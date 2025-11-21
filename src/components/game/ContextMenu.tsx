@@ -2,6 +2,9 @@
 
 import { useLayoutEffect, useRef, useState, useEffect } from "react";
 import { useSound } from "@/lib/contexts/SoundContext";
+import AttachmentTargetSelectionDialog, {
+  type AttachmentTarget,
+} from "@/lib/game/components/AttachmentTargetSelectionDialog";
 import {
   detectBurrowSubmergeAbilities,
   detectBurrowSubmergeAbilitiesSync,
@@ -51,9 +54,6 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   const openSearchDialog = useGameStore((s) => s.openSearchDialog);
   const openPlacementDialog = useGameStore((s) => s.openPlacementDialog);
   const addTokenToHand = useGameStore((s) => s.addTokenToHand);
-  const attachTokenToTopPermanent = useGameStore(
-    (s) => s.attachTokenToTopPermanent
-  );
   const attachTokenToPermanent = useGameStore((s) => s.attachTokenToPermanent);
   const attachPermanentToAvatar = useGameStore(
     (s) => s.attachPermanentToAvatar
@@ -75,6 +75,14 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   );
   // Extra combat actions computed per-open menu (do not store in state to avoid duplication)
   const extraActions: ContextMenuAction[] = [];
+
+  // Attachment target selection dialog state
+  const [attachmentDialog, setAttachmentDialog] = useState<{
+    artifactName: string;
+    artifactAt: string;
+    artifactIndex: number;
+    targets: AttachmentTarget[];
+  } | null>(null);
 
   useLayoutEffect(() => {
     if (!contextMenu) {
@@ -422,10 +430,40 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
           onClose();
         };
       } else if (nonTokenIndices.length > 0 && isAttachableToken) {
+        // Build list of all possible attachment targets for tokens
+        const possibleTargets: AttachmentTarget[] = nonTokenIndices.map(
+          ({ it, i }) => ({
+            type: "permanent" as const,
+            index: i,
+            card: it.card,
+            displayName: it.card.name,
+          })
+        );
+
         // Allow re-attachment for attachable tokens
         doAttachToken = () => {
-          attachTokenToTopPermanent(t.at, t.index);
-          onClose();
+          console.log(
+            "[ContextMenu] Token attach clicked, targets:",
+            possibleTargets.length
+          );
+          // If only one target, attach directly (old behavior)
+          if (possibleTargets.length === 1) {
+            attachTokenToPermanent(t.at, t.index, possibleTargets[0].index);
+            onClose();
+          } else {
+            // Multiple targets: show selection dialog (don't close menu yet)
+            console.log(
+              "[ContextMenu] Opening attachment dialog for token",
+              item.card.name
+            );
+            setAttachmentDialog({
+              artifactName: item.card.name,
+              artifactAt: t.at,
+              artifactIndex: t.index,
+              targets: possibleTargets,
+            });
+            console.log("[ContextMenu] Dialog state set");
+          }
         };
       }
       doBanish = () => {
@@ -462,23 +500,68 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         const isOnAvatarTile =
           avatarPos && avatarPos[0] === artifactX && avatarPos[1] === artifactY;
 
+        // Build list of all possible attachment targets
+        const possibleTargets: AttachmentTarget[] = [];
+
+        // Add all minions as potential targets
+        for (const { it, i } of nonArtifactPermanents) {
+          possibleTargets.push({
+            type: "permanent",
+            index: i,
+            card: it.card,
+            displayName: it.card.name,
+          });
+        }
+
+        // Add avatar if on same tile
+        if (isOnAvatarTile && avatar?.card) {
+          possibleTargets.push({
+            type: "avatar",
+            index: -1,
+            card: avatar.card,
+            displayName: `${ownerKey.toUpperCase()} Avatar`,
+          });
+        }
+
         // Can attach to minion or avatar
-        const hasAttachableTarget =
-          nonArtifactPermanents.length > 0 || isOnAvatarTile;
+        const hasAttachableTarget = possibleTargets.length > 0;
 
         if (hasAttachableTarget) {
           doAttachToken = () => {
-            if (nonArtifactPermanents.length > 0) {
-              // Attach to the top-most minion on the same tile
-              const targetIdx =
-                nonArtifactPermanents[nonArtifactPermanents.length - 1].i;
-              attachTokenToPermanent(t.at, t.index, targetIdx);
-              log(`Attached artifact '${item.card.name}' to minion`);
-            } else if (isOnAvatarTile) {
-              // Attach to avatar using the new function
-              attachPermanentToAvatar(t.at, t.index, ownerKey);
+            console.log(
+              "[ContextMenu] Artifact attach clicked, targets:",
+              possibleTargets.length,
+              possibleTargets
+            );
+            // If only one target, attach directly (old behavior)
+            if (possibleTargets.length === 1) {
+              const target = possibleTargets[0];
+              if (target.type === "avatar") {
+                attachPermanentToAvatar(t.at, t.index, ownerKey);
+              } else {
+                attachTokenToPermanent(t.at, t.index, target.index);
+                log(
+                  `Attached artifact '${item.card.name}' to ${target.displayName}`
+                );
+              }
+              onClose();
+            } else {
+              // Multiple targets: show selection dialog (don't close menu yet)
+              console.log(
+                "[ContextMenu] Opening attachment dialog for artifact",
+                item.card.name
+              );
+              setAttachmentDialog({
+                artifactName: item.card.name,
+                artifactAt: t.at,
+                artifactIndex: t.index,
+                targets: possibleTargets,
+              });
+              console.log(
+                "[ContextMenu] Dialog state set, targets:",
+                possibleTargets
+              );
             }
-            onClose();
           };
         }
       }
@@ -731,132 +814,153 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
 
   const label = tapped ? "Untap" : "Tap";
 
+  // Handle attachment target selection
+  const handleAttachmentTargetSelect = (target: AttachmentTarget) => {
+    if (!attachmentDialog) return;
+
+    const { artifactAt, artifactIndex } = attachmentDialog;
+    const arr = permanents[artifactAt] || [];
+    const artifact = arr[artifactIndex];
+    if (!artifact) return;
+
+    if (target.type === "avatar") {
+      // Attach to avatar
+      const ownerKey = seatFromOwner(artifact.owner);
+      attachPermanentToAvatar(artifactAt, artifactIndex, ownerKey);
+    } else {
+      // Attach to permanent
+      attachTokenToPermanent(artifactAt, artifactIndex, target.index);
+      log(`Attached '${artifact.card.name}' to ${target.displayName}`);
+    }
+
+    setAttachmentDialog(null);
+    onClose(); // Close context menu after selection
+  };
+
+  const handleAttachmentCancel = () => {
+    setAttachmentDialog(null);
+    onClose(); // Close context menu on cancel
+  };
+
+  console.log(
+    "[ContextMenu] Rendering, attachmentDialog:",
+    attachmentDialog ? "SET" : "null"
+  );
+
   return (
-    <div
-      className="absolute inset-0 z-30"
-      onClick={onClose}
-      onContextMenu={(e) => {
-        e.preventDefault();
-        onClose();
-      }}
-    >
+    <>
+      {attachmentDialog && (
+        <AttachmentTargetSelectionDialog
+          artifactName={attachmentDialog.artifactName}
+          targets={attachmentDialog.targets}
+          onSelect={handleAttachmentTargetSelect}
+          onCancel={handleAttachmentCancel}
+        />
+      )}
       <div
-        ref={menuRef}
-        className="absolute bg-zinc-900/90 backdrop-blur rounded-xl ring-1 ring-white/10 shadow-lg p-3 w-56 text-white pointer-events-auto"
-        style={{
-          left: (menuPos?.left ?? contextMenu.screen?.x ?? 16) + "px",
-          top: (menuPos?.top ?? contextMenu.screen?.y ?? 16) + "px",
+        className="absolute inset-0 z-30"
+        onClick={onClose}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          onClose();
         }}
-        onClick={(e) => e.stopPropagation()}
+        style={{ display: attachmentDialog ? "none" : "block" }}
       >
-        <div>
-          <div className="text-sm font-semibold mb-2 truncate" title={header}>
-            {header}
-          </div>
-          <div className="space-y-2">
-            {hasToggle && doToggle && (
-              <button
-                className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
-                onClick={doToggle}
-              >
-                {label}
-              </button>
-            )}
+        <div
+          ref={menuRef}
+          className="absolute bg-zinc-900/90 backdrop-blur rounded-xl ring-1 ring-white/10 shadow-lg p-3 w-56 text-white pointer-events-auto"
+          style={{
+            left: (menuPos?.left ?? contextMenu.screen?.x ?? 16) + "px",
+            top: (menuPos?.top ?? contextMenu.screen?.y ?? 16) + "px",
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div>
+            <div className="text-sm font-semibold mb-2 truncate" title={header}>
+              {header}
+            </div>
+            <div className="space-y-2">
+              {hasToggle && doToggle && (
+                <button
+                  className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
+                  onClick={doToggle}
+                >
+                  {label}
+                </button>
+              )}
 
-            {doTransfer && (
-              <button
-                className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
-                onClick={doTransfer}
-              >
-                {`Transfer control${transferTo ? ` to P${transferTo}` : ""}`}
-              </button>
-            )}
+              {doTransfer && (
+                <button
+                  className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
+                  onClick={doTransfer}
+                >
+                  {`Transfer control${transferTo ? ` to P${transferTo}` : ""}`}
+                </button>
+              )}
 
-            {(doAttachToken || doDetachToken) && (
-              <div className="space-y-2">
-                {doAttachToken && (
-                  <button
-                    className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
-                    onClick={doAttachToken}
-                  >
-                    {t.kind === "permanent" && isCarryableArtifact
-                      ? "Attach to unit"
-                      : "Attach to permanent"}
-                  </button>
-                )}
-                {doDetachToken && (
-                  <button
-                    className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
-                    onClick={doDetachToken}
-                  >
-                    Detach token
-                  </button>
-                )}
-              </div>
-            )}
-            {/* Attached tokens section - show for permanents and avatars */}
-            {attachedTokens &&
-              attachedTokens.length > 0 &&
-              (t.kind === "permanent" || t.kind === "avatar") && (
+              {(doAttachToken || doDetachToken) && (
                 <div className="space-y-2">
-                  <div className="text-xs text-white/70 px-3 py-1">
-                    Attached Items:
-                  </div>
-                  {attachedTokens.map((token) => {
-                    const tokenName = token.name.toLowerCase();
-                    const isLance = tokenName === "lance";
-                    const isStealth = tokenName === "stealth";
-                    const isDisabled = tokenName === "disabled";
+                  {doAttachToken && (
+                    <button
+                      className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
+                      onClick={doAttachToken}
+                    >
+                      {t.kind === "permanent" && isCarryableArtifact
+                        ? "Attach to unit"
+                        : "Attach to unit"}
+                    </button>
+                  )}
+                  {doDetachToken && (
+                    <button
+                      className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
+                      onClick={doDetachToken}
+                    >
+                      Detach token
+                    </button>
+                  )}
+                </div>
+              )}
+              {/* Attached tokens section - show for permanents and avatars */}
+              {attachedTokens &&
+                attachedTokens.length > 0 &&
+                (t.kind === "permanent" || t.kind === "avatar") && (
+                  <div className="space-y-2">
+                    <div className="text-xs text-white/70 px-3 py-1">
+                      Attached Items:
+                    </div>
+                    {attachedTokens.map((token) => {
+                      const tokenName = token.name.toLowerCase();
+                      const isLance = tokenName === "lance";
+                      const isStealth = tokenName === "stealth";
+                      const isDisabled = tokenName === "disabled";
 
-                    // Check if this is a carryable artifact
-                    const tokenType = (token.type || "").toLowerCase();
-                    const tokenSubTypes = (token.subTypes || "").toLowerCase();
-                    const isArtifact = tokenType.includes("artifact");
-                    const isMonument = tokenSubTypes.includes("monument");
-                    const isAutomaton = tokenSubTypes.includes("automaton");
-                    const isCarryableArt =
-                      isArtifact && !isMonument && !isAutomaton;
+                      // Check if this is a carryable artifact
+                      const tokenType = (token.type || "").toLowerCase();
+                      const tokenSubTypes = (
+                        token.subTypes || ""
+                      ).toLowerCase();
+                      const isArtifact = tokenType.includes("artifact");
+                      const isMonument = tokenSubTypes.includes("monument");
+                      const isAutomaton = tokenSubTypes.includes("automaton");
+                      const isCarryableArt =
+                        isArtifact && !isMonument && !isAutomaton;
 
-                    if (isCarryableArt) {
-                      // Carryable artifacts: offer Drop option (like Lance) - only if we own the parent
-                      if (!isMine) {
+                      if (isCarryableArt) {
+                        // Carryable artifacts: offer Drop option (like Lance) - only if we own the parent
+                        if (!isMine) {
+                          return (
+                            <div
+                              key={token.index}
+                              className="w-full text-left text-xs text-white/50 px-3 py-1"
+                            >
+                              {token.name} (opponent&apos;s)
+                            </div>
+                          );
+                        }
                         return (
-                          <div
-                            key={token.index}
-                            className="w-full text-left text-xs text-white/50 px-3 py-1"
-                          >
-                            {token.name} (opponent&apos;s)
-                          </div>
-                        );
-                      }
-                      return (
-                        <button
-                          key={token.index}
-                          className="w-full text-left rounded bg-purple-900/20 hover:bg-purple-900/40 px-3 py-1 text-sm"
-                          onClick={() => {
-                            detachToken(token.tileKey, token.index);
-                            onClose();
-                          }}
-                        >
-                          Drop {token.name}
-                        </button>
-                      );
-                    } else if (isLance) {
-                      // Lance: offer Drop or Destroy options - only if we own the parent
-                      if (!isMine) {
-                        return (
-                          <div
-                            key={token.index}
-                            className="w-full text-left text-xs text-white/50 px-3 py-1"
-                          >
-                            {token.name} (opponent&apos;s)
-                          </div>
-                        );
-                      }
-                      return (
-                        <div key={token.index} className="space-y-1">
                           <button
-                            className="w-full text-left rounded bg-amber-900/20 hover:bg-amber-900/40 px-3 py-1 text-sm"
+                            key={token.index}
+                            className="w-full text-left rounded bg-purple-900/20 hover:bg-purple-900/40 px-3 py-1 text-sm"
                             onClick={() => {
                               detachToken(token.tileKey, token.index);
                               onClose();
@@ -864,314 +968,340 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                           >
                             Drop {token.name}
                           </button>
+                        );
+                      } else if (isLance) {
+                        // Lance: offer Drop or Destroy options - only if we own the parent
+                        if (!isMine) {
+                          return (
+                            <div
+                              key={token.index}
+                              className="w-full text-left text-xs text-white/50 px-3 py-1"
+                            >
+                              {token.name} (opponent&apos;s)
+                            </div>
+                          );
+                        }
+                        return (
+                          <div key={token.index} className="space-y-1">
+                            <button
+                              className="w-full text-left rounded bg-amber-900/20 hover:bg-amber-900/40 px-3 py-1 text-sm"
+                              onClick={() => {
+                                detachToken(token.tileKey, token.index);
+                                onClose();
+                              }}
+                            >
+                              Drop {token.name}
+                            </button>
+                            <button
+                              className="w-full text-left rounded bg-red-900/20 hover:bg-red-900/40 px-3 py-1 text-sm"
+                              onClick={() => {
+                                movePermanentToZone(
+                                  token.tileKey,
+                                  token.index,
+                                  "banished"
+                                );
+                                try {
+                                  playCardFlip();
+                                } catch {}
+                                onClose();
+                              }}
+                            >
+                              Destroy {token.name}
+                            </button>
+                          </div>
+                        );
+                      } else if (isStealth || isDisabled) {
+                        // Stealth/Disabled: banish when detached - only if we own the parent
+                        if (!isMine) {
+                          return (
+                            <div
+                              key={token.index}
+                              className="w-full text-left text-xs text-white/50 px-3 py-1"
+                            >
+                              {token.name} (opponent&apos;s)
+                            </div>
+                          );
+                        }
+                        return (
                           <button
+                            key={token.index}
                             className="w-full text-left rounded bg-red-900/20 hover:bg-red-900/40 px-3 py-1 text-sm"
                             onClick={() => {
-                              movePermanentToZone(
-                                token.tileKey,
-                                token.index,
-                                "banished"
-                              );
-                              try {
-                                playCardFlip();
-                              } catch {}
+                              // First detach, then immediately banish
+                              detachToken(token.tileKey, token.index);
+                              // Use setTimeout to ensure detach completes first
+                              setTimeout(() => {
+                                const permanents =
+                                  useGameStore.getState().permanents;
+                                const items = permanents[token.tileKey] || [];
+                                // Find the token that was just detached
+                                const detachedToken = items.find(
+                                  (item) =>
+                                    !item.attachedTo &&
+                                    item.card.name.toLowerCase() === tokenName
+                                );
+                                if (detachedToken) {
+                                  const tokenIndex =
+                                    items.indexOf(detachedToken);
+                                  if (tokenIndex >= 0) {
+                                    movePermanentToZone(
+                                      token.tileKey,
+                                      tokenIndex,
+                                      "banished"
+                                    );
+                                    try {
+                                      playCardFlip();
+                                    } catch {}
+                                  }
+                                }
+                              }, 50);
                               onClose();
                             }}
                           >
-                            Destroy {token.name}
+                            Remove {token.name}
                           </button>
-                        </div>
-                      );
-                    } else if (isStealth || isDisabled) {
-                      // Stealth/Disabled: banish when detached - only if we own the parent
-                      if (!isMine) {
+                        );
+                      } else {
+                        // Other tokens: simple detach - only if we own the parent
+                        if (!isMine) {
+                          return (
+                            <div
+                              key={token.index}
+                              className="w-full text-left text-xs text-white/50 px-3 py-1"
+                            >
+                              {token.name} (opponent&apos;s)
+                            </div>
+                          );
+                        }
                         return (
-                          <div
+                          <button
                             key={token.index}
-                            className="w-full text-left text-xs text-white/50 px-3 py-1"
+                            className="w-full text-left rounded bg-red-900/20 hover:bg-red-900/40 px-3 py-1 text-sm"
+                            onClick={() => {
+                              detachToken(token.tileKey, token.index);
+                              onClose();
+                            }}
                           >
-                            {token.name} (opponent&apos;s)
-                          </div>
+                            Detach {token.name}
+                          </button>
                         );
                       }
+                    })}
+                  </div>
+                )}
+
+              {/* Counter toggle */}
+              {doToggleCounter && (
+                <button
+                  className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
+                  onClick={doToggleCounter}
+                >
+                  {hasCounter ? "Remove counter" : "Add counter"}
+                </button>
+              )}
+
+              {/* Burrow/Submerge Actions */}
+              {(positionActions.length > 0 ||
+                (Array.isArray(extraActions) && extraActions.length > 0)) && (
+                <div className="space-y-2">
+                  {positionActions.concat(extraActions).map((action) => {
+                    const isAttackHere = action.actionId === "__attack_here__";
+                    const isAttackAdj =
+                      action.actionId.startsWith("__attack_adj_");
+                    if (isAttackHere) {
                       return (
                         <button
-                          key={token.index}
-                          className="w-full text-left rounded bg-red-900/20 hover:bg-red-900/40 px-3 py-1 text-sm"
+                          key={action.actionId}
+                          className="w-full text-left rounded bg-emerald-600/20 hover:bg-emerald-600/30 px-3 py-1"
                           onClick={() => {
-                            // First detach, then immediately banish
-                            detachToken(token.tileKey, token.index);
-                            // Use setTimeout to ensure detach completes first
-                            setTimeout(() => {
-                              const permanents =
-                                useGameStore.getState().permanents;
-                              const items = permanents[token.tileKey] || [];
-                              // Find the token that was just detached
-                              const detachedToken = items.find(
-                                (item) =>
-                                  !item.attachedTo &&
-                                  item.card.name.toLowerCase() === tokenName
-                              );
-                              if (detachedToken) {
-                                const tokenIndex = items.indexOf(detachedToken);
-                                if (tokenIndex >= 0) {
-                                  movePermanentToZone(
-                                    token.tileKey,
-                                    tokenIndex,
-                                    "banished"
-                                  );
-                                  try {
-                                    playCardFlip();
-                                  } catch {}
-                                }
+                            // Reconstruct context to call attack here
+                            if (t.kind === "permanent") {
+                              const [sx, sy] = t.at.split(",");
+                              const at = t.at as string;
+                              const idx = t.index as number;
+                              const px = Number(sx),
+                                py = Number(sy);
+                              const itm = (permanents[at] || [])[idx];
+                              if (itm) {
+                                setAttackTargetChoice({
+                                  tile: { x: px, y: py },
+                                  attacker: {
+                                    at,
+                                    index: idx,
+                                    instanceId: itm.instanceId ?? null,
+                                    owner: itm.owner as 1 | 2,
+                                  },
+                                  candidates: [],
+                                });
                               }
-                            }, 50);
+                            }
                             onClose();
                           }}
                         >
-                          Remove {token.name}
-                        </button>
-                      );
-                    } else {
-                      // Other tokens: simple detach - only if we own the parent
-                      if (!isMine) {
-                        return (
-                          <div
-                            key={token.index}
-                            className="w-full text-left text-xs text-white/50 px-3 py-1"
-                          >
-                            {token.name} (opponent&apos;s)
-                          </div>
-                        );
-                      }
-                      return (
-                        <button
-                          key={token.index}
-                          className="w-full text-left rounded bg-red-900/20 hover:bg-red-900/40 px-3 py-1 text-sm"
-                          onClick={() => {
-                            detachToken(token.tileKey, token.index);
-                            onClose();
-                          }}
-                        >
-                          Detach {token.name}
+                          {action.displayText}
                         </button>
                       );
                     }
+                    if (isAttackAdj) {
+                      return (
+                        <button
+                          key={action.actionId}
+                          className="w-full text-left rounded bg-emerald-600/20 hover:bg-emerald-600/30 px-3 py-1"
+                          onClick={() => {
+                            const prefix = "__attack_adj_";
+                            const rest = action.actionId.startsWith(prefix)
+                              ? action.actionId.slice(prefix.length)
+                              : "";
+                            const coordsStr = rest.endsWith("__")
+                              ? rest.slice(0, -2)
+                              : rest;
+                            const parts = coordsStr.split("_");
+                            const ax = Number(parts[0]);
+                            const ay = Number(parts[1]);
+                            if (t.kind === "permanent") {
+                              const at = t.at as string;
+                              const idx = t.index as number;
+                              const itm = (permanents[at] || [])[idx];
+                              if (
+                                itm &&
+                                Number.isFinite(ax) &&
+                                Number.isFinite(ay)
+                              ) {
+                                setAttackTargetChoice({
+                                  tile: { x: ax, y: ay },
+                                  attacker: {
+                                    at,
+                                    index: idx,
+                                    instanceId: itm.instanceId ?? null,
+                                    owner: itm.owner as 1 | 2,
+                                  },
+                                  candidates: [],
+                                });
+                              }
+                            }
+                            onClose();
+                          }}
+                        >
+                          {action.displayText}
+                        </button>
+                      );
+                    }
+                    return (
+                      <button
+                        key={action.actionId}
+                        className={`w-full text-left rounded px-3 py-1 flex items-center space-x-2 ${
+                          action.isEnabled
+                            ? "bg-blue-600/20 hover:bg-blue-600/30 text-blue-200"
+                            : "bg-gray-600/20 text-gray-400 cursor-not-allowed"
+                        }`}
+                        disabled={!action.isEnabled}
+                        onClick={() => {
+                          if (action.isEnabled && action.newPositionState) {
+                            updatePermanentState(
+                              action.targetPermanentId,
+                              action.newPositionState
+                            );
+                            log(
+                              `${header} ${action.displayText.toLowerCase()}${
+                                action.newPositionState === "surface"
+                                  ? "ed"
+                                  : "ed"
+                              }`
+                            );
+                            onClose();
+                          }
+                        }}
+                        title={action.description}
+                      >
+                        <span className="text-xs">
+                          {action.icon === "arrow-down" && "↓"}
+                          {action.icon === "arrow-up" && "↑"}
+                          {action.icon === "waves" && "〜"}
+                        </span>
+                        <span>{action.displayText}</span>
+                      </button>
+                    );
                   })}
                 </div>
               )}
 
-            {/* Counter toggle */}
-            {doToggleCounter && (
-              <button
-                className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
-                onClick={doToggleCounter}
-              >
-                {hasCounter ? "Remove counter" : "Add counter"}
-              </button>
-            )}
-
-            {/* Burrow/Submerge Actions */}
-            {(positionActions.length > 0 ||
-              (Array.isArray(extraActions) && extraActions.length > 0)) && (
-              <div className="space-y-2">
-                {positionActions.concat(extraActions).map((action) => {
-                  const isAttackHere = action.actionId === "__attack_here__";
-                  const isAttackAdj =
-                    action.actionId.startsWith("__attack_adj_");
-                  if (isAttackHere) {
-                    return (
-                      <button
-                        key={action.actionId}
-                        className="w-full text-left rounded bg-emerald-600/20 hover:bg-emerald-600/30 px-3 py-1"
-                        onClick={() => {
-                          // Reconstruct context to call attack here
-                          if (t.kind === "permanent") {
-                            const [sx, sy] = t.at.split(",");
-                            const at = t.at as string;
-                            const idx = t.index as number;
-                            const px = Number(sx),
-                              py = Number(sy);
-                            const itm = (permanents[at] || [])[idx];
-                            if (itm) {
-                              setAttackTargetChoice({
-                                tile: { x: px, y: py },
-                                attacker: {
-                                  at,
-                                  index: idx,
-                                  instanceId: itm.instanceId ?? null,
-                                  owner: itm.owner as 1 | 2,
-                                },
-                                candidates: [],
-                              });
-                            }
-                          }
-                          onClose();
-                        }}
-                      >
-                        {action.displayText}
-                      </button>
-                    );
-                  }
-                  if (isAttackAdj) {
-                    return (
-                      <button
-                        key={action.actionId}
-                        className="w-full text-left rounded bg-emerald-600/20 hover:bg-emerald-600/30 px-3 py-1"
-                        onClick={() => {
-                          const prefix = "__attack_adj_";
-                          const rest = action.actionId.startsWith(prefix)
-                            ? action.actionId.slice(prefix.length)
-                            : "";
-                          const coordsStr = rest.endsWith("__")
-                            ? rest.slice(0, -2)
-                            : rest;
-                          const parts = coordsStr.split("_");
-                          const ax = Number(parts[0]);
-                          const ay = Number(parts[1]);
-                          if (t.kind === "permanent") {
-                            const at = t.at as string;
-                            const idx = t.index as number;
-                            const itm = (permanents[at] || [])[idx];
-                            if (
-                              itm &&
-                              Number.isFinite(ax) &&
-                              Number.isFinite(ay)
-                            ) {
-                              setAttackTargetChoice({
-                                tile: { x: ax, y: ay },
-                                attacker: {
-                                  at,
-                                  index: idx,
-                                  instanceId: itm.instanceId ?? null,
-                                  owner: itm.owner as 1 | 2,
-                                },
-                                candidates: [],
-                              });
-                            }
-                          }
-                          onClose();
-                        }}
-                      >
-                        {action.displayText}
-                      </button>
-                    );
-                  }
-                  return (
+              {(doToHand || doToGY || doToSpellbook || doBanish) && (
+                <div className="space-y-2">
+                  {doToHand && (
                     <button
-                      key={action.actionId}
-                      className={`w-full text-left rounded px-3 py-1 flex items-center space-x-2 ${
-                        action.isEnabled
-                          ? "bg-blue-600/20 hover:bg-blue-600/30 text-blue-200"
-                          : "bg-gray-600/20 text-gray-400 cursor-not-allowed"
-                      }`}
-                      disabled={!action.isEnabled}
-                      onClick={() => {
-                        if (action.isEnabled && action.newPositionState) {
-                          updatePermanentState(
-                            action.targetPermanentId,
-                            action.newPositionState
-                          );
-                          log(
-                            `${header} ${action.displayText.toLowerCase()}${
-                              action.newPositionState === "surface"
-                                ? "ed"
-                                : "ed"
-                            }`
-                          );
-                          onClose();
-                        }
-                      }}
-                      title={action.description}
+                      className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
+                      onClick={doToHand}
                     >
-                      <span className="text-xs">
-                        {action.icon === "arrow-down" && "↓"}
-                        {action.icon === "arrow-up" && "↑"}
-                        {action.icon === "waves" && "〜"}
-                      </span>
-                      <span>{action.displayText}</span>
+                      Move to Hand
                     </button>
-                  );
-                })}
-              </div>
-            )}
+                  )}
+                  {doToGY && (
+                    <button
+                      className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
+                      onClick={doToGY}
+                    >
+                      Move to Cemetery
+                    </button>
+                  )}
+                  {doToSpellbook && (
+                    <button
+                      className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
+                      onClick={doToSpellbook}
+                    >
+                      Move to Spellbook
+                    </button>
+                  )}
+                  {doAddToAtlas && (
+                    <button
+                      className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
+                      onClick={doAddToAtlas}
+                    >
+                      Move to Atlas
+                    </button>
+                  )}
+                  {doBanish && (
+                    <button
+                      className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
+                      onClick={doBanish}
+                    >
+                      Banish Card
+                    </button>
+                  )}
+                </div>
+              )}
 
-            {(doToHand || doToGY || doToSpellbook || doBanish) && (
-              <div className="space-y-2">
-                {doToHand && (
-                  <button
-                    className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
-                    onClick={doToHand}
-                  >
-                    Move to Hand
-                  </button>
-                )}
-                {doToGY && (
-                  <button
-                    className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
-                    onClick={doToGY}
-                  >
-                    Move to Cemetery
-                  </button>
-                )}
-                {doToSpellbook && (
-                  <button
-                    className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
-                    onClick={doToSpellbook}
-                  >
-                    Move to Spellbook
-                  </button>
-                )}
-                {doAddToAtlas && (
-                  <button
-                    className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
-                    onClick={doAddToAtlas}
-                  >
-                    Move to Atlas
-                  </button>
-                )}
-                {doBanish && (
-                  <button
-                    className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
-                    onClick={doBanish}
-                  >
-                    Banish Card
-                  </button>
-                )}
-              </div>
-            )}
-
-            {(doDrawFromPile || doShufflePile || doSearchPile) && (
-              <div className="space-y-2">
-                {doDrawFromPile && (
-                  <button
-                    className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
-                    onClick={doDrawFromPile}
-                  >
-                    Draw top
-                  </button>
-                )}
-                {doSearchPile && (
-                  <button
-                    className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
-                    onClick={doSearchPile}
-                  >
-                    Search pile
-                  </button>
-                )}
-                {doShufflePile && (
-                  <button
-                    className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
-                    onClick={doShufflePile}
-                  >
-                    Shuffle
-                  </button>
-                )}
-              </div>
-            )}
+              {(doDrawFromPile || doShufflePile || doSearchPile) && (
+                <div className="space-y-2">
+                  {doDrawFromPile && (
+                    <button
+                      className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
+                      onClick={doDrawFromPile}
+                    >
+                      Draw top
+                    </button>
+                  )}
+                  {doSearchPile && (
+                    <button
+                      className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
+                      onClick={doSearchPile}
+                    >
+                      Search pile
+                    </button>
+                  )}
+                  {doShufflePile && (
+                    <button
+                      className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
+                      onClick={doShufflePile}
+                    >
+                      Shuffle
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }

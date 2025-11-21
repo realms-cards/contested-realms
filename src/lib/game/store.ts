@@ -1,15 +1,28 @@
 import { create, type StateCreator } from "zustand";
 import { createAvatarSlice } from "./store/avatarState";
 import { createBoardSlice, createInitialBoard } from "./store/boardState";
-import { createBoardUiSlice, createInitialBoardUiState } from "./store/boardUiState";
+import {
+  createBoardUiSlice,
+  createInitialBoardUiState,
+} from "./store/boardUiState";
 import { createCardMetaSlice } from "./store/cardMetaState";
 import { createCombatSlice } from "./store/combatState";
-import { createCoreSlice, createInitialPlayers, createInitialD20Rolls } from "./store/coreState";
+import {
+  createCoreSlice,
+  createInitialPlayers,
+  createInitialD20Rolls,
+} from "./store/coreState";
 import { handleCustomMessage } from "./store/customMessageHandlers";
-import { createDialogSlice, createInitialDialogState } from "./store/dialogState";
+import {
+  createDialogSlice,
+  createInitialDialogState,
+} from "./store/dialogState";
 import { createEventSlice } from "./store/eventState";
 import { createGameActionsSlice } from "./store/gameActions";
-import { createHistorySlice, createInitialHistoryState } from "./store/historyState";
+import {
+  createHistorySlice,
+  createInitialHistoryState,
+} from "./store/historyState";
 import { createInteractionSlice } from "./store/interactionState";
 import { createMagicSlice } from "./store/magicState";
 import { createNetworkSlice } from "./store/networkState";
@@ -33,7 +46,11 @@ import { createDefaultAvatars } from "./store/utils/avatarHelpers";
 import { createDefaultPlayerPositions } from "./store/utils/positionHelpers";
 import { clearSnapshotsStorageFor } from "./store/utils/snapshotHelpers";
 import { createEmptyZonesRecord } from "./store/utils/zoneHelpers";
-import { createZoneSlice, createInitialMulligans, createInitialMulliganDrawn } from "./store/zoneState";
+import {
+  createZoneSlice,
+  createInitialMulligans,
+  createInitialMulliganDrawn,
+} from "./store/zoneState";
 
 export {
   BOARD_PING_LIFETIME_MS,
@@ -102,7 +119,9 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   resetGameState: () =>
     set((state) => {
       console.log("[game] Resetting game state for new match");
-      try { clearSnapshotsStorageFor(get().matchId ?? null); } catch {}
+      try {
+        clearSnapshotsStorageFor(get().matchId ?? null);
+      } catch {}
       const reset: Partial<GameState> = {
         players: createInitialPlayers(),
         currentPlayer: 1,
@@ -137,11 +156,17 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         acknowledgedInteractionIds: {},
         activeInteraction: null,
         transportSubscriptions: [],
+        interactionGuides: false,
+        magicGuides: false,
+        combatGuideSeatPrefs: { p1: false, p2: false },
+        magicGuideSeatPrefs: { p1: false, p2: false },
+        combatGuidesActive: false,
+        magicGuidesActive: false,
         snapshots: createEmptySnapshots(),
         pendingMagic: null,
       };
       return reset as GameState;
-    })
+    }),
 });
 
 export const createGameStore = () => create<GameState>(createGameStoreState);

@@ -14,6 +14,7 @@ import React, {
 import { OnlineContext } from "@/app/online/online-context";
 import AuthButton from "@/components/auth/AuthButton";
 import SeatMediaControls from "@/components/rtc/SeatMediaControls";
+import { useColorBlind } from "@/lib/contexts/ColorBlindContext";
 import { useLoadingContext } from "@/lib/contexts/LoadingContext";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
@@ -37,7 +38,9 @@ export default function UserBadge({
   const { isLoading: isGlobalLoading } = useLoadingContext();
   const { data: session, status, update: updateSession } = useSession();
   const user = session?.user;
-  const userEmailVerifiedRaw = (user as { emailVerified?: string | Date | null } | undefined)?.emailVerified ?? null;
+  const userEmailVerifiedRaw =
+    (user as { emailVerified?: string | Date | null } | undefined)
+      ?.emailVerified ?? null;
   const onlineCtx = useContext(OnlineContext);
   const connected: boolean = onlineCtx ? !!onlineCtx.connected : false;
   const voice = onlineCtx?.voice;
@@ -47,9 +50,15 @@ export default function UserBadge({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [profileName, setProfileName] = useState("");
-  const [profileEmail, setProfileEmail] = useState(() => (user?.email as string | undefined) ?? "");
-  const [serverEmail, setServerEmail] = useState(() => (user?.email as string | undefined) ?? "");
-  const [emailVerified, setEmailVerified] = useState<boolean>(() => Boolean(userEmailVerifiedRaw));
+  const [profileEmail, setProfileEmail] = useState(
+    () => (user?.email as string | undefined) ?? ""
+  );
+  const [serverEmail, setServerEmail] = useState(
+    () => (user?.email as string | undefined) ?? ""
+  );
+  const [emailVerified, setEmailVerified] = useState<boolean>(() =>
+    Boolean(userEmailVerifiedRaw)
+  );
   const [avatarDataUrl, setAvatarDataUrl] = useState<string | null | undefined>(
     undefined
   );
@@ -58,7 +67,12 @@ export default function UserBadge({
   const [profileError, setProfileError] = useState<string | null>(null);
   const [verificationSending, setVerificationSending] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [joinedTournament, setJoinedTournament] = useState<{ id: string; name: string } | null>(null);
+  const [joinedTournament, setJoinedTournament] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
+  const { enabled: colorBlindEnabled, setEnabled: setColorBlindEnabled } =
+    useColorBlind();
 
   const SPINNER_CHARS = ["✦", "❊", "✤", "❀", "❇︎"] as const;
   const [spinnerIndex, setSpinnerIndex] = useState(0);
@@ -165,22 +179,25 @@ export default function UserBadge({
     };
   }, [user?.id]);
 
-  const sendVerificationLink = useCallback(async (email: string): Promise<boolean> => {
-    setVerificationSending(true);
-    try {
-      const result = await signIn("email", {
-        email,
-        callbackUrl: "/",
-        redirect: false,
-      });
-      return Boolean(result?.ok);
-    } catch (error) {
-      console.error("Verification email error:", error);
-      return false;
-    } finally {
-      setVerificationSending(false);
-    }
-  }, []);
+  const sendVerificationLink = useCallback(
+    async (email: string): Promise<boolean> => {
+      setVerificationSending(true);
+      try {
+        const result = await signIn("email", {
+          email,
+          callbackUrl: "/",
+          redirect: false,
+        });
+        return Boolean(result?.ok);
+      } catch (error) {
+        console.error("Verification email error:", error);
+        return false;
+      } finally {
+        setVerificationSending(false);
+      }
+    },
+    []
+  );
 
   // When opening the menu (or on mount if already open), query current tournaments to detect membership
   useEffect(() => {
@@ -190,18 +207,29 @@ export default function UserBadge({
       try {
         // Only fetch when the menu is opened to avoid background traffic
         if (!open) return;
-        const res = await fetch('/api/tournaments');
+        const res = await fetch("/api/tournaments");
         if (!res.ok) return;
         const list = (await res.json()) as Array<{
           id: string;
           name: string;
           status: string;
-          registeredPlayers?: Array<{ id: string; displayName?: string; ready?: boolean }>;
+          registeredPlayers?: Array<{
+            id: string;
+            displayName?: string;
+            ready?: boolean;
+          }>;
         }>;
-        const mine = Array.isArray(list) && session.user
-          ? list.find(t => (t.registeredPlayers || []).some(p => p.id === session.user.id) && t.status !== 'completed')
-          : null;
-        if (!cancelled) setJoinedTournament(mine ? { id: mine.id, name: mine.name } : null);
+        const mine =
+          Array.isArray(list) && session.user
+            ? list.find(
+                (t) =>
+                  (t.registeredPlayers || []).some(
+                    (p) => p.id === session.user.id
+                  ) && t.status !== "completed"
+              )
+            : null;
+        if (!cancelled)
+          setJoinedTournament(mine ? { id: mine.id, name: mine.name } : null);
       } catch {
         if (!cancelled) setJoinedTournament(null);
       }
@@ -286,7 +314,8 @@ export default function UserBadge({
     }
 
     const trimmedEmail = profileEmail.trim();
-    const normalizedEmail = trimmedEmail.length > 0 ? trimmedEmail.toLowerCase() : "";
+    const normalizedEmail =
+      trimmedEmail.length > 0 ? trimmedEmail.toLowerCase() : "";
     const currentEmailNormalized = serverEmail.trim().toLowerCase();
     if (normalizedEmail !== currentEmailNormalized) {
       if (normalizedEmail && !EMAIL_REGEX.test(normalizedEmail)) {
@@ -321,7 +350,12 @@ export default function UserBadge({
 
       const data = (await res.json()) as {
         error?: string;
-        user?: { name: string | null; image: string | null; email: string | null; emailVerified: string | null };
+        user?: {
+          name: string | null;
+          image: string | null;
+          email: string | null;
+          emailVerified: string | null;
+        };
         success?: boolean;
         emailChanged?: boolean;
       };
@@ -356,7 +390,9 @@ export default function UserBadge({
             setEmailVerified(false);
           } else {
             successMessage = "Profile updated.";
-            setProfileError("Profile updated, but we couldn't send a verification email. Try again below.");
+            setProfileError(
+              "Profile updated, but we couldn't send a verification email. Try again below."
+            );
           }
         } else {
           successMessage = "Profile updated. Email removed.";
@@ -393,15 +429,32 @@ export default function UserBadge({
       setEmailVerified(false);
       if (profileEmail !== trimmed) setProfileEmail(trimmed);
     } else {
-      setProfileError("We couldn't send the verification email. Try again shortly.");
+      setProfileError(
+        "We couldn't send the verification email. Try again shortly."
+      );
     }
   };
 
   const avatarImageSrc = previewAvatar ?? null;
+  const presencePillClass = connected
+    ? colorBlindEnabled
+      ? "bg-sky-500/15 text-sky-300 ring-sky-500/30"
+      : "bg-emerald-500/15 text-emerald-300 ring-emerald-500/30"
+    : colorBlindEnabled
+    ? "bg-amber-500/15 text-amber-300 ring-amber-500/30"
+    : "bg-rose-500/15 text-rose-300 ring-rose-500/30";
+  const presenceDotClass = connected
+    ? colorBlindEnabled
+      ? "bg-sky-400"
+      : "bg-emerald-400"
+    : colorBlindEnabled
+    ? "bg-amber-400"
+    : "bg-rose-400";
   const normalizedEmailInput = profileEmail.trim().toLowerCase();
   const normalizedServerEmail = serverEmail.trim().toLowerCase();
   const emailDirty = normalizedEmailInput !== normalizedServerEmail;
-  const canSendVerification = Boolean(normalizedServerEmail) && !emailDirty && !emailVerified;
+  const canSendVerification =
+    Boolean(normalizedServerEmail) && !emailDirty && !emailVerified;
   const avatarIsDataUrl =
     typeof avatarImageSrc === "string" && avatarImageSrc.startsWith("data:");
   const avatar = avatarImageSrc ? (
@@ -437,7 +490,9 @@ export default function UserBadge({
           }`}
           aria-hidden="true"
         >
-          <span className="text-xl opacity-70">{SPINNER_CHARS[spinnerIndex]}</span>
+          <span className="text-xl opacity-70">
+            {SPINNER_CHARS[spinnerIndex]}
+          </span>
         </div>
         <button
           onClick={() => setOpen((v) => !v)}
@@ -464,11 +519,7 @@ export default function UserBadge({
                 {shouldShowPresence && (
                   <div className="mt-1">
                     <span
-                      className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full ring-1 ${
-                        connected
-                          ? "bg-emerald-500/15 text-emerald-300 ring-emerald-500/30"
-                          : "bg-rose-500/15 text-rose-300 ring-rose-500/30"
-                      }`}
+                      className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full ring-1 ${presencePillClass}`}
                       title={
                         connected
                           ? "Online services connected"
@@ -476,9 +527,7 @@ export default function UserBadge({
                       }
                     >
                       <span
-                        className={`inline-block w-2 h-2 rounded-full ${
-                          connected ? "bg-emerald-400" : "bg-rose-400"
-                        }`}
+                        className={`inline-block w-2 h-2 rounded-full ${presenceDotClass}`}
                       />
                       {connected ? "Online" : "Offline"}
                     </span>
@@ -529,9 +578,14 @@ export default function UserBadge({
                     onRequestConnection={voice.requestConnection}
                     targetPlayerId={(() => {
                       // Find opponent in current match/lobby
-                      const currentPlayers = onlineCtx?.match?.players ?? onlineCtx?.lobby?.players ?? [];
+                      const currentPlayers =
+                        onlineCtx?.match?.players ??
+                        onlineCtx?.lobby?.players ??
+                        [];
                       const myId = onlineCtx?.me?.id;
-                      const opponent = currentPlayers.find((p) => p.id !== myId);
+                      const opponent = currentPlayers.find(
+                        (p) => p.id !== myId
+                      );
                       return opponent?.id ?? null;
                     })()}
                   />
@@ -687,7 +741,9 @@ export default function UserBadge({
                       verificationSending ? "opacity-60 cursor-progress" : ""
                     }`}
                   >
-                    {verificationSending ? "Sending…" : "Send verification email"}
+                    {verificationSending
+                      ? "Sending…"
+                      : "Send verification email"}
                   </button>
                 )}
               </div>
@@ -702,6 +758,30 @@ export default function UserBadge({
                   placeholder="Enter your name"
                 />
               </label>
+              <div className="flex items-center justify-between gap-3 text-xs text-slate-300">
+                <div className="flex flex-col">
+                  <span>Color blind mode</span>
+                  <span className="mt-0.5 text-[11px] text-slate-400">
+                    Switch greens to blues and reds to yellows in the UI.
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setColorBlindEnabled(!colorBlindEnabled)}
+                  className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] ring-1 transition-colors ${
+                    colorBlindEnabled
+                      ? "bg-sky-500/20 text-sky-100 ring-sky-500/40"
+                      : "bg-slate-800 text-slate-200 ring-slate-600"
+                  }`}
+                >
+                  <span
+                    className={`inline-block w-2 h-2 rounded-full ${
+                      colorBlindEnabled ? "bg-sky-300" : "bg-slate-400"
+                    }`}
+                  />
+                  <span>{colorBlindEnabled ? "On" : "Off"}</span>
+                </button>
+              </div>
               <div className="flex items-center gap-3">
                 <div className="w-14 h-14 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center overflow-hidden">
                   {previewAvatar ? (

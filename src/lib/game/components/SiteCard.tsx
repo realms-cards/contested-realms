@@ -41,6 +41,7 @@ export type SiteCardProps = {
   setAttackConfirm: GameState["setAttackConfirm"];
   pendingCombat: GameState["pendingCombat"];
   pendingMagic: GameState["pendingMagic"];
+  magicGuidesActive: GameState["magicGuidesActive"];
   avatars: GameState["avatars"];
   dragFromHand: GameState["dragFromHand"];
   dragFromPile: GameState["dragFromPile"];
@@ -78,6 +79,7 @@ export function SiteCard({
   setAttackConfirm,
   pendingCombat,
   pendingMagic,
+  magicGuidesActive,
   avatars,
   dragFromHand,
   dragFromPile,
@@ -144,13 +146,22 @@ export function SiteCard({
       hl = HIGHLIGHT_TARGET;
     }
     if (
-      pendingMagic?.target &&
+      magicGuidesActive &&
+      pendingMagic &&
+      !pendingMagic.guidesSuppressed &&
+      pendingMagic.target &&
       pendingMagic.target.kind === "location" &&
       pendingMagic.target.at === tileKey
     ) {
       hl = HIGHLIGHT_TARGET;
     }
-    if (!hl && pendingMagic && pendingMagic.status === "choosingTarget") {
+    if (
+      !hl &&
+      magicGuidesActive &&
+      pendingMagic &&
+      !pendingMagic.guidesSuppressed &&
+      pendingMagic.status === "choosingTarget"
+    ) {
       const hints = pendingMagic.hints;
       const allowLoc = hints?.allow?.location !== false;
       const scope = hints?.scope || null;
@@ -230,16 +241,14 @@ export function SiteCard({
         const { ox, oy } = deriveCasterOrigin();
         if (ox === tileX || oy === tileY) {
           const dir =
-            ox === tileX
-              ? tileY < oy
-                ? "N"
-                : "S"
-              : tileX > ox
-              ? "E"
-              : "W";
+            ox === tileX ? (tileY < oy ? "N" : "S") : tileX > ox ? "E" : "W";
           const hits = computeProjectileFirstHits();
           const firstHit = hits[dir] ?? undefined;
-          setMagicTargetChoice({ kind: "projectile", direction: dir, firstHit });
+          setMagicTargetChoice({
+            kind: "projectile",
+            direction: dir,
+            firstHit,
+          });
         }
         return;
       }
@@ -269,7 +278,10 @@ export function SiteCard({
         .split(",")
         .map(Number);
       sameTileAsAttacker =
-        Number.isFinite(ax) && Number.isFinite(ay) && ax === tileX && ay === tileY;
+        Number.isFinite(ax) &&
+        Number.isFinite(ay) &&
+        ax === tileX &&
+        ay === tileY;
     } catch {}
     if (isEnemySite && onTile && sameTileAsAttacker) {
       const label = site.card?.name || "Site";

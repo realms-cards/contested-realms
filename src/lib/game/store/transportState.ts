@@ -1,12 +1,7 @@
 import type { StateCreator } from "zustand";
 import { wrapInteractionMessage } from "@/lib/net/interactions";
 import type { GameTransport, CustomMessage } from "@/lib/net/transport";
-import type {
-  GameState,
-  PlayerKey,
-  ServerPatchT,
-  Zones,
-} from "./types";
+import type { GameState, PlayerKey, ServerPatchT, Zones } from "./types";
 import { clonePatchForQueue } from "./utils/patchHelpers";
 
 type TransportSlice = Pick<
@@ -255,8 +250,7 @@ export const filterEchoPatchIfAny = (
     const remaining = filtered.__replaceKeys.filter(
       (key) => !fields.includes(key as TrackedPatchField)
     );
-    filtered.__replaceKeys =
-      remaining.length > 0 ? remaining : undefined;
+    filtered.__replaceKeys = remaining.length > 0 ? remaining : undefined;
   }
   const remainingKeys = Object.keys(filtered).filter(
     (key) => key !== "__replaceKeys"
@@ -383,9 +377,7 @@ export const createTransportSlice: StateCreator<
         (patchObj.zones && typeof patchObj.zones === "object");
       if (!actorKey && touchesSeatFields) {
         set((s) => {
-          const queue = Array.isArray(s.pendingPatches)
-            ? s.pendingPatches
-            : [];
+          const queue = Array.isArray(s.pendingPatches) ? s.pendingPatches : [];
           return {
             pendingPatches: [...queue, clonePatchForQueue(patchObj)],
           } as Partial<GameState> as GameState;
@@ -406,9 +398,9 @@ export const createTransportSlice: StateCreator<
           ) as PlayerKey[];
           const out: Partial<GameState["avatars"]> = {};
           if (actorKey && keys.includes(actorKey)) {
-            out[actorKey] = (
-              sanitized.avatars as GameState["avatars"]
-            )[actorKey];
+            out[actorKey] = (sanitized.avatars as GameState["avatars"])[
+              actorKey
+            ];
           }
           if (Object.keys(out).length > 0) {
             sanitized.avatars = out as GameState["avatars"];
@@ -499,9 +491,9 @@ export const createTransportSlice: StateCreator<
                   actorKey as PlayerKey
                 ];
                 if (v && typeof v === "object") {
-                  (out as Record<string, unknown>)[
-                    actorKey as PlayerKey
-                  ] = { ...(v as Record<string, unknown>) } as unknown;
+                  (out as Record<string, unknown>)[actorKey as PlayerKey] = {
+                    ...(v as Record<string, unknown>),
+                  } as unknown;
                 }
               }
               if (Object.keys(out).length > 0) {

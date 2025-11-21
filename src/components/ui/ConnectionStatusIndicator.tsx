@@ -3,142 +3,165 @@
  * Shows WebRTC connection status with error messages and retry functionality
  */
 
-import React, { useState, useEffect } from 'react';
-import type { ConnectionStatusIndicatorProps } from '../../../specs/006-live-video-and/contracts/ui-components';
+import React, { useState, useEffect } from "react";
+import type { ConnectionStatusIndicatorProps } from "../../../specs/006-live-video-and/contracts/ui-components";
+import { useColorBlind } from "@/lib/contexts/ColorBlindContext";
 
-export const ConnectionStatusIndicator: React.FC<ConnectionStatusIndicatorProps> = ({
-  connectionState,
-  lastError,
-  onRetry,
-  compact = false
-}) => {
+export const ConnectionStatusIndicator: React.FC<
+  ConnectionStatusIndicatorProps
+> = ({ connectionState, lastError, onRetry, compact = false }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [showTooltip, setShowTooltip] = useState(false);
+  const { enabled: colorBlindEnabled } = useColorBlind();
 
   // Auto-collapse after success
   useEffect(() => {
-    if (connectionState === 'connected') {
+    if (connectionState === "connected") {
       const timer = setTimeout(() => setIsExpanded(false), 3000);
       return () => clearTimeout(timer);
     }
-    
+
     return undefined;
   }, [connectionState]);
 
   // Auto-expand on errors
   useEffect(() => {
-    if (connectionState === 'failed' && lastError) {
+    if (connectionState === "failed" && lastError) {
       setIsExpanded(true);
     }
-    
+
     return undefined;
   }, [connectionState, lastError]);
 
   const getStatusConfig = () => {
     switch (connectionState) {
-      case 'idle':
+      case "idle":
         return {
-          color: 'gray',
-          bgColor: 'bg-gray-100',
-          textColor: 'text-gray-600',
-          borderColor: 'border-gray-200',
+          color: "gray",
+          bgColor: "bg-gray-100",
+          textColor: "text-gray-600",
+          borderColor: "border-gray-200",
           icon: (
             <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z"/>
+              <path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z" />
             </svg>
           ),
-          label: 'Disconnected',
-          description: 'Video chat is not active'
-        };
-        
-      case 'joining':
-        return {
-          color: 'blue',
-          bgColor: 'bg-blue-100',
-          textColor: 'text-blue-600',
-          borderColor: 'border-blue-200',
-          icon: (
-            <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-          ),
-          label: 'Joining...',
-          description: 'Joining video chat session'
+          label: "Disconnected",
+          description: "Video chat is not active",
         };
 
-      case 'negotiating':
+      case "joining":
         return {
-          color: 'yellow',
-          bgColor: 'bg-yellow-100',
-          textColor: 'text-yellow-600',
-          borderColor: 'border-yellow-200',
+          color: "blue",
+          bgColor: "bg-blue-100",
+          textColor: "text-blue-600",
+          borderColor: "border-blue-200",
           icon: (
-            <svg className="w-4 h-4 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0" />
+            <svg
+              className="w-4 h-4 animate-spin"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+              />
             </svg>
           ),
-          label: 'Connecting...',
-          description: 'Establishing peer connection'
+          label: "Joining...",
+          description: "Joining video chat session",
         };
 
-      case 'connected':
+      case "negotiating":
         return {
-          color: 'green',
-          bgColor: 'bg-green-100',
-          textColor: 'text-green-600',
-          borderColor: 'border-green-200',
+          color: "yellow",
+          bgColor: "bg-yellow-100",
+          textColor: "text-yellow-600",
+          borderColor: "border-yellow-200",
+          icon: (
+            <svg
+              className="w-4 h-4 animate-pulse"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"
+              />
+            </svg>
+          ),
+          label: "Connecting...",
+          description: "Establishing peer connection",
+        };
+
+      case "connected":
+        return {
+          color: colorBlindEnabled ? "blue" : "green",
+          bgColor: colorBlindEnabled ? "bg-sky-100" : "bg-green-100",
+          textColor: colorBlindEnabled ? "text-sky-600" : "text-green-600",
+          borderColor: colorBlindEnabled
+            ? "border-sky-200"
+            : "border-green-200",
           icon: (
             <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           ),
-          label: 'Connected',
-          description: 'Video chat is active'
+          label: "Connected",
+          description: "Video chat is active",
         };
 
-      case 'failed':
+      case "failed":
         return {
-          color: 'red',
-          bgColor: 'bg-red-100',
-          textColor: 'text-red-600',
-          borderColor: 'border-red-200',
+          color: colorBlindEnabled ? "yellow" : "red",
+          bgColor: colorBlindEnabled ? "bg-amber-100" : "bg-red-100",
+          textColor: colorBlindEnabled ? "text-amber-600" : "text-red-600",
+          borderColor: colorBlindEnabled
+            ? "border-amber-200"
+            : "border-red-200",
           icon: (
             <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              <path d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           ),
-          label: 'Connection Failed',
-          description: lastError || 'Unable to establish video connection'
+          label: "Connection Failed",
+          description: lastError || "Unable to establish video connection",
         };
 
-      case 'closed':
+      case "closed":
         return {
-          color: 'gray',
-          bgColor: 'bg-gray-100',
-          textColor: 'text-gray-600',
-          borderColor: 'border-gray-200',
+          color: "gray",
+          bgColor: "bg-gray-100",
+          textColor: "text-gray-600",
+          borderColor: "border-gray-200",
           icon: (
             <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636m12.728 12.728L18.364 5.636M5.636 18.364l12.728-12.728"/>
+              <path d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636m12.728 12.728L18.364 5.636M5.636 18.364l12.728-12.728" />
             </svg>
           ),
-          label: 'Disconnected',
-          description: 'Video chat session ended'
+          label: "Disconnected",
+          description: "Video chat session ended",
         };
 
       default:
         return {
-          color: 'gray',
-          bgColor: 'bg-gray-100',
-          textColor: 'text-gray-600',
-          borderColor: 'border-gray-200',
+          color: "gray",
+          bgColor: "bg-gray-100",
+          textColor: "text-gray-600",
+          borderColor: "border-gray-200",
           icon: (
             <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              <path d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           ),
-          label: 'Unknown',
-          description: 'Connection status unavailable'
+          label: "Unknown",
+          description: "Connection status unavailable",
         };
     }
   };
@@ -146,7 +169,7 @@ export const ConnectionStatusIndicator: React.FC<ConnectionStatusIndicatorProps>
   const config = getStatusConfig();
 
   // Don't show indicator for idle state in compact mode unless there's an error
-  if (compact && connectionState === 'idle' && !lastError) {
+  if (compact && connectionState === "idle" && !lastError) {
     return null;
   }
 
@@ -168,18 +191,18 @@ export const ConnectionStatusIndicator: React.FC<ConnectionStatusIndicatorProps>
           title={config.description}
         >
           {config.icon}
-          <span className="text-xs font-medium">
-            {config.label}
-          </span>
+          <span className="text-xs font-medium">{config.label}</span>
         </button>
 
         {/* Tooltip */}
         {showTooltip && (
-          <div className="
+          <div
+            className="
             absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2
             px-2 py-1 bg-gray-900 text-white text-xs rounded
             whitespace-nowrap z-50
-          ">
+          "
+          >
             {config.description}
             <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900" />
           </div>
@@ -190,16 +213,21 @@ export const ConnectionStatusIndicator: React.FC<ConnectionStatusIndicatorProps>
 
   // Full status indicator
   return (
-    <div className={`
+    <div
+      className={`
       ${config.bgColor} ${config.borderColor}
       border rounded-lg shadow-sm
       transition-all duration-200 ease-out
-    `}>
+    `}
+    >
       {/* Header */}
-      <div className={`
+      <div
+        className={`
         flex items-center justify-between p-3
-        ${compact ? 'cursor-pointer' : ''}
-      `} onClick={compact ? () => setIsExpanded(!isExpanded) : undefined}>
+        ${compact ? "cursor-pointer" : ""}
+      `}
+        onClick={compact ? () => setIsExpanded(!isExpanded) : undefined}
+      >
         <div className="flex items-center gap-2">
           {config.icon}
           <span className={`text-sm font-medium ${config.textColor}`}>
@@ -209,7 +237,7 @@ export const ConnectionStatusIndicator: React.FC<ConnectionStatusIndicatorProps>
 
         {/* Actions */}
         <div className="flex items-center gap-2">
-          {connectionState === 'failed' && onRetry && (
+          {connectionState === "failed" && onRetry && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -237,13 +265,20 @@ export const ConnectionStatusIndicator: React.FC<ConnectionStatusIndicatorProps>
                 ${config.textColor}
               `}
             >
-              <svg 
-                className={`w-3 h-3 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
-                fill="none" 
-                stroke="currentColor" 
+              <svg
+                className={`w-3 h-3 transition-transform duration-200 ${
+                  isExpanded ? "rotate-180" : ""
+                }`}
+                fill="none"
+                stroke="currentColor"
                 viewBox="0 0 24 24"
               >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 9l-7 7-7-7"
+                />
               </svg>
             </button>
           )}
@@ -257,7 +292,7 @@ export const ConnectionStatusIndicator: React.FC<ConnectionStatusIndicatorProps>
             {config.description}
           </p>
 
-          {lastError && connectionState === 'failed' && (
+          {lastError && connectionState === "failed" && (
             <div className="mt-2 p-2 bg-white/50 rounded text-xs text-red-700">
               <strong>Error:</strong> {lastError}
             </div>

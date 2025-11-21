@@ -57,7 +57,10 @@ export default function PlayPage() {
   const cameraMode = useGameStore((s) => s.cameraMode);
   const setCameraMode = useGameStore((s) => s.setCameraMode);
   const currentPlayerKey = currentPlayer === 1 ? "p1" : "p2";
-  const offlinePlayerNames = useMemo(() => ({ p1: "Player 1", p2: "Player 2" }), []);
+  const offlinePlayerNames = useMemo(
+    () => ({ p1: "Player 1", p2: "Player 2" }),
+    []
+  );
   const offlineNameById = useMemo(
     () => ({ hotseat_p1: "Player 1", hotseat_p2: "Player 2" }),
     []
@@ -318,7 +321,7 @@ export default function PlayPage() {
   }, [matW, matH]);
 
   return (
-    <div className="relative h-screen [height:100dvh] w-full">
+    <div className="relative h-screen [height:100dvh] w-full select-none">
       {/* Camera mode toggle */}
       <div className="absolute top-2 left-2 z-30">
         <div className="bg-black/50 rounded-lg p-1 ring-1 ring-white/10">

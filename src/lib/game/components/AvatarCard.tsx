@@ -66,9 +66,9 @@ type MagicContext = {
   setMagicTargetChoice: GameState["setMagicTargetChoice"];
   computeProjectileFirstHits: () => Record<
     "N" | "E" | "S" | "W",
-    | { kind: "permanent" | "avatar"; at: CellKey; index?: number }
-    | null
+    { kind: "permanent" | "avatar"; at: CellKey; index?: number } | null
   >;
+  magicGuidesActive: GameState["magicGuidesActive"];
 };
 
 type AvatarActions = {
@@ -170,6 +170,7 @@ export function AvatarCard({
     setMagicCasterChoice,
     setMagicTargetChoice,
     computeProjectileFirstHits,
+    magicGuidesActive,
   } = magicContext;
   const { moveAvatarToWithOffset, incrementCounter, decrementCounter } =
     avatarActions;
@@ -197,14 +198,17 @@ export function AvatarCard({
   const isTopAvatar = dragAvatar === seat || isSel || isLastTouched;
   const avatarY =
     BASE_CARD_ELEVATION +
-    (isTopAvatar ? (tileItems.length + 1) * STACK_LAYER_LIFT + CARD_THICK * 0.01 : 0);
+    (isTopAvatar
+      ? (tileItems.length + 1) * STACK_LAYER_LIFT + CARD_THICK * 0.01
+      : 0);
 
   const cachedCard = lastAvatarCardsRef.current[seat];
   const activeCard = avatar.card?.slug ? avatar.card : cachedCard;
   if (avatar.card?.slug) {
     lastAvatarCardsRef.current[seat] = avatar.card;
   }
-  const rotZ = (seat === "p1" ? 0 : Math.PI) + (avatar.tapped ? Math.PI / 2 : 0);
+  const rotZ =
+    (seat === "p1" ? 0 : Math.PI) + (avatar.tapped ? Math.PI / 2 : 0);
   const highlight = resolveHighlight();
 
   function resolveHighlight(): string | null {
@@ -227,7 +231,9 @@ export function AvatarCard({
       hl = HIGHLIGHT_TARGET;
     }
     if (
+      magicGuidesActive &&
       pendingMagic &&
+      !pendingMagic.guidesSuppressed &&
       pendingMagic.target &&
       pendingMagic.target.kind === "avatar" &&
       pendingMagic.target.seat === seat
@@ -235,7 +241,9 @@ export function AvatarCard({
       hl = HIGHLIGHT_TARGET;
     }
     if (
+      magicGuidesActive &&
       pendingMagic &&
+      !pendingMagic.guidesSuppressed &&
       pendingMagic.caster &&
       pendingMagic.caster.kind === "avatar" &&
       pendingMagic.caster.seat === seat
@@ -342,7 +350,11 @@ export function AvatarCard({
         setAttackConfirm({
           tile: combatContext.attackTargetChoice.tile,
           attacker: combatContext.attackTargetChoice.attacker,
-          target: { kind: "avatar", at: `${pos[0]},${pos[1]}` as CellKey, index: null },
+          target: {
+            kind: "avatar",
+            at: `${pos[0]},${pos[1]}` as CellKey,
+            index: null,
+          },
           targetLabel: label,
         });
         return;
@@ -500,7 +512,10 @@ export function AvatarCard({
               bodyMap.current.delete(id);
             }
           } catch (error) {
-            console.warn(`[physics] Failed to update body map for ${id}:`, error);
+            console.warn(
+              `[physics] Failed to update body map for ${id}:`,
+              error
+            );
           }
         }}
         ccd
@@ -526,8 +541,7 @@ export function AvatarCard({
             rotationZ={rotZ}
             elevation={0.0001}
             color={
-              highlight ??
-              (seat === "p1" ? PLAYER_COLORS.p1 : PLAYER_COLORS.p2)
+              highlight ?? (seat === "p1" ? PLAYER_COLORS.p1 : PLAYER_COLORS.p2)
             }
             renderOrder={1201}
             pulse={!!highlight}
@@ -560,7 +574,10 @@ export function AvatarCard({
             e.nativeEvent.preventDefault();
             selectAvatar(seat);
             setLastTouchedId(avatarId);
-            openContextMenu({ kind: "avatar", who: seat }, { x: e.clientX, y: e.clientY });
+            openContextMenu(
+              { kind: "avatar", who: seat },
+              { x: e.clientX, y: e.clientY }
+            );
           }}
         >
           {(selectedAvatar === seat || dragAvatar === seat) &&
@@ -679,7 +696,9 @@ export function AvatarCard({
       const artifactH = CARD_LONG * 0.6;
       const offsetMultiplier = 0.3;
       const offsetX =
-        CARD_SHORT * offsetMultiplier * (attachIdx - (uniqueArtifacts.length - 1) / 2);
+        CARD_SHORT *
+        offsetMultiplier *
+        (attachIdx - (uniqueArtifacts.length - 1) / 2);
       const offsetZ = CARD_LONG * 0.4;
       const uniqueKey = `${tileKey}-${p.instanceId || idx}`;
       const artifactHoverKey = `artifact:avatar:${seat}:${uniqueKey}`;
@@ -689,11 +708,7 @@ export function AvatarCard({
       return (
         <group
           key={`avatar-attached-${uniqueKey}`}
-          position={[
-            offsetX,
-            BASE_CARD_ELEVATION - CARD_THICK * 0.05,
-            offsetZ,
-          ]}
+          position={[offsetX, BASE_CARD_ELEVATION - CARD_THICK * 0.05, offsetZ]}
         >
           <CardPlane
             slug={p.card.slug}

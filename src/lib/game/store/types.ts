@@ -193,6 +193,7 @@ export type PendingMagic = {
   } | null;
   createdAt: number;
   summaryText?: string | null;
+  guidesSuppressed?: boolean | null;
 };
 
 // Context menu targeting for click-driven actions
@@ -294,12 +295,18 @@ export type GameState = {
   expireInteraction: (requestId: string) => void;
   clearInteraction: (requestId: string) => void;
   transportSubscriptions: Array<() => void>;
-  // Feature flag: opt-in guided overlays for combat interactions
+  // Feature flag: opt-in guided overlays for combat interactions (local preference)
   interactionGuides: boolean;
   setInteractionGuides: (on: boolean) => void;
-  // Feature flag: opt-in guided overlays for magic casting
+  // Feature flag: opt-in guided overlays for magic casting (local preference)
   magicGuides: boolean;
   setMagicGuides: (on: boolean) => void;
+  // Per-seat guide preferences (match scope; used to derive effective flags)
+  combatGuideSeatPrefs: Record<PlayerKey, boolean>;
+  magicGuideSeatPrefs: Record<PlayerKey, boolean>;
+  // Effective guide state: enabled only when both seats have their toggles on
+  combatGuidesActive: boolean;
+  magicGuidesActive: boolean;
   // Card meta cache (subset) used to detect base power quickly
   metaByCardId: Record<
     number,

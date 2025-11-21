@@ -33,6 +33,8 @@ export default function CombatHudOverlay() {
   const cancelCombat = useGameStore((s) => s.cancelCombat);
   const offerIntercept = useGameStore((s) => s.offerIntercept);
 
+  const combatGuidesActive = useGameStore((s) => s.combatGuidesActive);
+
   const actorIsActive =
     (actorKey === "p1" && currentPlayer === 1) ||
     (actorKey === "p2" && currentPlayer === 2);
@@ -572,19 +574,21 @@ export default function CombatHudOverlay() {
       const defenderDef = sumDef; // single defender => its defence
       const attackerPower = a.atk;
       const attKillsDef = attackerPower >= defenderDef;
-      const defKillsAtt = attackerDef != null ? defenderPower >= attackerDef : false;
+      const defKillsAtt =
+        attackerDef != null ? defenderPower >= attackerDef : false;
       const outcome = (() => {
         if (attKillsDef && defKillsAtt) return "both die";
-        if (!attKillsDef && defKillsAtt) return "Attacker dies, Defender survives";
-        if (attKillsDef && !defKillsAtt) return "Attacker survives, Defender dies";
+        if (!attKillsDef && defKillsAtt)
+          return "Attacker dies, Defender survives";
+        if (attKillsDef && !defKillsAtt)
+          return "Attacker survives, Defender dies";
         return "both survive";
       })();
       return (
         <span className="opacity-70 ml-2">
-          <span className="font-medium">{defName}</span> defends! {" "}
-          Attacker <span className="font-semibold">{attackerPower}</span>{" "}
-          Defender <span className="font-semibold">{defenderPower}</span>{" "}
-          → {outcome}
+          <span className="font-medium">{defName}</span> defends! Attacker{" "}
+          <span className="font-semibold">{attackerPower}</span> Defender{" "}
+          <span className="font-semibold">{defenderPower}</span> → {outcome}
         </span>
       );
     }
@@ -607,7 +611,8 @@ export default function CombatHudOverlay() {
         : "—";
     return (
       <span className="opacity-70 ml-2">
-        · Suggests: <span className="font-medium">{parts.join(" ")}</span> → {killVerdict}; {tradeVerdict}
+        · Suggests: <span className="font-medium">{parts.join(" ")}</span> →{" "}
+        {killVerdict}; {tradeVerdict}
       </span>
     );
   }
@@ -618,6 +623,8 @@ export default function CombatHudOverlay() {
     const id = window.setTimeout(() => setLastCombatSummary(null), 12000);
     return () => window.clearTimeout(id);
   }, [lastCombatSummary, setLastCombatSummary]);
+
+  if (!combatGuidesActive) return null;
 
   return (
     <>
@@ -678,7 +685,7 @@ export default function CombatHudOverlay() {
               className="mx-1 rounded bg-white/15 hover:bg-white/25 px-3 py-1"
               onClick={() => {
                 setAttackChoice(null);
-                requestRevertCrossMove();  // Revert the movement
+                requestRevertCrossMove(); // Revert the movement
               }}
             >
               Cancel
@@ -853,9 +860,9 @@ export default function CombatHudOverlay() {
             <SuggestionDefense />
             {pendingCombat.status === "committed"
               ? (() => {
-                  const aSeat = (
-                    seatFromOwner(pendingCombat.attacker.owner)
-                  ) as "p1" | "p2";
+                  const aSeat = seatFromOwner(pendingCombat.attacker.owner) as
+                    | "p1"
+                    | "p2";
                   const amAttacker = actorKey ? actorKey === aSeat : true;
                   if (!amAttacker) return null;
                   const defs = pendingCombat.defenders || [];

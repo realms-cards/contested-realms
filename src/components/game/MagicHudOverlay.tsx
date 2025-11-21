@@ -15,6 +15,7 @@ export default function MagicHudOverlay() {
   const avatars = useGameStore((s) => s.avatars);
   const actorKey = useGameStore((s) => s.actorKey);
   const currentPlayer = useGameStore((s) => s.currentPlayer);
+  const magicGuidesActive = useGameStore((s) => s.magicGuidesActive);
 
   const setMagicCasterChoice = useGameStore((s) => s.setMagicCasterChoice);
   const setMagicTargetChoice = useGameStore((s) => s.setMagicTargetChoice);
@@ -22,7 +23,9 @@ export default function MagicHudOverlay() {
   const resolveMagic = useGameStore((s) => s.resolveMagic);
   const cancelMagic = useGameStore((s) => s.cancelMagic);
 
-  if (!pendingMagic) return null;
+  if (!pendingMagic || !magicGuidesActive || pendingMagic.guidesSuppressed) {
+    return null;
+  }
 
   const ownerSeat = seatFromOwner(pendingMagic.spell.owner);
   const actorIsActive = ownerSeat
