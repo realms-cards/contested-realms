@@ -2004,7 +2004,7 @@ export default function OnlineMatchPage() {
   }
 
   return (
-    <div className="fixed inset-0 w-screen h-screen">
+    <div className="fixed inset-0 w-screen h-screen select-none">
       {/* Camera controls - left: reset icon + 2D/3D buttons */}
       <div className="absolute top-2 left-2 z-30">
         <div className="bg-black/50 rounded-lg p-1 ring-1 ring-white/10 flex items-center">

@@ -9,6 +9,7 @@ export type MagicTargetOverlayProps = {
   pendingMagic: GameState["pendingMagic"];
   avatars: GameState["avatars"];
   highlightColor?: string;
+  magicGuidesActive: GameState["magicGuidesActive"];
 };
 
 export function MagicTargetOverlay({
@@ -17,8 +18,9 @@ export function MagicTargetOverlay({
   pendingMagic,
   avatars,
   highlightColor = "#ef4444",
+  magicGuidesActive,
 }: MagicTargetOverlayProps) {
-  if (!pendingMagic) {
+  if (!pendingMagic || !magicGuidesActive || pendingMagic.guidesSuppressed) {
     return null;
   }
 
@@ -42,7 +44,9 @@ export function MagicTargetOverlay({
         isTargetTile = true;
       } else if (hitTarget && "seat" in hitTarget) {
         // intended target with seat (fallback for when firstHit not available)
-        const avatarPos = avatars?.[hitTarget.seat]?.pos as [number, number] | null;
+        const avatarPos = avatars?.[hitTarget.seat]?.pos as
+          | [number, number]
+          | null;
         if (Array.isArray(avatarPos)) {
           const avatarTileKey = `${avatarPos[0]},${avatarPos[1]}`;
           if (avatarTileKey === tileKey) {
@@ -104,7 +108,8 @@ export function MagicTargetOverlay({
       }
     } catch {}
 
-    const collinear = (ox === tileX || oy === tileY) && !(ox === tileX && oy === tileY);
+    const collinear =
+      (ox === tileX || oy === tileY) && !(ox === tileX && oy === tileY);
     if (!collinear) return null;
     return (
       <group>
@@ -150,4 +155,3 @@ export function MagicTargetOverlay({
     </group>
   );
 }
-

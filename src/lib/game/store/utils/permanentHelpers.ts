@@ -1,8 +1,4 @@
-import type {
-  CellKey,
-  Permanents,
-  PermanentItem,
-} from "../types";
+import type { CellKey, Permanents, PermanentItem } from "../types";
 import { ensureCardInstanceId } from "./cardHelpers";
 import { newPermanentInstanceId } from "./idHelpers";
 
@@ -93,7 +89,7 @@ export function movePermanentCore(
   });
 
   const targetSource =
-    toKey === fromKey ? fromArr : ((per[toKey] as PermanentItem[]) || []);
+    toKey === fromKey ? fromArr : (per[toKey] as PermanentItem[]) || [];
   const toArr = [...targetSource];
   const toArrStartLen = toArr.length;
   const newIndex = toArrStartLen;
@@ -151,12 +147,14 @@ export function moveAvatarAttachedArtifacts(
     }
   });
 
-  attachedIndices.sort((a, b) => b - a).forEach((idx) => {
-    const removed = oldArr.splice(idx, 1)[0];
-    if (removed) {
-      movedArtifacts.push(removed);
-    }
-  });
+  attachedIndices
+    .sort((a, b) => b - a)
+    .forEach((idx) => {
+      const removed = oldArr.splice(idx, 1)[0];
+      if (removed) {
+        movedArtifacts.push(removed);
+      }
+    });
 
   let newArr = [...(per[newTileKey] || [])];
   const movedIds = new Set(
@@ -204,7 +202,21 @@ export function normalizePermanentItem(
   item: PermanentItem | null | undefined
 ): PermanentItem | null {
   if (!item) return null;
+
+  // Special case: Preserve removal markers even without a card field
+  // These are used by mergeArrayByInstanceId to remove permanents
+  const itemRecord = item as Record<string, unknown>;
+  if (itemRecord.__remove === true && itemRecord.instanceId) {
+    return item as PermanentItem;
+  }
+
+  // Skip items with undefined/null cards (malformed data from server)
+  if (!item.card) {
+    console.warn("[normalizePermanentItem] Skipping item with undefined card", item);
+    return null;
+  }
   const card = ensureCardInstanceId(item.card);
+  if (!card) return null; // Card normalization failed
   let instanceId = item.instanceId;
   if (!instanceId || instanceId.length === 0) {
     instanceId = card.instanceId ?? newPermanentInstanceId();

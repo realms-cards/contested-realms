@@ -11,20 +11,30 @@ export default function DefensePanel() {
   const setDefenderSelection = useGameStore((s) => s.setDefenderSelection);
   const commitDefenders = useGameStore((s) => s.commitDefenders);
   const cancelCombat = useGameStore((s) => s.cancelCombat);
-  const interactionGuides = useGameStore((s) => s.interactionGuides);
+  const combatGuidesActive = useGameStore((s) => s.combatGuidesActive);
   const boardW = useGameStore((s) => s.board.size.w);
-  
 
   const isOpen = useMemo(
     () => Boolean(pending && pending.status === "defending"),
     [pending]
   );
-  const defenderSeat: PlayerKey | null = (pending?.defenderSeat as PlayerKey | null) ?? null;
+  const defenderSeat: PlayerKey | null =
+    (pending?.defenderSeat as PlayerKey | null) ?? null;
   const mySeat = actorKey;
-  const show = Boolean(isOpen && pending && defenderSeat && mySeat === defenderSeat && interactionGuides);
+  const show = Boolean(
+    isOpen &&
+      pending &&
+      defenderSeat &&
+      mySeat === defenderSeat &&
+      combatGuidesActive
+  );
 
-  const cellKey: CellKey = pending ? (`${pending.tile.x},${pending.tile.y}` as CellKey) : ("0,0" as CellKey);
-  const tileNumber = pending ? pending.tile.y * boardW + pending.tile.x + 1 : null;
+  const cellKey: CellKey = pending
+    ? (`${pending.tile.x},${pending.tile.y}` as CellKey)
+    : ("0,0" as CellKey);
+  const tileNumber = pending
+    ? pending.tile.y * boardW + pending.tile.x + 1
+    : null;
   const myOwner: 1 | 2 = defenderSeat === "p1" ? 1 : 2;
 
   const isIntercept = Boolean(pending && !pending.target);
@@ -40,15 +50,37 @@ export default function DefensePanel() {
 
   // Build list of candidates: friendly permanents at tile and friendly avatar at tile
   const candidates = useMemo(() => {
-    if (!pending) return [] as Array<{ kind: "permanent" | "avatar"; at: CellKey; index: number; label: string; owner: 1 | 2; instanceId: string | null }>;
-    const list: Array<{ kind: "permanent" | "avatar"; at: CellKey; index: number; label: string; owner: 1 | 2; instanceId: string | null }> = [];
+    if (!pending)
+      return [] as Array<{
+        kind: "permanent" | "avatar";
+        at: CellKey;
+        index: number;
+        label: string;
+        owner: 1 | 2;
+        instanceId: string | null;
+      }>;
+    const list: Array<{
+      kind: "permanent" | "avatar";
+      at: CellKey;
+      index: number;
+      label: string;
+      owner: 1 | 2;
+      instanceId: string | null;
+    }> = [];
     try {
       const items = permanents[cellKey] || [];
       items.forEach((p, i) => {
         if (!p) return;
         if (p.owner !== myOwner) return;
         const name = p.card?.name || "Unit";
-        list.push({ kind: "permanent", at: cellKey, index: i, owner: p.owner as 1 | 2, instanceId: p.instanceId ?? null, label: name });
+        list.push({
+          kind: "permanent",
+          at: cellKey,
+          index: i,
+          owner: p.owner as 1 | 2,
+          instanceId: p.instanceId ?? null,
+          label: name,
+        });
       });
     } catch {}
     try {
@@ -58,7 +90,14 @@ export default function DefensePanel() {
         const [ax, ay] = av.pos;
         if (ax === pending.tile.x && ay === pending.tile.y) {
           const name = av.card?.name || "Avatar";
-          list.push({ kind: "avatar", at: cellKey, index: -1, owner: myOwner, instanceId: null, label: name });
+          list.push({
+            kind: "avatar",
+            at: cellKey,
+            index: -1,
+            owner: myOwner,
+            instanceId: null,
+            label: name,
+          });
         }
       }
     } catch {}
@@ -89,19 +128,27 @@ export default function DefensePanel() {
     }
     const chosen = candidates
       .filter((c) => selected.has(`${c.kind}:${c.at}:${c.index}`))
-      .map((c) => ({ at: c.at, index: c.index, owner: c.owner as 1 | 2, instanceId: c.instanceId ?? null }));
+      .map((c) => ({
+        at: c.at,
+        index: c.index,
+        owner: c.owner as 1 | 2,
+        instanceId: c.instanceId ?? null,
+      }));
 
-    console.log('[DefensePanel] onDone called, chosen defenders:', chosen.length);
+    console.log(
+      "[DefensePanel] onDone called, chosen defenders:",
+      chosen.length
+    );
 
     // Update defenders first
     setDefenderSelection(chosen);
 
-    console.log('[DefensePanel] About to call commitDefenders');
+    console.log("[DefensePanel] About to call commitDefenders");
 
     // Call commitDefenders to send combatCommit message
     commitDefenders();
 
-    console.log('[DefensePanel] commitDefenders called');
+    console.log("[DefensePanel] commitDefenders called");
   };
 
   if (!show) return null;
@@ -116,12 +163,26 @@ export default function DefensePanel() {
             <div className="text-sm font-semibold">Tile {tnum}</div>
           </div>
           <div className="text-base">
-            Intercept <span className="font-fantaisie">{attackerName || "Attacker"}</span>?
+            Intercept{" "}
+            <span className="font-fantaisie">{attackerName || "Attacker"}</span>
+            ?
           </div>
-          <div className="text-xs opacity-80 mt-1">Your units there may tap to fight that enemy.</div>
+          <div className="text-xs opacity-80 mt-1">
+            Your units there may tap to fight that enemy.
+          </div>
           <div className="flex justify-end gap-2 mt-3">
-            <button className="text-xs rounded bg-white/15 hover:bg-white/25 px-3 py-1" onClick={() => cancelCombat()}>No</button>
-            <button className="text-xs rounded bg-emerald-600/90 hover:bg-emerald-500 px-3 py-1" onClick={() => setAskIntercept(false)}>Yes</button>
+            <button
+              className="text-xs rounded bg-white/15 hover:bg-white/25 px-3 py-1"
+              onClick={() => cancelCombat()}
+            >
+              No
+            </button>
+            <button
+              className="text-xs rounded bg-emerald-600/90 hover:bg-emerald-500 px-3 py-1"
+              onClick={() => setAskIntercept(false)}
+            >
+              Yes
+            </button>
           </div>
         </div>
       </div>
@@ -132,28 +193,37 @@ export default function DefensePanel() {
     <div className="fixed left-1/2 -translate-x-1/2 bottom-4 z-40 pointer-events-auto">
       <div className="rounded-xl bg-black/70 backdrop-blur text-white ring-1 ring-white/10 px-4 py-3 w-[min(92vw,560px)]">
         <div className="flex items-center justify-between mb-1">
-          <div className="text-sm font-semibold">{isIntercept ? "Intercept" : "Defend"} Tile {tileNumber ? `#${tileNumber}` : ""}</div>
+          <div className="text-sm font-semibold">
+            {isIntercept ? "Intercept" : "Defend"} Tile{" "}
+            {tileNumber ? `#${tileNumber}` : ""}
+          </div>
         </div>
         {pending?.target ? (
           <div className="text-xs text-zinc-300 mb-2">
-            Attacker is targeting {(() => {
+            Attacker is targeting{" "}
+            {(() => {
               const t = pending.target;
               if (!t) return "";
               if (t.kind === "site") return "your site";
               if (t.kind === "avatar") return "your avatar";
               // permanent: attempt to display card name
               const list = permanents[cellKey] || [];
-              const p = (t.index != null && list[t.index]) ? list[t.index] : null;
+              const p = t.index != null && list[t.index] ? list[t.index] : null;
               return p?.card?.name ? `"${p.card.name}"` : "a unit";
             })()}
           </div>
         ) : (
           <div className="text-xs text-zinc-300 mb-2">
-            Intercept <span className="font-fantaisie">{attackerName || "attacker"}</span> with:
+            Intercept{" "}
+            <span className="font-fantaisie">{attackerName || "attacker"}</span>{" "}
+            with:
           </div>
         )}
         {candidates.length === 0 ? (
-          <div className="text-xs opacity-80">No defenders on this tile. You can drag units here during the window to include them, then click Done.</div>
+          <div className="text-xs opacity-80">
+            No defenders on this tile. You can drag units here during the window
+            to include them, then click Done.
+          </div>
         ) : (
           <div className="flex flex-wrap gap-2 mb-2">
             {candidates.map((c) => {
@@ -162,19 +232,34 @@ export default function DefensePanel() {
               return (
                 <button
                   key={key}
-                  className={`text-xs rounded px-2 py-1 ring-1 ${active ? "bg-emerald-600/90 ring-emerald-400" : "bg-white/10 hover:bg-white/20 ring-white/20"}`}
+                  className={`text-xs rounded px-2 py-1 ring-1 ${
+                    active
+                      ? "bg-emerald-600/90 ring-emerald-400"
+                      : "bg-white/10 hover:bg-white/20 ring-white/20"
+                  }`}
                   aria-pressed={active}
                   onClick={() => toggle(key)}
                 >
-                  {active ? "✓ " : ""}{c.label}
+                  {active ? "✓ " : ""}
+                  {c.label}
                 </button>
               );
             })}
           </div>
         )}
         <div className="flex justify-end gap-2">
-          <button className="text-xs rounded bg-white/15 hover:bg-white/25 px-3 py-1" onClick={() => cancelCombat()}>Cancel</button>
-          <button className="text-xs rounded bg-emerald-600/90 hover:bg-emerald-500 px-3 py-1" onClick={onDone}>{isIntercept && selected.size === 0 ? 'Pass' : 'Done'}</button>
+          <button
+            className="text-xs rounded bg-white/15 hover:bg-white/25 px-3 py-1"
+            onClick={() => cancelCombat()}
+          >
+            Cancel
+          </button>
+          <button
+            className="text-xs rounded bg-emerald-600/90 hover:bg-emerald-500 px-3 py-1"
+            onClick={onDone}
+          >
+            {isIntercept && selected.size === 0 ? "Pass" : "Done"}
+          </button>
         </div>
       </div>
     </div>

@@ -62,6 +62,7 @@ moveSelectedPermanentTo: (x, y) =>
           return state;
         }
       }
+      console.log("[moveSelectedPermanentTo] Moving", exists.card.name, "from", fromKey, "to", toKey);
       const { per, movedName, removed, added, updated, newIndex } = movePermanentCore(
         state.permanents,
         fromKey,
@@ -100,6 +101,20 @@ moveSelectedPermanentTo: (x, y) =>
       }
       const tr = get().transport;
       if (tr) {
+        console.log("[moveSelectedPermanentTo] Before movement - state.permanents[toKey]:",
+          state.permanents[toKey]?.map((p) => ({
+            name: p.card.name,
+            tapped: p.tapped,
+            owner: p.owner,
+            attachedTo: p.attachedTo
+          })));
+        console.log("[moveSelectedPermanentTo] After movement - finalPer[toKey]:",
+          finalPer[toKey]?.map((p) => ({
+            name: p.card.name,
+            tapped: p.tapped,
+            owner: p.owner,
+            attachedTo: p.attachedTo
+          })));
         const patch = buildMoveDeltaPatch(
           fromKey,
           toKey,

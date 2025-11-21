@@ -105,6 +105,7 @@ type MagicContext = {
   setMagicTargetChoice: GameState["setMagicTargetChoice"];
   setMagicCasterChoice: GameState["setMagicCasterChoice"];
   computeProjectileFirstHits: ComputeProjectileHits;
+  magicGuidesActive: GameState["magicGuidesActive"];
 };
 
 type CounterHandlers = {
@@ -246,6 +247,7 @@ export function PermanentStack({
     setMagicTargetChoice,
     setMagicCasterChoice,
     computeProjectileFirstHits,
+    magicGuidesActive,
   } = magicContext;
   const { increment, decrement } = counterHandlers;
   const { setOffset, moveToWithOffset, moveToZone } = movementHandlers;
@@ -388,7 +390,11 @@ export function PermanentStack({
             roleGlow = HIGHLIGHT_DEFENDER;
           }
         }
-        if (pendingMagic) {
+        if (
+          magicGuidesActive &&
+          pendingMagic &&
+          !pendingMagic.guidesSuppressed
+        ) {
           if (
             pendingMagic.caster &&
             pendingMagic.caster.kind === "permanent" &&
@@ -461,11 +467,14 @@ export function PermanentStack({
           dragging && dragging.from === key && dragging.index === idx;
 
         const bodyType = tokenSiteReplace
-          ? "fixed"  // Rubble tokens are truly fixed (site replacements)
+          ? "fixed" // Rubble tokens are truly fixed (site replacements)
           : isDraggingPermanent && !useGhostOnlyBoardDrag
-            ? "kinematicPosition"  // Active drag: body follows physics during drag
-            : "fixed";  // Not dragging: locked in place to prevent unwanted position updates
-        const gravityScale = (useGhostOnlyBoardDrag || tokenSiteReplace || !isDraggingPermanent) ? 0 : 1;
+          ? "kinematicPosition" // Active drag: body follows physics during drag
+          : "fixed"; // Not dragging: locked in place to prevent unwanted position updates
+        const gravityScale =
+          useGhostOnlyBoardDrag || tokenSiteReplace || !isDraggingPermanent
+            ? 0
+            : 1;
 
         return (
           <RigidBody
@@ -1051,7 +1060,7 @@ export function PermanentStack({
                   rotationZ={rotZ}
                   elevation={isDraggingPermanent ? DRAG_LIFT + 0.0001 : 0.0001}
                   color={roleGlow ?? permanentGlowColor}
-                  renderOrder={1000}
+                  renderOrder={1500}
                   pulse={!!roleGlow}
                   pulseSpeed={1.6}
                   pulseMin={0.35}

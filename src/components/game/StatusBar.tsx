@@ -2,6 +2,7 @@
 
 import { Star } from "lucide-react";
 import { FEATURE_UNDO } from "@/lib/config/features";
+import { useColorBlind } from "@/lib/contexts/ColorBlindContext";
 import { useGameStore } from "@/lib/game/store";
 
 interface StatusBarProps {
@@ -18,6 +19,15 @@ export default function StatusBar({ dragFromHand }: StatusBarProps) {
   const d20Rolls = useGameStore((s) => s.d20Rolls);
   const setupWinner = useGameStore((s) => s.setupWinner);
   const choosePlayerOrder = useGameStore((s) => s.choosePlayerOrder);
+  const { enabled: colorBlindEnabled } = useColorBlind();
+
+  const primaryActionButtonClass =
+    "rounded-full text-white px-3 py-1 " +
+    (colorBlindEnabled
+      ? "bg-sky-600/90 hover:bg-sky-500"
+      : "bg-emerald-600/90 hover:bg-emerald-500");
+
+  const p2RollClass = colorBlindEnabled ? "text-amber-300" : "text-red-400";
 
   return (
     <div
@@ -28,28 +38,33 @@ export default function StatusBar({ dragFromHand }: StatusBarProps) {
     >
       <div className="flex items-center gap-3 rounded-full bg-black/60 backdrop-blur px-4 py-1.5 text-sm text-white shadow-lg ring-1 ring-white/10">
         <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
-        
+
         {phase === "Setup" ? (
           !setupWinner ? (
             <>
-              <span className="opacity-80">Roll D20 to determine starting player</span>
+              <span className="opacity-80">
+                Roll D20 to determine starting player
+              </span>
               <div className="flex items-center gap-2">
                 {d20Rolls.p1 !== null && (
                   <span className="text-blue-400">P1: {d20Rolls.p1}</span>
                 )}
                 {d20Rolls.p2 !== null && (
-                  <span className="text-red-400">P2: {d20Rolls.p2}</span>
+                  <span className={p2RollClass}>P2: {d20Rolls.p2}</span>
                 )}
               </div>
-              <span className="text-sm opacity-70">Click the dice on the board to roll!</span>
+              <span className="text-sm opacity-70">
+                Click the dice on the board to roll!
+              </span>
             </>
           ) : (
             <>
               <span className="opacity-80">
-                Player {setupWinner === "p1" ? "1" : "2"} won the roll! Choose turn order:
+                Player {setupWinner === "p1" ? "1" : "2"} won the roll! Choose
+                turn order:
               </span>
               <button
-                className="rounded-full bg-emerald-600/90 hover:bg-emerald-500 text-white px-3 py-1"
+                className={primaryActionButtonClass}
                 onClick={() => choosePlayerOrder(setupWinner, true)}
                 onContextMenu={(e) => e.preventDefault()}
               >
@@ -66,16 +81,18 @@ export default function StatusBar({ dragFromHand }: StatusBarProps) {
           )
         ) : (
           <>
-            <span className="opacity-80">Player {currentPlayer}&apos;s Turn</span>
-            
+            <span className="opacity-80">
+              Player {currentPlayer}&apos;s Turn
+            </span>
+
             <button
-              className="rounded-full bg-emerald-600/90 hover:bg-emerald-500 text-white px-3 py-1"
+              className={primaryActionButtonClass}
               onClick={() => endTurn()}
               onContextMenu={(e) => e.preventDefault()}
             >
               End Turn
             </button>
-            
+
             {FEATURE_UNDO && (
               <button
                 className="rounded-full bg-white/15 hover:bg-white/25 text-white px-3 py-1 disabled:opacity-40"

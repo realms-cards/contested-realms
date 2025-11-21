@@ -437,6 +437,19 @@ export function validateAction(
           const nextArr = Array.isArray(nextArrRaw) ? nextArrRaw : [];
           const prevArrRaw = prevPer[key];
           const prevArr = Array.isArray(prevArrRaw) ? prevArrRaw : [];
+
+          // Check if this looks like a delta patch (uses instanceId matching)
+          // A delta patch is identified by the presence of instanceId fields
+          const isDeltaPatch = nextArr.some((item: unknown) => {
+            if (!item || typeof item !== "object") return false;
+            const rec = item as AnyRecord;
+            return typeof rec.instanceId === "string";
+          });
+
+          // Skip validation for delta patches - they use instanceId matching, not index matching
+          // The merge logic (mergeArrayByInstanceId) will handle them correctly
+          if (isDeltaPatch) continue;
+
           const len = Math.min(prevArr.length, nextArr.length);
           for (let i = 0; i < len; i++) {
             const prevItem = (prevArr[i] || {}) as AnyRecord;
@@ -451,6 +464,34 @@ export function validateAction(
                 ? !!nextItem.tapped
                 : prevTapped;
               if (prevTapped !== nextTapped && owner !== meNum) {
+                // Allow untapping opponent permanents during turn transition
+                const isTurnTransition =
+                  typeof (action as AnyRecord).currentPlayer === "number" &&
+                  (action as AnyRecord).currentPlayer !== game.currentPlayer;
+                const isUntapping = prevTapped && !nextTapped;
+                const nextPlayer = (action as AnyRecord).currentPlayer as number;
+                const untappingNextPlayer = owner === nextPlayer;
+
+                console.log("[rules-validation] Tapped state change detected:", {
+                  prevTapped,
+                  nextTapped,
+                  owner,
+                  meNum,
+                  isTurnTransition,
+                  isUntapping,
+                  untappingNextPlayer,
+                  actionCurrentPlayer: (action as AnyRecord).currentPlayer,
+                  gameCurrentPlayer: game.currentPlayer,
+                  permanentCard: (prevItem.card as AnyRecord)?.name || "unknown",
+                });
+
+                if (isTurnTransition && isUntapping && untappingNextPlayer) {
+                  // Allow: player ending turn can untap next player's permanents
+                  console.log("[rules-validation] Allowing turn transition untap");
+                  continue;
+                }
+
+                console.log("[rules-validation] REJECTING tap/untap of opponent permanent");
                 return {
                   ok: false,
                   error: "Cannot tap or untap opponent permanent",

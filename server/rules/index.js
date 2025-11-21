@@ -366,6 +366,14 @@ function applyTurnStart(game) {
  */
 function validateAction(game, action, playerId, context) {
   try {
+    console.log('[rules-validation] ===== validateAction called =====');
+    console.log('[rules-validation] action keys:', action ? Object.keys(action) : 'null/undefined');
+    console.log('[rules-validation] action.permanents exists:', !!(action && action.permanents));
+    if (action && action.permanents) {
+      console.log('[rules-validation] action.permanents keys:', Object.keys(action.permanents));
+      console.log('[rules-validation] Full action.permanents:', JSON.stringify(action.permanents, null, 2));
+    }
+
     if (!action || typeof action !== 'object') return { ok: true };
     const match = context && context.match ? context.match : null;
     const idx = match && Array.isArray(match.playerIds) ? match.playerIds.indexOf(playerId) : -1;
@@ -439,18 +447,65 @@ function validateAction(game, action, playerId, context) {
         for (const key of Object.keys(action.permanents)) {
           const nextArr = Array.isArray(action.permanents[key]) ? action.permanents[key] : [];
           const prevArr = Array.isArray(prevPer[key]) ? prevPer[key] : [];
-          const len = Math.min(prevArr.length, nextArr.length);
-          for (let i = 0; i < len; i++) {
-            const prevItem = prevArr[i] || {};
-            const nextItem = nextArr[i] || {};
-            try {
-              const owner = Number(prevItem.owner);
-              const prevTapped = !!prevItem.tapped;
-              const nextTapped = Object.prototype.hasOwnProperty.call(nextItem, 'tapped') ? !!nextItem.tapped : prevTapped;
-              if (prevTapped !== nextTapped && owner !== meNum) {
-                return { ok: false, error: 'Cannot tap or untap opponent permanent' };
+
+          // Check if this is a delta patch (items have instanceId)
+          const isDeltaPatch = nextArr.length > 0 && nextArr.some(item => item && item.instanceId);
+
+          console.log('[rules-validation] Checking permanents patch for key:', key);
+          console.log('[rules-validation] isDeltaPatch:', isDeltaPatch);
+          console.log('[rules-validation] nextArr.length:', nextArr.length);
+          if (nextArr.length > 0) {
+            console.log('[rules-validation] nextArr[0]:', JSON.stringify(nextArr[0], null, 2));
+          }
+          if (prevArr.length > 0) {
+            console.log('[rules-validation] prevArr[0]:', JSON.stringify({
+              name: prevArr[0]?.card?.name,
+              owner: prevArr[0]?.owner,
+              tapped: prevArr[0]?.tapped,
+              instanceId: prevArr[0]?.instanceId
+            }, null, 2));
+          }
+
+          if (isDeltaPatch) {
+            // Delta patch: match by instanceId, not by array index
+            for (const nextItem of nextArr) {
+              if (!nextItem || !nextItem.instanceId) continue;
+
+              // Skip items marked for removal
+              if (nextItem.__remove) continue;
+
+              // Find matching item in previous state by instanceId
+              const prevItem = prevArr.find(p => p && p.instanceId === nextItem.instanceId);
+              if (!prevItem) {
+                // New item being added, no tap state comparison needed
+                continue;
               }
-            } catch {}
+
+              try {
+                const owner = Number(prevItem.owner);
+                const prevTapped = !!prevItem.tapped;
+                const nextTapped = Object.prototype.hasOwnProperty.call(nextItem, 'tapped') ? !!nextItem.tapped : prevTapped;
+                if (prevTapped !== nextTapped && owner !== meNum) {
+                  console.log('[rules-validation] REJECTING tap/untap of opponent permanent (delta patch)');
+                  return { ok: false, error: 'Cannot tap or untap opponent permanent' };
+                }
+              } catch {}
+            }
+          } else {
+            // Full snapshot: compare by array index (legacy behavior)
+            const len = Math.min(prevArr.length, nextArr.length);
+            for (let i = 0; i < len; i++) {
+              const prevItem = prevArr[i] || {};
+              const nextItem = nextArr[i] || {};
+              try {
+                const owner = Number(prevItem.owner);
+                const prevTapped = !!prevItem.tapped;
+                const nextTapped = Object.prototype.hasOwnProperty.call(nextItem, 'tapped') ? !!nextItem.tapped : prevTapped;
+                if (prevTapped !== nextTapped && owner !== meNum) {
+                  return { ok: false, error: 'Cannot tap or untap opponent permanent' };
+                }
+              } catch {}
+            }
           }
         }
       }
