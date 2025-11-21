@@ -53,6 +53,7 @@ type BoardTileProps = {
   pendingMagic: GameState["pendingMagic"];
   avatars: GameState["avatars"];
   magicHighlightColor: string;
+  magicGuidesActive: GameState["magicGuidesActive"];
   clearBoardSelection: () => void;
   permanents: Permanents;
   permanentPositions: GameState["permanentPositions"];
@@ -103,6 +104,7 @@ export function BoardTile({
   pendingMagic,
   avatars,
   magicHighlightColor,
+  magicGuidesActive,
   clearBoardSelection,
   permanents,
   permanentPositions,
@@ -140,13 +142,16 @@ export function BoardTile({
         lastDropAt={lastDropAt}
       />
 
-      <MagicTargetOverlay
-        tileX={tileX}
-        tileY={tileY}
-        pendingMagic={pendingMagic}
-        avatars={avatars}
-        highlightColor={magicHighlightColor}
-      />
+      {magicGuidesActive && (
+        <MagicTargetOverlay
+          tileX={tileX}
+          tileY={tileY}
+          pendingMagic={pendingMagic}
+          avatars={avatars}
+          highlightColor={magicHighlightColor}
+          magicGuidesActive={magicGuidesActive}
+        />
+      )}
 
       <SiteCard
         tileX={tileX}
@@ -165,6 +170,7 @@ export function BoardTile({
         pendingCombat={combatContext.pendingCombat}
         pendingMagic={pendingMagic}
         avatars={avatars}
+        magicGuidesActive={magicGuidesActive}
         dragFromHand={dragFromHand}
         dragFromPile={dragFromPile}
         dragging={permanentDragContext.dragging}

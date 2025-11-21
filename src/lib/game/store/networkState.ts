@@ -212,6 +212,34 @@ export const createNetworkSlice: StateCreator<
           candidate,
           replaceKeys.has("avatars") ? undefined : state.avatars
         );
+
+        // Preserve existing avatar cards if not explicitly updated in the patch
+        // This prevents avatars from disappearing on reload/reconnect
+        if (replaceKeys.has("avatars")) {
+          const p1Candidate = (p.avatars as Partial<Record<PlayerKey, Partial<AvatarState>>>)?.p1;
+          const p2Candidate = (p.avatars as Partial<Record<PlayerKey, Partial<AvatarState>>>)?.p2;
+
+          if (
+            p1Candidate &&
+            !("card" in p1Candidate) &&
+            state.avatars?.p1?.card
+          ) {
+            next.avatars = {
+              ...next.avatars,
+              p1: { ...next.avatars.p1, card: state.avatars.p1.card },
+            } as GameState["avatars"];
+          }
+          if (
+            p2Candidate &&
+            !("card" in p2Candidate) &&
+            state.avatars?.p2?.card
+          ) {
+            next.avatars = {
+              ...next.avatars,
+              p2: { ...next.avatars.p2, card: state.avatars.p2.card },
+            } as GameState["avatars"];
+          }
+        }
       }
       if (p.permanents !== undefined) {
         const source = replaceKeys.has("permanents")

@@ -346,7 +346,8 @@ export default function Board({
     prevOffset: [number, number] | null;
     instanceId?: string | null;
   } | null>(null);
-  const interactionGuides = useScopedStore((s) => s.interactionGuides);
+  const combatGuidesActive = useScopedStore((s) => s.combatGuidesActive);
+  const magicGuidesActive = useScopedStore((s) => s.magicGuidesActive);
   const metaByCardId = useScopedStore((s) => s.metaByCardId);
   const fetchCardMeta = useScopedStore((s) => s.fetchCardMeta);
   const pendingCombat = useScopedStore((s) => s.pendingCombat);
@@ -566,6 +567,7 @@ export default function Board({
     setMagicTargetChoice,
     setMagicCasterChoice,
     computeProjectileFirstHits,
+    magicGuidesActive,
   };
   const counterHandlers = {
     increment: incrementPermanentCounter,
@@ -581,7 +583,7 @@ export default function Board({
     board,
     permanents,
     avatars,
-    interactionGuides,
+    interactionGuides: combatGuidesActive,
     metaByCardId,
     fetchCardMeta,
     moveAvatarToWithOffset,
@@ -647,7 +649,7 @@ export default function Board({
     isSpectator,
     permanents,
     avatars,
-    interactionGuides,
+    interactionGuides: combatGuidesActive,
     metaByCardId,
     fetchCardMeta,
     moveSelectedPermanentToWithOffset,
@@ -770,6 +772,7 @@ export default function Board({
               pendingMagic={pendingMagic}
               avatars={avatars}
               magicHighlightColor={HIGHLIGHT_TARGET}
+              magicGuidesActive={magicGuidesActive}
               clearBoardSelection={clearBoardSelection}
               permanents={permanents}
               permanentPositions={permanentPositions}
@@ -796,7 +799,7 @@ export default function Board({
       <BoardCursorLayer />
 
       {/* Magic spell connection lines */}
-      {pendingMagic && (
+      {pendingMagic && magicGuidesActive && (
         <MagicConnectionLines
           pendingMagic={pendingMagic}
           avatars={avatars}
@@ -865,6 +868,7 @@ export default function Board({
               setMagicCasterChoice,
               setMagicTargetChoice,
               computeProjectileFirstHits,
+              magicGuidesActive,
             }}
             avatarActions={{
               moveAvatarToWithOffset,

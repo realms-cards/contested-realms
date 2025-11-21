@@ -2,7 +2,12 @@
 
 import { useFrame } from "@react-three/fiber";
 import { useRef } from "react";
-import { type Object3D, type Raycaster, type Intersection, type MeshBasicMaterial } from "three";
+import {
+  type Object3D,
+  type Raycaster,
+  type Intersection,
+  type MeshBasicMaterial,
+} from "three";
 
 function noopRaycast(
   this: Object3D,
@@ -54,7 +59,12 @@ export default function CardOutline({
     const t = state.clock.getElapsedTime();
     const phase = (Math.sin(t * Math.PI * 2 * pulseSpeed) + 1) / 2; // 0..1
     const op = pulseMin + (pulseMax - pulseMin) * phase;
-    const mats = [topMat.current, botMat.current, leftMat.current, rightMat.current];
+    const mats = [
+      topMat.current,
+      botMat.current,
+      leftMat.current,
+      rightMat.current,
+    ];
     for (const m of mats) {
       if (!m) continue;
       m.opacity = op;
@@ -78,9 +88,9 @@ export default function CardOutline({
           color={color}
           opacity={opacity}
           depthWrite={false}
-          depthTest={true}
+          depthTest={false}
           toneMapped={false}
-          transparent={opacity < 1}
+          transparent
         />
       </mesh>
       {/* Bottom edge */}
@@ -91,9 +101,9 @@ export default function CardOutline({
           color={color}
           opacity={opacity}
           depthWrite={false}
-          depthTest={true}
+          depthTest={false}
           toneMapped={false}
-          transparent={opacity < 1}
+          transparent
         />
       </mesh>
       {/* Left edge */}
@@ -104,9 +114,9 @@ export default function CardOutline({
           color={color}
           opacity={opacity}
           depthWrite={false}
-          depthTest={true}
+          depthTest={false}
           toneMapped={false}
-          transparent={opacity < 1}
+          transparent
         />
       </mesh>
       {/* Right edge */}
@@ -117,9 +127,9 @@ export default function CardOutline({
           color={color}
           opacity={opacity}
           depthWrite={false}
-          depthTest={true}
+          depthTest={false}
           toneMapped={false}
-          transparent={opacity < 1}
+          transparent
         />
       </mesh>
     </group>
