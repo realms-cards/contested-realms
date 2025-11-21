@@ -233,6 +233,7 @@ export function AvatarCard({
     if (
       magicGuidesActive &&
       pendingMagic &&
+      !pendingMagic.guidesSuppressed &&
       pendingMagic.target &&
       pendingMagic.target.kind === "avatar" &&
       pendingMagic.target.seat === seat
@@ -242,6 +243,7 @@ export function AvatarCard({
     if (
       magicGuidesActive &&
       pendingMagic &&
+      !pendingMagic.guidesSuppressed &&
       pendingMagic.caster &&
       pendingMagic.caster.kind === "avatar" &&
       pendingMagic.caster.seat === seat

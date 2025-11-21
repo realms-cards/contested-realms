@@ -390,7 +390,11 @@ export function PermanentStack({
             roleGlow = HIGHLIGHT_DEFENDER;
           }
         }
-        if (magicGuidesActive && pendingMagic) {
+        if (
+          magicGuidesActive &&
+          pendingMagic &&
+          !pendingMagic.guidesSuppressed
+        ) {
           if (
             pendingMagic.caster &&
             pendingMagic.caster.kind === "permanent" &&

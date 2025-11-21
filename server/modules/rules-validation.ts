@@ -439,14 +439,11 @@ export function validateAction(
           const prevArr = Array.isArray(prevArrRaw) ? prevArrRaw : [];
 
           // Check if this looks like a delta patch (uses instanceId matching)
+          // A delta patch is identified by the presence of instanceId fields
           const isDeltaPatch = nextArr.some((item: unknown) => {
             if (!item || typeof item !== "object") return false;
             const rec = item as AnyRecord;
-            // Delta patches have instanceId and may have __remove or partial data
-            return (
-              typeof rec.instanceId === "string" &&
-              (rec.__remove === true || !rec.card)
-            );
+            return typeof rec.instanceId === "string";
           });
 
           // Skip validation for delta patches - they use instanceId matching, not index matching
@@ -475,11 +472,26 @@ export function validateAction(
                 const nextPlayer = (action as AnyRecord).currentPlayer as number;
                 const untappingNextPlayer = owner === nextPlayer;
 
+                console.log("[rules-validation] Tapped state change detected:", {
+                  prevTapped,
+                  nextTapped,
+                  owner,
+                  meNum,
+                  isTurnTransition,
+                  isUntapping,
+                  untappingNextPlayer,
+                  actionCurrentPlayer: (action as AnyRecord).currentPlayer,
+                  gameCurrentPlayer: game.currentPlayer,
+                  permanentCard: (prevItem.card as AnyRecord)?.name || "unknown",
+                });
+
                 if (isTurnTransition && isUntapping && untappingNextPlayer) {
                   // Allow: player ending turn can untap next player's permanents
+                  console.log("[rules-validation] Allowing turn transition untap");
                   continue;
                 }
 
+                console.log("[rules-validation] REJECTING tap/untap of opponent permanent");
                 return {
                   ok: false,
                   error: "Cannot tap or untap opponent permanent",

@@ -11,7 +11,7 @@ export default function DefensePanel() {
   const setDefenderSelection = useGameStore((s) => s.setDefenderSelection);
   const commitDefenders = useGameStore((s) => s.commitDefenders);
   const cancelCombat = useGameStore((s) => s.cancelCombat);
-  const interactionGuides = useGameStore((s) => s.interactionGuides);
+  const combatGuidesActive = useGameStore((s) => s.combatGuidesActive);
   const boardW = useGameStore((s) => s.board.size.w);
 
   const isOpen = useMemo(
@@ -26,7 +26,7 @@ export default function DefensePanel() {
       pending &&
       defenderSeat &&
       mySeat === defenderSeat &&
-      interactionGuides
+      combatGuidesActive
   );
 
   const cellKey: CellKey = pending

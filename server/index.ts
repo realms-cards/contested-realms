@@ -3036,6 +3036,27 @@ io.on("connection", async (socket: SocketClient) => {
           io.to(`spectate:${matchId}`).emit("message", out);
         } catch {}
       } catch {}
+    } else if (type === "guidePref") {
+      try {
+        const match = await getOrLoadMatch(matchId);
+        const room = `match:${matchId}`;
+        const seat = getSeatForPlayer(match, player.id) || "p1";
+        const combatRaw = (payload as { combatGuides?: unknown })?.combatGuides;
+        const magicRaw = (payload as { magicGuides?: unknown })?.magicGuides;
+        const combatGuides = !!combatRaw;
+        const magicGuides = !!magicRaw;
+        const out = {
+          type: "guidePref",
+          seat,
+          combatGuides,
+          magicGuides,
+          ts: Date.now(),
+        } as const;
+        io.to(room).emit("message", out);
+        try {
+          io.to(`spectate:${matchId}`).emit("message", out);
+        } catch {}
+      } catch {}
     } else if (type === "toast") {
       try {
         const match = await getOrLoadMatch(matchId);

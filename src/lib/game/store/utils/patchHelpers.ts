@@ -346,6 +346,16 @@ export function buildMoveDeltaPatch(
   per: Permanents,
   prevPer: Permanents
 ): ServerPatchT {
+  console.log("[buildMoveDeltaPatch] Building patch:", {
+    fromKey,
+    toKey,
+    removedCount: removed.length,
+    removedNames: removed.map((r) => r.card.name),
+    updatedCount: updated.length,
+    updatedNames: updated.map((u) => u.card.name),
+    addedCount: added.length,
+    addedNames: added.map((a) => a.card.name),
+  });
   const deltaUpdates: PermanentDeltaUpdate[] = [];
   let deltaValid = true;
   for (const entry of removed) {
@@ -367,6 +377,12 @@ export function buildMoveDeltaPatch(
         deltaValid = false;
         break;
       }
+      console.log("[buildMoveDeltaPatch] Processing updated entry:", {
+        name: entry.card.name,
+        owner: entry.owner,
+        tapped: entry.tapped,
+        attachedTo: entry.attachedTo,
+      });
       const patchEntry: Partial<PermanentItem> = {
         instanceId: id,
       };
@@ -386,6 +402,7 @@ export function buildMoveDeltaPatch(
       if (entry.version !== undefined) {
         patchEntry.version = entry.version;
       }
+      console.log("[buildMoveDeltaPatch] Created patch entry:", patchEntry);
       deltaUpdates.push({
         at: fromKey,
         entry: patchEntry,
@@ -399,6 +416,12 @@ export function buildMoveDeltaPatch(
         deltaValid = false;
         break;
       }
+      console.log("[buildMoveDeltaPatch] Processing added entry:", {
+        name: entry.card.name,
+        owner: entry.owner,
+        tapped: entry.tapped,
+        attachedTo: entry.attachedTo,
+      });
       const patchEntry: Partial<PermanentItem> = {
         instanceId: id,
         owner: entry.owner,
@@ -420,6 +443,7 @@ export function buildMoveDeltaPatch(
       if (entry.version !== undefined) {
         patchEntry.version = entry.version;
       }
+      console.log("[buildMoveDeltaPatch] Created patch entry for added:", patchEntry);
       deltaUpdates.push({
         at: toKey,
         entry: patchEntry,
@@ -434,6 +458,28 @@ export function buildMoveDeltaPatch(
     fromKey,
     toKey,
   ]);
+
+  if (!deltaPatch) {
+    console.log("[buildMoveDeltaPatch] Delta invalid, using fallback patch");
+    console.log("[buildMoveDeltaPatch] Fallback includes cells:", [fromKey, toKey]);
+    console.log("[buildMoveDeltaPatch] Fallback fromKey permanents:",
+      (per ?? prevPer)[fromKey]?.map((p) => ({
+        name: p.card.name,
+        tapped: p.tapped,
+        owner: p.owner,
+        attachedTo: p.attachedTo
+      })));
+    console.log("[buildMoveDeltaPatch] Fallback toKey permanents:",
+      (per ?? prevPer)[toKey]?.map((p) => ({
+        name: p.card.name,
+        tapped: p.tapped,
+        owner: p.owner,
+        attachedTo: p.attachedTo
+      })));
+  } else {
+    console.log("[buildMoveDeltaPatch] Using delta patch with", deltaUpdates.length, "updates");
+  }
+
   return deltaPatch ?? fallbackPatch;
 }
 

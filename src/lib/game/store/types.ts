@@ -193,6 +193,7 @@ export type PendingMagic = {
   } | null;
   createdAt: number;
   summaryText?: string | null;
+  guidesSuppressed?: boolean | null;
 };
 
 // Context menu targeting for click-driven actions

@@ -799,7 +799,7 @@ export default function Board({
       <BoardCursorLayer />
 
       {/* Magic spell connection lines */}
-      {pendingMagic && magicGuidesActive && (
+      {pendingMagic && magicGuidesActive && !pendingMagic.guidesSuppressed && (
         <MagicConnectionLines
           pendingMagic={pendingMagic}
           avatars={avatars}
