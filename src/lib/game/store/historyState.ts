@@ -216,6 +216,25 @@ export const createHistorySlice: StateCreator<
 
           const boardForUndo = sanitizeBoardSitesForUndo(prev.board);
 
+          // Only restore our own zones, preserve opponent's current zones
+          // to avoid undoing their draws/actions
+          const me = state.actorKey as PlayerKey;
+          const opponent: PlayerKey = me === "p1" ? "p2" : "p1";
+          const zonesForUndo = {
+            [me]: prev.zones[me],
+            [opponent]: state.zones[opponent],
+          } as Record<PlayerKey, typeof prev.zones.p1>;
+
+          // Similarly, only restore our own mulligan state
+          const mulligansForUndo = {
+            [me]: prev.mulligans[me],
+            [opponent]: state.mulligans[opponent],
+          } as Record<PlayerKey, number>;
+          const mulliganDrawnForUndo = {
+            [me]: prev.mulliganDrawn[me],
+            [opponent]: state.mulliganDrawn[opponent],
+          } as Record<PlayerKey, typeof prev.mulliganDrawn.p1>;
+
           const patch: ServerPatchT = {
             players: prev.players,
             currentPlayer: prev.currentPlayer,
@@ -224,11 +243,11 @@ export const createHistorySlice: StateCreator<
             d20Rolls: prev.d20Rolls,
             setupWinner: prev.setupWinner,
             board: boardForUndo,
-            zones: prev.zones,
+            zones: zonesForUndo,
             avatars: prev.avatars,
             permanents: prev.permanents,
-            mulligans: prev.mulligans,
-            mulliganDrawn: prev.mulliganDrawn,
+            mulligans: mulligansForUndo,
+            mulliganDrawn: mulliganDrawnForUndo,
             permanentPositions: prev.permanentPositions,
             permanentAbilities: prev.permanentAbilities,
             sitePositions: prev.sitePositions,
