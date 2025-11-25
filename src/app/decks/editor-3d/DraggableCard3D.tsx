@@ -239,6 +239,15 @@ function DraggableCard3DInner({
           onHoverEnd?.();
         }}
         onPointerMove={(e: ThreeEvent<PointerEvent>) => {
+          // Continuous hover detection: check if this card is the topmost one under cursor
+          // This fires more reliably than onPointerOver for overlapping cards
+          if (interactive && !dragging.current && isPrimaryCardHit(e)) {
+            onHoverStart?.({
+              slug,
+              name: cardName ?? slug,
+              type: cardType ?? null,
+            });
+          }
           if (disabled) return;
           const s = dragStart.current;
           if (!s) return;

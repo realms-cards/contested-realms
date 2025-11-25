@@ -1732,9 +1732,15 @@ function AuthenticatedDeckEditor() {
   const clearHoverPreviewDebouncedRef = useRef(clearHoverPreviewDebounced);
   clearHoverPreviewDebouncedRef.current = clearHoverPreviewDebounced;
 
+  // Track currently hovered slug to dedupe rapid pointer move events
+  const currentHoverSlugRef = useRef<string | null>(null);
+
   // Stable hover callbacks that don't change reference - critical for memoized DraggableCard3D
   const stableOnHoverStart = useCallback(
     (card: { slug: string; name: string; type: string | null }) => {
+      // Dedupe: only update if the hovered card actually changed
+      if (currentHoverSlugRef.current === card.slug) return;
+      currentHoverSlugRef.current = card.slug;
       beginHoverPreviewRef.current(
         { slug: card.slug, name: card.name, type: card.type },
         `card:${card.slug}`
@@ -1744,6 +1750,7 @@ function AuthenticatedDeckEditor() {
   );
 
   const stableOnHoverEnd = useCallback(() => {
+    currentHoverSlugRef.current = null;
     clearHoverPreviewDebouncedRef.current(null, 20);
   }, []);
 
