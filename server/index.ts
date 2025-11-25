@@ -4264,25 +4264,39 @@ io.on("connection", async (socket: SocketClient) => {
     rtcHandlers.handleDisconnect(player ?? null);
 
     // Update draft presence on disconnect (cluster-aware)
+    // Capture session ID at disconnect time to avoid stale closure in async callback
+    const disconnectedDraftSessionId = currentDraftSessionId;
     try {
-      if (currentDraftSessionId) {
+      if (disconnectedDraftSessionId) {
         updateDraftPresence(
-          currentDraftSessionId,
+          disconnectedDraftSessionId,
           pid,
           players.get(pid)?.displayName || null,
           false
         )
           .then((list) => {
             try {
-              io.to(`draft:${currentDraftSessionId}`).emit(
+              io.to(`draft:${disconnectedDraftSessionId}`).emit(
                 "draft:session:presence",
-                { sessionId: currentDraftSessionId, players: list }
+                { sessionId: disconnectedDraftSessionId, players: list }
               );
-            } catch {}
+            } catch (emitErr) {
+              console.warn(
+                "[draft] Failed to emit presence on disconnect:",
+                emitErr
+              );
+            }
           })
-          .catch(() => {});
+          .catch((presenceErr) => {
+            console.warn(
+              "[draft] Failed to update presence on disconnect:",
+              presenceErr
+            );
+          });
       }
-    } catch {}
+    } catch (err) {
+      console.warn("[draft] Draft presence disconnect cleanup failed:", err);
+    }
 
     if (player) {
       // If the player was in a lobby, remove them immediately to prevent ghost lobbies

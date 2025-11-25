@@ -15,6 +15,8 @@ type TransportSlice = Pick<
 >;
 
 const PATCH_SIGNATURE_TTL_MS = 7_000;
+const MAX_SIGNATURE_MAP_SIZE = 100;
+const MAX_ENTRIES_PER_SIGNATURE = 10;
 const PATCH_SIGNATURE_FIELDS = [
   "permanents",
   "zones",
@@ -268,7 +270,26 @@ const registerPatchSignature = (
   if (!signature) return;
   const now = Date.now();
   prunePatchSignatures(now);
-  const list = pendingPatchSignatures.get(signature.id) ?? [];
+
+  // Prevent unbounded growth by limiting map size
+  if (pendingPatchSignatures.size >= MAX_SIGNATURE_MAP_SIZE) {
+    // Remove oldest entries by deleting first keys
+    const keysToDelete = Array.from(pendingPatchSignatures.keys()).slice(
+      0,
+      Math.floor(MAX_SIGNATURE_MAP_SIZE / 4)
+    );
+    for (const key of keysToDelete) {
+      pendingPatchSignatures.delete(key);
+    }
+  }
+
+  let list = pendingPatchSignatures.get(signature.id) ?? [];
+
+  // Limit entries per signature
+  if (list.length >= MAX_ENTRIES_PER_SIGNATURE) {
+    list = list.slice(-MAX_ENTRIES_PER_SIGNATURE + 1);
+  }
+
   const payload: Record<string, string> = {};
   for (const field of signature.fields) {
     const raw = (patch as Record<string, unknown>)[field];
@@ -281,6 +302,13 @@ const registerPatchSignature = (
     payload,
   });
   pendingPatchSignatures.set(signature.id, list);
+};
+
+/**
+ * Clear all pending patch signatures. Call on transport disconnect/reset.
+ */
+export const clearPatchSignatures = () => {
+  pendingPatchSignatures.clear();
 };
 
 export const createTransportSlice: StateCreator<
@@ -301,6 +329,10 @@ export const createTransportSlice: StateCreator<
           unsubscribe?.();
         } catch {}
       }
+    }
+    // Clear pending patch signatures when transport is disconnected to prevent memory leak
+    if (!t) {
+      clearPatchSignatures();
     }
     const unsubscribers: Array<() => void> = [];
     if (t) {
