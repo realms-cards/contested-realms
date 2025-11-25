@@ -1726,6 +1726,27 @@ function AuthenticatedDeckEditor() {
     };
   }, []);
 
+  // Stable callback refs for 3D card hover (prevents re-renders when passing to memoized cards)
+  const beginHoverPreviewRef = useRef(beginHoverPreview);
+  beginHoverPreviewRef.current = beginHoverPreview;
+  const clearHoverPreviewDebouncedRef = useRef(clearHoverPreviewDebounced);
+  clearHoverPreviewDebouncedRef.current = clearHoverPreviewDebounced;
+
+  // Stable hover callbacks that don't change reference - critical for memoized DraggableCard3D
+  const stableOnHoverStart = useCallback(
+    (card: { slug: string; name: string; type: string | null }) => {
+      beginHoverPreviewRef.current(
+        { slug: card.slug, name: card.name, type: card.type },
+        `card:${card.slug}`
+      );
+    },
+    []
+  );
+
+  const stableOnHoverEnd = useCallback(() => {
+    clearHoverPreviewDebouncedRef.current(null, 20);
+  }, []);
+
   // (Removed unused deckItems/deckCards/sideboardCards memos)
 
   // Derived summaries for HUD panels
@@ -3895,19 +3916,8 @@ function AuthenticatedDeckEditor() {
                     totalInStack={totalInStack}
                     interactive={true}
                     rotationZ={rotationZ}
-                    onHoverStart={(card) => {
-                      beginHoverPreview(
-                        {
-                          slug: card.slug,
-                          name: card.name,
-                          type: card.type,
-                        },
-                        `card-${p.id}`
-                      );
-                    }}
-                    onHoverEnd={() => {
-                      clearHoverPreviewDebounced(null, 20);
-                    }}
+                    onHoverStart={stableOnHoverStart}
+                    onHoverEnd={stableOnHoverEnd}
                     onContextMenu={(cx, cy) =>
                       openContextMenuForCard(
                         p.card.cardId,
