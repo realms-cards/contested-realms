@@ -151,7 +151,8 @@ export function handleCustomMessage(
       return;
     const cardName = card?.name || "";
     const hints = extractMagicTargetingHintsSync(cardName, null);
-    const magicGuidesActive = get().magicGuidesActive;
+    // NOTE: Site highlighting for magic spells is temporarily disabled (guidesSuppressed = true)
+    // until we can provide accurate targeting hints for every spell type.
     set({
       pendingMagic: {
         id: String(id),
@@ -168,7 +169,7 @@ export function handleCustomMessage(
         status: "choosingCaster",
         hints,
         createdAt: Date.now(),
-        guidesSuppressed: !magicGuidesActive,
+        guidesSuppressed: true,
       },
     } as Partial<GameState> as GameState);
     return;

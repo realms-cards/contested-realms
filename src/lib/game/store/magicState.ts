@@ -32,11 +32,13 @@ export const createMagicSlice: StateCreator<GameState, [], [], MagicSlice> = (
     const spell = input.spell;
     const tile = input.tile;
     const createdAt = Date.now();
-    const magicGuidesActive = get().magicGuidesActive;
     const ownerSeat = seatFromOwner(spell.owner);
     const autoCaster =
       input.presetCaster ?? ({ kind: "avatar", seat: ownerSeat } as const);
     const hints = extractMagicTargetingHintsSync(spell.card?.name || "", null);
+    // NOTE: Site highlighting for magic spells is temporarily disabled (guidesSuppressed = true)
+    // until we can provide accurate targeting hints for every spell type.
+    // See reference/SorceryRulebook.pdf for spell targeting rules.
     set({
       pendingMagic: {
         id,
@@ -47,7 +49,7 @@ export const createMagicSlice: StateCreator<GameState, [], [], MagicSlice> = (
         status: "choosingTarget",
         hints,
         createdAt,
-        guidesSuppressed: !magicGuidesActive,
+        guidesSuppressed: true,
       },
     } as Partial<GameState> as GameState);
     // Prefetch rules text early to avoid delay later
@@ -220,9 +222,19 @@ export const createMagicSlice: StateCreator<GameState, [], [], MagicSlice> = (
     if (!pending) return;
     const at = pending.spell.at as CellKey;
     const index = Number(pending.spell.index);
-    try {
-      get().movePermanentToZone(at, index, "graveyard");
-    } catch {}
+
+    // Per Sorcery Rulebook (p.749-751): Only Magic spells go to cemetery after resolution.
+    // Auras (p.743-746), Artifacts/Monuments (p.739-277), and Minions (p.725-729)
+    // remain in play as permanents.
+    const spellType = (pending.spell.card?.type || "").toLowerCase();
+    const isInstantMagic = spellType.includes("magic");
+
+    if (isInstantMagic) {
+      try {
+        get().movePermanentToZone(at, index, "graveyard");
+      } catch {}
+    }
+    // Non-magic spells (Auras, Artifacts, Minions) stay on the board as permanents
     const transport = get().transport;
     if (transport?.sendMessage) {
       try {
