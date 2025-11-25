@@ -38,12 +38,10 @@ type CombatSlice = Pick<
   | "cancelCombat"
 >;
 
-export const createCombatSlice: StateCreator<
-  GameState,
-  [],
-  [],
-  CombatSlice
-> = (set, get) => ({
+export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
+  set,
+  get
+) => ({
   pendingCombat: null,
   attackChoice: null,
   attackTargetChoice: null,
@@ -94,15 +92,20 @@ export const createCombatSlice: StateCreator<
     if (!pending || pending.status !== "committed") return false;
     const { permanents, metaByCardId } = get();
 
-    function getAtkDef(at: string, index: number): { atk: number; def: number } {
+    function getAtkDef(
+      at: string,
+      index: number
+    ): { atk: number; def: number } {
       try {
         const cardId =
           (permanents as Permanents)[at]?.[index]?.card?.cardId ?? null;
         const meta = cardId
-          ? (metaByCardId as Record<
-              number,
-              { attack: number | null; defence: number | null }
-            >)[Number(cardId)]
+          ? (
+              metaByCardId as Record<
+                number,
+                { attack: number | null; defence: number | null }
+              >
+            )[Number(cardId)]
           : undefined;
         const atk = Number(meta?.attack ?? 0) || 0;
         const def = Number(meta?.defence ?? meta?.attack ?? 0) || 0;
@@ -116,16 +119,14 @@ export const createCombatSlice: StateCreator<
       const list = (permanents as Permanents)[at] || [];
       return list.filter(
         (p) =>
-          p.attachedTo &&
-          p.attachedTo.at === at &&
-          p.attachedTo.index === index
+          p.attachedTo && p.attachedTo.at === at && p.attachedTo.index === index
       );
     }
 
-    function computeEffectiveAttack(input: {
-      at: CellKey;
-      index: number;
-    }): { atk: number; firstStrike: boolean } {
+    function computeEffectiveAttack(input: { at: CellKey; index: number }): {
+      atk: number;
+      firstStrike: boolean;
+    } {
       const base = getAtkDef(input.at, input.index).atk;
       const attachments = getAttachments(input.at, input.index);
       let atk = base;
@@ -192,7 +193,10 @@ export const createCombatSlice: StateCreator<
           ts: Date.now(),
         } as unknown as CustomMessage);
       } catch (error) {
-        console.error("[setDamageAssignment] Error sending combatAssign:", error);
+        console.error(
+          "[setDamageAssignment] Error sending combatAssign:",
+          error
+        );
       }
     }
     return true;
@@ -232,7 +236,9 @@ export const createCombatSlice: StateCreator<
           if (target.kind === "avatar") return "Avatar";
           const list = (get().permanents as Permanents)[target.at] || [];
           const permanent =
-            target.index != null && list[target.index] ? list[target.index] : null;
+            target.index != null && list[target.index]
+              ? list[target.index]
+              : null;
           return permanent?.card?.name || "Unit";
         } catch {
           return null;
@@ -312,7 +318,10 @@ export const createCombatSlice: StateCreator<
             ts: Date.now(),
           } as unknown as CustomMessage);
         } catch (error) {
-          console.error("[offerIntercept] Error sending interceptOffer:", error);
+          console.error(
+            "[offerIntercept] Error sending interceptOffer:",
+            error
+          );
         }
       }
       try {
@@ -376,7 +385,10 @@ export const createCombatSlice: StateCreator<
     const players = get().players;
     const board = get().board;
 
-    function getAtkDef(at: string, index: number): { atk: number; def: number } {
+    function getAtkDef(
+      at: string,
+      index: number
+    ): { atk: number; def: number } {
       try {
         const cardId = permanents[at]?.[index]?.card?.cardId;
         const info = cardId ? meta[Number(cardId)] : undefined;
@@ -392,9 +404,7 @@ export const createCombatSlice: StateCreator<
       const list = permanents[at] || [];
       return list.filter(
         (p) =>
-          p.attachedTo &&
-          p.attachedTo.at === at &&
-          p.attachedTo.index === index
+          p.attachedTo && p.attachedTo.at === at && p.attachedTo.index === index
       );
     }
 
@@ -426,10 +436,10 @@ export const createCombatSlice: StateCreator<
       }
     }
 
-    function computeEffectiveAttack(input: {
-      at: CellKey;
-      index: number;
-    }): { atk: number; firstStrike: boolean } {
+    function computeEffectiveAttack(input: { at: CellKey; index: number }): {
+      atk: number;
+      firstStrike: boolean;
+    } {
       const base = getAtkDef(input.at, input.index).atk;
       const attachments = getAttachments(input.at, input.index);
       let atk = base;
@@ -531,7 +541,12 @@ export const createCombatSlice: StateCreator<
       const siteAtTile = tileKey
         ? (board.sites[tileKey] as SiteTile | undefined)
         : undefined;
-      if (!pending.target && siteAtTile && siteAtTile.card && !pending.defenders?.length) {
+      if (
+        !pending.target &&
+        siteAtTile &&
+        siteAtTile.card &&
+        !pending.defenders?.length
+      ) {
         const owner = siteAtTile.owner as 1 | 2 | undefined;
         let seat: PlayerKey | null =
           owner === 1 || owner === 2
@@ -641,21 +656,27 @@ export const createCombatSlice: StateCreator<
     const attackerSeat = seatFromOwner(pending.attacker.owner);
     const defenderSeat = pending.defenderSeat as PlayerKey | null;
     if (actor) {
-      const defenderMayResolve =
-        Boolean(isIntercept && defenderSeat && actor === defenderSeat);
+      const defenderMayResolve = Boolean(
+        isIntercept && defenderSeat && actor === defenderSeat
+      );
       if (!defenderMayResolve && actor !== attackerSeat) return;
     }
     const { permanents, metaByCardId, board, players } = get();
 
-    function getAtkDef(at: string, index: number): { atk: number; def: number } {
+    function getAtkDef(
+      at: string,
+      index: number
+    ): { atk: number; def: number } {
       try {
         const cardId =
           (permanents as Permanents)[at]?.[index]?.card?.cardId ?? null;
         const meta = cardId
-          ? (metaByCardId as Record<
-              number,
-              { attack: number | null; defence: number | null }
-            >)[Number(cardId)]
+          ? (
+              metaByCardId as Record<
+                number,
+                { attack: number | null; defence: number | null }
+              >
+            )[Number(cardId)]
           : undefined;
         const atk = Number(meta?.attack ?? 0) || 0;
         const def = Number(meta?.defence ?? meta?.attack ?? 0) || 0;
@@ -669,16 +690,14 @@ export const createCombatSlice: StateCreator<
       const list = (permanents as Permanents)[at] || [];
       return list.filter(
         (p) =>
-          p.attachedTo &&
-          p.attachedTo.at === at &&
-          p.attachedTo.index === index
+          p.attachedTo && p.attachedTo.at === at && p.attachedTo.index === index
       );
     }
 
-    function computeEffectiveAttack(input: {
-      at: CellKey;
-      index: number;
-    }): { atk: number; firstStrike: boolean } {
+    function computeEffectiveAttack(input: { at: CellKey; index: number }): {
+      atk: number;
+      firstStrike: boolean;
+    } {
       const base = getAtkDef(input.at, input.index).atk;
       const attachments = getAttachments(input.at, input.index);
       let atk = base;
@@ -703,9 +722,25 @@ export const createCombatSlice: StateCreator<
       at: pending.attacker.at,
       index: pending.attacker.index,
     });
+
+    // Helper to get instanceId from a permanent at a given position
+    function getInstanceId(at: CellKey, index: number): string | null {
+      try {
+        return (permanents as Permanents)[at]?.[index]?.instanceId ?? null;
+      } catch {
+        return null;
+      }
+    }
+
     let targetSeat: PlayerKey | undefined;
-    const killList: Array<{ at: CellKey; index: number; owner: PlayerKey }> = [];
-    const damageList: Array<{ at: CellKey; index: number; amount: number }> = [];
+    const killList: Array<{
+      at: CellKey;
+      index: number;
+      owner: PlayerKey;
+      instanceId: string | null;
+    }> = [];
+    const damageList: Array<{ at: CellKey; index: number; amount: number }> =
+      [];
     let defenders = (pending.defenders || []).map((defender) => {
       const stats = getAtkDef(defender.at, defender.index);
       const effective = computeEffectiveAttack({
@@ -760,16 +795,17 @@ export const createCombatSlice: StateCreator<
       let total = 0;
       for (const item of assignment) {
         const key = `${item.at}:${item.index}`;
-        defenderAssignment.set(
-          key,
-          Math.floor(Number(item.amount) || 0)
-        );
+        defenderAssignment.set(key, Math.floor(Number(item.amount) || 0));
         total += Math.floor(Number(item.amount) || 0);
       }
       if (total !== Math.floor(eff.atk)) {
         const actorSeatCurrent = actor as PlayerKey | null;
-        const defenderResolving =
-          Boolean(isIntercept && actorSeatCurrent && defenderSeat && actorSeatCurrent === defenderSeat);
+        const defenderResolving = Boolean(
+          isIntercept &&
+            actorSeatCurrent &&
+            defenderSeat &&
+            actorSeatCurrent === defenderSeat
+        );
         if (defenderResolving) {
           const max = Math.floor(eff.atk);
           const count = defenders.length;
@@ -790,7 +826,10 @@ export const createCombatSlice: StateCreator<
       defenderAssignment.set(`${only.at}:${only.index}`, Math.floor(eff.atk));
     }
 
-    const attackerDef = getAtkDef(pending.attacker.at, pending.attacker.index).def;
+    const attackerDef = getAtkDef(
+      pending.attacker.at,
+      pending.attacker.index
+    ).def;
     let attackerAlive = true;
     const aliveDefenders = new Set(
       defenders.map((defender) => `${defender.at}:${defender.index}`)
@@ -806,6 +845,7 @@ export const createCombatSlice: StateCreator<
               at: defender.at,
               index: defender.index,
               owner: seatFromOwner(defender.owner),
+              instanceId: getInstanceId(defender.at, defender.index),
             });
             aliveDefenders.delete(key);
           } else if (assigned > 0) {
@@ -819,7 +859,11 @@ export const createCombatSlice: StateCreator<
         targetSeat = pending.defenderSeat as PlayerKey;
       }
       const fsAttackFromDefenders = defenders
-        .filter((defender) => defender.fs && aliveDefenders.has(`${defender.at}:${defender.index}`))
+        .filter(
+          (defender) =>
+            defender.fs &&
+            aliveDefenders.has(`${defender.at}:${defender.index}`)
+        )
         .reduce((sum, defender) => sum + defender.atk, 0);
       if (fsAttackFromDefenders >= attackerDef && attackerDef > 0) {
         attackerAlive = false;
@@ -836,6 +880,7 @@ export const createCombatSlice: StateCreator<
             at: defender.at,
             index: defender.index,
             owner: seatFromOwner(defender.owner),
+            instanceId: getInstanceId(defender.at, defender.index),
           });
           aliveDefenders.delete(key);
         } else if (assigned > 0) {
@@ -850,12 +895,14 @@ export const createCombatSlice: StateCreator<
     }
 
     if (attackerAlive) {
-      const anyFirstStrike = eff.firstStrike || defenders.some((defender) => defender.fs);
+      const anyFirstStrike =
+        eff.firstStrike || defenders.some((defender) => defender.fs);
       let defenderAtkSum = 0;
       if (anyFirstStrike) {
         const nonFsAlive = defenders.filter(
           (defender) =>
-            !defender.fs && aliveDefenders.has(`${defender.at}:${defender.index}`)
+            !defender.fs &&
+            aliveDefenders.has(`${defender.at}:${defender.index}`)
         );
         defenderAtkSum = nonFsAlive.reduce(
           (sum, defender) => sum + defender.atk,
@@ -877,6 +924,7 @@ export const createCombatSlice: StateCreator<
         at: pending.attacker.at,
         index: pending.attacker.index,
         owner: attackerSeat,
+        instanceId: getInstanceId(pending.attacker.at, pending.attacker.index),
       });
     }
 
@@ -890,7 +938,10 @@ export const createCombatSlice: StateCreator<
 
     if (defenders.length === 0) {
       if (pending.target && pending.target.kind === "site") {
-        const owner = board.sites[pending.target.at]?.owner as 1 | 2 | undefined;
+        const owner = board.sites[pending.target.at]?.owner as
+          | 1
+          | 2
+          | undefined;
         if (owner === 1 || owner === 2) {
           const seat = seatFromOwner(owner);
           targetSeat = seat;
@@ -927,27 +978,45 @@ export const createCombatSlice: StateCreator<
       }
     }
 
+    // Helper to find current index of a permanent by instanceId
+    function findIndexByInstanceId(
+      at: CellKey,
+      instanceId: string | null
+    ): number {
+      if (!instanceId) return -1;
+      const list = (get().permanents as Permanents)[at] || [];
+      return list.findIndex((p) => p.instanceId === instanceId);
+    }
+
     const mySeat = get().actorKey as PlayerKey | null;
-    if (mySeat) {
-      for (const kill of killList) {
-        if (kill.owner === mySeat) {
-          try {
-            get().movePermanentToZone(kill.at, kill.index, "graveyard");
-          } catch (error) {
-            console.error("[autoResolveCombat] Error moving to graveyard:", error);
+
+    // Sort kills by index descending within each cell to avoid index shifting issues
+    // When removing items, higher indices should be removed first
+    const myKills = killList
+      .filter((k) => !mySeat || k.owner === mySeat)
+      .sort((a, b) => {
+        if (a.at !== b.at) return 0; // Only sort within same cell
+        return b.index - a.index; // Descending order
+      });
+
+    for (const kill of myKills) {
+      try {
+        // Prefer instanceId lookup to handle index drift from concurrent patches
+        let currentIndex = kill.index;
+        if (kill.instanceId) {
+          const found = findIndexByInstanceId(kill.at, kill.instanceId);
+          if (found >= 0) {
+            currentIndex = found;
+          } else {
+            console.warn(
+              "[autoResolveCombat] Permanent not found by instanceId, using original index:",
+              kill
+            );
           }
         }
-      }
-    } else {
-      for (const kill of killList) {
-        try {
-          get().movePermanentToZone(kill.at, kill.index, "graveyard");
-        } catch (error) {
-          console.error(
-            "[autoResolveCombat] Error moving to graveyard (hotseat):",
-            error
-          );
-        }
+        get().movePermanentToZone(kill.at, currentIndex, "graveyard");
+      } catch (error) {
+        console.error("[autoResolveCombat] Error moving to graveyard:", error);
       }
     }
 
@@ -961,7 +1030,10 @@ export const createCombatSlice: StateCreator<
           ts: Date.now(),
         } as unknown as CustomMessage);
       } catch (error) {
-        console.error("[autoResolveCombat] Error sending combatAutoApply:", error);
+        console.error(
+          "[autoResolveCombat] Error sending combatAutoApply:",
+          error
+        );
       }
     }
     if (transport?.sendMessage && damageList.length > 0) {
@@ -979,9 +1051,11 @@ export const createCombatSlice: StateCreator<
 
     const attackerName = (() => {
       try {
-        return (get().permanents as Permanents)[pending.attacker.at]?.[
-          pending.attacker.index
-        ]?.card?.name || "Attacker";
+        return (
+          (get().permanents as Permanents)[pending.attacker.at]?.[
+            pending.attacker.index
+          ]?.card?.name || "Attacker"
+        );
       } catch {
         return "Attacker";
       }
@@ -989,7 +1063,9 @@ export const createCombatSlice: StateCreator<
 
     const getNameAt = (at: CellKey, index: number): string => {
       try {
-        return (get().permanents as Permanents)[at]?.[index]?.card?.name || "Unit";
+        return (
+          (get().permanents as Permanents)[at]?.[index]?.card?.name || "Unit"
+        );
       } catch {
         return "Unit";
       }
@@ -1077,18 +1153,14 @@ export const createCombatSlice: StateCreator<
       }
     } else if (pending.target && pending.target.kind === "avatar") {
       const seat: PlayerKey = opponentSeat(attackerSeat);
-      const before = Number(
-        (players as GameState["players"])[seat]?.life ?? 0
-      );
+      const before = Number((players as GameState["players"])[seat]?.life ?? 0);
       const after = Number(
         (get().players as GameState["players"])[seat]?.life ?? before
       );
       const dmg = Math.max(0, before - after);
       const avatarName = (() => {
         try {
-          return (
-            (get().avatars?.[seat]?.card?.name as string) || "Avatar"
-          );
+          return (get().avatars?.[seat]?.card?.name as string) || "Avatar";
         } catch {
           return "Avatar";
         }
@@ -1108,8 +1180,8 @@ export const createCombatSlice: StateCreator<
       const siteName = (() => {
         try {
           return (
-            (get().board.sites[pending.target.at as CellKey]?.card?.name ||
-              "Site")
+            get().board.sites[pending.target.at as CellKey]?.card?.name ||
+            "Site"
           );
         } catch {
           return "Site";
@@ -1153,7 +1225,10 @@ export const createCombatSlice: StateCreator<
           targetSeat,
         } as unknown as CustomMessage);
       } catch (error) {
-        console.error("[autoResolveCombat] Error sending combatSummary:", error);
+        console.error(
+          "[autoResolveCombat] Error sending combatSummary:",
+          error
+        );
       }
     }
 

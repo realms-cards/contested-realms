@@ -592,23 +592,61 @@ export function handleCustomMessage(
         "kills count:",
         killsAny.length
       );
-      for (const k of killsAny) {
-        if (!k || typeof k !== "object") continue;
-        const rec = k as Record<string, unknown>;
-        const at = typeof rec.at === "string" ? (rec.at as string) : "";
-        const idx = Number(rec.index);
-        const owner = (rec.owner as PlayerKey | undefined) ?? undefined;
-        console.log(
-          "[combatAutoApply] Processing kill:",
-          { at, idx, owner },
-          "owner === mySeat?",
-          owner === mySeat
-        );
-        if (!at || !Number.isFinite(idx)) continue;
-        if (!mySeat || owner !== mySeat) continue;
-        console.log("[combatAutoApply] Applying kill to graveyard:", at, idx);
+
+      // Parse kills and filter to only my kills
+      const myKills = killsAny
+        .filter((k): k is Record<string, unknown> => k && typeof k === "object")
+        .map((rec) => ({
+          at: typeof rec.at === "string" ? (rec.at as string) : "",
+          index: Number(rec.index),
+          owner: (rec.owner as PlayerKey | undefined) ?? undefined,
+          instanceId:
+            typeof rec.instanceId === "string" ? rec.instanceId : null,
+        }))
+        .filter(
+          (k) =>
+            k.at && Number.isFinite(k.index) && mySeat && k.owner === mySeat
+        )
+        // Sort by index descending within each cell to avoid index shifting
+        .sort((a, b) => {
+          if (a.at !== b.at) return 0;
+          return b.index - a.index;
+        });
+
+      for (const kill of myKills) {
+        console.log("[combatAutoApply] Processing kill:", kill);
         try {
-          get().movePermanentToZone(at as CellKey, Number(idx), "graveyard");
+          // Find current index by instanceId if available
+          let currentIndex = kill.index;
+          if (kill.instanceId) {
+            const permanents = get().permanents as Permanents;
+            const list = permanents[kill.at] || [];
+            const foundIdx = list.findIndex(
+              (p) => p.instanceId === kill.instanceId
+            );
+            if (foundIdx >= 0) {
+              currentIndex = foundIdx;
+              console.log(
+                "[combatAutoApply] Found by instanceId at index:",
+                currentIndex
+              );
+            } else {
+              console.warn(
+                "[combatAutoApply] Permanent not found by instanceId, using original index:",
+                kill
+              );
+            }
+          }
+          console.log(
+            "[combatAutoApply] Applying kill to graveyard:",
+            kill.at,
+            currentIndex
+          );
+          get().movePermanentToZone(
+            kill.at as CellKey,
+            currentIndex,
+            "graveyard"
+          );
         } catch (err) {
           console.error("[combatAutoApply] Error moving to graveyard:", err);
         }

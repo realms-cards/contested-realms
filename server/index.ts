@@ -56,6 +56,12 @@ const { registerRtcHandlers } = require("./socket/rtc-handlers");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { registerPubSubListeners } = require("./socket/pubsub-listeners");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
+const { createRedisStateManager } = require("./core/redis-state");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { createPlayerRegistry } = require("./modules/player-registry");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { LEADER_HEARTBEAT_INTERVAL_MS } = require("./core/redis-keys");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { startMaintenanceTimers } = require("./maintenance/timers");
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -599,6 +605,64 @@ const matchRecordings = new Map();
 const rtcParticipants: Map<string, Set<string>> = new Map();
 const participantDetails: Map<string, VoiceParticipant> = new Map();
 const pendingVoiceRequests: Map<string, PendingVoiceRequest> = new Map();
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Redis State Manager (Horizontal Scaling)
+// ─────────────────────────────────────────────────────────────────────────────
+const REDIS_STATE_ENABLED = serverConfig.enableRedisState;
+const redisState = createRedisStateManager({
+  redis: storeRedis,
+  instanceId: INSTANCE_ID,
+  enabled: REDIS_STATE_ENABLED,
+});
+
+if (REDIS_STATE_ENABLED) {
+  try {
+    console.log(`[scaling] Redis state enabled (instance=${INSTANCE_ID})`);
+  } catch {}
+} else {
+  try {
+    console.log(`[scaling] Redis state disabled, using local Maps only`);
+  } catch {}
+}
+
+// Player Registry (uses Redis state for cross-instance awareness)
+const playerRegistry = createPlayerRegistry({
+  io,
+  storeRedis,
+  redisState,
+  instanceId: INSTANCE_ID,
+  players,
+  playerIdBySocket,
+});
+
+// Leader heartbeat interval (refreshes match leader TTLs)
+let leaderHeartbeatInterval: ReturnType<typeof setInterval> | null = null;
+if (REDIS_STATE_ENABLED) {
+  leaderHeartbeatInterval = setInterval(async () => {
+    try {
+      // Refresh leadership for all matches we own
+      for (const matchId of matches.keys()) {
+        const isLeader = await redisState.refreshMatchLeader(matchId);
+        if (!isLeader) {
+          // We lost leadership, log it
+          try {
+            console.log(`[scaling] Lost leadership for match ${matchId}`);
+          } catch {}
+        }
+      }
+      // Also refresh lobby leadership if we're the leader
+      await redisState.refreshLobbyLeader();
+    } catch (err) {
+      try {
+        console.warn(
+          "[scaling] Leader heartbeat error:",
+          safeErrorMessage(err)
+        );
+      } catch {}
+    }
+  }, LEADER_HEARTBEAT_INTERVAL_MS);
+}
 
 const leaderboardService = createLeaderboardService({
   prisma,
@@ -1442,6 +1506,11 @@ function isPlayerConnected(playerId: string): boolean {
 // -----------------------------
 async function getOrClaimMatchLeader(matchId: string): Promise<string | null> {
   try {
+    // Use new Redis state manager if enabled (15s TTL with heartbeat)
+    if (REDIS_STATE_ENABLED) {
+      return redisState.claimMatchLeader(matchId);
+    }
+    // Legacy fallback (60s TTL, no heartbeat)
     if (!storeRedis) return INSTANCE_ID; // single-instance fallback
     const key = `match:leader:${matchId}`;
     const current = await storeRedis.get(key);
@@ -1454,7 +1523,7 @@ async function getOrClaimMatchLeader(matchId: string): Promise<string | null> {
       return current;
     }
     // Try to claim leadership
-    const setRes = await storeRedis.set(key, INSTANCE_ID, "NX", "EX", 60);
+    const setRes = await storeRedis.set(key, INSTANCE_ID, "EX", 60, "NX");
     if (setRes) return INSTANCE_ID;
     // Someone else won
     return await storeRedis.get(key);
@@ -2021,29 +2090,48 @@ io.on("connection", async (socket: SocketClient) => {
     const tokenId = authUser && authUser.id ? String(authUser.id) : null;
     const playerId = tokenId || providedId || rid("p");
 
-    let player = players.get(playerId);
-    if (!player) {
-      player = {
-        id: playerId,
-        displayName,
-        socketId: socket.id,
-        lobbyId: null,
-        matchId: null,
-      };
-      players.set(playerId, player);
-    } else {
-      player.displayName = displayName;
-      player.socketId = socket.id;
-    }
-    playerIdBySocket.set(socket.id, playerId);
-    authed = true;
+    let player: PlayerState;
 
-    // Cache player displayName in Redis for cross-instance lookups
-    try {
-      if (storeRedis) {
-        await storeRedis.hset(`player:${playerId}`, { displayName });
+    // Use player registry for Redis-backed state when enabled
+    if (REDIS_STATE_ENABLED) {
+      player = await playerRegistry.registerPlayer(
+        playerId,
+        displayName,
+        socket
+      );
+    } else {
+      // Legacy local-only state management
+      const existing = players.get(playerId);
+      if (!existing) {
+        player = {
+          id: playerId,
+          displayName,
+          socketId: socket.id,
+          lobbyId: null,
+          matchId: null,
+        };
+        players.set(playerId, player);
+      } else {
+        existing.displayName = displayName;
+        existing.socketId = socket.id;
+        player = existing;
       }
+      playerIdBySocket.set(socket.id, playerId);
+
+      // Cache player displayName in Redis for cross-instance lookups (legacy)
+      try {
+        if (storeRedis) {
+          await storeRedis.hset(`player:${playerId}`, { displayName });
+        }
+      } catch {}
+    }
+
+    // Always join player-specific room for cross-instance messaging
+    try {
+      await socket.join(`player:${playerId}`);
     } catch {}
+
+    authed = true;
 
     try {
       console.log(
@@ -4253,10 +4341,24 @@ io.on("connection", async (socket: SocketClient) => {
         void broadcastSpectatorsUpdated(io, watchId);
       }
     } catch {}
+
+    // Use player registry for disconnect handling when enabled
+    if (REDIS_STATE_ENABLED) {
+      playerRegistry.handleDisconnect(socket);
+    }
+
     const pid = playerIdBySocket.get(socket.id);
-    if (!pid) return;
+    if (!pid) {
+      // Still cleanup rate limiters even if player not found
+      cleanupRateLimits(socket.id);
+      return;
+    }
     const player = players.get(pid);
-    playerIdBySocket.delete(socket.id);
+
+    // Legacy cleanup (always run for local state consistency)
+    if (!REDIS_STATE_ENABLED) {
+      playerIdBySocket.delete(socket.id);
+    }
 
     // Cleanup rate limiters for disconnected socket
     cleanupRateLimits(socket.id);
@@ -4438,6 +4540,20 @@ async function shutdown() {
     console.log("[server] shutting down...");
   } catch {}
   const timer = setTimeout(() => process.exit(0), timeout);
+
+  // Stop leader heartbeat interval
+  try {
+    if (leaderHeartbeatInterval) {
+      clearInterval(leaderHeartbeatInterval);
+      leaderHeartbeatInterval = null;
+    }
+  } catch {}
+
+  // Cleanup player registry timers
+  try {
+    playerRegistry.shutdown();
+  } catch {}
+
   try {
     await new Promise<void>((resolve) => io.close(() => resolve()));
   } catch {}
