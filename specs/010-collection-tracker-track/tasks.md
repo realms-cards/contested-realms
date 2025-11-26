@@ -78,51 +78,51 @@
 
 ---
 
-## Phase 3: UI Components
+## Phase 3: UI Components ✅
 
 ### Collection Page Layout
 
-- [ ] **T028** Create `src/app/collection/layout.tsx` - collection page layout with header, navigation tabs (Collection, Browser, Decks, Stats).
+- [x] **T028** Create `src/app/collection/layout.tsx` - collection page layout with header, navigation tabs (Collection, Browser, Decks, Stats).
 
-- [ ] **T029** Create `src/app/collection/page.tsx` - main collection page showing CollectionGrid, CollectionStats sidebar, empty state for new users.
+- [x] **T029** Create `src/app/collection/page.tsx` - main collection page showing CollectionGrid, CollectionStats sidebar, empty state for new users.
 
 ### Collection Grid
 
-- [ ] **T030** Create `src/app/collection/CollectionGrid.tsx` - display owned cards in grid with card images, quantity badges, foil indicators. Support infinite scroll/pagination.
+- [x] **T030** Create `src/app/collection/CollectionGrid.tsx` - display owned cards in grid with card images, quantity badges, foil indicators. Support infinite scroll/pagination.
 
-- [ ] **T031** Create `src/app/collection/CollectionCard.tsx` - individual card display component with quantity badge, foil styling, click handler for edit modal.
+- [x] **T031** Create `src/app/collection/CollectionCard.tsx` - individual card display component with quantity badge, foil styling, click handler for edit modal.
 
-- [ ] **T032** Create `src/app/collection/CollectionFilters.tsx` - filter controls for set, element, type, rarity, search input, sort dropdown.
+- [x] **T032** Create `src/app/collection/CollectionFilters.tsx` - filter controls for set, element, type, rarity, search input, sort dropdown.
 
 ### Card Browser
 
-- [ ] **T033** Create `src/app/collection/CardBrowser.tsx` - browse ALL cards with owned/not-owned status, reuse existing card search API, show "Add to Collection" button.
+- [x] **T033** Create `src/app/collection/CardBrowser.tsx` - browse ALL cards with owned/not-owned status, reuse existing card search API, show "Add to Collection" button.
 
-- [ ] **T034** Create `src/app/collection/AddCardModal.tsx` - modal for adding card: quantity spinner, finish selector (Standard/Foil), variant picker.
+- [x] **T034** Create `src/app/collection/AddCardModal.tsx` - modal for adding card: quantity spinner, finish selector (Standard/Foil), variant picker.
 
 ### Quick Add
 
-- [ ] **T035** Create `src/app/collection/QuickAdd.tsx` - streamlined quick-add interface: search-as-you-type, one-click add with defaults, recent cards section, batch mode toggle.
+- [x] **T035** Create `src/app/collection/QuickAdd.tsx` - streamlined quick-add interface: search-as-you-type, one-click add with defaults, recent cards section, batch mode toggle.
 
 ### Collection Stats
 
-- [ ] **T036** Create `src/app/collection/CollectionStats.tsx` - display stats: totalCards, uniqueCards, totalValue, set completion bars, element pie chart, rarity breakdown.
+- [x] **T036** Create `src/app/collection/CollectionStats.tsx` - display stats: totalCards, uniqueCards, totalValue, set completion bars, element pie chart, rarity breakdown.
 
-- [ ] **T037** Create `src/app/collection/MissingCards.tsx` - list cards user doesn't own, grouped by set, with "Add to Wishlist" placeholder for future.
+- [x] **T037** Create `src/app/collection/MissingCards.tsx` - list cards user doesn't own, grouped by set, with "Add to Wishlist" placeholder for future.
 
 ### Collection Deck Builder
 
-- [ ] **T038** Create `src/app/collection/decks/page.tsx` - list collection decks with create button, deck cards showing avatar and validation status.
+- [x] **T038** Create `src/app/collection/decks/page.tsx` - list collection decks with create button, deck cards showing avatar and validation status.
 
-- [ ] **T039** Create `src/app/collection/decks/[id]/page.tsx` - collection deck editor: card picker filtered to owned cards, availability indicators, validation warnings.
+- [x] **T039** Create `src/app/collection/decks/[id]/page.tsx` - collection deck editor: card picker filtered to owned cards, availability indicators, validation warnings.
 
-- [ ] **T040** Create `src/app/collection/decks/CollectionDeckEditor.tsx` - deck editing component with ownership enforcement, remaining quantity display, export button.
+- [x] **T040** Create `src/app/collection/decks/CollectionDeckEditor.tsx` - deck editing component with ownership enforcement, remaining quantity display, export button.
 
 ### Pricing Display
 
-- [ ] **T041** Create `src/app/collection/CardPriceTag.tsx` - display card price (or N/A), "Buy on TCGPlayer" affiliate link button.
+- [x] **T041** Create `src/app/collection/CardPriceTag.tsx` - display card price (or N/A), "Buy on TCGPlayer" affiliate link button.
 
-- [ ] **T042** Integrate CardPriceTag into CollectionCard.tsx and CollectionGrid.tsx - show price on hover/detail view.
+- [x] **T042** Integrate CardPriceTag into CollectionCard.tsx and CollectionGrid.tsx - show price on hover/detail view.
 
 ---
 
