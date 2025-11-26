@@ -85,7 +85,7 @@ export default function MissingCards() {
                 >
                   <div className="aspect-[2.5/3.5] relative">
                     <Image
-                      src={`/api/assets/cards/${imageSlug}.webp`}
+                      src={`/api/images/${imageSlug}`}
                       alt={card.name}
                       fill
                       className="object-cover grayscale"

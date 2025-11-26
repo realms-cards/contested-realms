@@ -223,7 +223,7 @@ export default function CollectionDeckEditor({
                 >
                   <div className="w-8 h-11 relative rounded overflow-hidden flex-shrink-0">
                     <Image
-                      src={`/api/assets/cards/${card.slug}.webp`}
+                      src={`/api/images/${card.slug}`}
                       alt={card.name}
                       fill
                       className="object-cover"

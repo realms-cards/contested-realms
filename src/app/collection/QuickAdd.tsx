@@ -229,7 +229,7 @@ export default function QuickAdd({ onClose, onCardAdded }: QuickAddProps) {
                   >
                     <div className="w-10 h-14 relative rounded overflow-hidden flex-shrink-0">
                       <Image
-                        src={`/api/assets/cards/${imageSlug}.webp`}
+                        src={`/api/images/${imageSlug}`}
                         alt={card.name}
                         fill
                         className="object-cover"
@@ -269,7 +269,7 @@ export default function QuickAdd({ onClose, onCardAdded }: QuickAddProps) {
                 >
                   <div className="w-16 h-22 relative rounded overflow-hidden">
                     <Image
-                      src={`/api/assets/cards/${recent.slug}.webp`}
+                      src={`/api/images/${recent.slug}`}
                       alt={recent.name}
                       fill
                       className="object-cover"
