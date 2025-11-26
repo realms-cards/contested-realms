@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useSession } from "next-auth/react";
 import { useState, useEffect } from "react";
 import { Modal } from "@/components/ui/Modal";
+import { useSocket } from "@/lib/hooks/useSocket";
 
 interface Player {
   id: string;
@@ -28,6 +29,7 @@ export default function TournamentInviteModal({
   onInvitesSent,
 }: TournamentInviteModalProps) {
   const { data: session } = useSession();
+  const socket = useSocket();
   const [players, setPlayers] = useState<Player[]>([]);
   const [selectedPlayers, setSelectedPlayers] = useState<Set<string>>(
     new Set()
@@ -107,6 +109,18 @@ export default function TournamentInviteModal({
           inviteCount !== 1 ? "s" : ""
         }`
       );
+
+      // Notify invited players via socket for real-time toast
+      if (socket && data.invitations?.length > 0) {
+        for (const inv of data.invitations) {
+          socket.emit("sendTournamentInvite", {
+            targetPlayerId: inv.inviteeId,
+            tournamentId,
+            tournamentName,
+          });
+        }
+      }
+
       setSelectedPlayers(new Set());
 
       if (onInvitesSent) {
