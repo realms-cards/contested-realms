@@ -4,6 +4,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import AuthButton from "@/components/auth/AuthButton";
+import {
+  PresenceProvider,
+  usePresence,
+} from "@/components/providers/PresenceProvider";
 
 const tabs = [
   { href: "/collection", label: "My Collection", exact: true },
@@ -43,6 +47,24 @@ export default function CollectionLayout({
   }
 
   return (
+    <PresenceProvider location="collection">
+      <CollectionLayoutContent pathname={pathname}>
+        {children}
+      </CollectionLayoutContent>
+    </PresenceProvider>
+  );
+}
+
+function CollectionLayoutContent({
+  children,
+  pathname,
+}: {
+  children: React.ReactNode;
+  pathname: string | null;
+}) {
+  const { connected } = usePresence();
+
+  return (
     <div className="min-h-screen bg-gradient-to-b from-gray-900 to-black text-white">
       {/* Header */}
       <header className="border-b border-gray-800 bg-gray-900/80 backdrop-blur-sm sticky top-0 z-10">
@@ -56,6 +78,13 @@ export default function CollectionLayout({
                 ← Home
               </Link>
               <h1 className="text-xl font-bold">Your Collection</h1>
+              {/* Online indicator */}
+              {connected && (
+                <span className="flex items-center gap-1 text-xs text-green-400">
+                  <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+                  Online
+                </span>
+              )}
             </div>
             <AuthButton />
           </div>
@@ -65,7 +94,7 @@ export default function CollectionLayout({
             {tabs.map((tab) => {
               const isActive = tab.exact
                 ? pathname === tab.href
-                : pathname.startsWith(tab.href);
+                : pathname?.startsWith(tab.href);
 
               return (
                 <Link

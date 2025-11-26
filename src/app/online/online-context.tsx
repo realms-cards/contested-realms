@@ -22,7 +22,11 @@ export type AvailablePlayer = {
   shortUserId: string;
   displayName: string;
   avatarUrl: string | null;
-  presence: { online: boolean; inMatch: boolean };
+  presence: {
+    online: boolean;
+    inMatch: boolean;
+    location?: string | null; // 'lobby' | 'match' | 'collection' | 'decks' | 'browsing'
+  };
   isFriend: boolean;
   lastPlayedAt?: string | null;
   matchCountInLast10?: number | null;
@@ -56,7 +60,11 @@ export type OnlineContextValue = {
   ready: boolean;
   toggleReady: () => void;
   joinLobby: (id?: string) => Promise<void>;
-  createLobby: (options?: { name?: string; visibility?: LobbyVisibility; maxPlayers?: number }) => Promise<void>;
+  createLobby: (options?: {
+    name?: string;
+    visibility?: LobbyVisibility;
+    maxPlayers?: number;
+  }) => Promise<void>;
   leaveLobby: () => void;
   startMatch: (matchConfig?: StartMatchConfig) => void;
   joinMatch: (id: string) => Promise<void>;
@@ -77,7 +85,12 @@ export type OnlineContextValue = {
   // Extended actions
   requestLobbies: () => void;
   // Fetch HTTP available players with optional query/sort/cursor. If reset=true, clears and loads first page.
-  requestPlayers: (opts?: { q?: string; sort?: "recent" | "alphabetical"; cursor?: string | null; reset?: boolean }) => void;
+  requestPlayers: (opts?: {
+    q?: string;
+    sort?: "recent" | "alphabetical";
+    cursor?: string | null;
+    reset?: boolean;
+  }) => void;
   setLobbyVisibility: (visibility: LobbyVisibility) => void;
   setLobbyPlan?: (planned: "constructed" | "sealed" | "draft") => void;
   inviteToLobby: (targetPlayerId: string, lobbyId?: string) => void;
@@ -92,7 +105,11 @@ export type OnlineContextValue = {
     togglePlayback: () => void;
     rtc: UseMatchWebRTCReturn;
     requestConnection: (targetId: string) => void;
-    respondToRequest: (requestId: string, requesterId: string, accepted: boolean) => void;
+    respondToRequest: (
+      requestId: string,
+      requesterId: string,
+      accepted: boolean
+    ) => void;
     dismissOutgoingRequest: () => void;
     clearIncomingRequest: () => void;
     incomingRequest: VoiceIncomingRequest | null;
@@ -102,7 +119,9 @@ export type OnlineContextValue = {
   } | null;
 };
 
-export const OnlineContext = createContext<OnlineContextValue | undefined>(undefined);
+export const OnlineContext = createContext<OnlineContextValue | undefined>(
+  undefined
+);
 
 export function useOnline(): OnlineContextValue {
   const ctx = useContext(OnlineContext);

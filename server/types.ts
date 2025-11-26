@@ -4,12 +4,21 @@ export type Seat = "p1" | "p2";
 
 export type MatchPatch = Record<string, unknown>;
 
+export type PlayerLocation =
+  | "lobby"
+  | "match"
+  | "collection"
+  | "decks"
+  | "browsing"
+  | "offline";
+
 export interface PlayerState {
   id: string;
   displayName: string;
   socketId: string | null;
   lobbyId?: string | null;
   matchId?: string | null;
+  location?: PlayerLocation;
 }
 
 export interface ServerMatchState extends AnyRecord {
@@ -25,11 +34,13 @@ export interface ServerMatchState extends AnyRecord {
   draftConfig?: AnyRecord | null;
   playerDecks?: Map<string, unknown> | null;
   sealedPacks?: AnyRecord | null;
-  game?: (AnyRecord & {
-    winner?: Seat | null;
-    matchEnded?: boolean;
-    results?: unknown;
-  }) | null;
+  game?:
+    | (AnyRecord & {
+        winner?: Seat | null;
+        matchEnded?: boolean;
+        results?: unknown;
+      })
+    | null;
   players?: AnyRecord;
   seed?: string | null;
   turn?: string | null;
