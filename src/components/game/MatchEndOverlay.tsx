@@ -1,6 +1,7 @@
 "use client";
 
 import { Trophy, Skull, Users } from "lucide-react";
+import { createPortal } from "react-dom";
 import type { PlayerKey } from "@/lib/game/store";
 
 interface MatchEndOverlayProps {
@@ -86,9 +87,9 @@ export default function MatchEndOverlay({
     ? "Victory!"
     : `${winnerName ?? "Opponent"} wins`;
 
-  return (
+  const content = (
     <div
-      className="fixed inset-0 z-50 bg-black/80 backdrop-blur flex items-center justify-center"
+      className="fixed inset-0 z-[9999] bg-black/80 backdrop-blur flex items-center justify-center"
       onClick={canContinue ? onClose : undefined}
     >
       <div
@@ -270,4 +271,7 @@ export default function MatchEndOverlay({
       </div>
     </div>
   );
+
+  if (typeof document === "undefined") return null;
+  return createPortal(content, document.body);
 }
