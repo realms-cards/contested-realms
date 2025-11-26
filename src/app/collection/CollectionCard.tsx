@@ -24,7 +24,7 @@ export default function CollectionCard({
   const imageSlug =
     card.variant?.slug ||
     `${card.card.name.toLowerCase().replace(/\s+/g, "_")}_b_s`;
-  const imageUrl = `/api/assets/cards/${imageSlug}.webp`;
+  const imageUrl = `/api/images/${imageSlug}`;
 
   const isFoil = card.finish === "Foil";
 

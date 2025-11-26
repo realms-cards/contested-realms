@@ -83,7 +83,7 @@ export default function AddCardModal({
           <div className="flex gap-4">
             <div className="w-24 aspect-[2.5/3.5] relative rounded overflow-hidden flex-shrink-0">
               <Image
-                src={`/api/assets/cards/${imageSlug}.webp`}
+                src={`/api/images/${imageSlug}`}
                 alt={card.name}
                 fill
                 className="object-cover"

@@ -377,7 +377,7 @@ export default function CardBrowser({ onCardAdded }: CardBrowserProps) {
                 {/* Card Image */}
                 <div className="aspect-[2.5/3.5] relative">
                   <Image
-                    src={`/api/assets/cards/${imageSlug}.webp`}
+                    src={`/api/images/${imageSlug}`}
                     alt={card.name || "Card"}
                     fill
                     className="object-cover"
