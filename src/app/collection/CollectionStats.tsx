@@ -68,6 +68,34 @@ export default function CollectionStats() {
             <div className="text-gray-400 text-sm">Estimated Value</div>
           </div>
         </div>
+
+        {/* Export Buttons */}
+        <div className="mt-4 pt-4 border-t border-gray-700">
+          <div className="text-sm text-gray-400 mb-2">Export Collection</div>
+          <div className="flex gap-2">
+            <a
+              href="/api/collection/export?format=csv"
+              download="collection.csv"
+              className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm"
+            >
+              CSV
+            </a>
+            <a
+              href="/api/collection/export?format=json"
+              download="collection.json"
+              className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm"
+            >
+              JSON
+            </a>
+            <a
+              href="/api/collection/export?format=text"
+              download="collection.txt"
+              className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm"
+            >
+              Text
+            </a>
+          </div>
+        </div>
       </div>
 
       {/* Set Completion */}
