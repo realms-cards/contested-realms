@@ -67,26 +67,36 @@ export default function CollectionDeckEditor({
     try {
       // Search in collection
       const res = await fetch(
-        `/api/collection?search=${encodeURIComponent(query)}&limit=20`
+        `/api/collection?search=${encodeURIComponent(query)}&limit=50`
       );
       if (res.ok) {
         const data = await res.json();
-        const results: SearchResult[] = data.cards.map(
-          (c: {
-            cardId: number;
-            card: { name: string };
-            variant?: { slug: string };
-            quantity: number;
-            meta?: {
-              type?: string;
-              cost?: number;
-              thresholds?: Record<string, number>;
-            };
-          }) => {
-            const inDeck = cards
-              .filter((dc) => dc.cardId === c.cardId)
-              .reduce((sum, dc) => sum + dc.count, 0);
-            return {
+
+        // Consolidate duplicates by cardId
+        const cardMap = new Map<number, SearchResult>();
+
+        for (const c of data.cards as Array<{
+          cardId: number;
+          card: { name: string };
+          variant?: { slug: string };
+          quantity: number;
+          meta?: {
+            type?: string;
+            cost?: number;
+            thresholds?: Record<string, number>;
+          };
+        }>) {
+          const existing = cardMap.get(c.cardId);
+          const inDeck = cards
+            .filter((dc) => dc.cardId === c.cardId)
+            .reduce((sum, dc) => sum + dc.count, 0);
+
+          if (existing) {
+            // Add quantity to existing entry
+            existing.owned += c.quantity;
+          } else {
+            // Create new entry
+            cardMap.set(c.cardId, {
               cardId: c.cardId,
               name: c.card.name,
               owned: c.quantity,
@@ -97,10 +107,11 @@ export default function CollectionDeckEditor({
               type: c.meta?.type || "",
               cost: c.meta?.cost ?? null,
               thresholds: (c.meta?.thresholds as Record<string, number>) || {},
-            };
+            });
           }
-        );
-        setSearchResults(results);
+        }
+
+        setSearchResults(Array.from(cardMap.values()));
       }
     } catch {
       // Ignore errors
@@ -479,17 +490,9 @@ export default function CollectionDeckEditor({
 
         {/* Collection zone - max 10 cards for constructed */}
         <div className="mt-6 p-3 bg-amber-900/20 rounded-lg border border-amber-700/30">
-          <h3 className="font-bold text-amber-200 flex items-center justify-between">
-            <span>
-              Collection ({collection.reduce((s, c) => s + c.count, 0)}/10)
-            </span>
-            <span className="text-xs font-normal text-amber-400/70">
-              Optional cards
-            </span>
+          <h3 className="font-bold text-amber-200">
+            Collection ({collection.reduce((s, c) => s + c.count, 0)}/10)
           </h3>
-          <p className="text-xs text-amber-400/60 mt-1 mb-2">
-            Up to 10 cards stored with your deck but not in the main deck
-          </p>
           {collection.length > 0 ? (
             renderCardList(collection, "Collection")
           ) : (

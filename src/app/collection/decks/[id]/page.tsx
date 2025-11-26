@@ -13,6 +13,12 @@ interface DeckCard {
   count: number;
   ownedQuantity: number;
   availableQuantity: number;
+  slug?: string;
+  meta?: {
+    type?: string;
+    cost?: number;
+    thresholds?: Record<string, number>;
+  } | null;
 }
 
 interface DeckData {
