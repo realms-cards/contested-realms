@@ -326,7 +326,7 @@ export default function CollectionDeckEditor({
           <div className="text-center py-4 text-gray-400">Searching...</div>
         ) : searchResults.length > 0 ? (
           <div className="space-y-2 max-h-96 overflow-y-auto">
-            {searchResults.map((card) => {
+            {searchResults.map((card, index) => {
               const available = card.owned - card.inDeck;
               const autoZone = getAutoZone(card.type);
               const isSite = card.type.toLowerCase().includes("site");
@@ -334,7 +334,7 @@ export default function CollectionDeckEditor({
 
               return (
                 <div
-                  key={card.cardId}
+                  key={`${card.cardId}-${index}`}
                   className="flex items-start gap-2 p-2 bg-gray-800/80 rounded"
                 >
                   {/* Card Image */}
