@@ -19,8 +19,9 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
+    // Allow up to 5000 for summary view (fetches all missing cards)
     const limit = Math.min(
-      100,
+      5000,
       Math.max(1, parseInt(searchParams.get("limit") || "50", 10))
     );
     const setIdParam = searchParams.get("setId");
