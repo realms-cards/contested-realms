@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useCallback, useEffect, useState } from "react";
 
 interface MissingCard {
@@ -23,6 +24,8 @@ interface SetSummary {
   cards: MissingCard[];
 }
 
+type RarityFilter = "unique" | "elite" | "exceptional" | "ordinary" | null;
+
 // Rarity colors
 function getRarityColor(rarity: string): string {
   switch (rarity?.toLowerCase()) {
@@ -38,18 +41,37 @@ function getRarityColor(rarity: string): string {
   }
 }
 
-function getRarityBg(rarity: string): string {
+function getRarityBg(rarity: string, active?: boolean): string {
+  const opacity = active ? "/50" : "/20";
   switch (rarity?.toLowerCase()) {
     case "unique":
-      return "bg-purple-500/20";
+      return `bg-purple-500${opacity}`;
     case "elite":
-      return "bg-yellow-500/20";
+      return `bg-yellow-500${opacity}`;
     case "exceptional":
-      return "bg-blue-500/20";
+      return `bg-blue-500${opacity}`;
     case "ordinary":
     default:
-      return "bg-gray-500/20";
+      return `bg-gray-500${opacity}`;
   }
+}
+
+// Generate slug from card name and set
+function getCardSlug(name: string, setName: string): string {
+  const setPrefix = setName.toLowerCase().startsWith("alpha")
+    ? "alp"
+    : setName.toLowerCase().startsWith("beta")
+    ? "bet"
+    : setName.toLowerCase().startsWith("arthurian")
+    ? "art"
+    : setName.toLowerCase().startsWith("dragon")
+    ? "dra"
+    : "bet";
+  const cardPart = name
+    .toLowerCase()
+    .replace(/\s+/g, "_")
+    .replace(/[^a-z0-9_]/g, "");
+  return `${setPrefix}_${cardPart}_b_s`;
 }
 
 export default function MissingCards() {
@@ -57,6 +79,8 @@ export default function MissingCards() {
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
   const [expandedSet, setExpandedSet] = useState<string | null>(null);
+  const [rarityFilter, setRarityFilter] = useState<RarityFilter>(null);
+  const [hoveredCard, setHoveredCard] = useState<MissingCard | null>(null);
 
   const fetchAllMissing = useCallback(async () => {
     setLoading(true);
@@ -123,17 +147,19 @@ export default function MissingCards() {
               className="bg-gray-800/50 rounded-lg overflow-hidden"
             >
               {/* Set Header - Clickable */}
-              <button
-                onClick={() =>
-                  setExpandedSet(
-                    expandedSet === setSummary.setName
-                      ? null
-                      : setSummary.setName
-                  )
-                }
-                className="w-full p-3 flex items-center justify-between hover:bg-gray-700/50 transition-colors"
-              >
-                <div className="flex items-center gap-3">
+              <div className="p-3 flex items-center justify-between">
+                <button
+                  onClick={() => {
+                    if (expandedSet === setSummary.setName) {
+                      setExpandedSet(null);
+                      setRarityFilter(null);
+                    } else {
+                      setExpandedSet(setSummary.setName);
+                      setRarityFilter(null);
+                    }
+                  }}
+                  className="flex items-center gap-3 hover:text-white transition-colors"
+                >
                   <span
                     className={`text-lg transition-transform ${
                       expandedSet === setSummary.setName ? "rotate-90" : ""
@@ -145,87 +171,182 @@ export default function MissingCards() {
                   <span className="text-gray-500 text-sm">
                     ({setSummary.total} missing)
                   </span>
-                </div>
-                {/* Rarity breakdown */}
+                </button>
+                {/* Rarity breakdown - clickable filters */}
                 <div className="flex gap-2 text-xs">
                   {setSummary.byRarity.unique > 0 && (
-                    <span
-                      className={`px-2 py-0.5 rounded ${getRarityBg(
-                        "unique"
-                      )} ${getRarityColor("unique")}`}
+                    <button
+                      onClick={() => {
+                        setExpandedSet(setSummary.setName);
+                        setRarityFilter(
+                          rarityFilter === "unique" &&
+                            expandedSet === setSummary.setName
+                            ? null
+                            : "unique"
+                        );
+                      }}
+                      className={`px-2 py-0.5 rounded transition-all ${getRarityBg(
+                        "unique",
+                        rarityFilter === "unique" &&
+                          expandedSet === setSummary.setName
+                      )} ${getRarityColor("unique")} ${
+                        rarityFilter === "unique" &&
+                        expandedSet === setSummary.setName
+                          ? "ring-1 ring-purple-400"
+                          : "hover:ring-1 hover:ring-purple-400/50"
+                      }`}
                     >
                       {setSummary.byRarity.unique} U
-                    </span>
+                    </button>
                   )}
                   {setSummary.byRarity.elite > 0 && (
-                    <span
-                      className={`px-2 py-0.5 rounded ${getRarityBg(
-                        "elite"
-                      )} ${getRarityColor("elite")}`}
+                    <button
+                      onClick={() => {
+                        setExpandedSet(setSummary.setName);
+                        setRarityFilter(
+                          rarityFilter === "elite" &&
+                            expandedSet === setSummary.setName
+                            ? null
+                            : "elite"
+                        );
+                      }}
+                      className={`px-2 py-0.5 rounded transition-all ${getRarityBg(
+                        "elite",
+                        rarityFilter === "elite" &&
+                          expandedSet === setSummary.setName
+                      )} ${getRarityColor("elite")} ${
+                        rarityFilter === "elite" &&
+                        expandedSet === setSummary.setName
+                          ? "ring-1 ring-yellow-400"
+                          : "hover:ring-1 hover:ring-yellow-400/50"
+                      }`}
                     >
                       {setSummary.byRarity.elite} E
-                    </span>
+                    </button>
                   )}
                   {setSummary.byRarity.exceptional > 0 && (
-                    <span
-                      className={`px-2 py-0.5 rounded ${getRarityBg(
-                        "exceptional"
-                      )} ${getRarityColor("exceptional")}`}
+                    <button
+                      onClick={() => {
+                        setExpandedSet(setSummary.setName);
+                        setRarityFilter(
+                          rarityFilter === "exceptional" &&
+                            expandedSet === setSummary.setName
+                            ? null
+                            : "exceptional"
+                        );
+                      }}
+                      className={`px-2 py-0.5 rounded transition-all ${getRarityBg(
+                        "exceptional",
+                        rarityFilter === "exceptional" &&
+                          expandedSet === setSummary.setName
+                      )} ${getRarityColor("exceptional")} ${
+                        rarityFilter === "exceptional" &&
+                        expandedSet === setSummary.setName
+                          ? "ring-1 ring-blue-400"
+                          : "hover:ring-1 hover:ring-blue-400/50"
+                      }`}
                     >
                       {setSummary.byRarity.exceptional} Ex
-                    </span>
+                    </button>
                   )}
                   {setSummary.byRarity.ordinary > 0 && (
-                    <span
-                      className={`px-2 py-0.5 rounded ${getRarityBg(
-                        "ordinary"
-                      )} ${getRarityColor("ordinary")}`}
+                    <button
+                      onClick={() => {
+                        setExpandedSet(setSummary.setName);
+                        setRarityFilter(
+                          rarityFilter === "ordinary" &&
+                            expandedSet === setSummary.setName
+                            ? null
+                            : "ordinary"
+                        );
+                      }}
+                      className={`px-2 py-0.5 rounded transition-all ${getRarityBg(
+                        "ordinary",
+                        rarityFilter === "ordinary" &&
+                          expandedSet === setSummary.setName
+                      )} ${getRarityColor("ordinary")} ${
+                        rarityFilter === "ordinary" &&
+                        expandedSet === setSummary.setName
+                          ? "ring-1 ring-gray-400"
+                          : "hover:ring-1 hover:ring-gray-400/50"
+                      }`}
                     >
                       {setSummary.byRarity.ordinary} O
-                    </span>
+                    </button>
                   )}
                 </div>
-              </button>
+              </div>
 
               {/* Expanded Card List */}
               {expandedSet === setSummary.setName && (
-                <div className="border-t border-gray-700 p-3 bg-gray-900/50">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-1">
+                <div className="border-t border-gray-700 p-3 bg-gray-900/50 relative">
+                  {/* Card preview tooltip */}
+                  {hoveredCard && (
+                    <div className="absolute right-4 top-4 z-50 pointer-events-none">
+                      <div className="w-48 aspect-[2.5/3.5] relative rounded-lg overflow-hidden shadow-2xl ring-2 ring-white/20">
+                        <Image
+                          src={`/api/images/${getCardSlug(
+                            hoveredCard.name,
+                            hoveredCard.set
+                          )}`}
+                          alt={hoveredCard.name}
+                          fill
+                          className={`object-cover ${
+                            hoveredCard.type?.toLowerCase().includes("site")
+                              ? "rotate-90 scale-125"
+                              : ""
+                          }`}
+                          sizes="192px"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Filter indicator */}
+                  {rarityFilter && (
+                    <div className="mb-2 text-xs text-gray-400">
+                      Showing {rarityFilter} cards only •{" "}
+                      <button
+                        onClick={() => setRarityFilter(null)}
+                        className="text-blue-400 hover:underline"
+                      >
+                        Show all
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Cards list - single column when filtered */}
+                  <div
+                    className={
+                      rarityFilter
+                        ? "space-y-0.5 max-h-96 overflow-y-auto"
+                        : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-1 max-h-96 overflow-y-auto"
+                    }
+                  >
                     {setSummary.cards
-                      .sort((a, b) => {
-                        // Sort by rarity (unique first) then name
-                        const rarityOrder = {
-                          unique: 0,
-                          elite: 1,
-                          exceptional: 2,
-                          ordinary: 3,
-                        };
-                        const aOrder =
-                          rarityOrder[
-                            a.rarity?.toLowerCase() as keyof typeof rarityOrder
-                          ] ?? 4;
-                        const bOrder =
-                          rarityOrder[
-                            b.rarity?.toLowerCase() as keyof typeof rarityOrder
-                          ] ?? 4;
-                        if (aOrder !== bOrder) return aOrder - bOrder;
-                        return a.name.localeCompare(b.name);
-                      })
+                      .filter(
+                        (card) =>
+                          !rarityFilter ||
+                          card.rarity?.toLowerCase() === rarityFilter
+                      )
+                      .sort((a, b) => a.name.localeCompare(b.name))
                       .map((card) => (
                         <div
                           key={`${card.cardId}-${card.setId}`}
-                          className="flex items-center justify-between py-1 px-2 rounded hover:bg-gray-700/50"
+                          className="flex items-center justify-between py-1.5 px-2 rounded hover:bg-gray-700/50 cursor-pointer"
+                          onMouseEnter={() => setHoveredCard(card)}
+                          onMouseLeave={() => setHoveredCard(null)}
                         >
-                          <span className="text-sm truncate" title={card.name}>
-                            {card.name}
-                          </span>
-                          <span
-                            className={`text-xs ml-2 flex-shrink-0 ${getRarityColor(
-                              card.rarity
-                            )}`}
-                          >
-                            {card.rarity}
-                          </span>
+                          <span className="text-sm">{card.name}</span>
+                          {!rarityFilter && (
+                            <span
+                              className={`text-xs ml-2 flex-shrink-0 ${getRarityColor(
+                                card.rarity
+                              )}`}
+                            >
+                              {card.rarity}
+                            </span>
+                          )}
                         </div>
                       ))}
                   </div>
