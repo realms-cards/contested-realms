@@ -280,10 +280,10 @@ export default function MissingCards() {
               {/* Expanded Card List */}
               {expandedSet === setSummary.setName && (
                 <div className="border-t border-gray-700 p-3 bg-gray-900/50 relative">
-                  {/* Card preview tooltip */}
+                  {/* Card preview tooltip - fixed to left side of viewport */}
                   {hoveredCard && (
-                    <div className="absolute right-4 top-4 z-50 pointer-events-none">
-                      <div className="w-48 aspect-[2.5/3.5] relative rounded-lg overflow-hidden shadow-2xl ring-2 ring-white/20">
+                    <div className="fixed left-8 top-1/2 -translate-y-1/2 z-50 pointer-events-none">
+                      <div className="w-72 aspect-[2.5/3.5] relative rounded-lg overflow-hidden shadow-2xl ring-2 ring-white/20 bg-gray-900">
                         <Image
                           src={`/api/images/${getCardSlug(
                             hoveredCard.name,
@@ -296,8 +296,11 @@ export default function MissingCards() {
                               ? "rotate-90 scale-125"
                               : ""
                           }`}
-                          sizes="192px"
+                          sizes="288px"
                         />
+                      </div>
+                      <div className="mt-2 text-center text-sm font-medium text-white">
+                        {hoveredCard.name}
                       </div>
                     </div>
                   )}
