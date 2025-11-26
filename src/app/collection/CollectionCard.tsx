@@ -27,6 +27,7 @@ function CollectionCardInner({
   const imageUrl = `/api/images/${imageSlug}`;
 
   const isFoil = card.finish === "Foil";
+  const isSite = card.meta?.type?.toLowerCase().includes("site") || false;
 
   return (
     <div
@@ -37,12 +38,18 @@ function CollectionCardInner({
       onMouseLeave={() => setShowActions(false)}
     >
       {/* Card Image */}
-      <div className="aspect-[2.5/3.5] relative">
+      <div
+        className={
+          isSite
+            ? "aspect-[3.5/2.5] relative bg-black"
+            : "aspect-[2.5/3.5] relative"
+        }
+      >
         <Image
           src={imageUrl}
           alt={card.card.name}
           fill
-          className="object-cover"
+          className={isSite ? "object-contain rotate-90" : "object-cover"}
           sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, 16vw"
           onError={(e) => {
             // Fallback to placeholder
