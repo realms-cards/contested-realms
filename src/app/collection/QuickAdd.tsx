@@ -3,6 +3,7 @@
 import type { Finish } from "@prisma/client";
 import Image from "next/image";
 import { useCallback, useEffect, useState, useRef } from "react";
+import { Modal } from "@/components/ui/Modal";
 
 interface CardResult {
   id: number;
@@ -168,7 +169,7 @@ export default function QuickAdd({ onClose, onCardAdded }: QuickAddProps) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/80 flex items-start justify-center z-50 p-4 pt-20">
+    <Modal onClose={onClose} backdropClassName="items-start pt-20">
       <div className="bg-gray-900 rounded-xl max-w-lg w-full overflow-hidden">
         {/* Header */}
         <div className="p-4 border-b border-gray-800 flex items-center justify-between">
@@ -286,6 +287,6 @@ export default function QuickAdd({ onClose, onCardAdded }: QuickAddProps) {
           Click a card to add 1 copy. Search and add another!
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }
