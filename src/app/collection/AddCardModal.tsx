@@ -3,6 +3,7 @@
 import type { Finish } from "@prisma/client";
 import Image from "next/image";
 import { useState } from "react";
+import { Modal } from "@/components/ui/Modal";
 
 interface CardData {
   id: number;
@@ -67,7 +68,7 @@ export default function AddCardModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+    <Modal onClose={onClose}>
       <div className="bg-gray-900 rounded-xl max-w-md w-full overflow-hidden">
         {/* Header */}
         <div className="p-4 border-b border-gray-800 flex items-center justify-between">
@@ -180,6 +181,6 @@ export default function AddCardModal({
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

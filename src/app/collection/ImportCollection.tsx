@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Modal } from "@/components/ui/Modal";
 
 interface ImportCollectionProps {
   onClose: () => void;
@@ -66,7 +67,7 @@ export default function ImportCollection({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+    <Modal onClose={onClose}>
       <div className="bg-gray-900 rounded-xl max-w-2xl w-full overflow-hidden max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="p-4 border-b border-gray-800 flex items-center justify-between flex-shrink-0">
@@ -176,6 +177,6 @@ export default function ImportCollection({
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }
