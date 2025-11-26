@@ -70,10 +70,34 @@ export async function GET(
       ownedByCard.set(c.cardId, (ownedByCard.get(c.cardId) || 0) + c.quantity);
     }
 
+    // Get card IDs that need variant lookup (no variant in deck card)
+    const cardIdsNeedingVariant = deck.cards
+      .filter((c) => !c.variant)
+      .map((c) => c.cardId);
+
+    // Lookup any variant for cards missing one
+    const variantLookup = new Map<number, string>();
+    if (cardIdsNeedingVariant.length > 0) {
+      const variants = await prisma.cardVariant.findMany({
+        where: { cardId: { in: cardIdsNeedingVariant } },
+        select: { cardId: true, slug: true },
+      });
+      for (const v of variants) {
+        if (!variantLookup.has(v.cardId)) {
+          variantLookup.set(v.cardId, v.slug);
+        }
+      }
+    }
+
     // Calculate availability for each card
     const cardsWithAvailability = deck.cards.map((c) => {
       const owned = ownedByCard.get(c.cardId) || 0;
       const meta = c.card.meta[0];
+      // Use variant slug, or lookup a variant, or generate fallback
+      const slug =
+        c.variant?.slug ||
+        variantLookup.get(c.cardId) ||
+        `${c.card.name.toLowerCase().replace(/\s+/g, "_")}_b_s`;
       return {
         cardId: c.cardId,
         variantId: c.variantId,
@@ -82,9 +106,7 @@ export async function GET(
         count: c.count,
         ownedQuantity: owned,
         availableQuantity: Math.max(0, owned - c.count),
-        slug:
-          c.variant?.slug ||
-          `${c.card.name.toLowerCase().replace(/\s+/g, "_")}_b_s`,
+        slug,
         meta: meta
           ? {
               type: meta.type,
