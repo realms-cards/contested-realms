@@ -1,14 +1,29 @@
 "use client";
 
-import Image from "next/image";
 import { useCallback, useEffect, useState } from "react";
 
 interface MissingCard {
   cardId: number;
+  setId: number;
   name: string;
   set: string;
   rarity: string;
   type: string;
+}
+
+// Rarity colors
+function getRarityColor(rarity: string): string {
+  switch (rarity?.toLowerCase()) {
+    case "unique":
+      return "text-purple-400";
+    case "elite":
+      return "text-yellow-400";
+    case "exceptional":
+      return "text-blue-400";
+    case "ordinary":
+    default:
+      return "text-gray-400";
+  }
 }
 
 export default function MissingCards() {
@@ -16,6 +31,7 @@ export default function MissingCards() {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
   const [setFilter] = useState<string>("");
   const [rarityFilter, setRarityFilter] = useState<string>("");
 
@@ -24,7 +40,7 @@ export default function MissingCards() {
     try {
       const params = new URLSearchParams();
       params.set("page", String(page));
-      params.set("limit", "50");
+      params.set("limit", "100"); // Show more in list view
       if (setFilter) params.set("setId", setFilter);
       if (rarityFilter) params.set("rarity", rarityFilter);
 
@@ -33,6 +49,7 @@ export default function MissingCards() {
         const data = await res.json();
         setCards(data.cards);
         setTotalPages(data.pagination.totalPages);
+        setTotal(data.pagination.total);
       }
     } catch {
       // Ignore errors
@@ -45,10 +62,24 @@ export default function MissingCards() {
     fetchMissing();
   }, [fetchMissing]);
 
+  // Group cards by set for better organization
+  const cardsBySet = cards.reduce((acc, card) => {
+    if (!acc[card.set]) acc[card.set] = [];
+    acc[card.set].push(card);
+    return acc;
+  }, {} as Record<string, MissingCard[]>);
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold">Missing Cards</h2>
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div>
+          <h2 className="text-xl font-bold">Missing Cards</h2>
+          {total > 0 && (
+            <p className="text-sm text-gray-400">
+              {total} cards missing from your collection
+            </p>
+          )}
+        </div>
         <div className="flex gap-2">
           <select
             value={rarityFilter}
@@ -73,41 +104,42 @@ export default function MissingCards() {
         </div>
       ) : cards.length > 0 ? (
         <>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-            {cards.map((card) => {
-              const imageSlug = `${card.name
-                .toLowerCase()
-                .replace(/\s+/g, "_")}_b_s`;
-              return (
-                <div
-                  key={card.cardId}
-                  className="rounded-lg overflow-hidden bg-gray-800 opacity-75 hover:opacity-100 transition-opacity"
-                >
-                  <div className="aspect-[2.5/3.5] relative">
-                    <Image
-                      src={`/api/images/${imageSlug}`}
-                      alt={card.name}
-                      fill
-                      className="object-cover grayscale"
-                      sizes="(max-width: 640px) 50vw, 16vw"
-                    />
-                  </div>
-                  <div className="p-2">
-                    <div className="text-sm font-medium truncate">
-                      {card.name}
+          {/* List view grouped by set */}
+          <div className="space-y-6">
+            {Object.entries(cardsBySet).map(([setName, setCards]) => (
+              <div key={setName} className="bg-gray-800/50 rounded-lg p-4">
+                <h3 className="font-semibold text-sm text-gray-300 mb-3 border-b border-gray-700 pb-2">
+                  {setName}{" "}
+                  <span className="text-gray-500">({setCards.length})</span>
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-1">
+                  {setCards.map((card) => (
+                    <div
+                      key={`${card.cardId}-${card.setId}`}
+                      className="flex items-center justify-between py-1.5 px-2 rounded hover:bg-gray-700/50 transition-colors"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-sm truncate" title={card.name}>
+                          {card.name}
+                        </span>
+                      </div>
+                      <span
+                        className={`text-xs flex-shrink-0 ${getRarityColor(
+                          card.rarity
+                        )}`}
+                      >
+                        {card.rarity}
+                      </span>
                     </div>
-                    <div className="text-xs text-gray-400">
-                      {card.set} • {card.rarity}
-                    </div>
-                  </div>
+                  ))}
                 </div>
-              );
-            })}
+              </div>
+            ))}
           </div>
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-center gap-2">
+            <div className="flex items-center justify-center gap-2 pt-4">
               <button
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page === 1}
