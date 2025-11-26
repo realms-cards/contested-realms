@@ -2,7 +2,7 @@
 
 **Feature Branch**: `010-collection-tracker-track`  
 **Created**: 2025-11-26  
-**Status**: Draft  
+**Status**: Ready  
 **Input**: User description: "Collection Tracker - Track your physical Sorcery card collection, build decks from owned cards, and export to simulator"
 
 ---
@@ -89,10 +89,20 @@ As a Sorcery player, I want to track my physical card collection so that I can s
 - **FR-024**: Exported decks MUST be usable in all game modes (online, offline, tournaments).
 - **FR-025**: Exported decks SHOULD be marked with origin metadata indicating they came from collection.
 
+#### Card Pricing & Valuation
+
+- **FR-029**: System MUST integrate with TCGPlayer API to fetch current market prices for cards.
+- **FR-030**: System MUST display individual card market value in the collection view.
+- **FR-031**: System MUST display total collection value (sum of all owned cards × market prices).
+- **FR-032**: System MUST show value breakdown per set.
+- **FR-033**: System SHOULD distinguish pricing between Standard and Foil finishes.
+- **FR-034**: System SHOULD cache pricing data to avoid excessive API calls (refresh on demand or periodically).
+- **FR-035**: System MUST gracefully handle cards without TCGPlayer pricing data (show "N/A" or similar).
+
 #### Quick Add Features
 
-- **FR-026**: System SHOULD provide batch import via text list (same format as deck import).
-- **FR-027**: System SHOULD provide a "I opened a pack" quick-add flow for common pack configurations. [NEEDS CLARIFICATION: Should this auto-generate pack contents or just provide a quick-add UI?]
+- **FR-026**: System MUST provide batch import via text list (same format as deck import).
+- **FR-027**: System MUST provide a streamlined "Quick Add" interface optimized for rapidly adding multiple cards with minimal clicks.
 - **FR-028**: System SHOULD allow duplicating/copying quantities from one variant to another.
 
 ---
@@ -103,7 +113,7 @@ As a Sorcery player, I want to track my physical card collection so that I can s
 
 - **CollectionDeck**: A deck specifically built from collection constraints. Extends or mirrors the existing Deck entity but is flagged as collection-based and enforces ownership rules during editing.
 
-- **CollectionStats**: Computed/cached statistics about a user's collection including totals, set completion, and element distribution.
+- **CollectionStats**: Computed/cached statistics about a user's collection including totals, set completion, element distribution, and total market value.
 
 ---
 
@@ -111,10 +121,10 @@ As a Sorcery player, I want to track my physical card collection so that I can s
 
 - Trading or marketplace features
 - Wishlist/want-list functionality
-- Price tracking or market values
 - Collection sharing/public profiles
 - Import from other collection trackers
 - Physical card scanning/OCR
+- Historical price tracking/graphs
 
 ---
 
@@ -124,6 +134,7 @@ As a Sorcery player, I want to track my physical card collection so that I can s
 - **Existing deck infrastructure**: Will reuse deck validation logic, deck storage patterns, and deck builder UI patterns.
 - **Authentication**: Requires user authentication (already implemented via NextAuth).
 - **Card assets**: Assumes all card images are available via existing asset routes.
+- **TCGPlayer API**: Requires TCGPlayer API access for pricing data. API key will be stored server-side. Assumes TCGPlayer has Sorcery: Contested Realms card data indexed.
 
 ---
 
@@ -138,7 +149,7 @@ As a Sorcery player, I want to track my physical card collection so that I can s
 
 ### Requirement Completeness
 
-- [ ] No [NEEDS CLARIFICATION] markers remain (1 remains for pack-add flow)
+- [x] No [NEEDS CLARIFICATION] markers remain
 - [x] Requirements are testable and unambiguous
 - [x] Success criteria are measurable
 - [x] Scope is clearly bounded
@@ -154,12 +165,6 @@ As a Sorcery player, I want to track my physical card collection so that I can s
 - [x] User scenarios defined
 - [x] Requirements generated
 - [x] Entities identified
-- [ ] Review checklist passed (pending clarification)
-
----
-
-## Open Questions
-
-1. **FR-027 Pack Add Flow**: Should the "I opened a pack" feature auto-generate realistic pack contents based on set odds, or simply provide a UI optimized for quickly adding the 9-15 cards from a physical pack?
+- [x] Review checklist passed
 
 ---
