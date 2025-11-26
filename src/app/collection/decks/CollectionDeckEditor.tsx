@@ -55,6 +55,7 @@ export default function CollectionDeckEditor({
   const spellbook = cards.filter((c) => c.zone === "Spellbook");
   const atlas = cards.filter((c) => c.zone === "Atlas");
   const sideboard = cards.filter((c) => c.zone === "Sideboard");
+  const collection = cards.filter((c) => c.zone === "Collection");
 
   const searchOwnedCards = async (query: string) => {
     if (!query.trim()) {
@@ -198,31 +199,34 @@ export default function CollectionDeckEditor({
         const thresholds =
           (card.meta?.thresholds as Record<string, number>) || {};
         const cost = card.meta?.cost;
+        // Build slug from card name if not provided
+        const imageSlug =
+          card.slug || `${card.name.toLowerCase().replace(/\s+/g, "_")}_b_s`;
 
         return (
           <div
             key={card.cardId}
-            className={`flex items-start gap-2 p-2 rounded ${
+            className={`flex items-start gap-3 p-2 rounded ${
               exceeded
                 ? "bg-red-900/30 ring-1 ring-red-500/30"
                 : "bg-gray-800/80"
             }`}
           >
             {/* Card Image */}
-            {showImages && card.slug && (
+            {showImages && (
               <div
                 className={`relative flex-none rounded overflow-hidden ring-1 ring-white/10 bg-black/40 ${
-                  isSite ? "aspect-[4/3] w-12" : "aspect-[3/4] w-10"
+                  isSite ? "aspect-[4/3] w-14" : "aspect-[3/4] w-12"
                 }`}
               >
                 <Image
-                  src={`/api/images/${card.slug}`}
+                  src={`/api/images/${imageSlug}`}
                   alt={card.name}
                   fill
                   className={
                     isSite ? "object-contain rotate-90" : "object-cover"
                   }
-                  sizes="48px"
+                  sizes="56px"
                 />
               </div>
             )}
@@ -239,20 +243,22 @@ export default function CollectionDeckEditor({
               </div>
 
               {/* Thresholds and Cost */}
-              <div className="mt-0.5 flex items-center flex-wrap gap-1.5 text-xs">
+              <div className="mt-1 flex items-center flex-wrap gap-2">
                 {ELEMENT_ORDER.map((el) =>
                   thresholds[el] ? (
                     <span
                       key={el}
-                      className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded bg-white/10"
+                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-white/10"
                     >
                       <Image
                         src={`/api/assets/${el}.png`}
                         alt={el}
-                        width={10}
-                        height={10}
+                        width={14}
+                        height={14}
                       />
-                      <span className="text-[10px]">{thresholds[el]}</span>
+                      <span className="text-xs font-medium">
+                        {thresholds[el]}
+                      </span>
                     </span>
                   ) : null
                 )}
@@ -261,11 +267,11 @@ export default function CollectionDeckEditor({
                     {cost >= 0 && cost <= 9 ? (
                       <NumberBadge
                         value={cost as Digit}
-                        size={14}
-                        strokeWidth={6}
+                        size={20}
+                        strokeWidth={8}
                       />
                     ) : (
-                      <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full bg-white text-black text-[9px] font-bold">
+                      <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-white text-black text-xs font-bold">
                         {cost}
                       </span>
                     )}
@@ -410,6 +416,17 @@ export default function CollectionDeckEditor({
                       >
                         + {isAvatar ? "Avatar" : isSite ? "Atlas" : "Spell"}
                       </button>
+                      {!isAvatar && (
+                        <button
+                          onClick={() =>
+                            addCardToDeck(card.cardId, "Collection")
+                          }
+                          disabled={updating}
+                          className="px-2 py-1 rounded text-xs font-medium bg-amber-600/80 hover:bg-amber-600"
+                        >
+                          + Collection
+                        </button>
+                      )}
                     </div>
                   ) : (
                     <span className="text-gray-500 text-xs">All used</span>
@@ -459,6 +476,28 @@ export default function CollectionDeckEditor({
             {renderCardList(sideboard, "Sideboard")}
           </>
         )}
+
+        {/* Collection zone - max 10 cards for constructed */}
+        <div className="mt-6 p-3 bg-amber-900/20 rounded-lg border border-amber-700/30">
+          <h3 className="font-bold text-amber-200 flex items-center justify-between">
+            <span>
+              Collection ({collection.reduce((s, c) => s + c.count, 0)}/10)
+            </span>
+            <span className="text-xs font-normal text-amber-400/70">
+              Optional cards
+            </span>
+          </h3>
+          <p className="text-xs text-amber-400/60 mt-1 mb-2">
+            Up to 10 cards stored with your deck but not in the main deck
+          </p>
+          {collection.length > 0 ? (
+            renderCardList(collection, "Collection")
+          ) : (
+            <div className="text-amber-400/50 text-sm py-2 text-center">
+              No cards in collection zone
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
