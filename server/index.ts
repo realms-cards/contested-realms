@@ -56,6 +56,12 @@ const { registerRtcHandlers } = require("./socket/rtc-handlers");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { registerPubSubListeners } = require("./socket/pubsub-listeners");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
+const { createRedisStateManager } = require("./core/redis-state");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { createPlayerRegistry } = require("./modules/player-registry");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { LEADER_HEARTBEAT_INTERVAL_MS } = require("./core/redis-keys");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { startMaintenanceTimers } = require("./maintenance/timers");
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -68,14 +74,9 @@ const {
 } = require("./booster");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { BotManager } = require("./botManager");
-const {
-  applyTurnStart,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  validateAction,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  ensureCosts,
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-} = require("./rules");
+// Rules modules (TypeScript)
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { applyTurnStart } = require("./modules/rules-turn-start");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { applyMovementAndCombat } = require("./modules/rules-movement");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -599,6 +600,64 @@ const matchRecordings = new Map();
 const rtcParticipants: Map<string, Set<string>> = new Map();
 const participantDetails: Map<string, VoiceParticipant> = new Map();
 const pendingVoiceRequests: Map<string, PendingVoiceRequest> = new Map();
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Redis State Manager (Horizontal Scaling)
+// ─────────────────────────────────────────────────────────────────────────────
+const REDIS_STATE_ENABLED = serverConfig.enableRedisState;
+const redisState = createRedisStateManager({
+  redis: storeRedis,
+  instanceId: INSTANCE_ID,
+  enabled: REDIS_STATE_ENABLED,
+});
+
+if (REDIS_STATE_ENABLED) {
+  try {
+    console.log(`[scaling] Redis state enabled (instance=${INSTANCE_ID})`);
+  } catch {}
+} else {
+  try {
+    console.log(`[scaling] Redis state disabled, using local Maps only`);
+  } catch {}
+}
+
+// Player Registry (uses Redis state for cross-instance awareness)
+const playerRegistry = createPlayerRegistry({
+  io,
+  storeRedis,
+  redisState,
+  instanceId: INSTANCE_ID,
+  players,
+  playerIdBySocket,
+});
+
+// Leader heartbeat interval (refreshes match leader TTLs)
+let leaderHeartbeatInterval: ReturnType<typeof setInterval> | null = null;
+if (REDIS_STATE_ENABLED) {
+  leaderHeartbeatInterval = setInterval(async () => {
+    try {
+      // Refresh leadership for all matches we own
+      for (const matchId of matches.keys()) {
+        const isLeader = await redisState.refreshMatchLeader(matchId);
+        if (!isLeader) {
+          // We lost leadership, log it
+          try {
+            console.log(`[scaling] Lost leadership for match ${matchId}`);
+          } catch {}
+        }
+      }
+      // Also refresh lobby leadership if we're the leader
+      await redisState.refreshLobbyLeader();
+    } catch (err) {
+      try {
+        console.warn(
+          "[scaling] Leader heartbeat error:",
+          safeErrorMessage(err)
+        );
+      } catch {}
+    }
+  }, LEADER_HEARTBEAT_INTERVAL_MS);
+}
 
 const leaderboardService = createLeaderboardService({
   prisma,
@@ -1442,6 +1501,11 @@ function isPlayerConnected(playerId: string): boolean {
 // -----------------------------
 async function getOrClaimMatchLeader(matchId: string): Promise<string | null> {
   try {
+    // Use new Redis state manager if enabled (15s TTL with heartbeat)
+    if (REDIS_STATE_ENABLED) {
+      return redisState.claimMatchLeader(matchId);
+    }
+    // Legacy fallback (60s TTL, no heartbeat)
     if (!storeRedis) return INSTANCE_ID; // single-instance fallback
     const key = `match:leader:${matchId}`;
     const current = await storeRedis.get(key);
@@ -1454,7 +1518,7 @@ async function getOrClaimMatchLeader(matchId: string): Promise<string | null> {
       return current;
     }
     // Try to claim leadership
-    const setRes = await storeRedis.set(key, INSTANCE_ID, "NX", "EX", 60);
+    const setRes = await storeRedis.set(key, INSTANCE_ID, "EX", 60, "NX");
     if (setRes) return INSTANCE_ID;
     // Someone else won
     return await storeRedis.get(key);
@@ -2021,29 +2085,48 @@ io.on("connection", async (socket: SocketClient) => {
     const tokenId = authUser && authUser.id ? String(authUser.id) : null;
     const playerId = tokenId || providedId || rid("p");
 
-    let player = players.get(playerId);
-    if (!player) {
-      player = {
-        id: playerId,
-        displayName,
-        socketId: socket.id,
-        lobbyId: null,
-        matchId: null,
-      };
-      players.set(playerId, player);
-    } else {
-      player.displayName = displayName;
-      player.socketId = socket.id;
-    }
-    playerIdBySocket.set(socket.id, playerId);
-    authed = true;
+    let player: PlayerState;
 
-    // Cache player displayName in Redis for cross-instance lookups
-    try {
-      if (storeRedis) {
-        await storeRedis.hset(`player:${playerId}`, { displayName });
+    // Use player registry for Redis-backed state when enabled
+    if (REDIS_STATE_ENABLED) {
+      player = await playerRegistry.registerPlayer(
+        playerId,
+        displayName,
+        socket
+      );
+    } else {
+      // Legacy local-only state management
+      const existing = players.get(playerId);
+      if (!existing) {
+        player = {
+          id: playerId,
+          displayName,
+          socketId: socket.id,
+          lobbyId: null,
+          matchId: null,
+        };
+        players.set(playerId, player);
+      } else {
+        existing.displayName = displayName;
+        existing.socketId = socket.id;
+        player = existing;
       }
+      playerIdBySocket.set(socket.id, playerId);
+
+      // Cache player displayName in Redis for cross-instance lookups (legacy)
+      try {
+        if (storeRedis) {
+          await storeRedis.hset(`player:${playerId}`, { displayName });
+        }
+      } catch {}
+    }
+
+    // Always join player-specific room for cross-instance messaging
+    try {
+      await socket.join(`player:${playerId}`);
     } catch {}
+
+    authed = true;
 
     try {
       console.log(
@@ -3028,6 +3111,102 @@ io.on("connection", async (socket: SocketClient) => {
           defenders,
           ...(tile ? { tile } : {}),
           ...(target ? { target } : {}),
+          playerKey,
+          ts: Date.now(),
+        } as const;
+        io.to(room).emit("message", out);
+        try {
+          io.to(`spectate:${matchId}`).emit("message", out);
+        } catch {}
+      } catch {}
+    } else if (type === "combatAutoApply") {
+      // Auto-resolve combat: broadcast kill list to all players so each applies their own kills
+      try {
+        const match = await getOrLoadMatch(matchId);
+        const room = `match:${matchId}`;
+        const playerKey = getSeatForPlayer(match, player.id) || "p1";
+        const msg = payload as { id?: unknown; kills?: unknown };
+        const id = typeof msg.id === "string" ? msg.id : rid("cmb");
+        const rawKills = Array.isArray(msg.kills) ? msg.kills : [];
+        const kills = rawKills
+          .filter(
+            (k): k is Record<string, unknown> => k && typeof k === "object"
+          )
+          .map((k) => ({
+            at: typeof k.at === "string" ? k.at : "",
+            index: Number(k.index),
+            owner: typeof k.owner === "string" ? k.owner : "",
+            instanceId: typeof k.instanceId === "string" ? k.instanceId : null,
+          }))
+          .filter((k) => k.at && Number.isFinite(k.index) && k.owner);
+        const out = {
+          type: "combatAutoApply",
+          id,
+          kills,
+          playerKey,
+          ts: Date.now(),
+        } as const;
+        io.to(room).emit("message", out);
+        try {
+          io.to(`spectate:${matchId}`).emit("message", out);
+        } catch {}
+      } catch {}
+    } else if (type === "combatSummary") {
+      // Combat summary: broadcast final result to all players
+      try {
+        const match = await getOrLoadMatch(matchId);
+        const room = `match:${matchId}`;
+        const playerKey = getSeatForPlayer(match, player.id) || "p1";
+        const msg = payload as {
+          id?: unknown;
+          text?: unknown;
+          actor?: unknown;
+          targetSeat?: unknown;
+        };
+        const id = typeof msg.id === "string" ? msg.id : rid("cmb");
+        const text = typeof msg.text === "string" ? msg.text : "";
+        const actor = typeof msg.actor === "string" ? msg.actor : undefined;
+        const targetSeat =
+          typeof msg.targetSeat === "string" ? msg.targetSeat : undefined;
+        const out = {
+          type: "combatSummary",
+          id,
+          text,
+          actor,
+          targetSeat,
+          playerKey,
+          ts: Date.now(),
+        } as const;
+        io.to(room).emit("message", out);
+        try {
+          io.to(`spectate:${matchId}`).emit("message", out);
+        } catch {}
+      } catch {}
+    } else if (type === "combatDamage") {
+      // Combat damage: broadcast damage assignments to all players
+      try {
+        const match = await getOrLoadMatch(matchId);
+        const room = `match:${matchId}`;
+        const playerKey = getSeatForPlayer(match, player.id) || "p1";
+        const msg = payload as { id?: unknown; damage?: unknown };
+        const id = typeof msg.id === "string" ? msg.id : rid("cmb");
+        const rawDamage = Array.isArray(msg.damage) ? msg.damage : [];
+        const damage = rawDamage
+          .filter(
+            (d): d is Record<string, unknown> => d && typeof d === "object"
+          )
+          .map((d) => ({
+            at: typeof d.at === "string" ? d.at : "",
+            index: Number(d.index),
+            amount: Number(d.amount),
+          }))
+          .filter(
+            (d) => d.at && Number.isFinite(d.index) && Number.isFinite(d.amount)
+          );
+        const out = {
+          type: "combatDamage",
+          id,
+          damage,
           playerKey,
           ts: Date.now(),
         } as const;
@@ -4253,10 +4432,24 @@ io.on("connection", async (socket: SocketClient) => {
         void broadcastSpectatorsUpdated(io, watchId);
       }
     } catch {}
+
+    // Use player registry for disconnect handling when enabled
+    if (REDIS_STATE_ENABLED) {
+      playerRegistry.handleDisconnect(socket);
+    }
+
     const pid = playerIdBySocket.get(socket.id);
-    if (!pid) return;
+    if (!pid) {
+      // Still cleanup rate limiters even if player not found
+      cleanupRateLimits(socket.id);
+      return;
+    }
     const player = players.get(pid);
-    playerIdBySocket.delete(socket.id);
+
+    // Legacy cleanup (always run for local state consistency)
+    if (!REDIS_STATE_ENABLED) {
+      playerIdBySocket.delete(socket.id);
+    }
 
     // Cleanup rate limiters for disconnected socket
     cleanupRateLimits(socket.id);
@@ -4264,25 +4457,39 @@ io.on("connection", async (socket: SocketClient) => {
     rtcHandlers.handleDisconnect(player ?? null);
 
     // Update draft presence on disconnect (cluster-aware)
+    // Capture session ID at disconnect time to avoid stale closure in async callback
+    const disconnectedDraftSessionId = currentDraftSessionId;
     try {
-      if (currentDraftSessionId) {
+      if (disconnectedDraftSessionId) {
         updateDraftPresence(
-          currentDraftSessionId,
+          disconnectedDraftSessionId,
           pid,
           players.get(pid)?.displayName || null,
           false
         )
           .then((list) => {
             try {
-              io.to(`draft:${currentDraftSessionId}`).emit(
+              io.to(`draft:${disconnectedDraftSessionId}`).emit(
                 "draft:session:presence",
-                { sessionId: currentDraftSessionId, players: list }
+                { sessionId: disconnectedDraftSessionId, players: list }
               );
-            } catch {}
+            } catch (emitErr) {
+              console.warn(
+                "[draft] Failed to emit presence on disconnect:",
+                emitErr
+              );
+            }
           })
-          .catch(() => {});
+          .catch((presenceErr) => {
+            console.warn(
+              "[draft] Failed to update presence on disconnect:",
+              presenceErr
+            );
+          });
       }
-    } catch {}
+    } catch (err) {
+      console.warn("[draft] Draft presence disconnect cleanup failed:", err);
+    }
 
     if (player) {
       // If the player was in a lobby, remove them immediately to prevent ghost lobbies
@@ -4424,6 +4631,20 @@ async function shutdown() {
     console.log("[server] shutting down...");
   } catch {}
   const timer = setTimeout(() => process.exit(0), timeout);
+
+  // Stop leader heartbeat interval
+  try {
+    if (leaderHeartbeatInterval) {
+      clearInterval(leaderHeartbeatInterval);
+      leaderHeartbeatInterval = null;
+    }
+  } catch {}
+
+  // Cleanup player registry timers
+  try {
+    playerRegistry.shutdown();
+  } catch {}
+
   try {
     await new Promise<void>((resolve) => io.close(() => resolve()));
   } catch {}

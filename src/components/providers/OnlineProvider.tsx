@@ -31,6 +31,43 @@ import type {
 import { SocketTransport } from "@/lib/net/socketTransport";
 import type { StartMatchConfig } from "@/lib/net/transport";
 import { useMatchWebRTC } from "@/lib/rtc/useMatchWebRTC";
+import { PLAYER_COLORS } from "@/lib/game/constants";
+
+// Helper to parse [p1:Name] and [p2:Name] color markup into styled spans
+function renderColoredText(text: string): React.ReactNode {
+  const parts: React.ReactNode[] = [];
+  const regex = /\[p([12]):([^\]]+)\]/g;
+  let lastIndex = 0;
+  let match;
+  let key = 0;
+
+  while ((match = regex.exec(text)) !== null) {
+    // Add text before the match
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index));
+    }
+    // Add the colored span
+    const playerNum = match[1] as "1" | "2";
+    const name = match[2];
+    const color = playerNum === "1" ? PLAYER_COLORS.p1 : PLAYER_COLORS.p2;
+    parts.push(
+      <span
+        key={key++}
+        style={{ color, fontFamily: "var(--font-fantaisie, inherit)" }}
+      >
+        {name}
+      </span>
+    );
+    lastIndex = regex.lastIndex;
+  }
+
+  // Add remaining text
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+
+  return parts.length > 0 ? parts : text;
+}
 
 export default function OnlineProvider({
   children,
@@ -1446,7 +1483,7 @@ export default function OnlineProvider({
       )}
       {appToast && (
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[3000] bg-black/70 text-white text-sm px-3 py-2 rounded shadow ring-1 ring-white/20">
-          {appToast}
+          {renderColoredText(appToast)}
         </div>
       )}
     </OnlineContext.Provider>

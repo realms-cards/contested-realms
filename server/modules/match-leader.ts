@@ -574,6 +574,31 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
     isCpuPlayerId,
   } = deps;
 
+  /**
+   * Emit an event to a player using their player room (cross-instance safe).
+   * Falls back to socket ID if provided and valid on this instance.
+   * Always prefers player room for horizontal scaling compatibility.
+   */
+  function emitToPlayer<T>(
+    playerId: string,
+    event: string,
+    data: T,
+    socketId?: string | null
+  ): void {
+    // Always use player room for cross-instance compatibility
+    // The Socket.IO Redis adapter will propagate to the correct instance
+    try {
+      io.to(`player:${playerId}`).emit(event, data);
+    } catch {
+      // Fallback to socket ID if player room fails and we have a valid socket ID
+      if (socketId) {
+        try {
+          io.to(socketId).emit(event, data);
+        } catch {}
+      }
+    }
+  }
+
   // --- Spectator patch broadcasting ---
   function sanitizePatchForSpectator(
     patch: MatchPatch | null | undefined
@@ -630,12 +655,15 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
     purgeExpiredGrants(match, now);
     const actorSeat = getSeatForPlayer(match, playerId);
     if (!actorSeat) {
-      if (actorSocketId) {
-        io.to(actorSocketId).emit("error", {
+      emitToPlayer(
+        playerId,
+        "error",
+        {
           message: "Only seated players may take actions",
           code: "action_not_authorized",
-        });
-      }
+        },
+        actorSocketId
+      );
       return;
     }
 
@@ -890,12 +918,15 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
             }
             if (costRes && costRes.ok === false) {
               if (enforce) {
-                if (actorSocketId) {
-                  io.to(actorSocketId).emit("error", {
+                emitToPlayer(
+                  playerId,
+                  "error",
+                  {
                     message: costRes.error || "Insufficient resources",
                     code: "cost_unpaid",
-                  });
-                }
+                  },
+                  actorSocketId
+                );
                 try {
                   console.warn("[rules] ensureCosts rejected action", {
                     matchId,
@@ -955,22 +986,28 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
                 msg || ""
               );
               if (mustReject) {
-                if (actorSocketId) {
-                  io.to(actorSocketId).emit("error", {
+                emitToPlayer(
+                  playerId,
+                  "error",
+                  {
                     message: msg || "Illegal tap action",
                     code: "rules_violation",
-                  });
-                }
+                  },
+                  actorSocketId
+                );
                 return;
               }
 
               if (enforce) {
-                if (actorSocketId) {
-                  io.to(actorSocketId).emit("error", {
+                emitToPlayer(
+                  playerId,
+                  "error",
+                  {
                     message: validationResult.error || "Rules violation",
                     code: "rules_violation",
-                  });
-                }
+                  },
+                  actorSocketId
+                );
                 return;
               }
 
@@ -1724,6 +1761,8 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
     playerState.socketId = socketId;
 
     const room = `match:${matchId}`;
+
+    // Join socket to match room (local instance only)
     try {
       await io.in(socketId).socketsJoin(room);
       console.log("[joinMatch] Socket joined room", {
@@ -1732,7 +1771,9 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
         playerId,
       });
     } catch (err) {
-      console.error("[joinMatch] Failed to join room", {
+      // Socket may not exist on this instance (cross-instance forwarding)
+      // This is expected when the leader is not the player's connected instance
+      console.debug("[joinMatch] Socket not on this instance", {
         socketId,
         room,
         playerId,
@@ -1740,17 +1781,25 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
       });
     }
 
+    // Emit to player via their player room (cross-instance safe)
     try {
-      io.to(socketId).emit("matchStarted", { match: getMatchInfo(match) });
+      emitToPlayer(
+        playerId,
+        "matchStarted",
+        { match: getMatchInfo(match) },
+        socketId
+      );
     } catch {
       // ignore
     }
+    // Also broadcast to match room for any other connected players/spectators
     try {
       io.to(room).emit("matchStarted", { match: getMatchInfo(match) });
     } catch {
       // ignore
     }
 
+    // Send draft state if in progress
     try {
       if (
         match.matchType === "draft" &&
@@ -1758,7 +1807,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
         match.draftState.phase &&
         match.draftState.phase !== "waiting"
       ) {
-        io.to(socketId).emit("draftUpdate", match.draftState);
+        emitToPlayer(playerId, "draftUpdate", match.draftState, socketId);
       }
     } catch {
       // ignore

@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 export const dynamic = "force-dynamic";
+import { getSetIdByName } from "@/lib/api/cached-lookups";
 import { prisma } from "@/lib/prisma";
 
 // GET /api/cards/search?q=apprentice&set=Alpha&type=site|avatar|spell
@@ -12,18 +13,23 @@ export async function GET(req: NextRequest) {
     const typeFilt = (searchParams.get("type") || "").trim().toLowerCase();
 
     if (!q && !typeFilt) {
-      return new Response(JSON.stringify([]), { status: 200, headers: { "content-type": "application/json" } });
+      return new Response(JSON.stringify([]), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
     }
 
-    // Resolve setId if provided
+    // Resolve setId if provided (using cached lookup)
     let setId: number | null = null;
     if (setName) {
-      const set = await prisma.set.findUnique({ where: { name: setName } });
+      setId = await getSetIdByName(setName);
       // Be forgiving: if set is unknown, return empty list instead of a hard error so editor UX isn't blocked
-      if (!set) {
-        return new Response(JSON.stringify([]), { status: 200, headers: { "content-type": "application/json" } });
+      if (setId === null) {
+        return new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
       }
-      setId = set.id;
     }
 
     // Find matching variants by card name and set (if provided)
@@ -58,7 +64,10 @@ export async function GET(req: NextRequest) {
     });
 
     if (!variants.length) {
-      return new Response(JSON.stringify([]), { status: 200, headers: { "content-type": "application/json" } });
+      return new Response(JSON.stringify([]), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
     }
 
     // Fetch type/rarity for (cardId,setId)
@@ -73,14 +82,24 @@ export async function GET(req: NextRequest) {
       card: { name: string; subTypes: string | null };
       set: { name: string };
     };
-    const pairs = variants.map((v: VariantRow) => ({ cardId: v.cardId, setId: v.setId }));
+    const pairs = variants.map((v: VariantRow) => ({
+      cardId: v.cardId,
+      setId: v.setId,
+    }));
     const metas = await prisma.cardSetMetadata.findMany({
       where: { OR: pairs },
       select: { cardId: true, setId: true, type: true, rarity: true },
     });
     const metaKey = (c: number, s: number) => `${c}:${s}`;
-    const metaMap = new Map<string, { type: string | null; rarity: string | null }>();
-    for (const m of metas) metaMap.set(metaKey(m.cardId, m.setId), { type: m.type || null, rarity: m.rarity || null });
+    const metaMap = new Map<
+      string,
+      { type: string | null; rarity: string | null }
+    >();
+    for (const m of metas)
+      metaMap.set(metaKey(m.cardId, m.setId), {
+        type: m.type || null,
+        rarity: m.rarity || null,
+      });
 
     type SearchOut = {
       variantId: number;
@@ -103,7 +122,7 @@ export async function GET(req: NextRequest) {
         const subTypes = v.card.subTypes || null;
         return {
           variantId: v.id,
-          slug: v.slug.startsWith("dra_") ? ("drl_" + v.slug.slice(4)) : v.slug,
+          slug: v.slug.startsWith("dra_") ? "drl_" + v.slug.slice(4) : v.slug,
           finish: String(v.finish),
           product: v.product,
           cardId: v.cardId,
@@ -119,14 +138,23 @@ export async function GET(req: NextRequest) {
         const t = (it.type || "").toLowerCase();
         if (typeFilt === "site") return t.includes("site");
         if (typeFilt === "avatar") return t.includes("avatar");
-        if (typeFilt === "spell") return !t.includes("site") && !t.includes("avatar"); // exclude avatars from spells
+        if (typeFilt === "spell")
+          return !t.includes("site") && !t.includes("avatar"); // exclude avatars from spells
         return true;
       })
       .slice(0, 200);
 
-    return new Response(JSON.stringify(out), { status: 200, headers: { "content-type": "application/json" } });
+    return new Response(JSON.stringify(out), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : typeof e === "string" ? e : "Unknown error";
+    const message =
+      e instanceof Error
+        ? e.message
+        : typeof e === "string"
+        ? e
+        : "Unknown error";
     return new Response(JSON.stringify({ error: message }), { status: 500 });
   }
 }

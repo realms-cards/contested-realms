@@ -38,12 +38,10 @@ type CombatSlice = Pick<
   | "cancelCombat"
 >;
 
-export const createCombatSlice: StateCreator<
-  GameState,
-  [],
-  [],
-  CombatSlice
-> = (set, get) => ({
+export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
+  set,
+  get
+) => ({
   pendingCombat: null,
   attackChoice: null,
   attackTargetChoice: null,
@@ -94,15 +92,20 @@ export const createCombatSlice: StateCreator<
     if (!pending || pending.status !== "committed") return false;
     const { permanents, metaByCardId } = get();
 
-    function getAtkDef(at: string, index: number): { atk: number; def: number } {
+    function getAtkDef(
+      at: string,
+      index: number
+    ): { atk: number; def: number } {
       try {
         const cardId =
           (permanents as Permanents)[at]?.[index]?.card?.cardId ?? null;
         const meta = cardId
-          ? (metaByCardId as Record<
-              number,
-              { attack: number | null; defence: number | null }
-            >)[Number(cardId)]
+          ? (
+              metaByCardId as Record<
+                number,
+                { attack: number | null; defence: number | null }
+              >
+            )[Number(cardId)]
           : undefined;
         const atk = Number(meta?.attack ?? 0) || 0;
         const def = Number(meta?.defence ?? meta?.attack ?? 0) || 0;
@@ -116,16 +119,14 @@ export const createCombatSlice: StateCreator<
       const list = (permanents as Permanents)[at] || [];
       return list.filter(
         (p) =>
-          p.attachedTo &&
-          p.attachedTo.at === at &&
-          p.attachedTo.index === index
+          p.attachedTo && p.attachedTo.at === at && p.attachedTo.index === index
       );
     }
 
-    function computeEffectiveAttack(input: {
-      at: CellKey;
-      index: number;
-    }): { atk: number; firstStrike: boolean } {
+    function computeEffectiveAttack(input: { at: CellKey; index: number }): {
+      atk: number;
+      firstStrike: boolean;
+    } {
       const base = getAtkDef(input.at, input.index).atk;
       const attachments = getAttachments(input.at, input.index);
       let atk = base;
@@ -192,7 +193,10 @@ export const createCombatSlice: StateCreator<
           ts: Date.now(),
         } as unknown as CustomMessage);
       } catch (error) {
-        console.error("[setDamageAssignment] Error sending combatAssign:", error);
+        console.error(
+          "[setDamageAssignment] Error sending combatAssign:",
+          error
+        );
       }
     }
     return true;
@@ -215,29 +219,89 @@ export const createCombatSlice: StateCreator<
         createdAt: Date.now(),
       };
       const transport = get().transport;
+      // Helper to format name with player color markup [p1:Name] or [p2:Name]
+      const formatWithOwner = (name: string, owner: 1 | 2): string =>
+        `[p${owner}:${name}]`;
+
       const attackerLabel = (() => {
         try {
+          // Handle avatar attackers
+          if (attacker.isAvatar && attacker.avatarSeat) {
+            const avatarCard = (get().avatars as GameState["avatars"])?.[
+              attacker.avatarSeat
+            ]?.card;
+            const name = avatarCard?.name || "Avatar";
+            return formatWithOwner(name, attacker.owner);
+          }
           const source =
             (get().permanents as Permanents)[attacker.at]?.[attacker.index] ??
             null;
-          return source?.card?.name || "Attacker";
+          const name = source?.card?.name || "Attacker";
+          return formatWithOwner(name, attacker.owner);
         } catch {
-          return "Attacker";
+          return formatWithOwner("Attacker", attacker.owner);
         }
       })();
       const targetLabel = (() => {
         try {
           if (!target) return null;
-          if (target.kind === "site") return "Site";
-          if (target.kind === "avatar") return "Avatar";
+          const enemyOwner: 1 | 2 = attacker.owner === 1 ? 2 : 1;
+          if (target.kind === "site") {
+            const siteName = get().board.sites[target.at]?.card?.name || "Site";
+            return formatWithOwner(siteName, enemyOwner);
+          }
+          if (target.kind === "avatar") {
+            const seat = attacker.owner === 1 ? "p2" : "p1";
+            const avatarName =
+              (get().avatars as GameState["avatars"])?.[seat]?.card?.name ||
+              "Avatar";
+            return formatWithOwner(avatarName, enemyOwner);
+          }
           const list = (get().permanents as Permanents)[target.at] || [];
           const permanent =
-            target.index != null && list[target.index] ? list[target.index] : null;
-          return permanent?.card?.name || "Unit";
+            target.index != null && list[target.index]
+              ? list[target.index]
+              : null;
+          const permOwner = (permanent?.owner as 1 | 2) || enemyOwner;
+          return formatWithOwner(permanent?.card?.name || "Unit", permOwner);
         } catch {
           return null;
         }
       })();
+      // Check for artifact attachments that require manual resolution
+      const checkForArtifacts = (at: string, index: number): boolean => {
+        try {
+          const allPerms = get().permanents as Permanents;
+          const list = allPerms[at] || [];
+          // Attachments are permanents at the same cell with attachedTo pointing to this permanent
+          const attachments = list.filter(
+            (p) =>
+              p.attachedTo &&
+              p.attachedTo.at === at &&
+              p.attachedTo.index === index
+          );
+          for (const att of attachments) {
+            const name = (att.card?.name || "").toLowerCase();
+            const cardType = att.card?.type || "";
+            const isArtifact = cardType.toLowerCase().includes("artifact");
+            // Lance and Disabled are tracked, skip them
+            if (name === "lance" || name === "disabled") continue;
+            if (isArtifact) return true;
+          }
+          return false;
+        } catch {
+          return false;
+        }
+      };
+
+      const attackerHasArtifact =
+        !attacker.isAvatar && checkForArtifacts(attacker.at, attacker.index);
+      const targetHasArtifact =
+        target?.kind === "permanent" &&
+        target.index != null &&
+        checkForArtifacts(target.at, target.index);
+      const needsManualResolve = attackerHasArtifact || targetHasArtifact;
+
       if (transport?.sendMessage) {
         try {
           transport.sendMessage({
@@ -253,6 +317,16 @@ export const createCombatSlice: StateCreator<
             transport.sendMessage({
               type: "toast",
               text: `${attackerLabel} attacks ${targetLabel}`,
+            } as unknown as CustomMessage);
+          }
+          // Send early warning if artifacts require manual resolution
+          if (needsManualResolve) {
+            const artifactOwner = attackerHasArtifact
+              ? attackerLabel
+              : targetLabel || "Target";
+            transport.sendMessage({
+              type: "toast",
+              text: `⚠️ ${artifactOwner} has artifact attachments - manual combat resolution required`,
             } as unknown as CustomMessage);
           }
         } catch (error) {
@@ -312,7 +386,10 @@ export const createCombatSlice: StateCreator<
             ts: Date.now(),
           } as unknown as CustomMessage);
         } catch (error) {
-          console.error("[offerIntercept] Error sending interceptOffer:", error);
+          console.error(
+            "[offerIntercept] Error sending interceptOffer:",
+            error
+          );
         }
       }
       try {
@@ -376,7 +453,10 @@ export const createCombatSlice: StateCreator<
     const players = get().players;
     const board = get().board;
 
-    function getAtkDef(at: string, index: number): { atk: number; def: number } {
+    function getAtkDef(
+      at: string,
+      index: number
+    ): { atk: number; def: number } {
       try {
         const cardId = permanents[at]?.[index]?.card?.cardId;
         const info = cardId ? meta[Number(cardId)] : undefined;
@@ -392,9 +472,7 @@ export const createCombatSlice: StateCreator<
       const list = permanents[at] || [];
       return list.filter(
         (p) =>
-          p.attachedTo &&
-          p.attachedTo.at === at &&
-          p.attachedTo.index === index
+          p.attachedTo && p.attachedTo.at === at && p.attachedTo.index === index
       );
     }
 
@@ -426,10 +504,10 @@ export const createCombatSlice: StateCreator<
       }
     }
 
-    function computeEffectiveAttack(input: {
-      at: CellKey;
-      index: number;
-    }): { atk: number; firstStrike: boolean } {
+    function computeEffectiveAttack(input: { at: CellKey; index: number }): {
+      atk: number;
+      firstStrike: boolean;
+    } {
       const base = getAtkDef(input.at, input.index).atk;
       const attachments = getAttachments(input.at, input.index);
       let atk = base;
@@ -450,19 +528,33 @@ export const createCombatSlice: StateCreator<
       return { atk, firstStrike };
     }
 
-    const eff = computeEffectiveAttack({
-      at: pending.attacker.at,
-      index: pending.attacker.index,
-    });
+    // Compute effective attack - handle avatar attackers specially
+    const eff = (() => {
+      if (pending.attacker.isAvatar && pending.attacker.avatarSeat) {
+        // Avatar attack power comes from the avatar card
+        const avatarCard = get().avatars?.[pending.attacker.avatarSeat]?.card;
+        const cardId = avatarCard?.cardId;
+        if (cardId && meta[Number(cardId)]) {
+          const atk = Number(meta[Number(cardId)].attack ?? 0) || 0;
+          return { atk, firstStrike: false };
+        }
+        return { atk: 0, firstStrike: false };
+      }
+      return computeEffectiveAttack({
+        at: pending.attacker.at,
+        index: pending.attacker.index,
+      });
+    })();
     let summary = "Combat resolved";
-    const attackerName = getPermanentName(
-      pending.attacker.at,
-      pending.attacker.index
-    );
-    const attachmentEffects = listAttachmentEffects(
-      pending.attacker.at,
-      pending.attacker.index
-    );
+    const attackerName = (() => {
+      if (pending.attacker.isAvatar && pending.attacker.avatarSeat) {
+        return getAvatarName(pending.attacker.avatarSeat);
+      }
+      return getPermanentName(pending.attacker.at, pending.attacker.index);
+    })();
+    const attachmentEffects = pending.attacker.isAvatar
+      ? [] // Avatars don't have attachments
+      : listAttachmentEffects(pending.attacker.at, pending.attacker.index);
     const effectText = attachmentEffects.length
       ? ` [${attachmentEffects.join(", ")}]`
       : "";
@@ -531,7 +623,12 @@ export const createCombatSlice: StateCreator<
       const siteAtTile = tileKey
         ? (board.sites[tileKey] as SiteTile | undefined)
         : undefined;
-      if (!pending.target && siteAtTile && siteAtTile.card && !pending.defenders?.length) {
+      if (
+        !pending.target &&
+        siteAtTile &&
+        siteAtTile.card &&
+        !pending.defenders?.length
+      ) {
         const owner = siteAtTile.owner as 1 | 2 | undefined;
         let seat: PlayerKey | null =
           owner === 1 || owner === 2
@@ -633,29 +730,60 @@ export const createCombatSlice: StateCreator<
   },
 
   autoResolveCombat: () => {
+    console.log("[autoResolveCombat] Called");
     const pending = get().pendingCombat;
-    if (!pending) return;
-    if (pending.status !== "committed") return;
+    if (!pending) {
+      console.log("[autoResolveCombat] No pending combat, returning");
+      return;
+    }
+    if (pending.status !== "committed") {
+      console.log(
+        "[autoResolveCombat] Status is",
+        pending.status,
+        "not committed, returning"
+      );
+      return;
+    }
     const actor = get().actorKey as PlayerKey | null;
     const isIntercept = !pending.target;
     const attackerSeat = seatFromOwner(pending.attacker.owner);
     const defenderSeat = pending.defenderSeat as PlayerKey | null;
+    console.log(
+      "[autoResolveCombat] actor:",
+      actor,
+      "attackerSeat:",
+      attackerSeat,
+      "isIntercept:",
+      isIntercept
+    );
     if (actor) {
-      const defenderMayResolve =
-        Boolean(isIntercept && defenderSeat && actor === defenderSeat);
-      if (!defenderMayResolve && actor !== attackerSeat) return;
+      const defenderMayResolve = Boolean(
+        isIntercept && defenderSeat && actor === defenderSeat
+      );
+      if (!defenderMayResolve && actor !== attackerSeat) {
+        console.log(
+          "[autoResolveCombat] Actor not allowed to resolve, returning"
+        );
+        return;
+      }
     }
+    console.log("[autoResolveCombat] Proceeding with resolution");
     const { permanents, metaByCardId, board, players } = get();
 
-    function getAtkDef(at: string, index: number): { atk: number; def: number } {
+    function getAtkDef(
+      at: string,
+      index: number
+    ): { atk: number; def: number } {
       try {
         const cardId =
           (permanents as Permanents)[at]?.[index]?.card?.cardId ?? null;
         const meta = cardId
-          ? (metaByCardId as Record<
-              number,
-              { attack: number | null; defence: number | null }
-            >)[Number(cardId)]
+          ? (
+              metaByCardId as Record<
+                number,
+                { attack: number | null; defence: number | null }
+              >
+            )[Number(cardId)]
           : undefined;
         const atk = Number(meta?.attack ?? 0) || 0;
         const def = Number(meta?.defence ?? meta?.attack ?? 0) || 0;
@@ -669,43 +797,79 @@ export const createCombatSlice: StateCreator<
       const list = (permanents as Permanents)[at] || [];
       return list.filter(
         (p) =>
-          p.attachedTo &&
-          p.attachedTo.at === at &&
-          p.attachedTo.index === index
+          p.attachedTo && p.attachedTo.at === at && p.attachedTo.index === index
       );
     }
 
-    function computeEffectiveAttack(input: {
-      at: CellKey;
-      index: number;
-    }): { atk: number; firstStrike: boolean } {
+    function computeEffectiveAttack(input: { at: CellKey; index: number }): {
+      atk: number;
+      firstStrike: boolean;
+      hasUntrackedArtifact: boolean;
+    } {
       const base = getAtkDef(input.at, input.index).atk;
       const attachments = getAttachments(input.at, input.index);
       let atk = base;
       let firstStrike = false;
       let disabled = false;
+      let hasUntrackedArtifact = false;
       for (const token of attachments) {
         const name = (token.card?.name || "").toLowerCase();
+        const cardType = token.card?.type || "";
+        const isArtifact = cardType.toLowerCase().includes("artifact");
         if (name === "lance") {
           firstStrike = true;
           atk += 1;
-        }
-        if (name === "disabled") {
+        } else if (name === "disabled") {
           disabled = true;
+        } else if (isArtifact) {
+          // Non-Lance artifact with potentially untracked modifiers
+          hasUntrackedArtifact = true;
         }
       }
       if (disabled) atk = 0;
       if (!Number.isFinite(atk)) atk = 0;
-      return { atk, firstStrike };
+      return { atk, firstStrike, hasUntrackedArtifact };
     }
 
-    const eff = computeEffectiveAttack({
-      at: pending.attacker.at,
-      index: pending.attacker.index,
-    });
+    // For avatar attackers, don't use computeEffectiveAttack (avatars aren't permanents)
+    // Just get avatar's base attack power directly
+    const eff = pending.attacker.isAvatar
+      ? (() => {
+          const avatarCard =
+            get().avatars?.[pending.attacker.avatarSeat as PlayerKey]?.card;
+          const avatarCardId = avatarCard?.cardId;
+          const avatarMeta = avatarCardId
+            ? (metaByCardId as Record<number, { attack: number | null }>)[
+                Number(avatarCardId)
+              ]
+            : undefined;
+          const atk = Number(avatarMeta?.attack ?? 0) || 0;
+          // Avatars don't have attachments, so no first strike or artifacts
+          return { atk, firstStrike: false, hasUntrackedArtifact: false };
+        })()
+      : computeEffectiveAttack({
+          at: pending.attacker.at,
+          index: pending.attacker.index,
+        });
+
+    // Helper to get instanceId from a permanent at a given position
+    function getInstanceId(at: CellKey, index: number): string | null {
+      try {
+        return (permanents as Permanents)[at]?.[index]?.instanceId ?? null;
+      } catch {
+        return null;
+      }
+    }
+
     let targetSeat: PlayerKey | undefined;
-    const killList: Array<{ at: CellKey; index: number; owner: PlayerKey }> = [];
-    const damageList: Array<{ at: CellKey; index: number; amount: number }> = [];
+    const killList: Array<{
+      at: CellKey;
+      index: number;
+      owner: PlayerKey;
+      instanceId: string | null;
+    }> = [];
+    const damageList: Array<{ at: CellKey; index: number; amount: number }> =
+      [];
     let defenders = (pending.defenders || []).map((defender) => {
       const stats = getAtkDef(defender.at, defender.index);
       const effective = computeEffectiveAttack({
@@ -717,8 +881,26 @@ export const createCombatSlice: StateCreator<
         def: stats.def,
         atk: effective.atk,
         fs: effective.firstStrike,
+        hasUntrackedArtifact: effective.hasUntrackedArtifact,
       };
     });
+
+    // Check for untracked artifacts on attacker or defenders
+    const hasUntrackedArtifacts =
+      eff.hasUntrackedArtifact || defenders.some((d) => d.hasUntrackedArtifact);
+
+    if (hasUntrackedArtifacts) {
+      // Log that we're resolving with base stats (user was warned in UI)
+      console.log(
+        "[autoResolveCombat] Resolving with base stats - artifact modifiers not calculated"
+      );
+      try {
+        get().log(
+          "⚠️ Resolving with base stats - artifact effects not calculated"
+        );
+      } catch {}
+      // Continue with resolution using base stats
+    }
 
     if (
       defenders.length === 0 &&
@@ -741,6 +923,8 @@ export const createCombatSlice: StateCreator<
           at: pending.target.at,
           index: pending.target.index,
         });
+        // Note: target artifact warning already shown in UI if hasUntrackedArtifact
+        // Resolution proceeds with base stats
         defenders = [
           {
             at: pending.target.at,
@@ -749,6 +933,7 @@ export const createCombatSlice: StateCreator<
             def: stats.def,
             atk: effective.atk,
             fs: effective.firstStrike,
+            hasUntrackedArtifact: false, // Already checked above
           },
         ];
       }
@@ -760,16 +945,17 @@ export const createCombatSlice: StateCreator<
       let total = 0;
       for (const item of assignment) {
         const key = `${item.at}:${item.index}`;
-        defenderAssignment.set(
-          key,
-          Math.floor(Number(item.amount) || 0)
-        );
+        defenderAssignment.set(key, Math.floor(Number(item.amount) || 0));
         total += Math.floor(Number(item.amount) || 0);
       }
       if (total !== Math.floor(eff.atk)) {
         const actorSeatCurrent = actor as PlayerKey | null;
-        const defenderResolving =
-          Boolean(isIntercept && actorSeatCurrent && defenderSeat && actorSeatCurrent === defenderSeat);
+        const defenderResolving = Boolean(
+          isIntercept &&
+            actorSeatCurrent &&
+            defenderSeat &&
+            actorSeatCurrent === defenderSeat
+        );
         if (defenderResolving) {
           const max = Math.floor(eff.atk);
           const count = defenders.length;
@@ -790,8 +976,13 @@ export const createCombatSlice: StateCreator<
       defenderAssignment.set(`${only.at}:${only.index}`, Math.floor(eff.atk));
     }
 
-    const attackerDef = getAtkDef(pending.attacker.at, pending.attacker.index).def;
+    // For avatar attackers, damage goes to player life instead of "defence"
+    // We use Infinity as a placeholder since avatar can't be "killed" in normal sense
+    const attackerDef = pending.attacker.isAvatar
+      ? Infinity // Avatar never "dies" in combat - damage goes to player life
+      : getAtkDef(pending.attacker.at, pending.attacker.index).def;
     let attackerAlive = true;
+    let damageToAvatarOwner = 0; // Track damage dealt to avatar (goes to player life)
     const aliveDefenders = new Set(
       defenders.map((defender) => `${defender.at}:${defender.index}`)
     );
@@ -806,6 +997,7 @@ export const createCombatSlice: StateCreator<
               at: defender.at,
               index: defender.index,
               owner: seatFromOwner(defender.owner),
+              instanceId: getInstanceId(defender.at, defender.index),
             });
             aliveDefenders.delete(key);
           } else if (assigned > 0) {
@@ -819,9 +1011,16 @@ export const createCombatSlice: StateCreator<
         targetSeat = pending.defenderSeat as PlayerKey;
       }
       const fsAttackFromDefenders = defenders
-        .filter((defender) => defender.fs && aliveDefenders.has(`${defender.at}:${defender.index}`))
+        .filter(
+          (defender) =>
+            defender.fs &&
+            aliveDefenders.has(`${defender.at}:${defender.index}`)
+        )
         .reduce((sum, defender) => sum + defender.atk, 0);
-      if (fsAttackFromDefenders >= attackerDef && attackerDef > 0) {
+      // For avatar attackers, FS damage goes to player life
+      if (pending.attacker.isAvatar && pending.attacker.avatarSeat) {
+        damageToAvatarOwner += fsAttackFromDefenders;
+      } else if (fsAttackFromDefenders >= attackerDef && attackerDef > 0) {
         attackerAlive = false;
       }
     }
@@ -836,6 +1035,7 @@ export const createCombatSlice: StateCreator<
             at: defender.at,
             index: defender.index,
             owner: seatFromOwner(defender.owner),
+            instanceId: getInstanceId(defender.at, defender.index),
           });
           aliveDefenders.delete(key);
         } else if (assigned > 0) {
@@ -850,12 +1050,14 @@ export const createCombatSlice: StateCreator<
     }
 
     if (attackerAlive) {
-      const anyFirstStrike = eff.firstStrike || defenders.some((defender) => defender.fs);
+      const anyFirstStrike =
+        eff.firstStrike || defenders.some((defender) => defender.fs);
       let defenderAtkSum = 0;
       if (anyFirstStrike) {
         const nonFsAlive = defenders.filter(
           (defender) =>
-            !defender.fs && aliveDefenders.has(`${defender.at}:${defender.index}`)
+            !defender.fs &&
+            aliveDefenders.has(`${defender.at}:${defender.index}`)
         );
         defenderAtkSum = nonFsAlive.reduce(
           (sum, defender) => sum + defender.atk,
@@ -867,17 +1069,32 @@ export const createCombatSlice: StateCreator<
           0
         );
       }
-      if (defenderAtkSum >= attackerDef && attackerDef > 0) {
+
+      // For avatar attackers, damage goes to player life
+      if (pending.attacker.isAvatar && pending.attacker.avatarSeat) {
+        damageToAvatarOwner = defenderAtkSum;
+      } else if (defenderAtkSum >= attackerDef && attackerDef > 0) {
         attackerAlive = false;
       }
     }
 
-    if (!attackerAlive) {
+    // Kill non-avatar attackers that died
+    if (!attackerAlive && !pending.attacker.isAvatar) {
       killList.push({
         at: pending.attacker.at,
         index: pending.attacker.index,
         owner: attackerSeat,
+        instanceId: getInstanceId(pending.attacker.at, pending.attacker.index),
       });
+    }
+
+    // Apply damage to avatar owner's life
+    if (damageToAvatarOwner > 0 && pending.attacker.avatarSeat) {
+      try {
+        get().addLife(pending.attacker.avatarSeat, -damageToAvatarOwner);
+      } catch {
+        // ignore
+      }
     }
 
     for (const dmg of damageList) {
@@ -888,9 +1105,42 @@ export const createCombatSlice: StateCreator<
       }
     }
 
+    // Detect site at tile for fallback when pending.target is not explicitly set
+    const tileKey = (() => {
+      try {
+        return toCellKey(pending.tile.x, pending.tile.y);
+      } catch {
+        return null;
+      }
+    })();
+    const siteAtTile = tileKey
+      ? (board.sites[tileKey] as SiteTile | undefined)
+      : undefined;
+
     if (defenders.length === 0) {
       if (pending.target && pending.target.kind === "site") {
-        const owner = board.sites[pending.target.at]?.owner as 1 | 2 | undefined;
+        const owner = board.sites[pending.target.at]?.owner as
+          | 1
+          | 2
+          | undefined;
+        if (owner === 1 || owner === 2) {
+          const seat = seatFromOwner(owner);
+          targetSeat = seat;
+          const dd = players[seat].lifeState === "dd";
+          if (!dd) {
+            const dmg = Math.max(0, Math.floor(eff.atk));
+            if (dmg > 0) {
+              try {
+                get().addLife(seat as PlayerKey, -dmg);
+              } catch {
+                // ignore
+              }
+            }
+          }
+        }
+      } else if (!pending.target && siteAtTile && siteAtTile.card && tileKey) {
+        // Fallback: no explicit target but there's a site at the tile
+        const owner = siteAtTile.owner as 1 | 2 | undefined;
         if (owner === 1 || owner === 2) {
           const seat = seatFromOwner(owner);
           targetSeat = seat;
@@ -927,33 +1177,80 @@ export const createCombatSlice: StateCreator<
       }
     }
 
+    // Helper to find current index of a permanent by instanceId
+    function findIndexByInstanceId(
+      at: CellKey,
+      instanceId: string | null
+    ): number {
+      if (!instanceId) return -1;
+      const list = (get().permanents as Permanents)[at] || [];
+      return list.findIndex((p) => p.instanceId === instanceId);
+    }
+
     const mySeat = get().actorKey as PlayerKey | null;
-    if (mySeat) {
-      for (const kill of killList) {
-        if (kill.owner === mySeat) {
-          try {
-            get().movePermanentToZone(kill.at, kill.index, "graveyard");
-          } catch (error) {
-            console.error("[autoResolveCombat] Error moving to graveyard:", error);
+
+    // Capture attacker name BEFORE applying kills (permanent might be moved to graveyard)
+    const attackerNameForSummary = (() => {
+      try {
+        if (pending.attacker.isAvatar && pending.attacker.avatarSeat) {
+          const avatarCard = get().avatars?.[pending.attacker.avatarSeat]?.card;
+          const name = avatarCard?.name || "Avatar";
+          return `[p${pending.attacker.owner}:${name}]`;
+        }
+        const name =
+          (get().permanents as Permanents)[pending.attacker.at]?.[
+            pending.attacker.index
+          ]?.card?.name || "Attacker";
+        return `[p${pending.attacker.owner}:${name}]`;
+      } catch {
+        return `[p${pending.attacker.owner}:Attacker]`;
+      }
+    })();
+
+    // Sort kills by index descending within each cell to avoid index shifting issues
+    // When removing items, higher indices should be removed first
+    const myKills = killList
+      .filter((k) => !mySeat || k.owner === mySeat)
+      .sort((a, b) => {
+        if (a.at !== b.at) return 0; // Only sort within same cell
+        return b.index - a.index; // Descending order
+      });
+
+    for (const kill of myKills) {
+      try {
+        // Prefer instanceId lookup to handle index drift from concurrent patches
+        let currentIndex = kill.index;
+        if (kill.instanceId) {
+          const found = findIndexByInstanceId(kill.at, kill.instanceId);
+          if (found >= 0) {
+            currentIndex = found;
+          } else {
+            console.warn(
+              "[autoResolveCombat] Permanent not found by instanceId, using original index:",
+              kill
+            );
           }
         }
-      }
-    } else {
-      for (const kill of killList) {
-        try {
-          get().movePermanentToZone(kill.at, kill.index, "graveyard");
-        } catch (error) {
-          console.error(
-            "[autoResolveCombat] Error moving to graveyard (hotseat):",
-            error
-          );
-        }
+        get().movePermanentToZone(kill.at, currentIndex, "graveyard");
+      } catch (error) {
+        console.error("[autoResolveCombat] Error moving to graveyard:", error);
       }
     }
 
     const transport = get().transport;
+    console.log(
+      "[autoResolveCombat] killList:",
+      killList,
+      "transport:",
+      !!transport?.sendMessage
+    );
     if (transport?.sendMessage && killList.length > 0) {
       try {
+        console.log(
+          "[autoResolveCombat] Sending combatAutoApply with",
+          killList.length,
+          "kills"
+        );
         transport.sendMessage({
           type: "combatAutoApply",
           id: pending.id,
@@ -961,8 +1258,15 @@ export const createCombatSlice: StateCreator<
           ts: Date.now(),
         } as unknown as CustomMessage);
       } catch (error) {
-        console.error("[autoResolveCombat] Error sending combatAutoApply:", error);
+        console.error(
+          "[autoResolveCombat] Error sending combatAutoApply:",
+          error
+        );
       }
+    } else {
+      console.log(
+        "[autoResolveCombat] NOT sending combatAutoApply - killList empty or no transport"
+      );
     }
     if (transport?.sendMessage && damageList.length > 0) {
       try {
@@ -977,19 +1281,16 @@ export const createCombatSlice: StateCreator<
       }
     }
 
-    const attackerName = (() => {
-      try {
-        return (get().permanents as Permanents)[pending.attacker.at]?.[
-          pending.attacker.index
-        ]?.card?.name || "Attacker";
-      } catch {
-        return "Attacker";
-      }
-    })();
+    // Use the pre-captured attacker name (captured before kills were applied)
+    const attackerName = attackerNameForSummary;
 
-    const getNameAt = (at: CellKey, index: number): string => {
+    // Get colored name with [p1:Name] or [p2:Name] markup
+    const getColoredNameAt = (at: CellKey, index: number): string => {
       try {
-        return (get().permanents as Permanents)[at]?.[index]?.card?.name || "Unit";
+        const perm = (get().permanents as Permanents)[at]?.[index];
+        const name = perm?.card?.name || "Unit";
+        const owner = (perm?.owner as 1 | 2) || 1;
+        return `[p${owner}:${name}]`;
       } catch {
         return "Unit";
       }
@@ -999,8 +1300,10 @@ export const createCombatSlice: StateCreator<
       .filter((kill) => kill.owner === (pending.defenderSeat as PlayerKey))
       .map((kill) => {
         try {
-          return (get().permanents as Permanents)[kill.at]?.[kill.index]?.card
-            ?.name;
+          const perm = (get().permanents as Permanents)[kill.at]?.[kill.index];
+          const name = perm?.card?.name || "Unit";
+          const owner = (perm?.owner as 1 | 2) || 1;
+          return `[p${owner}:${name}]`;
         } catch {
           return null;
         }
@@ -1051,44 +1354,83 @@ export const createCombatSlice: StateCreator<
       Math.floor(damageFromFirstStrike + damageFromSimultaneous)
     );
     let text = "";
+    // Check if avatar attacker took damage
+    const avatarAttackerTookDamage =
+      pending.attacker.isAvatar && damageToAvatarOwner > 0;
+
     if ((pending.defenders?.length || 0) > 0) {
       const defenderNames = (pending.defenders || []).map((defender) =>
-        getNameAt(defender.at, defender.index)
+        getColoredNameAt(defender.at, defender.index)
       );
+      // Get the target name for narrative context
+      const targetDesc = (() => {
+        if (pending.target?.kind === "site") {
+          const siteName =
+            board.sites[pending.target.at]?.card?.name || "a site";
+          return siteName;
+        } else if (pending.target?.kind === "avatar") {
+          const seat = opponentSeat(attackerSeat);
+          return get().avatars?.[seat]?.card?.name || "the Avatar";
+        } else if (
+          pending.target?.kind === "permanent" &&
+          pending.target.index != null
+        ) {
+          return (
+            (get().permanents as Permanents)[pending.target.at]?.[
+              pending.target.index
+            ]?.card?.name || "a unit"
+          );
+        }
+        return "the target";
+      })();
+      const defenderList =
+        defenderNames.length === 1
+          ? defenderNames[0]
+          : defenderNames.slice(0, -1).join(", ") +
+            " and " +
+            defenderNames[defenderNames.length - 1];
+
       if (attackerDied) {
-        const source =
-          defenderNames.length === 1
-            ? `defending "${defenderNames[0]}"`
-            : `defenders ${defenderNames.map((n) => `"${n}"`).join(", ")}`;
-        text = `Attacker "${attackerName}" takes ${totalDamageToAttacker} damage from ${source} and is destroyed`;
         if (deadDefenders.length > 0) {
-          text += `; defenders lost: ${deadDefenders.join(", ")}`;
+          // Both attacker and some defenders died
+          text = `${attackerName} attacked ${targetDesc}; ${defenderList} defended — both sides took losses`;
+        } else {
+          // Attacker died, defenders survived
+          text = `${attackerName} attacked ${targetDesc}, but ${defenderList} defended and destroyed the attacker`;
+        }
+      } else if (avatarAttackerTookDamage && pending.attacker.avatarSeat) {
+        // Avatar attacker takes damage to player life
+        const seat = pending.attacker.avatarSeat;
+        if (deadDefenders.length > 0) {
+          text = `${attackerName} attacked ${targetDesc}; ${defenderList} defended but was destroyed (${damageToAvatarOwner} damage to ${seat.toUpperCase()})`;
+        } else {
+          text = `${attackerName} attacked ${targetDesc}; ${defenderList} defended (${damageToAvatarOwner} damage to ${seat.toUpperCase()})`;
         }
       } else if (deadDefenders.length > 0) {
-        text = `Defenders destroyed: ${deadDefenders.join(", ")}`;
+        // Attacker survived, killed defenders
+        text = `${attackerName} attacked ${targetDesc}; ${defenderList} defended but was destroyed`;
       } else {
+        // No one died, just damage
         const damageDescriptions = damageList.map((damage) => {
-          const name = getNameAt(damage.at as CellKey, damage.index);
+          const name = getColoredNameAt(damage.at as CellKey, damage.index);
           return `${name}: ${damage.amount}`;
         });
         text = damageDescriptions.length
-          ? `Damage dealt to defenders: ${damageDescriptions.join(", ")}`
-          : "No casualties";
+          ? `${attackerName} attacked ${targetDesc}; damage dealt: ${damageDescriptions.join(
+              ", "
+            )}`
+          : `${attackerName} attacked ${targetDesc}; no casualties`;
       }
     } else if (pending.target && pending.target.kind === "avatar") {
       const seat: PlayerKey = opponentSeat(attackerSeat);
-      const before = Number(
-        (players as GameState["players"])[seat]?.life ?? 0
-      );
+      const before = Number((players as GameState["players"])[seat]?.life ?? 0);
       const after = Number(
         (get().players as GameState["players"])[seat]?.life ?? before
       );
       const dmg = Math.max(0, before - after);
       const avatarName = (() => {
         try {
-          return (
-            (get().avatars?.[seat]?.card?.name as string) || "Avatar"
-          );
+          return (get().avatars?.[seat]?.card?.name as string) || "Avatar";
         } catch {
           return "Avatar";
         }
@@ -1108,8 +1450,8 @@ export const createCombatSlice: StateCreator<
       const siteName = (() => {
         try {
           return (
-            (get().board.sites[pending.target.at as CellKey]?.card?.name ||
-              "Site")
+            get().board.sites[pending.target.at as CellKey]?.card?.name ||
+            "Site"
           );
         } catch {
           return "Site";
@@ -1127,12 +1469,58 @@ export const createCombatSlice: StateCreator<
       } else {
         text = `Attacker "${attackerName}" strikes Site "${siteName}"`;
       }
+    } else if (!pending.target && siteAtTile && siteAtTile.card && tileKey) {
+      // Fallback: no explicit target but there's a site at the tile
+      const owner = siteAtTile.owner as 1 | 2 | undefined;
+      const seat: PlayerKey | null =
+        owner === 1 || owner === 2 ? seatFromOwner(owner) : null;
+      const siteName = siteAtTile.card?.name || "Site";
+      if (seat) {
+        const before = Number(
+          (players as GameState["players"])[seat]?.life ?? 0
+        );
+        const after = Number(
+          (get().players as GameState["players"])[seat]?.life ?? before
+        );
+        const dmg = Math.max(0, before - after);
+        text = `Attacker "${attackerName}" strikes Site "${siteName}" for ${dmg} damage (${seat.toUpperCase()} life ${before} -> ${after})`;
+      } else {
+        text = `Attacker "${attackerName}" strikes Site "${siteName}"`;
+      }
+    } else if (
+      pending.target &&
+      pending.target.kind === "permanent" &&
+      pending.target.index != null
+    ) {
+      // Attacking a unit (permanent) directly - no explicit defenders assigned
+      const targetName = getColoredNameAt(
+        pending.target.at,
+        pending.target.index
+      );
+      const targetDied = killList.some(
+        (k) => k.at === pending.target?.at && k.index === pending.target?.index
+      );
+      if (attackerDied && targetDied) {
+        text = `"${attackerName}" and "${targetName}" destroy each other`;
+      } else if (attackerDied) {
+        text = `Attacker "${attackerName}" is destroyed; "${targetName}" survives`;
+      } else if (targetDied) {
+        text = `"${attackerName}" destroys "${targetName}"`;
+      } else {
+        // Both survive (shouldn't happen normally but handle gracefully)
+        text = `"${attackerName}" attacks "${targetName}"; both survive`;
+      }
     } else {
       text = attackerDied
         ? `Attacker "${attackerName}" is destroyed`
         : "No casualties";
     }
 
+    console.log("[autoResolveCombat] Setting summary:", {
+      text,
+      attackerSeat,
+      targetSeat,
+    });
     set({
       lastCombatSummary: {
         id: pending.id,
@@ -1144,6 +1532,7 @@ export const createCombatSlice: StateCreator<
     } as Partial<GameState> as GameState);
     if (transport?.sendMessage) {
       try {
+        console.log("[autoResolveCombat] Sending combatSummary");
         transport.sendMessage({
           type: "combatSummary",
           id: pending.id,
@@ -1153,8 +1542,15 @@ export const createCombatSlice: StateCreator<
           targetSeat,
         } as unknown as CustomMessage);
       } catch (error) {
-        console.error("[autoResolveCombat] Error sending combatSummary:", error);
+        console.error(
+          "[autoResolveCombat] Error sending combatSummary:",
+          error
+        );
       }
+    } else {
+      console.log(
+        "[autoResolveCombat] NOT sending combatSummary - no transport"
+      );
     }
 
     get().resolveCombat();

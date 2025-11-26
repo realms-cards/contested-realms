@@ -7,13 +7,23 @@ type AnyRecord = Record<string, unknown>;
 declare module "./modules/draft" {
   import type { createMatchDraftService as CreateMatchDraftService } from "./modules/draft/match";
   export const config: {
-    getDraftConfig(prisma: PrismaClient, matchId: string, match: AnyRecord): Promise<AnyRecord>;
-    loadCubeConfiguration(prisma: PrismaClient, cubeId: string): Promise<AnyRecord>;
+    getDraftConfig(
+      prisma: PrismaClient,
+      matchId: string,
+      match: AnyRecord
+    ): Promise<AnyRecord>;
+    loadCubeConfiguration(
+      prisma: PrismaClient,
+      cubeId: string
+    ): Promise<AnyRecord>;
     ensureConfigLoaded(
       prisma: PrismaClient,
       matchId: string,
       match: AnyRecord,
-      hydrateMatchFromDatabase: (matchId: string, match: AnyRecord) => Promise<void>
+      hydrateMatchFromDatabase: (
+        matchId: string,
+        match: AnyRecord
+      ) => Promise<void>
     ): Promise<void>;
   };
   export const createMatchDraftService: typeof CreateMatchDraftService;
@@ -37,7 +47,12 @@ declare module "./modules/draft/match" {
       ensureConfigLoaded(...args: unknown[]): Promise<void>;
     };
     hydrateMatchFromDatabase(matchId: string, match: AnyRecord): Promise<void>;
-    persistMatchUpdate(match: AnyRecord, patch: AnyRecord | null, playerId: string, timestamp: number): Promise<void>;
+    persistMatchUpdate(
+      match: AnyRecord,
+      patch: AnyRecord | null,
+      playerId: string,
+      timestamp: number
+    ): Promise<void>;
     getOrLoadMatch(matchId: string): Promise<AnyRecord | null>;
     getMatchInfo(match: AnyRecord): AnyRecord;
     createRngFromString(seed: string): () => number;
@@ -49,19 +64,34 @@ declare module "./modules/draft/match" {
       isAuthed(): boolean;
       getPlayerBySocket(socket: Socket): AnyRecord | null;
     }): void;
-    updateDraftPresence(sessionId: string, playerId: string, playerName: string | null, isConnected: boolean): Promise<
-      DraftPresenceEntry[]
-    >;
+    updateDraftPresence(
+      sessionId: string,
+      playerId: string,
+      playerName: string | null,
+      isConnected: boolean
+    ): Promise<DraftPresenceEntry[]>;
     getDraftPresenceList(sessionId: string): DraftPresenceEntry[];
-    leaderDraftPlayerReady(matchId: string, playerId: string, ready: boolean): Promise<void>;
+    leaderDraftPlayerReady(
+      matchId: string,
+      playerId: string,
+      ready: boolean
+    ): Promise<void>;
     leaderStartDraft(
       matchId: string,
       requestingPlayerId?: string | null,
       overrideConfig?: AnyRecord | null,
       requestingSocketId?: string | null
     ): Promise<void>;
-    leaderMakeDraftPick(matchId: string, playerId: string, payload: AnyRecord): Promise<void>;
-    leaderChooseDraftPack(matchId: string, playerId: string, payload: AnyRecord): Promise<void>;
+    leaderMakeDraftPick(
+      matchId: string,
+      playerId: string,
+      payload: AnyRecord
+    ): Promise<void>;
+    leaderChooseDraftPack(
+      matchId: string,
+      playerId: string,
+      payload: AnyRecord
+    ): Promise<void>;
     clearDraftWatchdog(matchId: string): void;
     repairDraftInvariants(match: AnyRecord): void;
   };
@@ -81,10 +111,27 @@ declare module "./modules/tournament/broadcast" {
     newPhase: string,
     additionalData?: AnyRecord
   ): void;
-  export function emitTournamentUpdate(io: Server, tournamentId: string, data: AnyRecord): void;
-  export function emitRoundStarted(io: Server, tournamentId: string, roundNumber: number, matches: AnyRecord[]): void;
-  export function emitMatchesReady(io: Server, tournamentId: string, matches: AnyRecord[]): void;
-  export function emitDraftReady(io: Server, tournamentId: string, payload: AnyRecord): void;
+  export function emitTournamentUpdate(
+    io: Server,
+    tournamentId: string,
+    data: AnyRecord
+  ): void;
+  export function emitRoundStarted(
+    io: Server,
+    tournamentId: string,
+    roundNumber: number,
+    matches: AnyRecord[]
+  ): void;
+  export function emitMatchesReady(
+    io: Server,
+    tournamentId: string,
+    matches: AnyRecord[]
+  ): void;
+  export function emitDraftReady(
+    io: Server,
+    tournamentId: string,
+    payload: AnyRecord
+  ): void;
   export function emitPlayerJoined(
     io: Server,
     tournamentId: string,
@@ -108,13 +155,26 @@ declare module "./modules/tournament/broadcast" {
     totalPlayerCount: number,
     deckSubmitted?: boolean
   ): void;
-  export function emitStatisticsUpdate(io: Server, tournamentId: string, statistics: AnyRecord): void;
+  export function emitStatisticsUpdate(
+    io: Server,
+    tournamentId: string,
+    statistics: AnyRecord
+  ): void;
 }
 
 declare module "./modules/replay" {
-  export function listRecordings(prisma: PrismaClient, opts?: AnyRecord): Promise<AnyRecord[]>;
-  export function loadRecording(prisma: PrismaClient, matchId: string): Promise<AnyRecord | null>;
-  export function setupReplayRetentionPruner(prisma: PrismaClient, options?: AnyRecord): void;
+  export function listRecordings(
+    prisma: PrismaClient,
+    opts?: AnyRecord
+  ): Promise<AnyRecord[]>;
+  export function loadRecording(
+    prisma: PrismaClient,
+    matchId: string
+  ): Promise<AnyRecord | null>;
+  export function setupReplayRetentionPruner(
+    prisma: PrismaClient,
+    options?: AnyRecord
+  ): void;
 }
 
 declare module "./features" {
@@ -124,7 +184,9 @@ declare module "./features" {
     deps: AnyRecord
   ): {
     lobby: ReturnType<typeof import("./features/lobby").createLobbyFeature>;
-    tournament: ReturnType<typeof import("./features/tournament").createTournamentFeature>;
+    tournament: ReturnType<
+      typeof import("./features/tournament").createTournamentFeature
+    >;
   };
 }
 
@@ -180,14 +242,8 @@ declare module "./botManager" {
   }
 }
 
-declare module "./rules" {
-  export function applyTurnStart(game: AnyRecord): AnyRecord | null;
-  export function validateAction(game: AnyRecord, action: AnyRecord, options?: AnyRecord): { ok: boolean; errors?: string[] };
-  export function ensureCosts(game: AnyRecord, action: AnyRecord): AnyRecord;
-  export function applyMovementAndCombat(
-    game: AnyRecord,
-    action: AnyRecord,
-    playerId: string,
-    context?: AnyRecord
-  ): AnyRecord | null;
-}
+// NOTE: ./rules/index.js is deprecated. Use TypeScript modules:
+// - ./modules/rules-turn-start.ts for applyTurnStart
+// - ./modules/rules-movement.ts for applyMovementAndCombat
+// - ./modules/rules-validation.ts for validateAction
+// - ./modules/rules-costs.ts for ensureCosts

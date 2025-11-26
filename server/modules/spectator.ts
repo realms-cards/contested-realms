@@ -42,14 +42,33 @@ export async function broadcastSpectatorsUpdated(
     try {
       const sockets = await io.in(room).allSockets();
       count = sockets ? sockets.size : 0;
-    } catch {}
+    } catch (socketErr) {
+      console.warn(
+        "[spectate] Failed to get sockets for room:",
+        room,
+        socketErr
+      );
+    }
     const out = { type: "spectatorsUpdated", matchId, count };
     try {
       io.to(room).emit("message", out);
-    } catch {}
+    } catch (emitErr) {
+      console.warn(
+        "[spectate] Failed to emit to spectator room:",
+        room,
+        emitErr
+      );
+    }
     try {
       io.to(`match:${matchId}`).emit("message", out);
-    } catch {}
-  } catch {}
+    } catch (emitErr) {
+      console.warn(
+        "[spectate] Failed to emit to match room:",
+        matchId,
+        emitErr
+      );
+    }
+  } catch (err) {
+    console.warn("[spectate] broadcastSpectatorsUpdated failed:", matchId, err);
+  }
 }
-

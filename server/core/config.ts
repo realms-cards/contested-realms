@@ -10,6 +10,7 @@ export interface ServerConfig {
   redisOptions: RedisOptions;
   enableRedisAdapter: boolean;
   enableStoreRedis: boolean;
+  enableRedisState: boolean;
   instanceId: string;
 }
 
@@ -21,30 +22,45 @@ export function parseBoolean(value: unknown, fallback = false): boolean {
   return fallback;
 }
 
-export function buildServerConfig(envOverrides: Record<string, unknown> = {}): ServerConfig {
+export function buildServerConfig(
+  envOverrides: Record<string, unknown> = {}
+): ServerConfig {
   const env = { ...process.env, ...envOverrides };
   const port = env.PORT ? Number(env.PORT) : 3010;
   const pingIntervalRaw = Number(env.SOCKET_PING_INTERVAL_MS);
   const pingTimeoutRaw = Number(env.SOCKET_PING_TIMEOUT_MS);
   const pingIntervalMs =
-    Number.isFinite(pingIntervalRaw) && pingIntervalRaw > 0 ? pingIntervalRaw : 25000;
+    Number.isFinite(pingIntervalRaw) && pingIntervalRaw > 0
+      ? pingIntervalRaw
+      : 25000;
   const pingTimeoutMs =
-    Number.isFinite(pingTimeoutRaw) && pingTimeoutRaw > 0 ? pingTimeoutRaw : 90000;
+    Number.isFinite(pingTimeoutRaw) && pingTimeoutRaw > 0
+      ? pingTimeoutRaw
+      : 90000;
   const redisUrl =
     (typeof env.REDIS_URL === "string" && env.REDIS_URL) ||
     (typeof env.SOCKET_REDIS_URL === "string" && env.SOCKET_REDIS_URL) ||
     "redis://localhost:6379";
-  const redisPassword = typeof env.REDIS_PASSWORD === "string" ? env.REDIS_PASSWORD : "";
+  const redisPassword =
+    typeof env.REDIS_PASSWORD === "string" ? env.REDIS_PASSWORD : "";
   const enableRedisAdapter = !parseBoolean(env.SOCKET_REDIS_DISABLED, false);
   const enableStoreRedis = !parseBoolean(env.SOCKET_STORE_DISABLED, false);
-  const corsOrigins = (typeof env.SOCKET_CORS_ORIGIN === "string" ? env.SOCKET_CORS_ORIGIN : "http://localhost:3000")
+  const enableRedisState = parseBoolean(env.REDIS_STATE_ENABLED, false);
+  const corsOrigins = (
+    typeof env.SOCKET_CORS_ORIGIN === "string"
+      ? env.SOCKET_CORS_ORIGIN
+      : "http://localhost:3000"
+  )
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
   const instanceId =
-    (typeof env.INSTANCE_ID === "string" && env.INSTANCE_ID) || `srv-${Math.random().toString(36).slice(2, 7)}`;
+    (typeof env.INSTANCE_ID === "string" && env.INSTANCE_ID) ||
+    `srv-${Math.random().toString(36).slice(2, 7)}`;
 
-  const redisOptions: RedisOptions = redisPassword ? { password: redisPassword } : {};
+  const redisOptions: RedisOptions = redisPassword
+    ? { password: redisPassword }
+    : {};
 
   return {
     port,
@@ -56,6 +72,7 @@ export function buildServerConfig(envOverrides: Record<string, unknown> = {}): S
     redisOptions,
     enableRedisAdapter,
     enableStoreRedis,
+    enableRedisState,
     instanceId,
   };
 }

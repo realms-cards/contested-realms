@@ -172,6 +172,9 @@ export function AvatarCard({
     computeProjectileFirstHits,
     magicGuidesActive,
   } = magicContext;
+  // These are kept for future re-enablement of magic targeting hints
+  void computeProjectileFirstHits;
+  void magicGuidesActive;
   const { moveAvatarToWithOffset, incrementCounter, decrementCounter } =
     avatarActions;
 
@@ -282,45 +285,8 @@ export function AvatarCard({
       return true;
     }
     if (pendingMagic.status === "choosingTarget") {
-      const hints = pendingMagic.hints;
-      const scope = hints?.scope || null;
-      if (scope === "projectile") {
-        const pos2 = Array.isArray(avatar.pos) ? avatar.pos : null;
-        if (pos2) {
-          const hits = computeProjectileFirstHits();
-          const avatarCell = `${pos2[0]},${pos2[1]}`;
-
-          // Check if this avatar is a first hit in any direction
-          let matchedDirection: "N" | "E" | "S" | "W" | null = null;
-          for (const dir of ["N", "E", "S", "W"] as const) {
-            const hit = hits[dir];
-            if (hit && hit.kind === "avatar" && hit.at === avatarCell) {
-              matchedDirection = dir;
-              break;
-            }
-          }
-
-          if (matchedDirection) {
-            setMagicTargetChoice({
-              kind: "projectile",
-              direction: matchedDirection,
-              firstHit: hits[matchedDirection] || undefined,
-            });
-          }
-        }
-        return true;
-      }
-      const allowAvatar = hints?.allow?.avatar !== false;
-      if (!allowAvatar) return true;
-      const pos2 = Array.isArray(avatar.pos) ? avatar.pos : null;
-      if (pos2) {
-        const dx = Math.abs(pos2[0] - pendingMagic.tile.x);
-        const dy = Math.abs(pos2[1] - pendingMagic.tile.y);
-        const man = dx + dy;
-        if (scope === "here" && man !== 0) return true;
-        if (scope === "adjacent" && man !== 1) return true;
-        if (scope === "nearby" && man > 2) return true;
-      }
+      // Allow targeting any avatar without scope restrictions
+      // The actual spell effect validation happens server-side during resolution
       setMagicTargetChoice({ kind: "avatar", seat });
       return true;
     }

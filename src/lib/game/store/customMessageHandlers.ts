@@ -591,23 +591,97 @@ export function handleCustomMessage(
         "kills count:",
         killsAny.length
       );
-      for (const k of killsAny) {
-        if (!k || typeof k !== "object") continue;
-        const rec = k as Record<string, unknown>;
-        const at = typeof rec.at === "string" ? (rec.at as string) : "";
-        const idx = Number(rec.index);
-        const owner = (rec.owner as PlayerKey | undefined) ?? undefined;
-        console.log(
-          "[combatAutoApply] Processing kill:",
-          { at, idx, owner },
-          "owner === mySeat?",
-          owner === mySeat
-        );
-        if (!at || !Number.isFinite(idx)) continue;
-        if (!mySeat || owner !== mySeat) continue;
-        console.log("[combatAutoApply] Applying kill to graveyard:", at, idx);
+
+      // Parse kills and filter to only my kills
+      // If mySeat is not set, fall back to checking permanent ownership directly
+      const parsedKills = killsAny
+        .filter((k): k is Record<string, unknown> => k && typeof k === "object")
+        .map((rec) => ({
+          at: typeof rec.at === "string" ? (rec.at as string) : "",
+          index: Number(rec.index),
+          owner: (rec.owner as PlayerKey | undefined) ?? undefined,
+          instanceId:
+            typeof rec.instanceId === "string" ? rec.instanceId : null,
+        }));
+
+      console.log("[combatAutoApply] Parsed kills:", parsedKills);
+
+      const myKills = parsedKills
+        .filter((k) => {
+          if (!k.at || !Number.isFinite(k.index)) {
+            console.log("[combatAutoApply] Skipping invalid kill:", k);
+            return false;
+          }
+          // If mySeat is set, use it for filtering
+          if (mySeat) {
+            const matches = k.owner === mySeat;
+            console.log(
+              `[combatAutoApply] Kill owner=${k.owner}, mySeat=${mySeat}, matches=${matches}`
+            );
+            return matches;
+          }
+          // Fallback if mySeat is not set: check if permanent exists and owner matches
+          // This allows kills to be applied even if actorKey isn't set yet
+          try {
+            const perm = (get().permanents as Permanents)[k.at]?.[k.index];
+            if (!perm) return false;
+            const permOwner =
+              perm.owner === 1 ? "p1" : perm.owner === 2 ? "p2" : null;
+            // Apply kill if the permanent exists with matching owner
+            // This is safe because only one client should have this permanent
+            if (permOwner === k.owner) {
+              console.log(
+                "[combatAutoApply] Fallback: applying kill for owner",
+                k.owner,
+                "without mySeat"
+              );
+              return true;
+            }
+            return false;
+          } catch {
+            return false;
+          }
+        })
+        // Sort by index descending within each cell to avoid index shifting
+        .sort((a, b) => {
+          if (a.at !== b.at) return 0;
+          return b.index - a.index;
+        });
+
+      for (const kill of myKills) {
+        console.log("[combatAutoApply] Processing kill:", kill);
         try {
-          get().movePermanentToZone(at as CellKey, Number(idx), "graveyard");
+          // Find current index by instanceId if available
+          let currentIndex = kill.index;
+          if (kill.instanceId) {
+            const permanents = get().permanents as Permanents;
+            const list = permanents[kill.at] || [];
+            const foundIdx = list.findIndex(
+              (p) => p.instanceId === kill.instanceId
+            );
+            if (foundIdx >= 0) {
+              currentIndex = foundIdx;
+              console.log(
+                "[combatAutoApply] Found by instanceId at index:",
+                currentIndex
+              );
+            } else {
+              console.warn(
+                "[combatAutoApply] Permanent not found by instanceId, using original index:",
+                kill
+              );
+            }
+          }
+          console.log(
+            "[combatAutoApply] Applying kill to graveyard:",
+            kill.at,
+            currentIndex
+          );
+          get().movePermanentToZone(
+            kill.at as CellKey,
+            currentIndex,
+            "graveyard"
+          );
         } catch (err) {
           console.error("[combatAutoApply] Error moving to graveyard:", err);
         }
@@ -623,11 +697,21 @@ export function handleCustomMessage(
     const targetSeat = (msg as { targetSeat?: unknown }).targetSeat as
       | PlayerKey
       | undefined;
+    console.log("[combatSummary] Received:", {
+      id,
+      text,
+      actor,
+      targetSeat,
+      mySeat: get().actorKey,
+    });
     if (id && typeof text === "string") {
+      console.log("[combatSummary] Setting lastCombatSummary");
       set({
         lastCombatSummary: { id, text, ts: Date.now(), actor, targetSeat },
         pendingCombat: null,
       } as Partial<GameState> as GameState);
+    } else {
+      console.warn("[combatSummary] Missing id or text, not setting summary");
     }
     return;
   }
@@ -637,7 +721,14 @@ export function handleCustomMessage(
       | { x?: unknown; y?: unknown }
       | undefined;
     const attacker = (msg as { attacker?: unknown }).attacker as
-      | { at?: unknown; index?: unknown; instanceId?: unknown; owner?: unknown }
+      | {
+          at?: unknown;
+          index?: unknown;
+          instanceId?: unknown;
+          owner?: unknown;
+          isAvatar?: unknown;
+          avatarSeat?: unknown;
+        }
       | undefined;
     const targetAny = (msg as { target?: unknown }).target as unknown;
     const x = Number(tile?.x);
@@ -646,6 +737,11 @@ export function handleCustomMessage(
       typeof attacker?.at === "string" ? (attacker?.at as string) : null;
     const indexVal = Number(attacker?.index);
     const ownerVal = Number(attacker?.owner);
+    const isAvatarAttacker = Boolean(attacker?.isAvatar);
+    const avatarSeatVal =
+      typeof attacker?.avatarSeat === "string"
+        ? (attacker.avatarSeat as PlayerKey)
+        : undefined;
     if (
       !id ||
       !Number.isFinite(x) ||
@@ -689,6 +785,8 @@ export function handleCustomMessage(
           index: Number(indexVal),
           instanceId: (attacker?.instanceId as string | null) ?? null,
           owner: ownerVal as 1 | 2,
+          isAvatar: isAvatarAttacker || undefined,
+          avatarSeat: avatarSeatVal,
         },
         target,
         defenderSeat,
@@ -762,7 +860,13 @@ export function handleCustomMessage(
   if (t === "combatResolve") {
     const id = (msg as { id?: unknown }).id as string | undefined;
     const attacker = (msg as { attacker?: unknown }).attacker as
-      | { at?: unknown; index?: unknown; owner?: unknown }
+      | {
+          at?: unknown;
+          index?: unknown;
+          owner?: unknown;
+          isAvatar?: unknown;
+          avatarSeat?: unknown;
+        }
       | undefined;
     const defendersAny = (msg as { defenders?: unknown }).defenders as
       | unknown[]
@@ -771,11 +875,18 @@ export function handleCustomMessage(
     const tileMsg = (msg as { tile?: unknown }).tile as
       | { x?: unknown; y?: unknown }
       | undefined;
+    // Check if attacker is an avatar
+    const isAvatarAttacker = Boolean(attacker?.isAvatar);
+    const avatarSeat =
+      typeof attacker?.avatarSeat === "string"
+        ? (attacker.avatarSeat as PlayerKey)
+        : null;
     // Set taps idempotently: attacker taps on attack; defenders remain unchanged
     const aAt =
       typeof attacker?.at === "string" ? (attacker.at as string) : null;
     const aIdx = Number(attacker?.index);
-    if (aAt && Number.isFinite(aIdx)) {
+    // Don't tap avatar attackers as permanents
+    if (aAt && Number.isFinite(aIdx) && !isAvatarAttacker) {
       try {
         get().setTapPermanent(aAt as CellKey, Number(aIdx), true);
       } catch {}
@@ -863,16 +974,37 @@ export function handleCustomMessage(
         return { atk, firstStrike };
       }
       const aCell =
-        aAt && Number.isFinite(aIdx)
+        aAt && Number.isFinite(aIdx) && !isAvatarAttacker
           ? { at: aAt as CellKey, index: Number(aIdx) }
           : null;
-      const eff = aCell
-        ? computeEffectiveAttack(aCell)
-        : { atk: 0, firstStrike: false };
-      const attackerName = aCell
-        ? getPermName(aCell.at, aCell.index)
-        : "Attacker";
-      const atkFx = aCell ? listAttachmentEffects(aCell.at, aCell.index) : [];
+      // For avatar attackers, get attack from avatar card
+      const eff = (() => {
+        if (isAvatarAttacker && avatarSeat) {
+          const avatarCard = get().avatars?.[avatarSeat]?.card;
+          const cardId = avatarCard?.cardId;
+          if (cardId && meta[Number(cardId)]) {
+            const atk = Number(meta[Number(cardId)].attack ?? 0) || 0;
+            return { atk, firstStrike: false };
+          }
+          return { atk: 0, firstStrike: false };
+        }
+        return aCell
+          ? computeEffectiveAttack(aCell)
+          : { atk: 0, firstStrike: false };
+      })();
+      // For avatar attackers, use avatar name and skip attachments
+      const attackerName =
+        isAvatarAttacker && avatarSeat
+          ? getAvatarName(avatarSeat)
+          : aCell
+          ? getPermName(aCell.at, aCell.index)
+          : "Attacker";
+      // Avatars don't have attachments
+      const atkFx = isAvatarAttacker
+        ? []
+        : aCell
+        ? listAttachmentEffects(aCell.at, aCell.index)
+        : [];
       const fxTxt = atkFx.length ? ` [${atkFx.join(", ")}]` : "";
       const fsTag = eff.firstStrike ? " (FS)" : "";
       const attackerOwner = Number(attacker?.owner);
@@ -1028,28 +1160,13 @@ export function handleCustomMessage(
           })`;
         }
       }
-      const exists = get().lastCombatSummary;
-      if (exists && String(exists.id) === String(id || "")) {
-        // Keep the already received detailed summary; just clear pending state
-        set({ pendingCombat: null } as Partial<GameState> as GameState);
-      } else {
-        set({
-          lastCombatSummary: {
-            id: String(id || Date.now()),
-            text: summary,
-            ts: Date.now(),
-            actor: actorSeat,
-            targetSeat,
-          },
-          pendingCombat: null,
-        } as Partial<GameState> as GameState);
-      }
+      // Don't set lastCombatSummary here - the authoritative summary comes from
+      // the combatSummary message, not from combatResolve. Just clear pending state.
+      set({ pendingCombat: null } as Partial<GameState> as GameState);
     } catch {
       set({ pendingCombat: null } as Partial<GameState> as GameState);
     }
-    try {
-      get().log("Combat resolved");
-    } catch {}
+    // Note: The actual summary is sent via combatSummary message and displayed in the HUD
     return;
   }
   if (t === "combatCancel") {

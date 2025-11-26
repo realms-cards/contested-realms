@@ -346,6 +346,11 @@ export default function Board({
     prevOffset: [number, number] | null;
     instanceId?: string | null;
   } | null>(null);
+  // Keep a ref in sync with state to avoid stale closures in effects
+  const lastCrossMoveRef = useRef(lastCrossMove);
+  useEffect(() => {
+    lastCrossMoveRef.current = lastCrossMove;
+  }, [lastCrossMove]);
   const combatGuidesActive = useScopedStore((s) => s.combatGuidesActive);
   const magicGuidesActive = useScopedStore((s) => s.magicGuidesActive);
   const metaByCardId = useScopedStore((s) => s.metaByCardId);
@@ -519,65 +524,118 @@ export default function Board({
     return out;
   }, [board.size.w, board.size.h]);
 
-  const dragContext = {
-    dragging,
-    dragAvatar,
-    dragFromHand,
-    dragFromPile: Boolean(dragFromPile),
-    setDragging,
-    setDragFromHand,
-    dragStartRef,
-    dragTarget,
-    draggedBody,
-    bodyMap,
-    bodiesAccessedThisFrame,
-    boardGhostRef,
-    lastBoardGhostPosRef,
-    lastDropAt,
-    moveDraggedBody,
-    snapBodyTo,
-    setGhost,
-    useGhostOnlyBoardDrag: USE_GHOST_ONLY_BOARD_DRAG,
-  };
-  const hoverContext = {
-    beginHoverPreview,
-    clearHoverPreview,
-    clearHoverPreviewDebounced,
-    openContextMenu,
-  };
-  const touchContext = {
-    clearTouchTimers,
-    touchPreviewTimerRef,
-    touchContextTimerRef,
-  };
-  const selectionContext = {
-    selectPermanent,
-    selectedPermanent,
-    lastTouchedId,
-    setLastTouchedId,
-  };
-  const combatContext = {
-    attackTargetChoice,
-    setAttackConfirm,
-    pendingCombat,
-    setDefenderSelection,
-  };
-  const magicContext = {
-    pendingMagic,
-    setMagicTargetChoice,
-    setMagicCasterChoice,
-    computeProjectileFirstHits,
-    magicGuidesActive,
-  };
-  const counterHandlers = {
-    increment: incrementPermanentCounter,
-    decrement: decrementPermanentCounter,
-  };
-  const movementHandlers = {
-    setOffset: setPermanentOffset,
-    moveToWithOffset: moveSelectedPermanentToWithOffset,
-    moveToZone: movePermanentToZone,
-  };
+  const dragContext = useMemo(
+    () => ({
+      dragging,
+      dragAvatar,
+      dragFromHand,
+      dragFromPile: Boolean(dragFromPile),
+      setDragging,
+      setDragFromHand,
+      dragStartRef,
+      dragTarget,
+      draggedBody,
+      bodyMap,
+      bodiesAccessedThisFrame,
+      boardGhostRef,
+      lastBoardGhostPosRef,
+      lastDropAt,
+      moveDraggedBody,
+      snapBodyTo,
+      setGhost,
+      useGhostOnlyBoardDrag: USE_GHOST_ONLY_BOARD_DRAG,
+    }),
+    [
+      dragging,
+      dragAvatar,
+      dragFromHand,
+      dragFromPile,
+      setDragging,
+      setDragFromHand,
+      dragStartRef,
+      dragTarget,
+      draggedBody,
+      bodyMap,
+      bodiesAccessedThisFrame,
+      boardGhostRef,
+      lastBoardGhostPosRef,
+      lastDropAt,
+      moveDraggedBody,
+      snapBodyTo,
+      setGhost,
+    ]
+  );
+  const hoverContext = useMemo(
+    () => ({
+      beginHoverPreview,
+      clearHoverPreview,
+      clearHoverPreviewDebounced,
+      openContextMenu,
+    }),
+    [
+      beginHoverPreview,
+      clearHoverPreview,
+      clearHoverPreviewDebounced,
+      openContextMenu,
+    ]
+  );
+  const touchContext = useMemo(
+    () => ({
+      clearTouchTimers,
+      touchPreviewTimerRef,
+      touchContextTimerRef,
+    }),
+    [clearTouchTimers]
+  );
+  const selectionContext = useMemo(
+    () => ({
+      selectPermanent,
+      selectedPermanent,
+      lastTouchedId,
+      setLastTouchedId,
+    }),
+    [selectPermanent, selectedPermanent, lastTouchedId]
+  );
+  const combatContext = useMemo(
+    () => ({
+      attackTargetChoice,
+      setAttackConfirm,
+      pendingCombat,
+      setDefenderSelection,
+    }),
+    [attackTargetChoice, setAttackConfirm, pendingCombat, setDefenderSelection]
+  );
+  const magicContext = useMemo(
+    () => ({
+      pendingMagic,
+      setMagicTargetChoice,
+      setMagicCasterChoice,
+      computeProjectileFirstHits,
+      magicGuidesActive,
+    }),
+    [
+      pendingMagic,
+      setMagicTargetChoice,
+      setMagicCasterChoice,
+      computeProjectileFirstHits,
+      magicGuidesActive,
+    ]
+  );
+  const counterHandlers = useMemo(
+    () => ({
+      increment: incrementPermanentCounter,
+      decrement: decrementPermanentCounter,
+    }),
+    [incrementPermanentCounter, decrementPermanentCounter]
+  );
+  const movementHandlers = useMemo(
+    () => ({
+      setOffset: setPermanentOffset,
+      moveToWithOffset: moveSelectedPermanentToWithOffset,
+      moveToZone: movePermanentToZone,
+    }),
+    [setPermanentOffset, moveSelectedPermanentToWithOffset, movePermanentToZone]
+  );
 
   const handleTilePointerUp = useTileDropHandler({
     board,
@@ -690,7 +748,7 @@ export default function Board({
   }, [permanents, avatars, fetchCardMeta]);
 
   const revertLastCrossTileMove = useCallback(() => {
-    const snap = lastCrossMove;
+    const snap = lastCrossMoveRef.current;
     if (!snap) return;
     try {
       const [fx, fy] = snap.fromKey.split(",").map((v) => Number(v));
@@ -715,14 +773,13 @@ export default function Board({
     } catch {
       setLastCrossMove(null);
     }
-  }, [lastCrossMove, moveSelectedPermanentToWithOffset, selectPermanent]);
+  }, [moveSelectedPermanentToWithOffset, selectPermanent]);
 
   // Respond to layout-level cancel requests
   useEffect(() => {
     // Any tick change requests revert of the last cross-tile move
     revertLastCrossTileMove();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [revertCrossMoveTick]); // Only run when tick counter changes, not when callback recreates
+  }, [revertCrossMoveTick, revertLastCrossTileMove]);
 
   return (
     <group>

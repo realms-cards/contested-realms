@@ -4,12 +4,10 @@ import { MAX_EVENTS } from "./types";
 
 export type EventSlice = Pick<GameState, "events" | "eventSeq" | "log">;
 
-export const createEventSlice: StateCreator<
-  GameState,
-  [],
-  [],
-  EventSlice
-> = (set, get) => ({
+export const createEventSlice: StateCreator<GameState, [], [], EventSlice> = (
+  set,
+  get
+) => ({
   events: [],
   eventSeq: 0,
   log: (text: string) =>
@@ -20,6 +18,7 @@ export const createEventSlice: StateCreator<
         ts: Date.now(),
         text,
         turn: state.turn || 1,
+        player: state.currentPlayer,
       };
       const eventsAll = [...state.events, entry];
       const events =

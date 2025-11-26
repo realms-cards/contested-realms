@@ -2,14 +2,14 @@
 
 import { useLayoutEffect, useRef, useState, useEffect } from "react";
 import { useSound } from "@/lib/contexts/SoundContext";
-import AttachmentTargetSelectionDialog, {
-  type AttachmentTarget,
-} from "@/lib/game/components/AttachmentTargetSelectionDialog";
 import {
   detectBurrowSubmergeAbilities,
   detectBurrowSubmergeAbilitiesSync,
   detectRangedAbilitySync,
 } from "@/lib/game/cardAbilities";
+import AttachmentTargetSelectionDialog, {
+  type AttachmentTarget,
+} from "@/lib/game/components/AttachmentTargetSelectionDialog";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef } from "@/lib/game/store";
 import {
@@ -858,7 +858,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         />
       )}
       <div
-        className="absolute inset-0 z-30"
+        className="fixed inset-0 z-[100]"
         onClick={onClose}
         onContextMenu={(e) => {
           e.preventDefault();
@@ -868,7 +868,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
       >
         <div
           ref={menuRef}
-          className="absolute bg-zinc-900/90 backdrop-blur rounded-xl ring-1 ring-white/10 shadow-lg p-3 w-56 text-white pointer-events-auto"
+          className="fixed bg-zinc-900/90 backdrop-blur rounded-xl ring-1 ring-white/10 shadow-lg p-3 w-56 text-white pointer-events-auto"
           style={{
             left: (menuPos?.left ?? contextMenu.screen?.x ?? 16) + "px",
             top: (menuPos?.top ?? contextMenu.screen?.y ?? 16) + "px",

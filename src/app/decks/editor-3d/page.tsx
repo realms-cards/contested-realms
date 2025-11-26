@@ -1516,6 +1516,10 @@ function AuthenticatedDeckEditor() {
       raw = null;
     }
     if (!raw) {
+      console.log(
+        "[Cube Extras] No draftConfig found in localStorage for:",
+        draftId
+      );
       setCubeStandardCards([]);
       return;
     }
@@ -1534,7 +1538,13 @@ function AuthenticatedDeckEditor() {
       cfg = null;
     }
 
+    console.log("[Cube Extras] Loaded draftConfig:", cfg);
+
     if (!cfg?.cubeId || !cfg.includeCubeSideboardInStandard) {
+      console.log("[Cube Extras] Skipping cube extras:", {
+        hasCubeId: !!cfg?.cubeId,
+        includeCubeSideboardInStandard: cfg?.includeCubeSideboardInStandard,
+      });
       setCubeStandardCards([]);
       return;
     }
@@ -1724,6 +1734,34 @@ function AuthenticatedDeckEditor() {
         hoverPreviewClearTimerRef.current = null;
       }
     };
+  }, []);
+
+  // Stable callback refs for 3D card hover (prevents re-renders when passing to memoized cards)
+  const beginHoverPreviewRef = useRef(beginHoverPreview);
+  beginHoverPreviewRef.current = beginHoverPreview;
+  const clearHoverPreviewDebouncedRef = useRef(clearHoverPreviewDebounced);
+  clearHoverPreviewDebouncedRef.current = clearHoverPreviewDebounced;
+
+  // Track currently hovered slug to dedupe rapid pointer move events
+  const currentHoverSlugRef = useRef<string | null>(null);
+
+  // Stable hover callbacks that don't change reference - critical for memoized DraggableCard3D
+  const stableOnHoverStart = useCallback(
+    (card: { slug: string; name: string; type: string | null }) => {
+      // Dedupe: only update if the hovered card actually changed
+      if (currentHoverSlugRef.current === card.slug) return;
+      currentHoverSlugRef.current = card.slug;
+      beginHoverPreviewRef.current(
+        { slug: card.slug, name: card.name, type: card.type },
+        `card:${card.slug}`
+      );
+    },
+    []
+  );
+
+  const stableOnHoverEnd = useCallback(() => {
+    currentHoverSlugRef.current = null;
+    clearHoverPreviewDebouncedRef.current(null, 20);
   }, []);
 
   // (Removed unused deckItems/deckCards/sideboardCards memos)
@@ -3263,6 +3301,11 @@ function AuthenticatedDeckEditor() {
 
     const newPick3D: Pick3D[] = [];
     let id = 1;
+    // Counter for orderly fallback grid positioning (when no saved position exists)
+    let fallbackIndex = 0;
+    const GRID_COLS = 10;
+    const CARD_SPACING_X = 0.65; // Horizontal spacing
+    const CARD_SPACING_Z = 0.9; // Vertical spacing
 
     // 1) Compute total counts per card and initial deck-target based on picks
     const totalByCard = new Map<number, number>();
@@ -3332,11 +3375,18 @@ function AuthenticatedDeckEditor() {
             logicalZone = layoutPos.z < 0 ? "Deck" : "Sideboard";
           }
         } else {
-          x = -3 + Math.random() * 6;
+          // Orderly grid fallback instead of random positions
+          // This ensures cards are arranged neatly when auto-stack is toggled off
+          // or when no saved positions exist
+          const col = fallbackIndex % GRID_COLS;
+          const row = Math.floor(fallbackIndex / GRID_COLS);
+          // Start from left side, progress right; start from top of zone, progress down
+          x = -3 + col * CARD_SPACING_X;
           z =
             layoutZone === "Deck"
-              ? -2 + Math.random() * 1.8 // Deck zone: z from -2 to -0.2
-              : 0.5 + Math.random() * 3; // Sideboard/Collection layout zone: z from 0.5 to 3.5
+              ? -2.5 + row * CARD_SPACING_Z // Deck zone: start at z=-2.5, progress down
+              : 0.5 + row * CARD_SPACING_Z; // Sideboard zone: start at z=0.5, progress down
+          fallbackIndex++;
         }
 
         newPick3D.push({
@@ -3895,19 +3945,8 @@ function AuthenticatedDeckEditor() {
                     totalInStack={totalInStack}
                     interactive={true}
                     rotationZ={rotationZ}
-                    onHoverStart={(card) => {
-                      beginHoverPreview(
-                        {
-                          slug: card.slug,
-                          name: card.name,
-                          type: card.type,
-                        },
-                        `card-${p.id}`
-                      );
-                    }}
-                    onHoverEnd={() => {
-                      clearHoverPreviewDebounced(null, 20);
-                    }}
+                    onHoverStart={stableOnHoverStart}
+                    onHoverEnd={stableOnHoverEnd}
                     onContextMenu={(cx, cy) =>
                       openContextMenuForCard(
                         p.card.cardId,
@@ -4103,6 +4142,7 @@ function AuthenticatedDeckEditor() {
               setFeedbackMessage(msg);
               setTimeout(() => setFeedbackMessage(null), 2000);
             }}
+            showCollectionZone={cubeStandardCards.length > 0}
             collectionCount={collectionCount}
             collectionCountsByCardId={collectionCountsByCardId}
             moveOneFromSideboardToCollection={moveOneFromSideboardToCollection}

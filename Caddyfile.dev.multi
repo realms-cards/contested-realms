@@ -1,0 +1,23 @@
+# Multi-instance dev Caddyfile for testing horizontal scaling
+# Uses ip_hash for sticky sessions
+
+:3010 {
+    log {
+        output stdout
+        format console
+    }
+
+    reverse_proxy {
+        to server1:3010
+        to server2:3010
+        lb_policy ip_hash
+        transport http {
+            read_timeout 3m
+            write_timeout 3m
+        }
+        health_uri /healthz
+        health_interval 5s
+        health_timeout 3s
+        flush_interval -1
+    }
+}

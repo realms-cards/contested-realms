@@ -249,6 +249,8 @@ export function PermanentStack({
     computeProjectileFirstHits,
     magicGuidesActive,
   } = magicContext;
+  // These are kept for future re-enablement of magic targeting hints
+  void computeProjectileFirstHits;
   const { increment, decrement } = counterHandlers;
   const { setOffset, moveToWithOffset, moveToZone } = movementHandlers;
 
@@ -411,54 +413,9 @@ export function PermanentStack({
           ) {
             roleGlow = HIGHLIGHT_TARGET;
           }
-          if (
-            !roleGlow &&
-            !pendingMagic.caster &&
-            pendingMagic.status === "choosingCaster" &&
-            p.owner === pendingMagic.spell.owner
-          ) {
-            const nm = p.card?.name || "";
-            if (nm && detectSpellcasterSync(nm)) {
-              roleGlow = HIGHLIGHT_ATTACKER;
-            }
-          }
-          if (!roleGlow && pendingMagic.status === "choosingTarget") {
-            const allowPerm = pendingMagic.hints?.allow?.permanent !== false;
-            const scope = pendingMagic.hints?.scope || null;
-            if (allowPerm && scope === "projectile") {
-              const hits = computeProjectileFirstHits();
-              const k = key as CellKey;
-              const isFirstHit =
-                (hits.N &&
-                  hits.N.kind === "permanent" &&
-                  hits.N.at === k &&
-                  hits.N.index === idx) ||
-                (hits.E &&
-                  hits.E.kind === "permanent" &&
-                  hits.E.at === k &&
-                  hits.E.index === idx) ||
-                (hits.S &&
-                  hits.S.kind === "permanent" &&
-                  hits.S.at === k &&
-                  hits.S.index === idx) ||
-                (hits.W &&
-                  hits.W.kind === "permanent" &&
-                  hits.W.at === k &&
-                  hits.W.index === idx);
-              if (isFirstHit) {
-                roleGlow = HIGHLIGHT_TARGET;
-              }
-            } else if (allowPerm) {
-              const dx = Math.abs(tileX - pendingMagic.tile.x);
-              const dy = Math.abs(tileY - pendingMagic.tile.y);
-              const man = dx + dy;
-              let inScope = true;
-              if (scope === "here") inScope = man === 0;
-              else if (scope === "adjacent") inScope = man === 1;
-              else if (scope === "nearby") inScope = man <= 2;
-              if (inScope) roleGlow = HIGHLIGHT_TARGET;
-            }
-          }
+          // NOTE: "Potential target" highlighting is disabled until we can provide
+          // accurate hints for every spell type. Only selected caster/target are highlighted.
+          // The magic interaction flow (caster/target selection) still works.
         }
 
         const showPermanentGlow =
@@ -552,88 +509,8 @@ export function PermanentStack({
                       return;
                     }
                     if (pendingMagic.status === "choosingTarget") {
-                      const hints = pendingMagic.hints;
-                      const scope = hints?.scope || null;
-                      if (scope === "projectile") {
-                        // Use caster position as origin, not spell tile
-                        let ox = pendingMagic.tile.x;
-                        let oy = pendingMagic.tile.y;
-                        try {
-                          const caster = pendingMagic.caster;
-                          if (caster && caster.kind === "avatar") {
-                            const pos = avatars?.[caster.seat]?.pos as
-                              | [number, number]
-                              | null;
-                            if (Array.isArray(pos)) {
-                              ox = pos[0];
-                              oy = pos[1];
-                            }
-                          } else if (caster && caster.kind === "permanent") {
-                            const [cx, cy] = String(caster.at)
-                              .split(",")
-                              .map(Number);
-                            if (Number.isFinite(cx) && Number.isFinite(cy)) {
-                              ox = cx;
-                              oy = cy;
-                            }
-                          } else {
-                            // Default to spell owner's avatar
-                            const ownerSeat = seatFromOwner(
-                              pendingMagic.spell.owner
-                            );
-                            const pos = avatars?.[ownerSeat]?.pos as
-                              | [number, number]
-                              | null;
-                            if (Array.isArray(pos)) {
-                              ox = pos[0];
-                              oy = pos[1];
-                            }
-                          }
-                        } catch {}
-                        if (ox === tileX || oy === tileY) {
-                          const dir =
-                            ox === tileX
-                              ? tileY < oy
-                                ? "N"
-                                : "S"
-                              : tileX > ox
-                              ? "E"
-                              : "W";
-                          const hits = computeProjectileFirstHits();
-                          const first = hits[dir] || null;
-                          let intended:
-                            | { kind: "permanent"; at: CellKey; index: number }
-                            | undefined;
-                          // If multiple units share the first-hit tile, let the player
-                          // explicitly choose which one by clicking that unit.
-                          if (
-                            first &&
-                            first.kind === "permanent" &&
-                            first.at === (key as CellKey)
-                          ) {
-                            intended = {
-                              kind: "permanent",
-                              at: key as CellKey,
-                              index: idx,
-                            };
-                          }
-                          setMagicTargetChoice({
-                            kind: "projectile",
-                            direction: dir,
-                            firstHit: first || undefined,
-                            ...(intended ? { intended } : {}),
-                          });
-                        }
-                        return;
-                      }
-                      const allowPerm = hints?.allow?.permanent !== false;
-                      if (!allowPerm) return;
-                      const dx = Math.abs(tileX - pendingMagic.tile.x);
-                      const dy = Math.abs(tileY - pendingMagic.tile.y);
-                      const man = dx + dy;
-                      if (scope === "here" && man !== 0) return;
-                      if (scope === "adjacent" && man !== 1) return;
-                      if (scope === "nearby" && man > 2) return;
+                      // Allow targeting any permanent on the board without scope restrictions
+                      // The actual spell effect validation happens server-side during resolution
                       setMagicTargetChoice({
                         kind: "permanent",
                         at: key as CellKey,
@@ -650,7 +527,9 @@ export function PermanentStack({
                   const onTile =
                     attackTargetChoice.tile.x === tileX &&
                     attackTargetChoice.tile.y === tileY;
-                  if (onTile && owner === enemyOwner) {
+                  // Attachments (like Lance, Disabled) cannot be targeted directly
+                  const isAttachment = Boolean(p.attachedTo);
+                  if (onTile && owner === enemyOwner && !isAttachment) {
                     const label = p.card?.name || "Unit";
                     setAttackConfirm({
                       tile: attackTargetChoice.tile,
@@ -675,7 +554,9 @@ export function PermanentStack({
                     pendingCombat.tile.y === tileY;
                   const myOwner: 1 | 2 =
                     pendingCombat.attacker.owner === 1 ? 2 : 1;
-                  if (onTile && owner === myOwner) {
+                  // Attachments cannot be assigned as defenders
+                  const isAttachment = Boolean(p.attachedTo);
+                  if (onTile && owner === myOwner && !isAttachment) {
                     e.stopPropagation();
                     const present = (pendingCombat.defenders || []).some(
                       (d) => d.at === key && d.index === idx

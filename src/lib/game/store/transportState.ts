@@ -15,6 +15,8 @@ type TransportSlice = Pick<
 >;
 
 const PATCH_SIGNATURE_TTL_MS = 7_000;
+const MAX_SIGNATURE_MAP_SIZE = 100;
+const MAX_ENTRIES_PER_SIGNATURE = 10;
 const PATCH_SIGNATURE_FIELDS = [
   "permanents",
   "zones",
@@ -36,6 +38,180 @@ type PatchSignatureEntry = {
 
 const pendingPatchSignatures = new Map<string, PatchSignatureEntry[]>();
 let getStateAccessor: (() => GameState) | null = null;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Microtask batching: collect patches during a frame and send once
+// ─────────────────────────────────────────────────────────────────────────────
+let batchedPatch: ServerPatchT | null = null;
+let batchFlushScheduled = false;
+let batchFlushCallback: (() => void) | null = null;
+
+/**
+ * Merge two arrays of permanents by instanceId.
+ * Items with the same instanceId are merged (later values win for each field).
+ * New items are appended.
+ */
+const mergePermanentArrays = (
+  baseArr: unknown[],
+  incomingArr: unknown[]
+): unknown[] => {
+  const map = new Map<string, Record<string, unknown>>();
+  const order: string[] = [];
+
+  // Process base items first
+  for (const item of baseArr) {
+    if (!item || typeof item !== "object") continue;
+    const record = item as Record<string, unknown>;
+    const id = typeof record.instanceId === "string" ? record.instanceId : null;
+    if (id) {
+      map.set(id, { ...record });
+      order.push(id);
+    }
+  }
+
+  // Merge incoming items
+  for (const item of incomingArr) {
+    if (!item || typeof item !== "object") continue;
+    const record = item as Record<string, unknown>;
+    const id = typeof record.instanceId === "string" ? record.instanceId : null;
+    if (id) {
+      const existing = map.get(id);
+      if (existing) {
+        // Merge with existing
+        for (const [k, v] of Object.entries(record)) {
+          if (v !== undefined) existing[k] = v;
+        }
+      } else {
+        // New item
+        map.set(id, { ...record });
+        order.push(id);
+      }
+    } else {
+      // No instanceId - just append
+      return [...baseArr, ...incomingArr.filter((i) => i !== item), item];
+    }
+  }
+
+  return order
+    .map((id) => map.get(id))
+    .filter((item): item is Record<string, unknown> => item !== undefined);
+};
+
+/**
+ * Deep merge two patches. Later values overwrite earlier ones.
+ * Arrays are replaced, not concatenated (except events which are merged,
+ * and permanents arrays which are merged by instanceId).
+ */
+const mergePatch = (
+  base: ServerPatchT | null,
+  incoming: ServerPatchT
+): ServerPatchT => {
+  if (!base) return { ...incoming };
+  const result: ServerPatchT = { ...base };
+
+  for (const key of Object.keys(incoming) as Array<keyof ServerPatchT>) {
+    const incomingVal = incoming[key];
+    if (incomingVal === undefined) continue;
+
+    const baseVal = result[key];
+
+    // Special handling for events array: concatenate
+    if (key === "events" && Array.isArray(incomingVal)) {
+      const baseEvents = Array.isArray(baseVal) ? baseVal : [];
+      (result as Record<string, unknown>)[key] = [
+        ...baseEvents,
+        ...incomingVal,
+      ];
+      continue;
+    }
+
+    // Special handling for __replaceKeys: union
+    if (key === "__replaceKeys" && Array.isArray(incomingVal)) {
+      const baseKeys = Array.isArray(baseVal) ? baseVal : [];
+      const merged = [...new Set([...baseKeys, ...incomingVal])];
+      (result as Record<string, unknown>)[key] = merged;
+      continue;
+    }
+
+    // Deep merge objects (permanents, zones, avatars, players, etc.)
+    if (
+      incomingVal &&
+      typeof incomingVal === "object" &&
+      !Array.isArray(incomingVal) &&
+      baseVal &&
+      typeof baseVal === "object" &&
+      !Array.isArray(baseVal)
+    ) {
+      // For nested objects like permanents["0,1"], zones.p1, avatars.p1, etc.
+      const merged: Record<string, unknown> = {
+        ...(baseVal as Record<string, unknown>),
+      };
+      for (const [subKey, subVal] of Object.entries(
+        incomingVal as Record<string, unknown>
+      )) {
+        if (subVal === undefined) continue;
+        const existingSubVal = merged[subKey];
+
+        // Special case: permanents cell arrays - merge by instanceId
+        if (
+          key === "permanents" &&
+          Array.isArray(subVal) &&
+          Array.isArray(existingSubVal)
+        ) {
+          merged[subKey] = mergePermanentArrays(existingSubVal, subVal);
+          continue;
+        }
+
+        // One more level of merging for things like avatars.p1.{card, pos, ...}
+        if (
+          subVal &&
+          typeof subVal === "object" &&
+          !Array.isArray(subVal) &&
+          existingSubVal &&
+          typeof existingSubVal === "object" &&
+          !Array.isArray(existingSubVal)
+        ) {
+          merged[subKey] = {
+            ...(existingSubVal as Record<string, unknown>),
+            ...(subVal as Record<string, unknown>),
+          };
+        } else {
+          merged[subKey] = subVal;
+        }
+      }
+      (result as Record<string, unknown>)[key] = merged;
+      continue;
+    }
+
+    // Default: overwrite
+    (result as Record<string, unknown>)[key] = incomingVal;
+  }
+
+  return result;
+};
+
+/**
+ * Clear the batch state. Called on transport disconnect.
+ * Moves any pending batched patches to the pending queue to avoid data loss.
+ */
+export const clearBatchState = (
+  addToPending?: (patch: ServerPatchT) => void
+) => {
+  if (batchedPatch && addToPending) {
+    console.warn(
+      "[net] clearBatchState: saving batched patch to pending queue",
+      { keys: Object.keys(batchedPatch) }
+    );
+    addToPending(batchedPatch);
+  } else if (batchedPatch) {
+    console.warn("[net] clearBatchState: discarding batched patch!", {
+      keys: Object.keys(batchedPatch),
+    });
+  }
+  batchedPatch = null;
+  batchFlushScheduled = false;
+  batchFlushCallback = null;
+};
 
 export const setTransportStateAccessor = (fn: () => GameState) => {
   getStateAccessor = fn;
@@ -268,7 +444,26 @@ const registerPatchSignature = (
   if (!signature) return;
   const now = Date.now();
   prunePatchSignatures(now);
-  const list = pendingPatchSignatures.get(signature.id) ?? [];
+
+  // Prevent unbounded growth by limiting map size
+  if (pendingPatchSignatures.size >= MAX_SIGNATURE_MAP_SIZE) {
+    // Remove oldest entries by deleting first keys
+    const keysToDelete = Array.from(pendingPatchSignatures.keys()).slice(
+      0,
+      Math.floor(MAX_SIGNATURE_MAP_SIZE / 4)
+    );
+    for (const key of keysToDelete) {
+      pendingPatchSignatures.delete(key);
+    }
+  }
+
+  let list = pendingPatchSignatures.get(signature.id) ?? [];
+
+  // Limit entries per signature
+  if (list.length >= MAX_ENTRIES_PER_SIGNATURE) {
+    list = list.slice(-MAX_ENTRIES_PER_SIGNATURE + 1);
+  }
+
   const payload: Record<string, string> = {};
   for (const field of signature.fields) {
     const raw = (patch as Record<string, unknown>)[field];
@@ -281,6 +476,13 @@ const registerPatchSignature = (
     payload,
   });
   pendingPatchSignatures.set(signature.id, list);
+};
+
+/**
+ * Clear all pending patch signatures. Call on transport disconnect/reset.
+ */
+export const clearPatchSignatures = () => {
+  pendingPatchSignatures.clear();
 };
 
 export const createTransportSlice: StateCreator<
@@ -301,6 +503,16 @@ export const createTransportSlice: StateCreator<
           unsubscribe?.();
         } catch {}
       }
+    }
+    // Clear pending patch signatures and batch state when transport is disconnected
+    // Save any pending batched patches to avoid data loss
+    if (!t) {
+      clearPatchSignatures();
+      clearBatchState((patch) => {
+        set((s) => ({
+          pendingPatches: [...(s.pendingPatches || []), patch],
+        }));
+      });
     }
     const unsubscribers: Array<() => void> = [];
     if (t) {
@@ -360,102 +572,185 @@ export const createTransportSlice: StateCreator<
     const tr = state.transport;
     if (!patch || typeof patch !== "object") return false;
     const actorKey = get().actorKey;
-    let toSend: ServerPatchT = patch as ServerPatchT;
-    const replaceKeysCandidate = Array.isArray(
-      (patch as ServerPatchT).__replaceKeys
-    )
-      ? (patch as ServerPatchT).__replaceKeys
+
+    const patchObj = patch as ServerPatchT;
+    const replaceKeysCandidate = Array.isArray(patchObj.__replaceKeys)
+      ? patchObj.__replaceKeys
       : null;
     const isAuthoritativeSnapshot = !!(
       replaceKeysCandidate && replaceKeysCandidate.length > 0
     );
-    let signatureInfo: ReturnType<typeof makePatchSignature> | null = null;
-    if (!isAuthoritativeSnapshot) {
-      const patchObj = patch as ServerPatchT;
-      const touchesSeatFields =
-        (patchObj.avatars && typeof patchObj.avatars === "object") ||
-        (patchObj.zones && typeof patchObj.zones === "object");
-      if (!actorKey && touchesSeatFields) {
-        set((s) => {
-          const queue = Array.isArray(s.pendingPatches) ? s.pendingPatches : [];
-          return {
-            pendingPatches: [...queue, clonePatchForQueue(patchObj)],
-          } as Partial<GameState> as GameState;
-        });
-        try {
-          console.warn(
-            "[net] trySendPatch: queued seat-specific patch until actorKey is set",
-            { keys: Object.keys(patchObj.zones ?? {}) }
-          );
-        } catch {}
+
+    // Authoritative snapshots bypass batching and send immediately
+    if (isAuthoritativeSnapshot) {
+      if (!tr) {
+        set((s) => ({ pendingPatches: [...s.pendingPatches, patchObj] }));
+        console.warn("[net] Transport unavailable: queued snapshot patch");
         return false;
       }
       try {
-        const sanitized: ServerPatchT = { ...(patchObj as ServerPatchT) };
-        if (sanitized.avatars && typeof sanitized.avatars === "object") {
-          const keys = Object.keys(sanitized.avatars).filter(
-            (k) => k === "p1" || k === "p2"
-          ) as PlayerKey[];
-          const out: Partial<GameState["avatars"]> = {};
-          if (actorKey && keys.includes(actorKey)) {
-            out[actorKey] = (sanitized.avatars as GameState["avatars"])[
-              actorKey
-            ];
-          }
-          if (Object.keys(out).length > 0) {
-            sanitized.avatars = out as GameState["avatars"];
-          } else {
-            delete (sanitized as unknown as { avatars?: unknown }).avatars;
-          }
-        }
-        if (sanitized.zones && typeof sanitized.zones === "object") {
-          const z = sanitized.zones as Partial<Record<PlayerKey, Zones>>;
-          const outZ: Partial<Record<PlayerKey, Zones>> = {};
-          if (actorKey && z[actorKey]) {
-            outZ[actorKey] = z[actorKey] as Zones;
-          }
-          if (Object.keys(outZ).length > 0) {
-            sanitized.zones = outZ as GameState["zones"];
-          } else {
-            delete (sanitized as unknown as { zones?: unknown }).zones;
-          }
-        }
-        toSend = sanitized;
-      } catch {}
-      signatureInfo = makePatchSignature(toSend);
+        tr.sendAction(patchObj);
+        set({ lastLocalActionTs: Date.now() });
+        return true;
+      } catch (err) {
+        set((s) => ({ pendingPatches: [...s.pendingPatches, patchObj] }));
+        console.warn(`[net] Snapshot send failed: ${String(err)}`);
+        return false;
+      }
     }
+
+    // Queue seat-specific patches if actorKey not yet set
+    const touchesSeatFields =
+      (patchObj.avatars && typeof patchObj.avatars === "object") ||
+      (patchObj.zones && typeof patchObj.zones === "object");
+    if (!actorKey && touchesSeatFields) {
+      set((s) => {
+        const queue = Array.isArray(s.pendingPatches) ? s.pendingPatches : [];
+        return {
+          pendingPatches: [...queue, clonePatchForQueue(patchObj)],
+        } as Partial<GameState> as GameState;
+      });
+      try {
+        console.warn(
+          "[net] trySendPatch: queued seat-specific patch until actorKey is set",
+          { keys: Object.keys(patchObj.zones ?? {}) }
+        );
+      } catch {}
+      return false;
+    }
+
+    // Sanitize: only include actor's own seat data
+    const sanitized: ServerPatchT = { ...patchObj };
+    try {
+      if (sanitized.avatars && typeof sanitized.avatars === "object") {
+        const keys = Object.keys(sanitized.avatars).filter(
+          (k) => k === "p1" || k === "p2"
+        ) as PlayerKey[];
+        const out: Partial<GameState["avatars"]> = {};
+        if (actorKey && keys.includes(actorKey)) {
+          out[actorKey] = (sanitized.avatars as GameState["avatars"])[actorKey];
+        }
+        if (Object.keys(out).length > 0) {
+          sanitized.avatars = out as GameState["avatars"];
+        } else {
+          delete (sanitized as unknown as { avatars?: unknown }).avatars;
+        }
+      }
+      if (sanitized.zones && typeof sanitized.zones === "object") {
+        const z = sanitized.zones as Partial<Record<PlayerKey, Zones>>;
+        const outZ: Partial<Record<PlayerKey, Zones>> = {};
+        if (actorKey && z[actorKey]) {
+          outZ[actorKey] = z[actorKey] as Zones;
+        }
+        if (Object.keys(outZ).length > 0) {
+          sanitized.zones = outZ as GameState["zones"];
+        } else {
+          delete (sanitized as unknown as { zones?: unknown }).zones;
+        }
+      }
+    } catch {}
+
     if (process.env.NODE_ENV !== "production") {
       try {
-        const p = toSend as ServerPatchT;
-        if (p.avatars && typeof p.avatars === "object") {
+        if (sanitized.avatars && typeof sanitized.avatars === "object") {
           console.debug("[net] trySendPatch avatars ->", {
             actorKey,
-            avatars: p.avatars,
+            avatars: sanitized.avatars,
           });
         }
       } catch {}
     }
-    if (!tr) {
-      set((s) => ({ pendingPatches: [...s.pendingPatches, toSend] }));
-      try {
-        console.warn("[net] Transport unavailable: queued patch");
-      } catch {}
-      return false;
-    }
-    try {
-      tr.sendAction(toSend);
-      if (signatureInfo && signatureInfo.fields.length > 0) {
-        registerPatchSignature(signatureInfo, toSend);
+
+    // Log incoming patch for debugging
+    if (process.env.NODE_ENV !== "production") {
+      const incomingKeys = Object.keys(sanitized).filter(
+        (k) => k !== "__replaceKeys"
+      );
+      const hasPermanents = "permanents" in sanitized;
+      const hasZones = "zones" in sanitized;
+      if (hasPermanents || hasZones) {
+        console.debug("[net] trySendPatch adding to batch:", {
+          keys: incomingKeys,
+          hasPermanents,
+          hasZones,
+          permanentCells: hasPermanents
+            ? Object.keys(sanitized.permanents || {})
+            : [],
+          batchWasEmpty: batchedPatch === null,
+        });
       }
-      set({ lastLocalActionTs: Date.now() });
-      return true;
-    } catch (err) {
-      set((s) => ({ pendingPatches: [...s.pendingPatches, toSend] }));
-      try {
-        console.warn(`[net] Send failed, queued patch: ${String(err)}`);
-      } catch {}
-      return false;
     }
+
+    // Add to batch
+    const prevBatch = batchedPatch;
+    batchedPatch = mergePatch(batchedPatch, sanitized);
+
+    // Verify permanents weren't lost in merge
+    if (process.env.NODE_ENV !== "production") {
+      const hadPermanentsIncoming = "permanents" in sanitized;
+      const hasPermanentsAfterMerge =
+        batchedPatch && "permanents" in batchedPatch;
+      if (hadPermanentsIncoming && !hasPermanentsAfterMerge) {
+        console.error("[net] BUG: permanents lost during merge!", {
+          incoming: sanitized,
+          prevBatch,
+          result: batchedPatch,
+        });
+      }
+    }
+
+    // Schedule flush if not already scheduled
+    if (!batchFlushScheduled) {
+      batchFlushScheduled = true;
+      batchFlushCallback = () => {
+        const patchToSend = batchedPatch;
+        batchedPatch = null;
+        batchFlushScheduled = false;
+        batchFlushCallback = null;
+
+        if (!patchToSend) {
+          console.warn("[net] Batch flush called but patch was null");
+          return;
+        }
+
+        const currentTr = get().transport;
+        if (!currentTr) {
+          set((s) => ({ pendingPatches: [...s.pendingPatches, patchToSend] }));
+          console.warn("[net] Transport unavailable at flush: queued batch");
+          return;
+        }
+
+        try {
+          const signatureInfo = makePatchSignature(patchToSend);
+          currentTr.sendAction(patchToSend);
+          if (signatureInfo && signatureInfo.fields.length > 0) {
+            registerPatchSignature(signatureInfo, patchToSend);
+          }
+          set({ lastLocalActionTs: Date.now() });
+
+          // Always log sent patches in dev
+          if (process.env.NODE_ENV !== "production") {
+            const keys = Object.keys(patchToSend).filter(
+              (k) => k !== "__replaceKeys"
+            );
+            const hasPermanents = "permanents" in patchToSend;
+            console.debug("[net] Sent batched patch:", {
+              keys,
+              hasPermanents,
+              permanentCells: hasPermanents
+                ? Object.keys(patchToSend.permanents || {})
+                : [],
+            });
+          }
+        } catch (err) {
+          set((s) => ({ pendingPatches: [...s.pendingPatches, patchToSend] }));
+          console.warn(`[net] Batch send failed: ${String(err)}`);
+        }
+      };
+      queueMicrotask(batchFlushCallback);
+    }
+
+    return true;
   },
 
   flushPendingPatches: () => {
