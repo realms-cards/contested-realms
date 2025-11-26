@@ -1,9 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import CardPreview from "@/components/game/CardPreview";
 import { useSound } from "@/lib/contexts/SoundContext";
-import { useCardHover, type CardPreviewData } from "@/lib/game/hooks/useCardHover";
+import {
+  useCardHover,
+  type CardPreviewData,
+} from "@/lib/game/hooks/useCardHover";
 import type { CardRef } from "@/lib/game/store";
 
 interface PileSearchDialogProps {
@@ -22,9 +26,11 @@ export default function PileSearchDialog({
   const dialogRef = useRef<HTMLDivElement>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const { playCardSelect } = useSound();
-  
+
   // Enhanced card preview state using the draft-3d/editor-3d pattern
-  const [hoverPreview, setHoverPreview] = useState<CardPreviewData | null>(null);
+  const [hoverPreview, setHoverPreview] = useState<CardPreviewData | null>(
+    null
+  );
   const { showCardPreview, hideCardPreview, clearHoverTimers } = useCardHover({
     onShow: (card: CardPreviewData) => {
       setHoverPreview(card);
@@ -67,8 +73,8 @@ export default function PileSearchDialog({
     };
   }, [onClose, clearHoverTimers]);
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+  const content = (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm">
       <div
         ref={dialogRef}
         className="bg-zinc-900/95 backdrop-blur rounded-xl ring-1 ring-white/10 shadow-2xl p-6 w-96 max-h-[80vh] text-white flex flex-col"
@@ -116,8 +122,8 @@ export default function PileSearchDialog({
             placeholder="Search by name, text, or type..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            onFocus={(e) => e.currentTarget.removeAttribute('readonly')}
-            onMouseDown={(e) => e.currentTarget.removeAttribute('readonly')}
+            onFocus={(e) => e.currentTarget.removeAttribute("readonly")}
+            onMouseDown={(e) => e.currentTarget.removeAttribute("readonly")}
             readOnly
             className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
             autoFocus
@@ -127,7 +133,9 @@ export default function PileSearchDialog({
         <div className="flex-1 overflow-y-auto">
           {filteredCards.length === 0 ? (
             <div className="text-center text-zinc-400 py-8">
-              {cards.length === 0 ? "No cards in pile" : "No cards match your search"}
+              {cards.length === 0
+                ? "No cards in pile"
+                : "No cards match your search"}
             </div>
           ) : (
             <div className="space-y-2">
@@ -135,7 +143,9 @@ export default function PileSearchDialog({
                 <button
                   key={`${card.slug}-${index}`}
                   onClick={() => {
-                    try { playCardSelect(); } catch {}
+                    try {
+                      playCardSelect();
+                    } catch {}
                     onSelectCard(card);
                   }}
                   onMouseEnter={() => {
@@ -175,7 +185,7 @@ export default function PileSearchDialog({
           </button>
         </div>
       </div>
-      
+
       {/* Enhanced Card Preview Overlay */}
       {hoverPreview && (
         <CardPreview
@@ -186,4 +196,7 @@ export default function PileSearchDialog({
       )}
     </div>
   );
+
+  if (typeof document === "undefined") return null;
+  return createPortal(content, document.body);
 }
