@@ -111,6 +111,9 @@ export default function CardBrowser({ onCardAdded }: CardBrowserProps) {
     useState<string>("All Subtypes");
   const [showFilters, setShowFilters] = useState(false);
 
+  // Zoom level (number of base columns, sites take 2x)
+  const [zoomLevel, setZoomLevel] = useState(6);
+
   // Fetch user's collection to show owned status
   useEffect(() => {
     fetch("/api/collection?limit=1000")
@@ -332,25 +335,41 @@ export default function CardBrowser({ onCardAdded }: CardBrowserProps) {
         </div>
       )}
 
-      {/* Quick Set Buttons */}
-      <div className="flex flex-wrap gap-2">
-        <span className="text-sm text-gray-400 py-1">Browse set:</span>
-        {SETS.slice(1).map((set) => (
-          <button
-            key={set}
-            onClick={() => {
-              setSelectedSet(set);
-              setShowFilters(true);
-            }}
-            className={`px-3 py-1 text-sm rounded-full border transition-colors ${
-              selectedSet === set
-                ? "bg-blue-600 border-blue-500 text-white"
-                : "bg-gray-800 border-gray-600 hover:bg-gray-700"
-            }`}
-          >
-            {set}
-          </button>
-        ))}
+      {/* Quick Set Buttons + Zoom Slider */}
+      <div className="flex flex-wrap items-center gap-4">
+        <div className="flex flex-wrap gap-2 flex-1">
+          <span className="text-sm text-gray-400 py-1">Browse set:</span>
+          {SETS.slice(1).map((set) => (
+            <button
+              key={set}
+              onClick={() => {
+                setSelectedSet(set);
+                setShowFilters(true);
+              }}
+              className={`px-3 py-1 text-sm rounded-full border transition-colors ${
+                selectedSet === set
+                  ? "bg-blue-600 border-blue-500 text-white"
+                  : "bg-gray-800 border-gray-600 hover:bg-gray-700"
+              }`}
+            >
+              {set}
+            </button>
+          ))}
+        </div>
+
+        {/* Zoom Slider */}
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-gray-400">Size:</span>
+          <input
+            type="range"
+            min="4"
+            max="10"
+            value={zoomLevel}
+            onChange={(e) => setZoomLevel(Number(e.target.value))}
+            className="w-24 accent-blue-500"
+          />
+          <span className="text-xs text-gray-500 w-4">{zoomLevel}</span>
+        </div>
       </div>
 
       {/* Results */}
@@ -359,7 +378,12 @@ export default function CardBrowser({ onCardAdded }: CardBrowserProps) {
           <div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full" />
         </div>
       ) : results.length > 0 ? (
-        <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-4">
+        <div
+          className="grid gap-4"
+          style={{
+            gridTemplateColumns: `repeat(${zoomLevel}, minmax(0, 1fr))`,
+          }}
+        >
           {results.map((card) => {
             const ownedQty = ownedCards.get(card.id) || 0;
             const imageSlug =
@@ -381,11 +405,11 @@ export default function CardBrowser({ onCardAdded }: CardBrowserProps) {
                 }`}
                 onClick={() => setSelectedCard(card)}
               >
-                {/* Card Image - Sites are landscape (3.5:2.5), others are portrait (2.5:3.5) */}
+                {/* Card Image - Sites need rotation since stored portrait but display landscape */}
                 <div
                   className={
                     isSite
-                      ? "aspect-[3.5/2.5] relative"
+                      ? "aspect-[3.5/2.5] relative overflow-hidden"
                       : "aspect-[2.5/3.5] relative"
                   }
                 >
@@ -393,7 +417,11 @@ export default function CardBrowser({ onCardAdded }: CardBrowserProps) {
                     src={`/api/images/${imageSlug}`}
                     alt={card.name || "Card"}
                     fill
-                    className="object-cover"
+                    className={
+                      isSite
+                        ? "object-cover rotate-90 scale-[1.4]"
+                        : "object-cover"
+                    }
                     sizes={
                       isSite
                         ? "(max-width: 640px) 100vw, 25vw"
@@ -403,14 +431,14 @@ export default function CardBrowser({ onCardAdded }: CardBrowserProps) {
 
                   {/* Owned Badge */}
                   {ownedQty > 0 && (
-                    <div className="absolute top-2 left-2 bg-green-600 text-white text-xs px-2 py-0.5 rounded">
+                    <div className="absolute top-2 left-2 bg-green-600 text-white text-xs px-2 py-0.5 rounded z-10">
                       Owned: {ownedQty}
                     </div>
                   )}
 
                   {/* Site indicator */}
                   {isSite && (
-                    <div className="absolute top-2 right-2 bg-amber-600 text-white text-xs px-2 py-0.5 rounded">
+                    <div className="absolute top-2 right-2 bg-amber-600 text-white text-xs px-2 py-0.5 rounded z-10">
                       Site
                     </div>
                   )}
