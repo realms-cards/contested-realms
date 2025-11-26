@@ -1,6 +1,6 @@
-import type { ExportFormat } from "@/lib/collection/types";
 import { NextRequest } from "next/server";
 import { getServerAuthSession } from "@/lib/auth";
+import type { ExportFormat } from "@/lib/collection/types";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -20,9 +20,8 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const format = (searchParams.get("format") || "csv") as ExportFormat;
-    const setId = searchParams.get("setId")
-      ? parseInt(searchParams.get("setId")!, 10)
-      : undefined;
+    const setIdParam = searchParams.get("setId");
+    const setId = setIdParam ? parseInt(setIdParam, 10) : undefined;
 
     const userId = session.user.id;
 

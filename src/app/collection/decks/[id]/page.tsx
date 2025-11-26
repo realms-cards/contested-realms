@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { useParams, useRouter } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
 import CollectionDeckEditor from "../CollectionDeckEditor";
 
 interface DeckCard {
@@ -34,7 +34,7 @@ interface DeckData {
 export default function CollectionDeckEditorPage() {
   const params = useParams();
   const router = useRouter();
-  const deckId = params.id as string;
+  const deckId = params?.id as string;
 
   const [deck, setDeck] = useState<DeckData | null>(null);
   const [loading, setLoading] = useState(true);

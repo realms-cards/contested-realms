@@ -129,18 +129,18 @@ export function validateCollectionCardInput(input: unknown): {
   const { cardId, quantity, finish } = input as Record<string, unknown>;
 
   const cardValidation = validateCardId(cardId);
-  if (!cardValidation.valid) {
-    errors.push(cardValidation.error!);
+  if (!cardValidation.valid && cardValidation.error) {
+    errors.push(cardValidation.error);
   }
 
   const quantityValidation = validateQuantity(quantity as number);
-  if (!quantityValidation.valid) {
-    errors.push(quantityValidation.error!);
+  if (!quantityValidation.valid && quantityValidation.error) {
+    errors.push(quantityValidation.error);
   }
 
   const finishValidation = validateFinish(finish);
-  if (!finishValidation.valid) {
-    errors.push(finishValidation.error!);
+  if (!finishValidation.valid && finishValidation.error) {
+    errors.push(finishValidation.error);
   }
 
   return { valid: errors.length === 0, errors };
@@ -187,8 +187,8 @@ export function validateBulkOwnership(
       card.requested,
       card.cardName
     );
-    if (!validation.valid) {
-      errors.push(validation.error!);
+    if (!validation.valid && validation.error) {
+      errors.push(validation.error);
     }
   }
 

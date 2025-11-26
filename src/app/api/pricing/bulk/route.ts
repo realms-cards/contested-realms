@@ -1,10 +1,10 @@
+import type { Finish } from "@prisma/client";
 import { NextRequest } from "next/server";
-import { prisma } from "@/lib/prisma";
 import {
   getAffiliateLink,
   buildPriceCacheKey,
 } from "@/lib/collection/pricing-provider";
-import type { Finish } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
@@ -30,9 +30,9 @@ export async function POST(req: NextRequest) {
     }
 
     // Get all card IDs
-    const cardIds = [
-      ...new Set(cards.map((c: { cardId: number }) => c.cardId)),
-    ];
+    const cardIds: number[] = Array.from(
+      new Set<number>(cards.map((c: { cardId: number }) => c.cardId))
+    );
 
     // Fetch cards with their variants
     const dbCards = await prisma.card.findMany({

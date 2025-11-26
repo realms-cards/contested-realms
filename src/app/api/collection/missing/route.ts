@@ -23,9 +23,8 @@ export async function GET(req: NextRequest) {
       100,
       Math.max(1, parseInt(searchParams.get("limit") || "50", 10))
     );
-    const setId = searchParams.get("setId")
-      ? parseInt(searchParams.get("setId")!, 10)
-      : undefined;
+    const setIdParam = searchParams.get("setId");
+    const setId = setIdParam ? parseInt(setIdParam, 10) : undefined;
     const rarity = searchParams.get("rarity") || undefined;
 
     const userId = session.user.id;

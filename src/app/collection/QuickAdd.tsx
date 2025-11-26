@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState, useRef } from "react";
-import Image from "next/image";
 import type { Finish } from "@prisma/client";
+import Image from "next/image";
+import { useCallback, useEffect, useState, useRef } from "react";
 
 interface CardResult {
   id: number;
