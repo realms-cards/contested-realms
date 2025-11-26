@@ -6,7 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useState, useEffect, useCallback } from "react";
 import CardPreview from "@/components/game/CardPreview";
 import OnlineConsole from "@/components/game/OnlineConsole";
-import Board from "@/lib/game/Board";
+import { DynamicBoard as Board } from "@/components/game/dynamic-3d";
 import TextureCache from "@/lib/game/components/TextureCache";
 import { Physics } from "@/lib/game/physics";
 import { useGameStore } from "@/lib/game/store";
@@ -63,8 +63,8 @@ export default function AdminBotReplayViewerPage() {
         useGameStore.getState().resetGameState();
         setLoading(false);
       } catch (err) {
-        console.error('Failed to load bot replay:', err);
-        setError(err instanceof Error ? err.message : 'Failed to load replay');
+        console.error("Failed to load bot replay:", err);
+        setError(err instanceof Error ? err.message : "Failed to load replay");
         setLoading(false);
       }
     };
@@ -73,17 +73,28 @@ export default function AdminBotReplayViewerPage() {
   }, [matchId]);
 
   // Playback engine
-  const applyAction = useCallback((actionIndex: number) => {
-    if (!recording || actionIndex < 0 || actionIndex >= recording.actions.length) return;
+  const applyAction = useCallback(
+    (actionIndex: number) => {
+      if (
+        !recording ||
+        actionIndex < 0 ||
+        actionIndex >= recording.actions.length
+      )
+        return;
 
-    const action = recording.actions[actionIndex];
-    useGameStore.getState().applyPatch(action.patch);
-    setCurrentActionIndex(actionIndex);
-  }, [recording]);
+      const action = recording.actions[actionIndex];
+      useGameStore.getState().applyPatch(action.patch);
+      setCurrentActionIndex(actionIndex);
+    },
+    [recording]
+  );
 
   const stepForward = useCallback(() => {
     if (!recording) return;
-    const nextIndex = Math.min(currentActionIndex + 1, recording.actions.length - 1);
+    const nextIndex = Math.min(
+      currentActionIndex + 1,
+      recording.actions.length - 1
+    );
     applyAction(nextIndex);
   }, [recording, currentActionIndex, applyAction]);
 
@@ -99,15 +110,18 @@ export default function AdminBotReplayViewerPage() {
     setCurrentActionIndex(prevIndex);
   }, [recording, currentActionIndex]);
 
-  const jumpToAction = useCallback((targetIndex: number) => {
-    if (!recording) return;
-    useGameStore.getState().resetGameState();
-    for (let i = 0; i <= targetIndex; i++) {
-      const action = recording.actions[i];
-      useGameStore.getState().applyPatch(action.patch);
-    }
-    setCurrentActionIndex(targetIndex);
-  }, [recording]);
+  const jumpToAction = useCallback(
+    (targetIndex: number) => {
+      if (!recording) return;
+      useGameStore.getState().resetGameState();
+      for (let i = 0; i <= targetIndex; i++) {
+        const action = recording.actions[i];
+        useGameStore.getState().applyPatch(action.patch);
+      }
+      setCurrentActionIndex(targetIndex);
+    },
+    [recording]
+  );
 
   // Auto-playback
   useEffect(() => {
@@ -129,7 +143,7 @@ export default function AdminBotReplayViewerPage() {
     const elapsed = timestamp - recording.startTime;
     const minutes = Math.floor(elapsed / 60000);
     const seconds = Math.floor((elapsed % 60000) / 1000);
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    return `${minutes}:${seconds.toString().padStart(2, "0")}`;
   };
 
   if (loading) {
@@ -145,7 +159,9 @@ export default function AdminBotReplayViewerPage() {
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
         <div className="text-center text-white">
           <div className="text-xl mb-4">Error loading bot replay</div>
-          <div className="text-slate-400 mb-4">{error || "Recording not found"}</div>
+          <div className="text-slate-400 mb-4">
+            {error || "Recording not found"}
+          </div>
           <button
             onClick={() => router.push("/admin/training")}
             className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
@@ -158,53 +174,52 @@ export default function AdminBotReplayViewerPage() {
   }
 
   const currentAction = recording.actions[currentActionIndex];
-  const progress = recording.actions.length > 0 ? (currentActionIndex / (recording.actions.length - 1)) * 100 : 0;
+  const progress =
+    recording.actions.length > 0
+      ? (currentActionIndex / (recording.actions.length - 1)) * 100
+      : 0;
 
   return (
     <div className="fixed inset-0 w-screen h-screen bg-slate-900">
       {/* Admin Badge */}
-      <div className="absolute top-4 left-4 z-50 bg-amber-500/20 border border-amber-500/50 px-3 py-1 rounded-lg">
-        <span className="text-amber-200 text-xs font-semibold uppercase tracking-wide">Admin View - Bot Replay</span>
+      <div className="fixed top-4 left-4 z-[100] bg-amber-500/20 border border-amber-500/50 px-3 py-1 rounded-lg">
+        <span className="text-amber-200 text-xs font-semibold uppercase tracking-wide">
+          Admin View - Bot Replay
+        </span>
       </div>
 
       {/* 3D Game View */}
-      <div className="absolute inset-0 w-full h-full">
-        <Canvas
-          camera={{ position: [0, 10, 0], fov: 50 }}
-          shadows
-          gl={{ preserveDrawingBuffer: true, antialias: true, alpha: false }}
-        >
-          <color attach="background" args={["#0b0b0c"]} />
-          <ambientLight intensity={0.8} />
-          <directionalLight
-            position={[10, 12, 8]}
-            intensity={1.35}
-            castShadow
-          />
+      <Canvas
+        camera={{ position: [0, 10, 0], fov: 50 }}
+        shadows
+        gl={{ preserveDrawingBuffer: true, antialias: true, alpha: false }}
+      >
+        <color attach="background" args={["#0b0b0c"]} />
+        <ambientLight intensity={0.8} />
+        <directionalLight position={[10, 12, 8]} intensity={1.35} castShadow />
 
-          <Physics gravity={[0, -9.81, 0]}>
-            <Board interactionMode="spectator" enableBoardPings={false} />
-            <TextureCache />
-          </Physics>
+        <Physics gravity={[0, -9.81, 0]}>
+          <Board interactionMode="spectator" enableBoardPings={false} />
+          <TextureCache />
+        </Physics>
 
-          <OrbitControls
-            makeDefault
-            target={[0, 0, 0]}
-            enablePan
-            enableRotate
-            enableZoom
-            enableDamping
-            dampingFactor={0.08}
-            screenSpacePanning
-            panSpeed={1.2}
-            zoomSpeed={0.75}
-            minDistance={1}
-            maxDistance={36}
-            minPolarAngle={0}
-            maxPolarAngle={Math.PI / 2.05}
-          />
-        </Canvas>
-      </div>
+        <OrbitControls
+          makeDefault
+          target={[0, 0, 0]}
+          enablePan
+          enableRotate
+          enableZoom
+          enableDamping
+          dampingFactor={0.08}
+          screenSpacePanning
+          panSpeed={1.2}
+          zoomSpeed={0.75}
+          minDistance={1}
+          maxDistance={36}
+          minPolarAngle={0}
+          maxPolarAngle={Math.PI / 2.05}
+        />
+      </Canvas>
 
       {previewCard?.slug && !contextMenu && (
         <CardPreview
@@ -228,7 +243,8 @@ export default function AdminBotReplayViewerPage() {
                 {recording.playerNames.join(" vs ")}
               </div>
               <div className="text-sm text-slate-400">
-                {recording.initialState.matchType} • {recording.actions.length} actions • Bot Match
+                {recording.initialState.matchType} • {recording.actions.length}{" "}
+                actions • Bot Match
               </div>
             </div>
             <button
@@ -242,8 +258,12 @@ export default function AdminBotReplayViewerPage() {
           {/* Progress Bar */}
           <div className="mb-4">
             <div className="flex items-center justify-between text-sm text-slate-400 mb-2">
-              <span>Action {currentActionIndex + 1} of {recording.actions.length}</span>
-              <span>{currentAction ? formatTime(currentAction.timestamp) : "0:00"}</span>
+              <span>
+                Action {currentActionIndex + 1} of {recording.actions.length}
+              </span>
+              <span>
+                {currentAction ? formatTime(currentAction.timestamp) : "0:00"}
+              </span>
             </div>
             <div className="relative bg-slate-700 h-2 rounded-full">
               <div
@@ -268,14 +288,28 @@ export default function AdminBotReplayViewerPage() {
               className="h-9 w-9 grid place-items-center bg-slate-700 hover:bg-slate-600 rounded text-white transition-colors"
               title="Jump to Start"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M6 6h2v12H6V6zm12 6-8 6V6l8 6z"/></svg>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                className="w-5 h-5"
+              >
+                <path d="M6 6h2v12H6V6zm12 6-8 6V6l8 6z" />
+              </svg>
             </button>
             <button
               onClick={stepBackward}
               className="h-9 w-9 grid place-items-center bg-slate-700 hover:bg-slate-600 rounded text-white transition-colors"
               title="Step Backward"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M6 5h2v14H6V5zm12 7-9 6V6l9 6z"/></svg>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                className="w-5 h-5"
+              >
+                <path d="M6 5h2v14H6V5zm12 7-9 6V6l9 6z" />
+              </svg>
             </button>
             <button
               onClick={() => setIsPlaying(!isPlaying)}
@@ -283,12 +317,26 @@ export default function AdminBotReplayViewerPage() {
             >
               {isPlaying ? (
                 <>
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M8 6h3v12H8V6zm5 0h3v12h-3V6z"/></svg>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    className="w-5 h-5"
+                  >
+                    <path d="M8 6h3v12H8V6zm5 0h3v12h-3V6z" />
+                  </svg>
                   Pause
                 </>
               ) : (
                 <>
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M8 5v14l11-7-11-7z"/></svg>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    className="w-5 h-5"
+                  >
+                    <path d="M8 5v14l11-7-11-7z" />
+                  </svg>
                   Play
                 </>
               )}
@@ -298,14 +346,28 @@ export default function AdminBotReplayViewerPage() {
               className="h-9 w-9 grid place-items-center bg-slate-700 hover:bg-slate-600 rounded text-white transition-colors"
               title="Step Forward"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M7 6h3v12H7V6zm4 6 9 6V6l-9 6z"/></svg>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                className="w-5 h-5"
+              >
+                <path d="M7 6h3v12H7V6zm4 6 9 6V6l-9 6z" />
+              </svg>
             </button>
             <button
               onClick={() => jumpToAction(recording.actions.length - 1)}
               className="h-9 w-9 grid place-items-center bg-slate-700 hover:bg-slate-600 rounded text-white transition-colors"
               title="Jump to End"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M16 6h2v12h-2V6zM6 12l8-6v12l-8-6z"/></svg>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                className="w-5 h-5"
+              >
+                <path d="M16 6h2v12h-2V6zM6 12l8-6v12l-8-6z" />
+              </svg>
             </button>
 
             {/* Speed Control */}
@@ -333,7 +395,7 @@ export default function AdminBotReplayViewerPage() {
         chatInput={chatInput}
         setChatInput={setChatInput}
         onSendChat={() => {}}
-        onLeaveMatch={() => router.push('/admin/training')}
+        onLeaveMatch={() => router.push("/admin/training")}
         connected={true}
         myPlayerId={undefined}
         hideLeaveButton={true}

@@ -208,7 +208,13 @@ export type ContextMenuTarget =
     }
   | { kind: "tokenpile"; who: PlayerKey };
 
-export type GameEvent = { id: number; ts: number; text: string; turn?: number };
+export type GameEvent = {
+  id: number;
+  ts: number;
+  text: string;
+  turn?: number;
+  player?: 1 | 2;
+};
 export const MAX_EVENTS = 200;
 export const BOARD_PING_LIFETIME_MS = 2500;
 export const BOARD_PING_MAX_HISTORY = 8;
@@ -322,6 +328,8 @@ export type GameState = {
       index: number;
       instanceId?: string | null;
       owner: 1 | 2;
+      isAvatar?: boolean; // True if attacker is an avatar
+      avatarSeat?: PlayerKey; // Which player's avatar
     };
     target?: {
       kind: "permanent" | "avatar" | "site";
@@ -347,6 +355,8 @@ export type GameState = {
       index: number;
       instanceId?: string | null;
       owner: 1 | 2;
+      isAvatar?: boolean; // True if attacker is an avatar
+      avatarSeat?: PlayerKey; // Which player's avatar
     };
     attackerName?: string | null;
   } | null;
@@ -357,6 +367,8 @@ export type GameState = {
       index: number;
       instanceId?: string | null;
       owner: 1 | 2;
+      isAvatar?: boolean;
+      avatarSeat?: PlayerKey;
     };
     candidates: Array<{
       kind: "permanent" | "avatar" | "site";
@@ -372,6 +384,8 @@ export type GameState = {
       index: number;
       instanceId?: string | null;
       owner: 1 | 2;
+      isAvatar?: boolean;
+      avatarSeat?: PlayerKey;
     };
     target: {
       kind: "permanent" | "avatar" | "site";
@@ -409,6 +423,8 @@ export type GameState = {
       index: number;
       instanceId?: string | null;
       owner: 1 | 2;
+      isAvatar?: boolean;
+      avatarSeat?: PlayerKey;
     },
     target?: {
       kind: "permanent" | "avatar" | "site";
@@ -424,6 +440,8 @@ export type GameState = {
       index: number;
       instanceId?: string | null;
       owner: 1 | 2;
+      isAvatar?: boolean;
+      avatarSeat?: PlayerKey;
     }
   ) => void;
   setDefenderSelection: (

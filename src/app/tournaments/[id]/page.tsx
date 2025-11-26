@@ -14,7 +14,6 @@ import TournamentRoster from "@/components/tournament/TournamentRoster";
 import { useRealtimeTournaments } from "@/contexts/RealtimeTournamentContext";
 import type { CardPreviewData } from "@/lib/game/card-preview.types";
 
-
 const TournamentInviteModal = dynamic(
   () => import("@/components/tournament/TournamentInviteModal"),
   { ssr: false }
@@ -68,7 +67,6 @@ export default function TournamentDetailsPage() {
   const [toast, setToast] = useState<string | null>(null);
   const [hoveredCard, setHoveredCard] = useState<CardPreviewData | null>(null);
   const [showInviteModal, setShowInviteModal] = useState(false);
-  
 
   const [activeTab, setActiveTab] = useState<
     "overview" | "standings" | "rounds"
@@ -79,18 +77,35 @@ export default function TournamentDetailsPage() {
   const [initialLoaded, setInitialLoaded] = useState(false);
 
   // Local match assignment banner (instant without full refresh)
-  const [assigned, setAssigned] = useState<{ matchId: string; opponentName: string | null } | null>(null);
+  const [assigned, setAssigned] = useState<{
+    matchId: string;
+    opponentName: string | null;
+  } | null>(null);
   useEffect(() => {
     const handler = (e: Event) => {
       const d = (e as CustomEvent).detail as
-        | { tournamentId?: string; matchId?: string; opponentName?: string | null }
+        | {
+            tournamentId?: string;
+            matchId?: string;
+            opponentName?: string | null;
+          }
         | undefined;
       if (!d || !d.matchId) return;
       if (String(d.tournamentId) !== String(tournamentId)) return;
-      setAssigned({ matchId: String(d.matchId), opponentName: d.opponentName ?? null });
+      setAssigned({
+        matchId: String(d.matchId),
+        opponentName: d.opponentName ?? null,
+      });
     };
-    window.addEventListener("tournament:matchAssigned", handler as EventListener);
-    return () => window.removeEventListener("tournament:matchAssigned", handler as EventListener);
+    window.addEventListener(
+      "tournament:matchAssigned",
+      handler as EventListener
+    );
+    return () =>
+      window.removeEventListener(
+        "tournament:matchAssigned",
+        handler as EventListener
+      );
   }, [tournamentId]);
 
   // Context-provided assignment (from realtime handlers)
@@ -158,7 +173,9 @@ export default function TournamentDetailsPage() {
             const data = await res.json();
             setFallbackTournament(data as Tournament);
             // Add tournament to context so event handlers can update it
-            setCurrentTournament(data as unknown as Parameters<typeof setCurrentTournament>[0]);
+            setCurrentTournament(
+              data as unknown as Parameters<typeof setCurrentTournament>[0]
+            );
           }
         })
         .catch((err) => {
@@ -290,24 +307,46 @@ export default function TournamentDetailsPage() {
     if (assigned?.matchId) return;
     const mid = rtAssignedMatchId || myAssignedMatchId;
     if (!mid) return;
-    const match = (statistics?.matches || []).find((m) => String(m.id) === String(mid));
-    const players = Array.isArray((match as { players?: Array<{ id: string; name?: string }> } | null)?.players)
-      ? (((match as { players?: Array<{ id: string; name?: string }> } | null)?.players as Array<{ id: string; name?: string }>) ?? [])
+    const match = (statistics?.matches || []).find(
+      (m) => String(m.id) === String(mid)
+    );
+    const players = Array.isArray(
+      (match as { players?: Array<{ id: string; name?: string }> } | null)
+        ?.players
+    )
+      ? ((match as { players?: Array<{ id: string; name?: string }> } | null)
+          ?.players as Array<{ id: string; name?: string }>) ?? []
       : [];
     const me = session?.user?.id || null;
     const opp = players.find((p) => p.id !== me)?.name || null;
     setAssigned({ matchId: String(mid), opponentName: opp });
-  }, [assigned?.matchId, rtAssignedMatchId, myAssignedMatchId, statistics?.matches, session?.user?.id]);
+  }, [
+    assigned?.matchId,
+    rtAssignedMatchId,
+    myAssignedMatchId,
+    statistics?.matches,
+    session?.user?.id,
+  ]);
 
   // Also re-sync when the page becomes visible or gains focus (covers missed socket events)
   useEffect(() => {
     const sync = () => {
-      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      if (
+        typeof document !== "undefined" &&
+        document.visibilityState !== "visible"
+      )
+        return;
       const mid = assigned?.matchId || rtAssignedMatchId || myAssignedMatchId;
       if (!mid) return;
-      const match = (statistics?.matches || []).find((m) => String(m.id) === String(mid));
-      const players = Array.isArray((match as { players?: Array<{ id: string; name?: string }> } | null)?.players)
-        ? (((match as { players?: Array<{ id: string; name?: string }> } | null)?.players as Array<{ id: string; name?: string }>) ?? [])
+      const match = (statistics?.matches || []).find(
+        (m) => String(m.id) === String(mid)
+      );
+      const players = Array.isArray(
+        (match as { players?: Array<{ id: string; name?: string }> } | null)
+          ?.players
+      )
+        ? ((match as { players?: Array<{ id: string; name?: string }> } | null)
+            ?.players as Array<{ id: string; name?: string }>) ?? []
         : [];
       const me = session?.user?.id || null;
       const opp = players.find((p) => p.id !== me)?.name || null;
@@ -323,7 +362,13 @@ export default function TournamentDetailsPage() {
         window.removeEventListener("focus", sync);
       }
     };
-  }, [assigned?.matchId, rtAssignedMatchId, myAssignedMatchId, statistics?.matches, session?.user?.id]);
+  }, [
+    assigned?.matchId,
+    rtAssignedMatchId,
+    myAssignedMatchId,
+    statistics?.matches,
+    session?.user?.id,
+  ]);
 
   const [viewerDeckCards, setViewerDeckCards] = useState<
     Array<{
@@ -411,7 +456,9 @@ export default function TournamentDetailsPage() {
     if (Array.isArray(rp) && rp.some((p) => p.id === userId)) return true;
     // Fallback for active phase when registrations may not be present
     return Boolean(
-      statistics?.standings?.some((s) => s.playerId === userId && !s.isEliminated)
+      statistics?.standings?.some(
+        (s) => s.playerId === userId && !s.isEliminated
+      )
     );
   }, [tournament, statistics?.standings, session?.user?.id]);
 
@@ -422,11 +469,12 @@ export default function TournamentDetailsPage() {
   useEffect(() => {
     (async () => {
       try {
-        const fromContext = (
-          tournament as unknown as {
-            viewerDeck?: Array<{ cardId: string; quantity: number }>;
-          }
-        )?.viewerDeck || null;
+        const fromContext =
+          (
+            tournament as unknown as {
+              viewerDeck?: Array<{ cardId: string; quantity: number }>;
+            }
+          )?.viewerDeck || null;
 
         // If no deck in context, mark as loaded once to avoid repeated fetch attempts from context churn
         if (!fromContext || fromContext.length === 0) {
@@ -550,11 +598,7 @@ export default function TournamentDetailsPage() {
     (async () => {
       try {
         setConstructedError(null);
-        if (
-          !tId ||
-          tStatus !== "preparing" ||
-          tFormat !== "constructed"
-        )
+        if (!tId || tStatus !== "preparing" || tFormat !== "constructed")
           return;
         if (!isRegistered) return;
         setConstructedLoading(true);
@@ -618,13 +662,7 @@ export default function TournamentDetailsPage() {
         setConstructedLoading(false);
       }
     })();
-  }, [
-    tId,
-    tStatus,
-    tFormat,
-    isRegistered,
-    includePublicDecks,
-  ]);
+  }, [tId, tStatus, tFormat, isRegistered, includePublicDecks]);
 
   const handleSubmitConstructedDeck = async (
     deckId: string,
@@ -964,7 +1002,11 @@ export default function TournamentDetailsPage() {
   }
 
   // Avoid flashing "not found" before the realtime context hydrates and direct check completes
-  if (!derivedTournament && (!lastUpdated || !checkedDirect) && !initialLoaded) {
+  if (
+    !derivedTournament &&
+    (!lastUpdated || !checkedDirect) &&
+    !initialLoaded
+  ) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
         <div className="text-white text-xl">Loading tournament...</div>
@@ -999,7 +1041,9 @@ export default function TournamentDetailsPage() {
               <div className="flex items-center gap-3">
                 <div className="text-3xl">🏆</div>
                 <div>
-                  <div className="text-lg font-semibold">Tournament Completed</div>
+                  <div className="text-lg font-semibold">
+                    Tournament Completed
+                  </div>
                   <div className="text-sm text-white/70">{tournament.name}</div>
                 </div>
               </div>
@@ -1012,36 +1056,65 @@ export default function TournamentDetailsPage() {
             </div>
             <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
               {(() => {
-                const standings = (statistics?.standings || []) as Array<{ playerId: string; playerName: string; points?: number; omw?: number }>;
+                const standings = (statistics?.standings || []) as Array<{
+                  playerId: string;
+                  playerName: string;
+                  points?: number;
+                  omw?: number;
+                }>;
                 const top = standings.slice(0, 3);
-                const meId = session?.user?.id || '';
-                const myIdx = meId ? standings.findIndex((s) => s.playerId === meId) : -1;
+                const meId = session?.user?.id || "";
+                const myIdx = meId
+                  ? standings.findIndex((s) => s.playerId === meId)
+                  : -1;
                 const myRank = myIdx >= 0 ? myIdx + 1 : null;
-                const total = standings.length || getCurrentPlayersCount(tournament);
+                const total =
+                  standings.length || getCurrentPlayersCount(tournament);
                 const champion = standings[0]?.playerName || "Champion";
                 return (
                   <>
                     <div className="md:col-span-2">
                       <div className="text-xl font-bold mb-2">Champion</div>
-                      <div className="text-3xl font-fantaisie text-emerald-400">{champion}</div>
+                      <div className="text-3xl font-fantaisie text-emerald-400">
+                        {champion}
+                      </div>
                       <div className="mt-4 text-sm text-white/80">
                         {myRank ? (
-                          <span>Your result: <span className="font-semibold text-white">#{myRank}</span> of {total}</span>
+                          <span>
+                            Your result:{" "}
+                            <span className="font-semibold text-white">
+                              #{myRank}
+                            </span>{" "}
+                            of {total}
+                          </span>
                         ) : (
                           <span>Final standings are available below.</span>
                         )}
                       </div>
                     </div>
                     <div>
-                      <div className="text-sm font-semibold mb-2">Top Standings</div>
+                      <div className="text-sm font-semibold mb-2">
+                        Top Standings
+                      </div>
                       <div className="space-y-2">
                         {top.map((s, i) => (
-                          <div key={s.playerId} className="flex items-center justify-between rounded bg-white/5 px-3 py-2">
+                          <div
+                            key={s.playerId}
+                            className="flex items-center justify-between rounded bg-white/5 px-3 py-2"
+                          >
                             <div className="flex items-center gap-2">
-                              <div className="w-7 h-7 rounded-full bg-white/10 grid place-items-center text-sm font-bold">{i + 1}</div>
-                              <div className="truncate max-w-[12rem]">{s.playerName}</div>
+                              <div className="w-7 h-7 rounded-full bg-white/10 grid place-items-center text-sm font-bold">
+                                {i + 1}
+                              </div>
+                              <div className="truncate max-w-[12rem]">
+                                {s.playerName}
+                              </div>
                             </div>
-                            <div className="text-xs text-white/70">{typeof s.points === 'number' ? `${s.points} pts` : ''}</div>
+                            <div className="text-xs text-white/70">
+                              {typeof s.points === "number"
+                                ? `${s.points} pts`
+                                : ""}
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -1067,31 +1140,34 @@ export default function TournamentDetailsPage() {
         {null}
 
         {/* Creator Controls: Start next round banner at top */}
-        {tournament.status === "active" && isCreator && !activeRound && maxRoundNumber < (tournament.settings.totalRounds || 3) && (
-          <div className="mb-6 rounded-lg border border-indigo-600 bg-indigo-900/90 backdrop-blur flex items-center justify-between px-4 py-3 shadow-lg">
-            <div className="text-indigo-100 text-sm">
-              {rounds.length > 0 ? (
-                <span>
-                  Round {lastCompletedRoundNumber} completed. Start next round
-                  when ready.
-                </span>
-              ) : (
-                <span>
-                  Tournament is active. Start Round 1 when you&apos;re ready.
-                </span>
-              )}
+        {tournament.status === "active" &&
+          isCreator &&
+          !activeRound &&
+          maxRoundNumber < (tournament.settings.totalRounds || 3) && (
+            <div className="mb-6 rounded-lg border border-indigo-600 bg-indigo-900/90 backdrop-blur flex items-center justify-between px-4 py-3 shadow-lg">
+              <div className="text-indigo-100 text-sm">
+                {rounds.length > 0 ? (
+                  <span>
+                    Round {lastCompletedRoundNumber} completed. Start next round
+                    when ready.
+                  </span>
+                ) : (
+                  <span>
+                    Tournament is active. Start Round 1 when you&apos;re ready.
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={handleStartNextRound}
+                disabled={startingRound}
+                className="bg-indigo-500 hover:bg-indigo-400 text-white px-4 py-2 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {startingRound
+                  ? "Starting…"
+                  : `Start Round ${Math.max(1, maxRoundNumber + 1)}`}
+              </button>
             </div>
-            <button
-              onClick={handleStartNextRound}
-              disabled={startingRound}
-              className="bg-indigo-500 hover:bg-indigo-400 text-white px-4 py-2 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {startingRound
-                ? "Starting…"
-                : `Start Round ${Math.max(1, maxRoundNumber + 1)}`}
-            </button>
-          </div>
-        )}
+          )}
         {/* Header */}
         <div className="flex items-start justify-between mb-8">
           <div>
@@ -1131,14 +1207,14 @@ export default function TournamentDetailsPage() {
               {isCreator &&
                 tournament.status === "registering" &&
                 getCurrentPlayersCount(tournament) < tournament.maxPlayers && (
-                <button
-                  onClick={() => setShowInviteModal(true)}
-                  className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
-                >
-                  <span>👥</span>
-                  <span>Invite Players</span>
-                </button>
-              )}
+                  <button
+                    onClick={() => setShowInviteModal(true)}
+                    className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
+                  >
+                    <span>👥</span>
+                    <span>Invite Players</span>
+                  </button>
+                )}
 
               {tournament.status === "registering" &&
                 !isRegistered &&
@@ -1810,7 +1886,7 @@ export default function TournamentDetailsPage() {
                             {isMine && !isCompleted && (
                               <button
                                 onClick={() => startJoinMatch(String(m.id))}
-                                className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 rounded-md text-sm"
+                                className="bg-amber-500 hover:bg-amber-600 text-slate-900 font-semibold px-3 py-1 rounded-md text-sm"
                               >
                                 Join
                               </button>
@@ -2552,8 +2628,6 @@ export default function TournamentDetailsPage() {
               </div>
             </div>
           )}
-
-        
 
         {/* Tournament Completion Celebration Modal */}
         {showCompletionModal &&

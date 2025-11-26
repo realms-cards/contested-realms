@@ -1,7 +1,9 @@
-import CardOutline from "@/lib/game/components/CardOutline";
-import { CARD_LONG, CARD_SHORT } from "@/lib/game/constants";
+// NOTE: These imports are for the commented-out implementation below.
+// Kept for when accurate spell-specific hints are ready to re-enable.
+// import CardOutline from "@/lib/game/components/CardOutline";
+// import { CARD_LONG, CARD_SHORT } from "@/lib/game/constants";
+// import { seatFromOwner } from "@/lib/game/store/utils/boardHelpers";
 import type { GameState } from "@/lib/game/store/types";
-import { seatFromOwner } from "@/lib/game/store/utils/boardHelpers";
 
 export type MagicTargetOverlayProps = {
   tileX: number;
@@ -20,6 +22,14 @@ export function MagicTargetOverlay({
   highlightColor = "#ef4444",
   magicGuidesActive,
 }: MagicTargetOverlayProps) {
+  // NOTE: Magic target site highlighting is disabled until we can provide
+  // accurate hints for every spell type. See reference/SorceryRulebook.pdf.
+  // The magic interaction flow (caster/target selection) still works.
+  void [tileX, tileY, pendingMagic, avatars, highlightColor, magicGuidesActive];
+  return null;
+
+  // Original implementation preserved below for when accurate hints are ready:
+  /* 
   if (!pendingMagic || !magicGuidesActive || pendingMagic.guidesSuppressed) {
     return null;
   }
@@ -154,4 +164,5 @@ export function MagicTargetOverlay({
       />
     </group>
   );
+  */
 }

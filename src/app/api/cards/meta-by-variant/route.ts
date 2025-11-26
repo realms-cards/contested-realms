@@ -1,6 +1,54 @@
 import { NextRequest } from "next/server";
 export const dynamic = "force-dynamic";
+import { getSetIdByName } from "@/lib/api/cached-lookups";
 import { prisma } from "@/lib/prisma";
+
+// ─── In-memory cache for card metadata ───────────────────────────────────────
+// Card stats rarely change (only on ingestion), so caching is safe
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const MAX_CACHE_ENTRIES = 500;
+
+interface CacheEntry<T> {
+  data: T;
+  expiresAt: number;
+}
+
+type CardMetaResult = {
+  slug: string;
+  cardId: number;
+  cost: number | null;
+  thresholds: Record<string, number> | null;
+  attack: number | null;
+  defence: number | null;
+};
+
+const cardMetaCache = new Map<string, CacheEntry<CardMetaResult[]>>();
+
+function getCacheKey(setName: string, slugs: string[]): string {
+  return `${setName}|${slugs.sort().join(",")}`;
+}
+
+function getFromCache(key: string): CardMetaResult[] | null {
+  const entry = cardMetaCache.get(key);
+  if (!entry) return null;
+  if (Date.now() > entry.expiresAt) {
+    cardMetaCache.delete(key);
+    return null;
+  }
+  return entry.data;
+}
+
+function setInCache(key: string, data: CardMetaResult[]): void {
+  // Evict oldest entries if cache is full
+  if (cardMetaCache.size >= MAX_CACHE_ENTRIES) {
+    const keysToDelete = Array.from(cardMetaCache.keys()).slice(
+      0,
+      MAX_CACHE_ENTRIES / 4
+    );
+    for (const k of keysToDelete) cardMetaCache.delete(k);
+  }
+  cardMetaCache.set(key, { data, expiresAt: Date.now() + CACHE_TTL_MS });
+}
 
 // GET /api/cards/meta-by-variant?set=Alpha&slugs=slug1,slug2,slug3
 // Returns: [{ slug, cardId, cost, thresholds, attack, defence }]
@@ -26,21 +74,38 @@ export async function GET(req: NextRequest) {
       )
     );
 
-    // Resolve set if provided (prefer set-scoped lookups for accuracy/perf)
+    // Check cache first
+    const cacheKey = getCacheKey(setName, slugs);
+    const cached = getFromCache(cacheKey);
+    if (cached) {
+      if (process.env.NODE_ENV === "development") {
+        console.log(`[card-meta-cache] HIT: ${cacheKey.slice(0, 50)}...`);
+      }
+      return new Response(JSON.stringify(cached), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+
+    // Resolve set if provided (using cached lookup)
     let setId: number | null = null;
     if (setName) {
-      const set = await prisma.set.findUnique({ where: { name: setName } });
-      if (!set) {
+      setId = await getSetIdByName(setName);
+      if (setId === null) {
         return new Response(
           JSON.stringify({ error: `Unknown set: ${setName}` }),
           { status: 400 }
         );
       }
-      setId = set.id;
     }
 
     // Find variants by slug (optionally constrained by set)
-    type VariantRow = { id: number; cardId: number; setId: number; slug: string };
+    type VariantRow = {
+      id: number;
+      cardId: number;
+      setId: number;
+      slug: string;
+    };
     const variants: VariantRow[] = await prisma.variant.findMany({
       where: {
         slug: { in: slugs },
@@ -68,7 +133,10 @@ export async function GET(req: NextRequest) {
     }
 
     // Fetch metadata rows for (cardId,setId) pairs
-    const pairs = effectiveVariants.map((v) => ({ cardId: v.cardId, setId: v.setId }));
+    const pairs = effectiveVariants.map((v) => ({
+      cardId: v.cardId,
+      setId: v.setId,
+    }));
     const metas = await prisma.cardSetMetadata.findMany({
       where: { OR: pairs },
       select: {
@@ -87,17 +155,28 @@ export async function GET(req: NextRequest) {
     for (const m of metas) metaByPair.set(key(m.cardId, m.setId), m);
 
     // Build output rows keyed by slug
-    const out = effectiveVariants.map((v) => {
+    const out: CardMetaResult[] = effectiveVariants.map((v) => {
       const m = metaByPair.get(key(v.cardId, v.setId));
       return {
         slug: v.slug,
         cardId: v.cardId,
         cost: m?.cost ?? null,
-        thresholds: (m?.thresholds as unknown as Record<string, number> | null) ?? null,
+        thresholds:
+          (m?.thresholds as unknown as Record<string, number> | null) ?? null,
         attack: m?.attack ?? null,
         defence: m?.defence ?? null,
       };
     });
+
+    // Store in cache
+    setInCache(cacheKey, out);
+    if (process.env.NODE_ENV === "development") {
+      console.log(
+        `[card-meta-cache] MISS: ${cacheKey.slice(0, 50)}... (cached ${
+          out.length
+        } items)`
+      );
+    }
 
     return new Response(JSON.stringify(out), {
       status: 200,
@@ -105,7 +184,11 @@ export async function GET(req: NextRequest) {
     });
   } catch (e: unknown) {
     const message =
-      e instanceof Error ? e.message : typeof e === "string" ? e : "Unknown error";
+      e instanceof Error
+        ? e.message
+        : typeof e === "string"
+        ? e
+        : "Unknown error";
     return new Response(JSON.stringify({ error: message }), { status: 500 });
   }
 }

@@ -1516,6 +1516,10 @@ function AuthenticatedDeckEditor() {
       raw = null;
     }
     if (!raw) {
+      console.log(
+        "[Cube Extras] No draftConfig found in localStorage for:",
+        draftId
+      );
       setCubeStandardCards([]);
       return;
     }
@@ -1534,7 +1538,13 @@ function AuthenticatedDeckEditor() {
       cfg = null;
     }
 
+    console.log("[Cube Extras] Loaded draftConfig:", cfg);
+
     if (!cfg?.cubeId || !cfg.includeCubeSideboardInStandard) {
+      console.log("[Cube Extras] Skipping cube extras:", {
+        hasCubeId: !!cfg?.cubeId,
+        includeCubeSideboardInStandard: cfg?.includeCubeSideboardInStandard,
+      });
       setCubeStandardCards([]);
       return;
     }
@@ -3291,6 +3301,11 @@ function AuthenticatedDeckEditor() {
 
     const newPick3D: Pick3D[] = [];
     let id = 1;
+    // Counter for orderly fallback grid positioning (when no saved position exists)
+    let fallbackIndex = 0;
+    const GRID_COLS = 10;
+    const CARD_SPACING_X = 0.65; // Horizontal spacing
+    const CARD_SPACING_Z = 0.9; // Vertical spacing
 
     // 1) Compute total counts per card and initial deck-target based on picks
     const totalByCard = new Map<number, number>();
@@ -3360,11 +3375,18 @@ function AuthenticatedDeckEditor() {
             logicalZone = layoutPos.z < 0 ? "Deck" : "Sideboard";
           }
         } else {
-          x = -3 + Math.random() * 6;
+          // Orderly grid fallback instead of random positions
+          // This ensures cards are arranged neatly when auto-stack is toggled off
+          // or when no saved positions exist
+          const col = fallbackIndex % GRID_COLS;
+          const row = Math.floor(fallbackIndex / GRID_COLS);
+          // Start from left side, progress right; start from top of zone, progress down
+          x = -3 + col * CARD_SPACING_X;
           z =
             layoutZone === "Deck"
-              ? -2 + Math.random() * 1.8 // Deck zone: z from -2 to -0.2
-              : 0.5 + Math.random() * 3; // Sideboard/Collection layout zone: z from 0.5 to 3.5
+              ? -2.5 + row * CARD_SPACING_Z // Deck zone: start at z=-2.5, progress down
+              : 0.5 + row * CARD_SPACING_Z; // Sideboard zone: start at z=0.5, progress down
+          fallbackIndex++;
         }
 
         newPick3D.push({
@@ -4120,6 +4142,7 @@ function AuthenticatedDeckEditor() {
               setFeedbackMessage(msg);
               setTimeout(() => setFeedbackMessage(null), 2000);
             }}
+            showCollectionZone={cubeStandardCards.length > 0}
             collectionCount={collectionCount}
             collectionCountsByCardId={collectionCountsByCardId}
             moveOneFromSideboardToCollection={moveOneFromSideboardToCollection}

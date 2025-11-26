@@ -4,8 +4,8 @@
  */
 
 import React, { useState, useEffect } from "react";
-import type { ConnectionStatusIndicatorProps } from "../../../specs/006-live-video-and/contracts/ui-components";
 import { useColorBlind } from "@/lib/contexts/ColorBlindContext";
+import type { ConnectionStatusIndicatorProps } from "../../../specs/006-live-video-and/contracts/ui-components";
 
 export const ConnectionStatusIndicator: React.FC<
   ConnectionStatusIndicatorProps

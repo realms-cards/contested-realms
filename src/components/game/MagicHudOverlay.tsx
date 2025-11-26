@@ -235,7 +235,7 @@ export default function MagicHudOverlay() {
     })();
 
     return (
-      <div className="fixed inset-x-0 top-6 z-40 pointer-events-none flex justify-center">
+      <div className="fixed inset-x-0 top-6 z-[100] pointer-events-none flex justify-center">
         <div className="pointer-events-auto px-5 py-3 rounded-full bg-black/90 text-white ring-1 ring-white/20 shadow-lg text-lg md:text-xl flex items-center gap-2 select-none">
           <span className="opacity-80">
             {tileNum ? `[T${tileNum}] ` : ""}
@@ -428,7 +428,7 @@ export default function MagicHudOverlay() {
       }
     })();
     return (
-      <div className="fixed inset-x-0 top-24 z-40 pointer-events-none flex justify-center px-4">
+      <div className="fixed inset-x-0 top-24 z-[100] pointer-events-none flex justify-center px-4">
         <div className="pointer-events-auto max-w-3xl w-full rounded-xl bg-black/85 text-white ring-1 ring-white/20 shadow-xl p-4">
           <div className="text-base md:text-lg mb-2">
             <span className="font-fantaisie">{cardName}</span>

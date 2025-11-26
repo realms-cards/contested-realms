@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
-import { getAdminSession } from "@/lib/admin/auth";
 import MetaDashboard from "@/components/admin/MetaDashboard";
+import { getAdminSession } from "@/lib/admin/auth";
 
 export const dynamic = "force-dynamic";
 

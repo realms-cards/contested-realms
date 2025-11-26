@@ -74,14 +74,9 @@ const {
 } = require("./booster");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { BotManager } = require("./botManager");
-const {
-  applyTurnStart,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  validateAction,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  ensureCosts,
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-} = require("./rules");
+// Rules modules (TypeScript)
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { applyTurnStart } = require("./modules/rules-turn-start");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { applyMovementAndCombat } = require("./modules/rules-movement");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -3116,6 +3111,102 @@ io.on("connection", async (socket: SocketClient) => {
           defenders,
           ...(tile ? { tile } : {}),
           ...(target ? { target } : {}),
+          playerKey,
+          ts: Date.now(),
+        } as const;
+        io.to(room).emit("message", out);
+        try {
+          io.to(`spectate:${matchId}`).emit("message", out);
+        } catch {}
+      } catch {}
+    } else if (type === "combatAutoApply") {
+      // Auto-resolve combat: broadcast kill list to all players so each applies their own kills
+      try {
+        const match = await getOrLoadMatch(matchId);
+        const room = `match:${matchId}`;
+        const playerKey = getSeatForPlayer(match, player.id) || "p1";
+        const msg = payload as { id?: unknown; kills?: unknown };
+        const id = typeof msg.id === "string" ? msg.id : rid("cmb");
+        const rawKills = Array.isArray(msg.kills) ? msg.kills : [];
+        const kills = rawKills
+          .filter(
+            (k): k is Record<string, unknown> => k && typeof k === "object"
+          )
+          .map((k) => ({
+            at: typeof k.at === "string" ? k.at : "",
+            index: Number(k.index),
+            owner: typeof k.owner === "string" ? k.owner : "",
+            instanceId: typeof k.instanceId === "string" ? k.instanceId : null,
+          }))
+          .filter((k) => k.at && Number.isFinite(k.index) && k.owner);
+        const out = {
+          type: "combatAutoApply",
+          id,
+          kills,
+          playerKey,
+          ts: Date.now(),
+        } as const;
+        io.to(room).emit("message", out);
+        try {
+          io.to(`spectate:${matchId}`).emit("message", out);
+        } catch {}
+      } catch {}
+    } else if (type === "combatSummary") {
+      // Combat summary: broadcast final result to all players
+      try {
+        const match = await getOrLoadMatch(matchId);
+        const room = `match:${matchId}`;
+        const playerKey = getSeatForPlayer(match, player.id) || "p1";
+        const msg = payload as {
+          id?: unknown;
+          text?: unknown;
+          actor?: unknown;
+          targetSeat?: unknown;
+        };
+        const id = typeof msg.id === "string" ? msg.id : rid("cmb");
+        const text = typeof msg.text === "string" ? msg.text : "";
+        const actor = typeof msg.actor === "string" ? msg.actor : undefined;
+        const targetSeat =
+          typeof msg.targetSeat === "string" ? msg.targetSeat : undefined;
+        const out = {
+          type: "combatSummary",
+          id,
+          text,
+          actor,
+          targetSeat,
+          playerKey,
+          ts: Date.now(),
+        } as const;
+        io.to(room).emit("message", out);
+        try {
+          io.to(`spectate:${matchId}`).emit("message", out);
+        } catch {}
+      } catch {}
+    } else if (type === "combatDamage") {
+      // Combat damage: broadcast damage assignments to all players
+      try {
+        const match = await getOrLoadMatch(matchId);
+        const room = `match:${matchId}`;
+        const playerKey = getSeatForPlayer(match, player.id) || "p1";
+        const msg = payload as { id?: unknown; damage?: unknown };
+        const id = typeof msg.id === "string" ? msg.id : rid("cmb");
+        const rawDamage = Array.isArray(msg.damage) ? msg.damage : [];
+        const damage = rawDamage
+          .filter(
+            (d): d is Record<string, unknown> => d && typeof d === "object"
+          )
+          .map((d) => ({
+            at: typeof d.at === "string" ? d.at : "",
+            index: Number(d.index),
+            amount: Number(d.amount),
+          }))
+          .filter(
+            (d) => d.at && Number.isFinite(d.index) && Number.isFinite(d.amount)
+          );
+        const out = {
+          type: "combatDamage",
+          id,
+          damage,
           playerKey,
           ts: Date.now(),
         } as const;

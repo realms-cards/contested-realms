@@ -99,6 +99,10 @@ export default function MetaDashboard({ adminName }: MetaDashboardProps) {
   const [matchStats, setMatchStats] = useState<MatchStat[]>([]);
   const [matchStatsLoading, setMatchStatsLoading] = useState(false);
 
+  // Clear stats
+  const [clearing, setClearing] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+
   const refreshCardStats = useCallback(async () => {
     setCardStatsLoading(true);
     setCardStatsError(null);
@@ -210,6 +214,26 @@ export default function MetaDashboard({ adminName }: MetaDashboardProps) {
     refreshAll();
   }, [refreshAll]);
 
+  const clearStats = useCallback(
+    async (formatToClear?: string) => {
+      setClearing(true);
+      try {
+        const response = await fetch("/api/admin/meta/clear", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ format: formatToClear }),
+        });
+        if (response.ok) {
+          setShowClearConfirm(false);
+          refreshAll();
+        }
+      } finally {
+        setClearing(false);
+      }
+    },
+    [refreshAll]
+  );
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <div className="mx-auto flex max-w-6xl flex-col gap-10 px-6 py-10">
@@ -235,8 +259,52 @@ export default function MetaDashboard({ adminName }: MetaDashboardProps) {
             >
               Refresh All
             </button>
+            <button
+              onClick={() => setShowClearConfirm(true)}
+              className="inline-flex items-center justify-center rounded border border-rose-400 bg-rose-500/10 px-4 py-2 text-sm font-medium text-rose-200 hover:bg-rose-500/20"
+            >
+              Clear Stats
+            </button>
           </div>
         </header>
+
+        {/* Clear confirmation modal */}
+        {showClearConfirm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+            <div className="rounded-lg border border-slate-700 bg-slate-900 p-6 shadow-xl max-w-md w-full mx-4">
+              <h3 className="text-lg font-semibold text-white mb-2">
+                Clear Meta Statistics
+              </h3>
+              <p className="text-sm text-slate-300 mb-4">
+                This will permanently delete card win rate data. Choose which
+                format to clear:
+              </p>
+              <div className="flex flex-col gap-2 mb-4">
+                <button
+                  onClick={() => void clearStats(format)}
+                  disabled={clearing}
+                  className="w-full rounded border border-amber-400 bg-amber-500/10 px-4 py-2 text-sm font-medium text-amber-200 hover:bg-amber-500/20 disabled:opacity-50"
+                >
+                  {clearing ? "Clearing..." : `Clear ${format} only`}
+                </button>
+                <button
+                  onClick={() => void clearStats()}
+                  disabled={clearing}
+                  className="w-full rounded border border-rose-400 bg-rose-500/10 px-4 py-2 text-sm font-medium text-rose-200 hover:bg-rose-500/20 disabled:opacity-50"
+                >
+                  {clearing ? "Clearing..." : "Clear ALL formats"}
+                </button>
+              </div>
+              <button
+                onClick={() => setShowClearConfirm(false)}
+                disabled={clearing}
+                className="w-full rounded border border-slate-600 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-800 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Format selector */}
         <div className="flex items-center gap-4">

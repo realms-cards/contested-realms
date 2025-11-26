@@ -27,6 +27,8 @@ export type YourDeckListProps = {
   ) => void;
   setFeedback: (msg: string) => void;
   onColumnsChange?: (columns: 2 | 3 | 4 | 5) => void;
+  /** Only show collection feature when in cube draft with sideboard option enabled */
+  showCollectionZone?: boolean;
   collectionCountsByCardId: Record<number, number>;
   moveOneFromSideboardToCollection: (cardId: number) => void;
   moveOneFromCollectionToSideboard: (cardId: number) => void;
@@ -48,6 +50,7 @@ export default function YourDeckList(props: YourDeckListProps) {
     openContextMenu,
     setFeedback,
     onColumnsChange,
+    showCollectionZone = false,
     collectionCountsByCardId,
     moveOneFromSideboardToCollection,
     moveOneFromCollectionToSideboard,
@@ -258,7 +261,7 @@ export default function YourDeckList(props: YourDeckListProps) {
                       Sideboard: {cardInSideboard}
                     </span>
                   )}
-                  {cardInCollection > 0 && (
+                  {showCollectionZone && cardInCollection > 0 && (
                     <span className="bg-purple-600/20 text-purple-300 px-1 py-0.5 rounded text-[10px]">
                       Collection: {cardInCollection}
                     </span>
@@ -302,40 +305,41 @@ export default function YourDeckList(props: YourDeckListProps) {
                 </div>
               )}
             </div>
-            {(cardInSideboard > 0 || cardInCollection > 0) && (
-              <div className="mt-1 flex flex-wrap gap-1 text-[10px] opacity-90">
-                {cardInSideboard > 0 && (
-                  <button
-                    type="button"
-                    className="px-1.5 py-0.5 rounded bg-purple-700/30 text-purple-200 hover:bg-purple-700/50 border border-purple-500/40"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      moveOneFromSideboardToCollection(it.cardId);
-                      setFeedback(
-                        `Moved "${it.name}" from Sideboard to Collection`
-                      );
-                    }}
-                  >
-                    +1 to Collection
-                  </button>
-                )}
-                {cardInCollection > 0 && (
-                  <button
-                    type="button"
-                    className="px-1.5 py-0.5 rounded bg-purple-700/30 text-purple-200 hover:bg-purple-700/50 border border-purple-500/40"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      moveOneFromCollectionToSideboard(it.cardId);
-                      setFeedback(
-                        `Moved "${it.name}" from Collection to Sideboard`
-                      );
-                    }}
-                  >
-                    -1 from Collection
-                  </button>
-                )}
-              </div>
-            )}
+            {showCollectionZone &&
+              (cardInSideboard > 0 || cardInCollection > 0) && (
+                <div className="mt-1 flex flex-wrap gap-1 text-[10px] opacity-90">
+                  {cardInSideboard > 0 && (
+                    <button
+                      type="button"
+                      className="px-1.5 py-0.5 rounded bg-purple-700/30 text-purple-200 hover:bg-purple-700/50 border border-purple-500/40"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        moveOneFromSideboardToCollection(it.cardId);
+                        setFeedback(
+                          `Moved "${it.name}" from Sideboard to Collection`
+                        );
+                      }}
+                    >
+                      +1 to Collection
+                    </button>
+                  )}
+                  {cardInCollection > 0 && (
+                    <button
+                      type="button"
+                      className="px-1.5 py-0.5 rounded bg-purple-700/30 text-purple-200 hover:bg-purple-700/50 border border-purple-500/40"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        moveOneFromCollectionToSideboard(it.cardId);
+                        setFeedback(
+                          `Moved "${it.name}" from Collection to Sideboard`
+                        );
+                      }}
+                    >
+                      -1 from Collection
+                    </button>
+                  )}
+                </div>
+              )}
           </div>
         </div>
       </div>

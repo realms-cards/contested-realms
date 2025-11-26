@@ -31,7 +31,7 @@ export default function StatusBar({ dragFromHand }: StatusBarProps) {
 
   return (
     <div
-      className={`absolute top-3 left-1/2 -translate-x-1/2 z-10 ${
+      className={`fixed top-3 left-1/2 -translate-x-1/2 z-[100] ${
         dragFromHand ? "pointer-events-none" : "pointer-events-auto"
       } select-none`}
       onContextMenu={(e) => e.preventDefault()}

@@ -74,15 +74,24 @@ async function getOrLoad(sessionId) {
   if (sessions.has(sessionId)) {
     const entry = sessions.get(sessionId);
     console.log(
-      "[Engine] Using cached session: phase=%s pickNumber=%d waitingFor=%j",
+      "[Engine] Using cached session: phase=%s pickNumber=%d waitingFor=%j participants=%j",
       entry.state?.phase,
       entry.state?.pickNumber,
-      entry.state?.waitingFor
+      entry.state?.waitingFor,
+      (entry.session?.participants || []).map((p) => p.playerId)
     );
     return entry;
   }
   console.log("[Engine] Loading session from DB: %s", sessionId);
-  return await loadSession(sessionId);
+  const loaded = await loadSession(sessionId);
+  console.log(
+    "[Engine] Loaded from DB: phase=%s pickNumber=%d waitingFor=%j participants=%j",
+    loaded?.state?.phase,
+    loaded?.state?.pickNumber,
+    loaded?.state?.waitingFor,
+    (loaded?.session?.participants || []).map((p) => p.playerId)
+  );
+  return loaded;
 }
 
 function publishState(sessionId, state) {
@@ -276,10 +285,27 @@ export async function choosePack(
     const playerCount = participants.length;
     ensureArrays(state, playerCount);
 
-    if (state.phase !== "pack_selection") return state;
+    if (state.phase !== "pack_selection") {
+      console.log(
+        "[Engine] choosePack: rejecting - not in pack_selection phase, current phase=%s",
+        state.phase
+      );
+      return state;
+    }
 
     const seatIdx = indexByPlayer(participants, playerId);
-    if (seatIdx < 0) return state;
+    console.log(
+      "[Engine] choosePack: playerId=%s seatIdx=%d participants=%j",
+      playerId,
+      seatIdx,
+      participants.map((p) => p.playerId)
+    );
+    if (seatIdx < 0) {
+      console.log(
+        "[Engine] choosePack: rejecting - player not found in participants"
+      );
+      return state;
+    }
 
     const roundIndex = Math.max(0, Number(state.packIndex) || 0);
     const chosenIndex =

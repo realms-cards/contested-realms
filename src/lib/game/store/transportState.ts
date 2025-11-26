@@ -47,8 +47,60 @@ let batchFlushScheduled = false;
 let batchFlushCallback: (() => void) | null = null;
 
 /**
+ * Merge two arrays of permanents by instanceId.
+ * Items with the same instanceId are merged (later values win for each field).
+ * New items are appended.
+ */
+const mergePermanentArrays = (
+  baseArr: unknown[],
+  incomingArr: unknown[]
+): unknown[] => {
+  const map = new Map<string, Record<string, unknown>>();
+  const order: string[] = [];
+
+  // Process base items first
+  for (const item of baseArr) {
+    if (!item || typeof item !== "object") continue;
+    const record = item as Record<string, unknown>;
+    const id = typeof record.instanceId === "string" ? record.instanceId : null;
+    if (id) {
+      map.set(id, { ...record });
+      order.push(id);
+    }
+  }
+
+  // Merge incoming items
+  for (const item of incomingArr) {
+    if (!item || typeof item !== "object") continue;
+    const record = item as Record<string, unknown>;
+    const id = typeof record.instanceId === "string" ? record.instanceId : null;
+    if (id) {
+      const existing = map.get(id);
+      if (existing) {
+        // Merge with existing
+        for (const [k, v] of Object.entries(record)) {
+          if (v !== undefined) existing[k] = v;
+        }
+      } else {
+        // New item
+        map.set(id, { ...record });
+        order.push(id);
+      }
+    } else {
+      // No instanceId - just append
+      return [...baseArr, ...incomingArr.filter((i) => i !== item), item];
+    }
+  }
+
+  return order
+    .map((id) => map.get(id))
+    .filter((item): item is Record<string, unknown> => item !== undefined);
+};
+
+/**
  * Deep merge two patches. Later values overwrite earlier ones.
- * Arrays are replaced, not concatenated (except events which are merged).
+ * Arrays are replaced, not concatenated (except events which are merged,
+ * and permanents arrays which are merged by instanceId).
  */
 const mergePatch = (
   base: ServerPatchT | null,
@@ -99,6 +151,17 @@ const mergePatch = (
       )) {
         if (subVal === undefined) continue;
         const existingSubVal = merged[subKey];
+
+        // Special case: permanents cell arrays - merge by instanceId
+        if (
+          key === "permanents" &&
+          Array.isArray(subVal) &&
+          Array.isArray(existingSubVal)
+        ) {
+          merged[subKey] = mergePermanentArrays(existingSubVal, subVal);
+          continue;
+        }
+
         // One more level of merging for things like avatars.p1.{card, pos, ...}
         if (
           subVal &&
@@ -129,8 +192,22 @@ const mergePatch = (
 
 /**
  * Clear the batch state. Called on transport disconnect.
+ * Moves any pending batched patches to the pending queue to avoid data loss.
  */
-export const clearBatchState = () => {
+export const clearBatchState = (
+  addToPending?: (patch: ServerPatchT) => void
+) => {
+  if (batchedPatch && addToPending) {
+    console.warn(
+      "[net] clearBatchState: saving batched patch to pending queue",
+      { keys: Object.keys(batchedPatch) }
+    );
+    addToPending(batchedPatch);
+  } else if (batchedPatch) {
+    console.warn("[net] clearBatchState: discarding batched patch!", {
+      keys: Object.keys(batchedPatch),
+    });
+  }
   batchedPatch = null;
   batchFlushScheduled = false;
   batchFlushCallback = null;
@@ -428,9 +505,14 @@ export const createTransportSlice: StateCreator<
       }
     }
     // Clear pending patch signatures and batch state when transport is disconnected
+    // Save any pending batched patches to avoid data loss
     if (!t) {
       clearPatchSignatures();
-      clearBatchState();
+      clearBatchState((patch) => {
+        set((s) => ({
+          pendingPatches: [...(s.pendingPatches || []), patch],
+        }));
+      });
     }
     const unsubscribers: Array<() => void> = [];
     if (t) {
@@ -579,8 +661,43 @@ export const createTransportSlice: StateCreator<
       } catch {}
     }
 
+    // Log incoming patch for debugging
+    if (process.env.NODE_ENV !== "production") {
+      const incomingKeys = Object.keys(sanitized).filter(
+        (k) => k !== "__replaceKeys"
+      );
+      const hasPermanents = "permanents" in sanitized;
+      const hasZones = "zones" in sanitized;
+      if (hasPermanents || hasZones) {
+        console.debug("[net] trySendPatch adding to batch:", {
+          keys: incomingKeys,
+          hasPermanents,
+          hasZones,
+          permanentCells: hasPermanents
+            ? Object.keys(sanitized.permanents || {})
+            : [],
+          batchWasEmpty: batchedPatch === null,
+        });
+      }
+    }
+
     // Add to batch
+    const prevBatch = batchedPatch;
     batchedPatch = mergePatch(batchedPatch, sanitized);
+
+    // Verify permanents weren't lost in merge
+    if (process.env.NODE_ENV !== "production") {
+      const hadPermanentsIncoming = "permanents" in sanitized;
+      const hasPermanentsAfterMerge =
+        batchedPatch && "permanents" in batchedPatch;
+      if (hadPermanentsIncoming && !hasPermanentsAfterMerge) {
+        console.error("[net] BUG: permanents lost during merge!", {
+          incoming: sanitized,
+          prevBatch,
+          result: batchedPatch,
+        });
+      }
+    }
 
     // Schedule flush if not already scheduled
     if (!batchFlushScheduled) {
@@ -591,7 +708,10 @@ export const createTransportSlice: StateCreator<
         batchFlushScheduled = false;
         batchFlushCallback = null;
 
-        if (!patchToSend) return;
+        if (!patchToSend) {
+          console.warn("[net] Batch flush called but patch was null");
+          return;
+        }
 
         const currentTr = get().transport;
         if (!currentTr) {
@@ -607,13 +727,20 @@ export const createTransportSlice: StateCreator<
             registerPatchSignature(signatureInfo, patchToSend);
           }
           set({ lastLocalActionTs: Date.now() });
+
+          // Always log sent patches in dev
           if (process.env.NODE_ENV !== "production") {
             const keys = Object.keys(patchToSend).filter(
               (k) => k !== "__replaceKeys"
             );
-            if (keys.length > 2) {
-              console.debug("[net] Sent batched patch with keys:", keys);
-            }
+            const hasPermanents = "permanents" in patchToSend;
+            console.debug("[net] Sent batched patch:", {
+              keys,
+              hasPermanents,
+              permanentCells: hasPermanents
+                ? Object.keys(patchToSend.permanents || {})
+                : [],
+            });
           }
         } catch (err) {
           set((s) => ({ pendingPatches: [...s.pendingPatches, patchToSend] }));
