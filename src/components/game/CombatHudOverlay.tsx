@@ -94,6 +94,53 @@ export default function CombatHudOverlay() {
     return null;
   })();
 
+  // Check if a permanent at the given position has untracked artifact attachments
+  const hasUntrackedArtifact = (at: string, index: number): boolean => {
+    try {
+      const list = permanents[at] || [];
+      const attachments = list.filter(
+        (p) =>
+          p.attachedTo && p.attachedTo.at === at && p.attachedTo.index === index
+      );
+      for (const att of attachments) {
+        const name = (att.card?.name || "").toLowerCase();
+        const cardType = att.card?.type || "";
+        const isArtifact = cardType.toLowerCase().includes("artifact");
+        // Lance and Disabled are tracked, skip them
+        if (name === "lance" || name === "disabled") continue;
+        if (isArtifact) return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  };
+
+  // Check if combat involves any untracked artifacts (requires manual resolution)
+  const combatHasArtifacts = (() => {
+    if (!pendingCombat) return false;
+    const att = pendingCombat.attacker;
+    if (!att.isAvatar && hasUntrackedArtifact(att.at, att.index)) return true;
+    // Check defenders
+    for (const def of pendingCombat.defenders || []) {
+      if (hasUntrackedArtifact(def.at, def.index)) return true;
+    }
+    // Check direct target if no defenders
+    if (
+      pendingCombat.target?.kind === "permanent" &&
+      pendingCombat.target.index != null
+    ) {
+      if (
+        hasUntrackedArtifact(
+          pendingCombat.target.at,
+          pendingCombat.target.index
+        )
+      )
+        return true;
+    }
+    return false;
+  })();
+
   function AttackerAssignmentBar() {
     const actorKey = useGameStore((s) => s.actorKey);
     const pendingCombat = useGameStore((s) => s.pendingCombat);
@@ -980,12 +1027,27 @@ export default function CombatHudOverlay() {
                 return (
                   <div className="pointer-events-auto px-5 py-3 rounded-full bg-black/90 text-white ring-1 ring-white/20 shadow-lg text-base md:text-lg flex items-center gap-3">
                     <div>Defenders committed.</div>
-                    <button
-                      className="rounded bg-amber-600/90 hover:bg-amber-500 px-3 py-1 text-sm"
-                      onClick={() => autoResolveCombat()}
-                    >
-                      Auto Resolve
-                    </button>
+                    {combatHasArtifacts ? (
+                      <>
+                        <span className="text-amber-400 text-xs">
+                          ⚠️ Artifact
+                        </span>
+                        <button
+                          className="rounded bg-amber-600/90 hover:bg-amber-500 px-3 py-1 text-sm"
+                          onClick={() => autoResolveCombat()}
+                          title="Use base stats only (artifact effects not calculated)"
+                        >
+                          Resolve (base)
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        className="rounded bg-amber-600/90 hover:bg-amber-500 px-3 py-1 text-sm"
+                        onClick={() => autoResolveCombat()}
+                      >
+                        Auto Resolve
+                      </button>
+                    )}
                     <button
                       className="rounded bg-white/15 hover:bg-white/25 px-3 py-1 text-sm"
                       onClick={() => cancelCombat()}
@@ -1021,12 +1083,27 @@ export default function CombatHudOverlay() {
                   if (defs.length <= 1) {
                     return (
                       <>
-                        <button
-                          className="rounded bg-amber-600/90 hover:bg-amber-500 px-3 py-1 text-sm"
-                          onClick={() => autoResolveCombat()}
-                        >
-                          Auto Resolve
-                        </button>
+                        {combatHasArtifacts ? (
+                          <>
+                            <span className="text-amber-400 text-xs">
+                              ⚠️ Artifact
+                            </span>
+                            <button
+                              className="rounded bg-amber-600/90 hover:bg-amber-500 px-3 py-1 text-sm"
+                              onClick={() => autoResolveCombat()}
+                              title="Use base stats only (artifact effects not calculated)"
+                            >
+                              Resolve (base)
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            className="rounded bg-amber-600/90 hover:bg-amber-500 px-3 py-1 text-sm"
+                            onClick={() => autoResolveCombat()}
+                          >
+                            Auto Resolve
+                          </button>
+                        )}
                         <button
                           className="rounded bg-white/15 hover:bg-white/25 px-3 py-1 text-sm"
                           onClick={() => cancelCombat()}
@@ -1049,12 +1126,22 @@ export default function CombatHudOverlay() {
                   const valid = sum === totalAtk;
                   return (
                     <>
+                      {combatHasArtifacts && (
+                        <span className="text-amber-400 text-xs">
+                          ⚠️ Artifact
+                        </span>
+                      )}
                       <button
                         className="rounded bg-amber-600/90 hover:bg-amber-500 px-3 py-1 text-sm disabled:opacity-50"
                         onClick={() => autoResolveCombat()}
                         disabled={!valid}
+                        title={
+                          combatHasArtifacts
+                            ? "Use base stats only (artifact effects not calculated)"
+                            : undefined
+                        }
                       >
-                        Auto Resolve
+                        {combatHasArtifacts ? "Resolve (base)" : "Resolve"}
                       </button>
                       <button
                         className="rounded bg-white/15 hover:bg-white/25 px-3 py-1 text-sm"
