@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { NextRequest } from "next/server";
 import { getServerAuthSession } from "@/lib/auth";
 import type { ExportFormat } from "@/lib/collection/types";
@@ -26,8 +27,7 @@ export async function GET(req: NextRequest) {
     const userId = session.user.id;
 
     // Build query
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const where: any = { userId };
+    const where: Prisma.CollectionCardWhereInput = { userId };
     if (setId) {
       where.setId = setId;
     }

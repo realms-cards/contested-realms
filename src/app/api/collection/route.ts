@@ -1,4 +1,4 @@
-import type { Finish } from "@prisma/client";
+import type { Finish, Prisma, Rarity } from "@prisma/client";
 import { NextRequest } from "next/server";
 import { getServerAuthSession } from "@/lib/auth";
 import type {
@@ -48,16 +48,14 @@ export async function GET(req: NextRequest) {
     const userId = session.user.id;
 
     // Build where clause for collection cards
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const where: any = { userId };
+    const where: Prisma.CollectionCardWhereInput = { userId };
 
     if (setId) {
       where.setId = setId;
     }
 
     // For element, type, rarity filtering - need to filter via card relations
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const cardFilter: any = {};
+    const cardFilter: Prisma.CardWhereInput = {};
 
     if (element) {
       cardFilter.elements = { contains: element, mode: "insensitive" };
@@ -72,17 +70,15 @@ export async function GET(req: NextRequest) {
     }
 
     // For type and rarity, we need to filter via CardSetMetadata
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let metaFilter: any = undefined;
+    let metaFilter: Prisma.CardSetMetadataWhereInput | undefined = undefined;
     if (type || rarity) {
       metaFilter = {};
       if (type) metaFilter.type = { contains: type, mode: "insensitive" };
-      if (rarity) metaFilter.rarity = rarity;
+      if (rarity) metaFilter.rarity = rarity as Rarity;
     }
 
     // Build orderBy
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let orderBy: any;
+    let orderBy: Prisma.CollectionCardOrderByWithRelationInput;
     switch (sort) {
       case "quantity":
         orderBy = { quantity: order };
