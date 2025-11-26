@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import CollectionCard from "./CollectionCard";
 import type { CollectionCardResponse } from "@/lib/collection/types";
+import CollectionCard from "./CollectionCard";
 
 interface CollectionGridProps {
   cards: CollectionCardResponse[];

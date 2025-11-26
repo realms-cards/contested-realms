@@ -1,7 +1,7 @@
-import { NextRequest } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { getAffiliateLink } from "@/lib/collection/pricing-provider";
 import type { Finish } from "@prisma/client";
+import { NextRequest } from "next/server";
+import { getAffiliateLink } from "@/lib/collection/pricing-provider";
+import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 

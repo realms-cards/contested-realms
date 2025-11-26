@@ -1,17 +1,17 @@
+import type { Finish } from "@prisma/client";
 import { NextRequest } from "next/server";
 import { getServerAuthSession } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
-import {
-  validateCollectionCardInput,
-  validateQuantity,
-} from "@/lib/collection/validation";
-import type { Finish } from "@prisma/client";
 import type {
   CollectionListResponse,
   CollectionAddResponse,
   CollectionSortField,
   SortOrder,
 } from "@/lib/collection/types";
+import {
+  validateCollectionCardInput,
+  validateQuantity,
+} from "@/lib/collection/validation";
+import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
@@ -36,9 +36,8 @@ export async function GET(req: NextRequest) {
       100,
       Math.max(1, parseInt(searchParams.get("limit") || "50", 10))
     );
-    const setId = searchParams.get("setId")
-      ? parseInt(searchParams.get("setId")!, 10)
-      : undefined;
+    const setIdParam = searchParams.get("setId");
+    const setId = setIdParam ? parseInt(setIdParam, 10) : undefined;
     const element = searchParams.get("element") || undefined;
     const type = searchParams.get("type") || undefined;
     const rarity = searchParams.get("rarity") || undefined;
@@ -240,9 +239,9 @@ export async function POST(req: NextRequest) {
     };
 
     // Validate all card IDs exist
-    const cardIds = [
-      ...new Set(cardsInput.map((c: { cardId: number }) => c.cardId)),
-    ];
+    const cardIds: number[] = Array.from(
+      new Set<number>(cardsInput.map((c: { cardId: number }) => c.cardId))
+    );
     const existingCards = await prisma.card.findMany({
       where: { id: { in: cardIds } },
       select: { id: true },
@@ -282,20 +281,19 @@ export async function POST(req: NextRequest) {
       if (!qtyValidation.valid) {
         response.errors.push({
           cardId,
-          message: qtyValidation.error!,
+          message: qtyValidation.error || "Invalid quantity",
         });
         continue;
       }
 
       // Check if entry already exists (upsert)
-      const existing = await prisma.collectionCard.findUnique({
+      // For nullable variantId, we need to query differently
+      const existing = await prisma.collectionCard.findFirst({
         where: {
-          userId_cardId_variantId_finish: {
-            userId,
-            cardId,
-            variantId: variantId ?? null,
-            finish,
-          },
+          userId,
+          cardId,
+          variantId: variantId ?? null,
+          finish,
         },
       });
 

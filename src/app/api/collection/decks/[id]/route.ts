@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { getServerAuthSession } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
 import { validateOwnership } from "@/lib/collection/validation";
+import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
@@ -287,11 +287,18 @@ export async function PUT(
       },
     });
 
+    if (!updated) {
+      return new Response(
+        JSON.stringify({ error: "Failed to fetch updated deck" }),
+        { status: 500, headers: { "content-type": "application/json" } }
+      );
+    }
+
     return new Response(
       JSON.stringify({
-        id: updated!.id,
-        name: updated!.name,
-        cards: updated!.cards,
+        id: updated.id,
+        name: updated.name,
+        cards: updated.cards,
         validation: {
           isValid: true,
           errors: [],

@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { getServerAuthSession } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
 import type { CardAvailability } from "@/lib/collection/types";
+import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 

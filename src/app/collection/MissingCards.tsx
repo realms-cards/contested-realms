@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
+import { useCallback, useEffect, useState } from "react";
 
 interface MissingCard {
   cardId: number;
@@ -16,7 +16,7 @@ export default function MissingCards() {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [setFilter, setSetFilter] = useState<string>("");
+  const [setFilter] = useState<string>("");
   const [rarityFilter, setRarityFilter] = useState<string>("");
 
   const fetchMissing = useCallback(async () => {

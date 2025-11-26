@@ -1,5 +1,7 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import {
   createContext,
   useCallback,
@@ -8,11 +10,9 @@ import {
   useRef,
   useState,
 } from "react";
-import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
-import { SocketTransport } from "@/lib/net/socketTransport";
-import type { LobbyInvitePayloadT, PlayerLocation } from "@/lib/net/protocol";
 import InviteToast from "@/components/online/InviteToast";
+import type { LobbyInvitePayloadT, PlayerLocation } from "@/lib/net/protocol";
+import { SocketTransport } from "@/lib/net/socketTransport";
 
 interface PresenceContextValue {
   connected: boolean;

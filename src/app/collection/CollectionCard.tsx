@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
 import Image from "next/image";
+import { useState } from "react";
 import type { CollectionCardResponse } from "@/lib/collection/types";
 import CardPriceTag from "./CardPriceTag";
 
