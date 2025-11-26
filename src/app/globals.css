@@ -202,7 +202,8 @@ body[data-colorblind="true"] *[class*="bg-rose-"] {
 
 body[data-colorblind="true"] *[class*="text-red-"],
 body[data-colorblind="true"] *[class*="text-rose-"] {
-  color: #fbbf24 !important;
+  /* Dark amber for contrast on amber backgrounds */
+  color: #78350f !important;
 }
 
 body[data-colorblind="true"] *[class*="border-red-"],
