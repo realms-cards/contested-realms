@@ -24,11 +24,36 @@ export default function CollectionPage() {
   const [order, setOrder] = useState<SortOrder>("asc");
   const [page, setPage] = useState(1);
 
-  // Track last fetch params to avoid duplicate fetches
-  const lastFetchRef = useRef<string>("");
+  // Track fetch state to avoid duplicate fetches
   const abortRef = useRef<AbortController | null>(null);
+  const hasFetchedRef = useRef(false);
 
-  // Debounced fetch effect - only fetches when params actually change
+  // Fetch collection data
+  const fetchCollection = useCallback(
+    async (paramsStr: string, signal: AbortSignal) => {
+      try {
+        setLoading(true);
+        const res = await fetch(`/api/collection?${paramsStr}`, { signal });
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error || "Failed to load collection");
+        }
+        const result = await res.json();
+        setData(result);
+        setError(null);
+      } catch (e) {
+        if (e instanceof Error && e.name === "AbortError") {
+          return;
+        }
+        setError(e instanceof Error ? e.message : "Failed to load collection");
+      } finally {
+        setLoading(false);
+      }
+    },
+    []
+  );
+
+  // Build params and fetch when dependencies change
   useEffect(() => {
     const params = new URLSearchParams();
     params.set("page", String(page));
@@ -44,11 +69,6 @@ export default function CollectionPage() {
 
     const paramsStr = params.toString();
 
-    // Skip if params haven't changed
-    if (paramsStr === lastFetchRef.current) {
-      return;
-    }
-
     // Abort any pending request
     if (abortRef.current) {
       abortRef.current.abort();
@@ -57,49 +77,41 @@ export default function CollectionPage() {
     const controller = new AbortController();
     abortRef.current = controller;
 
-    // Debounce the fetch
-    const timer = setTimeout(async () => {
-      // Double-check params haven't changed during debounce
-      if (paramsStr !== lastFetchRef.current) {
-        lastFetchRef.current = paramsStr;
+    // Fetch immediately on first load, debounce subsequent changes
+    const delay = hasFetchedRef.current ? 150 : 0;
+    hasFetchedRef.current = true;
 
-        try {
-          setLoading(true);
-          const res = await fetch(`/api/collection?${paramsStr}`, {
-            signal: controller.signal,
-          });
-          if (!res.ok) {
-            const err = await res.json();
-            throw new Error(err.error || "Failed to load collection");
-          }
-          const result = await res.json();
-          setData(result);
-          setError(null);
-        } catch (e) {
-          if (e instanceof Error && e.name === "AbortError") {
-            return;
-          }
-          setError(
-            e instanceof Error ? e.message : "Failed to load collection"
-          );
-        } finally {
-          setLoading(false);
-        }
-      }
-    }, 150);
+    const timer = setTimeout(() => {
+      fetchCollection(paramsStr, controller.signal);
+    }, delay);
 
     return () => {
       clearTimeout(timer);
-      controller.abort();
     };
-  }, [page, sort, order, filters]);
+  }, [page, sort, order, filters, fetchCollection]);
 
   // Manual refresh function for after card updates
   const refreshCollection = useCallback(() => {
-    lastFetchRef.current = ""; // Force refresh
-    // Trigger re-render to run effect
-    setPage((p) => p);
-  }, []);
+    // Abort current and trigger new fetch
+    if (abortRef.current) {
+      abortRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    const params = new URLSearchParams();
+    params.set("page", String(page));
+    params.set("limit", "50");
+    params.set("sort", sort);
+    params.set("order", order);
+    if (filters.setId) params.set("setId", String(filters.setId));
+    if (filters.element) params.set("element", filters.element);
+    if (filters.type) params.set("type", filters.type);
+    if (filters.rarity) params.set("rarity", filters.rarity);
+    if (filters.search) params.set("search", filters.search);
+
+    fetchCollection(params.toString(), controller.signal);
+  }, [page, sort, order, filters, fetchCollection]);
 
   const handleFiltersChange = (newFilters: FilterType) => {
     setFilters(newFilters);

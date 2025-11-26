@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import type { LobbyInvitePayloadT } from "@/lib/net/protocol";
 
 export interface InviteToastProps {
@@ -27,6 +28,11 @@ export default function InviteToast({
 }: InviteToastProps) {
   const [visible, setVisible] = useState(true);
   const [remaining, setRemaining] = useState(Math.ceil(autoHideMs / 1000));
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     const countdown = setInterval(() => {
@@ -43,7 +49,7 @@ export default function InviteToast({
     return () => clearInterval(countdown);
   }, [onDismiss, autoHideMs]);
 
-  if (!visible) return null;
+  if (!visible || !mounted) return null;
 
   const handleAccept = () => {
     setVisible(false);
@@ -60,8 +66,8 @@ export default function InviteToast({
     onPostpone();
   };
 
-  return (
-    <div className="fixed bottom-4 right-4 z-50 max-w-sm animate-in slide-in-from-right duration-300">
+  return createPortal(
+    <div className="fixed bottom-4 right-4 z-[9999] max-w-sm animate-in slide-in-from-right duration-300">
       <div className="bg-slate-900 border border-indigo-500/50 rounded-xl shadow-2xl shadow-indigo-500/20 p-4">
         {/* Header with close */}
         <div className="flex items-start justify-between mb-3">
@@ -130,6 +136,7 @@ export default function InviteToast({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
