@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useState } from "react";
+import { useState, memo } from "react";
 import type { CollectionCardResponse } from "@/lib/collection/types";
 import CardPriceTag from "./CardPriceTag";
 
@@ -12,7 +12,7 @@ interface CollectionCardProps {
   onDelete?: () => void;
 }
 
-export default function CollectionCard({
+function CollectionCardInner({
   card,
   updating,
   onQuantityChange,
@@ -134,3 +134,7 @@ function getRarityColor(rarity: string): string {
       return "text-gray-400";
   }
 }
+
+// Memoize to prevent unnecessary re-renders when parent updates
+const CollectionCard = memo(CollectionCardInner);
+export default CollectionCard;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 
 interface CardPriceTagProps {
   cardId: number;
@@ -15,6 +15,9 @@ interface PriceInfo {
   affiliateUrl: string;
 }
 
+// Simple in-memory cache for prices
+const priceCache = new Map<string, PriceInfo>();
+
 export default function CardPriceTag({
   cardId,
   cardName,
@@ -23,9 +26,32 @@ export default function CardPriceTag({
   showLink = true,
 }: CardPriceTagProps) {
   const [price, setPrice] = useState<PriceInfo | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [shouldFetch, setShouldFetch] = useState(false);
+  const fetchedRef = useRef(false);
+
+  // Delay fetching to avoid fetching when user quickly hovers over cards
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShouldFetch(true);
+    }, 500); // Wait 500ms before fetching
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
+    if (!shouldFetch || fetchedRef.current) return;
+    fetchedRef.current = true;
+
+    const cacheKey = `${cardId}:${variantId || ""}:${finish || ""}`;
+
+    // Check cache first
+    const cached = priceCache.get(cacheKey);
+    if (cached) {
+      setPrice(cached);
+      return;
+    }
+
+    setLoading(true);
     const params = new URLSearchParams();
     if (variantId) params.set("variantId", String(variantId));
     if (finish) params.set("finish", finish);
@@ -33,28 +59,40 @@ export default function CardPriceTag({
     fetch(`/api/pricing/card/${cardId}?${params.toString()}`)
       .then((res) => res.json())
       .then((data) => {
+        let priceInfo: PriceInfo;
         if (data.prices?.[0]) {
-          setPrice({
+          priceInfo = {
             marketPrice: data.prices[0].marketPrice,
             affiliateUrl: data.prices[0].affiliateUrl,
-          });
+          };
         } else if (data.affiliateUrl) {
-          setPrice({
+          priceInfo = {
             marketPrice: null,
             affiliateUrl: data.affiliateUrl,
-          });
+          };
+        } else {
+          // Generate fallback affiliate link
+          const query = encodeURIComponent(cardName);
+          priceInfo = {
+            marketPrice: null,
+            affiliateUrl: `https://www.tcgplayer.com/search/sorcery-contested-realm/product?q=${query}&view=grid`,
+          };
         }
+        priceCache.set(cacheKey, priceInfo);
+        setPrice(priceInfo);
       })
       .catch(() => {
         // Generate fallback affiliate link
         const query = encodeURIComponent(cardName);
-        setPrice({
+        const priceInfo = {
           marketPrice: null,
           affiliateUrl: `https://www.tcgplayer.com/search/sorcery-contested-realm/product?q=${query}&view=grid`,
-        });
+        };
+        priceCache.set(cacheKey, priceInfo);
+        setPrice(priceInfo);
       })
       .finally(() => setLoading(false));
-  }, [cardId, variantId, finish, cardName]);
+  }, [shouldFetch, cardId, variantId, finish, cardName]);
 
   if (loading) {
     return <span className="text-gray-500 text-sm">Loading...</span>;
