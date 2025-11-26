@@ -161,6 +161,7 @@ export async function GET(req: NextRequest) {
               cost: c.card.meta[0].cost,
               attack: c.card.meta[0].attack,
               defence: c.card.meta[0].defence,
+              thresholds: c.card.meta[0].thresholds,
             }
           : null,
         price: null, // Pricing to be added in later task

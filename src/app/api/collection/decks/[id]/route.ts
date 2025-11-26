@@ -73,6 +73,7 @@ export async function GET(
     // Calculate availability for each card
     const cardsWithAvailability = deck.cards.map((c) => {
       const owned = ownedByCard.get(c.cardId) || 0;
+      const meta = c.card.meta[0];
       return {
         cardId: c.cardId,
         variantId: c.variantId,
@@ -81,6 +82,16 @@ export async function GET(
         count: c.count,
         ownedQuantity: owned,
         availableQuantity: Math.max(0, owned - c.count),
+        slug:
+          c.variant?.slug ||
+          `${c.card.name.toLowerCase().replace(/\s+/g, "_")}_b_s`,
+        meta: meta
+          ? {
+              type: meta.type,
+              cost: meta.cost,
+              thresholds: meta.thresholds,
+            }
+          : null,
       };
     });
 

@@ -2,6 +2,8 @@
 
 import Image from "next/image";
 import { useState } from "react";
+import { NumberBadge } from "@/components/game/manacost";
+import type { Digit } from "@/components/game/manacost";
 
 interface DeckCard {
   cardId: number;
@@ -11,6 +13,23 @@ interface DeckCard {
   count: number;
   ownedQuantity: number;
   availableQuantity: number;
+  meta?: {
+    type?: string;
+    cost?: number;
+    thresholds?: Record<string, number>;
+  };
+  slug?: string;
+}
+
+interface SearchResult {
+  cardId: number;
+  name: string;
+  owned: number;
+  inDeck: number;
+  slug: string;
+  type: string;
+  cost: number | null;
+  thresholds: Record<string, number>;
 }
 
 interface CollectionDeckEditorProps {
@@ -19,23 +38,18 @@ interface CollectionDeckEditorProps {
   onUpdate: () => void;
 }
 
+const ELEMENT_ORDER = ["air", "water", "earth", "fire"] as const;
+
 export default function CollectionDeckEditor({
   deckId,
   cards,
   onUpdate,
 }: CollectionDeckEditorProps) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<
-    Array<{
-      cardId: number;
-      name: string;
-      owned: number;
-      inDeck: number;
-      slug: string;
-    }>
-  >([]);
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [updating, setUpdating] = useState(false);
+  const [showImages, setShowImages] = useState(true);
 
   // Group cards by zone
   const spellbook = cards.filter((c) => c.zone === "Spellbook");
@@ -56,12 +70,17 @@ export default function CollectionDeckEditor({
       );
       if (res.ok) {
         const data = await res.json();
-        const results = data.cards.map(
+        const results: SearchResult[] = data.cards.map(
           (c: {
             cardId: number;
             card: { name: string };
             variant?: { slug: string };
             quantity: number;
+            meta?: {
+              type?: string;
+              cost?: number;
+              thresholds?: Record<string, number>;
+            };
           }) => {
             const inDeck = cards
               .filter((dc) => dc.cardId === c.cardId)
@@ -74,6 +93,9 @@ export default function CollectionDeckEditor({
               slug:
                 c.variant?.slug ||
                 `${c.card.name.toLowerCase().replace(/\s+/g, "_")}_b_s`,
+              type: c.meta?.type || "",
+              cost: c.meta?.cost ?? null,
+              thresholds: (c.meta?.thresholds as Record<string, number>) || {},
             };
           }
         );
@@ -84,6 +106,14 @@ export default function CollectionDeckEditor({
     } finally {
       setSearching(false);
     }
+  };
+
+  // Auto-detect zone based on card type
+  const getAutoZone = (type: string): string => {
+    const t = type.toLowerCase();
+    if (t.includes("site")) return "Atlas";
+    if (t.includes("avatar")) return "Avatar";
+    return "Spellbook";
   };
 
   const addCardToDeck = async (cardId: number, zone: string) => {
@@ -161,27 +191,101 @@ export default function CollectionDeckEditor({
   };
 
   const renderCardList = (cardList: DeckCard[], zoneName: string) => (
-    <div className="space-y-2">
+    <div className="space-y-1">
       {cardList.map((card) => {
         const exceeded = card.count > card.ownedQuantity;
+        const isSite = card.meta?.type?.toLowerCase().includes("site");
+        const thresholds =
+          (card.meta?.thresholds as Record<string, number>) || {};
+        const cost = card.meta?.cost;
+
         return (
           <div
             key={card.cardId}
-            className={`flex items-center gap-2 p-2 rounded ${
-              exceeded ? "bg-red-900/30" : "bg-gray-800"
+            className={`flex items-start gap-2 p-2 rounded ${
+              exceeded
+                ? "bg-red-900/30 ring-1 ring-red-500/30"
+                : "bg-gray-800/80"
             }`}
           >
-            <span className="text-gray-400 w-6">{card.count}×</span>
-            <span className="flex-1 truncate">{card.name}</span>
-            {exceeded && (
-              <span className="text-red-400 text-xs">
-                Own: {card.ownedQuantity}
-              </span>
+            {/* Card Image */}
+            {showImages && card.slug && (
+              <div
+                className={`relative flex-none rounded overflow-hidden ring-1 ring-white/10 bg-black/40 ${
+                  isSite ? "aspect-[4/3] w-12" : "aspect-[3/4] w-10"
+                }`}
+              >
+                <Image
+                  src={`/api/images/${card.slug}`}
+                  alt={card.name}
+                  fill
+                  className={
+                    isSite ? "object-contain rotate-90" : "object-cover"
+                  }
+                  sizes="48px"
+                />
+              </div>
             )}
+
+            {/* Card Info */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-start justify-between gap-1">
+                <div className="font-medium text-sm truncate" title={card.name}>
+                  {card.name}
+                </div>
+                <span className="text-gray-400 text-sm flex-none">
+                  ×{card.count}
+                </span>
+              </div>
+
+              {/* Thresholds and Cost */}
+              <div className="mt-0.5 flex items-center flex-wrap gap-1.5 text-xs">
+                {ELEMENT_ORDER.map((el) =>
+                  thresholds[el] ? (
+                    <span
+                      key={el}
+                      className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded bg-white/10"
+                    >
+                      <Image
+                        src={`/api/assets/${el}.png`}
+                        alt={el}
+                        width={10}
+                        height={10}
+                      />
+                      <span className="text-[10px]">{thresholds[el]}</span>
+                    </span>
+                  ) : null
+                )}
+                {cost != null && !isSite && (
+                  <span className="ml-auto">
+                    {cost >= 0 && cost <= 9 ? (
+                      <NumberBadge
+                        value={cost as Digit}
+                        size={14}
+                        strokeWidth={6}
+                      />
+                    ) : (
+                      <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full bg-white text-black text-[9px] font-bold">
+                        {cost}
+                      </span>
+                    )}
+                  </span>
+                )}
+              </div>
+
+              {/* Ownership warning */}
+              {exceeded && (
+                <div className="text-red-400 text-[10px] mt-0.5">
+                  Only own {card.ownedQuantity}
+                </div>
+              )}
+            </div>
+
+            {/* Remove button */}
             <button
               onClick={() => removeCardFromDeck(card.cardId)}
               disabled={updating}
-              className="text-red-400 hover:text-red-300 px-2"
+              className="text-red-400 hover:text-red-300 px-1 text-lg leading-none self-center"
             >
               −
             </button>
@@ -189,7 +293,9 @@ export default function CollectionDeckEditor({
         );
       })}
       {cardList.length === 0 && (
-        <div className="text-gray-500 text-sm py-2">No cards in {zoneName}</div>
+        <div className="text-gray-500 text-sm py-4 text-center">
+          No cards in {zoneName}
+        </div>
       )}
     </div>
   );
@@ -216,40 +322,93 @@ export default function CollectionDeckEditor({
           <div className="space-y-2 max-h-96 overflow-y-auto">
             {searchResults.map((card) => {
               const available = card.owned - card.inDeck;
+              const autoZone = getAutoZone(card.type);
+              const isSite = card.type.toLowerCase().includes("site");
+              const isAvatar = card.type.toLowerCase().includes("avatar");
+
               return (
                 <div
                   key={card.cardId}
-                  className="flex items-center gap-2 p-2 bg-gray-800 rounded"
+                  className="flex items-start gap-2 p-2 bg-gray-800/80 rounded"
                 >
-                  <div className="w-8 h-11 relative rounded overflow-hidden flex-shrink-0">
+                  {/* Card Image */}
+                  <div
+                    className={`relative flex-none rounded overflow-hidden ring-1 ring-white/10 bg-black/40 ${
+                      isSite ? "aspect-[4/3] w-10" : "aspect-[3/4] w-8"
+                    }`}
+                  >
                     <Image
                       src={`/api/images/${card.slug}`}
                       alt={card.name}
                       fill
-                      className="object-cover"
+                      className={
+                        isSite ? "object-contain rotate-90" : "object-cover"
+                      }
+                      sizes="40px"
                     />
                   </div>
+
+                  {/* Card Info */}
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm truncate">{card.name}</div>
-                    <div className="text-xs text-gray-400">
+                    <div className="text-sm font-medium truncate">
+                      {card.name}
+                    </div>
+                    <div className="text-[10px] text-gray-400">
                       Own: {card.owned} | In deck: {card.inDeck}
                     </div>
+                    {/* Thresholds and Cost */}
+                    <div className="mt-0.5 flex items-center flex-wrap gap-1">
+                      {ELEMENT_ORDER.map((el) =>
+                        card.thresholds[el] ? (
+                          <span
+                            key={el}
+                            className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded bg-white/10"
+                          >
+                            <Image
+                              src={`/api/assets/${el}.png`}
+                              alt={el}
+                              width={10}
+                              height={10}
+                            />
+                            <span className="text-[9px]">
+                              {card.thresholds[el]}
+                            </span>
+                          </span>
+                        ) : null
+                      )}
+                      {card.cost != null && !isSite && (
+                        <span className="ml-auto">
+                          {card.cost >= 0 && card.cost <= 9 ? (
+                            <NumberBadge
+                              value={card.cost as Digit}
+                              size={12}
+                              strokeWidth={5}
+                            />
+                          ) : (
+                            <span className="inline-flex items-center justify-center w-3 h-3 rounded-full bg-white text-black text-[8px] font-bold">
+                              {card.cost}
+                            </span>
+                          )}
+                        </span>
+                      )}
+                    </div>
                   </div>
+
+                  {/* Add Buttons */}
                   {available > 0 ? (
-                    <div className="flex gap-1">
+                    <div className="flex flex-col gap-1">
                       <button
-                        onClick={() => addCardToDeck(card.cardId, "Spellbook")}
+                        onClick={() => addCardToDeck(card.cardId, autoZone)}
                         disabled={updating}
-                        className="px-2 py-1 bg-blue-600 hover:bg-blue-700 rounded text-xs"
+                        className={`px-2 py-1 rounded text-xs font-medium ${
+                          isAvatar
+                            ? "bg-purple-600 hover:bg-purple-700"
+                            : isSite
+                            ? "bg-green-600 hover:bg-green-700"
+                            : "bg-blue-600 hover:bg-blue-700"
+                        }`}
                       >
-                        +Spell
-                      </button>
-                      <button
-                        onClick={() => addCardToDeck(card.cardId, "Atlas")}
-                        disabled={updating}
-                        className="px-2 py-1 bg-green-600 hover:bg-green-700 rounded text-xs"
-                      >
-                        +Atlas
+                        + {isAvatar ? "Avatar" : isSite ? "Atlas" : "Spell"}
                       </button>
                     </div>
                   ) : (
@@ -267,15 +426,26 @@ export default function CollectionDeckEditor({
       </div>
 
       {/* Spellbook */}
-      <div className="space-y-4">
-        <h3 className="font-bold">
-          Spellbook ({spellbook.reduce((s, c) => s + c.count, 0)})
-        </h3>
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="font-bold">
+            Spellbook ({spellbook.reduce((s, c) => s + c.count, 0)})
+          </h3>
+          <label className="flex items-center gap-1.5 text-xs text-gray-400 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={showImages}
+              onChange={(e) => setShowImages(e.target.checked)}
+              className="w-3 h-3 rounded"
+            />
+            Images
+          </label>
+        </div>
         {renderCardList(spellbook, "Spellbook")}
       </div>
 
       {/* Atlas */}
-      <div className="space-y-4">
+      <div className="space-y-3">
         <h3 className="font-bold">
           Atlas ({atlas.reduce((s, c) => s + c.count, 0)})
         </h3>
