@@ -406,11 +406,11 @@ export default function CardBrowser({ onCardAdded }: CardBrowserProps) {
                 }`}
                 onClick={() => setSelectedCard(card)}
               >
-                {/* Card Image - Sites need rotation since stored portrait but display landscape */}
+                {/* Card Image - Sites display in landscape */}
                 <div
                   className={
                     isSite
-                      ? "aspect-[3.5/2.5] relative overflow-hidden"
+                      ? "aspect-[3.5/2.5] relative bg-black"
                       : "aspect-[2.5/3.5] relative"
                   }
                 >
@@ -419,9 +419,7 @@ export default function CardBrowser({ onCardAdded }: CardBrowserProps) {
                     alt={card.name || "Card"}
                     fill
                     className={
-                      isSite
-                        ? "object-cover rotate-90 scale-[1.4]"
-                        : "object-cover"
+                      isSite ? "object-contain rotate-90" : "object-cover"
                     }
                     sizes={
                       isSite
@@ -434,13 +432,6 @@ export default function CardBrowser({ onCardAdded }: CardBrowserProps) {
                   {ownedQty > 0 && (
                     <div className="absolute top-2 left-2 bg-green-600 text-white text-xs px-2 py-0.5 rounded z-10">
                       Owned: {ownedQty}
-                    </div>
-                  )}
-
-                  {/* Site indicator */}
-                  {isSite && (
-                    <div className="absolute top-2 right-2 bg-amber-600 text-white text-xs px-2 py-0.5 rounded z-10">
-                      Site
                     </div>
                   )}
                 </div>
