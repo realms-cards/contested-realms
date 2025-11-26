@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import type {
   CollectionListResponse,
   CollectionFilters as FilterType,
@@ -24,7 +24,23 @@ export default function CollectionPage() {
   const [order, setOrder] = useState<SortOrder>("asc");
   const [page, setPage] = useState(1);
 
+  // Prevent duplicate fetches
+  const fetchingRef = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
+
   const fetchCollection = useCallback(async () => {
+    // Abort previous request if still pending
+    if (abortRef.current) {
+      abortRef.current.abort();
+    }
+
+    // Prevent duplicate concurrent fetches
+    if (fetchingRef.current) return;
+    fetchingRef.current = true;
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     try {
       setLoading(true);
 
@@ -40,7 +56,9 @@ export default function CollectionPage() {
       if (filters.rarity) params.set("rarity", filters.rarity);
       if (filters.search) params.set("search", filters.search);
 
-      const res = await fetch(`/api/collection?${params.toString()}`);
+      const res = await fetch(`/api/collection?${params.toString()}`, {
+        signal: controller.signal,
+      });
       if (!res.ok) {
         const err = await res.json();
         throw new Error(err.error || "Failed to load collection");
@@ -48,15 +66,25 @@ export default function CollectionPage() {
 
       const result = await res.json();
       setData(result);
+      setError(null);
     } catch (e) {
+      if (e instanceof Error && e.name === "AbortError") {
+        // Ignore aborted requests
+        return;
+      }
       setError(e instanceof Error ? e.message : "Failed to load collection");
     } finally {
+      fetchingRef.current = false;
       setLoading(false);
     }
   }, [page, sort, order, filters]);
 
+  // Debounced fetch effect
   useEffect(() => {
-    fetchCollection();
+    const timer = setTimeout(() => {
+      fetchCollection();
+    }, 100); // Small debounce to batch rapid state changes
+    return () => clearTimeout(timer);
   }, [fetchCollection]);
 
   const handleFiltersChange = (newFilters: FilterType) => {

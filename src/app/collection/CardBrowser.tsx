@@ -114,9 +114,10 @@ export default function CardBrowser({ onCardAdded }: CardBrowserProps) {
   // Zoom level (number of base columns, sites take 2x)
   const [zoomLevel, setZoomLevel] = useState(6);
 
-  // Fetch user's collection to show owned status
+  // Fetch user's collection summary (just card IDs and quantities, not full data)
   useEffect(() => {
-    fetch("/api/collection?limit=1000")
+    // Use a lighter endpoint or smaller limit - just need owned counts
+    fetch("/api/collection?limit=500&fields=cardId,quantity")
       .then((res) => res.json())
       .then((data) => {
         if (data.cards) {
