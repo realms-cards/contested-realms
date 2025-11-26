@@ -78,7 +78,7 @@ export async function GET(
     // Lookup any variant for cards missing one
     const variantLookup = new Map<number, string>();
     if (cardIdsNeedingVariant.length > 0) {
-      const variants = await prisma.cardVariant.findMany({
+      const variants = await prisma.variant.findMany({
         where: { cardId: { in: cardIdsNeedingVariant } },
         select: { cardId: true, slug: true },
       });

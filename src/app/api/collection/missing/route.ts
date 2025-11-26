@@ -1,3 +1,4 @@
+import type { Prisma, Rarity } from "@prisma/client";
 import { NextRequest } from "next/server";
 import { getServerAuthSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -38,13 +39,12 @@ export async function GET(req: NextRequest) {
     const ownedCardIds = new Set(ownedCards.map((c) => c.cardId));
 
     // Build filter for cards the user doesn't own
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const metaWhere: any = {};
+    const metaWhere: Prisma.CardSetMetadataWhereInput = {};
     if (setId) {
       metaWhere.setId = setId;
     }
     if (rarity) {
-      metaWhere.rarity = rarity;
+      metaWhere.rarity = rarity as Rarity;
     }
 
     // Get all cards with metadata matching filters
