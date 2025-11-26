@@ -6,23 +6,23 @@
 
 ---
 
-## Phase 1: Database & Setup
+## Phase 1: Database & Setup ✅
 
-- [ ] **T001** Add `CollectionCard` model to `prisma/schema.prisma` with fields: id, userId, cardId, setId, variantId, finish, quantity, createdAt, updatedAt. Add unique constraint `[userId, cardId, variantId, finish]` and indexes `[userId]`, `[cardId]`, `[userId, setId]`.
+- [x] **T001** Add `CollectionCard` model to `prisma/schema.prisma` with fields: id, userId, cardId, setId, variantId, finish, quantity, createdAt, updatedAt. Add unique constraint `[userId, cardId, variantId, finish]` and indexes `[userId]`, `[cardId]`, `[userId, setId]`.
 
-- [ ] **T002** Add relation `collectionCards CollectionCard[]` to existing `User` model in `prisma/schema.prisma`.
+- [x] **T002** Add relation `collectionCards CollectionCard[]` to existing `User` model in `prisma/schema.prisma`.
 
-- [ ] **T003** Add relation `collectionCards CollectionCard[]` to existing `Card` model in `prisma/schema.prisma`.
+- [x] **T003** Add relation `collectionCards CollectionCard[]` to existing `Card` model in `prisma/schema.prisma`.
 
-- [ ] **T004** Add relation `collectionCards CollectionCard[] @relation("CollectionCardSet")` to existing `Set` model in `prisma/schema.prisma`.
+- [x] **T004** Add relation `collectionCards CollectionCard[] @relation("CollectionCardSet")` to existing `Set` model in `prisma/schema.prisma`.
 
-- [ ] **T005** Add relation `collectionCards CollectionCard[] @relation("CollectionCardVariant")` to existing `Variant` model in `prisma/schema.prisma`.
+- [x] **T005** Add relation `collectionCards CollectionCard[] @relation("CollectionCardVariant")` to existing `Variant` model in `prisma/schema.prisma`.
 
-- [ ] **T006** Run `npm run prisma:generate` and create migration with `npm run prisma:migrate` for CollectionCard table.
+- [x] **T006** Run `npm run prisma:generate` and create migration with `npm run prisma:migrate` for CollectionCard table.
 
-- [ ] **T007** [P] Create `src/lib/collection/types.ts` with TypeScript types: `CollectionCardInput`, `CollectionCardResponse`, `CollectionStats`, `CardAvailability`, `PriceData`, `PriceProvider` interface.
+- [x] **T007** [P] Create `src/lib/collection/types.ts` with TypeScript types: `CollectionCardInput`, `CollectionCardResponse`, `CollectionStats`, `CardAvailability`, `PriceData`, `PriceProvider` interface.
 
-- [ ] **T008** [P] Create `src/lib/collection/validation.ts` with validation functions: `validateQuantity(1-99)`, `validateCardExists`, `validateOwnership`, `validateDeckRules`.
+- [x] **T008** [P] Create `src/lib/collection/validation.ts` with validation functions: `validateQuantity(1-99)`, `validateCardExists`, `validateOwnership`, `validateDeckRules`.
 
 ---
 
