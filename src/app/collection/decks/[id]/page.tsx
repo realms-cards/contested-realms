@@ -26,8 +26,16 @@ interface DeckData {
   stats: {
     spellbookCount: number;
     atlasCount: number;
+    collectionCount: number;
     sideboardCount: number;
+    avatarCount: number;
     hasAvatar: boolean;
+  };
+  requirements?: {
+    minSpellbook: number;
+    minAtlas: number;
+    maxCollection: number;
+    avatarCount: number;
   };
 }
 
@@ -156,26 +164,40 @@ export default function CollectionDeckEditorPage() {
               : "bg-red-900 text-red-300"
           }`}
         >
-          Avatar: {deck.stats.hasAvatar ? "✓" : "✗"}
+          Avatar: {deck.stats.avatarCount}/{deck.requirements?.avatarCount ?? 1}
         </div>
         <div
           className={`px-3 py-1 rounded text-sm ${
-            deck.stats.spellbookCount >= 40
+            deck.stats.spellbookCount >= (deck.requirements?.minSpellbook ?? 50)
               ? "bg-green-900 text-green-300"
               : "bg-yellow-900 text-yellow-300"
           }`}
         >
-          Spellbook: {deck.stats.spellbookCount}/40
+          Spellbook: {deck.stats.spellbookCount}/
+          {deck.requirements?.minSpellbook ?? 50}
         </div>
         <div
           className={`px-3 py-1 rounded text-sm ${
-            deck.stats.atlasCount >= 12
+            deck.stats.atlasCount >= (deck.requirements?.minAtlas ?? 30)
               ? "bg-green-900 text-green-300"
               : "bg-yellow-900 text-yellow-300"
           }`}
         >
-          Atlas: {deck.stats.atlasCount}/12
+          Atlas: {deck.stats.atlasCount}/{deck.requirements?.minAtlas ?? 30}
         </div>
+        {(deck.requirements?.maxCollection ?? 0) > 0 && (
+          <div
+            className={`px-3 py-1 rounded text-sm ${
+              deck.stats.collectionCount <=
+              (deck.requirements?.maxCollection ?? 10)
+                ? "bg-gray-700"
+                : "bg-red-900 text-red-300"
+            }`}
+          >
+            Collection: {deck.stats.collectionCount}/
+            {deck.requirements?.maxCollection ?? 10}
+          </div>
+        )}
         {deck.stats.sideboardCount > 0 && (
           <div className="px-3 py-1 rounded text-sm bg-gray-700">
             Sideboard: {deck.stats.sideboardCount}
