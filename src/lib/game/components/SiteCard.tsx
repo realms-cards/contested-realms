@@ -97,6 +97,10 @@ export function SiteCard({
   touchContextTimerRef,
   computeProjectileFirstHits,
 }: SiteCardProps) {
+  // These props are kept for future re-enablement of magic targeting hints
+  void magicGuidesActive;
+  void computeProjectileFirstHits;
+  void avatars;
   if (!maybeSite) return null;
   const site = maybeSite;
 
@@ -145,66 +149,10 @@ export function SiteCard({
     ) {
       hl = HIGHLIGHT_TARGET;
     }
-    if (
-      magicGuidesActive &&
-      pendingMagic &&
-      !pendingMagic.guidesSuppressed &&
-      pendingMagic.target &&
-      pendingMagic.target.kind === "location" &&
-      pendingMagic.target.at === tileKey
-    ) {
-      hl = HIGHLIGHT_TARGET;
-    }
-    if (
-      !hl &&
-      magicGuidesActive &&
-      pendingMagic &&
-      !pendingMagic.guidesSuppressed &&
-      pendingMagic.status === "choosingTarget"
-    ) {
-      const hints = pendingMagic.hints;
-      const allowLoc = hints?.allow?.location !== false;
-      const scope = hints?.scope || null;
-      if (allowLoc && scope !== "projectile") {
-        const dx = Math.abs(tileX - pendingMagic.tile.x);
-        const dy = Math.abs(tileY - pendingMagic.tile.y);
-        const man = dx + dy;
-        if (scope === null || scope === "global") hl = HIGHLIGHT_TARGET;
-        else if (scope === "here" && man === 0) hl = HIGHLIGHT_TARGET;
-        else if (scope === "adjacent" && man === 1) hl = HIGHLIGHT_TARGET;
-        else if (scope === "nearby" && man <= 2) hl = HIGHLIGHT_TARGET;
-      }
-    }
+    // NOTE: Magic target site highlighting is disabled until we can provide
+    // accurate hints for every spell type. See reference/SorceryRulebook.pdf.
+    // The magic interaction flow (caster/target selection) still works.
     return hl;
-  }
-
-  function deriveCasterOrigin(): { ox: number; oy: number } {
-    let ox = pendingMagic?.tile.x ?? tileX;
-    let oy = pendingMagic?.tile.y ?? tileY;
-    try {
-      const caster = pendingMagic?.caster;
-      if (caster && caster.kind === "avatar") {
-        const pos = avatars?.[caster.seat]?.pos as [number, number] | null;
-        if (Array.isArray(pos)) {
-          ox = pos[0];
-          oy = pos[1];
-        }
-      } else if (caster && caster.kind === "permanent") {
-        const [cx, cy] = String(caster.at).split(",").map(Number);
-        if (Number.isFinite(cx) && Number.isFinite(cy)) {
-          ox = cx;
-          oy = cy;
-        }
-      } else if (pendingMagic) {
-        const seat = seatFromOwner(pendingMagic.spell.owner);
-        const pos = avatars?.[seat]?.pos as [number, number] | null;
-        if (Array.isArray(pos)) {
-          ox = pos[0];
-          oy = pos[1];
-        }
-      }
-    } catch {}
-    return { ox, oy };
   }
 
   function handleTouchPreview(e: ThreeEvent<PointerEvent>) {
@@ -235,31 +183,8 @@ export function SiteCard({
     if (!amActor || !actorIsActive) return;
     e.stopPropagation();
     if (pendingMagic.status === "choosingTarget") {
-      const hints = pendingMagic.hints;
-      const scope = hints?.scope || null;
-      if (scope === "projectile") {
-        const { ox, oy } = deriveCasterOrigin();
-        if (ox === tileX || oy === tileY) {
-          const dir =
-            ox === tileX ? (tileY < oy ? "N" : "S") : tileX > ox ? "E" : "W";
-          const hits = computeProjectileFirstHits();
-          const firstHit = hits[dir] ?? undefined;
-          setMagicTargetChoice({
-            kind: "projectile",
-            direction: dir,
-            firstHit,
-          });
-        }
-        return;
-      }
-      if (hints?.allow?.location === false) return;
-      const { ox, oy } = deriveCasterOrigin();
-      const dx = Math.abs(tileX - ox);
-      const dy = Math.abs(tileY - oy);
-      const man = dx + dy;
-      if (scope === "here" && man !== 0) return;
-      if (scope === "adjacent" && man !== 1) return;
-      if (scope === "nearby" && man > 2) return;
+      // Allow targeting any location on the board without scope restrictions
+      // The actual spell effect validation happens server-side during resolution
       setMagicTargetChoice({ kind: "location", at: tileKey });
     }
   }

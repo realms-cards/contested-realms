@@ -35,6 +35,8 @@ type RightPanelProps = {
     clientY: number
   ) => void;
   setFeedback: (msg: string) => void;
+  /** Only show collection feature when in cube draft with sideboard option enabled */
+  showCollectionZone?: boolean;
   collectionCount: number;
   collectionCountsByCardId: Record<number, number>;
   moveOneFromSideboardToCollection: (cardId: number) => void;
@@ -58,6 +60,7 @@ export default function RightPanel(props: RightPanelProps) {
     moveOneFromSideboardToDeck,
     openContextMenu,
     setFeedback,
+    showCollectionZone = false,
     collectionCount,
     collectionCountsByCardId,
     moveOneFromSideboardToCollection,
@@ -133,12 +136,14 @@ export default function RightPanel(props: RightPanelProps) {
                     Sideboard: {picksByType.sideboard}
                   </span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 bg-purple-600 rounded" />
-                  <span className="text-purple-300">
-                    Collection: {collectionCount}
-                  </span>
-                </div>
+                {showCollectionZone && (
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 bg-purple-600 rounded" />
+                    <span className="text-purple-300">
+                      Collection: {collectionCount}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -156,6 +161,7 @@ export default function RightPanel(props: RightPanelProps) {
               moveOneFromSideboardToDeck={moveOneFromSideboardToDeck}
               openContextMenu={openContextMenu}
               setFeedback={setFeedback}
+              showCollectionZone={showCollectionZone}
               collectionCountsByCardId={collectionCountsByCardId}
               moveOneFromSideboardToCollection={
                 moveOneFromSideboardToCollection

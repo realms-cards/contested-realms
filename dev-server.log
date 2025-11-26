@@ -557,3 +557,1559 @@ prisma:query SELECT "public"."User"."id", "public"."User"."name", "public"."User
  GET /favicon.ico 200 in 18ms
  GET /favicon.ico 200 in 18ms
 [?25h
+
+> contested-realms@0.1.0 server
+> npm run server:dev
+
+
+> contested-realms@0.1.0 server:dev
+> tsx watch --tsconfig server/tsconfig.json server/index.ts
+
+[socket.io] Redis adapter enabled -> redis://localhost:6379
+[store] Redis state connected -> redis://localhost:6379 (instance=srv-n0kja)
+[Broadcast] Audit logging enabled
+[scaling] Redis state enabled (instance=srv-n0kja)
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::3010
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at pid (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4505:8)
+    at Object.<anonymous> (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4587:2)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Object.transformer (/Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/tsx/dist/register-D46fvsV_.cjs:3:1104)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -48,
+  syscall: 'listen',
+  address: '::',
+  port: 3010
+}
+
+Node.js v22.20.0
+
+> contested-realms@0.1.0 server
+> npm run server:dev
+
+
+> contested-realms@0.1.0 server:dev
+> tsx watch --tsconfig server/tsconfig.json server/index.ts
+
+[socket.io] Redis adapter enabled -> redis://localhost:6379
+[store] Redis state connected -> redis://localhost:6379 (instance=srv-duk2o)
+[Broadcast] Audit logging enabled
+[scaling] Redis state enabled (instance=srv-duk2o)
+[sorcery] Socket.IO server listening on http://localhost:3010
+missing 'error' handler on this Redis client
+missing 'error' handler on this Redis client
+[db] connection failed: Can't reach database server at `localhost:5432`
+
+Please make sure your database server is running at `localhost:5432`.
+[ioredis] Unhandled error event: Error: connect ECONNREFUSED 127.0.0.1:6379
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[persist] recover active matches failed: 
+Invalid `prisma.onlineMatchSession.findMany()` invocation in
+/Users/geleeroyale/CascadeProjects/sorcery-client/server/core/persistence.ts:395:52
+
+  392 
+  393 async function recoverActiveMatches() {
+  394   try {
+→ 395     const rows = await prisma.onlineMatchSession.findMany(
+Can't reach database server at `localhost:5432`
+
+Please make sure your database server is running at `localhost:5432`.
+[store] cluster state ready; pub/sub handlers active
+[ioredis] Unhandled error event: Error: connect ECONNREFUSED 127.0.0.1:6379
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+missing 'error' handler on this Redis client
+missing 'error' handler on this Redis client
+[ioredis] Unhandled error event: Error: connect ECONNREFUSED 127.0.0.1:6379
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[ioredis] Unhandled error event: Error: connect ECONNREFUSED 127.0.0.1:6379
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[ioredis] Unhandled error event: Error: connect ECONNREFUSED 127.0.0.1:6379
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+missing 'error' handler on this Redis client
+missing 'error' handler on this Redis client
+[ioredis] Unhandled error event: Error: connect ECONNREFUSED 127.0.0.1:6379
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[ioredis] Unhandled error event: Error: connect ECONNREFUSED 127.0.0.1:6379
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+missing 'error' handler on this Redis client
+missing 'error' handler on this Redis client
+[ioredis] Unhandled error event: Error: connect ECONNREFUSED 127.0.0.1:6379
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+missing 'error' handler on this Redis client
+[ioredis] Unhandled error event: Error: connect ECONNREFUSED 127.0.0.1:6379
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+missing 'error' handler on this Redis client
+[ioredis] Unhandled error event: Error: connect ECONNREFUSED 127.0.0.1:6379
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+missing 'error' handler on this Redis client
+missing 'error' handler on this Redis client
+[ioredis] Unhandled error event: Error: connect ECONNREFUSED 127.0.0.1:6379
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[ioredis] Unhandled error event: Error: connect ECONNREFUSED 127.0.0.1:6379
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+missing 'error' handler on this Redis client
+missing 'error' handler on this Redis client
+[ioredis] Unhandled error event: Error: connect ECONNREFUSED 127.0.0.1:6379
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[ioredis] Unhandled error event: Error: connect ECONNREFUSED 127.0.0.1:6379
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+missing 'error' handler on this Redis client
+missing 'error' handler on this Redis client
+[ioredis] Unhandled error event: Error: connect ECONNREFUSED 127.0.0.1:6379
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[ioredis] Unhandled error event: Error: connect ECONNREFUSED 127.0.0.1:6379
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+missing 'error' handler on this Redis client
+missing 'error' handler on this Redis client
+[ioredis] Unhandled error event: Error: connect ECONNREFUSED 127.0.0.1:6379
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[ioredis] Unhandled error event: Error: connect ECONNREFUSED 127.0.0.1:6379
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+missing 'error' handler on this Redis client
+missing 'error' handler on this Redis client
+[ioredis] Unhandled error event: Error: connect ECONNREFUSED 127.0.0.1:6379
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[ioredis] Unhandled error event: Error: connect ECONNREFUSED 127.0.0.1:6379
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+missing 'error' handler on this Redis client
+missing 'error' handler on this Redis client
+[ioredis] Unhandled error event: Error: connect ECONNREFUSED 127.0.0.1:6379
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[ioredis] Unhandled error event: Error: connect ECONNREFUSED 127.0.0.1:6379
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+missing 'error' handler on this Redis client
+missing 'error' handler on this Redis client
+[ioredis] Unhandled error event: Error: connect ECONNREFUSED 127.0.0.1:6379
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[ioredis] Unhandled error event: Error: connect ECONNREFUSED 127.0.0.1:6379
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+missing 'error' handler on this Redis client
+missing 'error' handler on this Redis client
+[ioredis] Unhandled error event: Error: connect ECONNREFUSED 127.0.0.1:6379
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[ioredis] Unhandled error event: Error: connect ECONNREFUSED 127.0.0.1:6379
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+missing 'error' handler on this Redis client
+missing 'error' handler on this Redis client
+[ioredis] Unhandled error event: Error: connect ECONNREFUSED 127.0.0.1:6379
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[ioredis] Unhandled error event: Error: connect ECONNREFUSED 127.0.0.1:6379
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+missing 'error' handler on this Redis client
+missing 'error' handler on this Redis client
+[ioredis] Unhandled error event: Error: connect ECONNREFUSED 127.0.0.1:6379
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[ioredis] Unhandled error event: Error: connect ECONNREFUSED 127.0.0.1:6379
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+missing 'error' handler on this Redis client
+missing 'error' handler on this Redis client
+[ioredis] Unhandled error event: Error: connect ECONNREFUSED 127.0.0.1:6379
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[ioredis] Unhandled error event: Error: connect ECONNREFUSED 127.0.0.1:6379
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+missing 'error' handler on this Redis client
+missing 'error' handler on this Redis client
+[ioredis] Unhandled error event: Error: connect ECONNREFUSED 127.0.0.1:6379
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[ioredis] Unhandled error event: Error: connect ECONNREFUSED 127.0.0.1:6379
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[auth] connect rejected: invalid_token { message: 'jwt expired' }
+missing 'error' handler on this Redis client
+missing 'error' handler on this Redis client
+[ioredis] Unhandled error event: Error: connect ECONNREFUSED 127.0.0.1:6379
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[ioredis] Unhandled error event: Error: connect ECONNREFUSED 127.0.0.1:6379
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[auth] connect rejected: invalid_token { message: 'jwt expired' }
+missing 'error' handler on this Redis client
+missing 'error' handler on this Redis client
+[ioredis] Unhandled error event: Error: connect ECONNREFUSED 127.0.0.1:6379
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[ioredis] Unhandled error event: Error: connect ECONNREFUSED 127.0.0.1:6379
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+missing 'error' handler on this Redis client
+missing 'error' handler on this Redis client
+[ioredis] Unhandled error event: Error: connect ECONNREFUSED 127.0.0.1:6379
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[ioredis] Unhandled error event: Error: connect ECONNREFUSED 127.0.0.1:6379
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[replay] retention prune failed: 
+Invalid `prisma.matchResult.findMany()` invocation in
+/Users/geleeroyale/CascadeProjects/sorcery-client/server/modules/replay/index.js:258:51
+
+  255 try {
+  256   const thresholdDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  257   // Find completed matches older than threshold
+→ 258   const oldResults = await prisma.matchResult.findMany(
+Can't reach database server at `localhost:5432`
+
+Please make sure your database server is running at `localhost:5432`.
+missing 'error' handler on this Redis client
+missing 'error' handler on this Redis client
+/Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/ioredis/built/redis/event_handler.js:182
+                    self.flushQueue(new errors_1.MaxRetriesPerRequestError(maxRetriesPerRequest));
+                                    ^
+
+MaxRetriesPerRequestError: Reached the max retries per request limit (which is 20). Refer to "maxRetriesPerRequest" option for details.
+    at Socket.<anonymous> (/Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/ioredis/built/redis/event_handler.js:182:37)
+    at Object.onceWrapper (node:events:634:26)
+    at Socket.emit (node:events:519:28)
+    at TCP.<anonymous> (node:net:346:12)
+
+Node.js v22.20.0
+6:07:24 PM [tsx] change in ./server/modules/rules-movement.ts Rerunning...
+c6:07:24 PM [tsx] change in ./server/modules/rules-movement.ts Rerunning...
+c[socket.io] Redis adapter enabled -> redis://localhost:6379
+[store] Redis state connected -> redis://localhost:6379 (instance=srv-3xw1g)
+[Broadcast] Audit logging enabled
+[socket.io] Redis adapter enabled -> redis://localhost:6379
+[store] Redis state connected -> redis://localhost:6379 (instance=srv-o345d)
+[Broadcast] Audit logging enabled
+[scaling] Redis state enabled (instance=srv-o345d)
+[scaling] Redis state enabled (instance=srv-3xw1g)
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::3010
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at pid (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4505:8)
+    at Object.<anonymous> (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4587:2)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Object.transformer (/Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/tsx/dist/register-D46fvsV_.cjs:3:1104)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -48,
+  syscall: 'listen',
+  address: '::',
+  port: 3010
+}
+
+Node.js v22.20.0
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::3010
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at pid (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4505:8)
+    at Object.<anonymous> (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4587:2)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Object.transformer (/Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/tsx/dist/register-D46fvsV_.cjs:3:1104)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -48,
+  syscall: 'listen',
+  address: '::',
+  port: 3010
+}
+
+Node.js v22.20.0
+6:07:35 PM [tsx] change in ./server/modules/rules-movement.ts Rerunning...
+c6:07:35 PM [tsx] change in ./server/modules/rules-movement.ts Rerunning...
+c[socket.io] Redis adapter enabled -> redis://localhost:6379
+[store] Redis state connected -> redis://localhost:6379 (instance=srv-h41p3)
+[Broadcast] Audit logging enabled
+[scaling] Redis state enabled (instance=srv-h41p3)
+[socket.io] Redis adapter enabled -> redis://localhost:6379
+[store] Redis state connected -> redis://localhost:6379 (instance=srv-9rwt5)
+[Broadcast] Audit logging enabled
+[scaling] Redis state enabled (instance=srv-9rwt5)
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::3010
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at pid (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4505:8)
+    at Object.<anonymous> (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4587:2)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Object.transformer (/Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/tsx/dist/register-D46fvsV_.cjs:3:1104)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -48,
+  syscall: 'listen',
+  address: '::',
+  port: 3010
+}
+
+Node.js v22.20.0
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::3010
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at pid (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4505:8)
+    at Object.<anonymous> (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4587:2)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Object.transformer (/Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/tsx/dist/register-D46fvsV_.cjs:3:1104)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -48,
+  syscall: 'listen',
+  address: '::',
+  port: 3010
+}
+
+Node.js v22.20.0
+6:07:53 PM [tsx] change in ./server/rules/index.js Rerunning...
+c6:07:53 PM [tsx] change in ./server/rules/index.js Rerunning...
+c[socket.io] Redis adapter enabled -> redis://localhost:6379
+[store] Redis state connected -> redis://localhost:6379 (instance=srv-r71rm)
+[Broadcast] Audit logging enabled
+[scaling] Redis state enabled (instance=srv-r71rm)
+[socket.io] Redis adapter enabled -> redis://localhost:6379
+[store] Redis state connected -> redis://localhost:6379 (instance=srv-aao6l)
+[Broadcast] Audit logging enabled
+[scaling] Redis state enabled (instance=srv-aao6l)
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::3010
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at pid (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4505:8)
+    at Object.<anonymous> (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4587:2)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Object.transformer (/Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/tsx/dist/register-D46fvsV_.cjs:3:1104)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -48,
+  syscall: 'listen',
+  address: '::',
+  port: 3010
+}
+
+Node.js v22.20.0
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::3010
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at pid (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4505:8)
+    at Object.<anonymous> (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4587:2)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Object.transformer (/Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/tsx/dist/register-D46fvsV_.cjs:3:1104)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -48,
+  syscall: 'listen',
+  address: '::',
+  port: 3010
+}
+
+Node.js v22.20.0
+6:41:30 PM [tsx] change in ./server/modules/rules-movement.ts Rerunning...
+c6:41:30 PM [tsx] change in ./server/modules/rules-movement.ts Rerunning...
+c[socket.io] Redis adapter enabled -> redis://localhost:6379
+[store] Redis state connected -> redis://localhost:6379 (instance=srv-gtctp)
+[Broadcast] Audit logging enabled
+[scaling] Redis state enabled (instance=srv-gtctp)
+[socket.io] Redis adapter enabled -> redis://localhost:6379
+[store] Redis state connected -> redis://localhost:6379 (instance=srv-65sar)
+[Broadcast] Audit logging enabled
+[scaling] Redis state enabled (instance=srv-65sar)
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::3010
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at pid (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4505:8)
+    at Object.<anonymous> (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4587:2)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Object.transformer (/Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/tsx/dist/register-D46fvsV_.cjs:3:1104)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -48,
+  syscall: 'listen',
+  address: '::',
+  port: 3010
+}
+
+Node.js v22.20.0
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::3010
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at pid (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4505:8)
+    at Object.<anonymous> (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4587:2)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Object.transformer (/Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/tsx/dist/register-D46fvsV_.cjs:3:1104)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -48,
+  syscall: 'listen',
+  address: '::',
+  port: 3010
+}
+
+Node.js v22.20.0
+6:41:54 PM [tsx] change in ./server/rules/index.js Rerunning...
+c6:41:54 PM [tsx] change in ./server/rules/index.js Rerunning...
+c[socket.io] Redis adapter enabled -> redis://localhost:6379
+[store] Redis state connected -> redis://localhost:6379 (instance=srv-tmyqf)
+[Broadcast] Audit logging enabled
+[scaling] Redis state enabled (instance=srv-tmyqf)
+[socket.io] Redis adapter enabled -> redis://localhost:6379
+[store] Redis state connected -> redis://localhost:6379 (instance=srv-iw3l4)
+[Broadcast] Audit logging enabled
+[scaling] Redis state enabled (instance=srv-iw3l4)
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::3010
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at pid (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4505:8)
+    at Object.<anonymous> (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4587:2)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Object.transformer (/Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/tsx/dist/register-D46fvsV_.cjs:3:1104)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -48,
+  syscall: 'listen',
+  address: '::',
+  port: 3010
+}
+
+Node.js v22.20.0
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::3010
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at pid (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4505:8)
+    at Object.<anonymous> (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4587:2)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Object.transformer (/Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/tsx/dist/register-D46fvsV_.cjs:3:1104)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -48,
+  syscall: 'listen',
+  address: '::',
+  port: 3010
+}
+
+Node.js v22.20.0
+6:43:26 PM [tsx] change in ./server/modules/rules-movement.ts Rerunning...
+c6:43:26 PM [tsx] change in ./server/modules/rules-movement.ts Rerunning...
+c[socket.io] Redis adapter enabled -> redis://localhost:6379
+[store] Redis state connected -> redis://localhost:6379 (instance=srv-nifqe)
+[Broadcast] Audit logging enabled
+[scaling] Redis state enabled (instance=srv-nifqe)
+[socket.io] Redis adapter enabled -> redis://localhost:6379
+[store] Redis state connected -> redis://localhost:6379 (instance=srv-477ii)
+[Broadcast] Audit logging enabled
+[scaling] Redis state enabled (instance=srv-477ii)
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::3010
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at pid (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4505:8)
+    at Object.<anonymous> (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4587:2)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Object.transformer (/Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/tsx/dist/register-D46fvsV_.cjs:3:1104)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -48,
+  syscall: 'listen',
+  address: '::',
+  port: 3010
+}
+
+Node.js v22.20.0
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::3010
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at pid (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4505:8)
+    at Object.<anonymous> (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4587:2)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Object.transformer (/Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/tsx/dist/register-D46fvsV_.cjs:3:1104)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -48,
+  syscall: 'listen',
+  address: '::',
+  port: 3010
+}
+
+Node.js v22.20.0
+6:43:52 PM [tsx] change in ./server/rules/index.js Rerunning...
+c6:43:52 PM [tsx] change in ./server/rules/index.js Rerunning...
+c[socket.io] Redis adapter enabled -> redis://localhost:6379
+[store] Redis state connected -> redis://localhost:6379 (instance=srv-u1h4u)
+[Broadcast] Audit logging enabled
+[scaling] Redis state enabled (instance=srv-u1h4u)
+[socket.io] Redis adapter enabled -> redis://localhost:6379
+[store] Redis state connected -> redis://localhost:6379 (instance=srv-mamun)
+[Broadcast] Audit logging enabled
+[scaling] Redis state enabled (instance=srv-mamun)
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::3010
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at pid (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4505:8)
+    at Object.<anonymous> (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4587:2)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Object.transformer (/Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/tsx/dist/register-D46fvsV_.cjs:3:1104)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -48,
+  syscall: 'listen',
+  address: '::',
+  port: 3010
+}
+
+Node.js v22.20.0
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::3010
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at pid (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4505:8)
+    at Object.<anonymous> (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4587:2)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Object.transformer (/Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/tsx/dist/register-D46fvsV_.cjs:3:1104)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -48,
+  syscall: 'listen',
+  address: '::',
+  port: 3010
+}
+
+Node.js v22.20.0
+6:44:06 PM [tsx] change in ./server/modules/rules-movement.ts Rerunning...
+c6:44:06 PM [tsx] change in ./server/modules/rules-movement.ts Rerunning...
+c[socket.io] Redis adapter enabled -> redis://localhost:6379
+[store] Redis state connected -> redis://localhost:6379 (instance=srv-kf4sd)
+[Broadcast] Audit logging enabled
+[scaling] Redis state enabled (instance=srv-kf4sd)
+[socket.io] Redis adapter enabled -> redis://localhost:6379
+[store] Redis state connected -> redis://localhost:6379 (instance=srv-gihgv)
+[Broadcast] Audit logging enabled
+[scaling] Redis state enabled (instance=srv-gihgv)
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::3010
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at pid (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4505:8)
+    at Object.<anonymous> (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4587:2)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Object.transformer (/Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/tsx/dist/register-D46fvsV_.cjs:3:1104)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -48,
+  syscall: 'listen',
+  address: '::',
+  port: 3010
+}
+
+Node.js v22.20.0
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::3010
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at pid (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4505:8)
+    at Object.<anonymous> (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4587:2)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Object.transformer (/Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/tsx/dist/register-D46fvsV_.cjs:3:1104)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -48,
+  syscall: 'listen',
+  address: '::',
+  port: 3010
+}
+
+Node.js v22.20.0
+6:44:15 PM [tsx] change in ./server/rules/index.js Rerunning...
+6:44:15 PM [tsx] change in ./server/rules/index.js Rerunning...
+cc[socket.io] Redis adapter enabled -> redis://localhost:6379
+[store] Redis state connected -> redis://localhost:6379 (instance=srv-sn02v)
+[Broadcast] Audit logging enabled
+[scaling] Redis state enabled (instance=srv-sn02v)
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::3010
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at pid (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4505:8)
+    at Object.<anonymous> (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4587:2)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Object.transformer (/Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/tsx/dist/register-D46fvsV_.cjs:3:1104)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -48,
+  syscall: 'listen',
+  address: '::',
+  port: 3010
+}
+
+Node.js v22.20.0
+[socket.io] Redis adapter enabled -> redis://localhost:6379
+[store] Redis state connected -> redis://localhost:6379 (instance=srv-5pm3e)
+[Broadcast] Audit logging enabled
+[scaling] Redis state enabled (instance=srv-5pm3e)
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::3010
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at pid (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4505:8)
+    at Object.<anonymous> (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4587:2)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Object.transformer (/Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/tsx/dist/register-D46fvsV_.cjs:3:1104)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -48,
+  syscall: 'listen',
+  address: '::',
+  port: 3010
+}
+
+Node.js v22.20.0
+6:45:35 PM [tsx] change in ./server/modules/rules-movement.ts Rerunning...
+c6:45:35 PM [tsx] change in ./server/modules/rules-movement.ts Rerunning...
+c[socket.io] Redis adapter enabled -> redis://localhost:6379
+[store] Redis state connected -> redis://localhost:6379 (instance=srv-95tyx)
+[Broadcast] Audit logging enabled
+[scaling] Redis state enabled (instance=srv-95tyx)
+[socket.io] Redis adapter enabled -> redis://localhost:6379
+[store] Redis state connected -> redis://localhost:6379 (instance=srv-j4f4a)
+[Broadcast] Audit logging enabled
+[scaling] Redis state enabled (instance=srv-j4f4a)
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::3010
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at pid (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4505:8)
+    at Object.<anonymous> (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4587:2)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Object.transformer (/Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/tsx/dist/register-D46fvsV_.cjs:3:1104)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -48,
+  syscall: 'listen',
+  address: '::',
+  port: 3010
+}
+
+Node.js v22.20.0
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::3010
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at pid (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4505:8)
+    at Object.<anonymous> (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4587:2)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Object.transformer (/Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/tsx/dist/register-D46fvsV_.cjs:3:1104)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -48,
+  syscall: 'listen',
+  address: '::',
+  port: 3010
+}
+
+Node.js v22.20.0
+6:46:04 PM [tsx] change in ./server/modules/rules-movement.ts Rerunning...
+6:46:04 PM [tsx] change in ./server/modules/rules-movement.ts Rerunning...
+cc[socket.io] Redis adapter enabled -> redis://localhost:6379
+[store] Redis state connected -> redis://localhost:6379 (instance=srv-5jw1g)
+[Broadcast] Audit logging enabled
+[scaling] Redis state enabled (instance=srv-5jw1g)
+[socket.io] Redis adapter enabled -> redis://localhost:6379
+[store] Redis state connected -> redis://localhost:6379 (instance=srv-j18rl)
+[Broadcast] Audit logging enabled
+[scaling] Redis state enabled (instance=srv-j18rl)
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::3010
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at pid (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4505:8)
+    at Object.<anonymous> (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4587:2)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Object.transformer (/Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/tsx/dist/register-D46fvsV_.cjs:3:1104)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -48,
+  syscall: 'listen',
+  address: '::',
+  port: 3010
+}
+
+Node.js v22.20.0
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::3010
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at pid (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4505:8)
+    at Object.<anonymous> (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4587:2)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Object.transformer (/Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/tsx/dist/register-D46fvsV_.cjs:3:1104)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -48,
+  syscall: 'listen',
+  address: '::',
+  port: 3010
+}
+
+Node.js v22.20.0
+6:46:41 PM [tsx] change in ./server/rules/index.js Rerunning...
+c6:46:41 PM [tsx] change in ./server/rules/index.js Rerunning...
+c[socket.io] Redis adapter enabled -> redis://localhost:6379
+[store] Redis state connected -> redis://localhost:6379 (instance=srv-apkw8)
+[Broadcast] Audit logging enabled
+[scaling] Redis state enabled (instance=srv-apkw8)
+[socket.io] Redis adapter enabled -> redis://localhost:6379
+[store] Redis state connected -> redis://localhost:6379 (instance=srv-p8kb7)
+[Broadcast] Audit logging enabled
+[scaling] Redis state enabled (instance=srv-p8kb7)
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::3010
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at pid (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4505:8)
+    at Object.<anonymous> (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4587:2)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Object.transformer (/Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/tsx/dist/register-D46fvsV_.cjs:3:1104)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -48,
+  syscall: 'listen',
+  address: '::',
+  port: 3010
+}
+
+Node.js v22.20.0
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::3010
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at pid (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4505:8)
+    at Object.<anonymous> (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4587:2)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Object.transformer (/Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/tsx/dist/register-D46fvsV_.cjs:3:1104)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -48,
+  syscall: 'listen',
+  address: '::',
+  port: 3010
+}
+
+Node.js v22.20.0
+6:50:11 PM [tsx] change in ./server/modules/rules-movement.ts Rerunning...
+c6:50:11 PM [tsx] change in ./server/modules/rules-movement.ts Rerunning...
+c[socket.io] Redis adapter enabled -> redis://localhost:6379
+[store] Redis state connected -> redis://localhost:6379 (instance=srv-131gc)
+[Broadcast] Audit logging enabled
+[scaling] Redis state enabled (instance=srv-131gc)
+[socket.io] Redis adapter enabled -> redis://localhost:6379
+[store] Redis state connected -> redis://localhost:6379 (instance=srv-3z8mp)
+[Broadcast] Audit logging enabled
+[scaling] Redis state enabled (instance=srv-3z8mp)
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::3010
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at pid (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4505:8)
+    at Object.<anonymous> (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4587:2)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Object.transformer (/Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/tsx/dist/register-D46fvsV_.cjs:3:1104)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -48,
+  syscall: 'listen',
+  address: '::',
+  port: 3010
+}
+
+Node.js v22.20.0
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::3010
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at pid (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4505:8)
+    at Object.<anonymous> (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4587:2)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Object.transformer (/Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/tsx/dist/register-D46fvsV_.cjs:3:1104)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -48,
+  syscall: 'listen',
+  address: '::',
+  port: 3010
+}
+
+Node.js v22.20.0
+6:50:42 PM [tsx] change in ./server/rules/index.js Rerunning...
+c6:50:42 PM [tsx] change in ./server/rules/index.js Rerunning...
+c[socket.io] Redis adapter enabled -> redis://localhost:6379
+[store] Redis state connected -> redis://localhost:6379 (instance=srv-xkpwn)
+[Broadcast] Audit logging enabled
+[scaling] Redis state enabled (instance=srv-xkpwn)
+[socket.io] Redis adapter enabled -> redis://localhost:6379
+[store] Redis state connected -> redis://localhost:6379 (instance=srv-uich4)
+[Broadcast] Audit logging enabled
+[scaling] Redis state enabled (instance=srv-uich4)
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::3010
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at pid (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4505:8)
+    at Object.<anonymous> (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4587:2)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Object.transformer (/Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/tsx/dist/register-D46fvsV_.cjs:3:1104)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -48,
+  syscall: 'listen',
+  address: '::',
+  port: 3010
+}
+
+Node.js v22.20.0
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::3010
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at pid (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4505:8)
+    at Object.<anonymous> (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4587:2)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Object.transformer (/Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/tsx/dist/register-D46fvsV_.cjs:3:1104)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -48,
+  syscall: 'listen',
+  address: '::',
+  port: 3010
+}
+
+Node.js v22.20.0
+6:52:24 PM [tsx] change in ./server/rules/index.js Rerunning...
+c6:52:24 PM [tsx] change in ./server/rules/index.js Rerunning...
+c[socket.io] Redis adapter enabled -> redis://localhost:6379
+[store] Redis state connected -> redis://localhost:6379 (instance=srv-fq0um)
+[Broadcast] Audit logging enabled
+[scaling] Redis state enabled (instance=srv-fq0um)
+[socket.io] Redis adapter enabled -> redis://localhost:6379
+[store] Redis state connected -> redis://localhost:6379 (instance=srv-rihem)
+[Broadcast] Audit logging enabled
+[scaling] Redis state enabled (instance=srv-rihem)
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::3010
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at pid (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4505:8)
+    at Object.<anonymous> (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4587:2)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Object.transformer (/Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/tsx/dist/register-D46fvsV_.cjs:3:1104)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -48,
+  syscall: 'listen',
+  address: '::',
+  port: 3010
+}
+
+Node.js v22.20.0
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::3010
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at pid (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4505:8)
+    at Object.<anonymous> (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4587:2)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Object.transformer (/Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/tsx/dist/register-D46fvsV_.cjs:3:1104)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -48,
+  syscall: 'listen',
+  address: '::',
+  port: 3010
+}
+
+Node.js v22.20.0
+6:54:19 PM [tsx] change in ./server/index.ts Rerunning...
+c6:54:19 PM [tsx] change in ./server/index.ts Rerunning...
+c[socket.io] Redis adapter enabled -> redis://localhost:6379
+[store] Redis state connected -> redis://localhost:6379 (instance=srv-033u9)
+[Broadcast] Audit logging enabled
+[scaling] Redis state enabled (instance=srv-033u9)
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::3010
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at pid (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4500:8)
+    at Object.<anonymous> (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4582:2)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Object.transformer (/Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/tsx/dist/register-D46fvsV_.cjs:3:1104)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -48,
+  syscall: 'listen',
+  address: '::',
+  port: 3010
+}
+
+Node.js v22.20.0
+[socket.io] Redis adapter enabled -> redis://localhost:6379
+[store] Redis state connected -> redis://localhost:6379 (instance=srv-iuwpv)
+[Broadcast] Audit logging enabled
+[scaling] Redis state enabled (instance=srv-iuwpv)
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::3010
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at pid (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4500:8)
+    at Object.<anonymous> (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4582:2)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Object.transformer (/Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/tsx/dist/register-D46fvsV_.cjs:3:1104)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -48,
+  syscall: 'listen',
+  address: '::',
+  port: 3010
+}
+
+Node.js v22.20.0
+6:55:28 PM [tsx] unlink in ./server/rules/index.js Rerunning...
+c6:55:28 PM [tsx] unlink in ./server/rules/index.js Rerunning...
+c[socket.io] Redis adapter enabled -> redis://localhost:6379
+[store] Redis state connected -> redis://localhost:6379 (instance=srv-b7pys)
+[Broadcast] Audit logging enabled
+[scaling] Redis state enabled (instance=srv-b7pys)
+[socket.io] Redis adapter enabled -> redis://localhost:6379
+[store] Redis state connected -> redis://localhost:6379 (instance=srv-ssuy2)
+[Broadcast] Audit logging enabled
+[scaling] Redis state enabled (instance=srv-ssuy2)
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::3010
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at pid (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4500:8)
+    at Object.<anonymous> (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4582:2)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Object.transformer (/Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/tsx/dist/register-D46fvsV_.cjs:3:1104)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -48,
+  syscall: 'listen',
+  address: '::',
+  port: 3010
+}
+
+Node.js v22.20.0
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::3010
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at pid (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4500:8)
+    at Object.<anonymous> (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4582:2)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Object.transformer (/Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/tsx/dist/register-D46fvsV_.cjs:3:1104)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -48,
+  syscall: 'listen',
+  address: '::',
+  port: 3010
+}
+
+Node.js v22.20.0
+7:21:52 PM [tsx] change in ./server/modules/rules-movement.ts Rerunning...
+c7:21:52 PM [tsx] change in ./server/modules/rules-movement.ts Rerunning...
+c[socket.io] Redis adapter enabled -> redis://localhost:6379
+[store] Redis state connected -> redis://localhost:6379 (instance=srv-q6tp9)
+[Broadcast] Audit logging enabled
+[scaling] Redis state enabled (instance=srv-q6tp9)
+[socket.io] Redis adapter enabled -> redis://localhost:6379
+[store] Redis state connected -> redis://localhost:6379 (instance=srv-r043t)
+[Broadcast] Audit logging enabled
+[scaling] Redis state enabled (instance=srv-r043t)
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::3010
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at pid (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4500:8)
+    at Object.<anonymous> (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4582:2)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Object.transformer (/Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/tsx/dist/register-D46fvsV_.cjs:3:1104)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -48,
+  syscall: 'listen',
+  address: '::',
+  port: 3010
+}
+
+Node.js v22.20.0
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::3010
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at pid (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4500:8)
+    at Object.<anonymous> (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4582:2)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Object.transformer (/Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/tsx/dist/register-D46fvsV_.cjs:3:1104)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -48,
+  syscall: 'listen',
+  address: '::',
+  port: 3010
+}
+
+Node.js v22.20.0
+7:42:54 PM [tsx] change in ./server/modules/rules-movement.ts Rerunning...
+7:42:54 PM [tsx] change in ./server/modules/rules-movement.ts Rerunning...
+ccnode:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+
+Error: Transform failed with 1 error:
+/Users/geleeroyale/CascadeProjects/sorcery-client/server/modules/rules-movement.ts:350:0: ERROR: Expected "*/" to terminate multi-line comment
+    at failureErrorWithLog (/Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/esbuild/lib/main.js:1467:15)
+    at /Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/esbuild/lib/main.js:736:50
+    at responseCallbacks.<computed> (/Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/esbuild/lib/main.js:603:9)
+    at handleIncomingPacket (/Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/esbuild/lib/main.js:658:12)
+    at Socket.readFromStdout (/Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/esbuild/lib/main.js:581:7)
+    at Socket.emit (node:events:519:28)
+    at addChunk (node:internal/streams/readable:561:12)
+    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+    at Readable.push (node:internal/streams/readable:392:5)
+    at Pipe.onStreamRead (node:internal/stream_base_commons:189:23) {
+  name: 'TransformError'
+}
+
+Node.js v22.20.0
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+
+Error: Transform failed with 1 error:
+/Users/geleeroyale/CascadeProjects/sorcery-client/server/modules/rules-movement.ts:350:0: ERROR: Expected "*/" to terminate multi-line comment
+    at failureErrorWithLog (/Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/esbuild/lib/main.js:1467:15)
+    at /Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/esbuild/lib/main.js:736:50
+    at responseCallbacks.<computed> (/Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/esbuild/lib/main.js:603:9)
+    at handleIncomingPacket (/Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/esbuild/lib/main.js:658:12)
+    at Socket.readFromStdout (/Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/esbuild/lib/main.js:581:7)
+    at Socket.emit (node:events:519:28)
+    at addChunk (node:internal/streams/readable:561:12)
+    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+    at Readable.push (node:internal/streams/readable:392:5)
+    at Pipe.onStreamRead (node:internal/stream_base_commons:189:23) {
+  name: 'TransformError'
+}
+
+Node.js v22.20.0
+7:43:10 PM [tsx] change in ./server/modules/rules-movement.ts Rerunning...
+c7:43:10 PM [tsx] change in ./server/modules/rules-movement.ts Rerunning...
+c[socket.io] Redis adapter enabled -> redis://localhost:6379
+[store] Redis state connected -> redis://localhost:6379 (instance=srv-7ligc)
+[Broadcast] Audit logging enabled
+[scaling] Redis state enabled (instance=srv-7ligc)
+[socket.io] Redis adapter enabled -> redis://localhost:6379
+[store] Redis state connected -> redis://localhost:6379 (instance=srv-76plq)
+[Broadcast] Audit logging enabled
+[scaling] Redis state enabled (instance=srv-76plq)
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::3010
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at pid (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4500:8)
+    at Object.<anonymous> (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4582:2)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Object.transformer (/Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/tsx/dist/register-D46fvsV_.cjs:3:1104)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -48,
+  syscall: 'listen',
+  address: '::',
+  port: 3010
+}
+
+Node.js v22.20.0
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::3010
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at pid (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4500:8)
+    at Object.<anonymous> (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4582:2)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Object.transformer (/Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/tsx/dist/register-D46fvsV_.cjs:3:1104)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -48,
+  syscall: 'listen',
+  address: '::',
+  port: 3010
+}
+
+Node.js v22.20.0
+8:01:11 PM [tsx] change in ./server/modules/rules-movement.ts Rerunning...
+c8:01:11 PM [tsx] change in ./server/modules/rules-movement.ts Rerunning...
+c[socket.io] Redis adapter enabled -> redis://localhost:6379
+[store] Redis state connected -> redis://localhost:6379 (instance=srv-iikw3)
+[Broadcast] Audit logging enabled
+[scaling] Redis state enabled (instance=srv-iikw3)
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::3010
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at pid (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4500:8)
+    at Object.<anonymous> (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4582:2)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Object.transformer (/Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/tsx/dist/register-D46fvsV_.cjs:3:1104)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -48,
+  syscall: 'listen',
+  address: '::',
+  port: 3010
+}
+
+Node.js v22.20.0
+[socket.io] Redis adapter enabled -> redis://localhost:6379
+[store] Redis state connected -> redis://localhost:6379 (instance=srv-jagh2)
+[Broadcast] Audit logging enabled
+[scaling] Redis state enabled (instance=srv-jagh2)
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::3010
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at pid (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4500:8)
+    at Object.<anonymous> (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4582:2)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Object.transformer (/Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/tsx/dist/register-D46fvsV_.cjs:3:1104)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -48,
+  syscall: 'listen',
+  address: '::',
+  port: 3010
+}
+
+Node.js v22.20.0
+9:53:20 PM [tsx] change in ./server/index.ts Rerunning...
+9:53:20 PM [tsx] change in ./server/index.ts Rerunning...
+cc[socket.io] Redis adapter enabled -> redis://localhost:6379
+[store] Redis state connected -> redis://localhost:6379 (instance=srv-fbn3c)
+[Broadcast] Audit logging enabled
+[scaling] Redis state enabled (instance=srv-fbn3c)
+[socket.io] Redis adapter enabled -> redis://localhost:6379
+[store] Redis state connected -> redis://localhost:6379 (instance=srv-dzfxu)
+[Broadcast] Audit logging enabled
+[scaling] Redis state enabled (instance=srv-dzfxu)
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::3010
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at pid (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4596:8)
+    at Object.<anonymous> (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4678:2)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Object.transformer (/Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/tsx/dist/register-D46fvsV_.cjs:3:1104)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -48,
+  syscall: 'listen',
+  address: '::',
+  port: 3010
+}
+
+Node.js v22.20.0
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::3010
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at pid (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4596:8)
+    at Object.<anonymous> (/Users/geleeroyale/CascadeProjects/sorcery-client/server/index.ts:4678:2)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Object.transformer (/Users/geleeroyale/CascadeProjects/sorcery-client/node_modules/tsx/dist/register-D46fvsV_.cjs:3:1104)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -48,
+  syscall: 'listen',
+  address: '::',
+  port: 3010
+}
+
+Node.js v22.20.0

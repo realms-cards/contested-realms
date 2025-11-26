@@ -32,13 +32,14 @@ export const createMagicSlice: StateCreator<GameState, [], [], MagicSlice> = (
     const spell = input.spell;
     const tile = input.tile;
     const createdAt = Date.now();
+    const magicGuidesActive = get().magicGuidesActive;
     const ownerSeat = seatFromOwner(spell.owner);
     const autoCaster =
       input.presetCaster ?? ({ kind: "avatar", seat: ownerSeat } as const);
     const hints = extractMagicTargetingHintsSync(spell.card?.name || "", null);
-    // NOTE: Site highlighting for magic spells is temporarily disabled (guidesSuppressed = true)
-    // until we can provide accurate targeting hints for every spell type.
+    // NOTE: Targeting hints may not be accurate for every spell type yet.
     // See reference/SorceryRulebook.pdf for spell targeting rules.
+    // Guides only show when both players have opted in (magicGuidesActive).
     set({
       pendingMagic: {
         id,
@@ -49,7 +50,7 @@ export const createMagicSlice: StateCreator<GameState, [], [], MagicSlice> = (
         status: "choosingTarget",
         hints,
         createdAt,
-        guidesSuppressed: true,
+        guidesSuppressed: !magicGuidesActive,
       },
     } as Partial<GameState> as GameState);
     // Prefetch rules text early to avoid delay later

@@ -140,6 +140,12 @@ export function useTileDropHandler({
         const apiAtDrop = draggedBody.current;
         dragTarget.current = null;
         draggedBody.current = null;
+
+        // Check if avatar moved cross-tile for attack triggering
+        const avatarPos = avatars[dragAvatar]?.pos;
+        const wasCrossTileMove =
+          avatarPos && (avatarPos[0] !== tileX || avatarPos[1] !== tileY);
+
         requestAnimationFrame(() => {
           moveAvatarToWithOffset(dragAvatar, tileX, tileY, [offX, offZ]);
         });
@@ -159,6 +165,70 @@ export function useTileDropHandler({
         avatarDragStartRef.current = null;
         selectAvatar(dragAvatar);
         lastDropAt.current = Date.now();
+
+        // Trigger attack choice for avatar cross-tile moves when guides are on
+        if (wasCrossTileMove && interactionGuides) {
+          const owner: 1 | 2 = dragAvatar === "p1" ? 1 : 2;
+          const enemyOwner: 1 | 2 = owner === 1 ? 2 : 1;
+          const enemySeat = enemyOwner === 1 ? "p1" : "p2";
+
+          // Check for valid targets at drop location
+          let hasTarget = false;
+
+          // Check for enemy permanents
+          const permsAtDrop = permanents[dropKey] || [];
+          hasTarget = permsAtDrop.some((p) => p && p.owner === enemyOwner);
+
+          // Check for enemy avatar
+          if (!hasTarget) {
+            const enemyAvatar = avatars[enemySeat];
+            if (
+              enemyAvatar &&
+              Array.isArray(enemyAvatar.pos) &&
+              enemyAvatar.pos[0] === tileX &&
+              enemyAvatar.pos[1] === tileY
+            ) {
+              hasTarget = true;
+            }
+          }
+
+          // Check for enemy site OR any site with enemy units
+          // (enemy units already checked above, so this is for attacking the site itself)
+          if (!hasTarget) {
+            const site = board.sites[dropKey];
+            if (site) {
+              // Can attack enemy-owned sites
+              if (site.owner === enemyOwner) {
+                hasTarget = true;
+              }
+              // Can also attack if there are enemy units on any site (already checked above via permsAtDrop)
+            }
+          }
+
+          // Check if it's the actor's turn
+          const mine =
+            (actorKey === "p1" && owner === 1) ||
+            (actorKey === "p2" && owner === 2);
+          const actorIsActive =
+            (actorKey === "p1" && currentPlayer === 1) ||
+            (actorKey === "p2" && currentPlayer === 2);
+
+          if (hasTarget && mine && actorIsActive) {
+            const avatarCard = avatars[dragAvatar]?.card;
+            setAttackChoice({
+              tile: { x: tileX, y: tileY },
+              attacker: {
+                at: dropKey,
+                index: -1, // Special index for avatar
+                instanceId: null,
+                owner,
+                isAvatar: true, // Mark as avatar attacker
+                avatarSeat: dragAvatar,
+              },
+              attackerName: avatarCard?.name || "Avatar",
+            });
+          }
+        }
         return;
       }
 

@@ -64,7 +64,11 @@ function LifeCounter({
   showNameAbove,
   showYou,
   spectatorMode,
-}: LifeCounterProps & { showNameAbove: boolean; showYou: boolean; spectatorMode?: boolean }) {
+}: LifeCounterProps & {
+  showNameAbove: boolean;
+  showYou: boolean;
+  spectatorMode?: boolean;
+}) {
   const playerState = useGameStore((s) => s.players[player]);
   const addLife = useGameStore((s) => s.addLife);
   const [showDeathConfirm, setShowDeathConfirm] = useState(false);
@@ -93,7 +97,11 @@ function LifeCounter({
           onContextMenu={(e) => e.preventDefault()}
         >
           {playerName}
-          {spectatorMode && isMe ? " (Watching)" : showYou && isMe ? " (You)" : ""}
+          {spectatorMode && isMe
+            ? " (Watching)"
+            : showYou && isMe
+            ? " (You)"
+            : ""}
         </div>
       )}
 
@@ -199,10 +207,15 @@ function LifeCounter({
               className="bg-slate-900/95 text-white rounded-xl border border-slate-700 shadow-2xl w-full max-w-sm p-5"
               onMouseDown={(e) => e.stopPropagation()}
             >
-              <h2 id="death-confirm-title" className="text-lg font-semibold mb-2">
+              <h2
+                id="death-confirm-title"
+                className="text-lg font-semibold mb-2"
+              >
                 Declare your DEATH?
               </h2>
-              <p className="text-sm text-slate-300 mb-4">This action is irreversible.</p>
+              <p className="text-sm text-slate-300 mb-4">
+                This action is irreversible.
+              </p>
               <div className="flex items-center justify-end gap-2">
                 <button
                   type="button"
@@ -274,7 +287,7 @@ export default function OnlineLifeCounters({
 
   return (
     <div
-      className={`absolute left-3 top-1/2 -translate-y-1/2 z-10 flex flex-col gap-4 ${
+      className={`fixed left-3 top-1/2 -translate-y-1/2 z-[100] flex flex-col gap-4 ${
         dragFromHand ? "pointer-events-none" : "pointer-events-auto"
       } text-white select-none`}
       onContextMenu={(e) => e.preventDefault()}

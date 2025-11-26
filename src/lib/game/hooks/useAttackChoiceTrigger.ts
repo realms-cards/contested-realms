@@ -89,11 +89,16 @@ export function triggerAttackChoiceIfApplicable(
       }
     }
 
-    // Check for enemy site
+    // Check for enemy site OR any site with enemy units
+    // (enemy units already checked above, so this is for attacking the site itself)
     if (!hasTarget) {
       const site = board.sites[dropKey];
-      if (site && site.owner === enemyOwner) {
-        hasTarget = true;
+      if (site) {
+        // Can attack enemy-owned sites
+        if (site.owner === enemyOwner) {
+          hasTarget = true;
+        }
+        // Can also attack if there are enemy units on any site (already checked above via list)
       }
     }
 
