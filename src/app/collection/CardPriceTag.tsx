@@ -2,6 +2,9 @@
 
 import { useEffect, useState, useRef } from "react";
 
+// Feature flag for pricing - set to true when pricing API is available
+const PRICING_ENABLED = process.env.NEXT_PUBLIC_PRICING_ENABLED === "true";
+
 interface CardPriceTagProps {
   cardId: number;
   cardName: string;
@@ -32,6 +35,9 @@ export default function CardPriceTag({
 
   // Delay fetching to avoid fetching when user quickly hovers over cards
   useEffect(() => {
+    // Skip if pricing is disabled
+    if (!PRICING_ENABLED) return;
+
     const timer = setTimeout(() => {
       setShouldFetch(true);
     }, 500); // Wait 500ms before fetching
@@ -39,6 +45,8 @@ export default function CardPriceTag({
   }, []);
 
   useEffect(() => {
+    // Skip if pricing is disabled
+    if (!PRICING_ENABLED) return;
     if (!shouldFetch || fetchedRef.current) return;
     fetchedRef.current = true;
 
@@ -93,6 +101,11 @@ export default function CardPriceTag({
       })
       .finally(() => setLoading(false));
   }, [shouldFetch, cardId, variantId, finish, cardName]);
+
+  // Return null if pricing is disabled
+  if (!PRICING_ENABLED) {
+    return null;
+  }
 
   if (loading) {
     return <span className="text-gray-500 text-sm">Loading...</span>;
