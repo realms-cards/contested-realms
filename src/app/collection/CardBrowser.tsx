@@ -359,7 +359,7 @@ export default function CardBrowser({ onCardAdded }: CardBrowserProps) {
           <div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full" />
         </div>
       ) : results.length > 0 ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-4">
           {results.map((card) => {
             const ownedQty = ownedCards.get(card.id) || 0;
             const imageSlug =
@@ -368,26 +368,50 @@ export default function CardBrowser({ onCardAdded }: CardBrowserProps) {
                 .toLowerCase()
                 .replace(/\s+/g, "_")}_b_s`;
 
+            // Sites are landscape cards - detect by type
+            const isSite = (card.meta?.type || "")
+              .toLowerCase()
+              .includes("site");
+
             return (
               <div
                 key={`${card.id}-${card.variant?.id || "base"}`}
-                className="relative group rounded-lg overflow-hidden bg-gray-800 cursor-pointer hover:ring-2 hover:ring-blue-500 transition-all"
+                className={`relative group rounded-lg overflow-hidden bg-gray-800 cursor-pointer hover:ring-2 hover:ring-blue-500 transition-all ${
+                  isSite ? "col-span-2" : ""
+                }`}
                 onClick={() => setSelectedCard(card)}
               >
-                {/* Card Image */}
-                <div className="aspect-[2.5/3.5] relative">
+                {/* Card Image - Sites are landscape (3.5:2.5), others are portrait (2.5:3.5) */}
+                <div
+                  className={
+                    isSite
+                      ? "aspect-[3.5/2.5] relative"
+                      : "aspect-[2.5/3.5] relative"
+                  }
+                >
                   <Image
                     src={`/api/images/${imageSlug}`}
                     alt={card.name || "Card"}
                     fill
                     className="object-cover"
-                    sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, 16vw"
+                    sizes={
+                      isSite
+                        ? "(max-width: 640px) 100vw, 25vw"
+                        : "(max-width: 640px) 50vw, 12.5vw"
+                    }
                   />
 
                   {/* Owned Badge */}
                   {ownedQty > 0 && (
                     <div className="absolute top-2 left-2 bg-green-600 text-white text-xs px-2 py-0.5 rounded">
                       Owned: {ownedQty}
+                    </div>
+                  )}
+
+                  {/* Site indicator */}
+                  {isSite && (
+                    <div className="absolute top-2 right-2 bg-amber-600 text-white text-xs px-2 py-0.5 rounded">
+                      Site
                     </div>
                   )}
                 </div>
