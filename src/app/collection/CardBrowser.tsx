@@ -128,7 +128,9 @@ export default function CardBrowser({ onCardAdded }: CardBrowserProps) {
             const ownedQty = ownedCards.get(card.id) || 0;
             const imageSlug =
               card.variant?.slug ||
-              `${card.name.toLowerCase().replace(/\s+/g, "_")}_b_s`;
+              `${(card.name || "unknown")
+                .toLowerCase()
+                .replace(/\s+/g, "_")}_b_s`;
 
             return (
               <div
@@ -140,7 +142,7 @@ export default function CardBrowser({ onCardAdded }: CardBrowserProps) {
                 <div className="aspect-[2.5/3.5] relative">
                   <Image
                     src={`/api/assets/cards/${imageSlug}.webp`}
-                    alt={card.name}
+                    alt={card.name || "Card"}
                     fill
                     className="object-cover"
                     sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, 16vw"
@@ -157,7 +159,7 @@ export default function CardBrowser({ onCardAdded }: CardBrowserProps) {
                 {/* Card Info */}
                 <div className="p-2">
                   <div className="text-sm font-medium truncate">
-                    {card.name}
+                    {card.name || "Unknown Card"}
                   </div>
                   <div className="text-xs text-gray-400">
                     {card.variant?.setName || "Unknown Set"}
