@@ -26,32 +26,7 @@ export default function CollectionPage() {
 
   // Track fetch state to avoid duplicate fetches
   const abortRef = useRef<AbortController | null>(null);
-  const hasFetchedRef = useRef(false);
-
-  // Fetch collection data
-  const fetchCollection = useCallback(
-    async (paramsStr: string, signal: AbortSignal) => {
-      try {
-        setLoading(true);
-        const res = await fetch(`/api/collection?${paramsStr}`, { signal });
-        if (!res.ok) {
-          const err = await res.json();
-          throw new Error(err.error || "Failed to load collection");
-        }
-        const result = await res.json();
-        setData(result);
-        setError(null);
-      } catch (e) {
-        if (e instanceof Error && e.name === "AbortError") {
-          return;
-        }
-        setError(e instanceof Error ? e.message : "Failed to load collection");
-      } finally {
-        setLoading(false);
-      }
-    },
-    []
-  );
+  const lastParamsRef = useRef<string>("");
 
   // Build params and fetch when dependencies change
   useEffect(() => {
@@ -69,6 +44,11 @@ export default function CollectionPage() {
 
     const paramsStr = params.toString();
 
+    // Skip if params haven't changed
+    if (paramsStr === lastParamsRef.current) {
+      return;
+    }
+
     // Abort any pending request
     if (abortRef.current) {
       abortRef.current.abort();
@@ -78,20 +58,52 @@ export default function CollectionPage() {
     abortRef.current = controller;
 
     // Fetch immediately on first load, debounce subsequent changes
-    const delay = hasFetchedRef.current ? 150 : 0;
-    hasFetchedRef.current = true;
+    const isFirstLoad = lastParamsRef.current === "";
+    lastParamsRef.current = paramsStr;
 
-    const timer = setTimeout(() => {
-      fetchCollection(paramsStr, controller.signal);
-    }, delay);
-
-    return () => {
-      clearTimeout(timer);
+    const doFetch = async () => {
+      try {
+        setLoading(true);
+        const res = await fetch(`/api/collection?${paramsStr}`, {
+          signal: controller.signal,
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error || "Failed to load collection");
+        }
+        const result = await res.json();
+        setData(result);
+        setError(null);
+      } catch (e) {
+        if (e instanceof Error && e.name === "AbortError") {
+          return;
+        }
+        setError(e instanceof Error ? e.message : "Failed to load collection");
+      } finally {
+        setLoading(false);
+      }
     };
-  }, [page, sort, order, filters, fetchCollection]);
+
+    if (isFirstLoad) {
+      doFetch();
+      return () => {};
+    } else {
+      const timer = setTimeout(doFetch, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [
+    page,
+    sort,
+    order,
+    filters.setId,
+    filters.element,
+    filters.type,
+    filters.rarity,
+    filters.search,
+  ]);
 
   // Manual refresh function for after card updates
-  const refreshCollection = useCallback(() => {
+  const refreshCollection = useCallback(async () => {
     // Abort current and trigger new fetch
     if (abortRef.current) {
       abortRef.current.abort();
@@ -110,8 +122,39 @@ export default function CollectionPage() {
     if (filters.rarity) params.set("rarity", filters.rarity);
     if (filters.search) params.set("search", filters.search);
 
-    fetchCollection(params.toString(), controller.signal);
-  }, [page, sort, order, filters, fetchCollection]);
+    const paramsStr = params.toString();
+    lastParamsRef.current = paramsStr;
+
+    try {
+      setLoading(true);
+      const res = await fetch(`/api/collection?${paramsStr}`, {
+        signal: controller.signal,
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to load collection");
+      }
+      const result = await res.json();
+      setData(result);
+      setError(null);
+    } catch (e) {
+      if (e instanceof Error && e.name === "AbortError") {
+        return;
+      }
+      setError(e instanceof Error ? e.message : "Failed to load collection");
+    } finally {
+      setLoading(false);
+    }
+  }, [
+    page,
+    sort,
+    order,
+    filters.setId,
+    filters.element,
+    filters.type,
+    filters.rarity,
+    filters.search,
+  ]);
 
   const handleFiltersChange = (newFilters: FilterType) => {
     setFilters(newFilters);
