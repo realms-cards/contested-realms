@@ -128,16 +128,49 @@ export default function CollectionDeckEditor({
     return "Spellbook";
   };
 
-  const addCardToDeck = async (cardId: number, zone: string) => {
+  const addCardToDeck = async (
+    cardId: number,
+    zone: string,
+    searchResult?: SearchResult
+  ) => {
     setUpdating(true);
     try {
-      // Get current deck cards and add the new one
-      const existingCard = cards.find((c) => c.cardId === cardId);
-      const newCards = existingCard
-        ? cards.map((c) =>
-            c.cardId === cardId ? { ...c, count: c.count + 1 } : c
-          )
-        : [...cards, { cardId, variantId: null, zone, count: 1 }];
+      // Check if card already exists in THIS zone
+      const existingCardInZone = cards.find(
+        (c) => c.cardId === cardId && c.zone === zone
+      );
+
+      let newCards;
+      if (existingCardInZone) {
+        // Increment count in the same zone
+        newCards = cards.map((c) =>
+          c.cardId === cardId && c.zone === zone
+            ? { ...c, count: c.count + 1 }
+            : c
+        );
+      } else {
+        // Add new entry for this zone with slug/meta from search
+        newCards = [
+          ...cards,
+          {
+            cardId,
+            variantId: null,
+            zone,
+            count: 1,
+            name: searchResult?.name || "",
+            slug: searchResult?.slug,
+            meta: searchResult
+              ? {
+                  type: searchResult.type,
+                  cost: searchResult.cost ?? undefined,
+                  thresholds: searchResult.thresholds,
+                }
+              : undefined,
+            ownedQuantity: searchResult?.owned || 0,
+            availableQuantity: 0,
+          },
+        ];
+      }
 
       const res = await fetch(`/api/collection/decks/${deckId}`, {
         method: "PUT",
@@ -415,7 +448,9 @@ export default function CollectionDeckEditor({
                   {available > 0 ? (
                     <div className="flex flex-col gap-1">
                       <button
-                        onClick={() => addCardToDeck(card.cardId, autoZone)}
+                        onClick={() =>
+                          addCardToDeck(card.cardId, autoZone, card)
+                        }
                         disabled={updating}
                         className={`px-2 py-1 rounded text-xs font-medium ${
                           isAvatar
@@ -430,7 +465,7 @@ export default function CollectionDeckEditor({
                       {!isAvatar && (
                         <button
                           onClick={() =>
-                            addCardToDeck(card.cardId, "Collection")
+                            addCardToDeck(card.cardId, "Collection", card)
                           }
                           disabled={updating}
                           className="px-2 py-1 rounded text-xs font-medium bg-amber-600/80 hover:bg-amber-600"
