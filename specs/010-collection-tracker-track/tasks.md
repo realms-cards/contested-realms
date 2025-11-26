@@ -126,31 +126,31 @@
 
 ---
 
-## Phase 4: Integration & Polish
+## Phase 4: Integration & Polish ✅
 
 ### Navigation Integration
 
-- [ ] **T043** Add "Your Collection" link to main page (`src/app/page.tsx`) in the main navigation/feature section.
+- [x] **T043** Add "Your Collection" link to main page (`src/app/page.tsx`) in the main navigation/feature section.
 
-- [ ] **T044** Add collection link to user menu/header for authenticated users.
+- [x] **T044** Add collection link to user menu/header for authenticated users.
 
 ### Import Integration
 
-- [ ] **T045** Create `src/app/collection/ImportCollection.tsx` - text import UI similar to DeckImportText, with preview and confirmation.
+- [x] **T045** Create `src/app/collection/ImportCollection.tsx` - text import UI similar to DeckImportText, with preview and confirmation.
 
 ### Export Integration
 
-- [ ] **T046** Add export buttons to CollectionStats - CSV, JSON, text format downloads.
+- [x] **T046** Add export buttons to CollectionStats - CSV, JSON, text format downloads.
 
 ### Performance & Polish
 
-- [ ] **T047** Add loading skeletons to CollectionGrid for better perceived performance.
+- [x] **T047** Add loading skeletons to CollectionGrid for better perceived performance.
 
-- [ ] **T048** Implement virtual scrolling in CollectionGrid for collections with 500+ cards.
+- [x] **T048** Implement virtual scrolling in CollectionGrid for collections with 500+ cards.
 
-- [ ] **T049** Add optimistic updates for quantity changes in collection.
+- [x] **T049** Add optimistic updates for quantity changes in collection.
 
-- [ ] **T050** Run quickstart.md validation scenarios manually and document results.
+- [x] **T050** Run quickstart.md validation scenarios manually and document results.
 
 ---
 
