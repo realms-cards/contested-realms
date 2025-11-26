@@ -7,14 +7,15 @@ import type {
 } from "./types";
 
 const HISTORY_LIMIT = 10;
+const UNDO_RETRY_LIMIT = 5;
+let undoRetryCount = 0;
 
 type HistorySlice = Pick<
   GameState,
   "history" | "historyByPlayer" | "pushHistory" | "undo"
 >;
 
-const clone = <T>(value: T): T =>
-  JSON.parse(JSON.stringify(value)) as T;
+const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 
 const buildSnapshot = (state: GameState): SerializedGame => ({
   actorKey: state.actorKey ?? null,
@@ -75,10 +76,7 @@ const sanitizeBoardSitesForUndo = (
   };
 };
 
-type HistoryDefaults = Pick<
-  GameState,
-  "history" | "historyByPlayer"
->;
+type HistoryDefaults = Pick<GameState, "history" | "historyByPlayer">;
 
 export const createInitialHistoryState = (): HistoryDefaults => ({
   history: [],
@@ -173,18 +171,41 @@ export const createHistorySlice: StateCreator<
       const tr = state.transport;
       if (tr) {
         if ((state.lastServerTs ?? 0) < (state.lastLocalActionTs ?? 0)) {
-          try {
-            console.debug("[undo] Delaying undo until server ack catches up", {
-              lastServerTs: state.lastServerTs,
-              lastLocalActionTs: state.lastLocalActionTs,
-            });
-          } catch {}
-          setTimeout(() => {
+          undoRetryCount++;
+          if (undoRetryCount >= UNDO_RETRY_LIMIT) {
             try {
-              store?.getState().undo();
+              console.warn(
+                "[undo] Max retry limit reached, proceeding with undo anyway",
+                {
+                  lastServerTs: state.lastServerTs,
+                  lastLocalActionTs: state.lastLocalActionTs,
+                  retries: undoRetryCount,
+                }
+              );
             } catch {}
-          }, 120);
-          return state as GameState;
+            undoRetryCount = 0;
+            // Fall through to proceed with undo
+          } else {
+            try {
+              console.debug(
+                "[undo] Delaying undo until server ack catches up",
+                {
+                  lastServerTs: state.lastServerTs,
+                  lastLocalActionTs: state.lastLocalActionTs,
+                  retryCount: undoRetryCount,
+                }
+              );
+            } catch {}
+            setTimeout(() => {
+              try {
+                store?.getState().undo();
+              } catch {}
+            }, 120);
+            return state as GameState;
+          }
+        } else {
+          // Reset retry counter on successful ack catch-up
+          undoRetryCount = 0;
         }
 
         try {
@@ -195,6 +216,25 @@ export const createHistorySlice: StateCreator<
 
           const boardForUndo = sanitizeBoardSitesForUndo(prev.board);
 
+          // Only restore our own zones, preserve opponent's current zones
+          // to avoid undoing their draws/actions
+          const me = state.actorKey as PlayerKey;
+          const opponent: PlayerKey = me === "p1" ? "p2" : "p1";
+          const zonesForUndo = {
+            [me]: prev.zones[me],
+            [opponent]: state.zones[opponent],
+          } as Record<PlayerKey, typeof prev.zones.p1>;
+
+          // Similarly, only restore our own mulligan state
+          const mulligansForUndo = {
+            [me]: prev.mulligans[me],
+            [opponent]: state.mulligans[opponent],
+          } as Record<PlayerKey, number>;
+          const mulliganDrawnForUndo = {
+            [me]: prev.mulliganDrawn[me],
+            [opponent]: state.mulliganDrawn[opponent],
+          } as Record<PlayerKey, typeof prev.mulliganDrawn.p1>;
+
           const patch: ServerPatchT = {
             players: prev.players,
             currentPlayer: prev.currentPlayer,
@@ -203,11 +243,11 @@ export const createHistorySlice: StateCreator<
             d20Rolls: prev.d20Rolls,
             setupWinner: prev.setupWinner,
             board: boardForUndo,
-            zones: prev.zones,
+            zones: zonesForUndo,
             avatars: prev.avatars,
             permanents: prev.permanents,
-            mulligans: prev.mulligans,
-            mulliganDrawn: prev.mulliganDrawn,
+            mulligans: mulligansForUndo,
+            mulliganDrawn: mulliganDrawnForUndo,
             permanentPositions: prev.permanentPositions,
             permanentAbilities: prev.permanentAbilities,
             sitePositions: prev.sitePositions,
@@ -236,11 +276,14 @@ export const createHistorySlice: StateCreator<
             ],
           } as ServerPatchT;
           try {
-            console.debug("[undo] Broadcasting authoritative snapshot to server", {
-              keys: patch.__replaceKeys,
-              eventSeq: patch.eventSeq,
-              permanentsCount: perCount,
-            });
+            console.debug(
+              "[undo] Broadcasting authoritative snapshot to server",
+              {
+                keys: patch.__replaceKeys,
+                eventSeq: patch.eventSeq,
+                permanentsCount: perCount,
+              }
+            );
           } catch {}
           get().trySendPatch(patch);
         } catch {}

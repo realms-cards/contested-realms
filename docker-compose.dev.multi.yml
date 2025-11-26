@@ -1,0 +1,115 @@
+# Multi-instance dev setup for testing horizontal scaling
+# Run: docker compose -f docker-compose.dev.multi.yml up -d --build
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: sorcery-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: sorcery
+      POSTGRES_USER: sorcery
+      POSTGRES_PASSWORD: sorcery
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sorcery"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: sorcery-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - redisdata:/data
+
+  # One-off migration runner (applies Prisma migrations)
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    container_name: sorcery-migrate
+    environment:
+      DATABASE_URL: postgresql://sorcery:sorcery@postgres:5432/sorcery?schema=public
+      DIRECT_URL: postgresql://sorcery:sorcery@postgres:5432/sorcery?schema=public
+    depends_on:
+      - postgres
+    command: ["npx", "prisma", "migrate", "deploy"]
+    restart: "no"
+
+  # Socket.IO server instance 1
+  server1:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    container_name: sorcery-server-1
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://sorcery:sorcery@postgres:5432/sorcery?schema=public
+      DIRECT_URL: postgresql://sorcery:sorcery@postgres:5432/sorcery?schema=public
+      REDIS_URL: redis://redis:6379
+      INSTANCE_ID: server1
+      PORT: 3010
+      # Enable horizontal scaling features
+      REDIS_STATE_ENABLED: "true"
+    depends_on:
+      - postgres
+      - redis
+      - migrate
+    expose:
+      - "3010"
+
+  # Socket.IO server instance 2
+  server2:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    container_name: sorcery-server-2
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://sorcery:sorcery@postgres:5432/sorcery?schema=public
+      DIRECT_URL: postgresql://sorcery:sorcery@postgres:5432/sorcery?schema=public
+      REDIS_URL: redis://redis:6379
+      INSTANCE_ID: server2
+      PORT: 3010
+      # Enable horizontal scaling features
+      REDIS_STATE_ENABLED: "true"
+    depends_on:
+      - postgres
+      - redis
+      - migrate
+    expose:
+      - "3010"
+
+  # Caddy reverse proxy with ip_hash load balancing
+  caddy:
+    image: caddy:2-alpine
+    container_name: sorcery-caddy
+    restart: unless-stopped
+    ports:
+      - "3010:3010"
+    volumes:
+      - ./Caddyfile.dev.multi:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - server1
+      - server2
+
+volumes:
+  pgdata:
+  redisdata:

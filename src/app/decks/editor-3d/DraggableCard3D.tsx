@@ -1,7 +1,7 @@
 "use client";
 
 import type { ThreeEvent } from "@react-three/fiber";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Group, Object3D } from "three";
 import { createCardMeshUserData } from "@/lib/game/card-preview.types";
 import CardPlane from "@/lib/game/components/CardPlane";
@@ -56,7 +56,7 @@ function isPrimaryCardHit(e: ThreeEvent<PointerEvent>): boolean {
   return false;
 }
 
-export default function DraggableCard3D({
+function DraggableCard3DInner({
   slug,
   isSite,
   x,
@@ -239,6 +239,15 @@ export default function DraggableCard3D({
           onHoverEnd?.();
         }}
         onPointerMove={(e: ThreeEvent<PointerEvent>) => {
+          // Continuous hover detection: check if this card is the topmost one under cursor
+          // This fires more reliably than onPointerOver for overlapping cards
+          if (interactive && !dragging.current && isPrimaryCardHit(e)) {
+            onHoverStart?.({
+              slug,
+              name: cardName ?? slug,
+              type: cardType ?? null,
+            });
+          }
           if (disabled) return;
           const s = dragStart.current;
           if (!s) return;
@@ -348,3 +357,7 @@ export default function DraggableCard3D({
     </group>
   );
 }
+
+// Memoize to prevent re-renders when parent state (like hoverPreview) changes
+const DraggableCard3D = memo(DraggableCard3DInner);
+export default DraggableCard3D;

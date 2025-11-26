@@ -12,13 +12,13 @@ import { useOnline } from "@/app/online/online-context";
 import UserBadge from "@/components/auth/UserBadge";
 import FloatingChat from "@/components/chat/FloatingChat";
 import CardPreviewOverlay from "@/components/game/CardPreviewOverlay";
+import { DynamicBoard as Board } from "@/components/game/dynamic-3d";
 import { NumberBadge } from "@/components/game/manacost";
 import type { Digit } from "@/components/game/manacost";
 import { GlobalVideoOverlay } from "@/components/ui/GlobalVideoOverlay";
 import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
 import TrackpadOrbitAdapter from "@/lib/controls/TrackpadOrbitAdapter";
 import type { SearchResult } from "@/lib/deckEditor/search";
-import Board from "@/lib/game/Board";
 import type { ApiCardMetaRow } from "@/lib/game/cardMeta";
 import { toCardMetaMap, mergeCardMetaMaps } from "@/lib/game/cardMeta";
 import {
@@ -164,6 +164,11 @@ export default function TournamentDraft3DScreen({
   useEffect(() => {
     isSortingEnabledRef.current = isSortingEnabled;
   }, [isSortingEnabled]);
+  // Ref for stackPositions to access in completion handlers
+  const stackPositionsRef = useRef<Map<
+    number,
+    { x: number; z: number; stackIndex: number }
+  > | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -515,14 +520,23 @@ export default function TournamentDraft3DScreen({
                   const latestPick3D = Array.isArray(pick3DRef.current)
                     ? pick3DRef.current
                     : [];
+                  // Always save layout positions - use stack positions if auto-stack is enabled
+                  // This ensures zone determination (Deck vs Sideboard based on z position) works
+                  // correctly when entering the deck editor
+                  const latestStackPositions = stackPositionsRef.current;
                   const layout =
-                    !isSortingEnabledRef.current && latestPick3D.length > 0
-                      ? latestPick3D.map((p) => ({
-                          cardId: p.card.cardId,
-                          zone: p.zone,
-                          x: p.x,
-                          z: p.z,
-                        }))
+                    latestPick3D.length > 0
+                      ? latestPick3D.map((p) => {
+                          const stackPos = isSortingEnabledRef.current
+                            ? latestStackPositions?.get(p.id)
+                            : null;
+                          return {
+                            cardId: p.card.cardId,
+                            zone: p.zone,
+                            x: stackPos ? stackPos.x : p.x,
+                            z: stackPos ? stackPos.z : p.z,
+                          };
+                        })
                       : [];
                   const layoutKey = `draftLayout_draft_${String(
                     draftSessionId
@@ -1308,14 +1322,23 @@ export default function TournamentDraft3DScreen({
               const latestPick3D = Array.isArray(pick3DRef.current)
                 ? pick3DRef.current
                 : [];
+              // Always save layout positions - use stack positions if auto-stack is enabled
+              // This ensures zone determination (Deck vs Sideboard based on z position) works
+              // correctly when entering the deck editor
+              const latestStackPositions = stackPositionsRef.current;
               const layout =
-                !isSortingEnabledRef.current && latestPick3D.length > 0
-                  ? latestPick3D.map((p) => ({
-                      cardId: p.card.cardId,
-                      zone: p.zone,
-                      x: p.x,
-                      z: p.z,
-                    }))
+                latestPick3D.length > 0
+                  ? latestPick3D.map((p) => {
+                      const stackPos = isSortingEnabledRef.current
+                        ? latestStackPositions?.get(p.id)
+                        : null;
+                      return {
+                        cardId: p.card.cardId,
+                        zone: p.zone,
+                        x: stackPos ? stackPos.x : p.x,
+                        z: stackPos ? stackPos.z : p.z,
+                      };
+                    })
                   : [];
               const layoutKey = `draftLayout_draft_${String(draftSessionId)}`;
               const prefsKey = `draftStackPrefs_draft_${String(
@@ -1538,6 +1561,11 @@ export default function TournamentDraft3DScreen({
       { sortMode }
     );
   }, [pick3D, isSortingEnabled, layoutMetaByCardId, sortMode]);
+
+  // Keep ref in sync with stackPositions for access in completion handlers
+  useEffect(() => {
+    stackPositionsRef.current = stackPositions;
+  }, [stackPositions]);
 
   // Calculate stack sizes for hitbox optimization
   const stackSizes = useMemo(() => {

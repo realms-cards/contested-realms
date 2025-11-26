@@ -14,13 +14,15 @@ import OfflineMulliganScreen from "@/components/game/OfflineMulliganScreen";
 import PileSearchDialog from "@/components/game/PileSearchDialog";
 import PlacementDialog from "@/components/game/PlacementDialog";
 import StatusBar from "@/components/game/StatusBar";
-import Board from "@/lib/game/Board";
+import {
+  DynamicBoard as Board,
+  DynamicHand3D as Hand3D,
+  DynamicHud3D as Hud3D,
+  DynamicPiles3D as Piles3D,
+  DynamicTokenPile3D as TokenPile3D,
+} from "@/components/game/dynamic-3d";
 import { createCardPreviewData } from "@/lib/game/card-preview.types";
-import Hand3D from "@/lib/game/components/Hand3D";
-import Hud3D from "@/lib/game/components/Hud3D";
-import Piles3D from "@/lib/game/components/Piles3D";
 import TextureCache from "@/lib/game/components/TextureCache";
-import TokenPile3D from "@/lib/game/components/TokenPile3D";
 import {
   MAT_PIXEL_W,
   MAT_PIXEL_H,
@@ -323,7 +325,7 @@ export default function PlayPage() {
   return (
     <div className="relative h-screen [height:100dvh] w-full select-none">
       {/* Camera mode toggle */}
-      <div className="absolute top-2 left-2 z-30">
+      <div className="fixed top-2 left-2 z-[100]">
         <div className="bg-black/50 rounded-lg p-1 ring-1 ring-white/10">
           <button
             className={`px-2 py-1 text-xs rounded ${
@@ -357,7 +359,7 @@ export default function PlayPage() {
       </div>
       {/* Setup Overlay */}
       {setupOpen && (
-        <div className="absolute inset-0 z-20 bg-black/70 backdrop-blur-sm flex items-center justify-center p-6">
+        <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-center justify-center p-6">
           {!prepared ? (
             <DeckSelector onPrepareComplete={() => setPrepared(true)} />
           ) : (
@@ -412,7 +414,7 @@ export default function PlayPage() {
 
       {/* Event Console */}
       <div
-        className={`absolute left-3 bottom-2 z-10 ${
+        className={`fixed left-3 bottom-2 z-[100] ${
           dragFromHand ? "pointer-events-none" : "pointer-events-auto"
         } text-white w-80`}
       >

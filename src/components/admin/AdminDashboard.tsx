@@ -1,6 +1,7 @@
 "use client";
 
 import clsx from "clsx";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   AdminActionResult,
@@ -53,9 +54,8 @@ export default function AdminDashboard({
   actions,
 }: AdminDashboardProps) {
   const [stats, setStats] = useState<AdminStats>(initialStats);
-  const [connections, setConnections] = useState<ConnectionTestResult[]>(
-    initialConnections
-  );
+  const [connections, setConnections] =
+    useState<ConnectionTestResult[]>(initialConnections);
   const [statusTimestamp, setStatusTimestamp] = useState<string>(
     initialStatusTimestamp
   );
@@ -83,57 +83,6 @@ export default function AdminDashboard({
   const [usersError, setUsersError] = useState<string | null>(null);
   const [usersNextCursor, setUsersNextCursor] = useState<string | null>(null);
   const [usersFetchedAt, setUsersFetchedAt] = useState<string | null>(null);
-  const [cardStats, setCardStats] = useState<
-    Array<{
-      cardId: number;
-      name: string;
-      plays: number;
-      wins: number;
-      losses: number;
-      draws: number;
-      winRate: number;
-    }>
-  >([]);
-  const [cardStatsError, setCardStatsError] = useState<string | null>(null);
-  const [cardStatsLoading, setCardStatsLoading] = useState(false);
-  const [cardStatsFormat, setCardStatsFormat] = useState<"constructed" | "sealed" | "draft">("constructed");
-  const [cardStatsOrder, setCardStatsOrder] = useState<"plays" | "wins" | "winRate">("plays");
-  const [cardStatsLimit, setCardStatsLimit] = useState<number>(50);
-
-  const refreshCardStats = useCallback(async () => {
-    setCardStatsLoading(true);
-    setCardStatsError(null);
-    try {
-      const params = new URLSearchParams();
-      params.set("format", cardStatsFormat);
-      params.set("order", cardStatsOrder);
-      params.set("limit", String(cardStatsLimit));
-      const response = await fetch(`/api/admin/human-card-stats?${params.toString()}`, {
-        method: "GET",
-        cache: "no-store",
-      });
-      if (!response.ok) {
-        const body = (await response.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(body?.error || `HTTP ${response.status}`);
-      }
-      const payload = (await response.json()) as {
-        stats: Array<{
-          cardId: number;
-          name: string;
-          plays: number;
-          wins: number;
-          losses: number;
-          draws: number;
-          winRate: number;
-        }>;
-      };
-      setCardStats(payload.stats || []);
-    } catch (error) {
-      setCardStatsError(error instanceof Error ? error.message : "Failed to load stats");
-    } finally {
-      setCardStatsLoading(false);
-    }
-  }, [cardStatsFormat, cardStatsOrder, cardStatsLimit]);
 
   const refreshHealthHistory = useCallback(async () => {
     setLoadingHealthHistory(true);
@@ -144,9 +93,9 @@ export default function AdminDashboard({
         cache: "no-store",
       });
       if (!response.ok) {
-        const body = (await response.json().catch(() => null)) as
-          | { error?: string }
-          | null;
+        const body = (await response.json().catch(() => null)) as {
+          error?: string;
+        } | null;
         throw new Error(body?.error || `HTTP ${response.status}`);
       }
       const payload = (await response.json()) as {
@@ -170,9 +119,9 @@ export default function AdminDashboard({
         cache: "no-store",
       });
       if (!response.ok) {
-        const body = (await response.json().catch(() => null)) as
-          | { error?: string }
-          | null;
+        const body = (await response.json().catch(() => null)) as {
+          error?: string;
+        } | null;
         throw new Error(body?.error || `HTTP ${response.status}`);
       }
       const payload = (await response.json()) as {
@@ -194,9 +143,9 @@ export default function AdminDashboard({
         cache: "no-store",
       });
       if (!response.ok) {
-        const body = (await response.json().catch(() => null)) as
-          | { error?: string }
-          | null;
+        const body = (await response.json().catch(() => null)) as {
+          error?: string;
+        } | null;
         throw new Error(body?.error || `HTTP ${response.status}`);
       }
       const payload = (await response.json()) as {
@@ -218,9 +167,9 @@ export default function AdminDashboard({
         cache: "no-store",
       });
       if (!response.ok) {
-        const body = (await response.json().catch(() => null)) as
-          | { error?: string }
-          | null;
+        const body = (await response.json().catch(() => null)) as {
+          error?: string;
+        } | null;
         throw new Error(body?.error || `HTTP ${response.status}`);
       }
       const payload = (await response.json()) as {
@@ -242,9 +191,9 @@ export default function AdminDashboard({
         cache: "no-store",
       });
       if (!response.ok) {
-        const body = (await response.json().catch(() => null)) as
-          | { error?: string }
-          | null;
+        const body = (await response.json().catch(() => null)) as {
+          error?: string;
+        } | null;
         throw new Error(body?.error || `HTTP ${response.status}`);
       }
       const payload = (await response.json()) as {
@@ -274,9 +223,9 @@ export default function AdminDashboard({
           cache: "no-store",
         });
         if (!response.ok) {
-          const body = (await response.json().catch(() => null)) as
-            | { error?: string }
-            | null;
+          const body = (await response.json().catch(() => null)) as {
+            error?: string;
+          } | null;
           throw new Error(body?.error || `HTTP ${response.status}`);
         }
         const payload = (await response.json()) as {
@@ -312,9 +261,9 @@ export default function AdminDashboard({
         cache: "no-store",
       });
       if (!response.ok) {
-        const body = (await response.json().catch(() => null)) as
-          | { error?: string }
-          | null;
+        const body = (await response.json().catch(() => null)) as {
+          error?: string;
+        } | null;
         throw new Error(body?.error || `HTTP ${response.status}`);
       }
       const payload = (await response.json()) as {
@@ -325,7 +274,9 @@ export default function AdminDashboard({
       setConnections(payload.connections);
       setStats(payload.stats);
       setStatusTimestamp(
-        payload.generatedAt || payload.stats.updatedAt || new Date().toISOString()
+        payload.generatedAt ||
+          payload.stats.updatedAt ||
+          new Date().toISOString()
       );
       await Promise.allSettled([
         refreshHealthHistory(),
@@ -333,7 +284,6 @@ export default function AdminDashboard({
         refreshJobs(),
         refreshSessions(),
         refreshUsage(),
-        refreshCardStats(),
       ]);
     } catch (error) {
       setStatusError(
@@ -348,7 +298,6 @@ export default function AdminDashboard({
     refreshJobs,
     refreshSessions,
     refreshUsage,
-    refreshCardStats,
   ]);
 
   useEffect(() => {
@@ -357,14 +306,12 @@ export default function AdminDashboard({
     void refreshJobs();
     void refreshSessions();
     void refreshUsage();
-    void refreshCardStats();
   }, [
     refreshErrors,
     refreshHealthHistory,
     refreshJobs,
     refreshSessions,
     refreshUsage,
-    refreshCardStats,
   ]);
 
   const runAdminAction = useCallback(
@@ -379,9 +326,9 @@ export default function AdminDashboard({
           body: JSON.stringify({ action: actionId }),
         });
         if (!response.ok) {
-          const body = (await response.json().catch(() => null)) as
-            | { error?: string }
-            | null;
+          const body = (await response.json().catch(() => null)) as {
+            error?: string;
+          } | null;
           throw new Error(body?.error || `HTTP ${response.status}`);
         }
         const result = (await response.json()) as AdminActionResult;
@@ -416,8 +363,8 @@ export default function AdminDashboard({
         conn.status === "ok"
           ? "bg-emerald-500/10 border-emerald-400/50 text-emerald-200"
           : conn.status === "skipped"
-            ? "bg-slate-700/40 border-slate-500/50 text-slate-200"
-            : "bg-rose-500/10 border-rose-400/60 text-rose-200";
+          ? "bg-slate-700/40 border-slate-500/50 text-slate-200"
+          : "bg-rose-500/10 border-rose-400/60 text-rose-200";
       return { ...conn, statusClass };
     });
   }, [connections]);
@@ -472,19 +419,15 @@ export default function AdminDashboard({
             Numbers are aggregated live from the database.
           </p>
           <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <StatCard
-              label="Registered users"
-              value={stats.totals.users}
-            />
+            <StatCard label="Registered users" value={stats.totals.users} />
             <StatCard
               label="Tournaments stored"
               value={stats.totals.tournaments}
-              sublabel={`${formatNumber(stats.totals.activeTournaments)} active`}
+              sublabel={`${formatNumber(
+                stats.totals.activeTournaments
+              )} active`}
             />
-            <StatCard
-              label="Matches recorded"
-              value={stats.totals.matches}
-            />
+            <StatCard label="Matches recorded" value={stats.totals.matches} />
             <StatCard
               label="Replay sessions"
               value={stats.totals.replaySessions}
@@ -500,95 +443,22 @@ export default function AdminDashboard({
           </div>
         </section>
 
-        <section className="flex flex-col gap-3">
-          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <h2 className="text-lg font-semibold text-white">Human card stats (per-card win rate)</h2>
-            <div className="flex flex-wrap items-center gap-2 text-xs">
-              <label className="flex items-center gap-1">
-                <span className="text-slate-300">Format</span>
-                <select
-                  value={cardStatsFormat}
-                  onChange={(e) => setCardStatsFormat(e.target.value as typeof cardStatsFormat)}
-                  className="rounded border border-slate-600 bg-slate-900 px-2 py-1 text-slate-200"
-                >
-                  <option value="constructed">constructed</option>
-                  <option value="sealed">sealed</option>
-                  <option value="draft">draft</option>
-                </select>
-              </label>
-              <label className="flex items-center gap-1">
-                <span className="text-slate-300">Order</span>
-                <select
-                  value={cardStatsOrder}
-                  onChange={(e) => setCardStatsOrder(e.target.value as typeof cardStatsOrder)}
-                  className="rounded border border-slate-600 bg-slate-900 px-2 py-1 text-slate-200"
-                >
-                  <option value="plays">plays</option>
-                  <option value="wins">wins</option>
-                  <option value="winRate">win rate</option>
-                </select>
-              </label>
-              <label className="flex items-center gap-1">
-                <span className="text-slate-300">Limit</span>
-                <input
-                  type="number"
-                  min={1}
-                  max={200}
-                  value={cardStatsLimit}
-                  onChange={(e) => setCardStatsLimit(Math.max(1, Math.min(200, Number(e.target.value) || 50)))}
-                  className="w-20 rounded border border-slate-600 bg-slate-900 px-2 py-1 text-slate-200"
-                />
-              </label>
-              <button
-                onClick={() => void refreshCardStats()}
-                className="inline-flex items-center justify-center rounded border border-slate-600 px-3 py-1 text-xs font-medium text-slate-200 hover:bg-slate-800"
-                disabled={cardStatsLoading}
-              >
-                {cardStatsLoading ? "Refreshing…" : "Refresh"}
-              </button>
+        <section className="rounded border border-slate-700 bg-slate-900/60 px-6 py-5">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-white">
+                Meta Statistics
+              </h2>
+              <p className="text-sm text-slate-400">
+                Card win rates, element distribution, mana curves, and more
+              </p>
             </div>
-          </div>
-          {cardStatsError && (
-            <div className="rounded border border-rose-500/50 bg-rose-500/10 px-3 py-2 text-xs text-rose-100">
-              {cardStatsError}
-            </div>
-          )}
-          <div className="overflow-auto rounded border border-slate-800 bg-slate-900/40">
-            <table className="min-w-full text-left text-xs text-slate-200">
-              <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400">
-                <tr>
-                  <th className="px-3 py-2">Card</th>
-                  <th className="px-3 py-2">Plays</th>
-                  <th className="px-3 py-2">Wins</th>
-                  <th className="px-3 py-2">Losses</th>
-                  <th className="px-3 py-2">Draws</th>
-                  <th className="px-3 py-2">Win rate</th>
-                </tr>
-              </thead>
-              <tbody>
-                {cardStats.length === 0 ? (
-                  <tr>
-                    <td className="px-3 py-2 text-slate-300" colSpan={6}>
-                      No stats yet. Play some matches or adjust filters.
-                    </td>
-                  </tr>
-                ) : (
-                  cardStats.map((row) => (
-                    <tr key={`${row.cardId}`} className="border-t border-slate-800/60">
-                      <td className="px-3 py-2">
-                        <span className="font-medium text-white">{row.name}</span>
-                        <div className="text-[10px] text-slate-400">#{row.cardId}</div>
-                      </td>
-                      <td className="px-3 py-2">{row.plays}</td>
-                      <td className="px-3 py-2">{row.wins}</td>
-                      <td className="px-3 py-2">{row.losses}</td>
-                      <td className="px-3 py-2">{row.draws}</td>
-                      <td className="px-3 py-2">{(row.winRate * 100).toFixed(1)}%</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+            <Link
+              href="/admin/meta"
+              className="inline-flex items-center justify-center rounded border border-emerald-400 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-200 hover:bg-emerald-500/20"
+            >
+              View Meta Dashboard →
+            </Link>
           </div>
         </section>
 
@@ -613,8 +483,8 @@ export default function AdminDashboard({
                       connection.status === "ok"
                         ? "bg-emerald-400/20 text-emerald-100"
                         : connection.status === "skipped"
-                          ? "bg-slate-500/30 text-slate-200"
-                          : "bg-rose-500/30 text-rose-100"
+                        ? "bg-slate-500/30 text-slate-200"
+                        : "bg-rose-500/30 text-rose-100"
                     )}
                   >
                     {connection.status}
@@ -850,7 +720,9 @@ export default function AdminDashboard({
 
         <section className="flex flex-col gap-3">
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <h2 className="text-lg font-semibold text-white">Active sessions</h2>
+            <h2 className="text-lg font-semibold text-white">
+              Active sessions
+            </h2>
             <button
               onClick={() => {
                 void refreshSessions();
@@ -901,7 +773,9 @@ export default function AdminDashboard({
 
         <section className="flex flex-col gap-3">
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <h2 className="text-lg font-semibold text-white">Usage snapshots</h2>
+            <h2 className="text-lg font-semibold text-white">
+              Usage snapshots
+            </h2>
             <button
               onClick={() => {
                 void refreshUsage();
@@ -935,9 +809,17 @@ export default function AdminDashboard({
                   </div>
                   <ul className="mt-2 space-y-1 text-xs text-slate-200">
                     <li>New users: {formatNumber(snapshot.newUsers)}</li>
-                    <li>Matches completed: {formatNumber(snapshot.matchesCompleted)}</li>
-                    <li>Tournaments started: {formatNumber(snapshot.tournamentsStarted)}</li>
-                    <li>Drafts created: {formatNumber(snapshot.draftsStarted)}</li>
+                    <li>
+                      Matches completed:{" "}
+                      {formatNumber(snapshot.matchesCompleted)}
+                    </li>
+                    <li>
+                      Tournaments started:{" "}
+                      {formatNumber(snapshot.tournamentsStarted)}
+                    </li>
+                    <li>
+                      Drafts created: {formatNumber(snapshot.draftsStarted)}
+                    </li>
                     <li>Active users: {formatNumber(snapshot.activeUsers)}</li>
                   </ul>
                 </div>
@@ -1080,8 +962,8 @@ export default function AdminDashboard({
                         isLoading
                           ? "bg-slate-700 text-slate-300"
                           : action.dangerous
-                            ? "bg-rose-600 text-white hover:bg-rose-500"
-                            : "bg-emerald-600 text-white hover:bg-emerald-500"
+                          ? "bg-rose-600 text-white hover:bg-rose-500"
+                          : "bg-emerald-600 text-white hover:bg-emerald-500"
                       )}
                     >
                       {isLoading ? "Running…" : "Run"}

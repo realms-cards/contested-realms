@@ -39,6 +39,42 @@ export default function CombatHudOverlay() {
     (actorKey === "p1" && currentPlayer === 1) ||
     (actorKey === "p2" && currentPlayer === 2);
 
+  // Render text with color markup [p1:Name] or [p2:Name] as colored spans with font-fantaisie
+  function renderColoredText(text: string): React.ReactNode {
+    const parts: React.ReactNode[] = [];
+    const regex = /\[(p[12]):([^\]]+)\]/g;
+    let lastIndex = 0;
+    let match;
+    let key = 0;
+
+    while ((match = regex.exec(text)) !== null) {
+      // Add text before the match
+      if (match.index > lastIndex) {
+        parts.push(text.slice(lastIndex, match.index));
+      }
+      // Add the colored name with font-fantaisie
+      const playerKey = match[1] as "p1" | "p2";
+      const cardName = match[2];
+      parts.push(
+        <span
+          key={key++}
+          className="font-fantaisie"
+          style={{ color: PLAYER_COLORS[playerKey], fontWeight: 600 }}
+        >
+          {cardName}
+        </span>
+      );
+      lastIndex = match.index + match[0].length;
+    }
+
+    // Add remaining text
+    if (lastIndex < text.length) {
+      parts.push(text.slice(lastIndex));
+    }
+
+    return parts.length > 0 ? parts : text;
+  }
+
   const tileNum = (() => {
     const source =
       attackChoice?.tile ??
@@ -56,6 +92,53 @@ export default function CombatHudOverlay() {
       } catch {}
     }
     return null;
+  })();
+
+  // Check if a permanent at the given position has untracked artifact attachments
+  const hasUntrackedArtifact = (at: string, index: number): boolean => {
+    try {
+      const list = permanents[at] || [];
+      const attachments = list.filter(
+        (p) =>
+          p.attachedTo && p.attachedTo.at === at && p.attachedTo.index === index
+      );
+      for (const att of attachments) {
+        const name = (att.card?.name || "").toLowerCase();
+        const cardType = att.card?.type || "";
+        const isArtifact = cardType.toLowerCase().includes("artifact");
+        // Lance and Disabled are tracked, skip them
+        if (name === "lance" || name === "disabled") continue;
+        if (isArtifact) return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  };
+
+  // Check if combat involves any untracked artifacts (requires manual resolution)
+  const combatHasArtifacts = (() => {
+    if (!pendingCombat) return false;
+    const att = pendingCombat.attacker;
+    if (!att.isAvatar && hasUntrackedArtifact(att.at, att.index)) return true;
+    // Check defenders
+    for (const def of pendingCombat.defenders || []) {
+      if (hasUntrackedArtifact(def.at, def.index)) return true;
+    }
+    // Check direct target if no defenders
+    if (
+      pendingCombat.target?.kind === "permanent" &&
+      pendingCombat.target.index != null
+    ) {
+      if (
+        hasUntrackedArtifact(
+          pendingCombat.target.at,
+          pendingCombat.target.index
+        )
+      )
+        return true;
+    }
+    return false;
   })();
 
   function AttackerAssignmentBar() {
@@ -167,7 +250,7 @@ export default function CombatHudOverlay() {
     const committed = pc.status === "committed";
 
     return (
-      <div className="fixed inset-x-0 bottom-24 z-40 pointer-events-none flex justify-center">
+      <div className="fixed inset-x-0 bottom-24 z-[100] pointer-events-none flex justify-center">
         <div className="pointer-events-auto px-5 py-3 rounded-full bg-black/90 text-white ring-1 ring-white/20 shadow-lg text-base md:text-lg flex items-center gap-3">
           {!committed ? (
             <span className="text-xs opacity-75 mr-1">
@@ -459,6 +542,7 @@ export default function CombatHudOverlay() {
       haveAny = true;
     }
     // If no defenders and target is site/avatar, show expected damage (including DD rules)
+    // Format should match autoResolveCombat summary text for consistency
     if (!haveAny && pendingCombat.target) {
       if (pendingCombat.target.kind === "site") {
         const owner = (() => {
@@ -480,17 +564,30 @@ export default function CombatHudOverlay() {
         if (seat === "p1" || seat === "p2") {
           const dd = players[seat].lifeState === "dd";
           const dmg = dd ? 0 : Math.max(0, Math.floor(a.atk));
+          const life = Number(players[seat]?.life ?? 0);
+          const after = Math.max(0, life - dmg);
+          const siteName =
+            board.sites[pendingCombat.target.at]?.card?.name || "Site";
+          const attackerName = (() => {
+            try {
+              return (
+                permanents[pendingCombat.attacker.at]?.[
+                  pendingCombat.attacker.index
+                ]?.card?.name || "Attacker"
+              );
+            } catch {
+              return "Attacker";
+            }
+          })();
+          // Match the format from autoResolveCombat
           return (
             <span className="opacity-70 ml-2">
-              · Expected: deal <span className="font-semibold">{dmg}</span> to
-              <span
-                className="font-semibold"
-                style={{ color: PLAYER_COLORS[seat] }}
-              >
-                {" "}
+              → &quot;{attackerName}&quot; strikes Site &quot;{siteName}&quot;
+              for <span className="font-semibold">{dmg}</span> damage (
+              <span style={{ color: PLAYER_COLORS[seat] }}>
                 {seat.toUpperCase()}
-              </span>
-              {a.firstStrike ? " (FS)" : ""}
+              </span>{" "}
+              life {life} → {after})
             </span>
           );
         }
@@ -499,18 +596,26 @@ export default function CombatHudOverlay() {
           pendingCombat.attacker.owner === 1 ? "p2" : "p1";
         const life = Number(players[seat]?.life ?? 0);
         const isDD = players[seat]?.lifeState === "dd";
+        const attackerName = (() => {
+          try {
+            return (
+              permanents[pendingCombat.attacker.at]?.[
+                pendingCombat.attacker.index
+              ]?.card?.name || "Attacker"
+            );
+          } catch {
+            return "Attacker";
+          }
+        })();
+        // Match format from autoResolveCombat
         if (isDD) {
           return (
             <span className="opacity-70 ml-2">
-              · Expected:{" "}
-              <span
-                className="font-semibold"
-                style={{ color: PLAYER_COLORS[seat] }}
-              >
+              → &quot;{attackerName}&quot; strikes Avatar (
+              <span style={{ color: PLAYER_COLORS[seat] }}>
                 {seat.toUpperCase()}
-              </span>{" "}
-              reduced to <span className="font-semibold">0</span> (lethal from
-              DD)
+              </span>
+              ) for lethal damage (reaches Death&apos;s Door)
             </span>
           );
         }
@@ -519,25 +624,95 @@ export default function CombatHudOverlay() {
         if (life > 0 && next <= 0) {
           return (
             <span className="opacity-70 ml-2">
-              · Expected: {seat.toUpperCase()} reaches Death&apos;s Door;
-              further avatar/site damage this turn won&apos;t reduce life
+              → &quot;{attackerName}&quot; strikes Avatar for{" "}
+              <span className="font-semibold">{dmg}</span> damage (
+              <span style={{ color: PLAYER_COLORS[seat] }}>
+                {seat.toUpperCase()}
+              </span>{" "}
+              reaches Death&apos;s Door)
             </span>
           );
         }
         return (
           <span className="opacity-70 ml-2">
-            · Deal <span className="font-semibold">{dmg}</span> to
-            <span
-              className="font-semibold"
-              style={{ color: PLAYER_COLORS[seat] }}
-            >
-              {" "}
+            → &quot;{attackerName}&quot; strikes Avatar for{" "}
+            <span className="font-semibold">{dmg}</span> damage (
+            <span style={{ color: PLAYER_COLORS[seat] }}>
               {seat.toUpperCase()}
-            </span>
-            , life {life} → {next}
-            {a.firstStrike ? " (FS)" : ""}
+            </span>{" "}
+            life {life} → {next})
           </span>
         );
+      } else if (
+        pendingCombat.target.kind === "permanent" &&
+        pendingCombat.target.index != null
+      ) {
+        // Attacking a unit directly (no defenders assigned yet)
+        const attackerName = (() => {
+          try {
+            return (
+              permanents[pendingCombat.attacker.at]?.[
+                pendingCombat.attacker.index
+              ]?.card?.name || "Attacker"
+            );
+          } catch {
+            return "Attacker";
+          }
+        })();
+        const targetName = (() => {
+          try {
+            return (
+              permanents[pendingCombat.target.at]?.[pendingCombat.target.index]
+                ?.card?.name || "Target"
+            );
+          } catch {
+            return "Target";
+          }
+        })();
+        // Compute target's effective stats
+        const targetDef = (() => {
+          try {
+            const id =
+              permanents[pendingCombat.target.at]?.[pendingCombat.target.index]
+                ?.card?.cardId;
+            const m = id ? metaByCardId[Number(id)] : undefined;
+            return Number(m?.defence ?? 0) || 0;
+          } catch {
+            return 0;
+          }
+        })();
+        const targetEffective = computeEffectiveAttack({
+          at: pendingCombat.target.at as CellKey,
+          index: pendingCombat.target.index,
+        });
+        const attackerDefence = (() => {
+          try {
+            const id =
+              permanents[pendingCombat.attacker.at]?.[
+                pendingCombat.attacker.index
+              ]?.card?.cardId;
+            const m = id ? metaByCardId[Number(id)] : undefined;
+            return Number(m?.defence ?? 0) || 0;
+          } catch {
+            return 0;
+          }
+        })();
+
+        const attKillsTarget = a.atk >= targetDef;
+        const targetKillsAtt = targetEffective.atk >= attackerDefence;
+
+        let outcome: string;
+        if (attKillsTarget && targetKillsAtt) {
+          outcome = `"${attackerName}" and "${targetName}" destroy each other`;
+        } else if (attKillsTarget) {
+          outcome = `"${attackerName}" destroys "${targetName}"`;
+        } else if (targetKillsAtt) {
+          outcome = `"${attackerName}" is destroyed; "${targetName}" survives`;
+        } else {
+          outcome = `Both survive`;
+        }
+
+        return <span className="opacity-70 ml-2">→ {outcome}</span>;
       }
     }
     const attackerDef = (() => {
@@ -551,7 +726,8 @@ export default function CombatHudOverlay() {
         return null;
       }
     })();
-    // If exactly one defender, show compact outcome form
+    // If exactly one defender, show compact outcome form that mirrors
+    // autoResolveCombat (including attachments and First Strike on defender).
     const defs = pendingCombat.defenders || [];
     if (haveAny && defs.length === 1) {
       const d0 = defs[0];
@@ -562,20 +738,40 @@ export default function CombatHudOverlay() {
           return "Defender";
         }
       })();
-      const defenderPower = (() => {
-        try {
-          const id = permanents[d0.at]?.[d0.index]?.card?.cardId;
-          const m = id ? metaByCardId[Number(id)] : undefined;
-          return Number(m?.attack ?? 0) || 0;
-        } catch {
-          return 0;
-        }
-      })();
+
+      // Use the same effective attack computation as autoResolveCombat for the
+      // defender (captures attachments like Lance and Disabled, plus FS).
+      const dEff = computeEffectiveAttack({
+        at: d0.at as CellKey,
+        index: d0.index,
+      });
+      const defenderPower = dEff.atk;
       const defenderDef = sumDef; // single defender => its defence
       const attackerPower = a.atk;
+
       const attKillsDef = attackerPower >= defenderDef;
-      const defKillsAtt =
-        attackerDef != null ? defenderPower >= attackerDef : false;
+
+      let defKillsAtt = false;
+      if (attackerDef != null) {
+        if (a.firstStrike && dEff.firstStrike) {
+          // Both have First Strike. Attacker deals damage first; defender only
+          // kills attacker if it survives that hit *and* its power meets/exceeds
+          // attacker defence.
+          defKillsAtt = !attKillsDef && defenderPower >= attackerDef;
+        } else if (a.firstStrike && !dEff.firstStrike) {
+          // Attacker hits first. If it kills the defender, the defender never
+          // gets to strike back.
+          defKillsAtt = !attKillsDef && defenderPower >= attackerDef;
+        } else if (!a.firstStrike && dEff.firstStrike) {
+          // Defender hits first; if it can meet or exceed attacker defence,
+          // attacker is expected to die before dealing damage.
+          defKillsAtt = defenderPower >= attackerDef;
+        } else {
+          // Neither has First Strike: simultaneous damage.
+          defKillsAtt = defenderPower >= attackerDef;
+        }
+      }
+
       const outcome = (() => {
         if (attKillsDef && defKillsAtt) return "both die";
         if (!attKillsDef && defKillsAtt)
@@ -584,11 +780,14 @@ export default function CombatHudOverlay() {
           return "Attacker survives, Defender dies";
         return "both survive";
       })();
+
       return (
         <span className="opacity-70 ml-2">
           <span className="font-medium">{defName}</span> defends! Attacker{" "}
-          <span className="font-semibold">{attackerPower}</span> Defender{" "}
-          <span className="font-semibold">{defenderPower}</span> → {outcome}
+          <span className="font-semibold">{attackerPower}</span>
+          {a.firstStrike ? " (FS)" : ""} Defender{" "}
+          <span className="font-semibold">{defenderPower}</span>
+          {dEff.firstStrike ? " (FS)" : ""} → {outcome}
         </span>
       );
     }
@@ -600,13 +799,13 @@ export default function CombatHudOverlay() {
     const killVerdict =
       a.atk != null && haveAny
         ? a.atk >= sumDef
-          ? "may wipe"
-          : "might not"
+          ? "target dies"
+          : "target survives"
         : "—";
     const tradeVerdict =
       attackerDef != null && haveAny
         ? sumAtk >= attackerDef
-          ? "attacker may die"
+          ? "attacker dies"
           : "attacker survives"
         : "—";
     return (
@@ -629,7 +828,7 @@ export default function CombatHudOverlay() {
   return (
     <>
       {/* Top bar */}
-      <div className="fixed inset-x-0 top-6 z-40 pointer-events-none flex justify-center">
+      <div className="fixed inset-x-0 top-6 z-[100] pointer-events-none flex justify-center">
         {attackChoice && actorIsActive ? (
           <div className="pointer-events-auto px-5 py-3 rounded-full bg-black/90 text-white ring-1 ring-white/20 shadow-lg text-lg md:text-xl flex items-center gap-2">
             <span className="opacity-80">
@@ -828,12 +1027,27 @@ export default function CombatHudOverlay() {
                 return (
                   <div className="pointer-events-auto px-5 py-3 rounded-full bg-black/90 text-white ring-1 ring-white/20 shadow-lg text-base md:text-lg flex items-center gap-3">
                     <div>Defenders committed.</div>
-                    <button
-                      className="rounded bg-amber-600/90 hover:bg-amber-500 px-3 py-1 text-sm"
-                      onClick={() => autoResolveCombat()}
-                    >
-                      Auto Resolve
-                    </button>
+                    {combatHasArtifacts ? (
+                      <>
+                        <span className="text-amber-400 text-xs">
+                          ⚠️ Artifact
+                        </span>
+                        <button
+                          className="rounded bg-amber-600/90 hover:bg-amber-500 px-3 py-1 text-sm"
+                          onClick={() => autoResolveCombat()}
+                          title="Use base stats only (artifact effects not calculated)"
+                        >
+                          Resolve (base)
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        className="rounded bg-amber-600/90 hover:bg-amber-500 px-3 py-1 text-sm"
+                        onClick={() => autoResolveCombat()}
+                      >
+                        Auto Resolve
+                      </button>
+                    )}
                     <button
                       className="rounded bg-white/15 hover:bg-white/25 px-3 py-1 text-sm"
                       onClick={() => cancelCombat()}
@@ -869,12 +1083,27 @@ export default function CombatHudOverlay() {
                   if (defs.length <= 1) {
                     return (
                       <>
-                        <button
-                          className="rounded bg-amber-600/90 hover:bg-amber-500 px-3 py-1 text-sm"
-                          onClick={() => autoResolveCombat()}
-                        >
-                          Auto Resolve
-                        </button>
+                        {combatHasArtifacts ? (
+                          <>
+                            <span className="text-amber-400 text-xs">
+                              ⚠️ Artifact
+                            </span>
+                            <button
+                              className="rounded bg-amber-600/90 hover:bg-amber-500 px-3 py-1 text-sm"
+                              onClick={() => autoResolveCombat()}
+                              title="Use base stats only (artifact effects not calculated)"
+                            >
+                              Resolve (base)
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            className="rounded bg-amber-600/90 hover:bg-amber-500 px-3 py-1 text-sm"
+                            onClick={() => autoResolveCombat()}
+                          >
+                            Auto Resolve
+                          </button>
+                        )}
                         <button
                           className="rounded bg-white/15 hover:bg-white/25 px-3 py-1 text-sm"
                           onClick={() => cancelCombat()}
@@ -897,12 +1126,22 @@ export default function CombatHudOverlay() {
                   const valid = sum === totalAtk;
                   return (
                     <>
+                      {combatHasArtifacts && (
+                        <span className="text-amber-400 text-xs">
+                          ⚠️ Artifact
+                        </span>
+                      )}
                       <button
                         className="rounded bg-amber-600/90 hover:bg-amber-500 px-3 py-1 text-sm disabled:opacity-50"
                         onClick={() => autoResolveCombat()}
                         disabled={!valid}
+                        title={
+                          combatHasArtifacts
+                            ? "Use base stats only (artifact effects not calculated)"
+                            : undefined
+                        }
                       >
-                        Auto Resolve
+                        {combatHasArtifacts ? "Resolve (base)" : "Resolve"}
                       </button>
                       <button
                         className="rounded bg-white/15 hover:bg-white/25 px-3 py-1 text-sm"
@@ -929,7 +1168,7 @@ export default function CombatHudOverlay() {
             const ac = actor ? PLAYER_COLORS[actor] : "#aaaaaa";
             const tc = targetSeat ? PLAYER_COLORS[targetSeat] : "#aaaaaa";
             return (
-              <div className="fixed inset-x-0 top-28 z-40 pointer-events-none flex justify-center">
+              <div className="fixed inset-x-0 top-28 z-[100] pointer-events-none flex justify-center">
                 <div className="pointer-events-auto px-5 py-3 rounded-full bg-black/90 text-white ring-1 ring-white/20 shadow-lg text-base md:text-lg flex items-center gap-3">
                   <div className="min-w-0">
                     {actor || targetSeat ? (
@@ -950,7 +1189,7 @@ export default function CombatHudOverlay() {
                       </div>
                     ) : null}
                     <div className="leading-tight drop-shadow-sm break-words">
-                      {lastCombatSummary.text}
+                      {renderColoredText(lastCombatSummary.text)}
                     </div>
                   </div>
                   <button

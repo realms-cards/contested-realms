@@ -7,8 +7,10 @@ import { useSession } from "next-auth/react";
 import { useState, useEffect, useCallback } from "react";
 import CardPreview from "@/components/game/CardPreview";
 import OnlineConsole from "@/components/game/OnlineConsole";
-import Board from "@/lib/game/Board";
-import Hand3D from "@/lib/game/components/Hand3D";
+import {
+  DynamicBoard as Board,
+  DynamicHand3D as Hand3D,
+} from "@/components/game/dynamic-3d";
 import TextureCache from "@/lib/game/components/TextureCache";
 import { Physics } from "@/lib/game/physics";
 import { useGameStore } from "@/lib/game/store";
@@ -36,15 +38,15 @@ export default function ReplayViewerPage() {
   const params = useParams();
   const router = useRouter();
   const matchId = params?.id as string;
-  
+
   const [transport, setTransport] = useState<SocketTransport | null>(null);
   const [connected, setConnected] = useState(false);
   const { data: session } = useSession();
-  
+
   const [recording, setRecording] = useState<MatchRecording | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
+
   // Replay controls
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentActionIndex, setCurrentActionIndex] = useState(0);
@@ -72,8 +74,12 @@ export default function ReplayViewerPage() {
     socketTransport.onGeneric("connect", handleConnect);
     socketTransport.onGeneric("disconnect", handleDisconnect);
 
-    const displayName = (session?.user?.name && String(session.user.name).trim()) || `Replay_${Date.now()}`;
-    const playerId = (session?.user && (session.user as { id?: string }).id) || `replay_viewer_${Date.now()}`;
+    const displayName =
+      (session?.user?.name && String(session.user.name).trim()) ||
+      `Replay_${Date.now()}`;
+    const playerId =
+      (session?.user && (session.user as { id?: string }).id) ||
+      `replay_viewer_${Date.now()}`;
 
     socketTransport
       .connect({
@@ -130,17 +136,28 @@ export default function ReplayViewerPage() {
   }, [connected, transport, matchId]);
 
   // Playback engine
-  const applyAction = useCallback((actionIndex: number) => {
-    if (!recording || actionIndex < 0 || actionIndex >= recording.actions.length) return;
-    
-    const action = recording.actions[actionIndex];
-    useGameStore.getState().applyPatch(action.patch);
-    setCurrentActionIndex(actionIndex);
-  }, [recording]);
+  const applyAction = useCallback(
+    (actionIndex: number) => {
+      if (
+        !recording ||
+        actionIndex < 0 ||
+        actionIndex >= recording.actions.length
+      )
+        return;
+
+      const action = recording.actions[actionIndex];
+      useGameStore.getState().applyPatch(action.patch);
+      setCurrentActionIndex(actionIndex);
+    },
+    [recording]
+  );
 
   const stepForward = useCallback(() => {
     if (!recording) return;
-    const nextIndex = Math.min(currentActionIndex + 1, recording.actions.length - 1);
+    const nextIndex = Math.min(
+      currentActionIndex + 1,
+      recording.actions.length - 1
+    );
     applyAction(nextIndex);
   }, [recording, currentActionIndex, applyAction]);
 
@@ -156,20 +173,23 @@ export default function ReplayViewerPage() {
     setCurrentActionIndex(prevIndex);
   }, [recording, currentActionIndex]);
 
-  const jumpToAction = useCallback((targetIndex: number) => {
-    if (!recording) return;
-    useGameStore.getState().resetGameState();
-    for (let i = 0; i <= targetIndex; i++) {
-      const action = recording.actions[i];
-      useGameStore.getState().applyPatch(action.patch);
-    }
-    setCurrentActionIndex(targetIndex);
-  }, [recording]);
+  const jumpToAction = useCallback(
+    (targetIndex: number) => {
+      if (!recording) return;
+      useGameStore.getState().resetGameState();
+      for (let i = 0; i <= targetIndex; i++) {
+        const action = recording.actions[i];
+        useGameStore.getState().applyPatch(action.patch);
+      }
+      setCurrentActionIndex(targetIndex);
+    },
+    [recording]
+  );
 
   // Auto-playback
   useEffect(() => {
     if (!isPlaying || !recording) return;
-    
+
     const interval = setInterval(() => {
       if (currentActionIndex >= recording.actions.length - 1) {
         setIsPlaying(false);
@@ -186,7 +206,7 @@ export default function ReplayViewerPage() {
     const elapsed = timestamp - recording.startTime;
     const minutes = Math.floor(elapsed / 60000);
     const seconds = Math.floor((elapsed % 60000) / 1000);
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    return `${minutes}:${seconds.toString().padStart(2, "0")}`;
   };
 
   if (!connected) {
@@ -210,7 +230,9 @@ export default function ReplayViewerPage() {
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
         <div className="text-center text-white">
           <div className="text-xl mb-4">Error loading replay</div>
-          <div className="text-slate-400 mb-4">{error || "Recording not found"}</div>
+          <div className="text-slate-400 mb-4">
+            {error || "Recording not found"}
+          </div>
           <button
             onClick={() => router.push("/replay")}
             className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
@@ -223,68 +245,65 @@ export default function ReplayViewerPage() {
   }
 
   const currentAction = recording.actions[currentActionIndex];
-  const progress = recording.actions.length > 0 ? (currentActionIndex / (recording.actions.length - 1)) * 100 : 0;
+  const progress =
+    recording.actions.length > 0
+      ? (currentActionIndex / (recording.actions.length - 1)) * 100
+      : 0;
 
   return (
     <div className="fixed inset-0 w-screen h-screen bg-slate-900">
       {/* 3D Game View */}
-      <div className="absolute inset-0 w-full h-full">
-        <Canvas
-          camera={{ position: [0, 10, 0], fov: 50 }}
-          shadows
-          gl={{ preserveDrawingBuffer: true, antialias: true, alpha: false }}
-        >
-          <color attach="background" args={["#0b0b0c"]} />
-          <ambientLight intensity={0.8} />
-          <directionalLight
-            position={[10, 12, 8]}
-            intensity={1.35}
-            castShadow
-          />
+      <Canvas
+        camera={{ position: [0, 10, 0], fov: 50 }}
+        shadows
+        gl={{ preserveDrawingBuffer: true, antialias: true, alpha: false }}
+      >
+        <color attach="background" args={["#0b0b0c"]} />
+        <ambientLight intensity={0.8} />
+        <directionalLight position={[10, 12, 8]} intensity={1.35} castShadow />
 
-          <Physics gravity={[0, -9.81, 0]}>
-            <Board interactionMode="spectator" enableBoardPings={false} />
-            {/* Commentator-style hands for replay: both players, face-up, flat, at edges */}
-            <Hand3D
-              owner="p1"
-              matW={1}
-              matH={1}
-              viewerPlayerNumber={1}
-              placement="edgeBottom"
-              showCardBacks={false}
-              flatCards
-            />
-            <Hand3D
-              owner="p2"
-              matW={1}
-              matH={1}
-              viewerPlayerNumber={1}
-              placement="edgeTop"
-              showCardBacks={false}
-              flatCards
-            />
-            <TextureCache />
-          </Physics>
-
-          <OrbitControls
-            makeDefault
-            target={[0, 0, 0]}
-            // Full orbit controls for replay viewing
-            enablePan
-            enableRotate
-            enableZoom
-            enableDamping
-            dampingFactor={0.08}
-            screenSpacePanning
-            panSpeed={1.2}
-            zoomSpeed={0.75}
-            minDistance={1}
-            maxDistance={36}
-            minPolarAngle={0}
-            maxPolarAngle={Math.PI / 2.05}
+        <Physics gravity={[0, -9.81, 0]}>
+          <Board interactionMode="spectator" enableBoardPings={false} />
+          {/* Commentator-style hands for replay: both players, face-up, flat, at edges */}
+          <Hand3D
+            owner="p1"
+            matW={1}
+            matH={1}
+            viewerPlayerNumber={1}
+            placement="edgeBottom"
+            showCardBacks={false}
+            flatCards
           />
-        </Canvas>
-      </div>
+          <Hand3D
+            owner="p2"
+            matW={1}
+            matH={1}
+            viewerPlayerNumber={1}
+            placement="edgeTop"
+            showCardBacks={false}
+            flatCards
+          />
+          <TextureCache />
+        </Physics>
+
+        <OrbitControls
+          makeDefault
+          target={[0, 0, 0]}
+          // Full orbit controls for replay viewing
+          enablePan
+          enableRotate
+          enableZoom
+          enableDamping
+          dampingFactor={0.08}
+          screenSpacePanning
+          panSpeed={1.2}
+          zoomSpeed={0.75}
+          minDistance={1}
+          maxDistance={36}
+          minPolarAngle={0}
+          maxPolarAngle={Math.PI / 2.05}
+        />
+      </Canvas>
 
       {previewCard?.slug && !contextMenu && (
         <CardPreview
@@ -308,7 +327,8 @@ export default function ReplayViewerPage() {
                 {recording.playerNames.join(" vs ")}
               </div>
               <div className="text-sm text-slate-400">
-                {recording.initialState.matchType} • {recording.actions.length} actions
+                {recording.initialState.matchType} • {recording.actions.length}{" "}
+                actions
               </div>
             </div>
             <button
@@ -322,11 +342,15 @@ export default function ReplayViewerPage() {
           {/* Progress Bar */}
           <div className="mb-4">
             <div className="flex items-center justify-between text-sm text-slate-400 mb-2">
-              <span>Action {currentActionIndex + 1} of {recording.actions.length}</span>
-              <span>{currentAction ? formatTime(currentAction.timestamp) : "0:00"}</span>
+              <span>
+                Action {currentActionIndex + 1} of {recording.actions.length}
+              </span>
+              <span>
+                {currentAction ? formatTime(currentAction.timestamp) : "0:00"}
+              </span>
             </div>
             <div className="relative bg-slate-700 h-2 rounded-full">
-              <div 
+              <div
                 className="absolute left-0 top-0 h-full bg-blue-500 rounded-full transition-all"
                 style={{ width: `${progress}%` }}
               />
@@ -349,7 +373,14 @@ export default function ReplayViewerPage() {
               title="Jump to Start"
             >
               {/* Skip back icon */}
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M6 6h2v12H6V6zm12 6-8 6V6l8 6z"/></svg>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                className="w-5 h-5"
+              >
+                <path d="M6 6h2v12H6V6zm12 6-8 6V6l8 6z" />
+              </svg>
             </button>
             <button
               onClick={stepBackward}
@@ -357,20 +388,41 @@ export default function ReplayViewerPage() {
               title="Step Backward"
             >
               {/* Step back icon */}
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M6 5h2v14H6V5zm12 7-9 6V6l9 6z"/></svg>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                className="w-5 h-5"
+              >
+                <path d="M6 5h2v14H6V5zm12 7-9 6V6l9 6z" />
+              </svg>
             </button>
             <button
               onClick={() => setIsPlaying(!isPlaying)}
               className="h-9 px-4 bg-blue-600 hover:bg-blue-700 rounded text-white transition-colors font-semibold flex items-center gap-2"
-              >
+            >
               {isPlaying ? (
                 <>
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M8 6h3v12H8V6zm5 0h3v12h-3V6z"/></svg>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    className="w-5 h-5"
+                  >
+                    <path d="M8 6h3v12H8V6zm5 0h3v12h-3V6z" />
+                  </svg>
                   Pause
                 </>
               ) : (
                 <>
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M8 5v14l11-7-11-7z"/></svg>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    className="w-5 h-5"
+                  >
+                    <path d="M8 5v14l11-7-11-7z" />
+                  </svg>
                   Play
                 </>
               )}
@@ -381,7 +433,14 @@ export default function ReplayViewerPage() {
               title="Step Forward"
             >
               {/* Step forward icon */}
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M7 6h3v12H7V6zm4 6 9 6V6l-9 6z"/></svg>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                className="w-5 h-5"
+              >
+                <path d="M7 6h3v12H7V6zm4 6 9 6V6l-9 6z" />
+              </svg>
             </button>
             <button
               onClick={() => jumpToAction(recording.actions.length - 1)}
@@ -389,9 +448,16 @@ export default function ReplayViewerPage() {
               title="Jump to End"
             >
               {/* Skip forward icon */}
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M16 6h2v12h-2V6zM6 12l8-6v12l-8-6z"/></svg>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                className="w-5 h-5"
+              >
+                <path d="M16 6h2v12h-2V6zM6 12l8-6v12l-8-6z" />
+              </svg>
             </button>
-            
+
             {/* Speed Control */}
             <div className="ml-4 flex items-center gap-2">
               <span className="text-sm text-slate-400">Speed:</span>
@@ -417,7 +483,7 @@ export default function ReplayViewerPage() {
         chatInput={chatInput}
         setChatInput={setChatInput}
         onSendChat={() => {}}
-        onLeaveMatch={() => router.push('/replay')}
+        onLeaveMatch={() => router.push("/replay")}
         connected={true}
         myPlayerId={undefined}
         hideLeaveButton={true}

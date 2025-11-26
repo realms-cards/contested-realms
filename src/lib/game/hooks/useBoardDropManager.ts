@@ -6,11 +6,8 @@ import {
   TILE_OFFSET_LIMIT_X,
   TILE_OFFSET_LIMIT_Z,
 } from "@/lib/game/boardShared";
-import {
-  CARD_LONG,
-  CARD_SHORT,
-  TILE_SIZE,
-} from "@/lib/game/constants";
+import { CARD_LONG, CARD_SHORT, TILE_SIZE } from "@/lib/game/constants";
+import { triggerAttackChoiceIfApplicable } from "@/lib/game/hooks/useAttackChoiceTrigger";
 import type { BoardDragControls } from "@/lib/game/hooks/useBoardDragControls";
 import type {
   BoardState,
@@ -195,10 +192,8 @@ export function useBoardDropManager({
       const tileZ = offsetY + ty * TILE_SIZE;
       const marginZ = STACK_MARGIN_Z;
       const spacing = STACK_SPACING;
-      const draggedOwner =
-        permanents[d.from]?.[d.index]?.owner ?? 1;
-      const draggedInstId =
-        permanents[d.from]?.[d.index]?.instanceId || null;
+      const draggedOwner = permanents[d.from]?.[d.index]?.owner ?? 1;
+      const draggedInstId = permanents[d.from]?.[d.index]?.instanceId || null;
       const zBase =
         draggedOwner === 1
           ? -TILE_SIZE * 0.5 + marginZ
@@ -242,58 +237,26 @@ export function useBoardDropManager({
         }
 
         if (interactionGuides) {
-          try {
-            const moved = permanents[d.from]?.[d.index];
-            const cardId = Number(moved?.card?.cardId);
-            if (Number.isFinite(cardId) && cardId > 0) {
-              if (!metaByCardId[cardId]) void fetchCardMeta([cardId]);
+          triggerAttackChoiceIfApplicable(
+            {
+              permanents,
+              avatars,
+              board,
+              metaByCardId,
+              fetchCardMeta,
+              actorKey,
+              currentPlayer,
+              setAttackChoice,
+            },
+            {
+              fromKey: d.from,
+              fromIndex: d.index,
+              dropKey,
+              tileX: tx,
+              tileY: ty,
+              newIndex,
             }
-            let hasBasePower = false;
-            if (Number.isFinite(cardId) && cardId > 0) {
-              const meta = metaByCardId[cardId];
-              if (meta) {
-                const atk = Number(meta.attack);
-                hasBasePower = Number.isFinite(atk) && atk !== 0;
-              } else {
-                hasBasePower = true;
-              }
-            }
-            if (hasBasePower) {
-              const enemyOwner: 1 | 2 = moved?.owner === 1 ? 2 : 1;
-              let hasTarget = false;
-              const list = permanents[dropKey] || [];
-              hasTarget = list.some((p) => p && p.owner === enemyOwner);
-              if (!hasTarget) {
-                const enemySeat = enemyOwner === 1 ? "p1" : "p2";
-                const av = avatars?.[enemySeat];
-                if (av && Array.isArray(av.pos) && av.pos.length === 2) {
-                  hasTarget = av.pos[0] === tx && av.pos[1] === ty;
-                }
-              }
-              if (!hasTarget) {
-                const site = board.sites[dropKey];
-                if (site && site.owner === enemyOwner) hasTarget = true;
-              }
-              const mine =
-                (actorKey === "p1" && draggedOwner === 1) ||
-                (actorKey === "p2" && draggedOwner === 2);
-              const actorIsActive =
-                (actorKey === "p1" && currentPlayer === 1) ||
-                (actorKey === "p2" && currentPlayer === 2);
-              if (hasTarget && mine && actorIsActive) {
-                setAttackChoice({
-                  tile: { x: tx, y: ty },
-                  attacker: {
-                    at: dropKey,
-                    index: newIndex,
-                    instanceId: draggedInstId ?? null,
-                    owner: draggedOwner as 1 | 2,
-                  },
-                  attackerName: moved?.card?.name || null,
-                });
-              }
-            }
-          } catch {}
+          );
         }
       }
       setDragging(null);
