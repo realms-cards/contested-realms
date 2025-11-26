@@ -26,55 +26,55 @@
 
 ---
 
-## Phase 2: API Implementation
+## Phase 2: API Implementation ✅
 
 ### Collection CRUD
 
-- [ ] **T009** Create `src/app/api/collection/route.ts` with GET handler - list user's collection with pagination, filters (setId, element, type, rarity, search), sorting, include card/variant/set relations.
+- [x] **T009** Create `src/app/api/collection/route.ts` with GET handler - list user's collection with pagination, filters (setId, element, type, rarity, search), sorting, include card/variant/set relations.
 
-- [ ] **T010** Add POST handler to `src/app/api/collection/route.ts` - add cards to collection, handle batch adds, upsert existing entries.
+- [x] **T010** Add POST handler to `src/app/api/collection/route.ts` - add cards to collection, handle batch adds, upsert existing entries.
 
-- [ ] **T011** Create `src/app/api/collection/[id]/route.ts` with PATCH handler - update quantity, delete entry when quantity <= 0.
+- [x] **T011** Create `src/app/api/collection/[id]/route.ts` with PATCH handler - update quantity, delete entry when quantity <= 0.
 
-- [ ] **T012** Add DELETE handler to `src/app/api/collection/[id]/route.ts` - remove card from collection entirely.
+- [x] **T012** Add DELETE handler to `src/app/api/collection/[id]/route.ts` - remove card from collection entirely.
 
 ### Collection Stats & Missing
 
-- [ ] **T013** Create `src/app/api/collection/stats/route.ts` - compute and return totalCards, uniqueCards, totalValue, bySet completion, byElement, byRarity breakdown.
+- [x] **T013** Create `src/app/api/collection/stats/route.ts` - compute and return totalCards, uniqueCards, totalValue, bySet completion, byElement, byRarity breakdown.
 
-- [ ] **T014** Create `src/app/api/collection/missing/route.ts` - return cards not in user's collection, support setId and rarity filters, pagination.
+- [x] **T014** Create `src/app/api/collection/missing/route.ts` - return cards not in user's collection, support setId and rarity filters, pagination.
 
 ### Import/Export
 
-- [ ] **T015** Create `src/app/api/collection/import/route.ts` - parse text format (reuse sorcery-decktext parser), match cards by name, batch upsert to collection.
+- [x] **T015** Create `src/app/api/collection/import/route.ts` - parse text format (reuse sorcery-decktext parser), match cards by name, batch upsert to collection.
 
-- [ ] **T016** Create `src/app/api/collection/export/route.ts` - export collection as CSV, JSON, or text format with optional setId filter.
+- [x] **T016** Create `src/app/api/collection/export/route.ts` - export collection as CSV, JSON, or text format with optional setId filter.
 
 ### Collection Decks
 
-- [ ] **T017** Create `src/app/api/collection/decks/route.ts` with GET handler - list user's collection decks (format=CollectionConstructed).
+- [x] **T017** Create `src/app/api/collection/decks/route.ts` with GET handler - list user's collection decks (format=CollectionConstructed).
 
-- [ ] **T018** Add POST handler to `src/app/api/collection/decks/route.ts` - create new collection deck with format flag.
+- [x] **T018** Add POST handler to `src/app/api/collection/decks/route.ts` - create new collection deck with format flag.
 
-- [ ] **T019** Create `src/app/api/collection/decks/[id]/route.ts` with GET handler - return deck with card availability info (owned vs inDeck).
+- [x] **T019** Create `src/app/api/collection/decks/[id]/route.ts` with GET handler - return deck with card availability info (owned vs inDeck).
 
-- [ ] **T020** Add PUT handler to `src/app/api/collection/decks/[id]/route.ts` - update deck, validate ownership for each card, reject if exceeds owned.
+- [x] **T020** Add PUT handler to `src/app/api/collection/decks/[id]/route.ts` - update deck, validate ownership for each card, reject if exceeds owned.
 
-- [ ] **T021** Add DELETE handler to `src/app/api/collection/decks/[id]/route.ts` - delete collection deck.
+- [x] **T021** Add DELETE handler to `src/app/api/collection/decks/[id]/route.ts` - delete collection deck.
 
-- [ ] **T022** Create `src/app/api/collection/decks/[id]/export/route.ts` POST handler - copy deck to regular Deck table for simulator use.
+- [x] **T022** Create `src/app/api/collection/decks/[id]/export/route.ts` POST handler - copy deck to regular Deck table for simulator use.
 
-- [ ] **T023** Create `src/app/api/collection/decks/[id]/availability/route.ts` GET handler - real-time availability check for deck cards.
+- [x] **T023** Create `src/app/api/collection/decks/[id]/availability/route.ts` GET handler - real-time availability check for deck cards.
 
 ### Pricing API
 
-- [ ] **T024** [P] Create `src/lib/collection/pricing-provider.ts` with `TCGPlayerAffiliateProvider` class implementing `PriceProvider` interface - generate affiliate links.
+- [x] **T024** [P] Create `src/lib/collection/pricing-provider.ts` with `TCGPlayerAffiliateProvider` class implementing `PriceProvider` interface - generate affiliate links.
 
-- [ ] **T025** Create `src/app/api/pricing/card/[cardId]/route.ts` - return pricing data and affiliate links for card variants.
+- [x] **T025** Create `src/app/api/pricing/card/[cardId]/route.ts` - return pricing data and affiliate links for card variants.
 
-- [ ] **T026** Create `src/app/api/pricing/bulk/route.ts` POST handler - batch pricing lookup with Redis caching.
+- [x] **T026** Create `src/app/api/pricing/bulk/route.ts` POST handler - batch pricing lookup with Redis caching.
 
-- [ ] **T027** Create `src/app/api/pricing/affiliate-link/route.ts` - generate TCGPlayer affiliate URL for card name.
+- [x] **T027** Create `src/app/api/pricing/affiliate-link/route.ts` - generate TCGPlayer affiliate URL for card name.
 
 ---
 
