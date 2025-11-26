@@ -290,9 +290,7 @@ export default function MissingCards() {
                         <div className="fixed left-8 top-1/2 -translate-y-1/2 z-50 pointer-events-none">
                           <div
                             className={`relative rounded-lg overflow-hidden shadow-2xl ring-2 ring-white/20 bg-gray-900 ${
-                              isSite
-                                ? "w-96 aspect-[3.5/2.5]"
-                                : "w-72 aspect-[2.5/3.5]"
+                              isSite ? "h-72 aspect-[7/5]" : "w-72 aspect-[5/7]"
                             }`}
                           >
                             <Image
@@ -304,10 +302,10 @@ export default function MissingCards() {
                               fill
                               className={
                                 isSite
-                                  ? "object-contain rotate-90"
+                                  ? "object-cover rotate-90 scale-[1.4]"
                                   : "object-cover"
                               }
-                              sizes={isSite ? "384px" : "288px"}
+                              sizes={isSite ? "400px" : "288px"}
                             />
                           </div>
                           <div className="mt-2 text-center text-sm font-medium text-white">
