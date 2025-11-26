@@ -32,8 +32,23 @@ function CollectionCardInner({
   return (
     <div
       className={`relative group rounded-lg overflow-hidden bg-gray-800 ${
-        isFoil ? "ring-2 ring-yellow-500/50" : ""
-      } ${updating ? "opacity-50 pointer-events-none" : ""}`}
+        isSite ? "col-span-2" : ""
+      } ${isFoil ? "foil-card" : ""} ${
+        updating ? "opacity-50 pointer-events-none" : ""
+      }`}
+      style={
+        isFoil
+          ? {
+              // Iridescent foil border glow
+              boxShadow: `
+                0 0 0 2px rgba(255,255,255,0.15),
+                0 0 10px 2px rgba(255,215,0,0.4),
+                0 0 15px 4px rgba(255,105,180,0.25),
+                0 0 20px 6px rgba(0,191,255,0.2)
+              `,
+            }
+          : undefined
+      }
       onMouseEnter={() => setShowActions(true)}
       onMouseLeave={() => setShowActions(false)}
     >
