@@ -281,29 +281,41 @@ export default function MissingCards() {
               {expandedSet === setSummary.setName && (
                 <div className="border-t border-gray-700 p-3 bg-gray-900/50 relative">
                   {/* Card preview tooltip - fixed to left side of viewport */}
-                  {hoveredCard && (
-                    <div className="fixed left-8 top-1/2 -translate-y-1/2 z-50 pointer-events-none">
-                      <div className="w-72 aspect-[2.5/3.5] relative rounded-lg overflow-hidden shadow-2xl ring-2 ring-white/20 bg-gray-900">
-                        <Image
-                          src={`/api/images/${getCardSlug(
-                            hoveredCard.name,
-                            hoveredCard.set
-                          )}`}
-                          alt={hoveredCard.name}
-                          fill
-                          className={`object-cover ${
-                            hoveredCard.type?.toLowerCase().includes("site")
-                              ? "rotate-90 scale-125"
-                              : ""
-                          }`}
-                          sizes="288px"
-                        />
-                      </div>
-                      <div className="mt-2 text-center text-sm font-medium text-white">
-                        {hoveredCard.name}
-                      </div>
-                    </div>
-                  )}
+                  {hoveredCard &&
+                    (() => {
+                      const isSite = hoveredCard.type
+                        ?.toLowerCase()
+                        .includes("site");
+                      return (
+                        <div className="fixed left-8 top-1/2 -translate-y-1/2 z-50 pointer-events-none">
+                          <div
+                            className={`relative rounded-lg overflow-hidden shadow-2xl ring-2 ring-white/20 bg-gray-900 ${
+                              isSite
+                                ? "w-96 aspect-[3.5/2.5]"
+                                : "w-72 aspect-[2.5/3.5]"
+                            }`}
+                          >
+                            <Image
+                              src={`/api/images/${getCardSlug(
+                                hoveredCard.name,
+                                hoveredCard.set
+                              )}`}
+                              alt={hoveredCard.name}
+                              fill
+                              className={
+                                isSite
+                                  ? "object-contain rotate-90"
+                                  : "object-cover"
+                              }
+                              sizes={isSite ? "384px" : "288px"}
+                            />
+                          </div>
+                          <div className="mt-2 text-center text-sm font-medium text-white">
+                            {hoveredCard.name}
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                   {/* Filter indicator */}
                   {rarityFilter && (
