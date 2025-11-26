@@ -13,6 +13,9 @@ interface CardData {
     slug: string;
     setName: string;
   };
+  meta?: {
+    type?: string;
+  };
 }
 
 interface AddCardModalProps {
@@ -82,14 +85,25 @@ export default function AddCardModal({
         <div className="p-4 space-y-4">
           {/* Card Preview */}
           <div className="flex gap-4">
-            <div className="w-24 aspect-[2.5/3.5] relative rounded overflow-hidden flex-shrink-0">
-              <Image
-                src={`/api/images/${imageSlug}`}
-                alt={card.name}
-                fill
-                className="object-cover"
-              />
-            </div>
+            {(() => {
+              const isSite = card.meta?.type?.toLowerCase().includes("site");
+              return (
+                <div
+                  className={`relative rounded overflow-hidden flex-shrink-0 ${
+                    isSite ? "w-32 aspect-[3.5/2.5]" : "w-24 aspect-[2.5/3.5]"
+                  }`}
+                >
+                  <Image
+                    src={`/api/images/${imageSlug}`}
+                    alt={card.name}
+                    fill
+                    className={
+                      isSite ? "object-contain rotate-90" : "object-cover"
+                    }
+                  />
+                </div>
+              );
+            })()}
             <div>
               <div className="font-bold text-lg">{card.name}</div>
               <div className="text-gray-400 text-sm">
