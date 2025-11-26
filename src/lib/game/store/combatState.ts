@@ -268,6 +268,40 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
           return null;
         }
       })();
+      // Check for artifact attachments that require manual resolution
+      const checkForArtifacts = (at: string, index: number): boolean => {
+        try {
+          const allPerms = get().permanents as Permanents;
+          const list = allPerms[at] || [];
+          // Attachments are permanents at the same cell with attachedTo pointing to this permanent
+          const attachments = list.filter(
+            (p) =>
+              p.attachedTo &&
+              p.attachedTo.at === at &&
+              p.attachedTo.index === index
+          );
+          for (const att of attachments) {
+            const name = (att.card?.name || "").toLowerCase();
+            const cardType = att.card?.type || "";
+            const isArtifact = cardType.toLowerCase().includes("artifact");
+            // Lance and Disabled are tracked, skip them
+            if (name === "lance" || name === "disabled") continue;
+            if (isArtifact) return true;
+          }
+          return false;
+        } catch {
+          return false;
+        }
+      };
+
+      const attackerHasArtifact =
+        !attacker.isAvatar && checkForArtifacts(attacker.at, attacker.index);
+      const targetHasArtifact =
+        target?.kind === "permanent" &&
+        target.index != null &&
+        checkForArtifacts(target.at, target.index);
+      const needsManualResolve = attackerHasArtifact || targetHasArtifact;
+
       if (transport?.sendMessage) {
         try {
           transport.sendMessage({
@@ -283,6 +317,16 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
             transport.sendMessage({
               type: "toast",
               text: `${attackerLabel} attacks ${targetLabel}`,
+            } as unknown as CustomMessage);
+          }
+          // Send early warning if artifacts require manual resolution
+          if (needsManualResolve) {
+            const artifactOwner = attackerHasArtifact
+              ? attackerLabel
+              : targetLabel || "Target";
+            transport.sendMessage({
+              type: "toast",
+              text: `⚠️ ${artifactOwner} has artifact attachments - manual combat resolution required`,
             } as unknown as CustomMessage);
           }
         } catch (error) {
@@ -846,15 +890,16 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
       eff.hasUntrackedArtifact || defenders.some((d) => d.hasUntrackedArtifact);
 
     if (hasUntrackedArtifacts) {
-      // Log warning and show summary indicating manual resolution needed
-      console.warn(
-        "[autoResolveCombat] Combat has untracked artifact modifiers - results may be inaccurate"
+      // Log that we're resolving with base stats (user was warned in UI)
+      console.log(
+        "[autoResolveCombat] Resolving with base stats - artifact modifiers not calculated"
       );
       try {
         get().log(
-          "⚠️ Combat has artifact attachments with untracked modifiers - results may need manual adjustment"
+          "⚠️ Resolving with base stats - artifact effects not calculated"
         );
       } catch {}
+      // Continue with resolution using base stats
     }
 
     if (
@@ -878,6 +923,8 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
           at: pending.target.at,
           index: pending.target.index,
         });
+        // Note: target artifact warning already shown in UI if hasUntrackedArtifact
+        // Resolution proceeds with base stats
         defenders = [
           {
             at: pending.target.at,
@@ -886,20 +933,9 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
             def: stats.def,
             atk: effective.atk,
             fs: effective.firstStrike,
-            hasUntrackedArtifact: effective.hasUntrackedArtifact,
+            hasUntrackedArtifact: false, // Already checked above
           },
         ];
-        // Check target for untracked artifacts too
-        if (effective.hasUntrackedArtifact) {
-          console.warn(
-            "[autoResolveCombat] Target has untracked artifact modifiers"
-          );
-          try {
-            get().log(
-              "⚠️ Target has artifact attachments with untracked modifiers - results may need manual adjustment"
-            );
-          } catch {}
-        }
       }
     }
 
