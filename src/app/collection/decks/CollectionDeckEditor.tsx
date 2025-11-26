@@ -17,7 +17,7 @@ interface DeckCard {
     type?: string;
     cost?: number;
     thresholds?: Record<string, number>;
-  };
+  } | null;
   slug?: string;
 }
 
