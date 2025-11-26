@@ -1,6 +1,10 @@
 import { NextRequest } from "next/server";
 import { getServerAuthSession } from "@/lib/auth";
 import { validateOwnership } from "@/lib/collection/validation";
+import {
+  CONSTRUCTED_REQUIREMENTS,
+  type ValidationError,
+} from "@/lib/deck/validation-rules";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -80,10 +84,10 @@ export async function GET(
       };
     });
 
-    // Find avatar
-    const hasAvatar = deck.cards.some((c) =>
-      c.card.meta[0]?.type?.toLowerCase().includes("avatar")
-    );
+    // Count avatars properly
+    const avatarCount = deck.cards
+      .filter((c) => c.card.meta[0]?.type?.toLowerCase().includes("avatar"))
+      .reduce((sum, c) => sum + c.count, 0);
 
     // Deck stats
     const spellbookCount = deck.cards
@@ -92,29 +96,46 @@ export async function GET(
     const atlasCount = deck.cards
       .filter((c) => c.zone === "Atlas")
       .reduce((sum, c) => sum + c.count, 0);
+    const collectionCount = deck.cards
+      .filter((c) => c.zone === "Collection")
+      .reduce((sum, c) => sum + c.count, 0);
     const sideboardCount = deck.cards
       .filter((c) => c.zone === "Sideboard")
       .reduce((sum, c) => sum + c.count, 0);
 
-    // Validation
-    const errors: Array<{ code: string; message: string; cardId?: number }> =
-      [];
-    if (!hasAvatar) {
+    // Validation using constructed rules (collection decks are for constructed play)
+    const reqs = CONSTRUCTED_REQUIREMENTS;
+    const errors: ValidationError[] = [];
+
+    // Avatar validation
+    if (avatarCount !== reqs.avatarCount) {
       errors.push({
-        code: "MISSING_AVATAR",
-        message: "Deck must have exactly 1 avatar",
+        code: "AVATAR_COUNT",
+        message: `Deck must have exactly ${reqs.avatarCount} avatar (has ${avatarCount})`,
       });
     }
-    if (spellbookCount < 40) {
+
+    // Spellbook validation
+    if (spellbookCount < reqs.minSpellbook) {
       errors.push({
         code: "SPELLBOOK_MIN",
-        message: `Spellbook needs at least 40 cards (has ${spellbookCount})`,
+        message: `Spellbook needs at least ${reqs.minSpellbook} cards (has ${spellbookCount})`,
       });
     }
-    if (atlasCount < 12) {
+
+    // Atlas validation
+    if (atlasCount < reqs.minAtlas) {
       errors.push({
         code: "ATLAS_MIN",
-        message: `Atlas needs at least 12 sites (has ${atlasCount})`,
+        message: `Atlas needs at least ${reqs.minAtlas} sites (has ${atlasCount})`,
+      });
+    }
+
+    // Collection validation
+    if (collectionCount > reqs.maxCollection) {
+      errors.push({
+        code: "COLLECTION_MAX",
+        message: `Collection cannot exceed ${reqs.maxCollection} cards (has ${collectionCount})`,
       });
     }
 
@@ -143,8 +164,16 @@ export async function GET(
       stats: {
         spellbookCount,
         atlasCount,
+        collectionCount,
         sideboardCount,
-        hasAvatar,
+        avatarCount,
+        hasAvatar: avatarCount === 1,
+      },
+      requirements: {
+        minSpellbook: reqs.minSpellbook,
+        minAtlas: reqs.minAtlas,
+        maxCollection: reqs.maxCollection,
+        avatarCount: reqs.avatarCount,
       },
     };
 
