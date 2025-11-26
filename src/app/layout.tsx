@@ -10,6 +10,7 @@ import GlobalCanvasWrapper from "@/components/providers/GlobalCanvasWrapper";
 import GlobalNetworkLoadingBridge from "@/components/providers/GlobalNetworkLoadingBridge";
 import OnlineProvider from "@/components/providers/OnlineProvider";
 import ThemeScope from "@/components/ui/ThemeScope";
+import TournamentInviteListener from "@/components/tournament/TournamentInviteListener";
 import { RealtimeTournamentProvider } from "@/contexts/RealtimeTournamentContext";
 import { authOptions } from "@/lib/auth";
 import { ColorBlindProvider } from "@/lib/contexts/ColorBlindContext";
@@ -77,6 +78,7 @@ export default async function RootLayout({
                         <RealtimeTournamentProvider>
                           <VideoOverlayProvider>
                             {children}
+                            <TournamentInviteListener />
                           </VideoOverlayProvider>
                         </RealtimeTournamentProvider>
                       </OnlineProvider>

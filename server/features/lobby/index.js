@@ -1231,6 +1231,37 @@ function createLobbyFeature(deps) {
       }
     });
 
+    // Handle tournament invites (sent from REST API handler)
+    socket.on("sendTournamentInvite", (payload = {}) => {
+      if (!isAuthed()) return;
+      const inviter = getPlayerBySocket(socket);
+      if (!inviter) return;
+
+      const { targetPlayerId, tournamentId, tournamentName } = payload;
+      if (!targetPlayerId || !tournamentId) return;
+
+      const target = players.get(targetPlayerId);
+      if (target && target.socketId) {
+        const tSocket = io.sockets.sockets.get(target.socketId);
+        if (tSocket) {
+          tSocket.emit("tournamentInvite", {
+            tournamentId,
+            tournamentName: tournamentName || "Tournament",
+            from: getPlayerInfo(inviter.id),
+          });
+          try {
+            console.info(
+              `[tournament-invite] sent from=${String(inviter.id).slice(
+                -6
+              )} to=${String(targetPlayerId).slice(
+                -6
+              )} tournament=${tournamentId}`
+            );
+          } catch {}
+        }
+      }
+    });
+
     socket.on("addCpuBot", (payload = {}) => {
       if (!isAuthed()) return;
       if (!CPU_BOTS_ENABLED) {
