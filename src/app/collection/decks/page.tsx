@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import DeckDiff from "../DeckDiff";
 
 interface CollectionDeck {
   id: string;
@@ -83,11 +84,12 @@ export default function CollectionDecksPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold">Collection Decks</h2>
+        <DeckDiff />
       </div>
 
       <p className="text-gray-400">
-        Build decks using only cards you own. Export them to the simulator when
-        ready to play.
+        Build decks using only cards you own. Compare any deck against your
+        collection to see which cards you&apos;re missing.
       </p>
 
       {/* Create New Deck */}
