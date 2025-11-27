@@ -290,23 +290,38 @@ export default function MissingCards() {
                         <div className="fixed left-8 top-1/2 -translate-y-1/2 z-50 pointer-events-none">
                           <div
                             className={`relative rounded-lg overflow-hidden shadow-2xl ring-2 ring-white/20 bg-gray-900 ${
-                              isSite ? "h-72 aspect-[7/5]" : "w-72 aspect-[5/7]"
+                              isSite
+                                ? "w-[400px] aspect-[7/5]"
+                                : "w-72 aspect-[5/7]"
                             }`}
                           >
-                            <Image
-                              src={`/api/images/${getCardSlug(
-                                hoveredCard.name,
-                                hoveredCard.set
-                              )}`}
-                              alt={hoveredCard.name}
-                              fill
-                              className={
-                                isSite
-                                  ? "object-cover rotate-90 scale-[1.4]"
-                                  : "object-cover"
-                              }
-                              sizes={isSite ? "400px" : "288px"}
-                            />
+                            {isSite ? (
+                              <div className="absolute inset-0 flex items-center justify-center">
+                                <div className="w-[286px] h-[400px] relative rotate-90">
+                                  <Image
+                                    src={`/api/images/${getCardSlug(
+                                      hoveredCard.name,
+                                      hoveredCard.set
+                                    )}`}
+                                    alt={hoveredCard.name}
+                                    fill
+                                    className="object-cover rounded"
+                                    sizes="400px"
+                                  />
+                                </div>
+                              </div>
+                            ) : (
+                              <Image
+                                src={`/api/images/${getCardSlug(
+                                  hoveredCard.name,
+                                  hoveredCard.set
+                                )}`}
+                                alt={hoveredCard.name}
+                                fill
+                                className="object-cover"
+                                sizes="288px"
+                              />
+                            )}
                           </div>
                           <div className="mt-2 text-center text-sm font-medium text-white">
                             {hoveredCard.name}
