@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import type { CollectionCardResponse } from "@/lib/collection/types";
 import CollectionCard from "./CollectionCard";
 
@@ -15,52 +15,83 @@ export default function CollectionGrid({
   loading,
   onQuantityChange,
 }: CollectionGridProps) {
-  const [updatingId, setUpdatingId] = useState<number | null>(null);
+  // Local optimistic state for quantities
+  const [localQuantities, setLocalQuantities] = useState<Map<number, number>>(
+    new Map()
+  );
+  const refreshDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const handleQuantityUpdate = async (id: number, newQuantity: number) => {
-    setUpdatingId(id);
-    try {
-      const res = await fetch(`/api/collection/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ quantity: newQuantity }),
-      });
+  // Clear local quantities when cards prop changes (after refresh)
+  useEffect(() => {
+    setLocalQuantities(new Map());
+  }, [cards]);
 
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Failed to update");
-      }
-
-      onQuantityChange?.();
-    } catch (e) {
-      console.error("Failed to update quantity:", e);
-      alert(e instanceof Error ? e.message : "Failed to update quantity");
-    } finally {
-      setUpdatingId(null);
+  const debouncedRefresh = () => {
+    if (refreshDebounceRef.current) {
+      clearTimeout(refreshDebounceRef.current);
     }
+    refreshDebounceRef.current = setTimeout(() => {
+      onQuantityChange?.();
+      refreshDebounceRef.current = null;
+    }, 500);
   };
 
-  const handleDelete = async (id: number) => {
+  const handleQuantityUpdate = (id: number, newQuantity: number) => {
+    // Optimistic update - immediately reflect in UI
+    setLocalQuantities((prev) => {
+      const next = new Map(prev);
+      if (newQuantity <= 0) {
+        next.set(id, 0); // Mark as deleted
+      } else {
+        next.set(id, newQuantity);
+      }
+      return next;
+    });
+
+    // Fire API call async
+    fetch(`/api/collection/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ quantity: newQuantity }),
+    })
+      .then((res) => {
+        if (!res.ok) {
+          res.json().then((err) => {
+            console.error("Failed to update quantity:", err.error);
+          });
+        }
+        debouncedRefresh();
+      })
+      .catch((e) => {
+        console.error("Failed to update quantity:", e);
+      });
+  };
+
+  const handleDelete = (id: number) => {
     if (!confirm("Remove this card from your collection?")) return;
 
-    setUpdatingId(id);
-    try {
-      const res = await fetch(`/api/collection/${id}`, {
-        method: "DELETE",
+    // Optimistic update - hide card immediately
+    setLocalQuantities((prev) => {
+      const next = new Map(prev);
+      next.set(id, 0);
+      return next;
+    });
+
+    // Fire API call async
+    fetch(`/api/collection/${id}`, {
+      method: "DELETE",
+    })
+      .then((res) => {
+        if (!res.ok) {
+          res.json().then((err) => {
+            console.error("Failed to delete:", err.error);
+          });
+        }
+        debouncedRefresh();
+      })
+      .catch((e) => {
+        console.error("Failed to delete:", e);
       });
-
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Failed to delete");
-      }
-
-      onQuantityChange?.();
-    } catch (e) {
-      console.error("Failed to delete:", e);
-      alert(e instanceof Error ? e.message : "Failed to delete");
-    } finally {
-      setUpdatingId(null);
-    }
   };
 
   if (loading) {
@@ -84,13 +115,26 @@ export default function CollectionGrid({
     );
   }
 
+  // Filter out optimistically deleted cards and apply local quantity overrides
+  const visibleCards = cards
+    .filter((card) => {
+      const localQty = localQuantities.get(card.id);
+      return localQty !== 0; // Hide if locally marked as deleted
+    })
+    .map((card) => {
+      const localQty = localQuantities.get(card.id);
+      if (localQty !== undefined && localQty > 0) {
+        return { ...card, quantity: localQty };
+      }
+      return card;
+    });
+
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-      {cards.map((card) => (
+      {visibleCards.map((card) => (
         <CollectionCard
           key={card.id}
           card={card}
-          updating={updatingId === card.id}
           onQuantityChange={(qty) => handleQuantityUpdate(card.id, qty)}
           onDelete={() => handleDelete(card.id)}
         />

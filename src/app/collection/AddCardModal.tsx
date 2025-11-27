@@ -41,33 +41,34 @@ export default function AddCardModal({
     setSaving(true);
     setError(null);
 
-    try {
-      const res = await fetch("/api/collection", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          cards: [
-            {
-              cardId: card.id,
-              variantId: card.variant?.id || null,
-              finish,
-              quantity,
-            },
-          ],
-        }),
+    // Close modal immediately for optimistic UX
+    onAdded();
+
+    // Fire API call without blocking
+    fetch("/api/collection", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        cards: [
+          {
+            cardId: card.id,
+            variantId: card.variant?.id || null,
+            finish,
+            quantity,
+          },
+        ],
+      }),
+    })
+      .then((res) => {
+        if (!res.ok) {
+          res.json().then((data) => {
+            console.error("Failed to add card:", data.error);
+          });
+        }
+      })
+      .catch((e) => {
+        console.error("Failed to add card:", e);
       });
-
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Failed to add card");
-      }
-
-      onAdded();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to add card");
-    } finally {
-      setSaving(false);
-    }
   };
 
   return (

@@ -27,6 +27,7 @@ export default function CollectionPage() {
   // Track fetch state to avoid duplicate fetches
   const abortRef = useRef<AbortController | null>(null);
   const lastParamsRef = useRef<string>("");
+  const refreshDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Build params and fetch when dependencies change
   useEffect(() => {
@@ -171,7 +172,14 @@ export default function CollectionPage() {
   };
 
   const handleCardAdded = () => {
-    refreshCollection();
+    // Debounce refreshes when adding cards rapidly
+    if (refreshDebounceRef.current) {
+      clearTimeout(refreshDebounceRef.current);
+    }
+    refreshDebounceRef.current = setTimeout(() => {
+      refreshCollection();
+      refreshDebounceRef.current = null;
+    }, 500);
   };
 
   // Listen for collection:refresh events from import/export

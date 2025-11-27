@@ -97,72 +97,79 @@ export default function QuickAdd({ onClose, onCardAdded }: QuickAddProps) {
   }, [query, searchCards]);
 
   const handleQuickAdd = async (card: CardResult) => {
-    setAdding(card.cardId);
+    // Optimistic update - show success immediately
+    saveRecentCard(card);
+    setQuery("");
+    setResults([]);
+    inputRef.current?.focus();
 
-    try {
-      const res = await fetch("/api/collection", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          cards: [
-            {
-              cardId: card.cardId,
-              variantId: card.variantId,
-              finish,
-              quantity: 1,
-            },
-          ],
-        }),
+    // Fire and forget - don't block UI
+    fetch("/api/collection", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        cards: [
+          {
+            cardId: card.cardId,
+            variantId: card.variantId,
+            finish,
+            quantity: 1,
+          },
+        ],
+      }),
+    })
+      .then((res) => {
+        if (!res.ok) {
+          res.json().then((data) => {
+            console.error("Failed to add card:", data.error);
+          });
+        }
+        // Notify parent to refresh (debounced on their end)
+        onCardAdded();
+      })
+      .catch((e) => {
+        console.error("Failed to add card:", e);
       });
-
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Failed to add");
-      }
-
-      saveRecentCard(card);
-      onCardAdded();
-
-      // Clear search and refocus
-      setQuery("");
-      setResults([]);
-      inputRef.current?.focus();
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Failed to add card");
-    } finally {
-      setAdding(null);
-    }
   };
 
   const handleRecentAdd = async (recent: RecentCard) => {
+    // Brief visual feedback then optimistic success
     setAdding(recent.cardId);
+    setTimeout(() => setAdding(null), 150);
 
-    try {
-      const res = await fetch("/api/collection", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          cards: [
-            {
-              cardId: recent.cardId,
-              finish,
-              quantity: 1,
-            },
-          ],
-        }),
+    // Move to front of recent list
+    setRecentCards((prev) => {
+      const filtered = prev.filter((r) => r.cardId !== recent.cardId);
+      const updated = [{ ...recent, addedAt: Date.now() }, ...filtered];
+      localStorage.setItem("collection:recentAdds", JSON.stringify(updated));
+      return updated;
+    });
+
+    // Fire and forget
+    fetch("/api/collection", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        cards: [
+          {
+            cardId: recent.cardId,
+            finish,
+            quantity: 1,
+          },
+        ],
+      }),
+    })
+      .then((res) => {
+        if (!res.ok) {
+          res.json().then((data) => {
+            console.error("Failed to add card:", data.error);
+          });
+        }
+        onCardAdded();
+      })
+      .catch((e) => {
+        console.error("Failed to add card:", e);
       });
-
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Failed to add");
-      }
-
-      onCardAdded();
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Failed to add card");
-    } finally {
-      setAdding(null);
-    }
   };
 
   return (
