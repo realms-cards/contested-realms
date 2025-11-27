@@ -108,7 +108,9 @@ export async function GET(req: NextRequest) {
               meta: metaFilter ? { where: metaFilter, take: 1 } : { take: 1 },
             },
           },
-          variant: true,
+          variant: {
+            include: { set: true },
+          },
           set: true,
         },
       }),
@@ -150,7 +152,12 @@ export async function GET(req: NextRequest) {
               product: c.variant.product,
             }
           : null,
-        set: c.set ? { name: c.set.name } : null,
+        // Prefer collection.set, fall back to variant.set for legacy entries
+        set: c.set
+          ? { name: c.set.name }
+          : c.variant?.set
+          ? { name: c.variant.set.name }
+          : null,
         meta: c.card.meta[0]
           ? {
               type: c.card.meta[0].type,

@@ -12,6 +12,7 @@ interface CardData {
     id: number;
     slug: string;
     setName: string;
+    setId?: number;
   };
   meta?: {
     type?: string;
@@ -53,6 +54,7 @@ export default function AddCardModal({
           {
             cardId: card.id,
             variantId: card.variant?.id || null,
+            setId: card.variant?.setId || null,
             finish,
             quantity,
           },

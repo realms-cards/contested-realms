@@ -37,6 +37,9 @@ export async function GET(req: NextRequest) {
     const whereVariant: { setId?: number } = {};
     if (setId != null) whereVariant.setId = setId;
 
+    // Limit results for faster response
+    const SEARCH_LIMIT = 50;
+
     const variants = await prisma.variant.findMany({
       where: {
         ...whereVariant,
@@ -61,7 +64,7 @@ export async function GET(req: NextRequest) {
         card: { select: { name: true, subTypes: true } },
         set: { select: { name: true } },
       },
-      take: 200,
+      take: SEARCH_LIMIT,
     });
 
     if (!variants.length) {
@@ -71,7 +74,7 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // Fetch type/rarity for (cardId,setId)
+    // Fetch type/rarity for (cardId,setId) using IN clauses (faster than OR)
     type VariantRow = {
       id: number;
       cardId: number;
@@ -83,12 +86,13 @@ export async function GET(req: NextRequest) {
       card: { name: string; subTypes: string | null };
       set: { name: string };
     };
-    const pairs = variants.map((v: VariantRow) => ({
-      cardId: v.cardId,
-      setId: v.setId,
-    }));
+    const cardIds = [...new Set(variants.map((v: VariantRow) => v.cardId))];
+    const setIds = [...new Set(variants.map((v: VariantRow) => v.setId))];
     const metas = await prisma.cardSetMetadata.findMany({
-      where: { OR: pairs },
+      where: {
+        cardId: { in: cardIds },
+        setId: { in: setIds },
+      },
       select: { cardId: true, setId: true, type: true, rarity: true },
     });
     const metaKey = (c: number, s: number) => `${c}:${s}`;
@@ -110,6 +114,7 @@ export async function GET(req: NextRequest) {
       cardId: number;
       cardName: string;
       set: string;
+      setId: number;
       type: string | null;
       subTypes: string | null;
       rarity: string | null;
@@ -129,6 +134,7 @@ export async function GET(req: NextRequest) {
           cardId: v.cardId,
           cardName: v.card.name,
           set: v.set.name,
+          setId: v.setId,
           type,
           subTypes,
           rarity,
