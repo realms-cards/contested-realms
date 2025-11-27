@@ -92,42 +92,43 @@ export async function GET(req: NextRequest) {
         break;
     }
 
-    // Get total count
-    const total = await prisma.collectionCard.count({ where });
-
-    // Fetch collection cards with relations
-    const cards = await prisma.collectionCard.findMany({
-      where,
-      orderBy,
-      skip: (page - 1) * limit,
-      take: limit,
-      include: {
-        card: {
-          include: {
-            meta: metaFilter ? { where: metaFilter, take: 1 } : { take: 1 },
+    // Run count, main query, and stats in parallel
+    const [total, cards, statsAgg, uniqueCount] = await Promise.all([
+      // Get total count
+      prisma.collectionCard.count({ where }),
+      // Fetch collection cards with relations
+      prisma.collectionCard.findMany({
+        where,
+        orderBy,
+        skip: (page - 1) * limit,
+        take: limit,
+        include: {
+          card: {
+            include: {
+              meta: metaFilter ? { where: metaFilter, take: 1 } : { take: 1 },
+            },
           },
+          variant: true,
+          set: true,
         },
-        variant: true,
-        set: true,
-      },
-    });
+      }),
+      // Calculate stats - aggregate
+      prisma.collectionCard.aggregate({
+        where: { userId },
+        _sum: { quantity: true },
+      }),
+      // Count unique cards
+      prisma.collectionCard.groupBy({
+        by: ["cardId"],
+        where: { userId },
+        _count: true,
+      }),
+    ]);
 
     // Post-filter for type/rarity if needed (when card's meta doesn't match)
     const filteredCards = metaFilter
       ? cards.filter((c) => c.card.meta.length > 0)
       : cards;
-
-    // Calculate stats
-    const statsAgg = await prisma.collectionCard.aggregate({
-      where: { userId },
-      _sum: { quantity: true },
-      _count: { cardId: true },
-    });
-
-    const uniqueCards = await prisma.collectionCard.groupBy({
-      by: ["cardId"],
-      where: { userId },
-    });
 
     const response: CollectionListResponse = {
       cards: filteredCards.map((c) => ({
@@ -170,7 +171,7 @@ export async function GET(req: NextRequest) {
       },
       stats: {
         totalCards: statsAgg._sum.quantity || 0,
-        uniqueCards: uniqueCards.length,
+        uniqueCards: uniqueCount.length,
         totalValue: null, // Pricing to be computed later
         currency: "USD",
       },
@@ -205,20 +206,6 @@ export async function POST(req: NextRequest) {
 
   try {
     const userId = session.user.id;
-
-    // Verify user exists
-    const user = await prisma.user.findUnique({ where: { id: userId } });
-    if (!user) {
-      return new Response(
-        JSON.stringify({
-          error:
-            "Your account could not be found in the database. Please sign out and sign back in.",
-          code: "USER_NOT_FOUND",
-        }),
-        { status: 401, headers: { "content-type": "application/json" } }
-      );
-    }
-
     const body = await req.json();
     const cardsInput = Array.isArray(body?.cards) ? body.cards : [];
 
@@ -235,17 +222,15 @@ export async function POST(req: NextRequest) {
       errors: [],
     };
 
-    // Validate all card IDs exist
-    const cardIds: number[] = Array.from(
-      new Set<number>(cardsInput.map((c: { cardId: number }) => c.cardId))
-    );
-    const existingCards = await prisma.card.findMany({
-      where: { id: { in: cardIds } },
-      select: { id: true },
-    });
-    const existingCardIds = new Set(existingCards.map((c) => c.id));
+    // Validate inputs first (no DB calls)
+    const validInputs: Array<{
+      cardId: number;
+      variantId: number | null;
+      setId: number | null;
+      finish: Finish;
+      quantity: number;
+    }> = [];
 
-    // Process each card
     for (const input of cardsInput) {
       const validation = validateCollectionCardInput(input);
       if (!validation.valid) {
@@ -264,16 +249,6 @@ export async function POST(req: NextRequest) {
         quantity: number;
       };
 
-      // Check card exists
-      if (!existingCardIds.has(cardId)) {
-        response.errors.push({
-          cardId,
-          message: "Card not found",
-        });
-        continue;
-      }
-
-      // Validate quantity
       const qtyValidation = validateQuantity(quantity);
       if (!qtyValidation.valid) {
         response.errors.push({
@@ -283,57 +258,140 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
-      // Check if entry already exists (upsert)
-      // For nullable variantId, we need to query differently
-      const existing = await prisma.collectionCard.findFirst({
+      validInputs.push({
+        cardId,
+        variantId: variantId ?? null,
+        setId: setId ?? null,
+        finish,
+        quantity,
+      });
+    }
+
+    if (validInputs.length === 0) {
+      return new Response(JSON.stringify(response), {
+        status: 201,
+        headers: { "content-type": "application/json" },
+      });
+    }
+
+    // Single transaction for all DB operations
+    const results = await prisma.$transaction(async (tx) => {
+      // Batch verify: user exists + cards exist in single query
+      const [user, existingCards] = await Promise.all([
+        tx.user.findUnique({ where: { id: userId }, select: { id: true } }),
+        tx.card.findMany({
+          where: { id: { in: validInputs.map((c) => c.cardId) } },
+          select: { id: true },
+        }),
+      ]);
+
+      if (!user) {
+        throw new Error("USER_NOT_FOUND");
+      }
+
+      const existingCardIds = new Set(existingCards.map((c) => c.id));
+      const toProcess: typeof validInputs = [];
+
+      for (const input of validInputs) {
+        if (!existingCardIds.has(input.cardId)) {
+          response.errors.push({
+            cardId: input.cardId,
+            message: "Card not found",
+          });
+        } else {
+          toProcess.push(input);
+        }
+      }
+
+      // Batch fetch existing collection entries
+      const existingEntries = await tx.collectionCard.findMany({
         where: {
           userId,
-          cardId,
-          variantId: variantId ?? null,
-          finish,
+          OR: toProcess.map((c) => ({
+            cardId: c.cardId,
+            variantId: c.variantId,
+            finish: c.finish,
+          })),
         },
       });
 
-      if (existing) {
-        // Update quantity
-        const newQuantity = Math.min(99, existing.quantity + quantity);
-        const updated = await prisma.collectionCard.update({
-          where: { id: existing.id },
-          data: { quantity: newQuantity },
-        });
-        response.updated.push({
-          id: updated.id,
-          cardId: updated.cardId,
-          variantId: updated.variantId,
-          quantity: updated.quantity,
-        });
-      } else {
-        // Create new entry
-        const created = await prisma.collectionCard.create({
-          data: {
-            userId,
-            cardId,
-            variantId: variantId ?? null,
-            setId: setId ?? null,
-            finish,
-            quantity,
-          },
-        });
-        response.added.push({
-          id: created.id,
-          cardId: created.cardId,
-          variantId: created.variantId,
-          quantity: created.quantity,
-          isNew: true,
-        });
-      }
-    }
+      // Build lookup map: "cardId:variantId:finish" -> existing entry
+      const entryMap = new Map(
+        existingEntries.map((e) => [
+          `${e.cardId}:${e.variantId ?? ""}:${e.finish}`,
+          e,
+        ])
+      );
+
+      const created: typeof response.added = [];
+      const updated: typeof response.updated = [];
+
+      // Process all cards in parallel
+      await Promise.all(
+        toProcess.map(async (input) => {
+          const key = `${input.cardId}:${input.variantId ?? ""}:${
+            input.finish
+          }`;
+          const existing = entryMap.get(key);
+
+          if (existing) {
+            const newQuantity = Math.min(
+              99,
+              existing.quantity + input.quantity
+            );
+            const result = await tx.collectionCard.update({
+              where: { id: existing.id },
+              data: { quantity: newQuantity },
+            });
+            updated.push({
+              id: result.id,
+              cardId: result.cardId,
+              variantId: result.variantId,
+              quantity: result.quantity,
+            });
+          } else {
+            const result = await tx.collectionCard.create({
+              data: {
+                userId,
+                cardId: input.cardId,
+                variantId: input.variantId,
+                setId: input.setId,
+                finish: input.finish,
+                quantity: input.quantity,
+              },
+            });
+            created.push({
+              id: result.id,
+              cardId: result.cardId,
+              variantId: result.variantId,
+              quantity: result.quantity,
+              isNew: true,
+            });
+          }
+        })
+      );
+
+      return { created, updated };
+    });
+
+    response.added = results.created;
+    response.updated = results.updated;
 
     return new Response(JSON.stringify(response), {
       status: 201,
       headers: { "content-type": "application/json" },
     });
   } catch (e) {
+    if (e instanceof Error && e.message === "USER_NOT_FOUND") {
+      return new Response(
+        JSON.stringify({
+          error:
+            "Your account could not be found in the database. Please sign out and sign back in.",
+          code: "USER_NOT_FOUND",
+        }),
+        { status: 401, headers: { "content-type": "application/json" } }
+      );
+    }
     const message = e instanceof Error ? e.message : "Unknown error";
     return new Response(JSON.stringify({ error: message }), {
       status: 500,
