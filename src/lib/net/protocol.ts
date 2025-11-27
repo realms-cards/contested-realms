@@ -1,5 +1,16 @@
 import { z } from "zod";
 
+// Player location for presence tracking
+export const PlayerLocationSchema = z.enum([
+  "lobby",
+  "match",
+  "collection",
+  "decks",
+  "browsing",
+  "offline",
+]);
+export type PlayerLocation = z.infer<typeof PlayerLocationSchema>;
+
 // Basic shared types
 const PlayerInfoInputSchema = z.object({
   id: z.string(),
@@ -9,6 +20,9 @@ const PlayerInfoInputSchema = z.object({
   avatarUrl: z.string().optional(),
   image: z.string().optional(),
   seat: z.enum(["p1", "p2"]).optional(),
+  location: PlayerLocationSchema.optional(),
+  inLobby: z.boolean().optional(),
+  inMatch: z.boolean().optional(),
 });
 
 type PlayerInfoInput = z.infer<typeof PlayerInfoInputSchema>;
@@ -35,6 +49,9 @@ function normalizePlayerInfo(raw: PlayerInfoInput) {
     displayName,
     avatarUrl: avatarCandidate ?? null,
     seat,
+    location: raw.location ?? null,
+    inLobby: raw.inLobby ?? false,
+    inMatch: raw.inMatch ?? false,
   };
 }
 
@@ -388,6 +405,12 @@ export const LobbyInvitePayload = z.object({
   visibility: LobbyVisibilitySchema,
   message: z.string().optional(),
 });
+export const InviteResponsePayload = z.object({
+  from: PlayerInfoSchema,
+  lobbyId: z.string(),
+  response: z.enum(["declined", "postponed"]),
+  message: z.string().optional(),
+});
 export const ErrorPayload = z.object({
   message: z.string(),
   code: z.string().optional(),
@@ -405,6 +428,7 @@ export type PongPayloadT = z.infer<typeof PongPayload>;
 export type LobbiesUpdatedPayloadT = z.infer<typeof LobbiesUpdatedPayload>;
 export type PlayerListPayloadT = z.infer<typeof PlayerListPayload>;
 export type LobbyInvitePayloadT = z.infer<typeof LobbyInvitePayload>;
+export type InviteResponsePayloadT = z.infer<typeof InviteResponsePayload>;
 export type ErrorPayloadT = z.infer<typeof ErrorPayload>;
 
 export type ServerEventMap = {
@@ -422,6 +446,7 @@ export type ServerEventMap = {
   lobbiesUpdated: LobbiesUpdatedPayloadT;
   playerList: PlayerListPayloadT;
   lobbyInvite: LobbyInvitePayloadT;
+  inviteResponseReceived: InviteResponsePayloadT;
 };
 
 export const Protocol = {
@@ -462,4 +487,5 @@ export const Protocol = {
   LobbiesUpdatedPayload,
   PlayerListPayload,
   LobbyInvitePayload,
+  InviteResponsePayload,
 };

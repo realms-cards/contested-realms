@@ -433,8 +433,34 @@ export default function PlayersInvitePanel({
                         </div>
                       )}
                       <div className="min-w-0">
-                        <div className="truncate font-medium">
-                          {p.displayName}
+                        <div className="flex items-center gap-1.5">
+                          <span className="truncate font-medium">
+                            {p.displayName}
+                          </span>
+                          {/* Location badge */}
+                          {p.presence.location &&
+                            p.presence.location !== "lobby" && (
+                              <span
+                                className={`shrink-0 text-[10px] px-1.5 py-0.5 rounded-full ${
+                                  p.presence.location === "collection" ||
+                                  p.presence.location === "decks"
+                                    ? "bg-purple-900/50 text-purple-300"
+                                    : p.presence.location === "match"
+                                    ? "bg-amber-900/50 text-amber-300"
+                                    : "bg-slate-700/50 text-slate-400"
+                                }`}
+                              >
+                                {p.presence.location === "collection"
+                                  ? "📦 Collection"
+                                  : p.presence.location === "decks"
+                                  ? "🃏 Decks"
+                                  : p.presence.location === "match"
+                                  ? "⚔️ In Match"
+                                  : p.presence.location === "browsing"
+                                  ? "Browsing"
+                                  : p.presence.location}
+                              </span>
+                            )}
                         </div>
                         <div className="text-[11px] opacity-60 font-mono">
                           {p.shortUserId}

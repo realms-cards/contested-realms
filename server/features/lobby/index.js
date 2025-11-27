@@ -1106,6 +1106,35 @@ function createLobbyFeature(deps) {
       } catch {}
     });
 
+    // Set player location for presence tracking
+    socket.on("setLocation", (payload = {}) => {
+      if (!isAuthed()) return;
+      const player = getPlayerBySocket(socket);
+      if (!player) return;
+      const validLocations = [
+        "lobby",
+        "match",
+        "collection",
+        "decks",
+        "browsing",
+        "offline",
+      ];
+      const location =
+        payload && validLocations.includes(payload.location)
+          ? payload.location
+          : "browsing";
+      player.location = location;
+      try {
+        console.info(
+          `[presence] ${player.displayName} (${player.id.slice(
+            -6
+          )}) → ${location}`
+        );
+      } catch {}
+      // Broadcast updated player list
+      io.emit("playerList", { players: playersArray() });
+    });
+
     socket.on("inviteToLobby", (payload = {}) => {
       if (!isAuthed()) return;
       const inviter = getPlayerBySocket(socket);
@@ -1151,6 +1180,82 @@ function createLobbyFeature(deps) {
               )} target=${String(targetId).slice(
                 -6
               )} lobby=${lobbyId} visibility=${lobby.visibility}`
+            );
+          } catch {}
+        }
+      }
+    });
+
+    // Handle invite responses (decline, postpone)
+    socket.on("inviteResponse", (payload = {}) => {
+      if (!isAuthed()) return;
+      const player = getPlayerBySocket(socket);
+      if (!player) return;
+
+      const lobbyId = payload?.lobbyId;
+      const response = payload?.response; // 'declined' | 'postponed'
+
+      if (!lobbyId || !response) return;
+
+      const lobby = lobbies.get(lobbyId);
+      if (!lobby || !lobby.hostId) return;
+
+      // Find host socket and notify them
+      const host = players.get(lobby.hostId);
+      if (host && host.socketId) {
+        const hostSocket = io.sockets.sockets.get(host.socketId);
+        if (hostSocket) {
+          hostSocket.emit("inviteResponseReceived", {
+            from: getPlayerInfo(player.id),
+            lobbyId,
+            response,
+            message:
+              response === "declined"
+                ? `${player.displayName} declined your invite`
+                : `${player.displayName} needs a few minutes`,
+          });
+          try {
+            console.info(
+              `[invite] response=${response} from=${player.id.slice(
+                -6
+              )} lobby=${lobbyId}`
+            );
+          } catch {}
+        }
+      }
+
+      // Remove invite if declined
+      if (response === "declined") {
+        const inv = lobbyInvites.get(lobbyId);
+        if (inv) inv.delete(player.id);
+      }
+    });
+
+    // Handle tournament invites (sent from REST API handler)
+    socket.on("sendTournamentInvite", (payload = {}) => {
+      if (!isAuthed()) return;
+      const inviter = getPlayerBySocket(socket);
+      if (!inviter) return;
+
+      const { targetPlayerId, tournamentId, tournamentName } = payload;
+      if (!targetPlayerId || !tournamentId) return;
+
+      const target = players.get(targetPlayerId);
+      if (target && target.socketId) {
+        const tSocket = io.sockets.sockets.get(target.socketId);
+        if (tSocket) {
+          tSocket.emit("tournamentInvite", {
+            tournamentId,
+            tournamentName: tournamentName || "Tournament",
+            from: getPlayerInfo(inviter.id),
+          });
+          try {
+            console.info(
+              `[tournament-invite] sent from=${String(inviter.id).slice(
+                -6
+              )} to=${String(targetPlayerId).slice(
+                -6
+              )} tournament=${tournamentId}`
             );
           } catch {}
         }

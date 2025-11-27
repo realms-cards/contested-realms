@@ -35,6 +35,7 @@ model Set {
   packConfig  PackConfig?
   deckCards   DeckCard[] @relation("DeckCardSet")
   cubeCards   CubeCard[] @relation("CubeCardSet")
+  collectionCards CollectionCard[] @relation("CollectionCardSet")
 
   @@index([name])
 }
@@ -52,6 +53,7 @@ model Card {
   deckCards  DeckCard[]
   cubeCards  CubeCard[]
   evaluation CardEvaluation?
+  collectionCards CollectionCard[]
 
   @@index([name])
 }
@@ -94,6 +96,7 @@ model Variant {
   set  Set  @relation(fields: [setId], references: [id], onDelete: Cascade)
   deckCards DeckCard[] @relation("DeckCardVariant")
   cubeCards CubeCard[] @relation("CubeCardVariant")
+  collectionCards CollectionCard[] @relation("CollectionCardVariant")
 
   @@index([setId])
   @@index([cardId])
@@ -190,6 +193,29 @@ model CubeCard {
   @@index([cardId])
 }
 
+// Collection tracker - user's physical card collection
+model CollectionCard {
+  id        Int      @id @default(autoincrement())
+  userId    String
+  cardId    Int
+  setId     Int?
+  variantId Int?
+  finish    Finish   @default(Standard)
+  quantity  Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  card    Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  set     Set?     @relation("CollectionCardSet", fields: [setId], references: [id])
+  variant Variant? @relation("CollectionCardVariant", fields: [variantId], references: [id])
+
+  @@unique([userId, cardId, variantId, finish])
+  @@index([userId])
+  @@index([cardId])
+  @@index([userId, setId])
+}
+
 // Auth models
 model Account {
   id                String  @id @default(cuid())
@@ -246,6 +272,7 @@ model User {
   friendshipsOwned      Friendship[] @relation("FriendshipOwner")
   friendshipsTargeted   Friendship[] @relation("FriendshipTarget")
   tournamentInvitations TournamentInvitation[]
+  collectionCards       CollectionCard[]
 }
 
 model VerificationToken {

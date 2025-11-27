@@ -1,5 +1,6 @@
 "use client";
 
+import { createPortal } from "react-dom";
 import type { TournamentInfo } from "@/lib/net/protocol";
 
 interface TournamentWaitingOverlayProps {
@@ -13,14 +14,16 @@ export default function TournamentWaitingOverlay({
   myPlayerId,
   onMatchReady,
 }: TournamentWaitingOverlayProps) {
-
-  const myStanding = tournament.standings.find(s => s.playerId === myPlayerId);
+  const myStanding = tournament.standings.find(
+    (s) => s.playerId === myPlayerId
+  );
   const currentRound = tournament.rounds[tournament.currentRound - 1];
   const myCurrentMatch = myStanding?.currentMatchId;
 
   const sortedStandings = [...tournament.standings].sort((a, b) => {
     if (a.matchPoints !== b.matchPoints) return b.matchPoints - a.matchPoints;
-    if (a.gameWinPercentage !== b.gameWinPercentage) return b.gameWinPercentage - a.gameWinPercentage;
+    if (a.gameWinPercentage !== b.gameWinPercentage)
+      return b.gameWinPercentage - a.gameWinPercentage;
     return b.opponentMatchWinPercentage - a.opponentMatchWinPercentage;
   });
 
@@ -53,34 +56,43 @@ export default function TournamentWaitingOverlay({
     }
   };
 
-  const actionButton = tournament.status === "playing" && myCurrentMatch ? (
-    <button
-      className="rounded bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 px-6 py-3 text-lg font-semibold shadow-lg"
-      onClick={() => onMatchReady(myCurrentMatch)}
-    >
-      Join Match
-    </button>
-  ) : null;
+  const actionButton =
+    tournament.status === "playing" && myCurrentMatch ? (
+      <button
+        className="rounded bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 px-6 py-3 text-lg font-semibold shadow-lg"
+        onClick={() => onMatchReady(myCurrentMatch)}
+      >
+        Join Match
+      </button>
+    ) : null;
 
-  return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6">
+  const content = (
+    <div className="fixed inset-0 z-[9999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-6">
       <div className="bg-slate-900/95 rounded-xl shadow-2xl w-full max-w-4xl p-6 ring-1 ring-slate-800">
         <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-white mb-2">{tournament.name}</h1>
+          <h1 className="text-2xl font-bold text-white mb-2">
+            {tournament.name}
+          </h1>
           <div className="text-lg text-slate-300 mb-4">
             {getStatusMessage()}
           </div>
-          
-          {actionButton && (
-            <div className="mb-6">
-              {actionButton}
-            </div>
-          )}
+
+          {actionButton && <div className="mb-6">{actionButton}</div>}
 
           <div className="flex justify-center gap-8 text-sm text-slate-400 mb-6">
-            <span>Format: {tournament.format.charAt(0).toUpperCase() + tournament.format.slice(1)}</span>
-            <span>Type: {tournament.matchType.charAt(0).toUpperCase() + tournament.matchType.slice(1)}</span>
-            <span>Round: {tournament.currentRound}/{tournament.totalRounds}</span>
+            <span>
+              Format:{" "}
+              {tournament.format.charAt(0).toUpperCase() +
+                tournament.format.slice(1)}
+            </span>
+            <span>
+              Type:{" "}
+              {tournament.matchType.charAt(0).toUpperCase() +
+                tournament.matchType.slice(1)}
+            </span>
+            <span>
+              Round: {tournament.currentRound}/{tournament.totalRounds}
+            </span>
           </div>
         </div>
 
@@ -107,7 +119,9 @@ export default function TournamentWaitingOverlay({
                     <span className="font-medium text-white">
                       {standing.displayName}
                       {standing.playerId === myPlayerId && (
-                        <span className="text-blue-400 text-sm ml-2">(You)</span>
+                        <span className="text-blue-400 text-sm ml-2">
+                          (You)
+                        </span>
                       )}
                     </span>
                   </div>
@@ -142,9 +156,13 @@ export default function TournamentWaitingOverlay({
                       }`}
                     >
                       <div className="text-sm">
-                        <span className="text-slate-300">Match {index + 1}</span>
+                        <span className="text-slate-300">
+                          Match {index + 1}
+                        </span>
                         {isMyMatch && (
-                          <span className="text-green-400 text-xs ml-2">(Your match)</span>
+                          <span className="text-green-400 text-xs ml-2">
+                            (Your match)
+                          </span>
                         )}
                       </div>
                       <div className="text-xs text-slate-400 font-mono">
@@ -160,7 +178,9 @@ export default function TournamentWaitingOverlay({
 
         {/* Tournament Progress */}
         <div className="mt-6 bg-black/20 rounded-lg p-4">
-          <h3 className="text-lg font-semibold text-white mb-3">Tournament Progress</h3>
+          <h3 className="text-lg font-semibold text-white mb-3">
+            Tournament Progress
+          </h3>
           <div className="flex items-center gap-2 mb-2">
             {Array.from({ length: tournament.totalRounds }, (_, i) => (
               <div
@@ -183,4 +203,7 @@ export default function TournamentWaitingOverlay({
       </div>
     </div>
   );
+
+  if (typeof document === "undefined") return null;
+  return createPortal(content, document.body);
 }

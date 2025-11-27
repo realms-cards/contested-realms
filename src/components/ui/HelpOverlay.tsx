@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { createPortal } from "react-dom";
 
 export type HelpOverlayProps = {
   title?: string;
@@ -63,52 +64,55 @@ export default function HelpOverlay({
         ?
       </button>
 
-      {open && (
-        <div
-          id={baseId}
-          className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm grid justify-items-center p-4 min-h-[100svh]"
-          onMouseDown={() => setOpen(false)}
-        >
+      {open &&
+        typeof document !== "undefined" &&
+        createPortal(
           <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={labelId}
-            className="relative place-self-center w-full max-w-3xl bg-slate-900/95 text-white rounded-xl border border-slate-700 shadow-2xl overflow-hidden flex flex-col"
-            onMouseDown={(e) => e.stopPropagation()}
+            id={baseId}
+            className="fixed inset-0 z-[9999] bg-black/70 backdrop-blur-sm grid justify-items-center p-4 min-h-[100svh]"
+            onMouseDown={() => setOpen(false)}
           >
-            {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-700/60">
-              <h2 id={labelId} className="text-lg md:text-xl font-semibold">
-                {title}
-              </h2>
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                className="ml-3 text-slate-300 hover:text-white rounded-md px-2 py-1 border border-transparent hover:border-slate-600"
-                aria-label="Close"
-              >
-                ✕
-              </button>
-            </div>
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby={labelId}
+              className="relative place-self-center w-full max-w-3xl bg-slate-900/95 text-white rounded-xl border border-slate-700 shadow-2xl overflow-hidden flex flex-col"
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between px-5 py-4 border-b border-slate-700/60">
+                <h2 id={labelId} className="text-lg md:text-xl font-semibold">
+                  {title}
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setOpen(false)}
+                  className="ml-3 text-slate-300 hover:text-white rounded-md px-2 py-1 border border-transparent hover:border-slate-600"
+                  aria-label="Close"
+                >
+                  ✕
+                </button>
+              </div>
 
-            {/* Body */}
-            <div className="px-5 py-4 max-h-[70svh] overflow-auto">
-              {children}
-            </div>
+              {/* Body */}
+              <div className="px-5 py-4 max-h-[70svh] overflow-auto">
+                {children}
+              </div>
 
-            {/* Footer */}
-            <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-slate-700/60">
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                className="px-3 py-1.5 rounded-md border border-slate-600 text-slate-200 hover:bg-slate-700/70"
-              >
-                Close
-              </button>
+              {/* Footer */}
+              <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-slate-700/60">
+                <button
+                  type="button"
+                  onClick={() => setOpen(false)}
+                  className="px-3 py-1.5 rounded-md border border-slate-600 text-slate-200 hover:bg-slate-700/70"
+                >
+                  Close
+                </button>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
     </>
   );
 }

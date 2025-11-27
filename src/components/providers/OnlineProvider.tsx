@@ -18,6 +18,7 @@ import type {
 } from "@/app/online/online-context";
 import { useLoadingContext } from "@/lib/contexts/LoadingContext";
 import { FEATURE_AUDIO_ONLY, FEATURE_SEAT_VIDEO } from "@/lib/flags";
+import { PLAYER_COLORS } from "@/lib/game/constants";
 import { useGameStore } from "@/lib/game/store";
 import type {
   LobbyInfo,
@@ -31,7 +32,6 @@ import type {
 import { SocketTransport } from "@/lib/net/socketTransport";
 import type { StartMatchConfig } from "@/lib/net/transport";
 import { useMatchWebRTC } from "@/lib/rtc/useMatchWebRTC";
-import { PLAYER_COLORS } from "@/lib/game/constants";
 
 // Helper to parse [p1:Name] and [p2:Name] color markup into styled spans
 function renderColoredText(text: string): React.ReactNode {

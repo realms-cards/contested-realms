@@ -17,9 +17,23 @@ export interface RequestHandlerDeps {
   metricsInc: (key: string, delta?: number) => void;
   players: Map<string, PlayerState>;
   tournamentBroadcast: {
-    emitTournamentUpdate: (io: import("socket.io").Server, tournamentId: string, data: AnyRecord) => void;
-    emitPhaseChanged: (io: import("socket.io").Server, tournamentId: string, newPhase: string, additionalData?: AnyRecord) => void;
-    emitRoundStarted: (io: import("socket.io").Server, tournamentId: string, roundNumber: number, matches: unknown) => void;
+    emitTournamentUpdate: (
+      io: import("socket.io").Server,
+      tournamentId: string,
+      data: AnyRecord
+    ) => void;
+    emitPhaseChanged: (
+      io: import("socket.io").Server,
+      tournamentId: string,
+      newPhase: string,
+      additionalData?: AnyRecord
+    ) => void;
+    emitRoundStarted: (
+      io: import("socket.io").Server,
+      tournamentId: string,
+      roundNumber: number,
+      matches: unknown
+    ) => void;
     emitPlayerJoined: (
       io: import("socket.io").Server,
       tournamentId: string,
@@ -90,17 +104,26 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
     : [serverConfig.corsOrigins].filter(Boolean);
 
   function allowCors(res: ServerResponse, reqOrigin: string | null): void {
-    if (reqOrigin && (CORS_ORIGINS.includes("*") || CORS_ORIGINS.includes(reqOrigin))) {
+    if (
+      reqOrigin &&
+      (CORS_ORIGINS.includes("*") || CORS_ORIGINS.includes(reqOrigin))
+    ) {
       res.setHeader("Access-Control-Allow-Origin", reqOrigin);
       res.setHeader("Vary", "Origin");
     }
     res.setHeader("Access-Control-Allow-Credentials", "true");
   }
 
-  function allowCorsForOptions(res: ServerResponse, reqOrigin: string | null): void {
+  function allowCorsForOptions(
+    res: ServerResponse,
+    reqOrigin: string | null
+  ): void {
     allowCors(res, reqOrigin);
     res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    res.setHeader(
+      "Access-Control-Allow-Headers",
+      "Content-Type, Authorization"
+    );
   }
 
   // Normalize incoming event names and accept a few aliases to avoid brittle 400s
@@ -115,7 +138,7 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
     "tournament:statistics:updated": "STATISTICS_UPDATED",
     "tournament:match:assigned": "MATCH_ASSIGNED",
     // Common variations
-    "matchended": "matchEnded",
+    matchended: "matchEnded",
   };
 
   function normalizeEventName(raw: unknown): string | null {
@@ -128,12 +151,18 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
     const upper = s.toUpperCase();
     if (isTournamentBroadcastEvent(upper)) return upper;
     // Aliases (case-insensitive keys)
-    const alias = EVENT_ALIAS_MAP[s] || EVENT_ALIAS_MAP[s.toLowerCase()] || EVENT_ALIAS_MAP[upper];
+    const alias =
+      EVENT_ALIAS_MAP[s] ||
+      EVENT_ALIAS_MAP[s.toLowerCase()] ||
+      EVENT_ALIAS_MAP[upper];
     if (alias && isTournamentBroadcastEvent(alias)) return alias;
     return null;
   }
 
-  return async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  return async function handleRequest(
+    req: IncomingMessage,
+    res: ServerResponse
+  ): Promise<void> {
     try {
       const reqOrigin = (req && req.headers && req.headers.origin) || null;
       const method = (req && req.method) || "GET";
@@ -167,7 +196,10 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
         } catch {}
         const text = buildPromMetrics();
         res.statusCode = 200;
-        res.setHeader("Content-Type", "text/plain; version=0.0.4; charset=utf-8");
+        res.setHeader(
+          "Content-Type",
+          "text/plain; version=0.0.4; charset=utf-8"
+        );
         res.end(text);
         return;
       }
@@ -194,7 +226,9 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
         allowCors(res, reqOrigin);
 
         const qRaw = (u.searchParams.get("q") || "").trim().toLowerCase();
-        const sortParam = (u.searchParams.get("sort") || "recent").toLowerCase();
+        const sortParam = (
+          u.searchParams.get("sort") || "recent"
+        ).toLowerCase();
         const sort = sortParam === "alphabetical" ? "alphabetical" : "recent";
         const limitRaw = Number(u.searchParams.get("limit") || 100);
         const limit = Math.max(
@@ -254,22 +288,26 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
                 select: { id: true, shortId: true, image: true },
               })
             : [];
-        const publicMap = new Map<string, { id: string; shortId: string | null; image: string | null }>(
-          publicUsers.map((user) => [user.id, user])
-        );
+        const publicMap = new Map<
+          string,
+          { id: string; shortId: string | null; image: string | null }
+        >(publicUsers.map((user) => [user.id, user]));
         const visible = candidates.filter((c) => publicMap.has(c.id));
 
         let friendSet = new Set<string>();
         if (requesterId && visible.length > 0) {
-          const friendships: Array<{ targetUserId: string }> = await prisma.friendship.findMany({
-            where: {
-              ownerUserId: requesterId,
-              targetUserId: { in: visible.map((v) => v.id) },
-            },
-            select: { targetUserId: true },
-          });
+          const friendships: Array<{ targetUserId: string }> =
+            await prisma.friendship.findMany({
+              where: {
+                ownerUserId: requesterId,
+                targetUserId: { in: visible.map((v) => v.id) },
+              },
+              select: { targetUserId: true },
+            });
           friendSet = new Set(
-            friendships.map((entry: { targetUserId: string }) => entry.targetUserId)
+            friendships.map(
+              (entry: { targetUserId: string }) => entry.targetUserId
+            )
           );
         }
 
@@ -305,9 +343,7 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
                     (info as AnyRecord).id ||
                     (info as AnyRecord).playerId ||
                     (info as AnyRecord).uid;
-                  const normalized = candidateId
-                    ? String(candidateId)
-                    : null;
+                  const normalized = candidateId ? String(candidateId) : null;
                   if (normalized && normalized !== requesterId) {
                     opponentIds.push(normalized);
                   }
@@ -351,13 +387,15 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
           const lastPlayedAt = lastAt.has(candidate.id)
             ? new Date(lastAt.get(candidate.id) || Date.now()).toISOString()
             : null;
+          // Get player's location from in-memory state
+          const player = players.get(candidate.id);
+          const location = player?.location || null;
           return {
             userId: candidate.id,
-            shortUserId:
-              (user && user.shortId) || candidate.id.slice(-8),
+            shortUserId: (user && user.shortId) || candidate.id.slice(-8),
             displayName: candidate.displayName,
             avatarUrl: (user && user.image) || null,
-            presence: { online: true, inMatch: false },
+            presence: { online: true, inMatch: false, location },
             isFriend: requesterId ? friendSet.has(candidate.id) : false,
             lastPlayedAt,
             matchCountInLast10: matchCount,
@@ -419,11 +457,14 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
           try {
             const body = Buffer.concat(chunks).toString();
             const parsed = JSON.parse(body) as AnyRecord;
-            const rawEvent = (parsed && (parsed.event ?? parsed.type ?? parsed.name)) as unknown;
+            const rawEvent = (parsed &&
+              (parsed.event ?? parsed.type ?? parsed.name)) as unknown;
             const event = normalizeEventName(rawEvent);
             if (!event) {
               throw new Error(
-                `Missing or invalid event${typeof rawEvent === "string" ? `: ${rawEvent}` : ""}`
+                `Missing or invalid event${
+                  typeof rawEvent === "string" ? `: ${rawEvent}` : ""
+                }`
               );
             }
 
@@ -443,17 +484,33 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
                 const tournamentId = toOptionalString(data.tournamentId);
                 const newPhase = toOptionalString(data.newPhase);
                 if (tournamentId && newPhase) {
-                  const { tournamentId: _ti, newPhase: _np, ...additionalData } = data;
-                  tournamentBroadcast.emitPhaseChanged(deps.io, tournamentId, newPhase, additionalData);
+                  const {
+                    tournamentId: _ti,
+                    newPhase: _np,
+                    ...additionalData
+                  } = data;
+                  tournamentBroadcast.emitPhaseChanged(
+                    deps.io,
+                    tournamentId,
+                    newPhase,
+                    additionalData
+                  );
                 }
                 break;
               }
               case "ROUND_STARTED": {
                 const tournamentId = toOptionalString(data.tournamentId);
                 const roundNumber = toOptionalNumber(data.roundNumber);
-                const matchesPayload = Array.isArray(data.matches) ? data.matches : null;
+                const matchesPayload = Array.isArray(data.matches)
+                  ? data.matches
+                  : null;
                 if (tournamentId && roundNumber !== null && matchesPayload) {
-                  tournamentBroadcast.emitRoundStarted(deps.io, tournamentId, roundNumber, matchesPayload);
+                  tournamentBroadcast.emitRoundStarted(
+                    deps.io,
+                    tournamentId,
+                    roundNumber,
+                    matchesPayload
+                  );
                 }
                 break;
               }
@@ -461,8 +518,10 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
                 const tournamentId = toOptionalString(data.tournamentId);
                 const playerId = toOptionalString(data.playerId);
                 if (tournamentId && playerId) {
-                  const playerName = toOptionalString(data.playerName) ?? undefined;
-                  const currentPlayerCount = toOptionalNumber(data.currentPlayerCount) ?? undefined;
+                  const playerName =
+                    toOptionalString(data.playerName) ?? undefined;
+                  const currentPlayerCount =
+                    toOptionalNumber(data.currentPlayerCount) ?? undefined;
                   tournamentBroadcast.emitPlayerJoined(
                     deps.io,
                     tournamentId,
@@ -477,8 +536,10 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
                 const tournamentId = toOptionalString(data.tournamentId);
                 const playerId = toOptionalString(data.playerId);
                 if (tournamentId && playerId) {
-                  const playerName = toOptionalString(data.playerName) ?? undefined;
-                  const currentPlayerCount = toOptionalNumber(data.currentPlayerCount) ?? undefined;
+                  const playerName =
+                    toOptionalString(data.playerName) ?? undefined;
+                  const currentPlayerCount =
+                    toOptionalNumber(data.currentPlayerCount) ?? undefined;
                   tournamentBroadcast.emitPlayerLeft(
                     deps.io,
                     tournamentId,
@@ -494,7 +555,11 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
                 const draftSessionId = toOptionalString(data.draftSessionId);
                 if (tournamentId && draftSessionId) {
                   const { tournamentId: _ti, ...rest } = data;
-                  tournamentBroadcast.emitDraftReady(deps.io, tournamentId, rest);
+                  tournamentBroadcast.emitDraftReady(
+                    deps.io,
+                    tournamentId,
+                    rest
+                  );
                 }
                 break;
               }
@@ -502,11 +567,16 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
                 const tournamentId = toOptionalString(data.tournamentId);
                 const playerId = toOptionalString(data.playerId);
                 if (tournamentId && playerId) {
-                  const preparationStatus = toOptionalString(data.preparationStatus) ?? undefined;
-                  const readyPlayerCount = toOptionalNumber(data.readyPlayerCount) ?? undefined;
-                  const totalPlayerCount = toOptionalNumber(data.totalPlayerCount) ?? undefined;
+                  const preparationStatus =
+                    toOptionalString(data.preparationStatus) ?? undefined;
+                  const readyPlayerCount =
+                    toOptionalNumber(data.readyPlayerCount) ?? undefined;
+                  const totalPlayerCount =
+                    toOptionalNumber(data.totalPlayerCount) ?? undefined;
                   const deckSubmitted =
-                    typeof data.deckSubmitted === "boolean" ? data.deckSubmitted : undefined;
+                    typeof data.deckSubmitted === "boolean"
+                      ? data.deckSubmitted
+                      : undefined;
                   tournamentBroadcast.emitPreparationUpdate(
                     deps.io,
                     tournamentId,
@@ -522,7 +592,11 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
               case "STATISTICS_UPDATED": {
                 const tournamentId = toOptionalString(data.tournamentId);
                 if (tournamentId) {
-                  tournamentBroadcast.emitStatisticsUpdate(deps.io, tournamentId, data);
+                  tournamentBroadcast.emitStatisticsUpdate(
+                    deps.io,
+                    tournamentId,
+                    data
+                  );
                 }
                 break;
               }
@@ -542,13 +616,20 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
                     lobbyName: lobbyName || undefined,
                   } as AnyRecord;
                   try {
-                    const p = players.get(playerId) as unknown as { socketId?: string } | undefined;
-                    const sid = typeof p?.socketId === 'string' ? (p.socketId as string) : null;
-                    if (typeof sid === 'string' && sid.length > 0) {
+                    const p = players.get(playerId) as unknown as
+                      | { socketId?: string }
+                      | undefined;
+                    const sid =
+                      typeof p?.socketId === "string"
+                        ? (p.socketId as string)
+                        : null;
+                    if (typeof sid === "string" && sid.length > 0) {
                       deps.io.to(sid as string).emit("MATCH_ASSIGNED", payload);
                     }
                     // Fallback: also emit to the tournament room so clients listening there can react
-                    deps.io.to(`tournament:${tournamentId}`).emit("MATCH_ASSIGNED", { playerId, ...payload });
+                    deps.io
+                      .to(`tournament:${tournamentId}`)
+                      .emit("MATCH_ASSIGNED", { playerId, ...payload });
                   } catch {}
                 }
                 break;
@@ -558,26 +639,38 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
                 if (matchId) {
                   const match = matchesMap.get(matchId);
                   if (match) {
-                    for (const playerId of Array.isArray(match.playerIds) ? match.playerIds : []) {
+                    for (const playerId of Array.isArray(match.playerIds)
+                      ? match.playerIds
+                      : []) {
                       const player = players.get(playerId);
                       if (player && player.matchId === matchId) {
                         player.matchId = null;
                       }
                     }
                     deps.io.to(`match:${matchId}`).emit("matchEnded", data);
-                    const reason = toOptionalString(data.reason) ?? "unknown_reason";
-                    console.log(`[Match] Ended match ${matchId} due to ${reason}`);
+                    const reason =
+                      toOptionalString(data.reason) ?? "unknown_reason";
+                    console.log(
+                      `[Match] Ended match ${matchId} due to ${reason}`
+                    );
                   }
                 }
                 break;
               }
             }
-            try { metricsInc("http.tournament.broadcast.ok", 1); } catch {}
+            try {
+              metricsInc("http.tournament.broadcast.ok", 1);
+            } catch {}
             res.writeHead(200, { "Content-Type": "application/json" });
             res.end(JSON.stringify({ success: true }));
           } catch (err) {
-            console.error("[Tournament] Broadcast error:", safeErrorMessage(err));
-            try { metricsInc("http.tournament.broadcast.error", 1); } catch {}
+            console.error(
+              "[Tournament] Broadcast error:",
+              safeErrorMessage(err)
+            );
+            try {
+              metricsInc("http.tournament.broadcast.error", 1);
+            } catch {}
             res.writeHead(400, { "Content-Type": "application/json" });
             res.end(
               JSON.stringify({
