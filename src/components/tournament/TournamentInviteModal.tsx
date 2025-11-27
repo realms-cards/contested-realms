@@ -3,6 +3,8 @@
 import Image from "next/image";
 import { useSession } from "next-auth/react";
 import { useState, useEffect } from "react";
+import { Modal } from "@/components/ui/Modal";
+import { useSocket } from "@/lib/hooks/useSocket";
 
 interface Player {
   id: string;
@@ -27,8 +29,11 @@ export default function TournamentInviteModal({
   onInvitesSent,
 }: TournamentInviteModalProps) {
   const { data: session } = useSession();
+  const socket = useSocket();
   const [players, setPlayers] = useState<Player[]>([]);
-  const [selectedPlayers, setSelectedPlayers] = useState<Set<string>>(new Set());
+  const [selectedPlayers, setSelectedPlayers] = useState<Set<string>>(
+    new Set()
+  );
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -99,7 +104,23 @@ export default function TournamentInviteModal({
       }
 
       const inviteCount = data.invitations?.length || 0;
-      setSuccess(`Successfully sent ${inviteCount} invitation${inviteCount !== 1 ? "s" : ""}`);
+      setSuccess(
+        `Successfully sent ${inviteCount} invitation${
+          inviteCount !== 1 ? "s" : ""
+        }`
+      );
+
+      // Notify invited players via socket for real-time toast
+      if (socket && data.invitations?.length > 0) {
+        for (const inv of data.invitations) {
+          socket.emit("sendTournamentInvite", {
+            targetPlayerId: inv.inviteeId,
+            tournamentId,
+            tournamentName,
+          });
+        }
+      }
+
       setSelectedPlayers(new Set());
 
       if (onInvitesSent) {
@@ -113,26 +134,27 @@ export default function TournamentInviteModal({
       }, 2000);
     } catch (err) {
       console.error("Error sending invitations:", err);
-      setError(err instanceof Error ? err.message : "Failed to send invitations");
+      setError(
+        err instanceof Error ? err.message : "Failed to send invitations"
+      );
     } finally {
       setSending(false);
     }
   };
 
-  const filteredPlayers = players.filter((player) =>
-    player.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    player.email?.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredPlayers = players.filter(
+    (player) =>
+      player.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      player.email?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <Modal onClose={onClose}>
       <div className="bg-slate-800 rounded-lg p-6 w-full max-w-md max-h-[80vh] flex flex-col">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold text-white">
-            Invite Players
-          </h2>
+          <h2 className="text-xl font-semibold text-white">Invite Players</h2>
           <button
             onClick={onClose}
             className="text-slate-400 hover:text-white text-2xl leading-none"
@@ -244,10 +266,12 @@ export default function TournamentInviteModal({
           >
             {sending
               ? "Sending..."
-              : `Invite ${selectedPlayers.size > 0 ? `(${selectedPlayers.size})` : ""}`}
+              : `Invite ${
+                  selectedPlayers.size > 0 ? `(${selectedPlayers.size})` : ""
+                }`}
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

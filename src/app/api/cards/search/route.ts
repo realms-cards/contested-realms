@@ -12,7 +12,8 @@ export async function GET(req: NextRequest) {
     const setName = (searchParams.get("set") || "").trim();
     const typeFilt = (searchParams.get("type") || "").trim().toLowerCase();
 
-    if (!q && !typeFilt) {
+    // Allow browsing by set even without a search query
+    if (!q && !typeFilt && !setName) {
       return new Response(JSON.stringify([]), {
         status: 200,
         headers: { "content-type": "application/json" },

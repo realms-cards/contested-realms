@@ -1,0 +1,156 @@
+import { getServerAuthSession } from "@/lib/auth";
+import type { CollectionStats } from "@/lib/collection/types";
+import { prisma } from "@/lib/prisma";
+
+export const dynamic = "force-dynamic";
+
+// GET /api/collection/stats
+// Returns collection statistics including set completion
+export async function GET() {
+  const session = await getServerAuthSession();
+  if (!session?.user) {
+    return new Response(
+      JSON.stringify({ error: "Unauthorized", code: "UNAUTHORIZED" }),
+      { status: 401, headers: { "content-type": "application/json" } }
+    );
+  }
+
+  try {
+    const userId = session.user.id;
+
+    // Get total cards and unique cards
+    const [totalAgg, uniqueCards] = await Promise.all([
+      prisma.collectionCard.aggregate({
+        where: { userId },
+        _sum: { quantity: true },
+      }),
+      prisma.collectionCard.groupBy({
+        by: ["cardId"],
+        where: { userId },
+      }),
+    ]);
+
+    // Get cards by set for completion tracking
+    const cardsBySet = await prisma.collectionCard.groupBy({
+      by: ["setId"],
+      where: { userId, setId: { not: null } },
+      _count: { cardId: true },
+    });
+
+    // Get all sets with their card counts
+    const sets = await prisma.set.findMany({
+      select: {
+        id: true,
+        name: true,
+        _count: {
+          select: { variants: true },
+        },
+      },
+    });
+
+    // Also get unique card count per set (via CardSetMetadata)
+    const setCardCounts = await prisma.cardSetMetadata.groupBy({
+      by: ["setId"],
+      _count: { cardId: true },
+    });
+    const cardCountBySet = new Map(
+      setCardCounts.map((s) => [s.setId, s._count.cardId])
+    );
+
+    // Build set completion data
+    const ownedBySet = new Map(
+      cardsBySet
+        .filter((s) => s.setId !== null)
+        .map((s) => [s.setId as number, s._count.cardId])
+    );
+
+    const bySet = sets
+      .map((set) => {
+        const owned = ownedBySet.get(set.id) || 0;
+        const total = cardCountBySet.get(set.id) || 0;
+        return {
+          setId: set.id,
+          setName: set.name,
+          owned,
+          total,
+          completion: total > 0 ? owned / total : 0,
+          value: null, // Pricing to be added later
+        };
+      })
+      .filter((s) => s.total > 0);
+
+    // Get cards by element
+    const collectionWithElements = await prisma.collectionCard.findMany({
+      where: { userId },
+      select: {
+        quantity: true,
+        card: { select: { elements: true } },
+      },
+    });
+
+    const byElement: Record<string, number> = {};
+    for (const entry of collectionWithElements) {
+      const elements = entry.card.elements;
+      if (elements) {
+        // Elements can be comma-separated
+        const elementList = elements.split(",").map((e) => e.trim());
+        for (const el of elementList) {
+          if (el) {
+            byElement[el] = (byElement[el] || 0) + entry.quantity;
+          }
+        }
+      }
+    }
+
+    // Get cards by rarity (need to join with metadata)
+    const collectionWithMeta = await prisma.collectionCard.findMany({
+      where: { userId },
+      select: {
+        quantity: true,
+        setId: true,
+        card: {
+          select: {
+            meta: {
+              select: { rarity: true, setId: true },
+            },
+          },
+        },
+      },
+    });
+
+    const byRarity: Record<string, number> = {};
+    for (const entry of collectionWithMeta) {
+      // Find matching metadata by setId if available
+      const meta = entry.setId
+        ? entry.card.meta.find((m) => m.setId === entry.setId)
+        : entry.card.meta[0];
+
+      if (meta?.rarity) {
+        byRarity[meta.rarity] = (byRarity[meta.rarity] || 0) + entry.quantity;
+      }
+    }
+
+    const response: CollectionStats = {
+      summary: {
+        totalCards: totalAgg._sum.quantity || 0,
+        uniqueCards: uniqueCards.length,
+        totalValue: null, // Pricing to be computed later
+        currency: "USD",
+      },
+      bySet,
+      byElement,
+      byRarity,
+    };
+
+    return new Response(JSON.stringify(response), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Unknown error";
+    return new Response(JSON.stringify({ error: message }), {
+      status: 500,
+      headers: { "content-type": "application/json" },
+    });
+  }
+}

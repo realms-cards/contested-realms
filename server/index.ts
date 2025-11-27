@@ -1435,7 +1435,14 @@ function rid(prefix: string): string {
     .slice(-4)}`;
 }
 
-type BasicPlayerInfo = { id: string; displayName: string; seat?: Seat };
+type BasicPlayerInfo = {
+  id: string;
+  displayName: string;
+  seat?: Seat;
+  location?: string;
+  inLobby?: boolean;
+  inMatch?: boolean;
+};
 
 function getPlayerInfo(
   playerId: string,
@@ -1447,6 +1454,12 @@ function getPlayerInfo(
   if (seat === "p1" || seat === "p2") {
     info.seat = seat;
   }
+  // Add location info for presence tracking
+  if (p.location) {
+    info.location = p.location;
+  }
+  info.inLobby = !!p.lobbyId;
+  info.inMatch = !!p.matchId;
   return info;
 }
 

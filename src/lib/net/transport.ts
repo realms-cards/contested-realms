@@ -16,11 +16,13 @@ import type {
   LobbiesUpdatedPayloadT,
   PlayerListPayloadT,
   LobbyInvitePayloadT,
+  InviteResponsePayloadT,
   LobbyVisibility,
   ChatScope,
   SealedConfig,
   DraftConfig,
   TournamentInfo,
+  PlayerLocation,
 } from "@/lib/net/protocol";
 import type {
   Draft3DEventMap,
@@ -60,17 +62,30 @@ export type TransportEventMap = {
   lobbiesUpdated: LobbiesUpdatedPayloadT;
   playerList: PlayerListPayloadT;
   lobbyInvite: LobbyInvitePayloadT;
+  inviteResponseReceived: InviteResponsePayloadT;
   draftUpdate: DraftState;
   message: CustomMessage; // generic channel for lightweight messages
   boardCursor: RemoteCursorState;
   // Tournament events
   tournamentCreated: TournamentInfo;
   tournamentUpdated: TournamentInfo;
-  tournamentJoined: { tournamentId: string; playerId: string; displayName: string };
+  tournamentJoined: {
+    tournamentId: string;
+    playerId: string;
+    displayName: string;
+  };
   tournamentLeft: { tournamentId: string; playerId: string };
   tournamentStarted: { tournamentId: string; status: string };
-  tournamentRoundStarted: { tournamentId: string; roundNumber: number; matches: string[] };
-  tournamentMatchReady: { tournamentId: string; matchId: string; players: string[] };
+  tournamentRoundStarted: {
+    tournamentId: string;
+    roundNumber: number;
+    matches: string[];
+  };
+  tournamentMatchReady: {
+    tournamentId: string;
+    matchId: string;
+    players: string[];
+  };
   tournamentCompleted: { tournamentId: string; winnerId?: string };
   tournamentsListUpdated: TournamentInfo[];
   interaction: InteractionEnvelope;
@@ -80,16 +95,18 @@ export type TransportEventMap = {
 } & Draft3DEventMap; // Extend with Draft-3D events for enhanced online integration
 
 export type TransportEvent = keyof TransportEventMap;
-export type TransportHandler<E extends TransportEvent> = (payload: TransportEventMap[E]) => void;
+export type TransportHandler<E extends TransportEvent> = (
+  payload: TransportEventMap[E]
+) => void;
 
 // Optional match configuration for starting a match
 export type StartMatchConfig = {
   matchType?: "constructed" | "sealed" | "draft";
-  sealedConfig?: (SealedConfig & {
+  sealedConfig?: SealedConfig & {
     // Extended fields used by the lobby UI; tolerated by server
     packCounts?: Record<string, number>;
     replaceAvatars?: boolean;
-  });
+  };
   draftConfig?: DraftConfig;
 };
 
@@ -97,7 +114,11 @@ export interface GameTransport {
   connect(opts: { displayName: string; playerId?: string }): Promise<void>;
   disconnect(): void;
 
-  createLobby(options?: { name?: string; visibility?: LobbyVisibility; maxPlayers?: number }): Promise<{ lobbyId: string }>;
+  createLobby(options?: {
+    name?: string;
+    visibility?: LobbyVisibility;
+    maxPlayers?: number;
+  }): Promise<{ lobbyId: string }>;
   joinLobby(lobbyId?: string): Promise<{ lobbyId: string }>; // if omitted, auto-join/create
   joinMatch(matchId: string): Promise<void>;
   watchMatch?(matchId: string, token?: string): Promise<void>;
@@ -118,15 +139,31 @@ export interface GameTransport {
   setLobbyVisibility(visibility: LobbyVisibility): void;
   inviteToLobby(targetPlayerId: string, lobbyId?: string): void;
   setLobbyPlan?(planned: "constructed" | "sealed" | "draft"): void;
+  // Presence tracking - set player location (collection, browsing, etc.)
+  setLocation?(location: PlayerLocation): void;
+  // Invite response - decline or postpone an invite
+  respondToInvite?(lobbyId: string, response: "declined" | "postponed"): void;
   // Server-managed CPU bot (host-only). Adds a bot to the current lobby.
   addCpuBot?(displayName?: string): void;
   // Remove a CPU bot from the current lobby (host-only). If playerId omitted, removes any CPU present.
   removeCpuBot?(playerId?: string): void;
 
   // Draft-specific methods (optional, may not be implemented by all transports)
-  startDraft?(config: { matchId: string; draftConfig: DraftConfig }): Promise<void>;
-  makeDraftPick?(config: { matchId: string; cardId: string; packIndex: number; pickNumber: number }): void;
-  chooseDraftPack?(config: { matchId: string; setChoice: string; packIndex: number }): void;
+  startDraft?(config: {
+    matchId: string;
+    draftConfig: DraftConfig;
+  }): Promise<void>;
+  makeDraftPick?(config: {
+    matchId: string;
+    cardId: string;
+    packIndex: number;
+    pickNumber: number;
+  }): void;
+  chooseDraftPack?(config: {
+    matchId: string;
+    setChoice: string;
+    packIndex: number;
+  }): void;
   submitDeck?(deck: unknown): void;
 
   // Draft-3D enhanced methods for online integration
@@ -137,8 +174,12 @@ export interface GameTransport {
   // Generic lightweight message channel for transient signals (e.g., draft ready)
   sendMessage?(msg: CustomMessage): Promise<void> | void;
   sendInteractionEnvelope?(envelope: InteractionEnvelope): Promise<void> | void;
-  sendInteractionRequest?(message: InteractionRequestMessage): Promise<void> | void;
-  sendInteractionResponse?(message: InteractionResponseMessage): Promise<void> | void;
+  sendInteractionRequest?(
+    message: InteractionRequestMessage
+  ): Promise<void> | void;
+  sendInteractionResponse?(
+    message: InteractionResponseMessage
+  ): Promise<void> | void;
 
   // Tournament methods
   createTournament?(config: {
@@ -154,6 +195,9 @@ export interface GameTransport {
   startTournament?(tournamentId: string): Promise<void>;
   requestTournaments?(): void;
 
-  on<E extends TransportEvent>(event: E, handler: TransportHandler<E>): () => void;
+  on<E extends TransportEvent>(
+    event: E,
+    handler: TransportHandler<E>
+  ): () => void;
   off?<E extends TransportEvent>(event: E, handler: TransportHandler<E>): void;
 }
