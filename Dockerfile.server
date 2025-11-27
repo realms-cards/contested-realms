@@ -13,6 +13,7 @@ COPY server ./server
 COPY bots ./bots
 COPY data ./data
 COPY scripts ./scripts
+COPY reference ./reference
 
 RUN rm -f server/tsconfig.tsbuildinfo
 RUN npm run server:build
@@ -33,6 +34,7 @@ COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/data ./data
 COPY --from=builder /app/bots ./bots
 COPY --from=builder /app/scripts ./scripts
+COPY --from=builder /app/reference ./reference
 
 # Generate Prisma client with production deps
 RUN npm run prisma:generate
