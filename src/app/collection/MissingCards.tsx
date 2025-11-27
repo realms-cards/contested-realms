@@ -361,20 +361,13 @@ export default function MissingCards() {
                       .map((card) => (
                         <div
                           key={`${card.cardId}-${card.setId}`}
-                          className="flex items-center justify-between py-1.5 px-2 rounded hover:bg-gray-700/50 cursor-pointer"
+                          className={`py-1 px-2 rounded hover:bg-gray-700/50 cursor-pointer text-sm ${getRarityColor(
+                            card.rarity
+                          )}`}
                           onMouseEnter={() => setHoveredCard(card)}
                           onMouseLeave={() => setHoveredCard(null)}
                         >
-                          <span className="text-sm">{card.name}</span>
-                          {!rarityFilter && (
-                            <span
-                              className={`text-xs ml-2 flex-shrink-0 ${getRarityColor(
-                                card.rarity
-                              )}`}
-                            >
-                              {card.rarity}
-                            </span>
-                          )}
+                          {card.name}
                         </div>
                       ))}
                   </div>
