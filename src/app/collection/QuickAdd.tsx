@@ -6,13 +6,12 @@ import { useCallback, useEffect, useState, useRef } from "react";
 import { Modal } from "@/components/ui/Modal";
 
 interface CardResult {
-  id: number;
-  name: string;
-  variant?: {
-    id: number;
-    slug: string;
-    setName: string;
-  };
+  cardId: number;
+  cardName: string;
+  variantId: number;
+  slug: string;
+  set: string;
+  finish: string;
 }
 
 interface RecentCard {
@@ -53,16 +52,14 @@ export default function QuickAdd({ onClose, onCardAdded }: QuickAddProps) {
 
   const saveRecentCard = (card: CardResult) => {
     const recent: RecentCard = {
-      cardId: card.id,
-      name: card.name,
-      slug:
-        card.variant?.slug ||
-        `${card.name.toLowerCase().replace(/\s+/g, "_")}_b_s`,
+      cardId: card.cardId,
+      name: card.cardName,
+      slug: card.slug,
       addedAt: Date.now(),
     };
 
     setRecentCards((prev) => {
-      const filtered = prev.filter((r) => r.cardId !== card.id);
+      const filtered = prev.filter((r) => r.cardId !== card.cardId);
       const updated = [recent, ...filtered].slice(0, MAX_RECENT);
       localStorage.setItem("collection:recentAdds", JSON.stringify(updated));
       return updated;
@@ -100,7 +97,7 @@ export default function QuickAdd({ onClose, onCardAdded }: QuickAddProps) {
   }, [query, searchCards]);
 
   const handleQuickAdd = async (card: CardResult) => {
-    setAdding(card.id);
+    setAdding(card.cardId);
 
     try {
       const res = await fetch("/api/collection", {
@@ -109,8 +106,8 @@ export default function QuickAdd({ onClose, onCardAdded }: QuickAddProps) {
         body: JSON.stringify({
           cards: [
             {
-              cardId: card.id,
-              variantId: card.variant?.id || null,
+              cardId: card.cardId,
+              variantId: card.variantId,
               finish,
               quantity: 1,
             },
@@ -217,37 +214,34 @@ export default function QuickAdd({ onClose, onCardAdded }: QuickAddProps) {
             <div className="p-4 text-center text-gray-400">Searching...</div>
           ) : results.length > 0 ? (
             <div className="divide-y divide-gray-800">
-              {results.map((card) => {
-                const imageSlug =
-                  card.variant?.slug ||
-                  `${card.name.toLowerCase().replace(/\s+/g, "_")}_b_s`;
-                return (
+              {results
+                .filter((card) => card.cardName)
+                .map((card) => (
                   <button
-                    key={`${card.id}-${card.variant?.id || "base"}`}
+                    key={`${card.cardId}-${card.variantId}`}
                     onClick={() => handleQuickAdd(card)}
-                    disabled={adding === card.id}
+                    disabled={adding === card.cardId}
                     className="w-full p-3 flex items-center gap-3 hover:bg-gray-800 transition-colors disabled:opacity-50"
                   >
                     <div className="w-10 h-14 relative rounded overflow-hidden flex-shrink-0">
                       <Image
-                        src={`/api/images/${imageSlug}`}
-                        alt={card.name}
+                        src={`/api/images/${card.slug}`}
+                        alt={card.cardName}
                         fill
                         className="object-cover"
                       />
                     </div>
                     <div className="flex-1 text-left">
-                      <div className="font-medium">{card.name}</div>
+                      <div className="font-medium">{card.cardName}</div>
                       <div className="text-xs text-gray-400">
-                        {card.variant?.setName || "Unknown Set"}
+                        {card.set || "Unknown Set"}
                       </div>
                     </div>
                     <div className="text-blue-400 text-sm">
-                      {adding === card.id ? "Adding..." : "+ Add"}
+                      {adding === card.cardId ? "Adding..." : "+ Add"}
                     </div>
                   </button>
-                );
-              })}
+                ))}
             </div>
           ) : query.trim() ? (
             <div className="p-4 text-center text-gray-400">No cards found</div>
