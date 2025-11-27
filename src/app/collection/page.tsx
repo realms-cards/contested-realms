@@ -174,6 +174,14 @@ export default function CollectionPage() {
     refreshCollection();
   };
 
+  // Listen for collection:refresh events from import/export
+  useEffect(() => {
+    const handleRefresh = () => refreshCollection();
+    window.addEventListener("collection:refresh", handleRefresh);
+    return () =>
+      window.removeEventListener("collection:refresh", handleRefresh);
+  }, [refreshCollection]);
+
   // Empty state
   if (
     !loading &&
