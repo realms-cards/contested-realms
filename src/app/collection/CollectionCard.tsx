@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useState, memo } from "react";
+import { memo } from "react";
 import type { CollectionCardResponse } from "@/lib/collection/types";
 import CardPriceTag from "./CardPriceTag";
 
@@ -18,8 +18,6 @@ function CollectionCardInner({
   onQuantityChange,
   onDelete,
 }: CollectionCardProps) {
-  const [showActions, setShowActions] = useState(false);
-
   // Build image URL
   const imageSlug =
     card.variant?.slug ||
@@ -49,8 +47,6 @@ function CollectionCardInner({
             }
           : undefined
       }
-      onMouseEnter={() => setShowActions(true)}
-      onMouseLeave={() => setShowActions(false)}
     >
       {/* Card Image */}
       <div
@@ -100,45 +96,43 @@ function CollectionCardInner({
         </div>
       </div>
 
-      {/* Hover Actions */}
-      {showActions && (
-        <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center gap-2 p-2">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => onQuantityChange?.(card.quantity - 1)}
-              disabled={card.quantity <= 1}
-              className="w-8 h-8 bg-gray-700 hover:bg-gray-600 rounded-full font-bold disabled:opacity-50"
-            >
-              −
-            </button>
-            <span className="text-xl font-bold w-8 text-center">
-              {card.quantity}
-            </span>
-            <button
-              onClick={() => onQuantityChange?.(card.quantity + 1)}
-              disabled={card.quantity >= 99}
-              className="w-8 h-8 bg-gray-700 hover:bg-gray-600 rounded-full font-bold disabled:opacity-50"
-            >
-              +
-            </button>
-          </div>
-
+      {/* Hover Actions - CSS only, no state */}
+      <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center gap-2 p-2 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="flex items-center gap-2">
           <button
-            onClick={onDelete}
-            className="text-red-400 hover:text-red-300 text-xs underline"
+            onClick={() => onQuantityChange?.(card.quantity - 1)}
+            disabled={card.quantity <= 1}
+            className="w-8 h-8 bg-gray-700 hover:bg-gray-600 rounded-full font-bold disabled:opacity-50"
           >
-            Remove
+            −
           </button>
-
-          {/* Price/Buy Link */}
-          <CardPriceTag
-            cardId={card.cardId}
-            cardName={card.card.name}
-            variantId={card.variantId}
-            finish={card.finish}
-          />
+          <span className="text-xl font-bold w-8 text-center">
+            {card.quantity}
+          </span>
+          <button
+            onClick={() => onQuantityChange?.(card.quantity + 1)}
+            disabled={card.quantity >= 99}
+            className="w-8 h-8 bg-gray-700 hover:bg-gray-600 rounded-full font-bold disabled:opacity-50"
+          >
+            +
+          </button>
         </div>
-      )}
+
+        <button
+          onClick={onDelete}
+          className="text-red-400 hover:text-red-300 text-xs underline"
+        >
+          Remove
+        </button>
+
+        {/* Price/Buy Link */}
+        <CardPriceTag
+          cardId={card.cardId}
+          cardName={card.card.name}
+          variantId={card.variantId}
+          finish={card.finish}
+        />
+      </div>
     </div>
   );
 }

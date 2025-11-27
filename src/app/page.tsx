@@ -107,11 +107,11 @@ export default function Home() {
 
         {/* Secondary Links */}
         {session && (
-          <AsciiPanel className="max-w-4xl min-w-2xl p-5 md:p-6 justify-self-center">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4 divide-y sm:divide-y-0 sm:divide-x divide-slate-700/70">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4 max-w-4xl min-w-2xl justify-self-center">
+            <AsciiPanel className="p-5 md:p-6">
               <Link
                 href="/decks"
-                className="group block hover:scale-[1.02] transition-transform duration-200 px-2 md:px-4"
+                className="group block hover:scale-[1.02] transition-transform duration-200"
               >
                 <div className="flex items-center justify-center py-3 md:py-4">
                   <h4 className="text-lg font-semibold tracking-wide">
@@ -119,9 +119,11 @@ export default function Home() {
                   </h4>
                 </div>
               </Link>
+            </AsciiPanel>
+            <AsciiPanel className="p-5 md:p-6">
               <Link
                 href="/collection"
-                className="group block hover:scale-[1.02] transition-transform duration-200 px-2 md:px-4"
+                className="group block hover:scale-[1.02] transition-transform duration-200"
               >
                 <div className="flex items-center justify-center py-3 md:py-4">
                   <h4 className="text-lg font-semibold tracking-wide">
@@ -129,8 +131,8 @@ export default function Home() {
                   </h4>
                 </div>
               </Link>
-            </div>
-          </AsciiPanel>
+            </AsciiPanel>
+          </div>
         )}
 
         {/* Other Realms (wide bottom element) */}
