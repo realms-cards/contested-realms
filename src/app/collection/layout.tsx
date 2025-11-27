@@ -8,6 +8,9 @@ import {
   PresenceProvider,
   usePresence,
 } from "@/components/providers/PresenceProvider";
+import { CodexProvider, useCodex } from "@/contexts/CodexContext";
+import CollectionImportExport from "./CollectionImportExport";
+import CreateCubeFromCollection from "./CreateCubeFromCollection";
 
 const tabs = [
   { href: "/collection", label: "My Collection", exact: true },
@@ -48,9 +51,14 @@ export default function CollectionLayout({
 
   return (
     <PresenceProvider location="collection">
-      <CollectionLayoutContent pathname={pathname}>
-        {children}
-      </CollectionLayoutContent>
+      <CodexProvider>
+        <CollectionLayoutContent
+          pathname={pathname}
+          userName={session.user?.name || "Your"}
+        >
+          {children}
+        </CollectionLayoutContent>
+      </CodexProvider>
     </PresenceProvider>
   );
 }
@@ -58,11 +66,19 @@ export default function CollectionLayout({
 function CollectionLayoutContent({
   children,
   pathname,
+  userName,
 }: {
   children: React.ReactNode;
   pathname: string | null;
+  userName: string;
 }) {
   const { connected } = usePresence();
+  const { showCodex, setShowCodex } = useCodex();
+
+  // Trigger refresh event for collection components
+  const handleCollectionRefresh = () => {
+    window.dispatchEvent(new Event("collection:refresh"));
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-900 to-black text-white">
@@ -77,7 +93,9 @@ function CollectionLayoutContent({
               >
                 ← Home
               </Link>
-              <h1 className="text-xl font-bold">Your Collection</h1>
+              <h1 className="text-xl font-fantaisie">
+                {userName}&apos;s Collection
+              </h1>
               {/* Online indicator */}
               {connected && (
                 <span className="flex items-center gap-1 text-xs text-green-400">
@@ -86,7 +104,27 @@ function CollectionLayoutContent({
                 </span>
               )}
             </div>
-            <AuthButton />
+            <div className="flex items-center gap-2">
+              {/* Import/Export */}
+              <CollectionImportExport onImported={handleCollectionRefresh} />
+
+              {/* Create Cube */}
+              <CreateCubeFromCollection />
+
+              {/* Codex toggle */}
+              <button
+                onClick={() => setShowCodex(!showCodex)}
+                className={`flex items-center gap-1.5 px-2 py-1 rounded text-xs transition-colors ${
+                  showCodex
+                    ? "bg-amber-600/30 text-amber-300 border border-amber-500/50"
+                    : "text-gray-400 hover:text-amber-300 hover:bg-gray-800"
+                }`}
+                title="Show codex/errata info for cards"
+              >
+                <span>📜</span>
+                <span className="hidden sm:inline">Codex</span>
+              </button>
+            </div>
           </div>
 
           {/* Navigation Tabs */}

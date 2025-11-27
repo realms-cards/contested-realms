@@ -736,3 +736,15 @@ model CardEvaluation {
   @@index([validationStatus])
   @@index([generatedBy])
 }
+
+// Codex entries for rules/errata from official codex
+model CodexEntry {
+  id        Int      @id @default(autoincrement())
+  title     String   @unique // Entry title (keyword or concept name)
+  content   String   @db.Text // Full content including subcodexes
+  cardRefs  String[] // Array of card names referenced [[Card Name]]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([title])
+}
