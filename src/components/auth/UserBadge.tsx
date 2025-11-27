@@ -73,6 +73,9 @@ export default function UserBadge({
   } | null>(null);
   const { enabled: colorBlindEnabled, setEnabled: setColorBlindEnabled } =
     useColorBlind();
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteInProgress, setDeleteInProgress] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const SPINNER_CHARS = ["✦", "❊", "✤", "❀", "❇︎"] as const;
   const [spinnerIndex, setSpinnerIndex] = useState(0);
@@ -105,8 +108,29 @@ export default function UserBadge({
     setEmailVerified(Boolean(userEmailVerifiedRaw));
     setAvatarDataUrl(undefined);
     setVerificationSending(false);
+    setDeleteConfirmOpen(false);
+    setDeleteError(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   }, [user?.email, user?.name, userEmailVerifiedRaw]);
+
+  const handleDeleteAccount = useCallback(async () => {
+    setDeleteInProgress(true);
+    setDeleteError(null);
+    try {
+      const res = await fetch("/api/profile/delete", { method: "DELETE" });
+      const data = (await res.json()) as { error?: string; success?: boolean };
+      if (!res.ok || data.error) {
+        throw new Error(data.error || "Failed to delete account");
+      }
+      // Sign out after successful deletion
+      await signOut({ callbackUrl: "/" });
+    } catch (error) {
+      setDeleteError(
+        error instanceof Error ? error.message : "Failed to delete account"
+      );
+      setDeleteInProgress(false);
+    }
+  }, []);
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
@@ -865,6 +889,54 @@ export default function UserBadge({
                 >
                   {profileSaving ? "Saving…" : "Save"}
                 </button>
+              </div>
+
+              {/* Delete account section */}
+              <div className="mt-4 pt-4 border-t border-slate-700/50">
+                {!deleteConfirmOpen ? (
+                  <button
+                    type="button"
+                    onClick={() => setDeleteConfirmOpen(true)}
+                    className="text-[11px] text-slate-400 hover:text-rose-300 underline"
+                  >
+                    Delete my account and data
+                  </button>
+                ) : (
+                  <div className="space-y-2">
+                    <p className="text-[11px] text-rose-300">
+                      This will permanently delete your account, decks, cubes,
+                      and all associated data. This cannot be undone.
+                    </p>
+                    {deleteError && (
+                      <p className="text-[11px] text-rose-400">{deleteError}</p>
+                    )}
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDeleteConfirmOpen(false);
+                          setDeleteError(null);
+                        }}
+                        className="h-7 px-2 rounded bg-white/10 text-[11px] text-white hover:bg-white/20"
+                        disabled={deleteInProgress}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleDeleteAccount}
+                        disabled={deleteInProgress}
+                        className={`h-7 px-3 rounded bg-rose-600 text-[11px] font-semibold text-white hover:bg-rose-500 ${
+                          deleteInProgress ? "opacity-60 cursor-progress" : ""
+                        }`}
+                      >
+                        {deleteInProgress
+                          ? "Deleting…"
+                          : "Yes, delete my account"}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>

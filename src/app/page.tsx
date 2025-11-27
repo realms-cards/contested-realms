@@ -13,15 +13,21 @@ export default function Home() {
   const router = useRouter();
   const { data: session } = useSession();
   const [showAlphaBanner, setShowAlphaBanner] = useState(true);
+  const [showCookieNotice, setShowCookieNotice] = useState(true);
   // Set home page title
   useEffect(() => {
     document.title = "Realms.cards";
     try {
-      const dismissed =
+      const alphaDismissed =
         typeof window !== "undefined"
           ? window.localStorage.getItem("sorcery:alphaBannerDismissed")
           : null;
-      if (dismissed === "1") setShowAlphaBanner(false);
+      if (alphaDismissed === "1") setShowAlphaBanner(false);
+      const cookieDismissed =
+        typeof window !== "undefined"
+          ? window.localStorage.getItem("sorcery:cookieNoticeDismissed")
+          : null;
+      if (cookieDismissed === "1") setShowCookieNotice(false);
     } catch {}
   }, []);
 
@@ -198,6 +204,35 @@ export default function Home() {
 
       {/* Bottom ASCII art background */}
       <AsciiBottomArt opacityClass="text-white/12" maxVh={null} />
+
+      {/* Cookie/Privacy notice toast */}
+      {showCookieNotice && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 max-w-sm w-[calc(100%-2rem)]">
+          <div className="bg-slate-800/95 backdrop-blur border border-slate-700/50 rounded-lg px-4 py-3 shadow-xl flex items-center justify-between gap-3">
+            <p className="text-[11px] text-slate-300 leading-tight">
+              We are not using third party tracking cookies. All cookies are for
+              authentication and simulator functionality only. Users have the
+              ability to delete all of their own data.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                try {
+                  window.localStorage.setItem(
+                    "sorcery:cookieNoticeDismissed",
+                    "1"
+                  );
+                } catch {}
+                setShowCookieNotice(false);
+              }}
+              className="shrink-0 text-slate-400 hover:text-white text-xs px-2 py-1 rounded hover:bg-white/10"
+              aria-label="Dismiss cookie notice"
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
