@@ -13,6 +13,7 @@ interface SearchApiResult {
   cardId: number;
   cardName: string;
   set: string;
+  setId: number;
   type: string | null;
   subTypes: string | null;
   rarity: string | null;
@@ -29,6 +30,7 @@ interface CardResult {
     slug: string;
     finish: string;
     setName: string;
+    setId: number;
   };
   meta?: {
     type: string;
@@ -169,6 +171,7 @@ export default function CardBrowser({ onCardAdded }: CardBrowserProps) {
               slug: item.slug,
               finish: item.finish,
               setName: item.set,
+              setId: item.setId,
             },
             meta: {
               type: item.type || "",

@@ -2,17 +2,15 @@
 
 import type { Finish } from "@prisma/client";
 import Image from "next/image";
-import { useCallback, useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { Modal } from "@/components/ui/Modal";
+import {
+  useCardSearch,
+  type CardSearchResult,
+} from "@/lib/collection/useCardSearch";
 
-interface CardResult {
-  cardId: number;
-  cardName: string;
-  variantId: number;
-  slug: string;
-  set: string;
-  finish: string;
-}
+// Use CardSearchResult from the hook
+type CardResult = CardSearchResult;
 
 interface RecentCard {
   cardId: number;
@@ -23,19 +21,27 @@ interface RecentCard {
 
 interface QuickAddProps {
   onClose: () => void;
-  onCardAdded: () => void;
+  onCardAdded?: () => void; // Called when modal closes if cards were added
 }
 
 const MAX_RECENT = 10;
 
 export default function QuickAdd({ onClose, onCardAdded }: QuickAddProps) {
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<CardResult[]>([]);
-  const [loading, setLoading] = useState(false);
   const [adding, setAdding] = useState<number | null>(null);
   const [finish, setFinish] = useState<Finish>("Standard");
   const [recentCards, setRecentCards] = useState<RecentCard[]>([]);
+  const [cardsAddedCount, setCardsAddedCount] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Use local search index for instant results
+  const { search, loading: indexLoading } = useCardSearch();
+
+  // Search results computed instantly from local index
+  const results = useMemo(() => {
+    if (!query.trim()) return [];
+    return search(query, 8);
+  }, [query, search]);
 
   // Load recent cards from localStorage
   useEffect(() => {
@@ -66,41 +72,13 @@ export default function QuickAdd({ onClose, onCardAdded }: QuickAddProps) {
     });
   };
 
-  const searchCards = useCallback(async (searchQuery: string) => {
-    if (!searchQuery.trim()) {
-      setResults([]);
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const res = await fetch(
-        `/api/cards/search?q=${encodeURIComponent(searchQuery)}`
-      );
-      if (res.ok) {
-        const data = await res.json();
-        setResults(data.slice(0, 8));
-      }
-    } catch {
-      // Ignore search errors
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  // Debounced search
-  useEffect(() => {
-    const timeout = setTimeout(() => {
-      searchCards(query);
-    }, 200);
-    return () => clearTimeout(timeout);
-  }, [query, searchCards]);
+  // No debounce needed - search is instant now
 
   const handleQuickAdd = async (card: CardResult) => {
     // Optimistic update - show success immediately
     saveRecentCard(card);
+    setCardsAddedCount((c) => c + 1);
     setQuery("");
-    setResults([]);
     inputRef.current?.focus();
 
     // Fire and forget - don't block UI
@@ -112,6 +90,7 @@ export default function QuickAdd({ onClose, onCardAdded }: QuickAddProps) {
           {
             cardId: card.cardId,
             variantId: card.variantId,
+            setId: card.setId,
             finish,
             quantity: 1,
           },
@@ -124,8 +103,7 @@ export default function QuickAdd({ onClose, onCardAdded }: QuickAddProps) {
             console.error("Failed to add card:", data.error);
           });
         }
-        // Notify parent to refresh (debounced on their end)
-        onCardAdded();
+        // Don't refresh collection while modal is open - will refresh on close
       })
       .catch((e) => {
         console.error("Failed to add card:", e);
@@ -144,6 +122,7 @@ export default function QuickAdd({ onClose, onCardAdded }: QuickAddProps) {
       localStorage.setItem("collection:recentAdds", JSON.stringify(updated));
       return updated;
     });
+    setCardsAddedCount((c) => c + 1);
 
     // Fire and forget
     fetch("/api/collection", {
@@ -165,20 +144,31 @@ export default function QuickAdd({ onClose, onCardAdded }: QuickAddProps) {
             console.error("Failed to add card:", data.error);
           });
         }
-        onCardAdded();
+        // Don't refresh collection while modal is open - will refresh on close
       })
       .catch((e) => {
         console.error("Failed to add card:", e);
       });
   };
 
+  const handleClose = () => {
+    // Refresh collection only if cards were added
+    if (cardsAddedCount > 0) {
+      onCardAdded?.();
+    }
+    onClose();
+  };
+
   return (
-    <Modal onClose={onClose} backdropClassName="items-start pt-20">
+    <Modal onClose={handleClose} backdropClassName="items-start pt-20">
       <div className="bg-gray-900 rounded-xl max-w-lg w-full overflow-hidden">
         {/* Header */}
         <div className="p-4 border-b border-gray-800 flex items-center justify-between">
           <h3 className="text-lg font-bold">Quick Add Cards</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-white">
+          <button
+            onClick={handleClose}
+            className="text-gray-400 hover:text-white"
+          >
             ✕
           </button>
         </div>
@@ -217,8 +207,10 @@ export default function QuickAdd({ onClose, onCardAdded }: QuickAddProps) {
 
         {/* Results */}
         <div className="max-h-64 overflow-y-auto">
-          {loading ? (
-            <div className="p-4 text-center text-gray-400">Searching...</div>
+          {indexLoading ? (
+            <div className="p-4 text-center text-gray-400">
+              Loading cards...
+            </div>
           ) : results.length > 0 ? (
             <div className="divide-y divide-gray-800">
               {results
