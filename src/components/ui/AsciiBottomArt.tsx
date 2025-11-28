@@ -12,7 +12,7 @@ import React from "react";
  */
 export default function AsciiBottomArt({
   className = "",
-  maxVh = 38,
+  maxVh = null,
   opacityClass = "text-white/10",
 }: {
   className?: string;
@@ -30,24 +30,14 @@ export default function AsciiBottomArt({
     return null;
   }
 
-  const containerStyle: React.CSSProperties = {
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    overflow: "hidden",
-    display: "flex",
-    alignItems: "flex-end",
+  const imgStyle: React.CSSProperties = {
     width: "100%",
-    height: "100%",
+    height: "auto",
   };
-  if (typeof maxVh === "number" && maxVh > 0) {
-    containerStyle.maxHeight = `${maxVh}vh`;
-  } else {
-    containerStyle.height = "100vh";
-  }
 
-  const imgStyle: React.CSSProperties = {};
+  if (typeof maxVh === "number" && maxVh > 0) {
+    imgStyle.maxHeight = `${maxVh}vh`;
+  }
   try {
     const m = opacityClass.match(/text-white\/(\d{1,3})/);
     if (m) {
@@ -58,9 +48,8 @@ export default function AsciiBottomArt({
 
   return (
     <div
-      className={`fixed inset-0 z-[5] pointer-events-none select-none ${className}`}
+      className={`fixed inset-0 z-[5] pointer-events-none select-none flex items-end justify-center ${className}`}
       aria-hidden
-      style={containerStyle}
     >
       <Image
         src="/home_bg_bot.svg"
