@@ -18,55 +18,66 @@ export async function DELETE() {
 
   try {
     // Delete in order respecting foreign key constraints
-    // 1. Delete user's tournament registrations
-    await prisma.tournamentPlayer.deleteMany({ where: { playerId: userId } });
+    await prisma.$transaction(async (tx) => {
+      // 1. Delete user's tournament registrations and related standings/statistics
+      await tx.tournamentRegistration.deleteMany({
+        where: { playerId: userId },
+      });
+      await tx.playerStanding.deleteMany({ where: { playerId: userId } });
+      await tx.tournamentStatistics.deleteMany({ where: { playerId: userId } });
 
-    // 2. Delete user's matches (as player1 or player2)
-    await prisma.match.deleteMany({
-      where: { OR: [{ player1Id: userId }, { player2Id: userId }] },
+      // 2. Delete leaderboard entries and draft participations
+      await tx.leaderboardEntry.deleteMany({ where: { playerId: userId } });
+      await tx.draftParticipant.deleteMany({ where: { playerId: userId } });
+
+      // 3. Delete user's online match sessions
+      await tx.onlineMatchSession.deleteMany({
+        where: { playerIds: { has: userId } },
+      });
+
+      // 4. Delete user's decks and deck cards
+      const userDecks = await tx.deck.findMany({
+        where: { userId },
+        select: { id: true },
+      });
+      const deckIds = userDecks.map((d) => d.id);
+      if (deckIds.length > 0) {
+        await tx.deckCard.deleteMany({ where: { deckId: { in: deckIds } } });
+        await tx.deck.deleteMany({ where: { id: { in: deckIds } } });
+      }
+
+      // 5. Delete user's cubes and cube cards
+      const userCubes = await tx.cube.findMany({
+        where: { userId },
+        select: { id: true },
+      });
+      const cubeIds = userCubes.map((c) => c.id);
+      if (cubeIds.length > 0) {
+        await tx.cubeCard.deleteMany({ where: { cubeId: { in: cubeIds } } });
+        await tx.cube.deleteMany({ where: { id: { in: cubeIds } } });
+      }
+
+      // 6. Delete friendships (both directions)
+      await tx.friendship.deleteMany({
+        where: {
+          OR: [{ ownerUserId: userId }, { targetUserId: userId }],
+        },
+      });
+
+      // 7. Anonymize match results that reference this user
+      await tx.matchResult.updateMany({
+        where: { OR: [{ winnerId: userId }, { loserId: userId }] },
+        data: { winnerId: null, loserId: null },
+      });
+
+      // 8. Delete user's passkey credentials, sessions, and accounts
+      await tx.passkeyCredential.deleteMany({ where: { userId } });
+      await tx.session.deleteMany({ where: { userId } });
+      await tx.account.deleteMany({ where: { userId } });
+
+      // 9. Finally, delete the user
+      await tx.user.delete({ where: { id: userId } });
     });
-
-    // 3. Delete user's online match sessions
-    await prisma.onlineMatchSession.deleteMany({
-      where: { playerIds: { has: userId } },
-    });
-
-    // 4. Delete user's decks and deck cards
-    const userDecks = await prisma.deck.findMany({
-      where: { userId },
-      select: { id: true },
-    });
-    const deckIds = userDecks.map((d) => d.id);
-    if (deckIds.length > 0) {
-      await prisma.deckCard.deleteMany({ where: { deckId: { in: deckIds } } });
-      await prisma.deck.deleteMany({ where: { id: { in: deckIds } } });
-    }
-
-    // 5. Delete user's cubes and cube cards
-    const userCubes = await prisma.cube.findMany({
-      where: { ownerId: userId },
-      select: { id: true },
-    });
-    const cubeIds = userCubes.map((c) => c.id);
-    if (cubeIds.length > 0) {
-      await prisma.cubeCard.deleteMany({ where: { cubeId: { in: cubeIds } } });
-      await prisma.cube.deleteMany({ where: { id: { in: cubeIds } } });
-    }
-
-    // 6. Delete friendships (both directions)
-    await prisma.friendship.deleteMany({
-      where: { OR: [{ userId }, { friendId: userId }] },
-    });
-
-    // 7. Delete user's passkey credentials
-    await prisma.passKeyCredential.deleteMany({ where: { userId } });
-
-    // 8. Delete user's sessions and accounts
-    await prisma.session.deleteMany({ where: { userId } });
-    await prisma.account.deleteMany({ where: { userId } });
-
-    // 9. Finally, delete the user
-    await prisma.user.delete({ where: { id: userId } });
 
     return NextResponse.json({ success: true, message: "Account deleted" });
   } catch (error) {

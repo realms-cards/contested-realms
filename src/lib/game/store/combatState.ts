@@ -1349,10 +1349,9 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
       // ignore
     }
 
-    const totalDamageToAttacker = Math.max(
-      0,
-      Math.floor(damageFromFirstStrike + damageFromSimultaneous)
-    );
+    void damageFromFirstStrike;
+    void damageFromSimultaneous;
+
     let text = "";
     // Check if avatar attacker took damage
     const avatarAttackerTookDamage =
