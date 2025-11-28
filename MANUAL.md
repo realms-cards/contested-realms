@@ -27,7 +27,7 @@ This manual documents keyboard shortcuts and core interaction flows for the Real
 
 - **Camera Pan / Tilt (2D & 3D)**
 
-  - `W`/`A`/`S`/`D` pans the camera.
+  - `W`/`A`/`S`/`D` pans the camera. In the editor we can also use the arrow keys.
   - `Q` / `E` tilts the camera up/down.
 
 - **Hand Browsing**
@@ -36,7 +36,13 @@ This manual documents keyboard shortcuts and core interaction flows for the Real
   - Mouse wheel also cycles focus when the pointer is over your hand.
 
 - **Quick Cancel / Cleanup**
+
   - Press `Escape` to close dialogs/overlays, dismiss hand hover/focus, and clear sticky hand drags.
+
+- **Editor (Free Mode)**
+  - Press `Space` to bring up the search overlay, start typing to search the card db - the first hit will be auto-highlighted
+  - Press `Enter` to add a highlighted card to the deck
+  - Press `Escape` to close the search overlay
 
 ## Mouse & Touch Basics
 
