@@ -1162,6 +1162,9 @@ export function handleCustomMessage(
       }
       // Don't set lastCombatSummary here - the authoritative summary comes from
       // the combatSummary message, not from combatResolve. Just clear pending state.
+      void id;
+      void targetSeat;
+      void summary;
       set({ pendingCombat: null } as Partial<GameState> as GameState);
     } catch {
       set({ pendingCombat: null } as Partial<GameState> as GameState);

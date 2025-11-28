@@ -56,22 +56,26 @@ export class TCGPlayerAffiliateProvider implements PriceProvider {
   name = "tcgplayer";
 
   async getPrice(
-    _cardId: number,
-    _variantId: number | null,
-    _finish: Finish
+    cardId: number,
+    variantId: number | null,
+    finish: Finish
   ): Promise<PriceData | null> {
+    void cardId;
+    void variantId;
+    void finish;
     // Real-time pricing not available without API access
     // Return null to indicate no pricing data
     return null;
   }
 
   async getBulkPrices(
-    _cards: Array<{
+    cards: Array<{
       cardId: number;
       variantId?: number | null;
       finish?: Finish;
     }>
   ): Promise<Map<string, PriceData>> {
+    void cards;
     // Real-time pricing not available without API access
     return new Map();
   }
@@ -85,6 +89,7 @@ export class TCGPlayerAffiliateProvider implements PriceProvider {
   }
 
   async refreshPrices(_cardIds: number[]): Promise<void> {
+    void _cardIds;
     // No-op without API access
   }
 }
