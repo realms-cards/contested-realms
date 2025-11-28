@@ -34,13 +34,18 @@ export interface DeckRequirements {
 // Limited Format (Sealed/Draft)
 // ============================================================================
 
+// Limited (sealed / draft) rules:
+// - Exactly 1 avatar
+// - At least 24 cards in spellbook
+// - At least 12 sites in atlas
+// - 0–10 cards allowed in collection (optional)
 export const LIMITED_REQUIREMENTS: DeckRequirements = {
-  minSpellbook: 40,
+  minSpellbook: 24,
   maxSpellbook: null, // No max
   minAtlas: 12,
   maxAtlas: null, // No max
   minCollection: 0,
-  maxCollection: 0, // No collection zone in limited
+  maxCollection: 10,
   avatarCount: 1,
   sideboardAllowed: true,
 };
@@ -49,20 +54,12 @@ export const LIMITED_REQUIREMENTS: DeckRequirements = {
 // Constructed Format
 // ============================================================================
 
-// Current constructed rules (until Dec 2024)
-const CONSTRUCTED_V1_REQUIREMENTS: DeckRequirements = {
-  minSpellbook: 50,
-  maxSpellbook: null,
-  minAtlas: 30,
-  maxAtlas: null,
-  minCollection: 0,
-  maxCollection: 10,
-  avatarCount: 1,
-  sideboardAllowed: true,
-};
-
-// New constructed rules (Dec 2024+)
-const CONSTRUCTED_V2_REQUIREMENTS: DeckRequirements = {
+// Constructed rules:
+// - Exactly 1 avatar
+// - At least 60 cards in spellbook
+// - At least 30 sites in atlas
+// - 0–10 cards allowed in collection (optional)
+export const CONSTRUCTED_REQUIREMENTS: DeckRequirements = {
   minSpellbook: 60,
   maxSpellbook: null,
   minAtlas: 30,
@@ -72,11 +69,6 @@ const CONSTRUCTED_V2_REQUIREMENTS: DeckRequirements = {
   avatarCount: 1,
   sideboardAllowed: true,
 };
-
-// Active constructed rules based on feature flag
-export const CONSTRUCTED_REQUIREMENTS: DeckRequirements = CONSTRUCTED_V2_ENABLED
-  ? CONSTRUCTED_V2_REQUIREMENTS
-  : CONSTRUCTED_V1_REQUIREMENTS;
 
 // ============================================================================
 // Validation Types

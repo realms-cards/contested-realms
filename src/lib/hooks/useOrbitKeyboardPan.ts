@@ -7,7 +7,18 @@ type Options = {
   panStep?: number;
 };
 
-const PAN_KEYS = new Set(["KeyW", "KeyA", "KeyS", "KeyD", "KeyQ", "KeyE"]);
+const PAN_KEYS = new Set([
+  "KeyW",
+  "KeyA",
+  "KeyS",
+  "KeyD",
+  "KeyQ",
+  "KeyE",
+  "ArrowUp",
+  "ArrowDown",
+  "ArrowLeft",
+  "ArrowRight",
+]);
 
 function shouldIgnoreTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -42,16 +53,16 @@ export function useOrbitKeyboardPan(
     const tick = () => {
       let dx = 0;
       let dy = 0;
-      if (pressed.has("KeyA")) dx += 1;
-      if (pressed.has("KeyD")) dx -= 1;
-      if (pressed.has("KeyS")) dy -= 1;
-      if (pressed.has("KeyW")) dy += 1;
+      if (pressed.has("KeyA") || pressed.has("ArrowLeft")) dx += 1;
+      if (pressed.has("KeyD") || pressed.has("ArrowRight")) dx -= 1;
+      if (pressed.has("KeyS") || pressed.has("ArrowDown")) dy -= 1;
+      if (pressed.has("KeyW") || pressed.has("ArrowUp")) dy += 1;
 
       if (dx !== 0 || dy !== 0) {
         // Pan relative to camera orientation on the XZ plane
         const t = controls.target as Vector3;
         const cam = controlsAny.object as unknown as
-          | ({ position: Vector3; getWorldDirection?: (v: Vector3) => Vector3 })
+          | { position: Vector3; getWorldDirection?: (v: Vector3) => Vector3 }
           | undefined;
         if (cam && cam.position) {
           const forward = new Vector3();

@@ -279,9 +279,9 @@ export async function PUT(
         ).toLowerCase();
         if (type.includes("avatar")) avatarCount += it.count;
       }
-      if (!(avatarCount === 1 && spellbook >= 50 && atlas >= 30)) {
+      if (!(avatarCount === 1 && spellbook >= 60 && atlas >= 30)) {
         throw new Error(
-          `Constructed deck invalid: requires exactly 1 Avatar, >=50 Spellbook, >=30 Atlas (avatar=${avatarCount}, spellbook=${spellbook}, atlas=${atlas}).`
+          `Constructed deck invalid: requires exactly 1 Avatar, >=60 Spellbook, >=30 Atlas (avatar=${avatarCount}, spellbook=${spellbook}, atlas=${atlas}).`
         );
       }
     }

@@ -11,6 +11,8 @@ interface DeckValidationProps {
   atlasCount: number;
   spellbookCount: number;
   validation: ValidationState;
+  minAtlas?: number;
+  minSpellbook?: number;
 }
 
 export default function DeckValidation({
@@ -18,7 +20,12 @@ export default function DeckValidation({
   atlasCount,
   spellbookCount,
   validation,
+  minAtlas,
+  minSpellbook,
 }: DeckValidationProps) {
+  const atlasTarget = typeof minAtlas === "number" ? minAtlas : 12;
+  const spellbookTarget = typeof minSpellbook === "number" ? minSpellbook : 24;
+
   return (
     <div className="flex items-center gap-6 text-sm">
       <div
@@ -43,7 +50,7 @@ export default function DeckValidation({
             validation.atlas ? "bg-green-400" : "bg-red-400"
           }`}
         />
-        Atlas: {atlasCount} / 12+
+        Atlas: {atlasCount} / {atlasTarget}+
       </div>
       <div
         className={`flex items-center gap-2 transition-colors ${
@@ -55,7 +62,7 @@ export default function DeckValidation({
             validation.spellbook ? "bg-green-400" : "bg-red-400"
           }`}
         />
-        Spellbook: {spellbookCount} / 24+
+        Spellbook: {spellbookCount} / {spellbookTarget}+
       </div>
     </div>
   );
