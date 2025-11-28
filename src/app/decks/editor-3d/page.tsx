@@ -21,6 +21,7 @@ import { useOnline } from "@/app/online/online-context";
 import FloatingChat from "@/components/chat/FloatingChat";
 import { TournamentControls } from "@/components/deck-editor";
 import CardPreview from "@/components/game/CardPreview";
+import { useCardSearch } from "@/lib/collection/useCardSearch";
 import { SearchResult, SearchType, searchCards } from "@/lib/deckEditor/search";
 import type { CardPreviewData } from "@/lib/game/card-preview.types";
 import {
@@ -170,9 +171,6 @@ function AuthenticatedDeckEditor() {
     console.log(
       `Picks changed: ${pickCount} unique cards, ${totalCards} total cards`
     );
-    if (pickCount === 0 && totalCards === 0) {
-      console.trace("Picks were cleared - stack trace:");
-    }
   }, [picks]);
 
   // Search state
@@ -264,6 +262,48 @@ function AuthenticatedDeckEditor() {
   );
   const sealedReplaceAvatars = sealedConfig?.replaceAvatars ?? false;
   const [bulkOpenInProgress, setBulkOpenInProgress] = useState(false);
+
+  // Free mode state (when not in draft or sealed mode)
+  const isFreeMode = !isDraftMode && !isSealed;
+  const [freeBoosterSet, setFreeBoosterSet] = useState("Beta");
+  const [freeBoosterCubeId, setFreeBoosterCubeId] = useState("");
+  const [freeBoosterLoading, setFreeBoosterLoading] = useState(false);
+  const [availableCubes, setAvailableCubes] = useState<
+    Array<{ id: string; name: string; cardCount: number; creatorName?: string }>
+  >([]);
+  // Free mode: validation mode (sealed = 30 cards, constructed = 40 cards)
+  const [freeValidationMode, setFreeValidationMode] = useState<
+    "constructed" | "sealed"
+  >("constructed");
+  // Track if cube boosters have been opened (for showing cube extras)
+  // This is set when opening cube boosters in free mode OR when draft mode is initialized
+  const [cubeBoostersOpened, setCubeBoostersOpened] = useState(false);
+  // Track the cube ID whose sideboard we've loaded (to reload if cube changes)
+  const [loadedCubeSideboardId, setLoadedCubeSideboardId] = useState<
+    string | null
+  >(null);
+
+  // Live search state for free mode
+  const { search: localCardSearch, ready: localSearchReady } = useCardSearch();
+  const [liveSearchQuery, setLiveSearchQuery] = useState("");
+  const [liveSearchResults, setLiveSearchResults] = useState<SearchResult[]>(
+    []
+  );
+  const [liveSearchLoading, setLiveSearchLoading] = useState(false);
+
+  // Hidden cards state for draft/sealed modes
+  const [hiddenCardIds, setHiddenCardIds] = useState<Set<number>>(new Set());
+  const [showHiddenCards, setShowHiddenCards] = useState(false);
+
+  // Auto-save preference for free mode
+  const [autoSaveEnabled, setAutoSaveEnabled] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("sorcery:deckEditorAutoSave") === "true";
+    }
+    return false;
+  });
+  const [showAutoSavePrompt, setShowAutoSavePrompt] = useState(false);
+  const autoSavePromptShownRef = useRef(false);
 
   const [matchEndedBannerMessage, setMatchEndedBannerMessage] = useState<
     string | null
@@ -901,6 +941,8 @@ function AuthenticatedDeckEditor() {
 
     console.log("[Draft Init] Initializing draft mode for", draftId);
     setIsDraftMode(true);
+    // Mark that boosters have been opened for cube extras visibility
+    setCubeBoostersOpened(true);
 
     let raw: string | null = null;
     const storageSuffix = playerIdParam
@@ -1625,6 +1667,10 @@ function AuthenticatedDeckEditor() {
   >(null);
   const tournamentControlsVisible = tournamentControlsMode !== null;
 
+  // Cube extras are only available when we've actually loaded cube sideboard cards
+  const cubeExtrasAvailable =
+    cubeStandardCards.length > 0 && cubeBoostersOpened;
+
   // Context menu for card move actions (deck/sideboard/collection)
   const [contextMenu, setContextMenu] = useState<{
     cardId: number;
@@ -2200,9 +2246,18 @@ function AuthenticatedDeckEditor() {
         else if (t.includes("site")) atlas += 1;
         else spellbookNonAvatar += 1;
       }
-      if (!(avatar === 1 && atlas >= 12 && spellbookNonAvatar >= 24)) {
+      // Compute minimums based on mode (mirror validationMinimums above)
+      const isLimitedMode =
+        isSealed ||
+        isDraftMode ||
+        (isFreeMode && freeValidationMode === "sealed");
+      const minAtlas = isLimitedMode ? 12 : 30;
+      const minSpellbook = isLimitedMode ? 24 : 60;
+      const isValid =
+        avatar === 1 && atlas >= minAtlas && spellbookNonAvatar >= minSpellbook;
+      if (!isValid && !isFreeMode) {
         throw new Error(
-          "Deck invalid. Require: 1 Avatar, Atlas >= 12, Spellbook >= 24 (excl. Avatar)"
+          `Deck invalid. Require: 1 Avatar, Atlas >= ${minAtlas}, Spellbook >= ${minSpellbook} (excl. Avatar)`
         );
       }
 
@@ -2212,6 +2267,10 @@ function AuthenticatedDeckEditor() {
         { cardId: number; zone: ApiZone; count: number; variantId?: number }
       >();
       for (const item of Object.values(picks)) {
+        // In free mode, do not persist Collection-zone cards (cube extras / helper pool)
+        if (isFreeMode && item.zone === "Collection") {
+          continue;
+        }
         const t = (item.type || "").toLowerCase();
         let apiZone: ApiZone;
         if (item.zone === "Collection") {
@@ -2251,6 +2310,28 @@ function AuthenticatedDeckEditor() {
 
       const cards = Array.from(agg.values());
 
+      // Decide what deck format to persist on the server.
+      // In free mode we always treat decks as non-constructed so validation is advisory only.
+      const nextFormat =
+        isDraftMode || isSealed
+          ? "Sealed"
+          : isFreeMode
+          ? "sandbox"
+          : "Constructed";
+
+      // Debug: log cards being saved
+      const cardsWithoutVariant = cards.filter((c) => !c.variantId);
+      if (cardsWithoutVariant.length > 0) {
+        console.warn(
+          `[saveDeck] ${cardsWithoutVariant.length} cards have no variantId:`,
+          cardsWithoutVariant
+            .slice(0, 3)
+            .map((c) => ({ cardId: c.cardId, zone: c.zone }))
+        );
+      } else {
+        console.log(`[saveDeck] All ${cards.length} cards have variantId`);
+      }
+
       if (deckId) {
         const res = await fetch(`/api/decks/${deckId}`, {
           method: "PUT",
@@ -2259,6 +2340,7 @@ function AuthenticatedDeckEditor() {
           cache: "no-store",
           body: JSON.stringify({
             name: deckName || "Deck",
+            format: nextFormat,
             set: setName,
             cards,
           }),
@@ -2291,7 +2373,7 @@ function AuthenticatedDeckEditor() {
           cache: "no-store",
           body: JSON.stringify({
             name: finalDeckName,
-            format: isDraftMode || isSealed ? "Sealed" : "Constructed",
+            format: nextFormat,
             set: setName,
             cards,
           }),
@@ -2300,7 +2382,14 @@ function AuthenticatedDeckEditor() {
         if (!res.ok) throw new Error(data?.error || "Failed to save deck");
         setDeckId(data.id);
         setDeckName(data.name); // Use the name returned by the server
-        setSaveMsg(`Saved deck ${data.name} (id: ${data.id})`);
+        // Show warning if deck is incomplete in free mode
+        if (isFreeMode && !isValid) {
+          setSaveMsg(
+            `Saved draft: ${data.name} (incomplete deck - ${avatar} avatar, ${atlas}/${minAtlas} sites, ${spellbookNonAvatar}/${minSpellbook} spells)`
+          );
+        } else {
+          setSaveMsg(`Saved deck ${data.name}`);
+        }
         // Refresh deck list
         try {
           const res2 = await fetch("/api/decks", {
@@ -2328,6 +2417,8 @@ function AuthenticatedDeckEditor() {
     isSealed,
     status,
     searchParams,
+    isFreeMode,
+    freeValidationMode,
   ]);
 
   // Toggle deck public/private status
@@ -2362,8 +2453,8 @@ function AuthenticatedDeckEditor() {
       setError(null);
       setSaveMsg(null);
 
-      // Validate minimum deck requirements for sealed
-      // Require: 1 Avatar, Atlas >= 12, Spellbook >= 24 (excluding Avatar)
+      // Validate minimum deck requirements for sealed (Limited rules)
+      // Limited: exactly 1 Avatar, Atlas >= 12, Spellbook >= 24
       let avatar = 0;
       let atlas = 0;
       let spellbookNonAvatar = 0;
@@ -2384,9 +2475,10 @@ function AuthenticatedDeckEditor() {
         deckZoneCards: pick3D.filter((p) => p.zone === "Deck").length,
       });
 
+      // Sealed validation: 1 Avatar, 12+ sites, 24+ spells
       if (!(avatar === 1 && atlas >= 12 && spellbookNonAvatar >= 24)) {
         throw new Error(
-          `Deck invalid. Current: ${avatar} Avatar, ${atlas} Atlas, ${spellbookNonAvatar} Spellbook. Required: 1 Avatar, Atlas >= 12, Spellbook >= 24 (excl. Avatar & Sites)`
+          `Deck invalid. Current: ${avatar} Avatar, ${atlas} Atlas, ${spellbookNonAvatar} Spellbook. Required: 1 Avatar, Atlas >= 12, Spellbook >= 24.`
         );
       }
 
@@ -2746,6 +2838,18 @@ function AuthenticatedDeckEditor() {
         const next: Record<PickKey, PickItem> = {};
         const addZone = (zone: Zone, arr: ApiCardRef[] | undefined) => {
           if (!arr || !Array.isArray(arr)) return;
+          // Debug: check for missing slugs in API response
+          const missingSlugCards = arr.filter((c) => !c.slug);
+          if (missingSlugCards.length > 0) {
+            console.warn(
+              `[loadDeck] ${missingSlugCards.length} cards in ${zone} have no slug:`,
+              missingSlugCards.slice(0, 3).map((c) => ({
+                cardId: c.cardId,
+                name: c.name,
+                variantId: c.variantId,
+              }))
+            );
+          }
           for (const c of arr) {
             const key: PickKey = `${c.cardId}:${zone}:${c.variantId ?? "x"}`;
             const exists = next[key];
@@ -2767,6 +2871,47 @@ function AuthenticatedDeckEditor() {
         addZone("Deck", data?.spellbook as ApiCardRef[]);
         addZone("Collection", data?.collection as ApiCardRef[]);
         addZone("Sideboard", data?.sideboard as ApiCardRef[]);
+
+        // Hydrate missing slugs/types for older decks using /api/cards/by-id
+        const missingIds = Array.from(
+          new Set(
+            Object.values(next)
+              .filter((p) => !p.slug)
+              .map((p) => p.cardId)
+          )
+        );
+        if (missingIds.length) {
+          try {
+            const resMeta = await fetch(
+              `/api/cards/by-id?ids=${encodeURIComponent(missingIds.join(","))}`
+            );
+            if (resMeta.ok) {
+              const metas = (await resMeta.json()) as Array<{
+                cardId: number;
+                name: string;
+                slug: string;
+                setName: string;
+                type: string | null;
+              }>;
+              const byId = new Map<number, (typeof metas)[number]>();
+              for (const m of metas) byId.set(m.cardId, m);
+              for (const item of Object.values(next)) {
+                if (!item.slug) {
+                  const meta = byId.get(item.cardId);
+                  if (meta) {
+                    item.slug = meta.slug;
+                    item.name = item.name || meta.name;
+                    if (item.type == null) item.type = meta.type;
+                    if (!item.set) item.set = meta.setName;
+                  }
+                }
+              }
+            }
+          } catch (e) {
+            console.warn("[loadDeck] Failed to hydrate missing slugs", e);
+          }
+        }
+
         setPicks(next);
 
         // Optional: prime metaByCardId with thresholds for sorting/grouping
@@ -3008,6 +3153,241 @@ function AuthenticatedDeckEditor() {
   ]);
 
   // Removed auto-save sealed deck function - use manual save only
+
+  // Free mode: Open a booster pack and add cards to sideboard
+  const openFreeBooster = useCallback(async () => {
+    if (freeBoosterLoading) return;
+    setFreeBoosterLoading(true);
+    try {
+      let url = "/api/booster?count=1";
+      const isCubeBooster = !!freeBoosterCubeId;
+      if (isCubeBooster) {
+        url += `&cube=${encodeURIComponent(freeBoosterCubeId)}`;
+      } else if (freeBoosterSet) {
+        url += `&set=${encodeURIComponent(freeBoosterSet)}`;
+      }
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("Failed to generate booster");
+      const data = await res.json();
+      const packCards = data.packs?.[0] || [];
+      if (packCards.length > 0) {
+        // Convert pack cards to SearchResult format and add to sideboard
+        const searchResults: SearchResult[] = packCards.map(
+          (card: {
+            cardId?: number;
+            variantId?: number;
+            cardName?: string;
+            name?: string;
+            slug?: string;
+            type?: string;
+            set?: string;
+            setName?: string;
+          }) => ({
+            cardId: card.cardId || 0,
+            variantId: card.variantId || 0,
+            cardName: card.cardName || card.name || "",
+            slug: card.slug || "",
+            type: card.type || "",
+            set: card.set || card.setName || freeBoosterSet,
+          })
+        );
+        addSearchResultsToSideboard(searchResults);
+        setFeedbackMessage(`Opened booster: ${packCards.length} cards added`);
+        setTimeout(() => setFeedbackMessage(null), 2000);
+
+        // If this was a cube booster, load the cube's sideboard cards for the collection zone
+        if (isCubeBooster && loadedCubeSideboardId !== freeBoosterCubeId) {
+          setLoadedCubeSideboardId(freeBoosterCubeId);
+          setCubeBoostersOpened(true);
+          // Fetch cube sideboard cards
+          try {
+            const cubeRes = await fetch(
+              `/api/cubes/${encodeURIComponent(freeBoosterCubeId)}`
+            );
+            if (cubeRes.ok) {
+              const cubeData = await cubeRes.json();
+              const sideboardCards = (cubeData.cards || []).filter(
+                (c: { zone?: string | null }) => c.zone === "sideboard"
+              );
+              if (sideboardCards.length > 0) {
+                const converted: SearchResult[] = sideboardCards.map(
+                  (c: {
+                    cardId: number;
+                    variantId: number | null;
+                    name: string;
+                    slug: string | null;
+                    setName: string | null;
+                    type: string | null;
+                    rarity: string | null;
+                  }) => ({
+                    cardId: c.cardId,
+                    variantId: c.variantId ?? 0,
+                    cardName: c.name,
+                    slug: c.slug ?? "",
+                    type: c.type ?? "",
+                    set: c.setName ?? "",
+                    finish: "Standard" as const,
+                    product: "",
+                    rarity: c.rarity ?? "Ordinary",
+                  })
+                );
+                setCubeStandardCards(converted);
+              }
+            }
+          } catch (e) {
+            console.error("Failed to load cube sideboard:", e);
+          }
+        }
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to open booster");
+    } finally {
+      setFreeBoosterLoading(false);
+    }
+  }, [
+    freeBoosterCubeId,
+    freeBoosterSet,
+    freeBoosterLoading,
+    addSearchResultsToSideboard,
+    loadedCubeSideboardId,
+  ]);
+
+  // Free mode: Fetch available cubes
+  useEffect(() => {
+    if (!isFreeMode || status !== "authenticated") return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/cubes", { credentials: "include" });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled) {
+          const cubes = [
+            ...(data.myCubes || []),
+            ...(data.publicCubes || []),
+          ].map(
+            (c: {
+              id: string;
+              name: string;
+              cardCount: number;
+              creatorName?: string;
+            }) => ({
+              id: c.id,
+              name: c.name,
+              cardCount: c.cardCount,
+              creatorName: c.creatorName,
+            })
+          );
+          setAvailableCubes(cubes);
+        }
+      } catch {
+        // Ignore errors loading cubes
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isFreeMode, status]);
+
+  // Free mode: Live search handler with debounce
+  const handleLiveSearchChange = useCallback(
+    (query: string) => {
+      setLiveSearchQuery(query);
+      if (!localSearchReady || query.length < 3) {
+        setLiveSearchResults([]);
+        return;
+      }
+      setLiveSearchLoading(true);
+      // Use local search for instant results
+      const results = localCardSearch(query, 20);
+      // Convert to SearchResult format
+      const searchResults: SearchResult[] = results.map((r) => ({
+        cardId: r.cardId,
+        variantId: r.variantId,
+        cardName: r.cardName,
+        slug: r.slug,
+        type: "", // Not available in local index
+        set: r.set,
+        finish: (r.finish || "Standard") as "Standard" | "Foil",
+        product: "",
+        rarity: "Ordinary",
+      }));
+      setLiveSearchResults(searchResults);
+      setLiveSearchLoading(false);
+    },
+    [localCardSearch, localSearchReady]
+  );
+
+  // Free mode: Remove a card from the editor entirely
+  const removeCardFromEditor = useCallback((cardId: number, zone: Zone) => {
+    setPick3D((prev) => {
+      const idx = prev.findIndex(
+        (p) => p.card.cardId === cardId && p.zone === zone
+      );
+      if (idx === -1) return prev;
+      const updated = [...prev];
+      updated.splice(idx, 1);
+      return updated;
+    });
+    // Also update picks state
+    setPicks((prevPicks) => {
+      const next = { ...prevPicks };
+      for (const key of Object.keys(next)) {
+        const item = next[key as PickKey];
+        if (item.cardId === cardId && item.zone === zone) {
+          if (item.count > 1) {
+            next[key as PickKey] = { ...item, count: item.count - 1 };
+          } else {
+            delete next[key as PickKey];
+          }
+          break;
+        }
+      }
+      return next;
+    });
+  }, []);
+
+  // Draft/Sealed mode: Toggle hide/show a card
+  const toggleHideCard = useCallback((cardId: number) => {
+    setHiddenCardIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(cardId)) {
+        next.delete(cardId);
+      } else {
+        next.add(cardId);
+      }
+      return next;
+    });
+  }, []);
+
+  // Show auto-save prompt on first entry in free mode (only if preference not set)
+  useEffect(() => {
+    if (!isFreeMode || autoSavePromptShownRef.current) return undefined;
+    // Check if user has already made a choice
+    const storedPref = localStorage.getItem("sorcery:deckEditorAutoSave");
+    if (storedPref === null && status === "authenticated") {
+      // First time user - show prompt after a delay
+      const timer = setTimeout(() => {
+        setShowAutoSavePrompt(true);
+        autoSavePromptShownRef.current = true;
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+    autoSavePromptShownRef.current = true;
+    return undefined;
+  }, [isFreeMode, status]);
+
+  // Auto-save effect for free mode
+  useEffect(() => {
+    if (!isFreeMode || !autoSaveEnabled || !deckId || saving) return;
+    if (pick3D.length === 0) return;
+
+    const timeoutId = setTimeout(() => {
+      saveDeck();
+    }, 5000); // 5 second debounce for auto-save
+
+    return () => clearTimeout(timeoutId);
+  }, [isFreeMode, autoSaveEnabled, deckId, saving, pick3D, saveDeck]);
 
   // Auto-save disabled for sealed mode - use manual save only
   // useEffect(() => {
@@ -3389,6 +3769,16 @@ function AuthenticatedDeckEditor() {
           fallbackIndex++;
         }
 
+        // Debug: log if slug is missing
+        if (!item.slug) {
+          console.warn("[Pick3D Build] Missing slug for card:", {
+            cardId: item.cardId,
+            name: item.name,
+            variantId: item.variantId,
+            zone: item.zone,
+          });
+        }
+
         newPick3D.push({
           id: id++,
           card: {
@@ -3516,13 +3906,29 @@ function AuthenticatedDeckEditor() {
     return n;
   }, [pick3D]);
 
+  // Determine required minimums based on mode
+  const validationMinimums = useMemo(() => {
+    // Limited (sealed / draft / free-mode sealed validation): 24 spells, 12 sites
+    const isLimitedMode =
+      isSealed ||
+      isDraftMode ||
+      (isFreeMode && freeValidationMode === "sealed");
+
+    if (isLimitedMode) {
+      return { atlas: 12, spellbook: 24 };
+    }
+
+    // Constructed: 60 spells, 30 sites
+    return { atlas: 30, spellbook: 60 };
+  }, [isSealed, isDraftMode, isFreeMode, freeValidationMode]);
+
   const validation = useMemo(() => {
     return {
       avatar: avatarCount === 1,
-      atlas: atlasCount >= 12,
-      spellbook: spellbookNonAvatar >= 24,
+      atlas: atlasCount >= validationMinimums.atlas,
+      spellbook: spellbookNonAvatar >= validationMinimums.spellbook,
     };
-  }, [avatarCount, atlasCount, spellbookNonAvatar]);
+  }, [avatarCount, atlasCount, spellbookNonAvatar, validationMinimums]);
 
   // (Removed unused canModifyCard callback)
 
@@ -3535,6 +3941,50 @@ function AuthenticatedDeckEditor() {
     }
     return undefined;
   }, [contextMenu]);
+
+  // Clear search fields when search is opened
+  useEffect(() => {
+    if (searchExpanded) {
+      setLiveSearchQuery("");
+      setLiveSearchResults([]);
+      setQ("");
+    }
+  }, [searchExpanded]);
+
+  // Global keyboard shortcuts for search
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger if user is typing in an input/textarea
+      const target = e.target as HTMLElement;
+      if (
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.isContentEditable
+      ) {
+        // Still allow Escape to close search even when typing
+        if (e.key === "Escape" && searchExpanded) {
+          e.preventDefault();
+          setSearchExpanded(false);
+        }
+        return;
+      }
+
+      // Space to open search (if not already open and not in draft mode)
+      if (e.key === " " && !searchExpanded && !isDraftMode) {
+        e.preventDefault();
+        setSearchExpanded(true);
+      }
+
+      // Escape to close search
+      if (e.key === "Escape" && searchExpanded) {
+        e.preventDefault();
+        setSearchExpanded(false);
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [searchExpanded, isDraftMode, setSearchExpanded]);
 
   // Helper to check if a card is a standard site (tournament legal)
   const isStandardSite = useCallback((cardName: string) => {
@@ -4118,6 +4568,26 @@ function AuthenticatedDeckEditor() {
           onSaveDeck={saveDeck}
           onSubmitSealed={submitSealedDeck}
           onSubmitDraft={submitDraftDeck}
+          // Hidden cards toggle for draft/sealed
+          hiddenCardCount={hiddenCardIds.size}
+          showHiddenCards={showHiddenCards}
+          onToggleShowHidden={() => setShowHiddenCards((v) => !v)}
+          // Free mode indicator
+          isFreeMode={isFreeMode}
+          // Free mode validation toggle
+          freeValidationMode={freeValidationMode}
+          onFreeValidationModeChange={setFreeValidationMode}
+          validationMinimums={validationMinimums}
+          // Auto-save toggle
+          autoSaveEnabled={autoSaveEnabled}
+          onToggleAutoSave={(enabled) => {
+            setAutoSaveEnabled(enabled);
+            localStorage.setItem("sorcery:deckEditorAutoSave", String(enabled));
+            setFeedbackMessage(
+              enabled ? "Auto-save enabled" : "Auto-save disabled"
+            );
+            setTimeout(() => setFeedbackMessage(null), 2000);
+          }}
         />
         {/* (Removed background usage text in favor of Help overlay) */}
         <Suspense fallback={null}>
@@ -4142,7 +4612,9 @@ function AuthenticatedDeckEditor() {
               setFeedbackMessage(msg);
               setTimeout(() => setFeedbackMessage(null), 2000);
             }}
-            showCollectionZone={cubeStandardCards.length > 0}
+            showCollectionZone={
+              cubeStandardCards.length > 0 && cubeBoostersOpened
+            }
             collectionCount={collectionCount}
             collectionCountsByCardId={collectionCountsByCardId}
             moveOneFromSideboardToCollection={moveOneFromSideboardToCollection}
@@ -4446,6 +4918,55 @@ function AuthenticatedDeckEditor() {
                   </button>
                 </div>
               )}
+
+              {/* Free mode: Remove card action */}
+              {isFreeMode &&
+                (contextMenu.deckCards.length > 0 ||
+                  contextMenu.sideboardCards.length > 0) && (
+                  <div className="border-t border-white/10 mt-2 pt-2">
+                    <button
+                      className="w-full text-left px-2 py-1 text-xs text-red-300 hover:bg-red-700/40 rounded"
+                      onClick={() => {
+                        const zone =
+                          contextMenu.deckCards.length > 0
+                            ? "Deck"
+                            : "Sideboard";
+                        removeCardFromEditor(contextMenu.cardId, zone as Zone);
+                        setFeedbackMessage(
+                          `Removed "${contextMenu.cardName}" from ${zone}`
+                        );
+                        setTimeout(() => setFeedbackMessage(null), 2000);
+                        setContextMenu(null);
+                      }}
+                    >
+                      🗑️ Remove one copy
+                    </button>
+                  </div>
+                )}
+
+              {/* Draft/Sealed mode: Hide card action */}
+              {(isDraftMode || isSealed) && (
+                <div className="border-t border-white/10 mt-2 pt-2">
+                  <button
+                    className="w-full text-left px-2 py-1 text-xs text-yellow-300 hover:bg-yellow-700/40 rounded"
+                    onClick={() => {
+                      toggleHideCard(contextMenu.cardId);
+                      const isHidden = hiddenCardIds.has(contextMenu.cardId);
+                      setFeedbackMessage(
+                        isHidden
+                          ? `Showing "${contextMenu.cardName}" again`
+                          : `Hiding "${contextMenu.cardName}" from view`
+                      );
+                      setTimeout(() => setFeedbackMessage(null), 2000);
+                      setContextMenu(null);
+                    }}
+                  >
+                    {hiddenCardIds.has(contextMenu.cardId)
+                      ? "👁️ Show card"
+                      : "👁️‍🗨️ Hide card"}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -4497,6 +5018,50 @@ function AuthenticatedDeckEditor() {
           </div>
         )}
 
+        {/* Auto-save prompt for free mode */}
+        {showAutoSavePrompt && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm pointer-events-auto">
+            <div className="bg-slate-900 rounded-xl p-6 max-w-md mx-4 shadow-2xl border border-white/10">
+              <h3 className="text-lg font-semibold text-white mb-3">
+                Enable Auto-Save?
+              </h3>
+              <p className="text-white/70 text-sm mb-4">
+                Would you like to automatically save your deck changes?
+                Auto-save will periodically save your progress in the
+                background.
+              </p>
+              <p className="text-white/50 text-xs mb-4">
+                Note: This only applies to existing decks. You&apos;ll still
+                need to save manually the first time.
+              </p>
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => {
+                    localStorage.setItem("sorcery:deckEditorAutoSave", "false");
+                    setAutoSaveEnabled(false);
+                    setShowAutoSavePrompt(false);
+                  }}
+                  className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm transition-colors"
+                >
+                  No, save manually
+                </button>
+                <button
+                  onClick={() => {
+                    localStorage.setItem("sorcery:deckEditorAutoSave", "true");
+                    setAutoSaveEnabled(true);
+                    setShowAutoSavePrompt(false);
+                    setFeedbackMessage("Auto-save enabled");
+                    setTimeout(() => setFeedbackMessage(null), 2000);
+                  }}
+                  className="px-4 py-2 rounded-lg bg-green-600 hover:bg-green-500 text-white text-sm font-medium transition-colors"
+                >
+                  Yes, enable auto-save
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Bottom controls */}
         <Suspense fallback={null}>
           <BottomBar
@@ -4517,6 +5082,7 @@ function AuthenticatedDeckEditor() {
             pick3DLength={pick3D.length}
             tournamentControlsVisible={tournamentControlsVisible}
             tournamentControlsMode={tournamentControlsMode}
+            cubeExtrasAvailable={cubeExtrasAvailable}
             onShowStandardCards={() =>
               setTournamentControlsMode((prev) =>
                 prev === "standard" ? null : "standard"
@@ -4538,6 +5104,21 @@ function AuthenticatedDeckEditor() {
             }}
             timeRemaining={timeRemaining}
             formatTime={formatTimeSealed}
+            // Free mode props
+            isFreeMode={isFreeMode}
+            freeBoosterSet={freeBoosterSet}
+            onFreeBoosterSetChange={setFreeBoosterSet}
+            freeBoosterCubeId={freeBoosterCubeId}
+            onFreeBoosterCubeChange={setFreeBoosterCubeId}
+            availableCubes={availableCubes}
+            onOpenFreeBooster={openFreeBooster}
+            freeBoosterLoading={freeBoosterLoading}
+            // Live search props
+            liveSearchQuery={liveSearchQuery}
+            onLiveSearchChange={handleLiveSearchChange}
+            liveSearchResults={liveSearchResults}
+            liveSearchLoading={liveSearchLoading}
+            onAddFromLiveSearch={addCardAuto}
           />
         </Suspense>
         {error && (

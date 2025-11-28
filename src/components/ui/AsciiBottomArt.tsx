@@ -2,7 +2,6 @@
 
 import Image from "next/image";
 import React from "react";
-import { createPortal } from "react-dom";
 
 /**
  * AsciiBottomArt
@@ -57,9 +56,9 @@ export default function AsciiBottomArt({
     }
   } catch {}
 
-  return createPortal(
+  return (
     <div
-      className={`fixed inset-0 z-0 pointer-events-none select-none ${className}`}
+      className={`fixed inset-0 z-[5] pointer-events-none select-none ${className}`}
       aria-hidden
       style={containerStyle}
     >
@@ -73,7 +72,6 @@ export default function AsciiBottomArt({
         draggable={false}
         priority
       />
-    </div>,
-    document.body
+    </div>
   );
 }

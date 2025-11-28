@@ -386,10 +386,10 @@ export async function POST(req: NextRequest) {
         ).toLowerCase();
         if (type.includes("avatar")) avatarCount += it.count;
       }
-      if (!(avatarCount === 1 && spellbook >= 50 && atlas >= 30)) {
+      if (!(avatarCount === 1 && spellbook >= 60 && atlas >= 30)) {
         return new Response(
           JSON.stringify({
-            error: `Constructed deck invalid: requires exactly 1 Avatar, >=50 Spellbook, >=30 Atlas (avatar=${avatarCount}, spellbook=${spellbook}, atlas=${atlas}).`,
+            error: `Constructed deck invalid: requires exactly 1 Avatar, >=60 Spellbook, >=30 Atlas (avatar=${avatarCount}, spellbook=${spellbook}, atlas=${atlas}).`,
           }),
           { status: 400 }
         );
