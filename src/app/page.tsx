@@ -141,6 +141,35 @@ export default function Home() {
           </div>
         )}
 
+        {session && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4 max-w-4xl min-w-2xl justify-self-center">
+            <AsciiPanel className="p-5 md:p-6">
+              <Link
+                href="/play"
+                className="group block hover:scale-[1.02] transition-transform duration-200"
+              >
+                <div className="flex items-center justify-center py-3 md:py-4">
+                  <h4 className="text-lg font-semibold tracking-wide">
+                    Solo Hotseat
+                  </h4>
+                </div>
+              </Link>
+            </AsciiPanel>
+            <AsciiPanel className="p-5 md:p-6">
+              <Link
+                href="/draft-3d"
+                className="group block hover:scale-[1.02] transition-transform duration-200"
+              >
+                <div className="flex items-center justify-center py-3 md:py-4">
+                  <h4 className="text-lg font-semibold tracking-wide">
+                    Solo Draftsim
+                  </h4>
+                </div>
+              </Link>
+            </AsciiPanel>
+          </div>
+        )}
+
         {/* Other Realms (wide bottom element) */}
         {session && (
           <div className="min-w-2xl max-w-3xlp-5 md:p-6 justify-self-center cursor-pointer">
@@ -203,7 +232,7 @@ export default function Home() {
       </div>
 
       {/* Bottom ASCII art background */}
-      <AsciiBottomArt opacityClass="text-white/12" maxVh={null} />
+      <AsciiBottomArt opacityClass="text-white/12" />
 
       {/* Cookie/Privacy notice toast */}
       {showCookieNotice && (
