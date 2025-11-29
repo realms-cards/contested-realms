@@ -1,4 +1,3 @@
-
 import type { StateCreator } from "zustand";
 import type {
   CellKey,
@@ -47,7 +46,7 @@ export const createPermanentMovementSlice: StateCreator<
   [],
   PermanentMovementSlice
 > = (set, get) => ({
-moveSelectedPermanentTo: (x, y) =>
+  moveSelectedPermanentTo: (x, y) =>
     set((state) => {
       const sel = state.selectedPermanent;
       if (!sel) return state;
@@ -56,20 +55,22 @@ moveSelectedPermanentTo: (x, y) =>
       const toKey: CellKey = toCellKey(x, y);
       const exists = (state.permanents[fromKey] || [])[sel.index];
       if (!exists) return state;
-      if (state.transport) {
+      if (state.transport && state.localPlayerId) {
         const ownerSeat = seatFromOwner(exists.owner);
         if (!state.actorKey || state.actorKey !== ownerSeat) {
           return state;
         }
       }
-      console.log("[moveSelectedPermanentTo] Moving", exists.card.name, "from", fromKey, "to", toKey);
-      const { per, movedName, removed, added, updated, newIndex } = movePermanentCore(
-        state.permanents,
+      console.log(
+        "[moveSelectedPermanentTo] Moving",
+        exists.card.name,
+        "from",
         fromKey,
-        sel.index,
-        toKey,
-        null
+        "to",
+        toKey
       );
+      const { per, movedName, removed, added, updated, newIndex } =
+        movePermanentCore(state.permanents, fromKey, sel.index, toKey, null);
       const cellNo = getCellNumber(x, y, state.board.size.w);
       let finalPer = per;
       const finalUpdated = updated;
@@ -101,20 +102,24 @@ moveSelectedPermanentTo: (x, y) =>
       }
       const tr = get().transport;
       if (tr) {
-        console.log("[moveSelectedPermanentTo] Before movement - state.permanents[toKey]:",
+        console.log(
+          "[moveSelectedPermanentTo] Before movement - state.permanents[toKey]:",
           state.permanents[toKey]?.map((p) => ({
             name: p.card.name,
             tapped: p.tapped,
             owner: p.owner,
-            attachedTo: p.attachedTo
-          })));
-        console.log("[moveSelectedPermanentTo] After movement - finalPer[toKey]:",
+            attachedTo: p.attachedTo,
+          }))
+        );
+        console.log(
+          "[moveSelectedPermanentTo] After movement - finalPer[toKey]:",
           finalPer[toKey]?.map((p) => ({
             name: p.card.name,
             tapped: p.tapped,
             owner: p.owner,
-            attachedTo: p.attachedTo
-          })));
+            attachedTo: p.attachedTo,
+          }))
+        );
         const patch = buildMoveDeltaPatch(
           fromKey,
           toKey,
@@ -131,7 +136,7 @@ moveSelectedPermanentTo: (x, y) =>
         selectedPermanent: null,
       } as Partial<GameState> as GameState;
     }),
-moveSelectedPermanentToWithOffset: (x, y, offset) =>
+  moveSelectedPermanentToWithOffset: (x, y, offset) =>
     set((state) => {
       const sel = state.selectedPermanent;
       if (!sel) return state;
@@ -140,19 +145,14 @@ moveSelectedPermanentToWithOffset: (x, y, offset) =>
       const toKey: CellKey = toCellKey(x, y);
       const exists = (state.permanents[fromKey] || [])[sel.index];
       if (!exists) return state;
-      if (state.transport) {
+      if (state.transport && state.localPlayerId) {
         const ownerSeat = seatFromOwner(exists.owner);
         if (!state.actorKey || state.actorKey !== ownerSeat) {
           return state;
         }
       }
-      const { per, movedName, removed, added, updated, newIndex } = movePermanentCore(
-        state.permanents,
-        fromKey,
-        sel.index,
-        toKey,
-        offset
-      );
+      const { per, movedName, removed, added, updated, newIndex } =
+        movePermanentCore(state.permanents, fromKey, sel.index, toKey, offset);
       const cellNo = getCellNumber(x, y, state.board.size.w);
       let finalPer = per;
       const finalUpdated = updated;
@@ -200,7 +200,7 @@ moveSelectedPermanentToWithOffset: (x, y, offset) =>
         selectedPermanent: null,
       } as Partial<GameState> as GameState;
     }),
-movePermanentToZone: (at, index, target, position) =>
+  movePermanentToZone: (at, index, target, position) =>
     set((state) => {
       get().pushHistory();
       const per: Permanents = { ...state.permanents };
@@ -208,9 +208,11 @@ movePermanentToZone: (at, index, target, position) =>
       const item = arr.splice(index, 1)[0];
       if (!item) return state;
       const ownerKey = seatFromOwner(item.owner);
-      if (state.transport) {
+      if (state.transport && state.localPlayerId) {
         if (!state.actorKey) {
-          get().log("Cannot move permanents until seat ownership is established");
+          get().log(
+            "Cannot move permanents until seat ownership is established"
+          );
           return state as GameState;
         }
         if (state.actorKey !== ownerKey) {
@@ -223,9 +225,13 @@ movePermanentToZone: (at, index, target, position) =>
       const zonesNext = { ...state.zones } as Record<PlayerKey, Zones>;
       const seatZones = { ...zonesNext[owner] };
       const movedCard = prepareCardForSeat(item.card, owner);
-      const isToken = String(item.card?.type || "").toLowerCase().includes("token");
-      const finalTarget = target === "graveyard" && isToken ? "banished" : target;
-      if (finalTarget === "hand") seatZones.hand = [...seatZones.hand, movedCard];
+      const isToken = String(item.card?.type || "")
+        .toLowerCase()
+        .includes("token");
+      const finalTarget =
+        target === "graveyard" && isToken ? "banished" : target;
+      if (finalTarget === "hand")
+        seatZones.hand = [...seatZones.hand, movedCard];
       else if (finalTarget === "graveyard")
         seatZones.graveyard = [movedCard, ...seatZones.graveyard];
       else if (target === "spellbook") {
@@ -262,8 +268,7 @@ movePermanentToZone: (at, index, target, position) =>
       const fallbackPatch = deltaPatch ? null : createPermanentsPatch(per, at);
       const zonePatch = createZonesPatchFor(zonesNext, owner);
       const patch: ServerPatchT = {};
-      if (deltaPatch?.permanents)
-        patch.permanents = deltaPatch.permanents;
+      if (deltaPatch?.permanents) patch.permanents = deltaPatch.permanents;
       else if (fallbackPatch?.permanents)
         patch.permanents = fallbackPatch.permanents;
       if (zonePatch?.zones) patch.zones = zonePatch.zones;
@@ -273,7 +278,7 @@ movePermanentToZone: (at, index, target, position) =>
         zones: zonesNext,
       } as Partial<GameState> as GameState;
     }),
-transferPermanentControl: (at, index, to) =>
+  transferPermanentControl: (at, index, to) =>
     set((state) => {
       get().pushHistory();
       if (state.transport && !state.actorKey) {
