@@ -140,7 +140,6 @@ export default function Home() {
             </AsciiPanel>
           </div>
         )}
-        {/*}
         {session && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4 max-w-4xl min-w-2xl justify-self-center">
             <AsciiPanel className="p-5 md:p-6">
@@ -169,7 +168,6 @@ export default function Home() {
             </AsciiPanel>
           </div>
         )}
-*/}
         {/* Other Realms (wide bottom element) */}
         {session && (
           <div className="min-w-2xl max-w-3xlp-5 md:p-6 justify-self-center cursor-pointer">
