@@ -404,7 +404,11 @@ export default function TournamentDetailsPage() {
   >([]);
   const constructedPanelRef = useRef<HTMLDivElement | null>(null);
   const [constructedModalOpen, setConstructedModalOpen] = useState(false);
-  const [includePublicDecks, setIncludePublicDecks] = useState(false);
+  const [includePublicDecks, setIncludePublicDecks] = useState(() => {
+    if (typeof window === "undefined") return true;
+    const stored = localStorage.getItem("sorcery:includePublicDecks");
+    return stored === null ? true : stored === "1";
+  });
 
   const tId = tournament?.id ?? null;
   const tStatus = tournament?.status ?? null;
@@ -1673,7 +1677,16 @@ export default function TournamentDetailsPage() {
                     type="checkbox"
                     className="accent-emerald-600"
                     checked={includePublicDecks}
-                    onChange={(e) => setIncludePublicDecks(e.target.checked)}
+                    onChange={(e) => {
+                      const next = e.target.checked;
+                      setIncludePublicDecks(next);
+                      try {
+                        localStorage.setItem(
+                          "sorcery:includePublicDecks",
+                          next ? "1" : "0"
+                        );
+                      } catch {}
+                    }}
                   />
                   Include public decks
                 </label>
@@ -2476,7 +2489,14 @@ export default function TournamentDetailsPage() {
                       className="accent-emerald-600"
                       checked={includePublicDecks}
                       onChange={async (e) => {
-                        setIncludePublicDecks(e.target.checked);
+                        const next = e.target.checked;
+                        setIncludePublicDecks(next);
+                        try {
+                          localStorage.setItem(
+                            "sorcery:includePublicDecks",
+                            next ? "1" : "0"
+                          );
+                        } catch {}
                         try {
                           setConstructedLoading(true);
                           const res = await fetch(

@@ -169,7 +169,11 @@ export const createHistorySlice: StateCreator<
       if (!prev) return state as GameState;
 
       const tr = state.transport;
-      if (tr) {
+      const isOnlineWithSeat = tr && state.actorKey;
+
+      // For offline/hotseat play (no actorKey), use direct state restoration
+      // Only use the patch-based approach when we have an actorKey (online play)
+      if (isOnlineWithSeat) {
         if ((state.lastServerTs ?? 0) < (state.lastLocalActionTs ?? 0)) {
           undoRetryCount++;
           if (undoRetryCount >= UNDO_RETRY_LIMIT) {

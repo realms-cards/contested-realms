@@ -1,9 +1,10 @@
 "use client";
 
 import { OrbitControls } from "@react-three/drei";
-import { Canvas } from "@react-three/fiber";
+import { Canvas, useThree } from "@react-three/fiber";
 import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import * as THREE from "three";
+import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import CardPreview from "@/components/game/CardPreview";
 import ContextMenu from "@/components/game/ContextMenu";
 import DeckSelector from "@/components/game/DeckSelector";
@@ -21,6 +22,7 @@ import {
   DynamicPiles3D as Piles3D,
   DynamicTokenPile3D as TokenPile3D,
 } from "@/components/game/dynamic-3d";
+import TrackpadOrbitAdapter from "@/lib/controls/TrackpadOrbitAdapter";
 import { createCardPreviewData } from "@/lib/game/card-preview.types";
 import TextureCache from "@/lib/game/components/TextureCache";
 import {
@@ -31,6 +33,7 @@ import {
 } from "@/lib/game/constants";
 import { Physics } from "@/lib/game/physics";
 import { useGameStore } from "@/lib/game/store";
+import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
 import { LocalTransport } from "@/lib/net/localTransport";
 
 export default function PlayPage() {
@@ -112,6 +115,13 @@ export default function PlayPage() {
     };
   }, [transport]);
 
+  // Disable combat/magic guides for offline play (not optimized yet)
+  useEffect(() => {
+    const state = useGameStore.getState();
+    if (state.combatGuidesActive) state.setInteractionGuides(false);
+    if (state.magicGuidesActive) state.setMagicGuides(false);
+  }, []);
+
   // Connect LocalTransport and subscribe to events
   useEffect(() => {
     const unsubscribers: Array<() => void> = [];
@@ -170,6 +180,7 @@ export default function PlayPage() {
   // Camera controls ref for reset functionality
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const controlsRef = useRef<any>(null);
+  const lastSeatRef = useRef<"p1" | "p2" | null>(null);
   function formatEventText(text: string): string {
     // Redact opponent (P2) drawn card names while preserving the rest
     let t = text || "";
@@ -257,7 +268,6 @@ export default function PlayPage() {
   }
 
   // Camera reset handled via gotoBaseline(cameraMode) where needed
-
   // Dynamic page title for offline play
   useEffect(() => {
     const baseTitle = "Realms.cards";
@@ -322,6 +332,32 @@ export default function PlayPage() {
     if (changed) c.update();
   }, [matW, matH]);
 
+  // Automatically orient the camera to the active player's seat in orbit mode
+  useEffect(() => {
+    const seat = currentPlayerKey;
+    const c = controlsRef.current;
+    if (!c) return;
+    if (cameraMode !== "orbit") return;
+    if (!seat || (seat !== "p1" && seat !== "p2")) return;
+    if (lastSeatRef.current === seat) return;
+
+    const cam = c.object as THREE.Camera;
+    const x = cam.position.x;
+    const z = cam.position.z;
+    const r = Math.sqrt(x * x + z * z) || 5;
+    const radius = Math.max(4, Math.min(r, maxDist));
+    const y = cam.position.y || 10;
+    const targetZ = seat === "p1" ? radius : -radius;
+
+    c.target.set(0, 0, 0);
+    cam.position.set(0, y, targetZ);
+    cam.up.set(0, 1, 0);
+    cam.lookAt(0, 0, 0);
+    c.update();
+
+    lastSeatRef.current = seat;
+  }, [cameraMode, currentPlayerKey, maxDist]);
+
   return (
     <div className="relative h-screen [height:100dvh] w-full select-none">
       {/* Camera mode toggle */}
@@ -363,23 +399,31 @@ export default function PlayPage() {
           {!prepared ? (
             <DeckSelector onPrepareComplete={() => setPrepared(true)} />
           ) : (
-            <div className="w-full max-w-6xl mx-auto space-y-4">
-              <OfflineMulliganScreen
-                myPlayerKey="p1"
-                playerNames={{ p1: "Player 1", p2: "Player 2" }}
-                finalizeLabel="Ready"
-                onStartGame={() => setP1Ready(true)}
-              />
-              <OfflineMulliganScreen
-                myPlayerKey="p2"
-                playerNames={{ p1: "Player 1", p2: "Player 2" }}
-                finalizeLabel="Ready"
-                onStartGame={() => setP2Ready(true)}
-              />
+            <div className="w-full max-w-4xl mx-auto space-y-4">
+              <div className="text-center text-xs font-semibold text-white/80">
+                {!p1Ready ? "Step 1/2" : "Step 2/2"}
+              </div>
+              {!p1Ready ? (
+                <OfflineMulliganScreen
+                  key="offline-mulligan-p1"
+                  myPlayerKey="p1"
+                  playerNames={{ p1: "Player 1", p2: "Player 2" }}
+                  finalizeLabel="Ready"
+                  onStartGame={() => setP1Ready(true)}
+                />
+              ) : (
+                <OfflineMulliganScreen
+                  key="offline-mulligan-p2"
+                  myPlayerKey="p2"
+                  playerNames={{ p1: "Player 1", p2: "Player 2" }}
+                  finalizeLabel="Ready"
+                  onStartGame={() => setP2Ready(true)}
+                />
+              )}
               {!(p1Ready && p2Ready) && (
                 <div className="text-center text-xs opacity-80 text-white">
-                  Hotseat: Player 1 confirms mulligans for both players. Click
-                  Ready on each to begin.
+                  Hotseat: Player 1 confirms mulligans for both players. Now
+                  perform mulligans for Player 1, then Player 2.
                 </div>
               )}
             </div>
@@ -581,11 +625,11 @@ export default function PlayPage() {
                   RIGHT: THREE.MOUSE.ROTATE,
                 }
               : {
-                  LEFT: THREE.MOUSE.ROTATE,
-                  MIDDLE: THREE.MOUSE.PAN,
-                  RIGHT: THREE.MOUSE.ROTATE,
+                  MIDDLE: THREE.MOUSE.DOLLY,
+                  RIGHT: THREE.MOUSE.PAN,
                 }
           }
+          touches={{ TWO: THREE.TOUCH.PAN }}
           enabled={
             !dragFromHand &&
             !dragFromPile &&
@@ -601,12 +645,12 @@ export default function PlayPage() {
             !selectedAvatar
           }
           enableRotate={
+            cameraMode === "topdown" &&
             !dragFromHand &&
             !dragFromPile &&
             !selected &&
             !selectedPermanent &&
-            !selectedAvatar &&
-            cameraMode !== "topdown"
+            !selectedAvatar
           }
           enableZoom={!dragFromHand && !dragFromPile}
           enableDamping={false}
@@ -616,7 +660,23 @@ export default function PlayPage() {
           minPolarAngle={cameraMode === "topdown" ? 0 : 0}
           maxPolarAngle={cameraMode === "topdown" ? 0 : Math.PI / 2.4}
         />
+        <KeyboardPanControls enabled={!dragFromHand && !dragFromPile} />
+        <TrackpadOrbitAdapter />
       </Canvas>
     </div>
   );
+}
+
+function KeyboardPanControls({
+  enabled = true,
+  step = 0.4,
+}: {
+  enabled?: boolean;
+  step?: number;
+}) {
+  const { controls } = useThree((state) => ({
+    controls: state.controls as OrbitControlsImpl | undefined,
+  }));
+  useOrbitKeyboardPan(controls, { enabled, panStep: step });
+  return null;
 }
