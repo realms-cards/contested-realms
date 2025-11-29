@@ -6,7 +6,7 @@ import type {
   ServerPatchT,
 } from "./types";
 
-const HISTORY_LIMIT = 10;
+const HISTORY_LIMIT = 3;
 const UNDO_RETRY_LIMIT = 5;
 let undoRetryCount = 0;
 
@@ -212,89 +212,112 @@ export const createHistorySlice: StateCreator<
           undoRetryCount = 0;
         }
 
+        const perCount = Object.values(prev.permanents || {}).reduce(
+          (a, v) => a + (Array.isArray(v) ? v.length : 0),
+          0
+        );
+
+        const boardForUndo = sanitizeBoardSitesForUndo(prev.board);
+
+        // Only restore our own zones, preserve opponent's current zones
+        // to avoid undoing their draws/actions
+        const me = state.actorKey as PlayerKey;
+        const opponent: PlayerKey = me === "p1" ? "p2" : "p1";
+        const zonesForUndo = {
+          [me]: prev.zones[me],
+          [opponent]: state.zones[opponent],
+        } as Record<PlayerKey, typeof prev.zones.p1>;
+
+        // Similarly, only restore our own mulligan state
+        const mulligansForUndo = {
+          [me]: prev.mulligans[me],
+          [opponent]: state.mulligans[opponent],
+        } as Record<PlayerKey, number>;
+        const mulliganDrawnForUndo = {
+          [me]: prev.mulliganDrawn[me],
+          [opponent]: state.mulliganDrawn[opponent],
+        } as Record<PlayerKey, typeof prev.mulliganDrawn.p1>;
+
+        // Similarly, only restore our own avatar state
+        const avatarsForUndo = {
+          [me]: prev.avatars[me],
+          [opponent]: state.avatars[opponent],
+        } as Record<PlayerKey, typeof prev.avatars.p1>;
+
+        const patch: ServerPatchT = {
+          players: prev.players,
+          currentPlayer: prev.currentPlayer,
+          turn: prev.turn,
+          phase: prev.phase,
+          d20Rolls: prev.d20Rolls,
+          setupWinner: prev.setupWinner,
+          board: boardForUndo,
+          zones: zonesForUndo,
+          avatars: avatarsForUndo,
+          permanents: prev.permanents,
+          mulligans: mulligansForUndo,
+          mulliganDrawn: mulliganDrawnForUndo,
+          permanentPositions: prev.permanentPositions,
+          permanentAbilities: prev.permanentAbilities,
+          sitePositions: prev.sitePositions,
+          playerPositions: prev.playerPositions,
+          events: prev.events,
+          eventSeq: prev.eventSeq,
+          __replaceKeys: [
+            "players",
+            "currentPlayer",
+            "turn",
+            "phase",
+            "d20Rolls",
+            "setupWinner",
+            "board",
+            "zones",
+            "avatars",
+            "permanents",
+            "mulligans",
+            "mulliganDrawn",
+            "permanentPositions",
+            "permanentAbilities",
+            "sitePositions",
+            "playerPositions",
+            "events",
+            "eventSeq",
+          ],
+        } as ServerPatchT;
         try {
-          const perCount = Object.values(prev.permanents || {}).reduce(
-            (a, v) => a + (Array.isArray(v) ? v.length : 0),
-            0
+          console.debug(
+            "[undo] Broadcasting authoritative snapshot to server",
+            {
+              keys: patch.__replaceKeys,
+              eventSeq: patch.eventSeq,
+              permanentsCount: perCount,
+            }
           );
-
-          const boardForUndo = sanitizeBoardSitesForUndo(prev.board);
-
-          // Only restore our own zones, preserve opponent's current zones
-          // to avoid undoing their draws/actions
-          const me = state.actorKey as PlayerKey;
-          const opponent: PlayerKey = me === "p1" ? "p2" : "p1";
-          const zonesForUndo = {
-            [me]: prev.zones[me],
-            [opponent]: state.zones[opponent],
-          } as Record<PlayerKey, typeof prev.zones.p1>;
-
-          // Similarly, only restore our own mulligan state
-          const mulligansForUndo = {
-            [me]: prev.mulligans[me],
-            [opponent]: state.mulligans[opponent],
-          } as Record<PlayerKey, number>;
-          const mulliganDrawnForUndo = {
-            [me]: prev.mulliganDrawn[me],
-            [opponent]: state.mulliganDrawn[opponent],
-          } as Record<PlayerKey, typeof prev.mulliganDrawn.p1>;
-
-          const patch: ServerPatchT = {
-            players: prev.players,
-            currentPlayer: prev.currentPlayer,
-            turn: prev.turn,
-            phase: prev.phase,
-            d20Rolls: prev.d20Rolls,
-            setupWinner: prev.setupWinner,
-            board: boardForUndo,
-            zones: zonesForUndo,
-            avatars: prev.avatars,
-            permanents: prev.permanents,
-            mulligans: mulligansForUndo,
-            mulliganDrawn: mulliganDrawnForUndo,
-            permanentPositions: prev.permanentPositions,
-            permanentAbilities: prev.permanentAbilities,
-            sitePositions: prev.sitePositions,
-            playerPositions: prev.playerPositions,
-            events: prev.events,
-            eventSeq: prev.eventSeq,
-            __replaceKeys: [
-              "players",
-              "currentPlayer",
-              "turn",
-              "phase",
-              "d20Rolls",
-              "setupWinner",
-              "board",
-              "zones",
-              "avatars",
-              "permanents",
-              "mulligans",
-              "mulliganDrawn",
-              "permanentPositions",
-              "permanentAbilities",
-              "sitePositions",
-              "playerPositions",
-              "events",
-              "eventSeq",
-            ],
-          } as ServerPatchT;
-          try {
-            console.debug(
-              "[undo] Broadcasting authoritative snapshot to server",
-              {
-                keys: patch.__replaceKeys,
-                eventSeq: patch.eventSeq,
-                permanentsCount: perCount,
-              }
-            );
-          } catch {}
-          get().trySendPatch(patch);
         } catch {}
+        get().trySendPatch(patch);
 
+        // Also apply state locally (don't just wait for server echo)
         return {
           history: historyNext ?? state.history,
           historyByPlayer: hb as GameState["historyByPlayer"],
+          players: prev.players,
+          currentPlayer: prev.currentPlayer,
+          turn: prev.turn,
+          phase: prev.phase,
+          d20Rolls: prev.d20Rolls,
+          setupWinner: prev.setupWinner,
+          board: boardForUndo,
+          zones: zonesForUndo,
+          avatars: avatarsForUndo,
+          permanents: prev.permanents,
+          mulligans: mulligansForUndo,
+          mulliganDrawn: mulliganDrawnForUndo,
+          permanentPositions: prev.permanentPositions,
+          permanentAbilities: prev.permanentAbilities,
+          sitePositions: prev.sitePositions,
+          playerPositions: prev.playerPositions,
+          events: prev.events,
+          eventSeq: prev.eventSeq,
         } as Partial<GameState> as GameState;
       }
 
