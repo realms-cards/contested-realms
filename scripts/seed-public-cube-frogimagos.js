@@ -392,6 +392,9 @@ Sideboard (15)
 1Sorcerer
 1Sparkmage
 1Waveshaper
+1Adept Illusionist
+1Brother Knight
+
 `;
 
 // ---- Parser for Curiosa-style deck text (ported from src/lib/decks/parsers/sorcery-decktext.ts) ----
