@@ -341,6 +341,10 @@ export async function generateBoosters(
 
 /**
  * Generate multiple boosters from a cube (random sampling without replacement per pack)
+ *
+ * Special handling for cube drafts:
+ * - Spellslinger is excluded from packs (available as free pick via extras)
+ * - Sideboard avatars are included in packs as draftable avatars
  */
 export async function generateCubeBoosters(
   cubeId: string,
@@ -386,24 +390,189 @@ export async function generateCubeBoosters(
     throw new Error(`Cube not found: ${cubeId}`);
   }
 
+  // Helper to resolve card type from variant or metadata
+  const resolveType = (entry: (typeof cube.cards)[number]): string | null => {
+    const variantType = entry.variant?.typeText?.trim();
+    if (variantType) return variantType;
+    const setId = entry.set?.id ?? entry.setId ?? null;
+    if (!setId) return null;
+    const meta = entry.card?.meta?.find((m) => m.setId === setId);
+    return meta?.type ?? null;
+  };
+
+  // Helper to check if a card is an avatar
+  const isAvatar = (type: string | null): boolean => {
+    return type?.toLowerCase().includes("avatar") ?? false;
+  };
+
   // Build working pool with card counts
+  // Include: main zone cards (except Spellslinger) + sideboard avatars
   const workingPool: BoosterCard[] = cube.cards.flatMap((entry) => {
     const zone = (entry as { zone?: string | null }).zone ?? "main";
-    if (zone !== "main") return [];
-    const count = Math.max(0, Number(entry.count) || 0);
-    if (count === 0 || !entry.variantId) return [];
+    const cardName = entry.card?.name || "";
+    const resolvedType = resolveType(entry);
 
-    const resolvedType = (() => {
-      const variantType = entry.variant?.typeText?.trim();
-      if (variantType) return variantType;
+    // Skip Spellslinger - it's available as a free pick, not draftable
+    if (cardName.toLowerCase() === "spellslinger") {
+      return [];
+    }
+
+    // Include main zone cards
+    if (zone === "main") {
+      const cardCount = Math.max(0, Number(entry.count) || 0);
+      if (cardCount === 0 || !entry.variantId) return [];
+
+      return Array.from(
+        { length: cardCount },
+        (): BoosterCard => ({
+          variantId: entry.variantId as number,
+          cardId: entry.cardId,
+          slug: entry.variant?.slug || "",
+          finish: (entry.variant?.finish as Finish) || "Standard",
+          product: entry.variant?.product || "Booster",
+          setName: entry.set?.name || "Unknown",
+          cardName,
+          rarity: "Ordinary",
+          type: resolvedType,
+        })
+      );
+    }
+
+    // Include sideboard avatars (they become draftable in packs)
+    if (zone === "sideboard" && isAvatar(resolvedType)) {
+      const cardCount = Math.max(0, Number(entry.count) || 0);
+      if (cardCount === 0 || !entry.variantId) return [];
+
+      return Array.from(
+        { length: cardCount },
+        (): BoosterCard => ({
+          variantId: entry.variantId as number,
+          cardId: entry.cardId,
+          slug: entry.variant?.slug || "",
+          finish: (entry.variant?.finish as Finish) || "Standard",
+          product: entry.variant?.product || "Booster",
+          setName: entry.set?.name || "Unknown",
+          cardName,
+          rarity: "Ordinary",
+          type: resolvedType,
+        })
+      );
+    }
+
+    return [];
+  });
+
+  if (workingPool.length === 0) {
+    throw new Error(`Cube ${cubeId} has no cards`);
+  }
+
+  const totalCardsNeeded = count * packSize;
+  console.log(
+    `[Cube Booster] Generating ${count} packs of ${packSize} cards from cube ${cubeId}. ` +
+      `Pool has ${workingPool.length} cards (need ${totalCardsNeeded}).`
+  );
+
+  if (workingPool.length < totalCardsNeeded) {
+    console.warn(
+      `[Cube Booster] WARNING: Cube ${cubeId} has ${workingPool.length} cards but ${totalCardsNeeded} are needed. ` +
+        `Some packs may be smaller or cards may repeat.`
+    );
+  }
+
+  // Generate packs by dealing cards without replacement from shuffled pool
+  // This respects the actual card counts in the cube (e.g., 1 Philosopher's Stone = only 1 across all packs)
+  const packs: BoosterCard[][] = [];
+  const shuffled = [...workingPool].sort(() => Math.random() - 0.5);
+  let dealIndex = 0;
+
+  for (let i = 0; i < count; i++) {
+    const pack: BoosterCard[] = [];
+
+    for (let j = 0; j < packSize; j++) {
+      if (dealIndex < shuffled.length) {
+        // Deal from the shuffled pool without replacement
+        pack.push(shuffled[dealIndex]);
+        dealIndex++;
+      } else if (shuffled.length > 0) {
+        // If we run out of cards, wrap around (fallback for undersized cubes)
+        // This is a degraded mode - ideally the cube should have enough cards
+        const fallbackIdx = (dealIndex - shuffled.length) % shuffled.length;
+        pack.push(shuffled[fallbackIdx]);
+        dealIndex++;
+      }
+    }
+
+    packs.push(pack);
+  }
+
+  return packs;
+}
+
+/**
+ * Get cube sideboard cards that should be available as "extras" (non-avatar sideboard cards only)
+ * For cubes like Frogimago's where sideboard avatars are drafted, this returns empty.
+ */
+export async function getCubeExtrasCards(
+  cubeId: string,
+  client: PrismaClient = defaultPrisma
+): Promise<BoosterCard[]> {
+  const cube = await client.cube.findUnique({
+    where: { id: cubeId },
+    include: {
+      cards: {
+        where: { zone: "sideboard" },
+        include: {
+          card: {
+            select: {
+              name: true,
+              meta: {
+                select: {
+                  setId: true,
+                  type: true,
+                },
+              },
+            },
+          },
+          variant: {
+            select: {
+              id: true,
+              slug: true,
+              finish: true,
+              product: true,
+              cardId: true,
+              typeText: true,
+            },
+          },
+          set: { select: { id: true, name: true } },
+        },
+      },
+    },
+  });
+
+  if (!cube) return [];
+
+  // Filter to only non-avatar sideboard cards
+  return cube.cards.flatMap((entry) => {
+    const variantType = entry.variant?.typeText?.trim();
+    let resolvedType = variantType || null;
+    if (!resolvedType) {
       const setId = entry.set?.id ?? entry.setId ?? null;
-      if (!setId) return null;
-      const meta = entry.card?.meta?.find((m) => m.setId === setId);
-      return meta?.type ?? null;
-    })();
+      if (setId) {
+        const meta = entry.card?.meta?.find((m) => m.setId === setId);
+        resolvedType = meta?.type ?? null;
+      }
+    }
+
+    // Skip avatars - they are drafted in packs now
+    if (resolvedType?.toLowerCase().includes("avatar")) {
+      return [];
+    }
+
+    const cardCount = Math.max(0, Number(entry.count) || 0);
+    if (cardCount === 0 || !entry.variantId) return [];
 
     return Array.from(
-      { length: count },
+      { length: cardCount },
       (): BoosterCard => ({
         variantId: entry.variantId as number,
         cardId: entry.cardId,
@@ -417,27 +586,4 @@ export async function generateCubeBoosters(
       })
     );
   });
-
-  if (workingPool.length === 0) {
-    throw new Error(`Cube ${cubeId} has no cards`);
-  }
-
-  // Generate packs by randomly sampling without replacement
-  const packs: BoosterCard[][] = [];
-  const shuffled = [...workingPool].sort(() => Math.random() - 0.5);
-
-  for (let i = 0; i < count; i++) {
-    const pack: BoosterCard[] = [];
-    const startIdx = (i * packSize) % shuffled.length;
-
-    for (let j = 0; j < packSize; j++) {
-      const idx = (startIdx + j) % shuffled.length;
-      const card = shuffled[idx];
-      if (card) pack.push(card);
-    }
-
-    packs.push(pack);
-  }
-
-  return packs;
 }

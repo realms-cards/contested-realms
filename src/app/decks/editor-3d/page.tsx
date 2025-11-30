@@ -1617,9 +1617,15 @@ function AuthenticatedDeckEditor() {
         };
 
         const rawCards = Array.isArray(payload?.cards) ? payload.cards : [];
-        const sideboardCards = rawCards.filter(
-          (c) => (c.zone ?? "main").toLowerCase() === "sideboard"
-        );
+        // Filter sideboard cards, excluding avatars (which are now drafted in packs)
+        const sideboardCards = rawCards.filter((c) => {
+          const zone = (c.zone ?? "main").toLowerCase();
+          if (zone !== "sideboard") return false;
+          // Exclude avatars - they are now draftable in packs
+          const cardType = (c.type ?? "").toLowerCase();
+          if (cardType.includes("avatar")) return false;
+          return true;
+        });
 
         const converted: SearchResult[] = [];
         for (const c of sideboardCards) {
@@ -3196,18 +3202,26 @@ function AuthenticatedDeckEditor() {
         setTimeout(() => setFeedbackMessage(null), 2000);
 
         // If this was a cube booster, load the cube's sideboard cards for the collection zone
+        // Only load non-avatar sideboard cards (avatars are now draftable in packs)
         if (isCubeBooster && loadedCubeSideboardId !== freeBoosterCubeId) {
           setLoadedCubeSideboardId(freeBoosterCubeId);
           setCubeBoostersOpened(true);
-          // Fetch cube sideboard cards
+          // Fetch cube sideboard cards (excluding avatars which are drafted)
           try {
             const cubeRes = await fetch(
               `/api/cubes/${encodeURIComponent(freeBoosterCubeId)}`
             );
             if (cubeRes.ok) {
               const cubeData = await cubeRes.json();
+              // Filter sideboard cards, excluding avatars (which are now drafted in packs)
               const sideboardCards = (cubeData.cards || []).filter(
-                (c: { zone?: string | null }) => c.zone === "sideboard"
+                (c: { zone?: string | null; type?: string | null }) => {
+                  if (c.zone !== "sideboard") return false;
+                  // Exclude avatars - they are now draftable in packs
+                  const cardType = (c.type ?? "").toLowerCase();
+                  if (cardType.includes("avatar")) return false;
+                  return true;
+                }
               );
               if (sideboardCards.length > 0) {
                 const converted: SearchResult[] = sideboardCards.map(

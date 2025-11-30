@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, type MouseEvent } from "react";
 import type { CubeSummary } from "@/lib/cubes/types";
@@ -31,7 +32,9 @@ export default function CubeItem({ cube }: CubeItemProps) {
     }
     try {
       setDeleting(true);
-      const res = await fetch(`/api/cubes/${encodeURIComponent(cube.id)}`, { method: "DELETE" });
+      const res = await fetch(`/api/cubes/${encodeURIComponent(cube.id)}`, {
+        method: "DELETE",
+      });
       if (!res.ok && res.status !== 204) {
         const msg = await res.text().catch(() => "");
         throw new Error(msg || "Failed to delete cube");
@@ -73,7 +76,9 @@ export default function CubeItem({ cube }: CubeItemProps) {
     <div className="flex flex-col gap-3 rounded-xl bg-slate-900/70 ring-1 ring-slate-800/80 p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-lg font-semibold text-slate-50 break-words">{cube.name}</div>
+          <div className="text-lg font-semibold text-slate-50 break-words">
+            {cube.name}
+          </div>
           {cube.description ? (
             <p className="mt-1 text-sm text-slate-300/90 whitespace-pre-line break-words">
               {cube.description}
@@ -111,13 +116,23 @@ export default function CubeItem({ cube }: CubeItemProps) {
         </div>
         {isOwner ? (
           <div className="flex flex-col gap-2">
+            <Link
+              href={`/cubes/${encodeURIComponent(cube.id)}/edit`}
+              className="rounded bg-blue-600/80 px-3 py-1 text-xs font-medium text-white hover:bg-blue-600 text-center"
+            >
+              Edit
+            </Link>
             <button
               type="button"
               onClick={handleTogglePublic}
               disabled={updatingPublic}
               className="rounded bg-slate-800/80 px-3 py-1 text-xs font-medium text-slate-100 hover:bg-slate-700/80 disabled:opacity-50"
             >
-              {updatingPublic ? "Updating..." : isPublicState ? "Make Private" : "Make Public"}
+              {updatingPublic
+                ? "Updating..."
+                : isPublicState
+                ? "Make Private"
+                : "Make Public"}
             </button>
             <button
               type="button"

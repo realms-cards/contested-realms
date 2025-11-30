@@ -44,7 +44,7 @@ export default function Draft3DPage() {
     "Alpha",
     "Alpha",
   ]);
-  const [players, setPlayers] = useState(8);
+  const [players, setPlayers] = useState(4);
   const [replaceAvatars, setReplaceAvatars] = useState(false);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,6 +53,8 @@ export default function Draft3DPage() {
   const [useCube, setUseCube] = useState(false);
   const [cubeId, setCubeId] = useState<string>("");
   const [cubes, setCubes] = useState<Array<{ id: string; name: string }>>([]);
+  // Track if the active draft is from a cube (and which cube name)
+  const [activeCubeName, setActiveCubeName] = useState<string | null>(null);
 
   // Fetch available cubes on mount
   useEffect(() => {
@@ -162,6 +164,9 @@ export default function Draft3DPage() {
 
       // Cube draft mode - generate all packs from the same cube
       if (useCube && cubeId) {
+        // Store the cube name for display in pack selection UI
+        const selectedCube = cubes.find((c) => c.id === cubeId);
+        setActiveCubeName(selectedCube?.name || "Cube");
         const resp = await fetch(
           `/api/booster?cube=${encodeURIComponent(cubeId)}&count=${players * 3}`
         );
@@ -176,7 +181,8 @@ export default function Draft3DPage() {
         packsB = allPacks.slice(players, players * 2);
         packsC = allPacks.slice(players * 2, players * 3);
       } else {
-        // Regular set-based draft mode
+        // Regular set-based draft mode - clear cube name
+        setActiveCubeName(null);
         const [setA, setB, setC] = setNames;
         const avatarParam = replaceAvatars ? "&replaceAvatars=true" : "";
         const [respA, respB, respC] = await Promise.all([
@@ -1491,10 +1497,14 @@ export default function Draft3DPage() {
                   const usedElsewhere = packChoice.some(
                     (v, idx) => idx !== packIndex && v === i
                   );
-                  const setName =
-                    seatPacks[0]?.[i]?.[0]?.setName || setNames[i] || "";
+                  // For cube drafts, show cube name; for set drafts, show set name
+                  const displayName = activeCubeName
+                    ? `${activeCubeName} Pack ${i + 1}`
+                    : seatPacks[0]?.[i]?.[0]?.setName || setNames[i] || "";
                   const assetName = (() => {
-                    const s = (setName || "").toLowerCase();
+                    // For cube drafts, use a generic cube image
+                    if (activeCubeName) return null;
+                    const s = (displayName || "").toLowerCase();
                     if (s.includes("arthur")) return "arthurian-booster.png";
                     if (s.includes("alpha")) return "alphabeta-booster.png";
                     if (s.includes("beta")) return "alphabeta-booster.png";
@@ -1508,7 +1518,9 @@ export default function Draft3DPage() {
                       className={`group rounded-lg p-3 bg-black/60 ring-1 ring-white/25 hover:bg-black/50 text-left ${
                         usedElsewhere ? "opacity-40 cursor-not-allowed" : ""
                       }`}
-                      aria-label={`Open ${setName || "pack"} option ${i + 1}`}
+                      aria-label={`Open ${displayName || "pack"} option ${
+                        i + 1
+                      }`}
                     >
                       <div
                         className={`relative w-full h-40 sm:h-48 md:h-56 rounded-md overflow-hidden ring-1 ring-white/15 bg-black/40 ${
@@ -1518,7 +1530,7 @@ export default function Draft3DPage() {
                         {assetName ? (
                           <Image
                             src={`/api/assets/${assetName}`}
-                            alt={`${setName} booster pack`}
+                            alt={`${displayName} booster pack`}
                             fill
                             sizes="(max-width:640px) 80vw, (max-width:1024px) 30vw, 20vw"
                             className="object-contain"
@@ -1526,13 +1538,13 @@ export default function Draft3DPage() {
                             unoptimized
                           />
                         ) : (
-                          <div className="flex items-center justify-center w-full h-full text-sm opacity-70">
-                            {setName || "Booster"}
+                          <div className="flex items-center justify-center w-full h-full text-sm opacity-70 text-center px-2">
+                            {displayName || "Booster"}
                           </div>
                         )}
-                        {/* Set label badge */}
+                        {/* Pack label badge */}
                         <div className="absolute bottom-1 left-1 right-1 text-[11px] px-2 py-1 rounded bg-black/60 text-white text-center pointer-events-none">
-                          {setName || "Booster"}
+                          {displayName || "Booster"}
                         </div>
                       </div>
                       <div className="mt-2 text-xs opacity-70">

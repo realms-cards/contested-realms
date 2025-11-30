@@ -218,6 +218,12 @@ export async function PUT(
               if (safeCount <= 0) return null;
               const setIdRaw = card.setId ?? card["setId"];
               const variantIdRaw = card.variantId ?? card["variantId"];
+              const zoneRaw = card.zone ?? card["zone"];
+              const zone =
+                typeof zoneRaw === "string" &&
+                ["main", "sideboard"].includes(zoneRaw)
+                  ? zoneRaw
+                  : "main";
               return {
                 cubeId: id,
                 cardId,
@@ -225,6 +231,7 @@ export async function PUT(
                 variantId:
                   variantIdRaw == null ? null : Number(variantIdRaw) || null,
                 count: safeCount,
+                zone,
               };
             })
             .filter(
@@ -236,6 +243,7 @@ export async function PUT(
                 setId: number | null;
                 variantId: number | null;
                 count: number;
+                zone: string;
               } => !!row
             ),
         }),
