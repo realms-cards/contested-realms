@@ -1,9 +1,11 @@
+import { isElementalist } from "@/lib/game/avatarAbilities";
 import {
   MANA_PROVIDER_BY_NAME,
   NON_MANA_SITE_IDENTIFIERS,
   THRESHOLD_GRANT_BY_NAME,
 } from "@/lib/game/mana-providers";
 import type {
+  AvatarState,
   BoardState,
   CardRef,
   GameState,
@@ -29,11 +31,22 @@ const thresholdCache: Record<
   {
     sitesRef: BoardState["sites"] | null;
     permanentsRef: Permanents | null;
+    avatarRef: AvatarState | null;
     totals: Thresholds;
   }
 > = {
-  p1: { sitesRef: null, permanentsRef: null, totals: emptyThresholds() },
-  p2: { sitesRef: null, permanentsRef: null, totals: emptyThresholds() },
+  p1: {
+    sitesRef: null,
+    permanentsRef: null,
+    avatarRef: null,
+    totals: emptyThresholds(),
+  },
+  p2: {
+    sitesRef: null,
+    permanentsRef: null,
+    avatarRef: null,
+    totals: emptyThresholds(),
+  },
 };
 
 export const playerKeyToOwner = (who: PlayerKey): 1 | 2 =>
@@ -55,10 +68,19 @@ const accumulateThresholds = (
 export const computeThresholdTotals = (
   board: BoardState,
   permanents: Permanents,
-  who: PlayerKey
+  who: PlayerKey,
+  avatar?: AvatarState | null
 ): Thresholds => {
   const owner = playerKeyToOwner(who);
   const totals = emptyThresholds();
+
+  // Elementalist avatar grants +1 to each threshold
+  if (avatar && isElementalist(avatar.card?.name)) {
+    totals.air += 1;
+    totals.water += 1;
+    totals.earth += 1;
+    totals.fire += 1;
+  }
 
   for (const tile of Object.values(board?.sites ?? {})) {
     if (!tile || tile.owner !== owner) continue;
@@ -87,21 +109,30 @@ export const getCachedThresholdTotals = (
   const cache = thresholdCache[who];
   const sitesRef = state.board.sites;
   const permanentsRef = state.permanents;
+  const avatarRef = state.avatars[who];
 
-  if (cache.sitesRef === sitesRef && cache.permanentsRef === permanentsRef) {
+  if (
+    cache.sitesRef === sitesRef &&
+    cache.permanentsRef === permanentsRef &&
+    cache.avatarRef === avatarRef
+  ) {
     return cache.totals;
   }
 
-  const totals = computeThresholdTotals(state.board, state.permanents, who);
+  const totals = computeThresholdTotals(
+    state.board,
+    state.permanents,
+    who,
+    avatarRef
+  );
   cache.sitesRef = sitesRef;
   cache.permanentsRef = permanentsRef;
+  cache.avatarRef = avatarRef;
   cache.totals = totals;
   return totals;
 };
 
-export const siteProvidesMana = (
-  card: CardRef | null | undefined
-): boolean => {
+export const siteProvidesMana = (card: CardRef | null | undefined): boolean => {
   if (!card) return false;
   const slug = typeof card.slug === "string" ? card.slug.toLowerCase() : null;
   if (slug && NON_MANA_SITE_IDENTIFIERS.has(slug)) return false;
