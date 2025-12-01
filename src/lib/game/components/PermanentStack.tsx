@@ -486,7 +486,7 @@ export function PermanentStack({
                   clearHoverPreview(hoverKey);
                   return;
                 }
-                if (pendingMagic) {
+                if (pendingMagic && !pendingMagic.guidesSuppressed) {
                   const ownerSeat = seatFromOwner(pendingMagic.spell.owner);
                   const amActor = actorKey === ownerSeat;
                   const actorIsActive =

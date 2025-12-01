@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { getServerAuthSession } from '@/lib/auth';
+import { logPerformance } from '@/lib/monitoring/performance';
 import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
@@ -7,9 +8,10 @@ export const dynamic = 'force-dynamic';
 // GET /api/tournaments/[id]/players/[playerId]/statistics
 // Get detailed statistics for a specific player in a tournament
 export async function GET(
-  req: NextRequest, 
+  req: NextRequest,
   { params }: { params: Promise<{ id: string; playerId: string }> }
 ) {
+  const startTime = performance.now();
   const { id, playerId } = await params;
   const session = await getServerAuthSession();
   if (!session?.user) {
@@ -174,7 +176,7 @@ export async function GET(
         return acc;
       }, {} as Record<number, { wins: number; losses: number; draws: number }>);
 
-    return new Response(JSON.stringify({
+    const response = new Response(JSON.stringify({
       tournament: {
         id,
         name: tournament.name,
@@ -225,8 +227,12 @@ export async function GET(
       status: 200,
       headers: { 'content-type': 'application/json' }
     });
+
+    logPerformance(`GET /api/tournaments/${id}/players/${playerId}/statistics`, performance.now() - startTime);
+    return response;
   } catch (e: unknown) {
     console.error('Error getting player tournament statistics:', e);
+    logPerformance(`GET /api/tournaments/${id}/players/${playerId}/statistics`, performance.now() - startTime);
     const message = e instanceof Error ? e.message : typeof e === 'string' ? e : 'Unknown error';
     return new Response(JSON.stringify({ error: message }), { status: 500 });
   }

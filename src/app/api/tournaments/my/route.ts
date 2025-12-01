@@ -1,6 +1,7 @@
 import { TournamentStatus } from '@prisma/client';
 import { NextRequest } from 'next/server';
 import { getServerAuthSession } from '@/lib/auth';
+import { logPerformance } from '@/lib/monitoring/performance';
 import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
@@ -8,6 +9,7 @@ export const dynamic = 'force-dynamic';
 // GET /api/tournaments/my
 // Returns tournaments the signed-in user created or participated in, with search and pagination
 export async function GET(req: NextRequest) {
+  const startTime = performance.now();
   const session = await getServerAuthSession();
   if (!session?.user) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
@@ -149,12 +151,14 @@ export async function GET(req: NextRequest) {
       completedAt: tournament.completedAt ? tournament.completedAt.getTime() : undefined,
     }));
 
+    logPerformance('GET /api/tournaments/my', performance.now() - startTime);
     return new Response(
       JSON.stringify({ items, total, page, pageSize }),
       { status: 200, headers: { 'content-type': 'application/json' } }
     );
   } catch (e: unknown) {
     console.error('Error fetching my tournaments:', e);
+    logPerformance('GET /api/tournaments/my', performance.now() - startTime);
     const message = e instanceof Error ? e.message : typeof e === 'string' ? e : 'Unknown error';
     return new Response(JSON.stringify({ error: message }), { status: 500 });
   }

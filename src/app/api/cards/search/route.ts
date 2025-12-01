@@ -1,11 +1,14 @@
 import { NextRequest } from "next/server";
 export const dynamic = "force-dynamic";
 import { getSetIdByName } from "@/lib/api/cached-lookups";
+import { withCache, CacheKeys } from "@/lib/cache/redis-cache";
+import { logPerformance } from "@/lib/monitoring/performance";
 import { prisma } from "@/lib/prisma";
 
 // GET /api/cards/search?q=apprentice&set=Alpha&type=site|avatar|spell
 // Returns a list of variants for the chosen set that match the query.
 export async function GET(req: NextRequest) {
+  const startTime = performance.now();
   try {
     const { searchParams } = new URL(req.url);
     const q = (searchParams.get("q") || "").trim();
@@ -20,27 +23,31 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // Resolve setId if provided (using cached lookup)
-    let setId: number | null = null;
-    if (setName) {
-      setId = await getSetIdByName(setName);
-      // Be forgiving: if set is unknown, return empty list instead of a hard error so editor UX isn't blocked
-      if (setId === null) {
-        return new Response(JSON.stringify([]), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        });
-      }
-    }
+    // Generate cache key based on search parameters
+    const cacheKey = CacheKeys.cards.search({ q, set: setName, type: typeFilt });
 
-    // Find matching variants by card name and set (if provided)
-    const whereVariant: { setId?: number } = {};
-    if (setId != null) whereVariant.setId = setId;
+    // Wrap search query with Redis cache (5 minute TTL - card data is stable)
+    const out = await withCache(
+      cacheKey,
+      async () => {
+        // Resolve setId if provided (using cached lookup)
+        let setId: number | null = null;
+        if (setName) {
+          setId = await getSetIdByName(setName);
+          // Be forgiving: if set is unknown, return empty list instead of a hard error so editor UX isn't blocked
+          if (setId === null) {
+            return [];
+          }
+        }
 
-    // Limit results for faster response
-    const SEARCH_LIMIT = 50;
+        // Find matching variants by card name and set (if provided)
+        const whereVariant: { setId?: number } = {};
+        if (setId != null) whereVariant.setId = setId;
 
-    const variants = await prisma.variant.findMany({
+        // Limit results for faster response
+        const SEARCH_LIMIT = 50;
+
+        const variants = await prisma.variant.findMany({
       where: {
         ...whereVariant,
         // Search by card name OR slug; make it case-insensitive for friendlier UX
@@ -106,56 +113,63 @@ export async function GET(req: NextRequest) {
         rarity: m.rarity || null,
       });
 
-    type SearchOut = {
-      variantId: number;
-      slug: string;
-      finish: string;
-      product: string;
-      cardId: number;
-      cardName: string;
-      set: string;
-      setId: number;
-      type: string | null;
-      subTypes: string | null;
-      rarity: string | null;
-    };
-    const out: SearchOut[] = variants
-      .map((v: VariantRow): SearchOut => {
-        const meta = metaMap.get(metaKey(v.cardId, v.setId));
-        // Prefer metadata.type over typeText (flavor text)
-        const type = meta?.type || v.typeText || null;
-        const rarity = meta?.rarity || null;
-        const subTypes = v.card.subTypes || null;
-        return {
-          variantId: v.id,
-          slug: v.slug.startsWith("dra_") ? "drl_" + v.slug.slice(4) : v.slug,
-          finish: String(v.finish),
-          product: v.product,
-          cardId: v.cardId,
-          cardName: v.card.name,
-          set: v.set.name,
-          setId: v.setId,
-          type,
-          subTypes,
-          rarity,
+        type SearchOut = {
+          variantId: number;
+          slug: string;
+          finish: string;
+          product: string;
+          cardId: number;
+          cardName: string;
+          set: string;
+          setId: number;
+          type: string | null;
+          subTypes: string | null;
+          rarity: string | null;
         };
-      })
-      .filter((it: SearchOut) => {
-        if (!typeFilt) return true;
-        const t = (it.type || "").toLowerCase();
-        if (typeFilt === "site") return t.includes("site");
-        if (typeFilt === "avatar") return t.includes("avatar");
-        if (typeFilt === "spell")
-          return !t.includes("site") && !t.includes("avatar"); // exclude avatars from spells
-        return true;
-      })
-      .slice(0, 200);
+        const formattedResults: SearchOut[] = variants
+          .map((v: VariantRow): SearchOut => {
+            const meta = metaMap.get(metaKey(v.cardId, v.setId));
+            // Prefer metadata.type over typeText (flavor text)
+            const type = meta?.type || v.typeText || null;
+            const rarity = meta?.rarity || null;
+            const subTypes = v.card.subTypes || null;
+            return {
+              variantId: v.id,
+              slug: v.slug.startsWith("dra_") ? "drl_" + v.slug.slice(4) : v.slug,
+              finish: String(v.finish),
+              product: v.product,
+              cardId: v.cardId,
+              cardName: v.card.name,
+              set: v.set.name,
+              setId: v.setId,
+              type,
+              subTypes,
+              rarity,
+            };
+          })
+          .filter((it: SearchOut) => {
+            if (!typeFilt) return true;
+            const t = (it.type || "").toLowerCase();
+            if (typeFilt === "site") return t.includes("site");
+            if (typeFilt === "avatar") return t.includes("avatar");
+            if (typeFilt === "spell")
+              return !t.includes("site") && !t.includes("avatar"); // exclude avatars from spells
+            return true;
+          })
+          .slice(0, 200);
 
+        return formattedResults;
+      },
+      { ttl: 300 } // 5 minute cache for card search - card data is stable
+    );
+
+    logPerformance('GET /api/cards/search', performance.now() - startTime);
     return new Response(JSON.stringify(out), {
       status: 200,
       headers: { "content-type": "application/json" },
     });
   } catch (e: unknown) {
+    logPerformance('GET /api/cards/search', performance.now() - startTime);
     const message =
       e instanceof Error
         ? e.message

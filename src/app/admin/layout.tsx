@@ -13,6 +13,7 @@ export default async function AdminLayout({
   await requireAdminSession();
   const links = [
     { href: "/admin", label: "Dashboard" },
+    { href: "/admin/performance", label: "Performance" },
     { href: "/admin/meta", label: "Meta" },
     { href: "/admin/training", label: "Training" },
     { href: "/admin/ladder", label: "Ladder" },

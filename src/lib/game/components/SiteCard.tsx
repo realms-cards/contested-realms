@@ -174,7 +174,7 @@ export function SiteCard({
   }
 
   function handleMagicTargeting(e: ThreeEvent<PointerEvent>) {
-    if (!pendingMagic) return;
+    if (!pendingMagic || pendingMagic.guidesSuppressed) return;
     const ownerSeat = seatFromOwner(pendingMagic.spell.owner);
     const amActor = actorKey === ownerSeat;
     const actorIsActive =

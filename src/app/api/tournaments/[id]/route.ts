@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { getServerAuthSession } from '@/lib/auth';
+import { logPerformance } from '@/lib/monitoring/performance';
 import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
@@ -7,6 +8,7 @@ export const dynamic = 'force-dynamic';
 // GET /api/tournaments/[id]
 // Returns specific tournament details
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const startTime = performance.now();
   const { id } = await params;
   const session = await getServerAuthSession();
   if (!session?.user) {
@@ -118,6 +120,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       createdAt: tournament.createdAt.getTime()
     };
 
+    logPerformance(`GET /api/tournaments/${id}`, performance.now() - startTime);
     return new Response(JSON.stringify(tournamentInfo), {
       status: 200,
       headers: {
@@ -127,6 +130,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       }
     });
   } catch (e: unknown) {
+    logPerformance(`GET /api/tournaments/${id}`, performance.now() - startTime);
     const message = e instanceof Error ? e.message : typeof e === 'string' ? e : 'Unknown error';
     return new Response(JSON.stringify({ error: message }), { status: 500 });
   }
@@ -135,6 +139,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 // DELETE /api/tournaments/[id]
 // Delete tournament (only if registering and empty)
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const startTime = performance.now();
   const { id } = await params;
   const session = await getServerAuthSession();
   if (!session?.user) {
@@ -163,11 +168,13 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
       where: { id }
     });
 
+    logPerformance(`DELETE /api/tournaments/${id}`, performance.now() - startTime);
     return new Response(JSON.stringify({ success: true }), {
       status: 200,
       headers: { 'content-type': 'application/json' }
     });
   } catch (e: unknown) {
+    logPerformance(`DELETE /api/tournaments/${id}`, performance.now() - startTime);
     const message = e instanceof Error ? e.message : typeof e === 'string' ? e : 'Unknown error';
     return new Response(JSON.stringify({ error: message }), { status: 500 });
   }
