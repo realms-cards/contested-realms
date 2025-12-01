@@ -130,9 +130,17 @@ export type EntityBase<TCard> = {
   tapped?: boolean;
 };
 
+// Champion reference for Dragonlord avatar
+export type ChampionRef = {
+  cardId: number;
+  name: string;
+  slug?: string | null;
+};
+
 export type AvatarState = EntityBase<CardRef | null> & {
   pos: [number, number] | null;
   counters?: number | null;
+  champion?: ChampionRef | null; // Dragonlord champion dragon
 };
 
 export type PermanentItem = EntityBase<CardRef> & {
@@ -611,6 +619,7 @@ export type GameState = {
   avatars: Record<PlayerKey, AvatarState>;
   permanents: Permanents;
   setAvatarCard: (who: PlayerKey, card: CardRef) => void;
+  setAvatarChampion: (who: PlayerKey, champion: ChampionRef | null) => void;
   placeAvatarAtStart: (who: PlayerKey) => void;
   moveAvatarTo: (who: PlayerKey, x: number, y: number) => void;
   moveAvatarToWithOffset: (

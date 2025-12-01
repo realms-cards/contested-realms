@@ -23,6 +23,7 @@ export type CardMeta = {
   attack: number | null;
   defence: number | null;
   thresholds: Record<string, number> | null;
+  type?: string | null; // Card type (e.g., "Avatar", "Site", "Minion")
 };
 
 export type Pick3D = {
@@ -79,13 +80,21 @@ export function choiceWeighted<T>(
   return items.at(-1)?.item ?? null;
 }
 
+// Known avatar card names (for when type info is missing from local search index)
+const KNOWN_AVATAR_NAMES = new Set(["dragonlord", "spellslinger"]);
+
 export function categorizeCard(
   card: BoosterCard,
   meta?: CardMeta
 ): "creatures" | "spells" | "sites" | "avatars" {
-  const type = (card.type || "").toLowerCase();
+  // Use card type, or fall back to meta type if card type is empty
+  const type = (card.type || meta?.type || "").toLowerCase();
   if (type.includes("site")) return "sites";
   if (type.includes("avatar")) return "avatars";
+  // Fallback: check known avatar names when type is still empty
+  if (!type && KNOWN_AVATAR_NAMES.has((card.cardName || "").toLowerCase())) {
+    return "avatars";
+  }
   const isCreature = meta && (meta.attack !== null || meta.defence !== null);
   if (isCreature) return "creatures";
   return "spells";

@@ -333,6 +333,7 @@ export type CreateTournamentConfig = {
     packCounts: Record<string, number>;
     timeLimit: number;
     replaceAvatars: boolean;
+    allowDragonlordChampion?: boolean;
   };
   draftConfig?: {
     setMix: string[];
@@ -343,6 +344,7 @@ export type CreateTournamentConfig = {
     pickTimeLimit?: number;
     constructionTimeLimit?: number;
     includeCubeSideboardInStandard?: boolean;
+    allowDragonlordChampion?: boolean;
   };
 };
 
@@ -486,6 +488,8 @@ export default function LobbiesCentral({
   const [sealedTimeLimit, setSealedTimeLimit] = useState<number>(40);
   const [sealedReplaceAvatars, setSealedReplaceAvatars] =
     useState<boolean>(false);
+  const [sealedAllowDragonlordChampion, setSealedAllowDragonlordChampion] =
+    useState<boolean>(true);
   const [draftBoosterCount, setDraftBoosterCount] = useState<number>(3);
   const [draftBoosters, setDraftBoosters] = useState<string[]>([
     "Beta",
@@ -496,6 +500,8 @@ export default function LobbiesCentral({
   const [draftCubeId, setDraftCubeId] = useState<string>("");
   const [draftIncludeCubeSideboard, setDraftIncludeCubeSideboard] =
     useState<boolean>(false);
+  const [draftAllowDragonlordChampion, setDraftAllowDragonlordChampion] =
+    useState<boolean>(true);
   const [draftPickTimeLimit, setDraftPickTimeLimit] = useState<number>(60);
   const [draftConstructionTimeLimit, setDraftConstructionTimeLimit] =
     useState<number>(20);
@@ -1433,6 +1439,7 @@ export default function LobbiesCentral({
                                     packCounts?: Record<string, number>;
                                     timeLimit?: number;
                                     replaceAvatars?: boolean;
+                                    allowDragonlordChampion?: boolean;
                                   };
                                 };
                               }
@@ -1449,6 +1456,8 @@ export default function LobbiesCentral({
                             .map(([s]) => s);
                           const timeLimit = cfg.timeLimit ?? 40;
                           const replaceAvatars = cfg.replaceAvatars ?? false;
+                          const allowDragonlordChampion =
+                            cfg.allowDragonlordChampion ?? true;
                           const params = new URLSearchParams({
                             sealed: "true",
                             tournament: tournament.id,
@@ -1457,6 +1466,9 @@ export default function LobbiesCentral({
                             timeLimit: String(timeLimit),
                             constructionStartTime: String(Date.now()),
                             replaceAvatars: String(replaceAvatars),
+                            allowDragonlordChampion: String(
+                              allowDragonlordChampion
+                            ),
                             matchName: tournament.name,
                           });
                           window.location.href = `/decks/editor-3d?${params.toString()}`;
@@ -1825,6 +1837,16 @@ export default function LobbiesCentral({
                       />
                       Replace Avatars
                     </label>
+                    <label className="flex items-center gap-2 text-xs mt-2">
+                      <input
+                        type="checkbox"
+                        checked={sealedAllowDragonlordChampion}
+                        onChange={(e) =>
+                          setSealedAllowDragonlordChampion(e.target.checked)
+                        }
+                      />
+                      Allow Dragonlord Champion
+                    </label>
                   </div>
                 </div>
               )}
@@ -2014,6 +2036,16 @@ export default function LobbiesCentral({
                       />
                     </div>
                   </div>
+                  <label className="flex items-center gap-2 text-xs mt-3">
+                    <input
+                      type="checkbox"
+                      checked={draftAllowDragonlordChampion}
+                      onChange={(e) =>
+                        setDraftAllowDragonlordChampion(e.target.checked)
+                      }
+                    />
+                    Allow Dragonlord Champion
+                  </label>
                 </div>
               )}
 
@@ -2081,6 +2113,7 @@ export default function LobbiesCentral({
                         packCounts,
                         timeLimit: sealedTimeLimit,
                         replaceAvatars: sealedReplaceAvatars,
+                        allowDragonlordChampion: sealedAllowDragonlordChampion,
                       };
                     } else if (tournamentMatchType === "draft") {
                       if (draftUseCube && draftCubeId) {
@@ -2095,6 +2128,7 @@ export default function LobbiesCentral({
                           constructionTimeLimit: draftConstructionTimeLimit,
                           includeCubeSideboardInStandard:
                             draftIncludeCubeSideboard,
+                          allowDragonlordChampion: draftAllowDragonlordChampion,
                         };
                       } else {
                         // Convert booster array to packCounts format
@@ -2110,6 +2144,7 @@ export default function LobbiesCentral({
                           packCounts,
                           pickTimeLimit: draftPickTimeLimit,
                           constructionTimeLimit: draftConstructionTimeLimit,
+                          allowDragonlordChampion: draftAllowDragonlordChampion,
                         };
                       }
                     }

@@ -44,8 +44,10 @@ export default function OnlineMulliganScreen({
   const myHand = zones[myPlayerKey]?.hand || [];
   const myMulligans = mulligans[myPlayerKey] || 0;
   const myAvatar = avatars[myPlayerKey]?.card || null;
+  const myChampion = avatars[myPlayerKey]?.champion || null;
   const opponentKey: PlayerKey = myPlayerKey === "p1" ? "p2" : "p1";
   const opponentAvatar = avatars[opponentKey]?.card || null;
+  const opponentChampion = avatars[opponentKey]?.champion || null;
   const isSecondSeat = (() => {
     const first = currentPlayer === 1 ? "p1" : "p2";
     return myPlayerKey === (first === "p1" ? "p2" : "p1");
@@ -130,6 +132,25 @@ export default function OnlineMulliganScreen({
                     className="object-contain"
                   />
                 </div>
+                {myChampion &&
+                  myAvatar.name?.toLowerCase() === "dragonlord" && (
+                    <div
+                      className="mt-1 px-2 py-0.5 bg-amber-900/40 rounded text-[10px] text-amber-200 ring-1 ring-amber-500/30 cursor-pointer hover:ring-amber-400/50 transition-all"
+                      onMouseEnter={() => {
+                        if (myChampion.slug) {
+                          setPreviewCard({
+                            name: myChampion.name,
+                            slug: myChampion.slug,
+                            cardId: myChampion.cardId,
+                            type: "Minion - Dragon",
+                          });
+                        }
+                      }}
+                      onMouseLeave={() => setPreviewCard(null)}
+                    >
+                      ⚔ {myChampion.name}
+                    </div>
+                  )}
               </div>
             )}
             {opponentAvatar?.slug && (
@@ -150,6 +171,25 @@ export default function OnlineMulliganScreen({
                     className="object-contain"
                   />
                 </div>
+                {opponentChampion &&
+                  opponentAvatar.name?.toLowerCase() === "dragonlord" && (
+                    <div
+                      className="mt-1 px-2 py-0.5 bg-amber-900/40 rounded text-[10px] text-amber-200 ring-1 ring-amber-500/30 cursor-pointer hover:ring-amber-400/50 transition-all"
+                      onMouseEnter={() => {
+                        if (opponentChampion.slug) {
+                          setPreviewCard({
+                            name: opponentChampion.name,
+                            slug: opponentChampion.slug,
+                            cardId: opponentChampion.cardId,
+                            type: "Minion - Dragon",
+                          });
+                        }
+                      }}
+                      onMouseLeave={() => setPreviewCard(null)}
+                    >
+                      ⚔ {opponentChampion.name}
+                    </div>
+                  )}
               </div>
             )}
           </div>

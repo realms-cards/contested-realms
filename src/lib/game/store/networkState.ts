@@ -8,22 +8,19 @@ import type {
 } from "./types";
 import type { PlayerPositionReference } from "../types";
 import { filterEchoPatchIfAny } from "./transportState";
-import {
-  normalizeAvatars,
-} from "./utils/avatarHelpers";
+import { normalizeAvatars } from "./utils/avatarHelpers";
 import { mergeEvents } from "./utils/eventHelpers";
-import { deepMergeReplaceArrays, mergePermanentsMap } from "./utils/patchHelpers";
+import {
+  deepMergeReplaceArrays,
+  mergePermanentsMap,
+} from "./utils/patchHelpers";
 import { normalizePermanentsRecord } from "./utils/permanentHelpers";
 import {
   createDefaultPlayerPositions,
   normalizePlayerPositions,
 } from "./utils/positionHelpers";
-import {
-  clearSnapshotsStorageFor,
-} from "./utils/snapshotHelpers";
-import {
-  normalizeZones,
-} from "./utils/zoneHelpers";
+import { clearSnapshotsStorageFor } from "./utils/snapshotHelpers";
+import { normalizeZones } from "./utils/zoneHelpers";
 
 type NetworkSlice = Pick<
   GameState,
@@ -106,9 +103,10 @@ export const createNetworkSlice: StateCreator<
               handP2: prevHandP2,
             });
             const pPer = p.permanents
-              ? Object.values(
-                  p.permanents as Record<string, unknown[]>
-                ).reduce((a, v) => a + (Array.isArray(v) ? v.length : 0), 0)
+              ? Object.values(p.permanents as Record<string, unknown[]>).reduce(
+                  (a, v) => a + (Array.isArray(v) ? v.length : 0),
+                  0
+                )
               : undefined;
             const pBoard = p.board as GameState["board"] | undefined;
             const pZones = p.zones as GameState["zones"] | undefined;
@@ -136,7 +134,10 @@ export const createNetworkSlice: StateCreator<
       if (p.players !== undefined) {
         next.players = replaceKeys.has("players")
           ? (p.players as GameState["players"])
-          : (deepMergeReplaceArrays(state.players, p.players) as GameState["players"]);
+          : (deepMergeReplaceArrays(
+              state.players,
+              p.players
+            ) as GameState["players"]);
       }
       if (p.currentPlayer !== undefined) {
         next.currentPlayer = p.currentPlayer;
@@ -150,7 +151,10 @@ export const createNetworkSlice: StateCreator<
       if (p.d20Rolls !== undefined) {
         next.d20Rolls = replaceKeys.has("d20Rolls")
           ? p.d20Rolls
-          : (deepMergeReplaceArrays(state.d20Rolls, p.d20Rolls) as GameState["d20Rolls"]);
+          : (deepMergeReplaceArrays(
+              state.d20Rolls,
+              p.d20Rolls
+            ) as GameState["d20Rolls"]);
         try {
           console.log("[applyServerPatch] Applied d20Rolls:", {
             prev: state.d20Rolls,
@@ -190,7 +194,10 @@ export const createNetworkSlice: StateCreator<
       if (p.board !== undefined) {
         next.board = replaceKeys.has("board")
           ? (p.board as GameState["board"])
-          : (deepMergeReplaceArrays(state.board, p.board) as GameState["board"]);
+          : (deepMergeReplaceArrays(
+              state.board,
+              p.board
+            ) as GameState["board"]);
       }
       if (p.zones !== undefined) {
         next.zones = normalizeZones(
@@ -213,11 +220,15 @@ export const createNetworkSlice: StateCreator<
           replaceKeys.has("avatars") ? undefined : state.avatars
         );
 
-        // Preserve existing avatar cards if not explicitly updated in the patch
+        // Preserve existing avatar cards and champions if not explicitly updated in the patch
         // This prevents avatars from disappearing on reload/reconnect
         if (replaceKeys.has("avatars")) {
-          const p1Candidate = (p.avatars as Partial<Record<PlayerKey, Partial<AvatarState>>>)?.p1;
-          const p2Candidate = (p.avatars as Partial<Record<PlayerKey, Partial<AvatarState>>>)?.p2;
+          const p1Candidate = (
+            p.avatars as Partial<Record<PlayerKey, Partial<AvatarState>>>
+          )?.p1;
+          const p2Candidate = (
+            p.avatars as Partial<Record<PlayerKey, Partial<AvatarState>>>
+          )?.p2;
 
           if (
             p1Candidate &&
@@ -229,6 +240,17 @@ export const createNetworkSlice: StateCreator<
               p1: { ...next.avatars.p1, card: state.avatars.p1.card },
             } as GameState["avatars"];
           }
+          // Also preserve champion for p1
+          if (
+            p1Candidate &&
+            !("champion" in p1Candidate) &&
+            state.avatars?.p1?.champion
+          ) {
+            next.avatars = {
+              ...next.avatars,
+              p1: { ...next.avatars.p1, champion: state.avatars.p1.champion },
+            } as GameState["avatars"];
+          }
           if (
             p2Candidate &&
             !("card" in p2Candidate) &&
@@ -237,6 +259,17 @@ export const createNetworkSlice: StateCreator<
             next.avatars = {
               ...next.avatars,
               p2: { ...next.avatars.p2, card: state.avatars.p2.card },
+            } as GameState["avatars"];
+          }
+          // Also preserve champion for p2
+          if (
+            p2Candidate &&
+            !("champion" in p2Candidate) &&
+            state.avatars?.p2?.champion
+          ) {
+            next.avatars = {
+              ...next.avatars,
+              p2: { ...next.avatars.p2, champion: state.avatars.p2.champion },
             } as GameState["avatars"];
           }
         }
@@ -252,14 +285,20 @@ export const createNetworkSlice: StateCreator<
       if (p.mulligans !== undefined) {
         next.mulligans = replaceKeys.has("mulligans")
           ? p.mulligans
-          : (deepMergeReplaceArrays(state.mulligans, p.mulligans) as GameState["mulligans"]);
+          : (deepMergeReplaceArrays(
+              state.mulligans,
+              p.mulligans
+            ) as GameState["mulligans"]);
       } else if (replaceKeys.has("mulligans")) {
         next.mulligans = { p1: 0, p2: 0 } as GameState["mulligans"];
       }
       if (p.mulliganDrawn !== undefined) {
         next.mulliganDrawn = replaceKeys.has("mulliganDrawn")
           ? p.mulliganDrawn
-          : (deepMergeReplaceArrays(state.mulliganDrawn, p.mulliganDrawn) as GameState["mulliganDrawn"]);
+          : (deepMergeReplaceArrays(
+              state.mulliganDrawn,
+              p.mulliganDrawn
+            ) as GameState["mulliganDrawn"]);
       } else if (replaceKeys.has("mulliganDrawn")) {
         next.mulliganDrawn = { p1: [], p2: [] } as GameState["mulliganDrawn"];
       }
@@ -286,7 +325,10 @@ export const createNetworkSlice: StateCreator<
       if (p.sitePositions !== undefined) {
         next.sitePositions = replaceKeys.has("sitePositions")
           ? (p.sitePositions as GameState["sitePositions"])
-          : (deepMergeReplaceArrays(state.sitePositions, p.sitePositions) as GameState["sitePositions"]);
+          : (deepMergeReplaceArrays(
+              state.sitePositions,
+              p.sitePositions
+            ) as GameState["sitePositions"]);
       } else if (replaceKeys.has("sitePositions")) {
         next.sitePositions = {} as GameState["sitePositions"];
       }
@@ -312,16 +354,12 @@ export const createNetworkSlice: StateCreator<
           ? Array.isArray(p.events)
             ? p.events
             : []
-          : mergeEvents(
-              state.events,
-              Array.isArray(p.events) ? p.events : []
-            );
+          : mergeEvents(state.events, Array.isArray(p.events) ? p.events : []);
         next.eventSeq = Math.max(state.eventSeq, Number(p.eventSeq) || 0);
       }
 
       try {
-        const candidatePhase =
-          (p.phase as GameState["phase"]) ?? state.phase;
+        const candidatePhase = (p.phase as GameState["phase"]) ?? state.phase;
         const candidateTurn = (p.turn as GameState["turn"]) ?? state.turn;
         const candidateCP =
           (p.currentPlayer as GameState["currentPlayer"]) ??
@@ -391,14 +429,15 @@ export const createNetworkSlice: StateCreator<
         }
       }
 
-      if (p.board !== undefined || p.zones !== undefined || p.permanents !== undefined) {
+      if (
+        p.board !== undefined ||
+        p.zones !== undefined ||
+        p.permanents !== undefined
+      ) {
         try {
           const mergedPerCount = Object.values(
             (next.permanents ?? state.permanents) || {}
-          ).reduce(
-            (a, v) => a + (Array.isArray(v) ? v.length : 0),
-            0
-          );
+          ).reduce((a, v) => a + (Array.isArray(v) ? v.length : 0), 0);
           const mergedSummary = {
             p1: {
               hand: (next.zones ?? state.zones)?.p1?.hand?.length ?? 0,
@@ -453,7 +492,10 @@ export const createNetworkSlice: StateCreator<
       if (p.players !== undefined) {
         next.players = replaceKeys.has("players")
           ? (p.players as GameState["players"])
-          : (deepMergeReplaceArrays(state.players, p.players) as GameState["players"]);
+          : (deepMergeReplaceArrays(
+              state.players,
+              p.players
+            ) as GameState["players"]);
       }
       if (p.currentPlayer !== undefined) {
         next.currentPlayer = p.currentPlayer;
@@ -479,17 +521,26 @@ export const createNetworkSlice: StateCreator<
       if (p.board !== undefined) {
         next.board = replaceKeys.has("board")
           ? (p.board as GameState["board"])
-          : (deepMergeReplaceArrays(state.board, p.board) as GameState["board"]);
+          : (deepMergeReplaceArrays(
+              state.board,
+              p.board
+            ) as GameState["board"]);
       }
       if (p.zones !== undefined) {
         next.zones = replaceKeys.has("zones")
           ? (p.zones as GameState["zones"])
-          : (deepMergeReplaceArrays(state.zones, p.zones) as GameState["zones"]);
+          : (deepMergeReplaceArrays(
+              state.zones,
+              p.zones
+            ) as GameState["zones"]);
       }
       if (p.avatars !== undefined) {
         next.avatars = replaceKeys.has("avatars")
           ? (p.avatars as GameState["avatars"])
-          : (deepMergeReplaceArrays(state.avatars, p.avatars) as GameState["avatars"]);
+          : (deepMergeReplaceArrays(
+              state.avatars,
+              p.avatars
+            ) as GameState["avatars"]);
       }
       if (p.permanents !== undefined) {
         if (replaceKeys.has("permanents")) {
@@ -506,12 +557,18 @@ export const createNetworkSlice: StateCreator<
       if (p.mulligans !== undefined) {
         next.mulligans = replaceKeys.has("mulligans")
           ? (p.mulligans as GameState["mulligans"])
-          : (deepMergeReplaceArrays(state.mulligans, p.mulligans) as GameState["mulligans"]);
+          : (deepMergeReplaceArrays(
+              state.mulligans,
+              p.mulligans
+            ) as GameState["mulligans"]);
       }
       if (p.mulliganDrawn !== undefined) {
         next.mulliganDrawn = replaceKeys.has("mulliganDrawn")
           ? (p.mulliganDrawn as GameState["mulliganDrawn"])
-          : (deepMergeReplaceArrays(state.mulliganDrawn, p.mulliganDrawn) as GameState["mulliganDrawn"]);
+          : (deepMergeReplaceArrays(
+              state.mulliganDrawn,
+              p.mulliganDrawn
+            ) as GameState["mulliganDrawn"]);
       }
       if (p.permanentPositions !== undefined) {
         next.permanentPositions = replaceKeys.has("permanentPositions")
@@ -532,12 +589,18 @@ export const createNetworkSlice: StateCreator<
       if (p.sitePositions !== undefined) {
         next.sitePositions = replaceKeys.has("sitePositions")
           ? (p.sitePositions as GameState["sitePositions"])
-          : (deepMergeReplaceArrays(state.sitePositions, p.sitePositions) as GameState["sitePositions"]);
+          : (deepMergeReplaceArrays(
+              state.sitePositions,
+              p.sitePositions
+            ) as GameState["sitePositions"]);
       }
       if (p.playerPositions !== undefined) {
         next.playerPositions = replaceKeys.has("playerPositions")
           ? (p.playerPositions as GameState["playerPositions"])
-          : (deepMergeReplaceArrays(state.playerPositions, p.playerPositions) as GameState["playerPositions"]);
+          : (deepMergeReplaceArrays(
+              state.playerPositions,
+              p.playerPositions
+            ) as GameState["playerPositions"]);
       }
       if (p.events !== undefined) {
         if (replaceKeys.has("events")) {
@@ -547,14 +610,14 @@ export const createNetworkSlice: StateCreator<
             p.eventSeq !== undefined
               ? Math.max(Number(p.eventSeq) || 0, 0)
               : Math.max(
-                  ev.reduce(
-                    (mx, e) => Math.max(mx, Number(e.id) || 0),
-                    0
-                  ),
+                  ev.reduce((mx, e) => Math.max(mx, Number(e.id) || 0), 0),
                   0
                 );
         } else {
-          const merged = mergeEvents(state.events, (p.events as GameState["events"]) || []);
+          const merged = mergeEvents(
+            state.events,
+            (p.events as GameState["events"]) || []
+          );
           next.events = merged;
           const mergedMaxId = merged.reduce(
             (mx, e) => Math.max(mx, Number(e.id) || 0),

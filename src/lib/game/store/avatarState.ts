@@ -1,15 +1,19 @@
 import type { StateCreator } from "zustand";
-import type { AvatarState, CellKey, GameState, ServerPatchT } from "./types";
-import {
-  buildAvatarUpdate,
-  createDefaultAvatars,
-} from "./utils/avatarHelpers";
+import type {
+  AvatarState,
+  CellKey,
+  ChampionRef,
+  GameState,
+  ServerPatchT,
+} from "./types";
+import { buildAvatarUpdate, createDefaultAvatars } from "./utils/avatarHelpers";
 import { moveAvatarAttachedArtifacts } from "./utils/permanentHelpers";
 
 type AvatarSlice = Pick<
   GameState,
   | "avatars"
   | "setAvatarCard"
+  | "setAvatarChampion"
   | "placeAvatarAtStart"
   | "moveAvatarTo"
   | "moveAvatarToWithOffset"
@@ -21,12 +25,10 @@ type AvatarSlice = Pick<
   | "clearAvatarCounter"
 >;
 
-export const createAvatarSlice: StateCreator<
-  GameState,
-  [],
-  [],
-  AvatarSlice
-> = (set, get) => ({
+export const createAvatarSlice: StateCreator<GameState, [], [], AvatarSlice> = (
+  set,
+  get
+) => ({
   avatars: createDefaultAvatars(),
 
   setAvatarCard: (who, card) =>
@@ -40,6 +42,27 @@ export const createAvatarSlice: StateCreator<
       if (tr) {
         const patch: ServerPatchT = {
           avatars: { [who]: { card } } as GameState["avatars"],
+        };
+        get().trySendPatch(patch);
+      }
+      return { avatars: avatarsNext } as Partial<GameState> as GameState;
+    }),
+
+  setAvatarChampion: (who, champion) =>
+    set((state) => {
+      if (champion) {
+        get().log(
+          `${who.toUpperCase()} sets Dragonlord Champion to '${champion.name}'`
+        );
+      }
+      const avatarsNext = {
+        ...state.avatars,
+        [who]: { ...state.avatars[who], champion },
+      } as GameState["avatars"];
+      const tr = get().transport;
+      if (tr) {
+        const patch: ServerPatchT = {
+          avatars: { [who]: { champion } } as GameState["avatars"],
         };
         get().trySendPatch(patch);
       }
@@ -230,7 +253,10 @@ export const createAvatarSlice: StateCreator<
       get().log(
         `${who.toUpperCase()} ${next.tapped ? "taps" : "untaps"} Avatar`
       );
-      const avatarsNext = { ...state.avatars, [who]: next } as GameState["avatars"];
+      const avatarsNext = {
+        ...state.avatars,
+        [who]: next,
+      } as GameState["avatars"];
       const patch: ServerPatchT = {
         avatars: { [who]: { tapped: next.tapped } } as GameState["avatars"],
       };
@@ -253,11 +279,18 @@ export const createAvatarSlice: StateCreator<
       const cur = state.avatars[who];
       const nextCount = Math.max(1, Number(cur?.counters || 0) + 1);
       const next = { ...cur, counters: nextCount } as AvatarState;
-      const avatarsNext = { ...state.avatars, [who]: next } as GameState["avatars"];
+      const avatarsNext = {
+        ...state.avatars,
+        [who]: next,
+      } as GameState["avatars"];
       get().log(
-        `${who.toUpperCase()} ${cur?.counters ? "increments" : "adds"} avatar counter (now ${nextCount})`
+        `${who.toUpperCase()} ${
+          cur?.counters ? "increments" : "adds"
+        } avatar counter (now ${nextCount})`
       );
-      const patch: ServerPatchT = { avatars: { [who]: { counters: nextCount } } as GameState["avatars"] };
+      const patch: ServerPatchT = {
+        avatars: { [who]: { counters: nextCount } } as GameState["avatars"],
+      };
       get().trySendPatch(patch);
       return { avatars: avatarsNext } as Partial<GameState> as GameState;
     }),
@@ -267,9 +300,16 @@ export const createAvatarSlice: StateCreator<
       const cur = state.avatars[who];
       const nextCount = Math.max(1, Number(cur?.counters || 0) + 1);
       const next = { ...cur, counters: nextCount } as AvatarState;
-      const avatarsNext = { ...state.avatars, [who]: next } as GameState["avatars"];
-      get().log(`${who.toUpperCase()} increments avatar counter (now ${nextCount})`);
-      const patch: ServerPatchT = { avatars: { [who]: { counters: nextCount } } as GameState["avatars"] };
+      const avatarsNext = {
+        ...state.avatars,
+        [who]: next,
+      } as GameState["avatars"];
+      get().log(
+        `${who.toUpperCase()} increments avatar counter (now ${nextCount})`
+      );
+      const patch: ServerPatchT = {
+        avatars: { [who]: { counters: nextCount } } as GameState["avatars"],
+      };
       get().trySendPatch(patch);
       return { avatars: avatarsNext } as Partial<GameState> as GameState;
     }),
@@ -281,17 +321,29 @@ export const createAvatarSlice: StateCreator<
       if (curCount <= 1) {
         const cleared = { ...cur } as AvatarState;
         delete (cleared as { counters?: number | null }).counters;
-        const avatarsNext = { ...state.avatars, [who]: cleared } as GameState["avatars"];
+        const avatarsNext = {
+          ...state.avatars,
+          [who]: cleared,
+        } as GameState["avatars"];
         get().log(`${who.toUpperCase()} removes avatar counter`);
-        const patch: ServerPatchT = { avatars: { [who]: { counters: null } } as GameState["avatars"] };
+        const patch: ServerPatchT = {
+          avatars: { [who]: { counters: null } } as GameState["avatars"],
+        };
         get().trySendPatch(patch);
         return { avatars: avatarsNext } as Partial<GameState> as GameState;
       } else {
         const nextCount = curCount - 1;
         const next = { ...cur, counters: nextCount } as AvatarState;
-        const avatarsNext = { ...state.avatars, [who]: next } as GameState["avatars"];
-        get().log(`${who.toUpperCase()} decrements avatar counter (now ${nextCount})`);
-        const patch: ServerPatchT = { avatars: { [who]: { counters: nextCount } } as GameState["avatars"] };
+        const avatarsNext = {
+          ...state.avatars,
+          [who]: next,
+        } as GameState["avatars"];
+        get().log(
+          `${who.toUpperCase()} decrements avatar counter (now ${nextCount})`
+        );
+        const patch: ServerPatchT = {
+          avatars: { [who]: { counters: nextCount } } as GameState["avatars"],
+        };
         get().trySendPatch(patch);
         return { avatars: avatarsNext } as Partial<GameState> as GameState;
       }
@@ -303,9 +355,14 @@ export const createAvatarSlice: StateCreator<
       if (!cur || cur.counters == null) return state as GameState;
       const cleared = { ...cur } as AvatarState;
       delete (cleared as { counters?: number | null }).counters;
-      const avatarsNext = { ...state.avatars, [who]: cleared } as GameState["avatars"];
+      const avatarsNext = {
+        ...state.avatars,
+        [who]: cleared,
+      } as GameState["avatars"];
       get().log(`${who.toUpperCase()} removes avatar counter`);
-      const patch: ServerPatchT = { avatars: { [who]: { counters: null } } as GameState["avatars"] };
+      const patch: ServerPatchT = {
+        avatars: { [who]: { counters: null } } as GameState["avatars"],
+      };
       get().trySendPatch(patch);
       return { avatars: avatarsNext } as Partial<GameState> as GameState;
     }),

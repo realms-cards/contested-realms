@@ -67,6 +67,7 @@ export async function loadDeckFor(
       shuffleSpellbook,
       shuffleAtlas,
       setAvatarCard,
+      setAvatarChampion,
       placeAvatarAtStart,
       drawOpening,
     } = useGameStore.getState();
@@ -76,6 +77,16 @@ export async function loadDeckFor(
     shuffleSpellbook(who);
     shuffleAtlas(who);
     setAvatarCard(who, avatar);
+
+    // Set Dragonlord champion if present
+    if (data.champion) {
+      setAvatarChampion(who, {
+        cardId: data.champion.cardId,
+        name: data.champion.name,
+        slug: data.champion.slug || null,
+      });
+    }
+
     placeAvatarAtStart(who);
     drawOpening(who);
 
@@ -328,6 +339,7 @@ export async function loadTournamentConstructedDeck(
       shuffleSpellbook,
       shuffleAtlas,
       setAvatarCard,
+      setAvatarChampion,
       placeAvatarAtStart,
       drawOpening,
     } = useGameStore.getState();
@@ -336,6 +348,19 @@ export async function loadTournamentConstructedDeck(
     shuffleSpellbook(who);
     shuffleAtlas(who);
     setAvatarCard(who, avatar);
+
+    // Set Dragonlord champion if present
+    const deckWithChampion = deckData as {
+      champion?: { cardId: number; name: string; slug?: string | null };
+    };
+    if (deckWithChampion.champion) {
+      setAvatarChampion(who, {
+        cardId: deckWithChampion.champion.cardId,
+        name: deckWithChampion.champion.name,
+        slug: deckWithChampion.champion.slug || null,
+      });
+    }
+
     placeAvatarAtStart(who);
     drawOpening(who);
 

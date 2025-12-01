@@ -22,8 +22,7 @@ export function ensureAvatarState(
 ): AvatarState {
   const base = fallback ? { ...fallback } : createEmptyAvatarState();
   const next: AvatarState = {
-    card:
-      candidate && "card" in candidate ? candidate.card ?? null : base.card,
+    card: candidate && "card" in candidate ? candidate.card ?? null : base.card,
     pos:
       candidate && Array.isArray(candidate.pos)
         ? (candidate.pos as [number, number])
@@ -41,12 +40,32 @@ export function ensureAvatarState(
     delete next.offset;
   }
   // Normalize counters if present
-  if (candidate && Object.prototype.hasOwnProperty.call(candidate, "counters")) {
-    next.counters = (candidate as { counters?: number | null }).counters ?? null;
+  if (
+    candidate &&
+    Object.prototype.hasOwnProperty.call(candidate, "counters")
+  ) {
+    next.counters =
+      (candidate as { counters?: number | null }).counters ?? null;
   } else if ((base as { counters?: number | null }).counters !== undefined) {
     next.counters = (base as { counters?: number | null }).counters ?? null;
   } else {
     delete (next as { counters?: number | null }).counters;
+  }
+  // Normalize champion if present (Dragonlord avatar feature)
+  type ChampionType = {
+    cardId: number;
+    name: string;
+    slug: string | null;
+  } | null;
+  if (
+    candidate &&
+    Object.prototype.hasOwnProperty.call(candidate, "champion")
+  ) {
+    next.champion = (candidate as { champion?: ChampionType }).champion ?? null;
+  } else if ((base as { champion?: ChampionType }).champion !== undefined) {
+    next.champion = (base as { champion?: ChampionType }).champion ?? null;
+  } else {
+    delete (next as { champion?: ChampionType }).champion;
   }
   return next;
 }

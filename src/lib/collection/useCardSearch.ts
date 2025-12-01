@@ -73,7 +73,7 @@ export function useCardSearch() {
 
       const q = query.toLowerCase();
       const results: CardSearchResult[] = [];
-      const seenCards = new Set<number>(); // Dedupe by cardId
+      const seenCards = new Map<number, { isFoil: boolean }>(); // Dedupe by cardId, track finish
 
       for (const entry of index.entries) {
         const [cardId, variantId, setId, cardName, slug, setName, isFoil] =
@@ -84,9 +84,28 @@ export function useCardSearch() {
           cardName.toLowerCase().includes(q) ||
           slug.toLowerCase().includes(q)
         ) {
-          // Dedupe: prefer first match (Standard finish usually)
-          if (seenCards.has(cardId)) continue;
-          seenCards.add(cardId);
+          // Dedupe: prefer Standard finish over Foil (foil images may not exist)
+          const existing = seenCards.get(cardId);
+          if (existing) {
+            // Replace foil with standard if we find a standard version
+            if (existing.isFoil && !isFoil) {
+              const idx = results.findIndex((r) => r.cardId === cardId);
+              if (idx !== -1) {
+                results[idx] = {
+                  cardId,
+                  cardName,
+                  variantId,
+                  slug,
+                  set: setName,
+                  setId,
+                  finish: "Standard",
+                };
+                seenCards.set(cardId, { isFoil: false });
+              }
+            }
+            continue;
+          }
+          seenCards.set(cardId, { isFoil: !!isFoil });
 
           results.push({
             cardId,

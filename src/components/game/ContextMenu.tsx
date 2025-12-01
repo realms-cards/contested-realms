@@ -60,6 +60,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   );
   const detachToken = useGameStore((s) => s.detachToken);
   const log = useGameStore((s) => s.log);
+  const setPreviewCard = useGameStore((s) => s.setPreviewCard);
 
   // Permanent position management (burrow/submerge)
   const getAvailableActions = useGameStore((s) => s.getAvailableActions);
@@ -279,6 +280,11 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   }> = [];
   let isCarryableArtifact = false;
   let isMine = false; // Ownership check for attached items operations
+  let championInfo: {
+    name: string;
+    slug?: string | null;
+    cardId?: number;
+  } | null = null; // Dragonlord champion
 
   if (t.kind === "site") {
     const key = toCellKey(t.x, t.y);
@@ -672,6 +678,16 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     const canToggle = !actorKey || actorKey === t.who;
     hasToggle = !!canToggle;
     isMine = !actorKey || actorKey === t.who;
+
+    // Check for Dragonlord champion (works for any player's Dragonlord avatar)
+    if (a?.champion && a?.card?.name?.toLowerCase() === "dragonlord") {
+      championInfo = {
+        name: a.champion.name,
+        slug: a.champion.slug,
+        cardId: a.champion.cardId,
+      };
+    }
+
     if (canToggle) {
       doToggle = () => {
         toggleTapAvatar(t.who);
@@ -879,6 +895,34 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
             <div className="text-sm font-semibold mb-2 truncate" title={header}>
               {header}
             </div>
+            {/* Dragonlord Champion display */}
+            {championInfo &&
+              (() => {
+                const champ = championInfo; // Capture for callback
+                return (
+                  <div
+                    className="mb-2 px-3 py-1.5 bg-gradient-to-r from-amber-900/40 to-orange-900/40 rounded-lg ring-1 ring-amber-500/30 cursor-pointer hover:ring-amber-400/50 transition-all"
+                    onMouseEnter={() => {
+                      if (champ.slug) {
+                        setPreviewCard({
+                          name: champ.name,
+                          slug: champ.slug,
+                          cardId: champ.cardId ?? 0,
+                          type: "Minion - Dragon",
+                        });
+                      }
+                    }}
+                    onMouseLeave={() => setPreviewCard(null)}
+                  >
+                    <div className="text-[10px] uppercase tracking-wide text-amber-400/80 mb-0.5">
+                      Champion
+                    </div>
+                    <div className="text-sm font-medium text-amber-200">
+                      {champ.name}
+                    </div>
+                  </div>
+                );
+              })()}
             <div className="space-y-2">
               {hasToggle && doToggle && (
                 <button
