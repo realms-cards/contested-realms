@@ -19,6 +19,7 @@ import MatchEndOverlay from "@/components/game/MatchEndOverlay";
 import MatchInfoPopup from "@/components/game/MatchInfoPopup";
 import OnlineConsole from "@/components/game/OnlineConsole";
 import OnlineD20Screen from "@/components/game/OnlineD20Screen";
+import HarbingerPortalScreen from "@/components/game/HarbingerPortalScreen";
 import OnlineDeckSelector from "@/components/game/OnlineDeckSelector";
 import OnlineDraftDeckLoader from "@/components/game/OnlineDraftDeckLoader";
 import OnlineLifeCounters from "@/components/game/OnlineLifeCounters";
@@ -48,6 +49,10 @@ import {
 import { useCardHover } from "@/lib/game/hooks/useCardHover";
 import { Physics } from "@/lib/game/physics";
 import { useGameStore, type PlayerKey } from "@/lib/game/store";
+import {
+  detectHarbingerSeats,
+  hasAnyHarbinger,
+} from "@/lib/game/avatarAbilities";
 import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
 import { LegacySeatVideo3D } from "@/lib/rtc/SeatVideo3D";
 import {
@@ -499,6 +504,59 @@ export default function OnlineMatchPage() {
     !storeMatchEnded;
   const [prepared, setPrepared] = useState<boolean>(false);
   const [d20RollingComplete, setD20RollingComplete] = useState<boolean>(false);
+  const [portalSetupComplete, setPortalSetupComplete] =
+    useState<boolean>(false);
+
+  // Portal state from game store
+  const portalState = useGameStore((s) => s.portalState);
+  const initPortalState = useGameStore((s) => s.initPortalState);
+  const avatars = useGameStore((s) => s.avatars);
+
+  // Detect if Harbinger portal phase is needed
+  const needsPortalPhase = useMemo(() => {
+    // Only check after D20 rolling is complete
+    if (!d20RollingComplete) return false;
+    // If portal setup already done, skip
+    if (portalSetupComplete) return false;
+    // If portal state already exists and is complete, skip
+    if (portalState?.setupComplete) return false;
+    // Check if any player has Harbinger avatar
+    return hasAnyHarbinger(avatars);
+  }, [
+    d20RollingComplete,
+    portalSetupComplete,
+    portalState?.setupComplete,
+    avatars,
+  ]);
+
+  // Initialize portal state when D20 rolling completes and Harbinger is detected
+  useEffect(() => {
+    if (!d20RollingComplete) return;
+    if (portalSetupComplete) return;
+    if (portalState) return; // Already initialized
+
+    const harbingerSeats = detectHarbingerSeats(avatars);
+    if (harbingerSeats.length > 0) {
+      console.log("[Portal] Detected Harbinger avatars:", harbingerSeats);
+      initPortalState(harbingerSeats);
+    } else {
+      // No Harbinger, mark portal phase as complete
+      setPortalSetupComplete(true);
+    }
+  }, [
+    d20RollingComplete,
+    portalSetupComplete,
+    portalState,
+    avatars,
+    initPortalState,
+  ]);
+
+  // Watch for portal setup completion
+  useEffect(() => {
+    if (portalState?.setupComplete && !portalSetupComplete) {
+      setPortalSetupComplete(true);
+    }
+  }, [portalState?.setupComplete, portalSetupComplete]);
 
   // Track sealed submission flag for this match (used to decide when to load decks)
   const hasSubmittedSealedDeck = useMemo(() => {
@@ -2180,6 +2238,12 @@ export default function OnlineMatchPage() {
               myPlayerKey={myPlayerKey}
               playerNames={playerNames}
               onRollingComplete={() => setD20RollingComplete(true)}
+            />
+          ) : needsPortalPhase ? (
+            <HarbingerPortalScreen
+              myPlayerKey={myPlayerKey}
+              playerNames={playerNames}
+              onSetupComplete={() => setPortalSetupComplete(true)}
             />
           ) : (
             <OnlineMulliganScreen

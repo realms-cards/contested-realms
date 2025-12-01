@@ -14,6 +14,10 @@ interface D20DiceProps {
   isRolling: boolean;
   onRollComplete?: () => void;
   onRoll?: () => void;
+  /** Custom dice color override (default: player-based blue/red) */
+  customColor?: string;
+  /** Whether this die is highlighted as a duplicate needing reroll */
+  isDuplicate?: boolean;
 }
 
 export default function D20Dice({
@@ -24,6 +28,8 @@ export default function D20Dice({
   onRollComplete,
   onRoll,
   playerName,
+  customColor,
+  isDuplicate = false,
 }: D20DiceProps) {
   const meshRef = useRef<THREE.Mesh>(null);
   const [rollStartTime, setRollStartTime] = useState<number>(0);
@@ -60,9 +66,12 @@ export default function D20Dice({
     }
   });
 
-  // Color based on player
-  const diceColor = player === "p1" ? "#3b82f6" : "#ef4444"; // blue or red
+  // Color based on player or custom override
+  const defaultColor = player === "p1" ? "#3b82f6" : "#ef4444"; // blue or red
+  const diceColor = customColor ?? defaultColor;
   const textColor = "#ffffff";
+  // Highlight duplicate dice with pulsing yellow outline
+  const duplicateHighlight = isDuplicate ? "#fbbf24" : undefined;
 
   return (
     <group position={position}>
@@ -88,9 +97,15 @@ export default function D20Dice({
         <meshStandardMaterial
           color={diceColor}
           emissive={
-            !isRolling && roll === null && onRoll ? diceColor : "#000000"
+            isDuplicate
+              ? duplicateHighlight
+              : !isRolling && roll === null && onRoll
+              ? diceColor
+              : "#000000"
           }
-          emissiveIntensity={!isRolling && roll === null && onRoll ? 0.1 : 0}
+          emissiveIntensity={
+            isDuplicate ? 0.4 : !isRolling && roll === null && onRoll ? 0.1 : 0
+          }
         />
       </mesh>
 

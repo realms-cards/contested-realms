@@ -1,41 +1,56 @@
 "use client";
 
 import { useRef, useState, useEffect } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import type { CollectionCardResponse } from "@/lib/collection/types";
 import CollectionCard from "./CollectionCard";
-import VirtualizedCollectionGrid from "./VirtualizedCollectionGrid";
 
-// Threshold for enabling virtualization (improves performance with large collections)
-const VIRTUALIZATION_THRESHOLD = 50;
-
-interface CollectionGridProps {
+interface VirtualizedCollectionGridProps {
   cards: CollectionCardResponse[];
   loading?: boolean;
   onQuantityChange?: () => void;
 }
 
-export default function CollectionGrid({
+/**
+ * Virtualized collection grid that only renders visible cards
+ * Improves performance with large collections (100+ cards)
+ *
+ * Performance benefits:
+ * - Only renders ~20-30 cards at once (visible viewport)
+ * - Reduces DOM nodes from 500+ to ~30
+ * - Smooth scrolling with 60fps maintained
+ * - Memory efficient - only active elements in memory
+ */
+export default function VirtualizedCollectionGrid({
   cards,
   loading,
   onQuantityChange,
-}: CollectionGridProps) {
-  // Use virtualization for large collections (50+ cards) to maintain 60fps
-  if (!loading && cards.length >= VIRTUALIZATION_THRESHOLD) {
-    return (
-      <VirtualizedCollectionGrid
-        cards={cards}
-        loading={loading}
-        onQuantityChange={onQuantityChange}
-      />
-    );
-  }
-
-  // Standard grid for smaller collections (< 50 cards)
+}: VirtualizedCollectionGridProps) {
   // Local optimistic state for quantities
   const [localQuantities, setLocalQuantities] = useState<Map<number, number>>(
     new Map()
   );
   const refreshDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const parentRef = useRef<HTMLDivElement>(null);
+
+  // Responsive column count based on screen size
+  const [columns, setColumns] = useState(6);
+
+  // Update column count on resize
+  useEffect(() => {
+    const updateColumns = () => {
+      const width = window.innerWidth;
+      if (width < 640) setColumns(2); // sm
+      else if (width < 768) setColumns(3); // md
+      else if (width < 1024) setColumns(4); // lg
+      else if (width < 1280) setColumns(5); // xl
+      else setColumns(6); // 2xl+
+    };
+
+    updateColumns();
+    window.addEventListener('resize', updateColumns);
+    return () => window.removeEventListener('resize', updateColumns);
+  }, []);
 
   // Clear local quantities when cards prop changes (after refresh)
   useEffect(() => {
@@ -145,16 +160,57 @@ export default function CollectionGrid({
       return card;
     });
 
+  // Calculate rows (each row contains `columns` cards)
+  const rowCount = Math.ceil(visibleCards.length / columns);
+
+  // Virtualizer for rows
+  const rowVirtualizer = useVirtualizer({
+    count: rowCount,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 280, // Approximate row height (card height + gap)
+    overscan: 2, // Render 2 extra rows above/below viewport for smooth scrolling
+  });
+
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-      {visibleCards.map((card) => (
-        <CollectionCard
-          key={card.id}
-          card={card}
-          onQuantityChange={(qty) => handleQuantityUpdate(card.id, qty)}
-          onDelete={() => handleDelete(card.id)}
-        />
-      ))}
+    <div
+      ref={parentRef}
+      className="h-[calc(100vh-16rem)] overflow-auto"
+      style={{ contain: 'strict' }} // Optimize rendering performance
+    >
+      <div
+        style={{
+          height: `${rowVirtualizer.getTotalSize()}px`,
+          width: '100%',
+          position: 'relative',
+        }}
+      >
+        {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+          const startIndex = virtualRow.index * columns;
+          const endIndex = Math.min(startIndex + columns, visibleCards.length);
+          const rowCards = visibleCards.slice(startIndex, endIndex);
+
+          return (
+            <div
+              key={virtualRow.index}
+              className="absolute top-0 left-0 w-full"
+              style={{
+                transform: `translateY(${virtualRow.start}px)`,
+              }}
+            >
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 px-1">
+                {rowCards.map((card) => (
+                  <CollectionCard
+                    key={card.id}
+                    card={card}
+                    onQuantityChange={(qty) => handleQuantityUpdate(card.id, qty)}
+                    onDelete={() => handleDelete(card.id)}
+                  />
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

@@ -335,6 +335,14 @@ export const createNetworkSlice: StateCreator<
           : mergeEvents(state.events, Array.isArray(p.events) ? p.events : []);
         next.eventSeq = Math.max(state.eventSeq, Number(p.eventSeq) || 0);
       }
+      // Harbinger portal state (Gothic expansion)
+      if (p.portalState !== undefined) {
+        next.portalState = replaceKeys.has("portalState")
+          ? p.portalState
+          : p.portalState; // Portal state is always replaced, not merged
+      } else if (replaceKeys.has("portalState")) {
+        next.portalState = null;
+      }
 
       try {
         const candidatePhase = (p.phase as GameState["phase"]) ?? state.phase;
