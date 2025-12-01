@@ -31,7 +31,7 @@ export const prisma =
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
 
 // Connection pool metrics for monitoring
-let connectionMetrics = {
+const connectionMetrics = {
   totalConnections: 0,
   activeConnections: 0,
   idleConnections: 0,

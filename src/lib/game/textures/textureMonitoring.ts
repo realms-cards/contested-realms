@@ -128,7 +128,7 @@ export function getTextureCacheStats(): TextureCacheStats {
   const topTextures = allTextures
     .sort((a, b) => b.refs - a.refs)
     .slice(0, 10)
-    .map(({ url, refs, lastUsed, memory }) => ({
+    .map(({ url, refs, lastUsed }) => ({
       url: url.length > 50 ? '...' + url.slice(-47) : url,
       refs,
       lastUsed,
@@ -233,6 +233,10 @@ export function forceClearUnreferencedTextures(): number {
  *
  * @example
  * ```typescript
+ * 'use client';
+ *
+ * import { useTextureCacheStats } from '@/lib/game/textures/textureMonitoring';
+ *
  * function TextureDebugPanel() {
  *   const stats = useTextureCacheStats(1000);
  *
@@ -245,24 +249,19 @@ export function forceClearUnreferencedTextures(): number {
  *   );
  * }
  * ```
+ *
+ * Note: This is a client-side only hook. Import from a 'use client' component.
  */
 export function useTextureCacheStats(updateInterval = 1000): TextureCacheStats {
-  if (typeof window === 'undefined') {
-    return {
-      totalTextures: 0,
-      activeTextures: 0,
-      cachedTextures: 0,
-      estimatedMemoryMB: 0,
-      pendingLoads: 0,
-      byType: { ktx2: 0, raster: 0, unknown: 0 },
-      topTextures: [],
-    };
-  }
+  // This function must be imported and used in client components only
+  // SSR will return empty stats
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { useState, useEffect } = require('react');
 
-  const [stats, setStats] = (
+  const [stats, setStats] = useState<TextureCacheStats>(() =>
     typeof window !== 'undefined'
-      ? require('react').useState<TextureCacheStats>(() => getTextureCacheStats())
-      : [{
+      ? getTextureCacheStats()
+      : {
           totalTextures: 0,
           activeTextures: 0,
           cachedTextures: 0,
@@ -270,19 +269,18 @@ export function useTextureCacheStats(updateInterval = 1000): TextureCacheStats {
           pendingLoads: 0,
           byType: { ktx2: 0, raster: 0, unknown: 0 },
           topTextures: [],
-        }, () => {}]
-  ) as [TextureCacheStats, (stats: TextureCacheStats) => void];
+        }
+  );
 
-  if (typeof window !== 'undefined') {
-    const { useEffect } = require('react');
-    useEffect(() => {
-      const interval = setInterval(() => {
-        setStats(getTextureCacheStats());
-      }, updateInterval);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
 
-      return () => clearInterval(interval);
-    }, [updateInterval]);
-  }
+    const interval = setInterval(() => {
+      setStats(getTextureCacheStats());
+    }, updateInterval);
+
+    return () => clearInterval(interval);
+  }, [updateInterval, setStats]);
 
   return stats;
 }
