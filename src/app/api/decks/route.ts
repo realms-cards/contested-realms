@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { getServerAuthSession } from "@/lib/auth";
+import { logPerformance } from "@/lib/monitoring/performance";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +23,7 @@ const AVATAR_CACHE_TTL = 60 * 1000; // 1 minute
 //   publicDecks: [{ id, name, format, imported, isPublic, updatedAt, userName, avatarState, avatarCard }]
 // }
 export async function GET() {
+  const startTime = performance.now();
   const session = await getServerAuthSession();
   if (!session?.user) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
@@ -202,11 +204,13 @@ export async function GET() {
       })),
     };
 
+    logPerformance('GET /api/decks', performance.now() - startTime);
     return new Response(JSON.stringify(response), {
       status: 200,
       headers: { "content-type": "application/json" },
     });
   } catch (e: unknown) {
+    logPerformance('GET /api/decks', performance.now() - startTime);
     const message =
       e instanceof Error
         ? e.message
@@ -223,6 +227,7 @@ export async function GET() {
 // - For backward compatibility, a top-level 'set' may be provided; if present, it will be used as the default set for cards that do not specify a variantId.
 // - If a card has a variantId, its set will be inferred from that variant, overriding the top-level 'set' for that card.
 export async function POST(req: NextRequest) {
+  const startTime = performance.now();
   const session = await getServerAuthSession();
   if (!session?.user) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
@@ -423,11 +428,13 @@ export async function POST(req: NextRequest) {
       return { id: deck.id, name: deck.name, format: deck.format };
     });
 
+    logPerformance('POST /api/decks', performance.now() - startTime);
     return new Response(JSON.stringify(result), {
       status: 201,
       headers: { "content-type": "application/json" },
     });
   } catch (e: unknown) {
+    logPerformance('POST /api/decks', performance.now() - startTime);
     const message =
       e instanceof Error
         ? e.message

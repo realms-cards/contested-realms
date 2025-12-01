@@ -1,6 +1,8 @@
 import { InvitationStatus, TournamentFormat, TournamentStatus } from '@prisma/client';
 import { NextRequest } from 'next/server';
 import { getServerAuthSession } from '@/lib/auth';
+import { withCache, CacheKeys, invalidateCache } from '@/lib/cache/redis-cache';
+import { logPerformance } from '@/lib/monitoring/performance';
 import { prisma } from '@/lib/prisma';
 import { tournamentSocketService } from '@/lib/services/tournament-broadcast';
 
@@ -9,6 +11,7 @@ export const dynamic = 'force-dynamic';
 // GET /api/tournaments
 // Returns all active tournaments
 export async function GET(req: NextRequest) {
+  const startTime = performance.now();
   const session = await getServerAuthSession();
   if (!session?.user) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
@@ -40,49 +43,70 @@ export async function GET(req: NextRequest) {
 
     console.log('Fetching tournaments...', { statuses: statuses ?? 'ALL', limit, offset });
 
-    // Build where clause - filter out private tournaments unless user is creator or has invitation
-    const where = {
-      ...(statuses ? { status: { in: statuses } } : {}),
-      ...(q ? { name: { contains: q, mode: 'insensitive' as const } } : {}),
-      // Show public tournaments + private tournaments where user is creator or invited
-      OR: [
-        { isPrivate: false },
-        { creatorId: session.user.id },
-        {
-          invitations: {
-            some: {
-              inviteeId: session.user.id,
-              status: { in: ['pending' as InvitationStatus, 'accepted' as InvitationStatus] }
-            }
-          }
-        },
-        {
-          registrations: {
-            some: {
-              playerId: session.user.id
-            }
-          }
-        }
-      ]
-    };
-    const tournaments = await prisma.tournament.findMany({
-      where,
-      include: {
-        registrations: {
-          include: {
-            player: {
-              select: { id: true, name: true }
-            }
-          }
-        },
-        standings: true,
-        // Note: Removed rounds/matches include for performance - they're not used in the list view
-        // Individual tournament pages load rounds separately when needed
-      },
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-      skip: offset,
+    // Store userId for use in cache and queries
+    const userId = session.user.id;
+
+    // Generate cache key based on query parameters and user
+    const cacheKey = CacheKeys.tournaments.list({
+      userId,
+      status: statusParam,
+      q,
+      includeCompleted,
+      limit,
+      offset,
     });
+
+    // Wrap database query with Redis cache (10 second TTL for high-traffic route)
+    const tournaments = await withCache(
+      cacheKey,
+      async () => {
+        // Build where clause - filter out private tournaments unless user is creator or has invitation
+        const where = {
+          ...(statuses ? { status: { in: statuses } } : {}),
+          ...(q ? { name: { contains: q, mode: 'insensitive' as const } } : {}),
+          // Show public tournaments + private tournaments where user is creator or invited
+          OR: [
+            { isPrivate: false },
+            { creatorId: userId },
+            {
+              invitations: {
+                some: {
+                  inviteeId: userId,
+                  status: { in: ['pending' as InvitationStatus, 'accepted' as InvitationStatus] }
+                }
+              }
+            },
+            {
+              registrations: {
+                some: {
+                  playerId: userId
+                }
+              }
+            }
+          ]
+        };
+
+        return await prisma.tournament.findMany({
+          where,
+          include: {
+            registrations: {
+              include: {
+                player: {
+                  select: { id: true, name: true }
+                }
+              }
+            },
+            standings: true,
+            // Note: Removed rounds/matches include for performance - they're not used in the list view
+            // Individual tournament pages load rounds separately when needed
+          },
+          orderBy: { createdAt: 'desc' },
+          take: limit,
+          skip: offset,
+        });
+      },
+      { ttl: 10 } // 10 second cache for frequently changing tournament data
+    );
 
     console.log('Found tournaments:', tournaments.length);
     
@@ -135,6 +159,7 @@ export async function GET(req: NextRequest) {
       completedAt: tournament.completedAt ? tournament.completedAt.getTime() : undefined,
     }));
 
+    logPerformance('GET /api/tournaments', performance.now() - startTime);
     return new Response(JSON.stringify(tournamentInfos), {
       status: 200,
       headers: {
@@ -145,6 +170,7 @@ export async function GET(req: NextRequest) {
     });
   } catch (e: unknown) {
     console.error('Error fetching tournaments:', e);
+    logPerformance('GET /api/tournaments', performance.now() - startTime);
     const message = e instanceof Error ? e.message : typeof e === 'string' ? e : 'Unknown error';
     return new Response(JSON.stringify({ error: message }), { status: 500 });
   }
@@ -153,6 +179,7 @@ export async function GET(req: NextRequest) {
 // POST /api/tournaments
 // Body: { name: string, format: 'swiss' | 'elimination' | 'round_robin', matchType: 'constructed' | 'sealed' | 'draft', maxPlayers: number, isPrivate?: boolean, sealedConfig?: any, draftConfig?: any }
 export async function POST(req: NextRequest) {
+  const startTime = performance.now();
   const session = await getServerAuthSession();
   if (!session?.user) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
@@ -334,6 +361,9 @@ export async function POST(req: NextRequest) {
       // Don't fail tournament creation if auto-registration fails
     }
 
+    // Invalidate tournament list caches (new tournament was created)
+    await invalidateCache(CacheKeys.tournaments.invalidateAll());
+
     // Broadcast new tournament so lobby/tournaments lists auto-update
     try {
       await tournamentSocketService.broadcastTournamentUpdateById(tournament.id);
@@ -341,6 +371,7 @@ export async function POST(req: NextRequest) {
       console.warn('Failed to broadcast tournament creation:', socketErr);
     }
 
+    logPerformance('POST /api/tournaments', performance.now() - startTime);
     return new Response(JSON.stringify({
       id: tournament.id,
       name: tournament.name,
@@ -356,6 +387,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (e: unknown) {
     console.error('Error creating tournament:', e);
+    logPerformance('POST /api/tournaments', performance.now() - startTime);
     const message = e instanceof Error ? e.message : typeof e === 'string' ? e : 'Unknown error';
     return new Response(JSON.stringify({ error: message }), { status: 500 });
   }

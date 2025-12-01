@@ -272,7 +272,7 @@ export function AvatarCard({
   });
 
   function handleMagicClick(e: ThreeEvent<PointerEvent>): boolean {
-    if (!pendingMagic) return false;
+    if (!pendingMagic || pendingMagic.guidesSuppressed) return false;
     const ownerSeat = seatFromOwner(pendingMagic.spell.owner);
     const amActor = actorKey === ownerSeat;
     const actorIsActive =

@@ -1733,6 +1733,16 @@ export default function TournamentDetailsPage() {
                                     Select
                                   </button>
                                 )}
+                                <Link
+                                  href={`/decks/editor-3d?id=${encodeURIComponent(
+                                    d.id
+                                  )}&tournament=${encodeURIComponent(
+                                    tournament.id
+                                  )}`}
+                                  className="text-xs text-emerald-200 underline"
+                                >
+                                  Edit
+                                </Link>
                               </div>
                             </div>
                           ))}
@@ -1777,6 +1787,16 @@ export default function TournamentDetailsPage() {
                                       Select
                                     </button>
                                   )}
+                                  <Link
+                                    href={`/decks/editor-3d?id=${encodeURIComponent(
+                                      d.id
+                                    )}&tournament=${encodeURIComponent(
+                                      tournament.id
+                                    )}`}
+                                    className="text-xs text-emerald-200 underline"
+                                  >
+                                    Edit
+                                  </Link>
                                 </div>
                               </div>
                             ))}
@@ -1785,9 +1805,22 @@ export default function TournamentDetailsPage() {
                       )}
                   </div>
                 ) : (
-                  <div className="text-emerald-200/80 text-sm">
-                    No decks found. Create a constructed deck in the Decks
-                    section first.
+                  <div className="text-emerald-200/80 text-sm space-y-2">
+                    <div>
+                      No valid decks found. Constructed decks must have:
+                    </div>
+                    <ul className="list-disc list-inside text-xs opacity-80">
+                      <li>Exactly 1 Avatar</li>
+                      <li>At least 60 cards in Spellbook</li>
+                      <li>At least 30 sites in Atlas</li>
+                      <li>0-10 cards in Collection</li>
+                      <li>Dragonlord decks require a champion</li>
+                    </ul>
+                    <div>
+                      <Link href="/decks" className="underline">
+                        Edit your decks
+                      </Link>
+                    </div>
                   </div>
                 )}
               </div>
@@ -2643,12 +2676,22 @@ export default function TournamentDetailsPage() {
                       )}
                   </div>
                 ) : (
-                  <div className="text-emerald-200/80 text-sm">
-                    No decks found. Create a constructed deck in the{" "}
-                    <a className="underline" href="/decks">
-                      Decks
-                    </a>{" "}
-                    section first.
+                  <div className="text-emerald-200/80 text-sm space-y-2">
+                    <div>
+                      No valid decks found. Constructed decks must have:
+                    </div>
+                    <ul className="list-disc list-inside text-xs opacity-80">
+                      <li>Exactly 1 Avatar</li>
+                      <li>At least 60 cards in Spellbook</li>
+                      <li>At least 30 sites in Atlas</li>
+                      <li>0-10 cards in Collection</li>
+                      <li>Dragonlord decks require a champion</li>
+                    </ul>
+                    <div>
+                      <a className="underline" href="/decks">
+                        Edit your decks
+                      </a>
+                    </div>
                   </div>
                 )}
               </div>
