@@ -5,9 +5,11 @@ import type { CardMeta, Pick3D } from "@/lib/game/cardSorting";
 
 export default function useCardMeta(
   yourCounts: Array<{ cardId: number }>,
-  pick3D: Pick3D[],
+  pick3D: Pick3D[]
 ) {
-  const [metaByCardId, setMetaByCardId] = useState<Record<number, CardMeta>>({});
+  const [metaByCardId, setMetaByCardId] = useState<Record<number, CardMeta>>(
+    {}
+  );
 
   useEffect(() => {
     const ids = new Set<number>();
@@ -28,13 +30,16 @@ export default function useCardMeta(
     let cancelled = false;
     Promise.all(
       chunks.map(async (chunk) => {
-        const res = await fetch(`/api/cards/meta?ids=${chunk.join(",")}`, { cache: "no-store" });
+        const res = await fetch(`/api/cards/meta?ids=${chunk.join(",")}`, {
+          cache: "no-store",
+        });
         const rows = (await res.json()) as Array<{
           cardId: number;
           cost: number | null;
           thresholds: Record<string, number> | null;
           attack: number | null;
           defence: number | null;
+          type: string | null;
         }>;
         return rows;
       })
@@ -49,6 +54,7 @@ export default function useCardMeta(
               thresholds: m.thresholds,
               attack: m.attack,
               defence: m.defence,
+              type: m.type,
             };
           }
         }

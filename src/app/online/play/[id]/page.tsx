@@ -2188,6 +2188,18 @@ export default function OnlineMatchPage() {
               onStartGame={finishSetup}
             />
           )}
+          {/* Card preview for setup screens (deck selector, D20, mulligan) */}
+          {previewCard?.slug && (
+            <CardPreview
+              card={{
+                slug: previewCard.slug ?? "",
+                name: previewCard.name,
+                type: previewCard.type ?? null,
+              }}
+              anchor="top-right"
+              zIndexClass="z-[110]"
+            />
+          )}
         </div>
       )}
 
@@ -2262,13 +2274,27 @@ export default function OnlineMatchPage() {
 
           {/* Context Menu */}
           {contextMenu && (
-            <ContextMenu
-              onClose={() => {
-                clearSelection();
-                setPreviewCard(null);
-                closeContextMenu();
-              }}
-            />
+            <>
+              <ContextMenu
+                onClose={() => {
+                  clearSelection();
+                  setPreviewCard(null);
+                  closeContextMenu();
+                }}
+              />
+              {/* Card preview for context menu hover (champion, etc.) */}
+              {previewCard?.slug && (
+                <CardPreview
+                  card={{
+                    slug: previewCard.slug ?? "",
+                    name: previewCard.name,
+                    type: previewCard.type ?? null,
+                  }}
+                  anchor="top-right"
+                  zIndexClass="z-[110]"
+                />
+              )}
+            </>
           )}
 
           {/* Global dialogs */}

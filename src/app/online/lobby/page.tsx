@@ -333,6 +333,7 @@ function LobbyPageContent({
     packCounts: { Beta: 6, "Arthurian Legends": 0 } as Record<string, number>,
     timeLimit: 40, // minutes
     replaceAvatars: false,
+    allowDragonlordChampion: true,
   });
   const [draftConfig, setDraftConfig] = useState<{
     setMix: string[];
@@ -342,6 +343,7 @@ function LobbyPageContent({
     cubeId: string | null;
     cubeName: string | null;
     includeCubeSideboardInStandard?: boolean;
+    allowDragonlordChampion?: boolean;
   }>(() => ({
     // Available sets restricted for now
     setMix: ["Beta"],
@@ -351,6 +353,7 @@ function LobbyPageContent({
     cubeId: null,
     cubeName: null,
     includeCubeSideboardInStandard: false,
+    allowDragonlordChampion: true,
   }));
   const [draftUseCube, setDraftUseCube] = useState(false);
   const [availableCubes, setAvailableCubes] = useState<CubeOption[]>([]);
@@ -757,6 +760,7 @@ function LobbyPageContent({
       timeLimit: sealedConfig.timeLimit,
       packCounts: sealedConfig.packCounts,
       replaceAvatars: sealedConfig.replaceAvatars,
+      allowDragonlordChampion: sealedConfig.allowDragonlordChampion,
     };
     startMatch({ matchType: "sealed", sealedConfig: legacySealedConfig });
   }, [
@@ -1629,6 +1633,20 @@ function LobbyPageContent({
                       />
                       <span>Replace Sorcerer with Beta avatars</span>
                     </label>
+                    <label className="flex items-center gap-2 text-sm mt-2">
+                      <input
+                        type="checkbox"
+                        checked={sealedConfig.allowDragonlordChampion}
+                        onChange={(e) =>
+                          setSealedConfig((prev) => ({
+                            ...prev,
+                            allowDragonlordChampion: e.target.checked,
+                          }))
+                        }
+                        className="rounded"
+                      />
+                      <span>Allow Dragonlord Champion selection</span>
+                    </label>
                   </>
                 )}
               </div>
@@ -1717,6 +1735,8 @@ function LobbyPageContent({
                         timeLimit: sealedConfig.timeLimit,
                         packCounts: sealedConfig.packCounts,
                         replaceAvatars: sealedConfig.replaceAvatars,
+                        allowDragonlordChampion:
+                          sealedConfig.allowDragonlordChampion,
                       };
                       startMatch({
                         matchType: "sealed",

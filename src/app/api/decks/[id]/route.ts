@@ -43,6 +43,21 @@ export async function GET(
         isPublic: true,
         imported: true,
         userId: true,
+        championCardId: true,
+        champion: {
+          select: {
+            id: true,
+            name: true,
+            variants: {
+              select: { slug: true, typeText: true },
+              take: 1,
+            },
+            meta: {
+              select: { rulesText: true, thresholds: true },
+              take: 1,
+            },
+          },
+        },
         cards: {
           include: {
             card: true,
@@ -122,6 +137,18 @@ export async function GET(
       else pushMany(sideboard, dc.count, ref);
     }
 
+    // Build champion info if present
+    const champion = deck.champion
+      ? {
+          cardId: deck.champion.id,
+          name: deck.champion.name,
+          slug: deck.champion.variants?.[0]?.slug ?? null,
+          typeText: deck.champion.variants?.[0]?.typeText ?? null,
+          rulesText: deck.champion.meta?.[0]?.rulesText ?? null,
+          thresholds: deck.champion.meta?.[0]?.thresholds ?? null,
+        }
+      : null;
+
     return new Response(
       JSON.stringify({
         id: deck.id,
@@ -131,6 +158,8 @@ export async function GET(
         imported: deck.imported,
         isOwner: deck.userId === session.user.id,
         userName: deck.user?.name || "Unknown Player",
+        championCardId: deck.championCardId,
+        champion,
         spellbook,
         atlas,
         collection,
@@ -216,8 +245,21 @@ export async function PUT(
       body?.isPublic !== undefined ? Boolean(body.isPublic) : undefined;
     const setName = body?.set ? String(body.set) : undefined;
     const cards = Array.isArray(body?.cards) ? body.cards : [];
+    // Dragonlord champion support: null to clear, number to set, undefined to leave unchanged
+    const championCardId =
+      body?.championCardId === null
+        ? null
+        : body?.championCardId !== undefined
+        ? Number(body.championCardId)
+        : undefined;
 
-    if (!cards.length && !name && !format && isPublic === undefined) {
+    if (
+      !cards.length &&
+      !name &&
+      !format &&
+      isPublic === undefined &&
+      championCardId === undefined
+    ) {
       return new Response(JSON.stringify({ error: "Nothing to update" }), {
         status: 400,
       });
@@ -426,14 +468,20 @@ export async function PUT(
       }
     }
 
-    // Update name/format/isPublic last so validation can block an invalid constructed deck
-    if (name || format || isPublic !== undefined) {
+    // Update name/format/isPublic/championCardId last so validation can block an invalid constructed deck
+    if (
+      name ||
+      format ||
+      isPublic !== undefined ||
+      championCardId !== undefined
+    ) {
       await prisma.deck.update({
         where: { id },
         data: {
           name: name ?? undefined,
           format: format ?? undefined,
           isPublic: isPublic ?? undefined,
+          championCardId,
         },
       });
     }

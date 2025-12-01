@@ -55,6 +55,14 @@ type BottomBarProps = {
   liveSearchLoading?: boolean;
   // Callback for adding cards from live search (reuse addCardAuto from props)
   onAddFromLiveSearch?: (r: SearchResult) => void;
+  // Dragonlord champion props
+  hasDragonlordAvatar?: boolean;
+  champion?: {
+    cardId: number;
+    name: string;
+    slug: string | null;
+  } | null;
+  onOpenChampionModal?: () => void;
 };
 
 export default function BottomBar(props: BottomBarProps) {
@@ -101,6 +109,10 @@ export default function BottomBar(props: BottomBarProps) {
     liveSearchResults = [],
     liveSearchLoading = false,
     onAddFromLiveSearch,
+    // Dragonlord champion props
+    hasDragonlordAvatar = false,
+    champion = null,
+    onOpenChampionModal,
   } = props;
 
   const standardActive =
@@ -464,6 +476,34 @@ export default function BottomBar(props: BottomBarProps) {
                             title="Show cube extras from this cube"
                           >
                             Cube Extras
+                          </button>
+                        )}
+                        {/* Dragonlord Champion button */}
+                        {hasDragonlordAvatar && onOpenChampionModal && (
+                          <button
+                            onClick={onOpenChampionModal}
+                            className={`h-10 px-4 rounded font-medium transition-colors flex items-center gap-2 ${
+                              champion
+                                ? "bg-amber-600 text-white hover:bg-amber-500"
+                                : "bg-amber-700 text-white hover:bg-amber-600 animate-pulse"
+                            }`}
+                            title={
+                              champion
+                                ? `Champion: ${champion.name} (click to change)`
+                                : "Select your Dragonlord champion"
+                            }
+                          >
+                            {champion ? (
+                              <>
+                                <span className="text-amber-200">⚔️</span>
+                                {champion.name}
+                              </>
+                            ) : (
+                              <>
+                                <span>🐉</span>
+                                Select Champion
+                              </>
+                            )}
                           </button>
                         )}
                       </div>

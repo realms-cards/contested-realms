@@ -54,6 +54,7 @@ model Card {
   cubeCards  CubeCard[]
   evaluation CardEvaluation?
   collectionCards CollectionCard[]
+  championedByDecks Deck[] @relation("DeckChampion")
 
   @@index([name])
 }
@@ -123,17 +124,20 @@ model PackConfig {
 
 // Decks for users
 model Deck {
-  id        String   @id @default(cuid())
-  name      String
-  format    String   @default("Constructed")
-  isPublic  Boolean  @default(false)
-  imported  Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  userId    String
+  id             String   @id @default(cuid())
+  name           String
+  format         String   @default("Constructed")
+  isPublic       Boolean  @default(false)
+  imported       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  userId         String
+  // Dragonlord champion: when Dragonlord is the avatar, this stores the chosen Unique Dragon's cardId
+  championCardId Int?
 
-  user  User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  cards DeckCard[]
+  user     User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cards    DeckCard[]
+  champion Card?      @relation("DeckChampion", fields: [championCardId], references: [id])
 
   @@index([userId])
   @@index([isPublic, createdAt])

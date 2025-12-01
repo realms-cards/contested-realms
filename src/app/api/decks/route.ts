@@ -248,6 +248,9 @@ export async function POST(req: NextRequest) {
     const isPublic = Boolean(body?.isPublic || false);
     const setName = body?.set ? String(body.set) : undefined;
     const cards = Array.isArray(body?.cards) ? body.cards : [];
+    // Dragonlord champion support
+    const championCardId =
+      body?.championCardId != null ? Number(body.championCardId) : null;
 
     if (!name) {
       return new Response(JSON.stringify({ error: "Missing deck name" }), {
@@ -399,7 +402,7 @@ export async function POST(req: NextRequest) {
     // Create deck and all cards in a single transaction to minimize latency
     const result = await prisma.$transaction(async (tx) => {
       const deck = await tx.deck.create({
-        data: { name, format, isPublic, userId },
+        data: { name, format, isPublic, userId, championCardId },
       });
       const createData = Array.from(agg.values()).map(
         ({ cardId, zone, count, variantId }) => ({

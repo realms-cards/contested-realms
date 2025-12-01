@@ -19,7 +19,10 @@ import useCardMeta from "@/app/decks/editor-3d/hooks/useCardMeta";
 import useSealedTimer from "@/app/decks/editor-3d/hooks/useSealedTimer";
 import { useOnline } from "@/app/online/online-context";
 import FloatingChat from "@/components/chat/FloatingChat";
-import { TournamentControls } from "@/components/deck-editor";
+import {
+  TournamentControls,
+  DragonlordChampionModal,
+} from "@/components/deck-editor";
 import CardPreview from "@/components/game/CardPreview";
 import { useCardSearch } from "@/lib/collection/useCardSearch";
 import { SearchResult, SearchType, searchCards } from "@/lib/deckEditor/search";
@@ -57,6 +60,9 @@ const EditorCanvas = dynamic(
 
 // Stable constant for standard site names (tournament legal)
 const STANDARD_SITE_NAMES = ["Spire", "Stream", "Valley", "Wasteland"] as const;
+
+// Known avatar names (for fallback when type info is missing from local search)
+const KNOWN_AVATARS = ["dragonlord", "spellslinger"];
 
 function pickStandardSiteResult(
   results: SearchResult[],
@@ -235,6 +241,7 @@ function AuthenticatedDeckEditor() {
     packCount: number;
     setMix: string[];
     replaceAvatars: boolean;
+    allowDragonlordChampion: boolean;
   } | null>(null);
 
   const [packs, setPacks] = useState<
@@ -311,6 +318,18 @@ function AuthenticatedDeckEditor() {
   const [matchEndedBannerVisible, setMatchEndedBannerVisible] = useState(false);
   const matchBannerPrevMatchIdRef = useRef<string | null>(null);
   const matchBannerPrevStatusRef = useRef<string | null>(null);
+
+  // Dragonlord champion state
+  const [showChampionModal, setShowChampionModal] = useState(false);
+  const [championCardId, setChampionCardId] = useState<number | null>(null);
+  const [champion, setChampion] = useState<{
+    cardId: number;
+    name: string;
+    slug: string | null;
+    rulesText: string | null;
+  } | null>(null);
+  // Track if we've prompted for champion after adding Dragonlord
+  const dragonlordPromptedRef = useRef(false);
 
   // Reliable navigation helper back to the match page
   const goBackToMatch = useCallback(
@@ -808,6 +827,8 @@ function AuthenticatedDeckEditor() {
     const timeLimit = searchParams?.get("timeLimit");
     const constructionStartTime = searchParams?.get("constructionStartTime");
     const replaceAvatars = searchParams?.get("replaceAvatars") === "true";
+    const allowDragonlordChampion =
+      searchParams?.get("allowDragonlordChampion") !== "false";
 
     if (sealed === "true" && (matchId || tournamentId) && !isSealed) {
       console.log("Initializing sealed mode...");
@@ -827,6 +848,7 @@ function AuthenticatedDeckEditor() {
           ? (searchParams?.get("setMix") || "").split(",")
           : ["Beta"],
         replaceAvatars,
+        allowDragonlordChampion,
       };
 
       setSealedConfig(config);
@@ -1849,6 +1871,42 @@ function AuthenticatedDeckEditor() {
     return res;
   }, [pick3D, picks, metaByCardId]);
 
+  // Detect if Dragonlord avatar is in the deck (for champion selection)
+  // Note: Dragonlord is the only card with that name, so we can detect it by name alone
+  // (type check is optional since the local search index doesn't include type info)
+  const hasDragonlordAvatar = useMemo(() => {
+    return pick3D.some(
+      (p) => p.zone === "Deck" && p.card.cardName.toLowerCase() === "dragonlord"
+    );
+  }, [pick3D]);
+
+  // Check if Dragonlord champion selection is allowed
+  const allowDragonlordChampion =
+    isFreeMode || sealedConfig?.allowDragonlordChampion !== false;
+
+  // Prompt for champion when Dragonlord is detected without a champion
+  useEffect(() => {
+    if (
+      hasDragonlordAvatar &&
+      !champion &&
+      !showChampionModal &&
+      !dragonlordPromptedRef.current &&
+      allowDragonlordChampion
+    ) {
+      dragonlordPromptedRef.current = true;
+      setShowChampionModal(true);
+    }
+    // Reset prompt flag when Dragonlord is removed
+    if (!hasDragonlordAvatar) {
+      dragonlordPromptedRef.current = false;
+    }
+  }, [
+    hasDragonlordAvatar,
+    champion,
+    showChampionModal,
+    allowDragonlordChampion,
+  ]);
+
   const { collectionCount, collectionCountsByCardId } = useMemo(() => {
     const counts: Record<number, number> = {};
     let total = 0;
@@ -2277,7 +2335,9 @@ function AuthenticatedDeckEditor() {
         if (isFreeMode && item.zone === "Collection") {
           continue;
         }
-        const t = (item.type || "").toLowerCase();
+        // Use item.type, fall back to metaByCardId type (for cards added via live search)
+        const meta = metaByCardId[item.cardId];
+        const t = (item.type || meta?.type || "").toLowerCase();
         let apiZone: ApiZone;
         if (item.zone === "Collection") {
           apiZone = "Collection";
@@ -2349,6 +2409,8 @@ function AuthenticatedDeckEditor() {
             format: nextFormat,
             set: setName,
             cards,
+            // Include Dragonlord champion if set
+            championCardId: hasDragonlordAvatar ? championCardId : null,
           }),
         });
         const data = await res.json();
@@ -2425,6 +2487,9 @@ function AuthenticatedDeckEditor() {
     searchParams,
     isFreeMode,
     freeValidationMode,
+    championCardId,
+    hasDragonlordAvatar,
+    metaByCardId,
   ]);
 
   // Toggle deck public/private status
@@ -2840,6 +2905,22 @@ function AuthenticatedDeckEditor() {
         if (typeof data?.userName === "string")
           setDeckCreatorName(data.userName);
 
+        // Load Dragonlord champion if set
+        // Reset the prompt flag so we can prompt again for this deck
+        dragonlordPromptedRef.current = false;
+        if (data?.championCardId && data?.champion) {
+          setChampionCardId(data.championCardId);
+          setChampion({
+            cardId: data.champion.cardId,
+            name: data.champion.name,
+            slug: data.champion.slug ?? null,
+            rulesText: data.champion.rulesText ?? null,
+          });
+        } else {
+          setChampionCardId(null);
+          setChampion(null);
+        }
+
         // Build picks from zones (Spellbook/Atlas/Collection/Sideboard)
         const next: Record<PickKey, PickItem> = {};
         const addZone = (zone: Zone, arr: ApiCardRef[] | undefined) => {
@@ -3045,6 +3126,10 @@ function AuthenticatedDeckEditor() {
     setPick3D([]);
     setMetaByCardId({});
     setResults([]);
+    // Reset champion state for new deck
+    setChampionCardId(null);
+    setChampion(null);
+    dragonlordPromptedRef.current = false;
   }, []);
 
   // Add Spellslinger as tournament avatar (just add the prefetched card normally)
@@ -3891,22 +3976,35 @@ function AuthenticatedDeckEditor() {
     for (const pick of pick3D) {
       // Only count cards in deck zone
       if (pick.zone !== "Deck") continue;
-      const t = (pick.card.type || "").toLowerCase();
-      if (t.includes("avatar")) n += 1;
+      const meta = metaByCardId[pick.card.cardId];
+      // Use card type, or fall back to meta type
+      const t = (pick.card.type || meta?.type || "").toLowerCase();
+      const name = (pick.card.cardName || "").toLowerCase();
+      // Check type or fallback to known avatar names
+      if (t.includes("avatar") || (!t && KNOWN_AVATARS.includes(name))) {
+        n += 1;
+      }
     }
     return n;
-  }, [pick3D]);
+  }, [pick3D, metaByCardId]);
 
   const spellbookNonAvatar = useMemo(() => {
     let n = 0;
     for (const pick of pick3D) {
       // Only count non-avatar, non-site cards in deck zone
       if (pick.zone !== "Deck") continue;
-      const t = (pick.card.type || "").toLowerCase();
-      if (!t.includes("avatar") && !t.includes("site")) n += 1;
+      const meta = metaByCardId[pick.card.cardId];
+      // Use card type, or fall back to meta type
+      const t = (pick.card.type || meta?.type || "").toLowerCase();
+      const name = (pick.card.cardName || "").toLowerCase();
+      // Exclude avatars (by type or known name) and sites
+      const isAvatar =
+        t.includes("avatar") || (!t && KNOWN_AVATARS.includes(name));
+      const isSite = t.includes("site");
+      if (!isAvatar && !isSite) n += 1;
     }
     return n;
-  }, [pick3D]);
+  }, [pick3D, metaByCardId]);
 
   // Count sites in deck zone for Atlas validation
   const atlasCount = useMemo(() => {
@@ -3914,11 +4012,12 @@ function AuthenticatedDeckEditor() {
     for (const pick of pick3D) {
       // Only count sites in deck zone
       if (pick.zone !== "Deck") continue;
-      const t = (pick.card.type || "").toLowerCase();
+      const meta = metaByCardId[pick.card.cardId];
+      const t = (pick.card.type || meta?.type || "").toLowerCase();
       if (t.includes("site")) n += 1;
     }
     return n;
-  }, [pick3D]);
+  }, [pick3D, metaByCardId]);
 
   // Determine required minimums based on mode
   const validationMinimums = useMemo(() => {
@@ -5133,6 +5232,10 @@ function AuthenticatedDeckEditor() {
             liveSearchResults={liveSearchResults}
             liveSearchLoading={liveSearchLoading}
             onAddFromLiveSearch={addCardAuto}
+            // Dragonlord champion props
+            hasDragonlordAvatar={hasDragonlordAvatar && allowDragonlordChampion}
+            champion={champion}
+            onOpenChampionModal={() => setShowChampionModal(true)}
           />
         </Suspense>
         {error && (
@@ -5219,6 +5322,23 @@ function AuthenticatedDeckEditor() {
           onAddCubeStandardCard={addToSideboardFromSearch}
         />
       </Suspense>
+
+      {/* Dragonlord Champion Selection Modal */}
+      <DragonlordChampionModal
+        isOpen={showChampionModal}
+        currentChampion={champion}
+        onSelect={(dragon) => {
+          setChampionCardId(dragon.cardId);
+          setChampion({
+            cardId: dragon.cardId,
+            name: dragon.name,
+            slug: dragon.slug,
+            rulesText: dragon.rulesText,
+          });
+          setShowChampionModal(false);
+        }}
+        onClose={() => setShowChampionModal(false)}
+      />
     </div>
   );
 }

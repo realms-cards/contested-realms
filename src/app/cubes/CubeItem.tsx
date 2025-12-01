@@ -114,36 +114,45 @@ export default function CubeItem({ cube }: CubeItemProps) {
             ) : null}
           </div>
         </div>
-        {isOwner ? (
-          <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2">
+          {isOwner ? (
+            <>
+              <Link
+                href={`/cubes/${encodeURIComponent(cube.id)}/edit`}
+                className="rounded bg-blue-600/80 px-3 py-1 text-xs font-medium text-white hover:bg-blue-600 text-center"
+              >
+                Edit
+              </Link>
+              <button
+                type="button"
+                onClick={handleTogglePublic}
+                disabled={updatingPublic}
+                className="rounded bg-slate-800/80 px-3 py-1 text-xs font-medium text-slate-100 hover:bg-slate-700/80 disabled:opacity-50"
+              >
+                {updatingPublic
+                  ? "Updating..."
+                  : isPublicState
+                  ? "Make Private"
+                  : "Make Public"}
+              </button>
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={deleting}
+                className="rounded bg-rose-600/80 px-3 py-1 text-xs font-medium text-white hover:bg-rose-600 disabled:opacity-50"
+              >
+                {deleting ? "Deleting..." : "Delete"}
+              </button>
+            </>
+          ) : (
             <Link
-              href={`/cubes/${encodeURIComponent(cube.id)}/edit`}
-              className="rounded bg-blue-600/80 px-3 py-1 text-xs font-medium text-white hover:bg-blue-600 text-center"
+              href={`/cubes/${encodeURIComponent(cube.id)}`}
+              className="rounded bg-emerald-600/80 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-600 text-center"
             >
-              Edit
+              View
             </Link>
-            <button
-              type="button"
-              onClick={handleTogglePublic}
-              disabled={updatingPublic}
-              className="rounded bg-slate-800/80 px-3 py-1 text-xs font-medium text-slate-100 hover:bg-slate-700/80 disabled:opacity-50"
-            >
-              {updatingPublic
-                ? "Updating..."
-                : isPublicState
-                ? "Make Private"
-                : "Make Public"}
-            </button>
-            <button
-              type="button"
-              onClick={handleDelete}
-              disabled={deleting}
-              className="rounded bg-rose-600/80 px-3 py-1 text-xs font-medium text-white hover:bg-rose-600 disabled:opacity-50"
-            >
-              {deleting ? "Deleting..." : "Delete"}
-            </button>
-          </div>
-        ) : null}
+          )}
+        </div>
       </div>
     </div>
   );

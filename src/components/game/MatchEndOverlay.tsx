@@ -37,7 +37,6 @@ export default function MatchEndOverlay({
 }: MatchEndOverlayProps) {
   if (!isVisible) return null;
 
-  const isDraw = winner === null;
   const winnerName = winner ? playerNames[winner] : null;
   const isSpectator = !myPlayerKey;
   const didIWinSeat = !isSpectator && winner === myPlayerKey;
@@ -45,8 +44,18 @@ export default function MatchEndOverlay({
     typeof winnerId === "string" &&
     typeof myPlayerId === "string" &&
     winnerId === myPlayerId;
-  const didIWin = reason === "forfeit" ? !!didIWinById : didIWinSeat;
   const isForfeit = reason === "forfeit";
+  // Detect if this is an abandonment: someone left and we're the "winner" by ID
+  // but maybe the reason event hasn't arrived yet
+  const isAbandonment =
+    !isForfeit &&
+    typeof winnerId === "string" &&
+    typeof myPlayerId === "string" &&
+    winnerId === myPlayerId;
+  // Use ID-based check for forfeits/abandonments, seat-based for normal gameplay
+  const didIWin = isForfeit || isAbandonment ? !!didIWinById : didIWinSeat;
+  // A draw only occurs when both players died simultaneously (winner is null AND no winnerId)
+  const isDraw = winner === null && !winnerId;
   const isRatedForfeit = isForfeit ? rated !== false : false;
 
   const handleLeaveMatch = () => {
@@ -63,7 +72,7 @@ export default function MatchEndOverlay({
   // Title text
   const titleText = isDraw
     ? "Draw!"
-    : isForfeit
+    : isForfeit || isAbandonment
     ? isSpectator
       ? winnerName
         ? isRatedForfeit
@@ -74,8 +83,8 @@ export default function MatchEndOverlay({
         : "Match ended early"
       : didIWin
       ? isRatedForfeit
-        ? "Opponent left"
-        : "Opponent left early"
+        ? "Opponent forfeited"
+        : "Opponent left"
       : isRatedForfeit
       ? "You left the match"
       : "You left early"
@@ -103,7 +112,11 @@ export default function MatchEndOverlay({
           ) : isSpectator ? (
             <Trophy className="w-16 h-16 text-yellow-400" />
           ) : didIWin ? (
-            <Trophy className="w-16 h-16 text-yellow-400" />
+            isRatedForfeit || (!isForfeit && !isAbandonment) ? (
+              <Trophy className="w-16 h-16 text-yellow-400" />
+            ) : (
+              <Users className="w-16 h-16 text-yellow-400" />
+            )
           ) : (
             <Skull className="w-16 h-16 text-red-400" />
           )}
@@ -116,7 +129,7 @@ export default function MatchEndOverlay({
         <div className="text-lg opacity-90 mb-6">
           {isDraw ? (
             <p>Both players died simultaneously.</p>
-          ) : isForfeit ? (
+          ) : isForfeit || isAbandonment ? (
             isSpectator ? (
               isRatedForfeit ? (
                 <p>Match ended by forfeit.</p>
@@ -135,11 +148,11 @@ export default function MatchEndOverlay({
                 </p>
               ) : (
                 <p>
-                  <span className="font-semibold text-green-400">
+                  <span className="font-semibold text-yellow-400">
                     Your opponent
                   </span>
                   {
-                    " left the match early. This match will not be recorded for global scores."
+                    " left the match. This match will not be recorded for global scores."
                   }
                 </p>
               )
@@ -174,20 +187,26 @@ export default function MatchEndOverlay({
         </div>
 
         {/* Match Summary */}
-        {isForfeit ? (
+        {isForfeit || isAbandonment ? (
           <div className="bg-black/30 rounded-xl p-4 mb-6 text-sm">
             <div className="text-xs opacity-70 mb-2">Final Result</div>
             <div className="space-y-1">
               <div
                 className={`flex justify-between ${
-                  didIWin ? "text-green-400" : "text-red-400"
+                  didIWin
+                    ? isRatedForfeit
+                      ? "text-green-400"
+                      : "text-yellow-400"
+                    : "text-red-400"
                 }`}
               >
                 <span>{didIWin ? "You" : "Opponent"}</span>
                 <span>
                   {isRatedForfeit
-                    ? "Winner (forfeit)"
-                    : "Forfeit (not counted)"}
+                    ? didIWin
+                      ? "Winner (forfeit)"
+                      : "Forfeited"
+                    : "Match abandoned"}
                 </span>
               </div>
             </div>

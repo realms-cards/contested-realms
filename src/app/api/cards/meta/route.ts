@@ -52,6 +52,7 @@ export async function GET(req: NextRequest) {
       thresholds: unknown;
       attack: number | null;
       defence: number | null;
+      type: string | null;
       setId: number;
     }>;
     if (set) {
@@ -63,6 +64,7 @@ export async function GET(req: NextRequest) {
           thresholds: true,
           attack: true,
           defence: true,
+          type: true,
           setId: true,
         },
       });
@@ -76,6 +78,7 @@ export async function GET(req: NextRequest) {
           thresholds: true,
           attack: true,
           defence: true,
+          type: true,
           setId: true,
         },
         orderBy: { setId: "desc" },
@@ -95,6 +98,7 @@ export async function GET(req: NextRequest) {
         (m.thresholds as unknown as Record<string, number> | null) ?? null,
       attack: m.attack ?? null,
       defence: m.defence ?? null,
+      type: m.type ?? null,
     }));
 
     return new Response(JSON.stringify(out), {

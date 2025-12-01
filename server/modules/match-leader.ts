@@ -43,6 +43,8 @@ interface AvatarState {
   pos: [number, number] | null;
   tapped: boolean;
   offset?: unknown;
+  champion?: { cardId: number; name: string; slug: string | null } | null;
+  counters?: number;
 }
 
 interface AvatarsState {

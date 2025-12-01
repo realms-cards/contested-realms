@@ -1067,12 +1067,6 @@ export default function GameToolbox({
                 />
               </Canvas>
             </div>
-            {d20Value !== null && !d20Rolling && (
-              <div className="mt-4 text-center text-sm text-zinc-300">
-                Result:{" "}
-                <span className="font-semibold text-white">{d20Value}</span>
-              </div>
-            )}
           </div>
         </div>
       )}
