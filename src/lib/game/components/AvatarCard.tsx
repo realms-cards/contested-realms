@@ -566,6 +566,7 @@ export function AvatarCard({
             elevation={dragAvatar === seat ? DRAG_LIFT + 0.002 : 0.002}
             polygonOffsetUnits={-1.25}
             polygonOffsetFactor={-0.75}
+            depthWrite={false}
             renderOrder={
               hideAvatar
                 ? -5
