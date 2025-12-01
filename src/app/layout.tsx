@@ -1,4 +1,3 @@
-import { SpeedInsights } from "@vercel/speed-insights/next";
 import type { Metadata, Viewport } from "next";
 // Google fonts disabled for offline/CI builds
 import localFont from "next/font/local";

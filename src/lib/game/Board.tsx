@@ -188,6 +188,7 @@ export default function Board({
   const remoteCursors = useScopedStore((s) => s.remoteCursors);
   const localPlayerId = useScopedStore((s) => s.localPlayerId);
   const avatars = useScopedStore((s) => s.avatars);
+  const portalState = useScopedStore((s) => s.portalState);
   const overlayBlocking = useScopedStore((s) =>
     Boolean(s.peekDialog || s.searchDialog || s.placementDialog)
   );
@@ -844,6 +845,7 @@ export default function Board({
               calculateEdgePosition={calculateEdgePosition}
               attackConfirm={attackConfirm}
               attackTargetChoice={attackTargetChoice}
+              portalState={portalState}
             />
           );
         })}

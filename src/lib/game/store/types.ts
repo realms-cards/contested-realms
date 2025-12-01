@@ -143,6 +143,27 @@ export type AvatarState = EntityBase<CardRef | null> & {
   champion?: ChampionRef | null; // Dragonlord champion dragon
 };
 
+// --- Harbinger Portal State (Gothic expansion) --------------------------------
+export type PortalRollPhase = "pending" | "rolling" | "complete";
+
+export type PortalPlayerState = {
+  rolls: number[]; // Raw D20 results (1-20)
+  tileNumbers: number[]; // Final unique tile numbers (1-20)
+  rollPhase: PortalRollPhase;
+};
+
+export type PortalState = {
+  // Which players have Harbinger avatar (detected by name)
+  harbingerSeats: PlayerKey[];
+  // Per-player portal state
+  p1: PortalPlayerState | null;
+  p2: PortalPlayerState | null;
+  // Current player rolling (for sequential dual-harbinger)
+  currentRoller: PlayerKey | null;
+  // Overall setup complete flag
+  setupComplete: boolean;
+};
+
 export type PermanentItem = EntityBase<CardRef> & {
   owner: 1 | 2;
   tilt?: number;
@@ -634,6 +655,14 @@ export type GameState = {
   incrementAvatarCounter: (who: PlayerKey) => void;
   decrementAvatarCounter: (who: PlayerKey) => void;
   clearAvatarCounter: (who: PlayerKey) => void;
+  // Harbinger Portal State (Gothic expansion)
+  portalState: PortalState | null;
+  initPortalState: (harbingerSeats: PlayerKey[]) => void;
+  setPortalCurrentRoller: (seat: PlayerKey | null) => void;
+  rollPortalDie: (seat: PlayerKey, dieIndex: number) => void;
+  rerollPortalDie: (seat: PlayerKey, dieIndex: number) => void;
+  finalizePortalRolls: (seat: PlayerKey) => void;
+  completePortalSetup: () => void;
   // Mulligans
   mulligans: Record<PlayerKey, number>;
   mulligan: (who: PlayerKey) => void;
@@ -815,5 +844,6 @@ export type ServerPatchT = Partial<{
   playerPositions: GameState["playerPositions"];
   events: GameState["events"];
   eventSeq: GameState["eventSeq"];
+  portalState: GameState["portalState"];
   __replaceKeys: string[];
 }>;
