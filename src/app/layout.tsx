@@ -8,6 +8,7 @@ import GlobalUserBadge from "@/components/auth/GlobalUserBadge";
 import GlobalNetworkLoadingBridge from "@/components/providers/GlobalNetworkLoadingBridge";
 import OnlineProvider from "@/components/providers/OnlineProvider";
 import ThemeScope from "@/components/ui/ThemeScope";
+import { CacheProvider } from "@/contexts/CacheContext";
 import { RealtimeTournamentProvider } from "@/contexts/RealtimeTournamentContext";
 import { authOptions } from "@/lib/auth";
 import { ColorBlindProvider } from "@/lib/contexts/ColorBlindContext";
@@ -69,22 +70,25 @@ export default async function RootLayout({
             <ColorBlindProvider>
               <SoundProvider>
                 <AuthProvider session={session}>
-                  <ThemeScope>
-                    <OnlineProvider>
-                      <RealtimeTournamentProvider>
-                        <VideoOverlayProvider>{children}</VideoOverlayProvider>
-                      </RealtimeTournamentProvider>
-                    </OnlineProvider>
-                  </ThemeScope>
-                  {/* Floating user badge on all non-online pages */}
-                  <GlobalUserBadge />
-                  {/* Theme toggle removed per design: muted colorful is the standard */}
+                  <CacheProvider>
+                    <ThemeScope>
+                      <OnlineProvider>
+                        <RealtimeTournamentProvider>
+                          <VideoOverlayProvider>
+                            {children}
+                          </VideoOverlayProvider>
+                        </RealtimeTournamentProvider>
+                      </OnlineProvider>
+                    </ThemeScope>
+                    {/* Floating user badge on all non-online pages */}
+                    <GlobalUserBadge />
+                    {/* Theme toggle removed per design: muted colorful is the standard */}
+                  </CacheProvider>
                 </AuthProvider>
               </SoundProvider>
             </ColorBlindProvider>
           </ThemeProvider>
         </LoadingProvider>
-        <SpeedInsights />
       </body>
     </html>
   );
