@@ -4,7 +4,6 @@ import { Star, Settings, Users } from "lucide-react";
 import AudioControls from "@/components/game/AudioControls";
 import { FEATURE_UNDO } from "@/lib/config/features";
 import { useColorBlind } from "@/lib/contexts/ColorBlindContext";
-import { PLAYER_COLORS } from "@/lib/game/constants";
 import { useGameStore } from "@/lib/game/store";
 
 interface OnlineStatusBarProps {
@@ -57,30 +56,12 @@ export default function OnlineStatusBar({
 
   return (
     <div
-      className={`fixed top-3 left-1/2 -translate-x-1/2 z-[100] ${
+      className={`absolute top-3 left-1/2 -translate-x-1/2 z-10 ${
         dragFromHand ? "pointer-events-none" : "pointer-events-auto"
       } select-none`}
       onContextMenu={(e) => e.preventDefault()}
     >
       <div className="flex items-center gap-3 rounded-full bg-black/60 backdrop-blur px-4 py-1.5 text-sm text-white shadow-lg ring-1 ring-white/10">
-        {/* Player Number Badge */}
-        {myPlayerNumber && (
-          <>
-            <div
-              className="rounded-full px-2.5 py-0.5 font-bold text-xs"
-              style={{
-                backgroundColor:
-                  PLAYER_COLORS[myPlayerNumber === 1 ? "p1" : "p2"],
-                color: "#000",
-              }}
-              title={`You are Player ${myPlayerNumber}`}
-            >
-              P{myPlayerNumber}
-            </div>
-            <div className="w-px h-4 bg-white/20" />
-          </>
-        )}
-
         {/* Match Info Button */}
         <button
           className="rounded-full bg-white/15 hover:bg-white/25 text-white px-3 py-1 flex items-center gap-1.5"

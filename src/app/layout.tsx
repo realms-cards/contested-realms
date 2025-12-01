@@ -1,3 +1,4 @@
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import type { Metadata, Viewport } from "next";
 // Google fonts disabled for offline/CI builds
 import localFont from "next/font/local";
@@ -5,10 +6,8 @@ import "./globals.css";
 import { getServerSession } from "next-auth/next";
 import AuthProvider from "@/components/auth/AuthProvider";
 import GlobalUserBadge from "@/components/auth/GlobalUserBadge";
-import GlobalCanvasWrapper from "@/components/providers/GlobalCanvasWrapper";
 import GlobalNetworkLoadingBridge from "@/components/providers/GlobalNetworkLoadingBridge";
 import OnlineProvider from "@/components/providers/OnlineProvider";
-import TournamentInviteListener from "@/components/tournament/TournamentInviteListener";
 import ThemeScope from "@/components/ui/ThemeScope";
 import { RealtimeTournamentProvider } from "@/contexts/RealtimeTournamentContext";
 import { authOptions } from "@/lib/auth";
@@ -71,26 +70,22 @@ export default async function RootLayout({
             <ColorBlindProvider>
               <SoundProvider>
                 <AuthProvider session={session}>
-                  <GlobalCanvasWrapper>
-                    <ThemeScope>
-                      <OnlineProvider>
-                        <RealtimeTournamentProvider>
-                          <VideoOverlayProvider>
-                            {children}
-                            <TournamentInviteListener />
-                          </VideoOverlayProvider>
-                        </RealtimeTournamentProvider>
-                      </OnlineProvider>
-                    </ThemeScope>
-                    {/* Floating user badge on all non-online pages */}
-                    <GlobalUserBadge />
-                    {/* Theme toggle removed per design: muted colorful is the standard */}
-                  </GlobalCanvasWrapper>
+                  <ThemeScope>
+                    <OnlineProvider>
+                      <RealtimeTournamentProvider>
+                        <VideoOverlayProvider>{children}</VideoOverlayProvider>
+                      </RealtimeTournamentProvider>
+                    </OnlineProvider>
+                  </ThemeScope>
+                  {/* Floating user badge on all non-online pages */}
+                  <GlobalUserBadge />
+                  {/* Theme toggle removed per design: muted colorful is the standard */}
                 </AuthProvider>
               </SoundProvider>
             </ColorBlindProvider>
           </ThemeProvider>
         </LoadingProvider>
+        <SpeedInsights />
       </body>
     </html>
   );

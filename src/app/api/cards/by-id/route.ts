@@ -2,7 +2,8 @@ import { Finish } from '@prisma/client';
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
-export const dynamic = 'force-dynamic';
+// ISR: Card data rarely changes, revalidate every hour
+export const revalidate = 3600; // 1 hour
 
 // GET /api/cards/by-id?ids=1,2,3
 // Returns: [{ cardId, name, slug, setName, type }]

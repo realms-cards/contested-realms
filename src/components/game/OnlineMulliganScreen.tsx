@@ -134,20 +134,7 @@ export default function OnlineMulliganScreen({
                 </div>
                 {myChampion &&
                   myAvatar.name?.toLowerCase() === "dragonlord" && (
-                    <div
-                      className="mt-1 px-2 py-0.5 bg-amber-900/40 rounded text-[10px] text-amber-200 ring-1 ring-amber-500/30 cursor-pointer hover:ring-amber-400/50 transition-all"
-                      onMouseEnter={() => {
-                        if (myChampion.slug) {
-                          setPreviewCard({
-                            name: myChampion.name,
-                            slug: myChampion.slug,
-                            cardId: myChampion.cardId,
-                            type: "Minion - Dragon",
-                          });
-                        }
-                      }}
-                      onMouseLeave={() => setPreviewCard(null)}
-                    >
+                    <div className="mt-1 px-2 py-0.5 bg-amber-900/40 rounded text-[10px] text-amber-200 ring-1 ring-amber-500/30">
                       ⚔ {myChampion.name}
                     </div>
                   )}
@@ -173,20 +160,7 @@ export default function OnlineMulliganScreen({
                 </div>
                 {opponentChampion &&
                   opponentAvatar.name?.toLowerCase() === "dragonlord" && (
-                    <div
-                      className="mt-1 px-2 py-0.5 bg-amber-900/40 rounded text-[10px] text-amber-200 ring-1 ring-amber-500/30 cursor-pointer hover:ring-amber-400/50 transition-all"
-                      onMouseEnter={() => {
-                        if (opponentChampion.slug) {
-                          setPreviewCard({
-                            name: opponentChampion.name,
-                            slug: opponentChampion.slug,
-                            cardId: opponentChampion.cardId,
-                            type: "Minion - Dragon",
-                          });
-                        }
-                      }}
-                      onMouseLeave={() => setPreviewCard(null)}
-                    >
+                    <div className="mt-1 px-2 py-0.5 bg-amber-900/40 rounded text-[10px] text-amber-200 ring-1 ring-amber-500/30">
                       ⚔ {opponentChampion.name}
                     </div>
                   )}

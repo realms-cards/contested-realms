@@ -139,19 +139,18 @@ export function useBoardDragControls({
         }
         return;
       }
+      // Optimized: Single RAF instead of double RAF (was causing 33ms delay)
       requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          const prev = pendingSnaps.current.get(id);
-          const attempts = prev ? Math.max(prev.attempts, 8) : 8;
-          pendingSnaps.current.set(id, { x, z, attempts, delay: 1 });
-          if (process.env.NODE_ENV !== "production") {
-            console.debug(
-              `[snap] queue ${id} -> x=${Number(x).toFixed(2)} z=${Number(
-                z
-              ).toFixed(2)}`
-            );
-          }
-        });
+        const prev = pendingSnaps.current.get(id);
+        const attempts = prev ? Math.max(prev.attempts, 8) : 8;
+        pendingSnaps.current.set(id, { x, z, attempts, delay: 1 });
+        if (process.env.NODE_ENV !== "production") {
+          console.debug(
+            `[snap] queue ${id} -> x=${Number(x).toFixed(2)} z=${Number(
+              z
+            ).toFixed(2)}`
+          );
+        }
       });
     },
     [enableSnap]

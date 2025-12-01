@@ -104,6 +104,25 @@ export function SeatVideo3D({
     };
   }, [stream, hasVideo]);
 
+  // Cleanup texture and video element on unmount to prevent GPU memory leaks
+  useEffect(() => {
+    return () => {
+      // Dispose Three.js texture to free GPU memory
+      if (texture) {
+        texture.dispose();
+      }
+      // Remove video element from DOM if it exists
+      const vid = videoElRef.current;
+      if (vid) {
+        try {
+          vid.pause();
+          vid.srcObject = null;
+          vid.remove();
+        } catch {}
+      }
+    };
+  }, [texture]);
+
   // Invisible raycast handler to make plane non-interactive
   const noopRaycast = useMemo(() => function noop(this: THREE.Object3D) {
     return [] as unknown as THREE.Intersection[];
