@@ -10,7 +10,7 @@ import type { PlayerKey, AvatarState } from "./store/types";
 /**
  * Known avatar ability types
  */
-export type AvatarAbility = "harbinger" | "dragonlord" | null;
+export type AvatarAbility = "harbinger" | "dragonlord" | "elementalist" | null;
 
 /**
  * Check if an avatar name indicates Harbinger (Gothic expansion)
@@ -31,6 +31,16 @@ export function isDragonlord(avatarName: string | null | undefined): boolean {
 }
 
 /**
+ * Check if an avatar name indicates Elementalist
+ * Uses case-insensitive matching
+ * Elementalist grants +1 to each threshold (air, water, earth, fire)
+ */
+export function isElementalist(avatarName: string | null | undefined): boolean {
+  if (!avatarName) return false;
+  return avatarName.toLowerCase().includes("elementalist");
+}
+
+/**
  * Get the primary ability type for an avatar by name
  * Returns null if no special ability detected
  */
@@ -42,6 +52,7 @@ export function getAvatarAbility(
 
   if (name.includes("harbinger")) return "harbinger";
   if (name.includes("dragonlord")) return "dragonlord";
+  if (name.includes("elementalist")) return "elementalist";
 
   return null;
 }
