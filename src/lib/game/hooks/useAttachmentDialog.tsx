@@ -1,4 +1,4 @@
-import { Html } from "@react-three/drei";
+import { Html as Html3D } from "@react-three/drei";
 import { useCallback, useState } from "react";
 import TokenAttachmentDialog from "@/lib/game/components/TokenAttachmentDialog";
 import { useGameStore } from "@/lib/game/store";
@@ -144,7 +144,7 @@ export function useAttachmentDialog({
   }, [dialog, playFromPileTo, playSelectedTo, setDragFromPile]);
 
   const attachmentDialogNode = dialog ? (
-    <Html fullscreen zIndexRange={[10, 0]}>
+    <Html3D fullscreen zIndexRange={[10, 0]}>
       <TokenAttachmentDialog
         token={dialog.token}
         targetPermanent={dialog.targetPermanent}
@@ -154,7 +154,7 @@ export function useAttachmentDialog({
         onConfirm={handleConfirm}
         onCancel={handleCancel}
       />
-    </Html>
+    </Html3D>
   ) : null;
 
   return { openAttachmentDialog, attachmentDialogNode };

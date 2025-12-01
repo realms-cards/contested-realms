@@ -1579,248 +1579,260 @@ export default function EnhancedOnlineDraft3DScreen({
   return (
     <div className="fixed inset-0 w-screen h-screen">
       {/* Enhanced 3D Stage */}
-      <Canvas
-        camera={{ position: [0, 10, 0], fov: 50 }}
-        shadows
-        gl={{ preserveDrawingBuffer: false, antialias: true, alpha: false }}
-      >
-        <color attach="background" args={["#0b0b0c"]} />
-        <ambientLight intensity={0.8} />
-        <directionalLight position={[10, 12, 8]} intensity={1.35} castShadow />
+      <div className="absolute inset-0 w-full h-full">
+        <Canvas
+          camera={{ position: [0, 10, 0], fov: 50 }}
+          shadows
+          gl={{ preserveDrawingBuffer: false, antialias: true, alpha: false }}
+        >
+          <color attach="background" args={["#0b0b0c"]} />
+          <ambientLight intensity={0.8} />
+          <directionalLight
+            position={[10, 12, 8]}
+            intensity={1.35}
+            castShadow
+          />
 
-        <Physics gravity={[0, -9.81, 0]}>
-          <Board noRaycast={true} interactionMode="spectator" />
-        </Physics>
+          <Physics gravity={[0, -9.81, 0]}>
+            <Board noRaycast={true} interactionMode="spectator" />
+          </Physics>
 
-        {/* Seat Video planes at player positions (fixed orientation toward board) */}
-        {rtc?.featureEnabled && (
-          <>
-            <LegacySeatVideo3D
-              who={myPlayerKey}
-              stream={rtc?.localStream ?? null}
-            />
-            <LegacySeatVideo3D
-              who={opponentKey}
-              stream={rtc?.remoteStream ?? null}
-            />
-          </>
-        )}
-
-        {/* Removed global TextureCache for draft to avoid preloading entire match textures */}
-
-        {/* Enhanced Mouse tracking for precise card hover detection */}
-        <MouseTracker
-          cards={pick3D}
-          onHover={(card) => {
-            if (card) {
-              showCardPreview({
-                slug: card.slug,
-                name: card.name,
-                type: card.type,
-              });
-            } else {
-              hideCardPreview();
-            }
-          }}
-        />
-
-        {/* Enhanced Draft Pack Hand (from single-player) */}
-        {draftState.phase !== "complete" &&
-          !packChoiceOverlay &&
-          packAsBoosterCards.length > 0 && (
-            <DraftPackHand3D
-              cards={packAsBoosterCards}
-              disabled={!amPicker}
-              allowHoverWhenDisabled={!amPicker} // Allow hover previews when waiting for turn
-              opacity={!amPicker ? 0.6 : 1.0} // Dim cards when waiting for turn
-              hiddenIndex={staged?.idx ?? null}
-              onDragChange={setOrbitLocked}
-              getTopRenderOrder={getTopRenderOrder}
-              transitionEnabled
-              transitionKey={`${draftState.packIndex}:${draftState.pickNumber}`}
-              passDirection={
-                draftState.packDirection === "right" ? "right" : "left"
-              }
-              transitionDurationMs={480}
-              onHoverInfo={(info) => {
-                if (info) {
-                  showCardPreview(info);
-                } else {
-                  hideCardPreview();
-                }
-              }}
-              onDragMove={(idx, wx, wz) => {
-                const d = Math.hypot(wx - PICK_CENTER.x, wz - PICK_CENTER.z);
-                if (d > PICK_RADIUS) setReadyIdx(idx);
-                else if (readyIdx === idx) setReadyIdx(null);
-              }}
-              onRelease={(idx, wx, wz) => {
-                // Only allow staging when it's the player's turn
-                if (!amPicker) return;
-
-                const d = Math.hypot(wx - PICK_CENTER.x, wz - PICK_CENTER.z);
-                if (d > PICK_RADIUS) {
-                  setStaged({ idx, x: wx, z: wz });
-                  setSelectedRowIndex(null);
-                } else if (staged && staged.idx === idx) {
-                  setStaged(null);
-                }
-              }}
-              selectedIndex={selectedRowIndex}
-              onSelectIndex={(idx) => {
-                setSelectedRowIndex(idx);
-                if (idx != null) {
-                  // Only allow staging when it's the player's turn
-                  if (amPicker) {
-                    setStaged({
-                      idx,
-                      x: STAGE_CLICK_POS.x,
-                      z: STAGE_CLICK_POS.z,
-                    });
-                    setSelectedRowIndex(null);
-                  }
-                } else {
-                }
-              }}
-              orbitLocked={orbitLocked}
-            />
+          {/* Seat Video planes at player positions (fixed orientation toward board) */}
+          {rtc?.featureEnabled && (
+            <>
+              <LegacySeatVideo3D
+                who={myPlayerKey}
+                stream={rtc?.localStream ?? null}
+              />
+              <LegacySeatVideo3D
+                who={opponentKey}
+                stream={rtc?.remoteStream ?? null}
+              />
+            </>
           )}
 
-        {/* Enhanced staged card representation */}
-        {staged && !needsPackChoice && packAsBoosterCards[staged.idx] && (
-          <DraggableCard3D
-            key={`staged-${draftState.packIndex}-${draftState.pickNumber}-${staged.idx}`}
-            slug={packAsBoosterCards[staged.idx]?.slug || ""}
-            isSite={(packAsBoosterCards[staged.idx]?.type || "")
-              .toLowerCase()
-              .includes("site")}
-            x={staged.x}
-            z={staged.z}
-            cardId={packAsBoosterCards[staged.idx]?.cardId}
-            cardName={
-              packAsBoosterCards[staged.idx]?.cardName ??
-              packAsBoosterCards[staged.idx]?.slug ??
-              ""
-            }
-            cardType={packAsBoosterCards[staged.idx]?.type ?? null}
-            onDrop={(wx, wz) => {
-              // Only allow moving staged cards when it's the player's turn
-              if (!amPicker) return;
-              setStaged((prev) =>
-                prev && prev.idx === staged.idx
-                  ? { ...prev, x: wx, z: wz }
-                  : prev
-              );
-            }}
-            onDragChange={setOrbitLocked}
-            getTopRenderOrder={getTopRenderOrder}
-            lockUpright
-            onHoverStart={(preview) => {
-              if (!preview || orbitLocked) return;
-              showCardPreview(preview);
-            }}
-            onHoverEnd={() => {
-              hideCardPreview();
-            }}
-            onRelease={(wx, wz) => {
-              // Only allow unstaging when it's the player's turn
-              if (!amPicker) return;
-              const d = Math.hypot(wx - PICK_CENTER.x, wz - PICK_CENTER.z);
-              if (d <= PICK_RADIUS) {
-                setStaged(null);
+          {/* Removed global TextureCache for draft to avoid preloading entire match textures */}
+
+          {/* Enhanced Mouse tracking for precise card hover detection */}
+          <MouseTracker
+            cards={pick3D}
+            onHover={(card) => {
+              if (card) {
+                showCardPreview({
+                  slug: card.slug,
+                  name: card.name,
+                  type: card.type,
+                });
+              } else {
                 hideCardPreview();
               }
             }}
-            // Prefer raster textures in draft for better churn performance
-            preferRaster
           />
-        )}
 
-        {/* Enhanced picked cards with proper sorting */}
-        {pick3D.length > 0 && (
-          <group>
-            {pick3D.map((p) => {
-              const isSite = (p.card.type || "").toLowerCase().includes("site");
+          {/* Enhanced Draft Pack Hand (from single-player) */}
+          {draftState.phase !== "complete" &&
+            !packChoiceOverlay &&
+            packAsBoosterCards.length > 0 && (
+              <DraftPackHand3D
+                cards={packAsBoosterCards}
+                disabled={!amPicker}
+                allowHoverWhenDisabled={!amPicker} // Allow hover previews when waiting for turn
+                opacity={!amPicker ? 0.6 : 1.0} // Dim cards when waiting for turn
+                hiddenIndex={staged?.idx ?? null}
+                onDragChange={setOrbitLocked}
+                getTopRenderOrder={getTopRenderOrder}
+                transitionEnabled
+                transitionKey={`${draftState.packIndex}:${draftState.pickNumber}`}
+                passDirection={
+                  draftState.packDirection === "right" ? "right" : "left"
+                }
+                transitionDurationMs={480}
+                onHoverInfo={(info) => {
+                  if (info) {
+                    showCardPreview(info);
+                  } else {
+                    hideCardPreview();
+                  }
+                }}
+                onDragMove={(idx, wx, wz) => {
+                  const d = Math.hypot(wx - PICK_CENTER.x, wz - PICK_CENTER.z);
+                  if (d > PICK_RADIUS) setReadyIdx(idx);
+                  else if (readyIdx === idx) setReadyIdx(null);
+                }}
+                onRelease={(idx, wx, wz) => {
+                  // Only allow staging when it's the player's turn
+                  if (!amPicker) return;
 
-              const stackPos = stackPositions?.get(p.id);
-              const x = stackPos
-                ? stackPos.x + stackPos.stackIndex * 0.03
-                : p.x;
-              const z = stackPos ? stackPos.z : p.z;
-              const y = stackPos ? 0.002 + stackPos.stackIndex * 0.05 : 0.002;
-              const isVisible = stackPos ? stackPos.isVisible : true;
-              const baseRO = stackPos ? 1600 + stackPos.stackIndex * 10 : 1500;
-
-              const stackKey = stackPos
-                ? `${stackPos.x.toFixed(3)},${stackPos.z.toFixed(3)}`
-                : null;
-              const totalInStack = stackKey ? stackSizes.get(stackKey) || 1 : 1;
-              const stackIndex = stackPos ? stackPos.stackIndex : 0;
-
-              return (
-                <DraggableCard3D
-                  key={`pick-${p.id}`}
-                  slug={p.card.slug}
-                  isSite={isSite}
-                  x={x}
-                  z={z}
-                  cardId={p.id}
-                  cardName={p.card.cardName ?? p.card.slug}
-                  cardType={p.card.type ?? null}
-                  y={y}
-                  baseRenderOrder={baseRO}
-                  stackIndex={stackIndex}
-                  totalInStack={totalInStack}
-                  onDrop={(wx, wz) => {
-                    if (!isSortingEnabled) {
-                      setPick3D((prev) =>
-                        prev.map((it) =>
-                          it.id === p.id ? { ...it, x: wx, z: wz } : it
-                        )
-                      );
+                  const d = Math.hypot(wx - PICK_CENTER.x, wz - PICK_CENTER.z);
+                  if (d > PICK_RADIUS) {
+                    setStaged({ idx, x: wx, z: wz });
+                    setSelectedRowIndex(null);
+                  } else if (staged && staged.idx === idx) {
+                    setStaged(null);
+                  }
+                }}
+                selectedIndex={selectedRowIndex}
+                onSelectIndex={(idx) => {
+                  setSelectedRowIndex(idx);
+                  if (idx != null) {
+                    // Only allow staging when it's the player's turn
+                    if (amPicker) {
+                      setStaged({
+                        idx,
+                        x: STAGE_CLICK_POS.x,
+                        z: STAGE_CLICK_POS.z,
+                      });
+                      setSelectedRowIndex(null);
                     }
-                  }}
-                  onDragChange={setOrbitLocked}
-                  getTopRenderOrder={getTopRenderOrder}
-                  lockUpright
-                  disabled={isSortingEnabled && !isVisible}
-                  // Prefer raster textures in draft for better churn performance
-                  preferRaster
-                />
-              );
-            })}
-          </group>
-        )}
+                  } else {
+                  }
+                }}
+                orbitLocked={orbitLocked}
+              />
+            )}
 
-        <OrbitControls
-          makeDefault
-          target={[0, 0, 0]}
-          enabled={!orbitLocked}
-          enablePan
-          enableRotate={false}
-          enableZoom
-          enableDamping
-          dampingFactor={0.08}
-          screenSpacePanning
-          panSpeed={1.2}
-          zoomSpeed={0.75}
-          minDistance={2}
-          maxDistance={28}
-          minPolarAngle={0.05}
-          maxPolarAngle={0.35}
-          mouseButtons={{
-            MIDDLE: MOUSE.DOLLY,
-            RIGHT: MOUSE.PAN,
-          }}
-          touches={{ TWO: TOUCH.PAN }}
-        />
-        <ClampOrbitTarget bounds={{ minX: -8, maxX: 8, minZ: -6, maxZ: 6 }} />
-        <KeyboardPanControls enabled={!orbitLocked} />
-        <TrackpadOrbitAdapter />
-      </Canvas>
+          {/* Enhanced staged card representation */}
+          {staged && !needsPackChoice && packAsBoosterCards[staged.idx] && (
+            <DraggableCard3D
+              key={`staged-${draftState.packIndex}-${draftState.pickNumber}-${staged.idx}`}
+              slug={packAsBoosterCards[staged.idx]?.slug || ""}
+              isSite={(packAsBoosterCards[staged.idx]?.type || "")
+                .toLowerCase()
+                .includes("site")}
+              x={staged.x}
+              z={staged.z}
+              cardId={packAsBoosterCards[staged.idx]?.cardId}
+              cardName={
+                packAsBoosterCards[staged.idx]?.cardName ??
+                packAsBoosterCards[staged.idx]?.slug ??
+                ""
+              }
+              cardType={packAsBoosterCards[staged.idx]?.type ?? null}
+              onDrop={(wx, wz) => {
+                // Only allow moving staged cards when it's the player's turn
+                if (!amPicker) return;
+                setStaged((prev) =>
+                  prev && prev.idx === staged.idx
+                    ? { ...prev, x: wx, z: wz }
+                    : prev
+                );
+              }}
+              onDragChange={setOrbitLocked}
+              getTopRenderOrder={getTopRenderOrder}
+              lockUpright
+              onHoverStart={(preview) => {
+                if (!preview || orbitLocked) return;
+                showCardPreview(preview);
+              }}
+              onHoverEnd={() => {
+                hideCardPreview();
+              }}
+              onRelease={(wx, wz) => {
+                // Only allow unstaging when it's the player's turn
+                if (!amPicker) return;
+                const d = Math.hypot(wx - PICK_CENTER.x, wz - PICK_CENTER.z);
+                if (d <= PICK_RADIUS) {
+                  setStaged(null);
+                  hideCardPreview();
+                }
+              }}
+              // Prefer raster textures in draft for better churn performance
+              preferRaster
+            />
+          )}
+
+          {/* Enhanced picked cards with proper sorting */}
+          {pick3D.length > 0 && (
+            <group>
+              {pick3D.map((p) => {
+                const isSite = (p.card.type || "")
+                  .toLowerCase()
+                  .includes("site");
+
+                const stackPos = stackPositions?.get(p.id);
+                const x = stackPos
+                  ? stackPos.x + stackPos.stackIndex * 0.03
+                  : p.x;
+                const z = stackPos ? stackPos.z : p.z;
+                const y = stackPos ? 0.002 + stackPos.stackIndex * 0.05 : 0.002;
+                const isVisible = stackPos ? stackPos.isVisible : true;
+                const baseRO = stackPos
+                  ? 1600 + stackPos.stackIndex * 10
+                  : 1500;
+
+                const stackKey = stackPos
+                  ? `${stackPos.x.toFixed(3)},${stackPos.z.toFixed(3)}`
+                  : null;
+                const totalInStack = stackKey
+                  ? stackSizes.get(stackKey) || 1
+                  : 1;
+                const stackIndex = stackPos ? stackPos.stackIndex : 0;
+
+                return (
+                  <DraggableCard3D
+                    key={`pick-${p.id}`}
+                    slug={p.card.slug}
+                    isSite={isSite}
+                    x={x}
+                    z={z}
+                    cardId={p.id}
+                    cardName={p.card.cardName ?? p.card.slug}
+                    cardType={p.card.type ?? null}
+                    y={y}
+                    baseRenderOrder={baseRO}
+                    stackIndex={stackIndex}
+                    totalInStack={totalInStack}
+                    onDrop={(wx, wz) => {
+                      if (!isSortingEnabled) {
+                        setPick3D((prev) =>
+                          prev.map((it) =>
+                            it.id === p.id ? { ...it, x: wx, z: wz } : it
+                          )
+                        );
+                      }
+                    }}
+                    onDragChange={setOrbitLocked}
+                    getTopRenderOrder={getTopRenderOrder}
+                    lockUpright
+                    disabled={isSortingEnabled && !isVisible}
+                    // Prefer raster textures in draft for better churn performance
+                    preferRaster
+                  />
+                );
+              })}
+            </group>
+          )}
+
+          <OrbitControls
+            makeDefault
+            target={[0, 0, 0]}
+            enabled={!orbitLocked}
+            enablePan
+            enableRotate={false}
+            enableZoom
+            enableDamping
+            dampingFactor={0.08}
+            screenSpacePanning
+            panSpeed={1.2}
+            zoomSpeed={0.75}
+            minDistance={2}
+            maxDistance={28}
+            minPolarAngle={0.05}
+            maxPolarAngle={0.35}
+            mouseButtons={{
+              MIDDLE: MOUSE.DOLLY,
+              RIGHT: MOUSE.PAN,
+            }}
+            touches={{ TWO: TOUCH.PAN }}
+          />
+          <ClampOrbitTarget bounds={{ minX: -8, maxX: 8, minZ: -6, maxZ: 6 }} />
+          <KeyboardPanControls enabled={!orbitLocked} />
+          <TrackpadOrbitAdapter />
+        </Canvas>
+      </div>
 
       {/* Enhanced Overlays */}
-      <div className="fixed inset-0 z-[100] pointer-events-none select-none">
+      <div className="absolute inset-0 z-20 pointer-events-none select-none">
         {/* Collapsed user avatar badge (floating) */}
         <UserBadge variant="floating" />
         {/* Enhanced Top controls */}

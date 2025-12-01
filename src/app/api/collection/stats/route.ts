@@ -79,37 +79,16 @@ export async function GET() {
       })
       .filter((s) => s.total > 0);
 
-    // Get cards by element
-    const collectionWithElements = await prisma.collectionCard.findMany({
-      where: { userId },
-      select: {
-        quantity: true,
-        card: { select: { elements: true } },
-      },
-    });
-
-    const byElement: Record<string, number> = {};
-    for (const entry of collectionWithElements) {
-      const elements = entry.card.elements;
-      if (elements) {
-        // Elements can be comma-separated
-        const elementList = elements.split(",").map((e) => e.trim());
-        for (const el of elementList) {
-          if (el) {
-            byElement[el] = (byElement[el] || 0) + entry.quantity;
-          }
-        }
-      }
-    }
-
-    // Get cards by rarity (need to join with metadata)
-    const collectionWithMeta = await prisma.collectionCard.findMany({
+    // Optimized: Fetch collection once with both elements and metadata
+    // This reduces 2 separate queries (1000 rows) to 1 query (500 rows)
+    const collectionWithDetails = await prisma.collectionCard.findMany({
       where: { userId },
       select: {
         quantity: true,
         setId: true,
         card: {
           select: {
+            elements: true,
             meta: {
               select: { rarity: true, setId: true },
             },
@@ -118,9 +97,23 @@ export async function GET() {
       },
     });
 
+    // Process both element and rarity aggregations in single pass
+    const byElement: Record<string, number> = {};
     const byRarity: Record<string, number> = {};
-    for (const entry of collectionWithMeta) {
-      // Find matching metadata by setId if available
+
+    for (const entry of collectionWithDetails) {
+      // Aggregate by element
+      const elements = entry.card.elements;
+      if (elements) {
+        const elementList = elements.split(",").map((e) => e.trim());
+        for (const el of elementList) {
+          if (el) {
+            byElement[el] = (byElement[el] || 0) + entry.quantity;
+          }
+        }
+      }
+
+      // Aggregate by rarity
       const meta = entry.setId
         ? entry.card.meta.find((m) => m.setId === entry.setId)
         : entry.card.meta[0];

@@ -182,44 +182,50 @@ export default function AdminBotReplayViewerPage() {
   return (
     <div className="fixed inset-0 w-screen h-screen bg-slate-900">
       {/* Admin Badge */}
-      <div className="fixed top-4 left-4 z-[100] bg-amber-500/20 border border-amber-500/50 px-3 py-1 rounded-lg">
+      <div className="absolute top-4 left-4 z-50 bg-amber-500/20 border border-amber-500/50 px-3 py-1 rounded-lg">
         <span className="text-amber-200 text-xs font-semibold uppercase tracking-wide">
           Admin View - Bot Replay
         </span>
       </div>
 
       {/* 3D Game View */}
-      <Canvas
-        camera={{ position: [0, 10, 0], fov: 50 }}
-        shadows
-        gl={{ preserveDrawingBuffer: true, antialias: true, alpha: false }}
-      >
-        <color attach="background" args={["#0b0b0c"]} />
-        <ambientLight intensity={0.8} />
-        <directionalLight position={[10, 12, 8]} intensity={1.35} castShadow />
+      <div className="absolute inset-0 w-full h-full">
+        <Canvas
+          camera={{ position: [0, 10, 0], fov: 50 }}
+          shadows
+          gl={{ preserveDrawingBuffer: true, antialias: true, alpha: false }}
+        >
+          <color attach="background" args={["#0b0b0c"]} />
+          <ambientLight intensity={0.8} />
+          <directionalLight
+            position={[10, 12, 8]}
+            intensity={1.35}
+            castShadow
+          />
 
-        <Physics gravity={[0, -9.81, 0]}>
-          <Board interactionMode="spectator" enableBoardPings={false} />
-          <TextureCache />
-        </Physics>
+          <Physics gravity={[0, -9.81, 0]}>
+            <Board interactionMode="spectator" enableBoardPings={false} />
+            <TextureCache />
+          </Physics>
 
-        <OrbitControls
-          makeDefault
-          target={[0, 0, 0]}
-          enablePan
-          enableRotate
-          enableZoom
-          enableDamping
-          dampingFactor={0.08}
-          screenSpacePanning
-          panSpeed={1.2}
-          zoomSpeed={0.75}
-          minDistance={1}
-          maxDistance={36}
-          minPolarAngle={0}
-          maxPolarAngle={Math.PI / 2.05}
-        />
-      </Canvas>
+          <OrbitControls
+            makeDefault
+            target={[0, 0, 0]}
+            enablePan
+            enableRotate
+            enableZoom
+            enableDamping
+            dampingFactor={0.08}
+            screenSpacePanning
+            panSpeed={1.2}
+            zoomSpeed={0.75}
+            minDistance={1}
+            maxDistance={36}
+            minPolarAngle={0}
+            maxPolarAngle={Math.PI / 2.05}
+          />
+        </Canvas>
+      </div>
 
       {previewCard?.slug && !contextMenu && (
         <CardPreview

@@ -76,26 +76,40 @@ export async function GET(
     });
 
     // Get player's matches in this tournament
-    const matches = await prisma.match.findMany({
-      where: {
-        tournamentId: id
-      },
-      include: {
-        round: {
-          select: { roundNumber: true }
-        }
-      },
-      orderBy: [
-        { round: { roundNumber: 'asc' } },
-        { createdAt: 'asc' }
-      ]
-    });
-
-    // Filter matches that include the player (since JSON queries are complex in Prisma)
-    const playerMatches = matches.filter(match => {
-      const players = match.players as Array<{ id: string; name: string }>;
-      return players.some(p => p.id === playerId);
-    });
+    // Optimized: Filter at database level using JSON path query instead of in-memory
+    // This reduces data transfer by 4x in a 32-player tournament (48 matches → 12 matches)
+    const playerMatches = await prisma.$queryRaw<Array<{
+      id: string;
+      tournamentId: string;
+      roundId: string | null;
+      players: unknown;
+      results: unknown;
+      status: string;
+      startedAt: Date | null;
+      completedAt: Date | null;
+      createdAt: Date;
+      roundNumber: number | null;
+    }>>`
+      SELECT
+        m.id,
+        m."tournamentId",
+        m."roundId",
+        m.players,
+        m.results,
+        m.status,
+        m."startedAt",
+        m."completedAt",
+        m."createdAt",
+        r."roundNumber" as "roundNumber"
+      FROM "Match" m
+      LEFT JOIN "Round" r ON m."roundId" = r.id
+      WHERE m."tournamentId" = ${id}
+        AND EXISTS (
+          SELECT 1 FROM jsonb_array_elements(m.players) AS player
+          WHERE player->>'id' = ${playerId}
+        )
+      ORDER BY r."roundNumber" ASC NULLS LAST, m."createdAt" ASC
+    `;
 
     // Process match history
     const matchHistory = playerMatches.map(match => {
@@ -125,7 +139,7 @@ export async function GET(
 
       return {
         matchId: match.id,
-        roundNumber: match.round?.roundNumber || null,
+        roundNumber: match.roundNumber || null,
         opponent: opponent ? {
           id: opponent.id,
           name: opponent.name

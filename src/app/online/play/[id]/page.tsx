@@ -2007,7 +2007,7 @@ export default function OnlineMatchPage() {
   return (
     <div className="fixed inset-0 w-screen h-screen select-none">
       {/* Camera controls - left: reset icon + 2D/3D buttons */}
-      <div className="fixed top-2 left-2 z-[100]">
+      <div className="absolute top-2 left-2 z-30">
         <div className="bg-black/50 rounded-lg p-1 ring-1 ring-white/10 flex items-center">
           <button
             onClick={resetCamera}
@@ -2058,7 +2058,7 @@ export default function OnlineMatchPage() {
         </div>
       </div>
       {!inThisMatch && (
-        <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-center justify-center p-6">
+        <div className="absolute inset-0 z-30 bg-black/70 backdrop-blur-sm flex items-center justify-center p-6">
           <div className="text-center">
             <div className="text-xl font-semibold mb-2">Joining Match</div>
             <div className="text-sm opacity-60">Match ID: {matchId}</div>
@@ -2067,7 +2067,7 @@ export default function OnlineMatchPage() {
       )}
 
       {inThisMatch && isSpectatorView && (
-        <div className="fixed top-2 right-2 z-[100]">
+        <div className="absolute top-2 right-2 z-30">
           <div className="flex items-center gap-2">
             <div className="px-2 py-1 rounded bg-purple-600/80 text-white text-xs font-semibold shadow">
               Spectating
@@ -2105,7 +2105,7 @@ export default function OnlineMatchPage() {
       )}
 
       {inThisMatch && setupOpen && myPlayerKey && (
-        <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-center justify-center p-6">
+        <div className="absolute inset-0 z-20 bg-black/70 backdrop-blur-sm flex items-center justify-center p-6">
           {!prepared ? (
             // For tournament matches (any mode), never show deck loaders/selectors.
             // Decks come from the tournament submission and are auto-loaded via match.playerDecks.
@@ -2188,18 +2188,6 @@ export default function OnlineMatchPage() {
               onStartGame={finishSetup}
             />
           )}
-          {/* Card preview for setup screens (deck selector, D20, mulligan) */}
-          {previewCard?.slug && (
-            <CardPreview
-              card={{
-                slug: previewCard.slug ?? "",
-                name: previewCard.name,
-                type: previewCard.type ?? null,
-              }}
-              anchor="top-right"
-              zIndexClass="z-[110]"
-            />
-          )}
         </div>
       )}
 
@@ -2225,16 +2213,14 @@ export default function OnlineMatchPage() {
               spectatorCount={spectatorCount}
             />
           )}
-          {!setupOpen && (
-            <OnlineLifeCounters
-              dragFromHand={dragFromHand}
-              myPlayerKey={viewPlayerKey}
-              playerNames={playerNames}
-              showYouLabels={!isSpectatorView}
-              readOnly={isSpectatorView}
-              spectatorMode={isSpectatorView}
-            />
-          )}
+          <OnlineLifeCounters
+            dragFromHand={dragFromHand}
+            myPlayerKey={viewPlayerKey}
+            playerNames={playerNames}
+            showYouLabels={!isSpectatorView}
+            readOnly={isSpectatorView}
+            spectatorMode={isSpectatorView}
+          />
 
           {/* Online Console with Events and Chat tabs */}
           <OnlineConsole
@@ -2274,27 +2260,13 @@ export default function OnlineMatchPage() {
 
           {/* Context Menu */}
           {contextMenu && (
-            <>
-              <ContextMenu
-                onClose={() => {
-                  clearSelection();
-                  setPreviewCard(null);
-                  closeContextMenu();
-                }}
-              />
-              {/* Card preview for context menu hover (champion, etc.) */}
-              {previewCard?.slug && (
-                <CardPreview
-                  card={{
-                    slug: previewCard.slug ?? "",
-                    name: previewCard.name,
-                    type: previewCard.type ?? null,
-                  }}
-                  anchor="top-right"
-                  zIndexClass="z-[110]"
-                />
-              )}
-            </>
+            <ContextMenu
+              onClose={() => {
+                clearSelection();
+                setPreviewCard(null);
+                closeContextMenu();
+              }}
+            />
           )}
 
           {/* Global dialogs */}
@@ -2391,185 +2363,191 @@ export default function OnlineMatchPage() {
 
           {/* 3D Board Canvas - fills entire viewport */}
           {!setupOpen && (
-            <Canvas
-              camera={cameraOptions}
-              shadows
-              gl={glOptions}
-              onPointerMissed={() => {
-                if (!dragFromHand && !dragFromPile) {
-                  clearSelection();
-                  closeContextMenu();
-                  setPreviewCard(null);
-                }
-              }}
-            >
-              <color attach="background" args={["#0b0b0c"]} />
-              <ambientLight intensity={0.6} />
-              <directionalLight
-                position={[10, 12, 8]}
-                intensity={1}
-                castShadow
-              />
-
-              {/* Interactive board (physics-enabled) */}
-              <Physics key="stable-physics" gravity={[0, -9.81, 0]}>
-                <PhysicsProbe mid={match?.id} />
-                <Board
-                  interactionMode={boardInteractionMode}
-                  enableBoardPings
+            <div className="absolute inset-0 w-full h-full">
+              <Canvas
+                camera={cameraOptions}
+                shadows
+                gl={glOptions}
+                onPointerMissed={() => {
+                  if (!dragFromHand && !dragFromPile) {
+                    clearSelection();
+                    closeContextMenu();
+                    setPreviewCard(null);
+                  }
+                }}
+              >
+                <color attach="background" args={["#0b0b0c"]} />
+                <ambientLight intensity={0.6} />
+                <directionalLight
+                  position={[10, 12, 8]}
+                  intensity={1}
+                  castShadow
                 />
-              </Physics>
 
-              {/* Seat Video planes at player positions (fixed orientation toward board) */}
-              {rtc?.featureEnabled && myPlayerKey && (
-                <>
-                  {/* Local preview at my seat (muted via video texture; audio handled separately) */}
-                  <LegacySeatVideo3D
-                    who={myPlayerKey}
-                    stream={rtc?.localStream ?? null}
+                {/* Interactive board (physics-enabled) */}
+                <Physics key="stable-physics" gravity={[0, -9.81, 0]}>
+                  <PhysicsProbe mid={match?.id} />
+                  <Board
+                    interactionMode={boardInteractionMode}
+                    enableBoardPings
                   />
-                  {/* Remote video at opponent seat */}
-                  <LegacySeatVideo3D
-                    who={myPlayerKey === "p1" ? "p2" : "p1"}
-                    stream={rtc?.remoteStream ?? null}
-                  />
-                </>
-              )}
+                </Physics>
 
-              {/* 3D Piles (sides of the board) */}
-              <Piles3D
-                owner="p1"
-                matW={MAT_PIXEL_W}
-                matH={MAT_PIXEL_H}
-                showCardPreview={showCardPreview}
-                hideCardPreview={hideCardPreview}
-              />
-              <Piles3D
-                owner="p2"
-                matW={MAT_PIXEL_W}
-                matH={MAT_PIXEL_H}
-                showCardPreview={showCardPreview}
-                hideCardPreview={hideCardPreview}
-              />
-              {/* Token piles (face-up) */}
-              <TokenPile3D owner="p1" />
-              <TokenPile3D owner="p2" />
+                {/* Seat Video planes at player positions (fixed orientation toward board) */}
+                {rtc?.featureEnabled && myPlayerKey && (
+                  <>
+                    {/* Local preview at my seat (muted via video texture; audio handled separately) */}
+                    <LegacySeatVideo3D
+                      who={myPlayerKey}
+                      stream={rtc?.localStream ?? null}
+                    />
+                    {/* Remote video at opponent seat */}
+                    <LegacySeatVideo3D
+                      who={myPlayerKey === "p1" ? "p2" : "p1"}
+                      stream={rtc?.remoteStream ?? null}
+                    />
+                  </>
+                )}
 
-              {/* 3D HUD (thresholds, life, mana) */}
-              <Hud3D owner="p1" />
-              <Hud3D owner="p2" />
-
-              {/* 3D Hands - show both player and opponent hands */}
-              {viewPlayerKey && (
-                <Hand3D
-                  owner={viewPlayerKey}
+                {/* 3D Piles (sides of the board) */}
+                <Piles3D
+                  owner="p1"
                   matW={MAT_PIXEL_W}
                   matH={MAT_PIXEL_H}
-                  viewerPlayerNumber={viewPlayerNumber}
-                  // Own-hand visibility: players always see; spectators see only with commentator permit
-                  showCardBacks={
-                    isSpectatorView ? !spectatorCanViewHands : false
-                  }
-                  // Commentator: bottom edge for oriented seat; Spectator (non-commentator): also use bottom edge for oriented seat
-                  placement={isSpectatorView ? "edgeBottom" : undefined}
-                  flatCards={
-                    isSpectatorView ? Boolean(spectatorCanViewHands) : false
-                  }
                   showCardPreview={showCardPreview}
                   hideCardPreview={hideCardPreview}
                 />
-              )}
-              {/* Opponent hand with card backs */}
-              {viewPlayerKey &&
-                (() => {
-                  const opponentKey = viewPlayerKey === "p1" ? "p2" : "p1";
-                  return (
-                    <Hand3D
-                      owner={opponentKey}
-                      matW={MAT_PIXEL_W}
-                      matH={MAT_PIXEL_H}
-                      // Opponent-hand visibility: players see backs; spectators see faces only with commentator permit
-                      showCardBacks={
-                        isSpectatorView ? !spectatorCanViewHands : true
-                      }
-                      viewerPlayerNumber={viewPlayerNumber}
-                      // Commentator and non-commentator spectators: top edge for the opponent seat
-                      placement={isSpectatorView ? "edgeTop" : undefined}
-                      flatCards={
-                        isSpectatorView ? Boolean(spectatorCanViewHands) : false
-                      }
-                      showCardPreview={showCardPreview}
-                      hideCardPreview={hideCardPreview}
-                    />
-                  );
-                })()}
-
-              {/* Smart texture cache: own hand + top N of draw piles (background) */}
-              <TextureCache mode="smart" topN={5} />
-
-              <OrbitControls
-                ref={controlsRef}
-                makeDefault
-                target={[0, 0, 0]}
-                mouseButtons={
-                  isSpectatorView
-                    ? {
-                        LEFT: THREE.MOUSE.ROTATE,
-                        MIDDLE: THREE.MOUSE.DOLLY,
-                        RIGHT: THREE.MOUSE.PAN,
-                      }
-                    : {
-                        MIDDLE: THREE.MOUSE.DOLLY,
-                        RIGHT: THREE.MOUSE.PAN,
-                      }
-                }
-                touches={{ TWO: THREE.TOUCH.PAN }}
-                enabled={canPanCamera}
-                enablePan={canPanCamera}
-                enableRotate={isSpectatorView ? true : false}
-                enableZoom={!resyncing && !dragFromHand && !dragFromPile}
-                enableDamping={isSpectatorView}
-                dampingFactor={isSpectatorView ? 0.08 : 0}
-                screenSpacePanning={isSpectatorView}
-                panSpeed={isSpectatorView ? 1.2 : 1}
-                onChange={clampControls}
-                minDistance={minDist}
-                maxDistance={maxDist}
-                minPolarAngle={
-                  cameraMode === "topdown" ? naturalTiltAngle : safeMinOrbitTilt
-                }
-                maxPolarAngle={
-                  cameraMode === "topdown" ? naturalTiltAngle : Math.PI / 2.4
-                }
-                // Adjust rotation constraints based on player position
-                // Default to P1 constraints if player number not determined yet
-                minAzimuthAngle={
-                  isSpectatorView
-                    ? -Infinity
-                    : viewPlayerNumber === 2
-                    ? Math.PI - 0.5
-                    : -0.5
-                }
-                maxAzimuthAngle={
-                  isSpectatorView
-                    ? Infinity
-                    : viewPlayerNumber === 2
-                    ? Math.PI + 0.5
-                    : 0.5
-                }
-              />
-              {/* Smooth spectator rotation around board center */}
-              {isSpectatorView && (
-                <SpectatorRotateControls
-                  enabled={true}
-                  controlsRef={controlsRef}
-                  yawTargetRef={spectatorYawTargetRef}
-                  resetKey={viewPlayerNumber}
+                <Piles3D
+                  owner="p2"
+                  matW={MAT_PIXEL_W}
+                  matH={MAT_PIXEL_H}
+                  showCardPreview={showCardPreview}
+                  hideCardPreview={hideCardPreview}
                 />
-              )}
-              <KeyboardPanControls enabled={canPanCamera} />
-              <TrackpadOrbitAdapter />
-            </Canvas>
+                {/* Token piles (face-up) */}
+                <TokenPile3D owner="p1" />
+                <TokenPile3D owner="p2" />
+
+                {/* 3D HUD (thresholds, life, mana) */}
+                <Hud3D owner="p1" />
+                <Hud3D owner="p2" />
+
+                {/* 3D Hands - show both player and opponent hands */}
+                {viewPlayerKey && (
+                  <Hand3D
+                    owner={viewPlayerKey}
+                    matW={MAT_PIXEL_W}
+                    matH={MAT_PIXEL_H}
+                    viewerPlayerNumber={viewPlayerNumber}
+                    // Own-hand visibility: players always see; spectators see only with commentator permit
+                    showCardBacks={
+                      isSpectatorView ? !spectatorCanViewHands : false
+                    }
+                    // Commentator: bottom edge for oriented seat; Spectator (non-commentator): also use bottom edge for oriented seat
+                    placement={isSpectatorView ? "edgeBottom" : undefined}
+                    flatCards={
+                      isSpectatorView ? Boolean(spectatorCanViewHands) : false
+                    }
+                    showCardPreview={showCardPreview}
+                    hideCardPreview={hideCardPreview}
+                  />
+                )}
+                {/* Opponent hand with card backs */}
+                {viewPlayerKey &&
+                  (() => {
+                    const opponentKey = viewPlayerKey === "p1" ? "p2" : "p1";
+                    return (
+                      <Hand3D
+                        owner={opponentKey}
+                        matW={MAT_PIXEL_W}
+                        matH={MAT_PIXEL_H}
+                        // Opponent-hand visibility: players see backs; spectators see faces only with commentator permit
+                        showCardBacks={
+                          isSpectatorView ? !spectatorCanViewHands : true
+                        }
+                        viewerPlayerNumber={viewPlayerNumber}
+                        // Commentator and non-commentator spectators: top edge for the opponent seat
+                        placement={isSpectatorView ? "edgeTop" : undefined}
+                        flatCards={
+                          isSpectatorView
+                            ? Boolean(spectatorCanViewHands)
+                            : false
+                        }
+                        showCardPreview={showCardPreview}
+                        hideCardPreview={hideCardPreview}
+                      />
+                    );
+                  })()}
+
+                {/* Smart texture cache: own hand + top N of draw piles (background) */}
+                <TextureCache mode="smart" topN={5} />
+
+                <OrbitControls
+                  ref={controlsRef}
+                  makeDefault
+                  target={[0, 0, 0]}
+                  mouseButtons={
+                    isSpectatorView
+                      ? {
+                          LEFT: THREE.MOUSE.ROTATE,
+                          MIDDLE: THREE.MOUSE.DOLLY,
+                          RIGHT: THREE.MOUSE.PAN,
+                        }
+                      : {
+                          MIDDLE: THREE.MOUSE.DOLLY,
+                          RIGHT: THREE.MOUSE.PAN,
+                        }
+                  }
+                  touches={{ TWO: THREE.TOUCH.PAN }}
+                  enabled={canPanCamera}
+                  enablePan={canPanCamera}
+                  enableRotate={isSpectatorView ? true : false}
+                  enableZoom={!resyncing && !dragFromHand && !dragFromPile}
+                  enableDamping={isSpectatorView}
+                  dampingFactor={isSpectatorView ? 0.08 : 0}
+                  screenSpacePanning={isSpectatorView}
+                  panSpeed={isSpectatorView ? 1.2 : 1}
+                  onChange={clampControls}
+                  minDistance={minDist}
+                  maxDistance={maxDist}
+                  minPolarAngle={
+                    cameraMode === "topdown"
+                      ? naturalTiltAngle
+                      : safeMinOrbitTilt
+                  }
+                  maxPolarAngle={
+                    cameraMode === "topdown" ? naturalTiltAngle : Math.PI / 2.4
+                  }
+                  // Adjust rotation constraints based on player position
+                  // Default to P1 constraints if player number not determined yet
+                  minAzimuthAngle={
+                    isSpectatorView
+                      ? -Infinity
+                      : viewPlayerNumber === 2
+                      ? Math.PI - 0.5
+                      : -0.5
+                  }
+                  maxAzimuthAngle={
+                    isSpectatorView
+                      ? Infinity
+                      : viewPlayerNumber === 2
+                      ? Math.PI + 0.5
+                      : 0.5
+                  }
+                />
+                {/* Smooth spectator rotation around board center */}
+                {isSpectatorView && (
+                  <SpectatorRotateControls
+                    enabled={true}
+                    controlsRef={controlsRef}
+                    yawTargetRef={spectatorYawTargetRef}
+                    resetKey={viewPlayerNumber}
+                  />
+                )}
+                <KeyboardPanControls enabled={canPanCamera} />
+                <TrackpadOrbitAdapter />
+              </Canvas>
+            </div>
           )}
         </>
       )}
