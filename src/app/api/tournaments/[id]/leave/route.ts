@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { getServerAuthSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { tournamentSocketService } from '@/lib/services/tournament-broadcast';
+import { invalidateCache, CacheKeys } from '@/lib/cache/redis-cache';
 
 export const dynamic = 'force-dynamic';
 
@@ -80,6 +81,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       console.warn('Failed to broadcast player left event:', socketError);
       // Don't fail the request if socket broadcast fails
     }
+
+    // Invalidate tournament cache so next poll gets fresh data
+    await invalidateCache(CacheKeys.tournaments.invalidateTournament(id));
 
     return new Response(JSON.stringify({
       success: true,

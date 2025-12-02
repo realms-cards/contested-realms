@@ -45,15 +45,11 @@ export default function MatchEndOverlay({
     typeof myPlayerId === "string" &&
     winnerId === myPlayerId;
   const isForfeit = reason === "forfeit";
-  // Detect if this is an abandonment: someone left and we're the "winner" by ID
-  // but maybe the reason event hasn't arrived yet
-  const isAbandonment =
-    !isForfeit &&
-    typeof winnerId === "string" &&
-    typeof myPlayerId === "string" &&
-    winnerId === myPlayerId;
-  // Use ID-based check for forfeits/abandonments, seat-based for normal gameplay
-  const didIWin = isForfeit || isAbandonment ? !!didIWinById : didIWinSeat;
+  // isAbandonment is only true for forfeits (opponent left) - never for normal gameplay wins
+  // The server always sets reason="forfeit" when someone leaves, so we rely on that
+  const isAbandonment = isForfeit;
+  // Use ID-based check for forfeits, seat-based for normal gameplay wins
+  const didIWin = isForfeit ? !!didIWinById : didIWinSeat;
   // A draw only occurs when both players died simultaneously (winner is null AND no winnerId)
   const isDraw = winner === null && !winnerId;
   const isRatedForfeit = isForfeit ? rated !== false : false;

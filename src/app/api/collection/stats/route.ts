@@ -1,5 +1,7 @@
 import { getServerAuthSession } from "@/lib/auth";
 import type { CollectionStats } from "@/lib/collection/types";
+import { withCache, CacheKeys } from "@/lib/cache/redis-cache";
+import { logPerformance } from "@/lib/monitoring/performance";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -7,6 +9,7 @@ export const dynamic = "force-dynamic";
 // GET /api/collection/stats
 // Returns collection statistics including set completion
 export async function GET() {
+  const startTime = performance.now();
   const session = await getServerAuthSession();
   if (!session?.user) {
     return new Response(
@@ -18,8 +21,15 @@ export async function GET() {
   try {
     const userId = session.user.id;
 
-    // Get total cards and unique cards
-    const [totalAgg, uniqueCards] = await Promise.all([
+    // Generate cache key for this user's collection stats
+    const cacheKey = CacheKeys.collection.stats(userId);
+
+    // Wrap stats query with Redis cache (30 second TTL - balances freshness with performance)
+    const response = await withCache(
+      cacheKey,
+      async () => {
+        // Get total cards and unique cards
+        const [totalAgg, uniqueCards] = await Promise.all([
       prisma.collectionCard.aggregate({
         where: { userId },
         _sum: { quantity: true },
@@ -79,37 +89,16 @@ export async function GET() {
       })
       .filter((s) => s.total > 0);
 
-    // Get cards by element
-    const collectionWithElements = await prisma.collectionCard.findMany({
-      where: { userId },
-      select: {
-        quantity: true,
-        card: { select: { elements: true } },
-      },
-    });
-
-    const byElement: Record<string, number> = {};
-    for (const entry of collectionWithElements) {
-      const elements = entry.card.elements;
-      if (elements) {
-        // Elements can be comma-separated
-        const elementList = elements.split(",").map((e) => e.trim());
-        for (const el of elementList) {
-          if (el) {
-            byElement[el] = (byElement[el] || 0) + entry.quantity;
-          }
-        }
-      }
-    }
-
-    // Get cards by rarity (need to join with metadata)
-    const collectionWithMeta = await prisma.collectionCard.findMany({
+    // Optimized: Fetch collection once with both elements and metadata
+    // This reduces 2 separate queries (1000 rows) to 1 query (500 rows)
+    const collectionWithDetails = await prisma.collectionCard.findMany({
       where: { userId },
       select: {
         quantity: true,
         setId: true,
         card: {
           select: {
+            elements: true,
             meta: {
               select: { rarity: true, setId: true },
             },
@@ -118,9 +107,23 @@ export async function GET() {
       },
     });
 
+    // Process both element and rarity aggregations in single pass
+    const byElement: Record<string, number> = {};
     const byRarity: Record<string, number> = {};
-    for (const entry of collectionWithMeta) {
-      // Find matching metadata by setId if available
+
+    for (const entry of collectionWithDetails) {
+      // Aggregate by element
+      const elements = entry.card.elements;
+      if (elements) {
+        const elementList = elements.split(",").map((e) => e.trim());
+        for (const el of elementList) {
+          if (el) {
+            byElement[el] = (byElement[el] || 0) + entry.quantity;
+          }
+        }
+      }
+
+      // Aggregate by rarity
       const meta = entry.setId
         ? entry.card.meta.find((m) => m.setId === entry.setId)
         : entry.card.meta[0];
@@ -130,24 +133,29 @@ export async function GET() {
       }
     }
 
-    const response: CollectionStats = {
-      summary: {
-        totalCards: totalAgg._sum.quantity || 0,
-        uniqueCards: uniqueCards.length,
-        totalValue: null, // Pricing to be computed later
-        currency: "USD",
+        return {
+          summary: {
+            totalCards: totalAgg._sum.quantity || 0,
+            uniqueCards: uniqueCards.length,
+            totalValue: null, // Pricing to be computed later
+            currency: "USD",
+          },
+          bySet,
+          byElement,
+          byRarity,
+        } as CollectionStats;
       },
-      bySet,
-      byElement,
-      byRarity,
-    };
+      { ttl: 30 } // 30 second cache - balances freshness with performance
+    );
 
+    logPerformance('GET /api/collection/stats', performance.now() - startTime);
     return new Response(JSON.stringify(response), {
       status: 200,
       headers: { "content-type": "application/json" },
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Unknown error";
+    logPerformance('GET /api/collection/stats', performance.now() - startTime);
     return new Response(JSON.stringify({ error: message }), {
       status: 500,
       headers: { "content-type": "application/json" },

@@ -3,6 +3,7 @@ import { getServerAuthSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { tournamentSocketService } from '@/lib/services/tournament-broadcast';
 import { updateStandingsAfterMatch } from '@/lib/tournament/pairing';
+import { invalidateCache, CacheKeys } from '@/lib/cache/redis-cache';
 
 export const dynamic = 'force-dynamic';
 
@@ -202,6 +203,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ mat
         }
       }
     }
+    }
+
+    // Invalidate tournament cache so next poll gets fresh data
+    if (match.tournamentId) {
+      await invalidateCache(CacheKeys.tournaments.invalidateTournament(match.tournamentId));
     }
 
     return new Response(JSON.stringify({

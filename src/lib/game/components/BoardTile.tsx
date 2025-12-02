@@ -1,6 +1,7 @@
 import { Text } from "@react-three/drei";
 import type { MutableRefObject } from "react";
 import { MagicTargetOverlay } from "@/lib/game/components/MagicTargetOverlay";
+import { PortalOverlay } from "@/lib/game/components/PortalOverlay";
 import {
   PermanentStack,
   type PermanentStackProps,
@@ -17,6 +18,7 @@ import type {
   GameState,
   Permanents,
   PlayerKey,
+  PortalState,
 } from "@/lib/game/store/types";
 
 type BoardTileProps = {
@@ -68,6 +70,10 @@ type BoardTileProps = {
   calculateEdgePosition: GameState["calculateEdgePosition"];
   attackConfirm: GameState["attackConfirm"];
   attackTargetChoice: GameState["attackTargetChoice"];
+  portalState: PortalState | null;
+  // Switch site position support
+  switchSiteSource: GameState["switchSiteSource"];
+  onCompleteSwitchSite?: (targetX: number, targetY: number) => void;
 };
 
 export function BoardTile({
@@ -119,6 +125,9 @@ export function BoardTile({
   calculateEdgePosition,
   attackConfirm,
   attackTargetChoice,
+  portalState,
+  switchSiteSource,
+  onCompleteSwitchSite,
 }: BoardTileProps) {
   const items = permanents[tileKey] || [];
   const cellNumber = (boardSize.h - 1 - tileY) * boardSize.w + tileX + 1;
@@ -140,7 +149,12 @@ export function BoardTile({
         emitBoardPing={emitBoardPing}
         clearBoardSelection={clearBoardSelection}
         lastDropAt={lastDropAt}
+        switchSiteSource={switchSiteSource}
+        onCompleteSwitchSite={onCompleteSwitchSite}
       />
+
+      {/* Portal overlay (Harbinger ability) - rendered under cards */}
+      <PortalOverlay tileX={tileX} tileY={tileY} portalState={portalState} />
 
       {magicGuidesActive && (
         <MagicTargetOverlay
@@ -186,6 +200,8 @@ export function BoardTile({
         touchPreviewTimerRef={touchContext.touchPreviewTimerRef}
         touchContextTimerRef={touchContext.touchContextTimerRef}
         computeProjectileFirstHits={magicContext.computeProjectileFirstHits}
+        switchSiteSource={switchSiteSource}
+        onCompleteSwitchSite={onCompleteSwitchSite}
       />
 
       <PermanentStack

@@ -14,6 +14,7 @@ import React, {
 import { OnlineContext } from "@/app/online/online-context";
 import AuthButton from "@/components/auth/AuthButton";
 import SeatMediaControls from "@/components/rtc/SeatMediaControls";
+import CacheSettingsSection from "@/components/settings/CacheSettingsSection";
 import { useColorBlind } from "@/lib/contexts/ColorBlindContext";
 import { useLoadingContext } from "@/lib/contexts/LoadingContext";
 
@@ -806,6 +807,8 @@ export default function UserBadge({
                   <span>{colorBlindEnabled ? "On" : "Off"}</span>
                 </button>
               </div>
+              {/* Card Image Cache section */}
+              <CacheSettingsSection />
               <div className="flex items-center gap-3">
                 <div className="w-14 h-14 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center overflow-hidden">
                   {previewAvatar ? (

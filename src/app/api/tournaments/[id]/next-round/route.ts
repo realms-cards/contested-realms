@@ -128,26 +128,36 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       await tournamentSocketService.broadcastTournamentUpdateById(id);
 
       // Additionally, send MATCH_ASSIGNED to each participant of created matches
+      // Optimized: Batch all broadcasts instead of sequential awaits (32 sequential → 1 parallel batch)
       const t = await prisma.tournament.findUnique({ where: { id }, select: { name: true } });
       const lobbyName = t?.name || 'Tournament Match';
+
+      const broadcastPromises = [];
       for (const m of matchData) {
         if (m.player1Id) {
-          await tournamentSocketService.broadcastMatchAssigned(id, m.player1Id, {
-            matchId: m.id,
-            opponentId: m.player2Id,
-            opponentName: m.player2Name,
-            lobbyName,
-          });
+          broadcastPromises.push(
+            tournamentSocketService.broadcastMatchAssigned(id, m.player1Id, {
+              matchId: m.id,
+              opponentId: m.player2Id,
+              opponentName: m.player2Name,
+              lobbyName,
+            })
+          );
         }
         if (m.player2Id) {
-          await tournamentSocketService.broadcastMatchAssigned(id, m.player2Id, {
-            matchId: m.id,
-            opponentId: m.player1Id,
-            opponentName: m.player1Name,
-            lobbyName,
-          });
+          broadcastPromises.push(
+            tournamentSocketService.broadcastMatchAssigned(id, m.player2Id, {
+              matchId: m.id,
+              opponentId: m.player1Id,
+              opponentName: m.player1Name,
+              lobbyName,
+            })
+          );
         }
       }
+
+      // Execute all broadcasts in parallel
+      await Promise.all(broadcastPromises);
     } catch (socketError) {
       console.warn('Failed to broadcast round started event:', socketError);
       // Don't fail the request if socket broadcast fails

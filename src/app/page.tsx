@@ -65,7 +65,7 @@ export default function Home() {
         <AsciiLogo className="max-w-4xl mx-auto" />
 
         {/* Primary Navigation */}
-        <div className="grid grid-cols-1 md:grid-cols-1 gap-5 xl:gap-6 max-w-6xl mx-auto">
+        <div className="grid grid-cols-1 md:grid-cols-1 gap-5 xl:gap-6 max-w-4xl mx-auto">
           {/* Local Hotseat 
           <AsciiPanel className="p-5 md:p-6">
             <Link
@@ -82,7 +82,7 @@ export default function Home() {
           */}
 
           {session ? (
-            <AsciiPanel className="max-w-4xl min-w-2xl p-5 md:p-6 justify-self-center">
+            <AsciiPanel className="w-full p-5 md:p-6 justify-self-center">
               <Link
                 href="/online/lobby"
                 className="group block hover:scale-[1.02] transition-transform duration-200"
@@ -95,7 +95,7 @@ export default function Home() {
               </Link>
             </AsciiPanel>
           ) : (
-            <AsciiPanel className="w-4xl p-5 md:p-6 justify-self-center">
+            <AsciiPanel className="w-full p-5 md:p-6 justify-self-center">
               <button
                 type="button"
                 onClick={() => router.push("/auth/signin")}
@@ -113,7 +113,7 @@ export default function Home() {
 
         {/* Secondary Links */}
         {session && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4 max-w-4xl min-w-2xl justify-self-center">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4 max-w-4xl mx-auto">
             <AsciiPanel className="p-5 md:p-6">
               <Link
                 href="/decks"
@@ -141,7 +141,7 @@ export default function Home() {
           </div>
         )}
         {session && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4 max-w-4xl min-w-2xl justify-self-center">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4 max-w-4xl mx-auto">
             <AsciiPanel className="p-5 md:p-6">
               <Link
                 href="/play"
@@ -170,7 +170,7 @@ export default function Home() {
         )}
         {/* Other Realms (wide bottom element) */}
         {session && (
-          <div className="min-w-2xl max-w-3xlp-5 md:p-6 justify-self-center cursor-pointer">
+          <div className="max-w-4xl mx-auto cursor-pointer">
             <OtherRealms />
           </div>
         )}

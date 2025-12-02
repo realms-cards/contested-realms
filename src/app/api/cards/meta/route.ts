@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
-export const dynamic = "force-dynamic";
+// ISR: Card metadata rarely changes, revalidate every hour
+export const revalidate = 3600; // 1 hour
 import { getSetIdByName } from "@/lib/api/cached-lookups";
 import { prisma } from "@/lib/prisma";
 

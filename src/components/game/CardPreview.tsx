@@ -11,14 +11,14 @@ type Props = {
   card: CardPreviewData | null | undefined;
   anchor?: Anchor; // default: top-right
   className?: string;
-  zIndexClass?: string; // default: z-[100] to be above global Canvas (z-50)
+  zIndexClass?: string; // default: z-30
 };
 
 export default function CardPreview({
   card,
   anchor = "top-right",
   className = "",
-  zIndexClass = "z-[100]",
+  zIndexClass = "z-30",
 }: Props) {
   const slug = card?.slug ?? "";
 
@@ -183,14 +183,14 @@ export default function CardPreview({
   const anchorClasses = (() => {
     switch (effectiveAnchor) {
       case "top-left":
-        return `fixed left-3 ${topOffsetClass}`;
+        return `absolute left-3 ${topOffsetClass}`;
       case "bottom-left":
-        return `fixed left-3 ${bottomOffsetClass}`;
+        return `absolute left-3 ${bottomOffsetClass}`;
       case "bottom-right":
-        return `fixed right-2 ${bottomOffsetClass}`;
+        return `absolute right-2 ${bottomOffsetClass}`;
       case "top-right":
       default:
-        return `fixed right-3 ${topOffsetClass}`;
+        return `absolute right-3 ${topOffsetClass}`;
     }
   })();
 

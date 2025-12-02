@@ -1202,170 +1202,178 @@ export default function OnlineDraft3DScreen({
   return (
     <div className="fixed inset-0 w-screen h-screen">
       {/* 3D Stage */}
-      <Canvas
-        camera={{ position: [0, 10, 0], fov: 50 }}
-        shadows
-        gl={{ preserveDrawingBuffer: true, antialias: true, alpha: false }}
-      >
-        <color attach="background" args={["#0b0b0c"]} />
-        <ambientLight intensity={0.8} />
-        <directionalLight position={[10, 12, 8]} intensity={1.35} castShadow />
+      <div className="absolute inset-0 w-full h-full">
+        <Canvas
+          camera={{ position: [0, 10, 0], fov: 50 }}
+          shadows
+          gl={{ preserveDrawingBuffer: true, antialias: true, alpha: false }}
+        >
+          <color attach="background" args={["#0b0b0c"]} />
+          <ambientLight intensity={0.8} />
+          <directionalLight
+            position={[10, 12, 8]}
+            intensity={1.35}
+            castShadow
+          />
 
-        <Physics gravity={[0, -9.81, 0]}>
-          <Board interactionMode="spectator" />
-        </Physics>
+          <Physics gravity={[0, -9.81, 0]}>
+            <Board interactionMode="spectator" />
+          </Physics>
 
-        <Piles3D owner="p1" matW={MAT_PIXEL_W} matH={MAT_PIXEL_H} />
-        <Piles3D owner="p2" matW={MAT_PIXEL_W} matH={MAT_PIXEL_H} />
+          <Piles3D owner="p1" matW={MAT_PIXEL_W} matH={MAT_PIXEL_H} />
+          <Piles3D owner="p2" matW={MAT_PIXEL_W} matH={MAT_PIXEL_H} />
 
-        <TextureCache />
+          <TextureCache />
 
-        {/* Current pack */}
-        {draftState.phase !== "complete" && (
-          <group>
-            {myPack.map((c, idx) => {
-              const pos = packLayout[idx] ?? { x: 0, z: 0, rot: 0 };
-              const isSite = (c.type || "").toLowerCase().includes("site");
-              return (
-                <DraggableCard3D
-                  key={`pack-${draftState.packIndex}-${draftState.pickNumber}-${c.id}-${idx}`}
-                  slug={c.slug}
-                  isSite={isSite}
-                  x={pos.x}
-                  z={pos.z}
-                  cardName={c.cardName ?? c.name ?? c.slug}
-                  cardType={c.type ?? null}
-                  disabled={!amPicker}
-                  onDragChange={setOrbitLocked}
-                  rotationZ={pos.rot}
-                  getTopRenderOrder={getTopRenderOrder}
-                  onHoverStart={(preview) => {
-                    if (!orbitLocked) setHoverPreview(preview ?? null);
-                  }}
-                  onHoverEnd={() => setHoverPreview(null)}
-                  onClick={() => {
-                    if (!amPicker) return;
-                    console.log(
-                      `[DraftClient 3D] clickStage -> cardId=${c.id} name=${
-                        c.cardName ?? c.name
-                      } pack=${draftState.packIndex} pick=${
-                        draftState.pickNumber
-                      }`
-                    );
-                    // Stage the card at a position slightly away from center
-                    const stageX = pos.x + 0.5;
-                    const stageZ = pos.z + 0.5;
-                    setStaged({ card: c, x: stageX, z: stageZ });
-                  }}
-                  onDragMove={(wx, wz) => {
-                    const d = Math.hypot(
-                      wx - PICK_CENTER.x,
-                      wz - PICK_CENTER.z
-                    );
-                    if (d > PICK_RADIUS) setReadyIdx(idx);
-                    else if (readyIdx === idx) setReadyIdx(null);
-                  }}
-                  onRelease={(wx, wz, wasDragging) => {
-                    if (!wasDragging) return;
-                    const d = Math.hypot(
-                      wx - PICK_CENTER.x,
-                      wz - PICK_CENTER.z
-                    );
-                    if (d > PICK_RADIUS) {
+          {/* Current pack */}
+          {draftState.phase !== "complete" && (
+            <group>
+              {myPack.map((c, idx) => {
+                const pos = packLayout[idx] ?? { x: 0, z: 0, rot: 0 };
+                const isSite = (c.type || "").toLowerCase().includes("site");
+                return (
+                  <DraggableCard3D
+                    key={`pack-${draftState.packIndex}-${draftState.pickNumber}-${c.id}-${idx}`}
+                    slug={c.slug}
+                    isSite={isSite}
+                    x={pos.x}
+                    z={pos.z}
+                    cardName={c.cardName ?? c.name ?? c.slug}
+                    cardType={c.type ?? null}
+                    disabled={!amPicker}
+                    onDragChange={setOrbitLocked}
+                    rotationZ={pos.rot}
+                    getTopRenderOrder={getTopRenderOrder}
+                    onHoverStart={(preview) => {
+                      if (!orbitLocked) setHoverPreview(preview ?? null);
+                    }}
+                    onHoverEnd={() => setHoverPreview(null)}
+                    onClick={() => {
+                      if (!amPicker) return;
                       console.log(
-                        `[DraftClient 3D] stagePick -> cardId=${c.id} name=${
+                        `[DraftClient 3D] clickStage -> cardId=${c.id} name=${
                           c.cardName ?? c.name
                         } pack=${draftState.packIndex} pick=${
                           draftState.pickNumber
-                        } at=(${wx.toFixed(2)},${wz.toFixed(2)})`
+                        }`
                       );
-                      setStaged({ card: c, x: wx, z: wz });
-                    } else if (staged?.card?.id === c.id) {
-                      console.log(
-                        `[DraftClient 3D] unstagePick -> cardId=${c.id}`
-                      );
-                      setStaged(null);
-                    }
-                  }}
-                />
-              );
-            })}
-          </group>
-        )}
-
-        {/* Picked cards displayed on the board */}
-        {pick3D.length > 0 && (
-          <group>
-            {pick3D.map((p) => {
-              const stackPos = stackedPositions?.get(p.id) || {
-                x: p.x,
-                z: p.z,
-                stackIndex: 0,
-                isVisible: true,
-              };
-              if (!stackPos.isVisible) return null;
-
-              const isSite = (p.card.type || "").toLowerCase().includes("site");
-              return (
-                <group
-                  key={`pick-${p.id}`}
-                  position={[
-                    stackPos.x,
-                    0.01 + stackPos.stackIndex * 0.01,
-                    stackPos.z,
-                  ]}
-                >
-                  <CardPlane
-                    slug={p.card.slug}
-                    width={isSite ? CARD_LONG : CARD_SHORT}
-                    height={isSite ? CARD_SHORT : CARD_LONG}
-                    rotationZ={isSite ? -Math.PI / 2 : 0}
-                    elevation={0.01 + stackPos.stackIndex * 0.01}
-                    onPointerOver={() => {
-                      if (!orbitLocked)
-                        setHoverPreview({
-                          slug: p.card.slug,
-                          name: p.card.cardName,
-                          type: p.card.type,
-                        });
+                      // Stage the card at a position slightly away from center
+                      const stageX = pos.x + 0.5;
+                      const stageZ = pos.z + 0.5;
+                      setStaged({ card: c, x: stageX, z: stageZ });
                     }}
-                    onPointerOut={() => setHoverPreview(null)}
+                    onDragMove={(wx, wz) => {
+                      const d = Math.hypot(
+                        wx - PICK_CENTER.x,
+                        wz - PICK_CENTER.z
+                      );
+                      if (d > PICK_RADIUS) setReadyIdx(idx);
+                      else if (readyIdx === idx) setReadyIdx(null);
+                    }}
+                    onRelease={(wx, wz, wasDragging) => {
+                      if (!wasDragging) return;
+                      const d = Math.hypot(
+                        wx - PICK_CENTER.x,
+                        wz - PICK_CENTER.z
+                      );
+                      if (d > PICK_RADIUS) {
+                        console.log(
+                          `[DraftClient 3D] stagePick -> cardId=${c.id} name=${
+                            c.cardName ?? c.name
+                          } pack=${draftState.packIndex} pick=${
+                            draftState.pickNumber
+                          } at=(${wx.toFixed(2)},${wz.toFixed(2)})`
+                        );
+                        setStaged({ card: c, x: wx, z: wz });
+                      } else if (staged?.card?.id === c.id) {
+                        console.log(
+                          `[DraftClient 3D] unstagePick -> cardId=${c.id}`
+                        );
+                        setStaged(null);
+                      }
+                    }}
                   />
-                </group>
-              );
-            })}
-          </group>
-        )}
+                );
+              })}
+            </group>
+          )}
 
-        <OrbitControls
-          makeDefault
-          target={[0, 0, 0]}
-          enabled={!orbitLocked}
-          enablePan
-          enableRotate={false}
-          enableZoom
-          enableDamping
-          dampingFactor={0.08}
-          screenSpacePanning
-          panSpeed={1.2}
-          zoomSpeed={0.75}
-          minDistance={2}
-          maxDistance={28}
-          minPolarAngle={0.05}
-          maxPolarAngle={0.35}
-          mouseButtons={{
-            MIDDLE: MOUSE.DOLLY,
-            RIGHT: MOUSE.PAN,
-          }}
-          touches={{ TWO: TOUCH.PAN }}
-        />
-        <ClampOrbitTarget bounds={{ minX: -8, maxX: 8, minZ: -6, maxZ: 6 }} />
-        <KeyboardPanControls enabled={!orbitLocked} />
-        <TrackpadOrbitAdapter />
-      </Canvas>
+          {/* Picked cards displayed on the board */}
+          {pick3D.length > 0 && (
+            <group>
+              {pick3D.map((p) => {
+                const stackPos = stackedPositions?.get(p.id) || {
+                  x: p.x,
+                  z: p.z,
+                  stackIndex: 0,
+                  isVisible: true,
+                };
+                if (!stackPos.isVisible) return null;
+
+                const isSite = (p.card.type || "")
+                  .toLowerCase()
+                  .includes("site");
+                return (
+                  <group
+                    key={`pick-${p.id}`}
+                    position={[
+                      stackPos.x,
+                      0.01 + stackPos.stackIndex * 0.01,
+                      stackPos.z,
+                    ]}
+                  >
+                    <CardPlane
+                      slug={p.card.slug}
+                      width={isSite ? CARD_LONG : CARD_SHORT}
+                      height={isSite ? CARD_SHORT : CARD_LONG}
+                      rotationZ={isSite ? -Math.PI / 2 : 0}
+                      elevation={0.01 + stackPos.stackIndex * 0.01}
+                      onPointerOver={() => {
+                        if (!orbitLocked)
+                          setHoverPreview({
+                            slug: p.card.slug,
+                            name: p.card.cardName,
+                            type: p.card.type,
+                          });
+                      }}
+                      onPointerOut={() => setHoverPreview(null)}
+                    />
+                  </group>
+                );
+              })}
+            </group>
+          )}
+
+          <OrbitControls
+            makeDefault
+            target={[0, 0, 0]}
+            enabled={!orbitLocked}
+            enablePan
+            enableRotate={false}
+            enableZoom
+            enableDamping
+            dampingFactor={0.08}
+            screenSpacePanning
+            panSpeed={1.2}
+            zoomSpeed={0.75}
+            minDistance={2}
+            maxDistance={28}
+            minPolarAngle={0.05}
+            maxPolarAngle={0.35}
+            mouseButtons={{
+              MIDDLE: MOUSE.DOLLY,
+              RIGHT: MOUSE.PAN,
+            }}
+            touches={{ TWO: TOUCH.PAN }}
+          />
+          <ClampOrbitTarget bounds={{ minX: -8, maxX: 8, minZ: -6, maxZ: 6 }} />
+          <KeyboardPanControls enabled={!orbitLocked} />
+          <TrackpadOrbitAdapter />
+        </Canvas>
+      </div>
 
       {/* Overlays */}
-      <div className="fixed inset-0 z-[100] pointer-events-none select-none">
+      <div className="absolute inset-0 z-20 pointer-events-none select-none">
         {/* Header */}
         <div className="max-w-7xl mx-auto p-4 flex flex-wrap items-end gap-4 pointer-events-auto select-none">
           <div className="text-3xl font-fantaisie text-white">Draft</div>

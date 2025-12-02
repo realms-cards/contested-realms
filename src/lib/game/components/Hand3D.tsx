@@ -218,9 +218,46 @@ export default function Hand3D({
   }, [dragFromHand, selected, owner, setDragFromHand]);
   // Keep the hand anchored to the camera with less frequent updates
   const boardSize = useGameStore((s) => s.board.size);
+  const lastUpdateRef = useRef({ reveal: 0, spread: 0, focus: 0, hover: 0 });
+  const lastCameraPosRef = useRef({ x: 0, y: 0, z: 0 });
+
   useFrame(() => {
     const cam = camera as PerspectiveCamera;
     if (!rootRef.current || !("fov" in cam)) return;
+
+    // Check if camera has moved (board dragging)
+    const camPos = cam.position;
+    const cameraMoved =
+      Math.abs(camPos.x - lastCameraPosRef.current.x) > 0.001 ||
+      Math.abs(camPos.y - lastCameraPosRef.current.y) > 0.001 ||
+      Math.abs(camPos.z - lastCameraPosRef.current.z) > 0.001;
+
+    if (cameraMoved) {
+      lastCameraPosRef.current = { x: camPos.x, y: camPos.y, z: camPos.z };
+    }
+
+    // Performance optimization: Skip expensive calculations if hand is stable AND camera hasn't moved
+    // Check if all lerps are close to their targets (threshold: 0.01)
+    const isEdgePlacementCheck = (typeof placement === 'string' && (placement === 'edgeTop' || placement === 'edgeBottom')) || showCardBacks;
+    const targetShownCheck = isEdgePlacementCheck ? 1 : (overCardsArea || mouseInZone) ? 1 : 0;
+    const handShouldBeSpreadCheck = isEdgePlacementCheck ? true : (overCardsArea || mouseInZone);
+    const spreadTargetCheck = handShouldBeSpreadCheck ? 1 : 0;
+
+    const revealDelta = Math.abs(targetShownCheck - revealLerp.current);
+    const spreadDelta = Math.abs(spreadTargetCheck - handSpreadLerp.current);
+    const focusDelta = Math.abs(focusTargetRef.current - focusLerpRef.current);
+    const hoverTarget = hoverTargetRef.current >= 0 ? hoverTargetRef.current : -1;
+    const hoverDelta = Math.abs(hoverTarget - hoverLerpRef.current);
+
+    // Skip frame only if animations are stable AND camera is stationary
+    const threshold = 0.01;
+    if (!cameraMoved && revealDelta < threshold && spreadDelta < threshold && focusDelta < threshold && hoverDelta < threshold) {
+      // Only update every 4th frame when stable to keep position synchronized
+      const last = lastUpdateRef.current;
+      const now = performance.now();
+      if (now - (last.reveal || 0) < 66) return; // ~60ms = 4 frames at 60fps
+      lastUpdateRef.current.reveal = now;
+    }
 
     const dist = HAND_DIST;
     const fov = (cam.fov * Math.PI) / 180;

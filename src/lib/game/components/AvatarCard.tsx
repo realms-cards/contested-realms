@@ -1,4 +1,4 @@
-import { Html } from "@react-three/drei";
+import { Html as Html3D } from "@react-three/drei";
 import type { ThreeEvent } from "@react-three/fiber";
 import { CuboidCollider, RigidBody } from "@react-three/rapier";
 import type { MutableRefObject } from "react";
@@ -272,7 +272,7 @@ export function AvatarCard({
   });
 
   function handleMagicClick(e: ThreeEvent<PointerEvent>): boolean {
-    if (!pendingMagic) return false;
+    if (!pendingMagic || pendingMagic.guidesSuppressed) return false;
     const ownerSeat = seatFromOwner(pendingMagic.spell.owner);
     const amActor = actorKey === ownerSeat;
     const actorIsActive =
@@ -566,7 +566,6 @@ export function AvatarCard({
             elevation={dragAvatar === seat ? DRAG_LIFT + 0.002 : 0.002}
             polygonOffsetUnits={-1.25}
             polygonOffsetFactor={-0.75}
-            depthWrite={false}
             renderOrder={
               hideAvatar
                 ? -5
@@ -601,7 +600,7 @@ export function AvatarCard({
     const leftEdgeX = -CARD_SHORT * 0.5;
     const centerZ = 0;
     return (
-      <Html
+      <Html3D
         position={[leftEdgeX, 0.004, centerZ]}
         transform
         rotation-x={-Math.PI / 2}
@@ -650,7 +649,7 @@ export function AvatarCard({
             </div>
           </div>
         </div>
-      </Html>
+      </Html3D>
     );
   }
 

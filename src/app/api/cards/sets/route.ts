@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 
-export const dynamic = "force-dynamic";
+// ISR: Sets rarely change (only on ingestion), revalidate every hour
+export const revalidate = 3600; // 1 hour
 
 // GET /api/cards/sets
 // Returns all available sets for filtering

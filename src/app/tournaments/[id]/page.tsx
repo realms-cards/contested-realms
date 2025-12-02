@@ -213,14 +213,15 @@ export default function TournamentDetailsPage() {
     }
   }, [initialLoaded, derivedTournament, lastUpdated]);
 
+  // Sync context on mount only - avoid repeated calls that trigger forced refreshes
+  const didSyncRef = useRef(false);
   useEffect(() => {
-    if (
-      derivedTournament &&
-      (!currentTournament || currentTournament.id !== derivedTournament.id)
-    ) {
-      setCurrentTournamentById(derivedTournament.id);
+    if (didSyncRef.current) return;
+    if (tournamentId && !currentTournament) {
+      didSyncRef.current = true;
+      setCurrentTournamentById(tournamentId);
     }
-  }, [derivedTournament, currentTournament, setCurrentTournamentById]);
+  }, [tournamentId, currentTournament, setCurrentTournamentById]);
 
   // Alias realtime statistics for easier usage
   const statistics = rtStatistics;
@@ -385,7 +386,6 @@ export default function TournamentDetailsPage() {
   >([]);
   const [viewerDeckLoaded, setViewerDeckLoaded] = useState(false);
   const viewerDeckHashRef = useRef<string | null>(null);
-  const [checkedDirect, setCheckedDirect] = useState(false);
   const [showDeckDetails, setShowDeckDetails] = useState(false);
   // Constructed preparation state
   const [constructedLoading, setConstructedLoading] = useState(false);
@@ -414,32 +414,7 @@ export default function TournamentDetailsPage() {
   const tStatus = tournament?.status ?? null;
   const tFormat = tournament?.format ?? null;
 
-  // Fallback: if list hasn't provided the tournament yet, attempt fetching by id directly once
-  useEffect(() => {
-    (async () => {
-      try {
-        if (tournament || rtLoading || checkedDirect || !lastUpdated) return;
-        const res = await fetch(
-          `/api/tournaments/${encodeURIComponent(tournamentId)}`
-        );
-        if (res.ok) {
-          const detail = await res.json();
-          setCurrentTournament(detail as unknown as typeof currentTournament);
-        }
-      } catch {
-        // ignore
-      } finally {
-        setCheckedDirect(true);
-      }
-    })();
-  }, [
-    tournament,
-    rtLoading,
-    lastUpdated,
-    checkedDirect,
-    tournamentId,
-    setCurrentTournament,
-  ]);
+  // Removed duplicate fallback effect - the one at lines 158-197 handles this
 
   // Helpers: safe currentPlayers count
   function getCurrentPlayersCount(t: Tournament | null): number {
@@ -1006,10 +981,10 @@ export default function TournamentDetailsPage() {
     );
   }
 
-  // Avoid flashing "not found" before the realtime context hydrates and direct check completes
+  // Avoid flashing "not found" before the realtime context hydrates
   if (
     !derivedTournament &&
-    (!lastUpdated || !checkedDirect) &&
+    (!lastUpdated || fallbackLoading) &&
     !initialLoaded
   ) {
     return (
@@ -1733,6 +1708,16 @@ export default function TournamentDetailsPage() {
                                     Select
                                   </button>
                                 )}
+                                <Link
+                                  href={`/decks/editor-3d?id=${encodeURIComponent(
+                                    d.id
+                                  )}&tournament=${encodeURIComponent(
+                                    tournament.id
+                                  )}`}
+                                  className="text-xs text-emerald-200 underline"
+                                >
+                                  Edit
+                                </Link>
                               </div>
                             </div>
                           ))}
@@ -1777,6 +1762,16 @@ export default function TournamentDetailsPage() {
                                       Select
                                     </button>
                                   )}
+                                  <Link
+                                    href={`/decks/editor-3d?id=${encodeURIComponent(
+                                      d.id
+                                    )}&tournament=${encodeURIComponent(
+                                      tournament.id
+                                    )}`}
+                                    className="text-xs text-emerald-200 underline"
+                                  >
+                                    Edit
+                                  </Link>
                                 </div>
                               </div>
                             ))}
@@ -1785,9 +1780,22 @@ export default function TournamentDetailsPage() {
                       )}
                   </div>
                 ) : (
-                  <div className="text-emerald-200/80 text-sm">
-                    No decks found. Create a constructed deck in the Decks
-                    section first.
+                  <div className="text-emerald-200/80 text-sm space-y-2">
+                    <div>
+                      No valid decks found. Constructed decks must have:
+                    </div>
+                    <ul className="list-disc list-inside text-xs opacity-80">
+                      <li>Exactly 1 Avatar</li>
+                      <li>At least 60 cards in Spellbook</li>
+                      <li>At least 30 sites in Atlas</li>
+                      <li>0-10 cards in Collection</li>
+                      <li>Dragonlord decks require a champion</li>
+                    </ul>
+                    <div>
+                      <Link href="/decks" className="underline">
+                        Edit your decks
+                      </Link>
+                    </div>
                   </div>
                 )}
               </div>
@@ -2643,12 +2651,22 @@ export default function TournamentDetailsPage() {
                       )}
                   </div>
                 ) : (
-                  <div className="text-emerald-200/80 text-sm">
-                    No decks found. Create a constructed deck in the{" "}
-                    <a className="underline" href="/decks">
-                      Decks
-                    </a>{" "}
-                    section first.
+                  <div className="text-emerald-200/80 text-sm space-y-2">
+                    <div>
+                      No valid decks found. Constructed decks must have:
+                    </div>
+                    <ul className="list-disc list-inside text-xs opacity-80">
+                      <li>Exactly 1 Avatar</li>
+                      <li>At least 60 cards in Spellbook</li>
+                      <li>At least 30 sites in Atlas</li>
+                      <li>0-10 cards in Collection</li>
+                      <li>Dragonlord decks require a champion</li>
+                    </ul>
+                    <div>
+                      <a className="underline" href="/decks">
+                        Edit your decks
+                      </a>
+                    </div>
                   </div>
                 )}
               </div>

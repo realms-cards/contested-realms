@@ -27,6 +27,7 @@ import { createInteractionSlice } from "./store/interactionState";
 import { createMagicSlice } from "./store/magicState";
 import { createNetworkSlice } from "./store/networkState";
 import { createPermanentSlice } from "./store/permanentState";
+import { createPortalSlice } from "./store/portalState";
 import { createPositionSlice } from "./store/positionState";
 import { createPreferenceSlice } from "./store/preferenceState";
 import { createRemoteCursorSlice } from "./store/remoteCursorState";
@@ -78,6 +79,9 @@ export type {
   Phase,
   PlayerKey,
   PlayerState,
+  PortalPlayerState,
+  PortalRollPhase,
+  PortalState,
   RemoteCursorState,
   ServerPatchT,
   SendInteractionRequestInput,
@@ -111,6 +115,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   ...createInteractionSlice(set, get, storeApi),
   ...createTransportSlice(set, get, storeApi),
   ...createNetworkSlice(set, get, storeApi),
+  ...createPortalSlice(set, get, storeApi),
 
   // Multiplayer transport (injected by online play UI)
   receiveCustomMessage: (msg) => handleCustomMessage(msg, set, get),
@@ -164,6 +169,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         magicGuidesActive: false,
         snapshots: createEmptySnapshots(),
         pendingMagic: null,
+        portalState: null,
       };
       return reset as GameState;
     }),

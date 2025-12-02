@@ -220,7 +220,7 @@ export const createNetworkSlice: StateCreator<
           replaceKeys.has("avatars") ? undefined : state.avatars
         );
 
-        // Preserve existing avatar cards and champions if not explicitly updated in the patch
+        // Preserve existing avatar cards if not explicitly updated in the patch
         // This prevents avatars from disappearing on reload/reconnect
         if (replaceKeys.has("avatars")) {
           const p1Candidate = (
@@ -240,17 +240,6 @@ export const createNetworkSlice: StateCreator<
               p1: { ...next.avatars.p1, card: state.avatars.p1.card },
             } as GameState["avatars"];
           }
-          // Also preserve champion for p1
-          if (
-            p1Candidate &&
-            !("champion" in p1Candidate) &&
-            state.avatars?.p1?.champion
-          ) {
-            next.avatars = {
-              ...next.avatars,
-              p1: { ...next.avatars.p1, champion: state.avatars.p1.champion },
-            } as GameState["avatars"];
-          }
           if (
             p2Candidate &&
             !("card" in p2Candidate) &&
@@ -259,17 +248,6 @@ export const createNetworkSlice: StateCreator<
             next.avatars = {
               ...next.avatars,
               p2: { ...next.avatars.p2, card: state.avatars.p2.card },
-            } as GameState["avatars"];
-          }
-          // Also preserve champion for p2
-          if (
-            p2Candidate &&
-            !("champion" in p2Candidate) &&
-            state.avatars?.p2?.champion
-          ) {
-            next.avatars = {
-              ...next.avatars,
-              p2: { ...next.avatars.p2, champion: state.avatars.p2.champion },
             } as GameState["avatars"];
           }
         }
@@ -356,6 +334,14 @@ export const createNetworkSlice: StateCreator<
             : []
           : mergeEvents(state.events, Array.isArray(p.events) ? p.events : []);
         next.eventSeq = Math.max(state.eventSeq, Number(p.eventSeq) || 0);
+      }
+      // Harbinger portal state (Gothic expansion)
+      if (p.portalState !== undefined) {
+        next.portalState = replaceKeys.has("portalState")
+          ? p.portalState
+          : p.portalState; // Portal state is always replaced, not merged
+      } else if (replaceKeys.has("portalState")) {
+        next.portalState = null;
       }
 
       try {

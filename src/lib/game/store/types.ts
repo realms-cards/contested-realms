@@ -143,6 +143,27 @@ export type AvatarState = EntityBase<CardRef | null> & {
   champion?: ChampionRef | null; // Dragonlord champion dragon
 };
 
+// --- Harbinger Portal State (Gothic expansion) --------------------------------
+export type PortalRollPhase = "pending" | "rolling" | "complete";
+
+export type PortalPlayerState = {
+  rolls: number[]; // Raw D20 results (1-20)
+  tileNumbers: number[]; // Final unique tile numbers (1-20)
+  rollPhase: PortalRollPhase;
+};
+
+export type PortalState = {
+  // Which players have Harbinger avatar (detected by name)
+  harbingerSeats: PlayerKey[];
+  // Per-player portal state
+  p1: PortalPlayerState | null;
+  p2: PortalPlayerState | null;
+  // Current player rolling (for sequential dual-harbinger)
+  currentRoller: PlayerKey | null;
+  // Overall setup complete flag
+  setupComplete: boolean;
+};
+
 export type PermanentItem = EntityBase<CardRef> & {
   owner: 1 | 2;
   tilt?: number;
@@ -283,6 +304,8 @@ export type GameState = {
   setActorKey: (key: PlayerKey | null) => void;
   localPlayerId: string | null;
   setLocalPlayerId: (id: string | null) => void;
+  opponentPlayerId: string | null;
+  setOpponentPlayerId: (id: string | null) => void;
   // Match end detection
   matchEnded: boolean;
   winner: PlayerKey | null;
@@ -616,6 +639,13 @@ export type GameState = {
   // Transfer control
   transferPermanentControl: (at: CellKey, index: number, to?: 1 | 2) => void;
   transferSiteControl: (x: number, y: number, to?: 1 | 2) => void;
+  // Switch site position (Earthquake, Rift Valley) - moves all permanents/avatars with the site
+  switchSitePosition: (
+    sourceX: number,
+    sourceY: number,
+    targetX: number,
+    targetY: number
+  ) => void;
   avatars: Record<PlayerKey, AvatarState>;
   permanents: Permanents;
   setAvatarCard: (who: PlayerKey, card: CardRef) => void;
@@ -634,6 +664,14 @@ export type GameState = {
   incrementAvatarCounter: (who: PlayerKey) => void;
   decrementAvatarCounter: (who: PlayerKey) => void;
   clearAvatarCounter: (who: PlayerKey) => void;
+  // Harbinger Portal State (Gothic expansion)
+  portalState: PortalState | null;
+  initPortalState: (harbingerSeats: PlayerKey[]) => void;
+  setPortalCurrentRoller: (seat: PlayerKey | null) => void;
+  rollPortalDie: (seat: PlayerKey, dieIndex: number) => void;
+  rerollPortalDie: (seat: PlayerKey, dieIndex: number) => void;
+  finalizePortalRolls: (seat: PlayerKey) => void;
+  completePortalSetup: () => void;
   // Mulligans
   mulligans: Record<PlayerKey, number>;
   mulligan: (who: PlayerKey) => void;
@@ -682,6 +720,9 @@ export type GameState = {
     screen?: { x: number; y: number }
   ) => void;
   closeContextMenu: () => void;
+  // Switch site position selection (Earthquake, Rift Valley)
+  switchSiteSource: { x: number; y: number } | null;
+  setSwitchSiteSource: (source: { x: number; y: number } | null) => void;
   // Placement dialog for cards to piles
   placementDialog: {
     cardName: string;
@@ -815,5 +856,6 @@ export type ServerPatchT = Partial<{
   playerPositions: GameState["playerPositions"];
   events: GameState["events"];
   eventSeq: GameState["eventSeq"];
+  portalState: GameState["portalState"];
   __replaceKeys: string[];
 }>;

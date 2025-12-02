@@ -1,5 +1,6 @@
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef, Phase } from "@/lib/game/store";
+import { preCacheDeckFromResponse } from "@/lib/service-worker/registration";
 
 // Internal helper: extend CardRef with an optional classification zone
 type CardRefWithZone = CardRef & { __zone?: string | null };
@@ -22,6 +23,10 @@ export async function loadDeckFor(
     }
 
     const data = await res.json();
+
+    // Pre-cache card images in the background for offline play
+    preCacheDeckFromResponse(data);
+
     const rawSpellbook: CardRef[] = Array.isArray(data?.spellbook)
       ? (data.spellbook as CardRef[])
       : [];

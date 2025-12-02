@@ -1,6 +1,6 @@
 "use client";
 
-import { Html } from "@react-three/drei";
+import { Html as Html3D } from "@react-three/drei";
 import { useMemo } from "react";
 import { ManaCounterHUD } from "@/components/game/manacost";
 import Threshold3D from "@/lib/game/components/Threshold3D";
@@ -55,7 +55,7 @@ export default function Hud3D({ owner }: Hud3DProps) {
       {/* Available mana counter near threshold column */}
       <group position={[manaX, 0.001, 0]}>
         {/* DOM-based controls to avoid interfering with 3D raycasting */}
-        <Html
+        <Html3D
           position={[0, 0.003, 0]}
           zIndexRange={[0, 0]}
           transform
@@ -72,7 +72,7 @@ export default function Hud3D({ owner }: Hud3DProps) {
               size={18}
             />
           </div>
-        </Html>
+        </Html3D>
       </group>
     </group>
   );

@@ -9,6 +9,7 @@ import {
   type WebGLRenderer,
 } from "three";
 import { KTX2Loader } from "three/examples/jsm/loaders/KTX2Loader.js";
+import { exposeTextureCache } from "./textureMonitoring";
 
 export interface UseCardTextureOptions {
   slug?: string;
@@ -30,6 +31,12 @@ type CacheEntry = {
 const textureCache = new Map<string, CacheEntry>();
 // Pending loads by URL to dedupe concurrent requests.
 const pendingLoads = new Map<string, Promise<Texture>>();
+
+// Expose cache to monitoring utilities for debugging and performance tracking
+if (typeof globalThis !== 'undefined') {
+  exposeTextureCache(textureCache, pendingLoads);
+}
+
 // Single KTX2Loader per app to reuse workers/transcoder and internal caches across all canvases.
 let globalKtx2Loader: KTX2Loader | null = null;
 // Remember KTX2 URLs that failed recently; retry after a cooldown.

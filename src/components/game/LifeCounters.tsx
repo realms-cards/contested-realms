@@ -201,7 +201,7 @@ function LifeCounter({
 export default function LifeCounters({ dragFromHand }: LifeCountersProps) {
   return (
     <div
-      className={`fixed left-3 top-1/2 -translate-y-1/2 z-[100] flex flex-col gap-4 ${
+      className={`absolute left-3 top-1/2 -translate-y-1/2 z-10 flex flex-col gap-4 ${
         dragFromHand ? "pointer-events-none" : "pointer-events-auto"
       } text-white select-none`}
       onContextMenu={(e) => e.preventDefault()}

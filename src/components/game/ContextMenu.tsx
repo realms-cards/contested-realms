@@ -2,14 +2,14 @@
 
 import { useLayoutEffect, useRef, useState, useEffect } from "react";
 import { useSound } from "@/lib/contexts/SoundContext";
+import AttachmentTargetSelectionDialog, {
+  type AttachmentTarget,
+} from "@/lib/game/components/AttachmentTargetSelectionDialog";
 import {
   detectBurrowSubmergeAbilities,
   detectBurrowSubmergeAbilitiesSync,
   detectRangedAbilitySync,
 } from "@/lib/game/cardAbilities";
-import AttachmentTargetSelectionDialog, {
-  type AttachmentTarget,
-} from "@/lib/game/components/AttachmentTargetSelectionDialog";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef } from "@/lib/game/store";
 import {
@@ -60,7 +60,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   );
   const detachToken = useGameStore((s) => s.detachToken);
   const log = useGameStore((s) => s.log);
-  const setPreviewCard = useGameStore((s) => s.setPreviewCard);
+  const setSwitchSiteSource = useGameStore((s) => s.setSwitchSiteSource);
 
   // Permanent position management (burrow/submerge)
   const getAvailableActions = useGameStore((s) => s.getAvailableActions);
@@ -280,11 +280,6 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   }> = [];
   let isCarryableArtifact = false;
   let isMine = false; // Ownership check for attached items operations
-  let championInfo: {
-    name: string;
-    slug?: string | null;
-    cardId?: number;
-  } | null = null; // Dragonlord champion
 
   if (t.kind === "site") {
     const key = toCellKey(t.x, t.y);
@@ -346,6 +341,19 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         });
         onClose();
       };
+    }
+
+    // Switch Site Position (Earthquake, Rift Valley)
+    // Can move a site to a void or swap with another site
+    if (site) {
+      extraActions.push({
+        actionId: "__switch_site_position__",
+        displayText: "Switch Position",
+        isEnabled: true,
+        targetPermanentId: 0,
+        description:
+          "Click another tile to move this site there (swap or move to void). All minions and avatars move with the site.",
+      });
     }
   } else if (t.kind === "permanent") {
     const arr = permanents[t.at] || [];
@@ -678,16 +686,6 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     const canToggle = !actorKey || actorKey === t.who;
     hasToggle = !!canToggle;
     isMine = !actorKey || actorKey === t.who;
-
-    // Check for Dragonlord champion (works for any player's Dragonlord avatar)
-    if (a?.champion && a?.card?.name?.toLowerCase() === "dragonlord") {
-      championInfo = {
-        name: a.champion.name,
-        slug: a.champion.slug,
-        cardId: a.champion.cardId,
-      };
-    }
-
     if (canToggle) {
       doToggle = () => {
         toggleTapAvatar(t.who);
@@ -874,7 +872,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         />
       )}
       <div
-        className="fixed inset-0 z-[100]"
+        className="absolute inset-0 z-30"
         onClick={onClose}
         onContextMenu={(e) => {
           e.preventDefault();
@@ -884,7 +882,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
       >
         <div
           ref={menuRef}
-          className="fixed bg-zinc-900/90 backdrop-blur rounded-xl ring-1 ring-white/10 shadow-lg p-3 w-56 text-white pointer-events-auto"
+          className="absolute bg-zinc-900/90 backdrop-blur rounded-xl ring-1 ring-white/10 shadow-lg p-3 w-56 text-white pointer-events-auto"
           style={{
             left: (menuPos?.left ?? contextMenu.screen?.x ?? 16) + "px",
             top: (menuPos?.top ?? contextMenu.screen?.y ?? 16) + "px",
@@ -895,34 +893,6 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
             <div className="text-sm font-semibold mb-2 truncate" title={header}>
               {header}
             </div>
-            {/* Dragonlord Champion display */}
-            {championInfo &&
-              (() => {
-                const champ = championInfo; // Capture for callback
-                return (
-                  <div
-                    className="mb-2 px-3 py-1.5 bg-gradient-to-r from-amber-900/40 to-orange-900/40 rounded-lg ring-1 ring-amber-500/30 cursor-pointer hover:ring-amber-400/50 transition-all"
-                    onMouseEnter={() => {
-                      if (champ.slug) {
-                        setPreviewCard({
-                          name: champ.name,
-                          slug: champ.slug,
-                          cardId: champ.cardId ?? 0,
-                          type: "Minion - Dragon",
-                        });
-                      }
-                    }}
-                    onMouseLeave={() => setPreviewCard(null)}
-                  >
-                    <div className="text-[10px] uppercase tracking-wide text-amber-400/80 mb-0.5">
-                      Champion
-                    </div>
-                    <div className="text-sm font-medium text-amber-200">
-                      {champ.name}
-                    </div>
-                  </div>
-                );
-              })()}
             <div className="space-y-2">
               {hasToggle && doToggle && (
                 <button
@@ -1222,6 +1192,27 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                                   candidates: [],
                                 });
                               }
+                            }
+                            onClose();
+                          }}
+                        >
+                          {action.displayText}
+                        </button>
+                      );
+                    }
+                    // Switch Site Position action
+                    if (action.actionId === "__switch_site_position__") {
+                      return (
+                        <button
+                          key={action.actionId}
+                          className="w-full text-left rounded bg-amber-600/20 hover:bg-amber-600/30 px-3 py-1"
+                          title={action.description}
+                          onClick={() => {
+                            if (t.kind === "site") {
+                              setSwitchSiteSource({ x: t.x, y: t.y });
+                              log(
+                                "Site selected for switch. Click another tile to complete the move."
+                              );
                             }
                             onClose();
                           }}

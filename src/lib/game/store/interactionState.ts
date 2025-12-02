@@ -113,10 +113,7 @@ export const createInteractionSlice: StateCreator<
   sendInteractionRequest: (input: SendInteractionRequestInput) => {
     const requestId = input.requestId ?? generateInteractionRequestId();
     const grantOverride = normalizeGrantRequest(input.grant);
-    const basePayload = { ...(input.payload ?? {}) } as Record<
-      string,
-      unknown
-    >;
+    const basePayload = { ...(input.payload ?? {}) } as Record<string, unknown>;
     if (grantOverride) {
       basePayload.grant = grantOverride;
     }
@@ -191,7 +188,9 @@ export const createInteractionSlice: StateCreator<
     }
   },
 
-  receiveInteractionEnvelope: (incoming: InteractionEnvelope | InteractionMessage) => {
+  receiveInteractionEnvelope: (
+    incoming: InteractionEnvelope | InteractionMessage
+  ) => {
     const message: InteractionMessage | null = (() => {
       if (!incoming || typeof incoming !== "object") return null;
       if (
@@ -444,7 +443,8 @@ export const createInteractionSlice: StateCreator<
 
       const payload = (message.payload ?? {}) as Record<string, unknown>;
       const requestedBy =
-        typeof payload.requestedBy === "string" && payload.requestedBy.length > 0
+        typeof payload.requestedBy === "string" &&
+        payload.requestedBy.length > 0
           ? payload.requestedBy
           : null;
       const actorSeat =

@@ -1,4 +1,4 @@
-import { Html } from "@react-three/drei";
+import { Html as Html3D } from "@react-three/drei";
 import type { ThreeEvent } from "@react-three/fiber";
 import { CuboidCollider, RigidBody } from "@react-three/rapier";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
@@ -486,7 +486,7 @@ export function PermanentStack({
                   clearHoverPreview(hoverKey);
                   return;
                 }
-                if (pendingMagic) {
+                if (pendingMagic && !pendingMagic.guidesSuppressed) {
                   const ownerSeat = seatFromOwner(pendingMagic.spell.owner);
                   const amActor = actorKey === ownerSeat;
                   const actorIsActive =
@@ -1034,7 +1034,7 @@ export function PermanentStack({
                   const leftEdgeX = -CARD_SHORT * 0.5;
                   const centerZ = 0;
                   return (
-                    <Html
+                    <Html3D
                       position={[leftEdgeX, 0.004, centerZ]}
                       transform
                       rotation-x={-Math.PI / 2}
@@ -1083,7 +1083,7 @@ export function PermanentStack({
                           </div>
                         </div>
                       </div>
-                    </Html>
+                    </Html3D>
                   );
                 })()}
                 {(() => {
