@@ -1,6 +1,6 @@
 import { getServerAuthSession } from "@/lib/auth";
-import type { CollectionStats } from "@/lib/collection/types";
 import { withCache, CacheKeys } from "@/lib/cache/redis-cache";
+import type { CollectionStats } from "@/lib/collection/types";
 import { logPerformance } from "@/lib/monitoring/performance";
 import { prisma } from "@/lib/prisma";
 

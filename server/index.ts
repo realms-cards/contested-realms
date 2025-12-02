@@ -1285,7 +1285,15 @@ async function finalizeMatch(
   const leaderboardPayload = isDraw ? { isDraw: true } : { winnerId, loserId };
 
   if (isRatedResult) {
-    recordLeaderboardMatchResult(match, leaderboardPayload).catch(() => {});
+    recordLeaderboardMatchResult(match, leaderboardPayload).catch(
+      (err: unknown) => {
+        console.error(
+          `[leaderboard] Failed to record match result for ${match.id}:`,
+          err instanceof Error ? err.message : err,
+          { winnerId, loserId, isDraw, playerIds: match.playerIds }
+        );
+      }
+    );
   }
 
   // If this is a tournament match, persist result into Tournament Match and update round completion

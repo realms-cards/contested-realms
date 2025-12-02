@@ -1,7 +1,6 @@
 "use client";
-
-import { Suspense, lazy } from "react";
 import type { Canvas as CanvasType } from "@react-three/fiber";
+import { Suspense, lazy } from "react";
 import type { ComponentProps } from "react";
 
 /**

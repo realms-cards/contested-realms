@@ -1,6 +1,7 @@
 import type { Finish, Prisma, Rarity } from "@prisma/client";
 import { NextRequest } from "next/server";
 import { getServerAuthSession } from "@/lib/auth";
+import { CacheKeys, invalidateCache } from "@/lib/cache/redis-cache";
 import type {
   CollectionListResponse,
   CollectionAddResponse,
@@ -11,7 +12,6 @@ import {
   validateCollectionCardInput,
   validateQuantity,
 } from "@/lib/collection/validation";
-import { CacheKeys, invalidateCache } from "@/lib/cache/redis-cache";
 import { logPerformance } from "@/lib/monitoring/performance";
 import { prisma } from "@/lib/prisma";
 

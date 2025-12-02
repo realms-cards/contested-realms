@@ -1,11 +1,11 @@
 import { Text } from "@react-three/drei";
 import type { MutableRefObject } from "react";
 import { MagicTargetOverlay } from "@/lib/game/components/MagicTargetOverlay";
-import { PortalOverlay } from "@/lib/game/components/PortalOverlay";
 import {
   PermanentStack,
   type PermanentStackProps,
 } from "@/lib/game/components/PermanentStack";
+import { PortalOverlay } from "@/lib/game/components/PortalOverlay";
 import { SiteCard } from "@/lib/game/components/SiteCard";
 import {
   TileInteractionPlane,

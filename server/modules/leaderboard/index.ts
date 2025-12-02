@@ -82,7 +82,8 @@ export function createLeaderboardService({
   matchRecordings,
 }: LeaderboardServiceDeps) {
   if (!prisma) throw new Error("createLeaderboardService requires prisma");
-  if (!players) throw new Error("createLeaderboardService requires players map");
+  if (!players)
+    throw new Error("createLeaderboardService requires players map");
   if (!matchRecordings) {
     throw new Error("createLeaderboardService requires matchRecordings map");
   }
@@ -147,7 +148,10 @@ export function createLeaderboardService({
     });
   }
 
-  async function checkTournamentWin(tournamentId: string | null, playerId: string | null): Promise<boolean> {
+  async function checkTournamentWin(
+    tournamentId: string | null,
+    playerId: string | null
+  ): Promise<boolean> {
     if (!tournamentId || !playerId) return false;
     try {
       const tournament = await prisma.tournament.findUnique({
@@ -160,7 +164,11 @@ export function createLeaderboardService({
         },
       });
 
-      if (!tournament || tournament.status !== "completed" || !tournament.standings[0]) {
+      if (
+        !tournament ||
+        tournament.status !== "completed" ||
+        !tournament.standings[0]
+      ) {
         return false;
       }
 
@@ -183,11 +191,7 @@ export function createLeaderboardService({
     for (const timeFrame of TIME_FRAMES) {
       const entries = await prisma.leaderboardEntry.findMany({
         where: { format, timeFrame },
-        orderBy: [
-          { rating: "desc" },
-          { winRate: "desc" },
-          { wins: "desc" },
-        ],
+        orderBy: [{ rating: "desc" }, { winRate: "desc" }, { wins: "desc" }],
       });
       if (entries.length === 0) continue;
 
@@ -207,15 +211,33 @@ export function createLeaderboardService({
     payload: LeaderboardMatchPayload = {}
   ): Promise<void> {
     try {
-      if (!match || !match.id || match._leaderboardRecorded) return;
+      if (!match || !match.id) {
+        console.warn(`[leaderboard] recordMatchResult: invalid match object`);
+        return;
+      }
+      if (match._leaderboardRecorded) {
+        console.log(
+          `[leaderboard] recordMatchResult: already recorded for ${match.id}`
+        );
+        return;
+      }
 
-      const validFormats = new Set<GameFormat>(["constructed", "sealed", "draft"]);
+      const validFormats = new Set<GameFormat>([
+        "constructed",
+        "sealed",
+        "draft",
+      ]);
       const format: GameFormat = validFormats.has(match.matchType as GameFormat)
         ? (match.matchType as GameFormat)
         : "constructed";
 
-      const playerIds: string[] = Array.isArray(match.playerIds) ? match.playerIds : [];
+      const playerIds: string[] = Array.isArray(match.playerIds)
+        ? match.playerIds
+        : [];
       if (playerIds.length === 0) {
+        console.warn(
+          `[leaderboard] recordMatchResult: no playerIds for ${match.id}`
+        );
         match._leaderboardRecorded = true;
         return;
       }
@@ -231,18 +253,28 @@ export function createLeaderboardService({
         return;
       }
 
-      const infoById = new Map<string, string>(playerInfos.map((info) => [info.id, info.displayName]));
+      const infoById = new Map<string, string>(
+        playerInfos.map((info) => [info.id, info.displayName])
+      );
       const recording = matchRecordings.get(match.id);
       let durationSeconds: number | null = null;
       if (recording && typeof recording.startTime === "number") {
         const endTime = recording.endTime ?? Date.now();
-        durationSeconds = Math.max(0, Math.round((endTime - recording.startTime) / 1000));
+        durationSeconds = Math.max(
+          0,
+          Math.round((endTime - recording.startTime) / 1000)
+        );
       }
 
       const isDraw = payload.isDraw === true;
       let winnerId =
-        typeof payload.winnerId === "string" ? payload.winnerId : typeof match.winnerId === "string" ? match.winnerId : null;
-      let loserId = typeof payload.loserId === "string" ? payload.loserId : null;
+        typeof payload.winnerId === "string"
+          ? payload.winnerId
+          : typeof match.winnerId === "string"
+          ? match.winnerId
+          : null;
+      let loserId =
+        typeof payload.loserId === "string" ? payload.loserId : null;
 
       if (isDraw || !winnerId) {
         winnerId = null;
@@ -254,7 +286,9 @@ export function createLeaderboardService({
       const tournamentId =
         typeof payload.tournamentId === "string"
           ? payload.tournamentId
-          : (typeof match.tournamentId === "string" ? match.tournamentId : null);
+          : typeof match.tournamentId === "string"
+          ? match.tournamentId
+          : null;
 
       const existingResult = await prisma.matchResult.findFirst({
         where: { matchId: match.id },
@@ -268,11 +302,15 @@ export function createLeaderboardService({
           let safeLoserId = isDraw ? null : loserId;
 
           if (safeWinnerId) {
-            const exists = await prisma.user.findUnique({ where: { id: safeWinnerId } });
+            const exists = await prisma.user.findUnique({
+              where: { id: safeWinnerId },
+            });
             if (!exists) safeWinnerId = null;
           }
           if (safeLoserId) {
-            const exists = await prisma.user.findUnique({ where: { id: safeLoserId } });
+            const exists = await prisma.user.findUnique({
+              where: { id: safeLoserId },
+            });
             if (!exists) safeLoserId = null;
           }
 
@@ -298,11 +336,22 @@ export function createLeaderboardService({
       match._leaderboardRecorded = true;
 
       if (!winnerId && !loserId && !isDraw) {
+        console.warn(
+          `[leaderboard] recordMatchResult: no winner/loser/draw for ${match.id}`,
+          {
+            payloadWinnerId: payload.winnerId,
+            payloadLoserId: payload.loserId,
+            matchWinnerId: match.winnerId,
+            playerIds,
+          }
+        );
         return;
       }
 
       const tournamentWin = await checkTournamentWin(tournamentId, winnerId);
-      const timeFrames: TimeFrame[] = tournamentWin ? [...TIME_FRAMES] : ["all_time"];
+      const timeFrames: TimeFrame[] = tournamentWin
+        ? [...TIME_FRAMES]
+        : ["all_time"];
       let leaderboardUpdated = false;
 
       if (isDraw) {
@@ -319,10 +368,10 @@ export function createLeaderboardService({
                 data: {
                   draws: { increment: 1 },
                   winRate:
-                    entry.wins /
-                    (entry.wins + entry.losses + entry.draws + 1),
+                    entry.wins / (entry.wins + entry.losses + entry.draws + 1),
                   lastActive: new Date(),
-                  displayName: infoById.get(entry.playerId) || entry.displayName,
+                  displayName:
+                    infoById.get(entry.playerId) || entry.displayName,
                 },
               })
             )
@@ -330,9 +379,23 @@ export function createLeaderboardService({
         }
         leaderboardUpdated = true;
       } else if (winnerId && loserId) {
+        console.log(
+          `[leaderboard] recordMatchResult: updating leaderboard for ${match.id}`,
+          {
+            winnerId,
+            loserId,
+            format,
+            timeFrames,
+          }
+        );
         for (const timeFrame of timeFrames) {
           const [winnerEntry, loserEntry] = await Promise.all([
-            getOrCreateEntry(winnerId, infoById.get(winnerId), format, timeFrame),
+            getOrCreateEntry(
+              winnerId,
+              infoById.get(winnerId),
+              format,
+              timeFrame
+            ),
             getOrCreateEntry(loserId, infoById.get(loserId), format, timeFrame),
           ]);
 
@@ -349,7 +412,10 @@ export function createLeaderboardService({
                 rating: newWinnerRating,
                 winRate:
                   (winnerEntry.wins + 1) /
-                  (winnerEntry.wins + winnerEntry.losses + winnerEntry.draws + 1),
+                  (winnerEntry.wins +
+                    winnerEntry.losses +
+                    winnerEntry.draws +
+                    1),
                 lastActive: new Date(),
                 displayName: infoById.get(winnerId) || winnerEntry.displayName,
                 ...(tournamentWin ? { tournamentWins: { increment: 1 } } : {}),
@@ -374,12 +440,27 @@ export function createLeaderboardService({
 
       if (leaderboardUpdated) {
         await recalculateRanks(format);
+        console.log(
+          `[leaderboard] recordMatchResult: successfully updated for ${match.id}`
+        );
+      } else {
+        console.warn(
+          `[leaderboard] recordMatchResult: no leaderboard update for ${match.id}`,
+          {
+            winnerId,
+            loserId,
+            isDraw,
+            playerIds,
+          }
+        );
       }
     } catch (err) {
       try {
         const message = err instanceof Error ? err.message : String(err);
         console.warn(
-          `[leaderboard] failed to record result for ${match && match.id ? match.id : "unknown"}:`,
+          `[leaderboard] failed to record result for ${
+            match && match.id ? match.id : "unknown"
+          }:`,
           message
         );
       } catch {

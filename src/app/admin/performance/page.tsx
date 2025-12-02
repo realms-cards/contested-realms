@@ -254,28 +254,28 @@ export default function AdminPerformancePage() {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded border border-emerald-800 bg-emerald-900/20 p-3">
             <div className="flex items-center gap-2">
-              <div className="h-3 w-3 rounded-full bg-emerald-400"></div>
+              <div className="h-3 w-3 rounded-full bg-emerald-400" />
               <div className="text-sm font-semibold text-emerald-300">Excellent</div>
             </div>
             <div className="mt-1 text-xs text-slate-400">&lt; 50ms</div>
           </div>
           <div className="rounded border border-yellow-800 bg-yellow-900/20 p-3">
             <div className="flex items-center gap-2">
-              <div className="h-3 w-3 rounded-full bg-yellow-400"></div>
+              <div className="h-3 w-3 rounded-full bg-yellow-400" />
               <div className="text-sm font-semibold text-yellow-300">Good</div>
             </div>
             <div className="mt-1 text-xs text-slate-400">50ms - 200ms</div>
           </div>
           <div className="rounded border border-orange-800 bg-orange-900/20 p-3">
             <div className="flex items-center gap-2">
-              <div className="h-3 w-3 rounded-full bg-orange-400"></div>
+              <div className="h-3 w-3 rounded-full bg-orange-400" />
               <div className="text-sm font-semibold text-orange-300">Fair</div>
             </div>
             <div className="mt-1 text-xs text-slate-400">200ms - 500ms</div>
           </div>
           <div className="rounded border border-red-800 bg-red-900/20 p-3">
             <div className="flex items-center gap-2">
-              <div className="h-3 w-3 rounded-full bg-red-400"></div>
+              <div className="h-3 w-3 rounded-full bg-red-400" />
               <div className="text-sm font-semibold text-red-300">Slow</div>
             </div>
             <div className="mt-1 text-xs text-slate-400">&gt; 500ms</div>

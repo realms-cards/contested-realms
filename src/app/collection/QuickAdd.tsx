@@ -201,6 +201,10 @@ export default function QuickAdd({ onClose, onCardAdded }: QuickAddProps) {
             placeholder="Type card name and click to add..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
             className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
