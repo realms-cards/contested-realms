@@ -253,57 +253,63 @@ export default function ReplayViewerPage() {
   return (
     <div className="fixed inset-0 w-screen h-screen bg-slate-900">
       {/* 3D Game View */}
-      <Canvas
-        camera={{ position: [0, 10, 0], fov: 50 }}
-        shadows
-        gl={{ preserveDrawingBuffer: true, antialias: true, alpha: false }}
-      >
-        <color attach="background" args={["#0b0b0c"]} />
-        <ambientLight intensity={0.8} />
-        <directionalLight position={[10, 12, 8]} intensity={1.35} castShadow />
-
-        <Physics gravity={[0, -9.81, 0]}>
-          <Board interactionMode="spectator" enableBoardPings={false} />
-          {/* Commentator-style hands for replay: both players, face-up, flat, at edges */}
-          <Hand3D
-            owner="p1"
-            matW={1}
-            matH={1}
-            viewerPlayerNumber={1}
-            placement="edgeBottom"
-            showCardBacks={false}
-            flatCards
+      <div className="absolute inset-0 w-full h-full">
+        <Canvas
+          camera={{ position: [0, 10, 0], fov: 50 }}
+          shadows
+          gl={{ preserveDrawingBuffer: true, antialias: true, alpha: false }}
+        >
+          <color attach="background" args={["#0b0b0c"]} />
+          <ambientLight intensity={0.8} />
+          <directionalLight
+            position={[10, 12, 8]}
+            intensity={1.35}
+            castShadow
           />
-          <Hand3D
-            owner="p2"
-            matW={1}
-            matH={1}
-            viewerPlayerNumber={1}
-            placement="edgeTop"
-            showCardBacks={false}
-            flatCards
-          />
-          <TextureCache />
-        </Physics>
 
-        <OrbitControls
-          makeDefault
-          target={[0, 0, 0]}
-          // Full orbit controls for replay viewing
-          enablePan
-          enableRotate
-          enableZoom
-          enableDamping
-          dampingFactor={0.08}
-          screenSpacePanning
-          panSpeed={1.2}
-          zoomSpeed={0.75}
-          minDistance={1}
-          maxDistance={36}
-          minPolarAngle={0}
-          maxPolarAngle={Math.PI / 2.05}
-        />
-      </Canvas>
+          <Physics gravity={[0, -9.81, 0]}>
+            <Board interactionMode="spectator" enableBoardPings={false} />
+            {/* Commentator-style hands for replay: both players, face-up, flat, at edges */}
+            <Hand3D
+              owner="p1"
+              matW={1}
+              matH={1}
+              viewerPlayerNumber={1}
+              placement="edgeBottom"
+              showCardBacks={false}
+              flatCards
+            />
+            <Hand3D
+              owner="p2"
+              matW={1}
+              matH={1}
+              viewerPlayerNumber={1}
+              placement="edgeTop"
+              showCardBacks={false}
+              flatCards
+            />
+            <TextureCache />
+          </Physics>
+
+          <OrbitControls
+            makeDefault
+            target={[0, 0, 0]}
+            // Full orbit controls for replay viewing
+            enablePan
+            enableRotate
+            enableZoom
+            enableDamping
+            dampingFactor={0.08}
+            screenSpacePanning
+            panSpeed={1.2}
+            zoomSpeed={0.75}
+            minDistance={1}
+            maxDistance={36}
+            minPolarAngle={0}
+            maxPolarAngle={Math.PI / 2.05}
+          />
+        </Canvas>
+      </div>
 
       {previewCard?.slug && !contextMenu && (
         <CardPreview

@@ -4619,6 +4619,17 @@ server.listen(PORT, () => {
     try {
       console.log("[db] connected");
     } catch {}
+    // Warm up connection pool with a simple query
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      try {
+        console.log("[db] connection pool warmed up");
+      } catch {}
+    } catch (e) {
+      try {
+        console.warn("[db] connection warmup failed:", safeErrorMessage(e));
+      } catch {}
+    }
   } catch (e) {
     try {
       console.error("[db] connection failed:", safeErrorMessage(e));

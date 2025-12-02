@@ -11,6 +11,8 @@ import {
   validateCollectionCardInput,
   validateQuantity,
 } from "@/lib/collection/validation";
+import { CacheKeys, invalidateCache } from "@/lib/cache/redis-cache";
+import { logPerformance } from "@/lib/monitoring/performance";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -18,6 +20,7 @@ export const dynamic = "force-dynamic";
 // GET /api/collection
 // Query params: page, limit, setId, element, type, rarity, search, sort, order
 export async function GET(req: NextRequest) {
+  const startTime = performance.now();
   const session = await getServerAuthSession();
   if (!session?.user) {
     return new Response(
@@ -184,11 +187,13 @@ export async function GET(req: NextRequest) {
       },
     };
 
+    logPerformance('GET /api/collection', performance.now() - startTime);
     return new Response(JSON.stringify(response), {
       status: 200,
       headers: { "content-type": "application/json" },
     });
   } catch (e) {
+    logPerformance('GET /api/collection', performance.now() - startTime);
     const message = e instanceof Error ? e.message : "Unknown error";
     return new Response(JSON.stringify({ error: message }), {
       status: 500,
@@ -200,6 +205,7 @@ export async function GET(req: NextRequest) {
 // POST /api/collection
 // Body: { cards: [{ cardId, variantId?, setId?, finish, quantity }] }
 export async function POST(req: NextRequest) {
+  const startTime = performance.now();
   const session = await getServerAuthSession();
   if (!session?.user) {
     return new Response(
@@ -384,11 +390,16 @@ export async function POST(req: NextRequest) {
     response.added = results.created;
     response.updated = results.updated;
 
+    // Invalidate user's collection caches (cards were added/updated)
+    await invalidateCache(CacheKeys.collection.invalidateUser(userId));
+
+    logPerformance('POST /api/collection', performance.now() - startTime);
     return new Response(JSON.stringify(response), {
       status: 201,
       headers: { "content-type": "application/json" },
     });
   } catch (e) {
+    logPerformance('POST /api/collection', performance.now() - startTime);
     if (e instanceof Error && e.message === "USER_NOT_FOUND") {
       return new Response(
         JSON.stringify({

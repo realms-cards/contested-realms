@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { getServerAuthSession } from "@/lib/auth";
+import { CONSTRUCTED_REQUIREMENTS } from "@/lib/deck/validation-rules";
 import { prisma } from "@/lib/prisma";
 import { tournamentSocketService } from "@/lib/services/tournament-broadcast";
 import {
@@ -134,6 +135,13 @@ export async function GET(
       ...baseMyDecks.map((d) => d.id),
       ...publicDecks.map((d) => d.id),
     ];
+    console.log("[Constructed Decks] Validating decks:", allForValidation);
+    console.log(
+      "[Constructed Decks] baseMyDecks:",
+      baseMyDecks.map((d) => ({ id: d.id, name: d.name }))
+    );
+    console.log("[Constructed Decks] publicDecks count:", publicDecks.length);
+
     const deckCards = allForValidation.length
       ? await prisma.deckCard.findMany({
           where: { deckId: { in: allForValidation } },
@@ -143,14 +151,20 @@ export async function GET(
             setId: true,
             zone: true,
             count: true,
-            variant: { select: { typeText: true } },
+            variant: { select: { typeText: true, setId: true } },
+            card: { select: { name: true } },
           },
         })
       : [];
+    console.log("[Constructed Decks] Found deck cards:", deckCards.length);
     // Build meta fallback map (cardId,setId -> type)
+    // Include both DeckCard.setId and Variant.setId for lookup
     const pairs = deckCards
-      .filter((dc) => dc.setId != null)
-      .map((dc) => ({ cardId: dc.cardId, setId: dc.setId as number }));
+      .map((dc) => {
+        const sId = dc.setId ?? dc.variant?.setId ?? null;
+        return sId != null ? { cardId: dc.cardId, setId: sId } : null;
+      })
+      .filter((p): p is { cardId: number; setId: number } => p !== null);
     const metaMap = new Map<string, string>();
     if (pairs.length) {
       const metas = await prisma.cardSetMetadata.findMany({
@@ -159,44 +173,141 @@ export async function GET(
       });
       for (const m of metas) metaMap.set(`${m.cardId}:${m.setId}`, m.type);
     }
+    console.log("[Constructed Decks] MetaMap size:", metaMap.size);
 
     const constructedValidityByDeck = new Map<
       string,
-      { avatarCount: number; spellbook: number; atlas: number; valid: boolean }
+      {
+        avatarCount: number;
+        spellbook: number;
+        atlas: number;
+        collection: number;
+        hasDragonlordAvatar: boolean;
+        valid: boolean;
+      }
     >();
     for (const dc of deckCards) {
       const key = dc.deckId as string;
       let agg = constructedValidityByDeck.get(key);
       if (!agg) {
-        agg = { avatarCount: 0, spellbook: 0, atlas: 0, valid: false };
+        agg = {
+          avatarCount: 0,
+          spellbook: 0,
+          atlas: 0,
+          collection: 0,
+          hasDragonlordAvatar: false,
+          valid: false,
+        };
         constructedValidityByDeck.set(key, agg);
       }
       // Count zones
       const qty = Number(dc.count || 0);
       if (dc.zone === "Spellbook") agg.spellbook += qty;
       if (dc.zone === "Atlas") agg.atlas += qty;
-      // Avatar detection - prefer metadata.type over typeText (flavor text)
+      if (dc.zone === "Collection") agg.collection += qty;
+      // Avatar detection - prefer metadata.type over typeText
+      // Use DeckCard.setId or fall back to Variant.setId for metaMap lookup
+      const effectiveSetId = dc.setId ?? dc.variant?.setId ?? null;
       const type = (
-        (dc.setId != null
-          ? metaMap.get(`${dc.cardId}:${dc.setId}`)
+        (effectiveSetId != null
+          ? metaMap.get(`${dc.cardId}:${effectiveSetId}`)
           : undefined) ||
         dc.variant?.typeText ||
         ""
       ).toLowerCase();
       if (type.includes("avatar")) {
+        console.log(`[Constructed Decks] Found avatar in deck ${key}:`, {
+          cardId: dc.cardId,
+          name: dc.card?.name,
+          type,
+          qty,
+        });
         agg.avatarCount += qty;
+        const cardName = dc.card?.name?.toLowerCase() || "";
+        if (cardName === "dragonlord") {
+          agg.hasDragonlordAvatar = true;
+        }
       }
     }
+    // Log sample of deck cards for debugging
+    if (deckCards.length > 0) {
+      const sample = deckCards.slice(0, 3);
+      console.log(
+        "[Constructed Decks] Sample deck cards:",
+        sample.map((dc) => ({
+          deckId: dc.deckId,
+          cardId: dc.cardId,
+          zone: dc.zone,
+          count: dc.count,
+          typeText: dc.variant?.typeText,
+          setId: dc.setId,
+          variantSetId: dc.variant?.setId,
+        }))
+      );
+    }
+    // Look up champion assignment for decks so Dragonlord decks require a champion
+    const championRows = allForValidation.length
+      ? await prisma.deck.findMany({
+          where: { id: { in: allForValidation } },
+          select: { id: true, championCardId: true },
+        })
+      : [];
+    const championByDeckId = new Map<string, number | null>();
+    for (const row of championRows) {
+      championByDeckId.set(row.id, row.championCardId ?? null);
+    }
+
+    const {
+      minSpellbook,
+      minAtlas,
+      maxCollection,
+      avatarCount: requiredAvatars,
+    } = CONSTRUCTED_REQUIREMENTS;
+
     // Finalize validity
-    for (const [, agg] of constructedValidityByDeck) {
-      agg.valid =
-        agg.avatarCount === 1 && agg.spellbook >= 50 && agg.atlas >= 30;
+    for (const [deckId, agg] of constructedValidityByDeck) {
+      const meetsCounts =
+        agg.avatarCount === requiredAvatars &&
+        agg.spellbook >= minSpellbook &&
+        agg.atlas >= minAtlas &&
+        (maxCollection == null || agg.collection <= maxCollection);
+
+      const championCardId = championByDeckId.get(deckId) ?? null;
+      const needsChampion = agg.hasDragonlordAvatar;
+      const championOk = !needsChampion || championCardId != null;
+
+      agg.valid = meetsCounts && championOk;
+
+      console.log(`[Constructed Decks] Deck ${deckId}:`, {
+        avatarCount: agg.avatarCount,
+        spellbook: agg.spellbook,
+        atlas: agg.atlas,
+        collection: agg.collection,
+        hasDragonlordAvatar: agg.hasDragonlordAvatar,
+        championCardId,
+        meetsCounts,
+        championOk,
+        valid: agg.valid,
+        requirements: {
+          requiredAvatars,
+          minSpellbook,
+          minAtlas,
+          maxCollection,
+        },
+      });
     }
     const isDeckValid = (id: string) =>
       constructedValidityByDeck.get(id)?.valid === true;
 
     const validMyDecks = baseMyDecks.filter((d) => isDeckValid(d.id));
     publicDecks = publicDecks.filter((d) => isDeckValid(d.id));
+
+    console.log(
+      "[Constructed Decks] Valid decks:",
+      validMyDecks.map((d) => d.id),
+      "Public valid:",
+      publicDecks.length
+    );
 
     // Get currently selected deck from preparation data
     const prepData =
@@ -218,11 +329,12 @@ export async function GET(
         selectedDeckId,
         allowedFormats,
         deckRequirements: {
-          minimumCards: 50,
-          minimumAtlas: 30,
-          avatar: 1,
-          maximumCards: null,
-          sideboardAllowed: true,
+          minimumCards: CONSTRUCTED_REQUIREMENTS.minSpellbook,
+          minimumAtlas: CONSTRUCTED_REQUIREMENTS.minAtlas,
+          avatar: CONSTRUCTED_REQUIREMENTS.avatarCount,
+          maximumCards: CONSTRUCTED_REQUIREMENTS.maxSpellbook,
+          maxCollection: CONSTRUCTED_REQUIREMENTS.maxCollection,
+          sideboardAllowed: CONSTRUCTED_REQUIREMENTS.sideboardAllowed,
           validationRequired: true,
         },
         settings: constructedConfig,

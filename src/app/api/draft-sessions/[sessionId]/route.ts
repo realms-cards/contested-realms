@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { getServerAuthSession } from '@/lib/auth';
+import { logPerformance } from '@/lib/monitoring/performance';
 import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
@@ -10,6 +11,7 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ sessionId: string }> }
 ) {
+  const startTime = performance.now();
   const { sessionId } = await params;
   const session = await getServerAuthSession();
 
@@ -58,6 +60,7 @@ export async function GET(
       );
     }
 
+    logPerformance(`GET /api/draft-sessions/${sessionId}`, performance.now() - startTime);
     return new Response(
       JSON.stringify({
         id: draftSession.id,
@@ -80,6 +83,7 @@ export async function GET(
     );
   } catch (e: unknown) {
     console.error('Error fetching draft session:', e);
+    logPerformance(`GET /api/draft-sessions/${sessionId}`, performance.now() - startTime);
     const message =
       e instanceof Error ? e.message : typeof e === 'string' ? e : 'Unknown error';
     return new Response(JSON.stringify({ error: message }), {

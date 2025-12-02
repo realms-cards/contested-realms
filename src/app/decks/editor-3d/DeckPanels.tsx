@@ -1,6 +1,12 @@
 "use client";
 
-import { HelpCircle, Shuffle, SlidersHorizontal } from "lucide-react";
+import {
+  ArrowLeft,
+  HelpCircle,
+  Shuffle,
+  SlidersHorizontal,
+} from "lucide-react";
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import DeckTopBarActions from "@/app/decks/editor-3d/DeckTopBarActions";
 import UserBadge from "@/components/auth/UserBadge";
@@ -52,6 +58,8 @@ type DeckPanelsProps = {
   // Auto-save toggle
   autoSaveEnabled?: boolean;
   onToggleAutoSave?: (enabled: boolean) => void;
+  // Tournament context (for "Back to Tournament" link)
+  tournamentId?: string | null;
 };
 
 export default function DeckPanels(props: DeckPanelsProps) {
@@ -105,12 +113,24 @@ export default function DeckPanels(props: DeckPanelsProps) {
     // Auto-save
     autoSaveEnabled = false,
     onToggleAutoSave,
+    // Tournament context
+    tournamentId,
   } = props;
 
   return (
     <div className="absolute inset-0 z-20 pointer-events-none select-none">
       <div className="max-w-7xl mx-auto p-4 lg:pr-[20rem] xl:pr-[24rem] 2xl:pr-[28rem] flex flex-wrap items-end gap-4 pointer-events-auto select-none">
         <div className="flex items-center gap-3">
+          {/* Back to Tournament link */}
+          {tournamentId && (
+            <Link
+              href={`/tournaments/${encodeURIComponent(tournamentId)}`}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600/80 hover:bg-emerald-500 text-white text-sm font-medium transition-colors shadow-md"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to Tournament
+            </Link>
+          )}
           <div className="text-3xl font-fantaisie text-white">
             Deck Editor
             {isDraftMode && (

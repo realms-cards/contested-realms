@@ -13,6 +13,7 @@ import type {
 import { seatFromOwner } from "@/lib/game/store/utils/boardHelpers";
 
 const HIGHLIGHT_TARGET = "#ef4444";
+const HIGHLIGHT_SWITCH_SOURCE = "#f59e0b"; // amber for switch site selection
 
 type ProjectileHit = {
   kind: "permanent" | "avatar";
@@ -61,6 +62,9 @@ export type SiteCardProps = {
   touchPreviewTimerRef: MutableRefObject<number | null>;
   touchContextTimerRef: MutableRefObject<number | null>;
   computeProjectileFirstHits: ComputeProjectileHits;
+  // Switch site position selection
+  switchSiteSource: GameState["switchSiteSource"];
+  onCompleteSwitchSite?: (targetX: number, targetY: number) => void;
 };
 
 export function SiteCard({
@@ -96,6 +100,8 @@ export function SiteCard({
   touchPreviewTimerRef,
   touchContextTimerRef,
   computeProjectileFirstHits,
+  switchSiteSource,
+  onCompleteSwitchSite,
 }: SiteCardProps) {
   // These props are kept for future re-enablement of magic targeting hints
   void magicGuidesActive;
@@ -135,6 +141,14 @@ export function SiteCard({
 
   function highlightColor(): string | null {
     let hl: string | null = null;
+    // Switch site source highlight (amber pulse)
+    if (
+      switchSiteSource &&
+      switchSiteSource.x === tileX &&
+      switchSiteSource.y === tileY
+    ) {
+      hl = HIGHLIGHT_SWITCH_SOURCE;
+    }
     if (
       attackConfirm &&
       attackConfirm.target.kind === "site" &&
@@ -174,7 +188,7 @@ export function SiteCard({
   }
 
   function handleMagicTargeting(e: ThreeEvent<PointerEvent>) {
-    if (!pendingMagic) return;
+    if (!pendingMagic || pendingMagic.guidesSuppressed) return;
     const ownerSeat = seatFromOwner(pendingMagic.spell.owner);
     const amActor = actorKey === ownerSeat;
     const actorIsActive =
@@ -226,6 +240,14 @@ export function SiteCard({
     handleAttackTargeting(e);
   };
 
+  const handlePointerUp = (e: ThreeEvent<PointerEvent>) => {
+    // If switching sites, complete the switch when clicking on this site
+    if (switchSiteSource && onCompleteSwitchSite) {
+      e.stopPropagation();
+      onCompleteSwitchSite(tileX, tileY);
+    }
+  };
+
   const highlight = highlightColor();
 
   return (
@@ -268,6 +290,7 @@ export function SiteCard({
             renderOrder={10}
             textureUrl={!site.card.slug ? "/api/assets/earth.png" : undefined}
             onPointerDown={handlePointerDown}
+            onPointerUp={handlePointerUp}
             onPointerOver={(e) => {
               if (dragFromHand || dragFromPile) return;
               e.stopPropagation();
@@ -306,6 +329,7 @@ export function SiteCard({
           position={[edgeOffset.x, 0.001, edgeOffset.z]}
           castShadow
           onPointerDown={handlePointerDown}
+          onPointerUp={handlePointerUp}
         >
           <planeGeometry args={[CARD_SHORT, CARD_LONG]} />
           <meshStandardMaterial

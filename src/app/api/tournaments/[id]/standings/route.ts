@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { getServerAuthSession } from '@/lib/auth';
+import { logPerformance } from '@/lib/monitoring/performance';
 import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
@@ -7,6 +8,7 @@ export const dynamic = 'force-dynamic';
 // GET /api/tournaments/[id]/standings
 // Get current tournament standings
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const startTime = performance.now();
   const { id } = await params;
   const session = await getServerAuthSession();
   if (!session?.user) {
@@ -37,7 +39,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       ]
     });
 
-    return new Response(JSON.stringify({
+    const response = new Response(JSON.stringify({
       tournamentId: id,
       tournamentName: tournament.name,
       tournamentStatus: tournament.status,
@@ -60,8 +62,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       status: 200,
       headers: { 'content-type': 'application/json' }
     });
+
+    logPerformance(`GET /api/tournaments/${id}/standings`, performance.now() - startTime);
+    return response;
   } catch (e: unknown) {
     console.error('Error getting tournament standings:', e);
+    logPerformance(`GET /api/tournaments/${id}/standings`, performance.now() - startTime);
     const message = e instanceof Error ? e.message : typeof e === 'string' ? e : 'Unknown error';
     return new Response(JSON.stringify({ error: message }), { status: 500 });
   }
@@ -103,29 +109,66 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return new Response(JSON.stringify({ error: 'Only tournament creator can update standings' }), { status: 403 });
     }
 
-    // Update standings based on match results
-    for (const result of matchResults) {
-      const { winnerId, loserId, isDraw, gameWins, gameLosses } = result;
+    // Batch all standing updates into a single transaction for performance
+    // This reduces N×4 sequential queries to 1 transaction with N×2 operations
+    const updateOperations = [];
 
-      if (isDraw) {
-        // Update both players for draw
-        await updatePlayerStanding(id, winnerId, { draws: 1, matchPoints: 1 });
-        await updatePlayerStanding(id, loserId, { draws: 1, matchPoints: 1 });
+    for (const result of matchResults) {
+      const { winnerId, loserId, isDraw } = result;
+
+      if (isDraw && winnerId && loserId) {
+        // Both players get draw
+        updateOperations.push(
+          prisma.playerStanding.update({
+            where: {
+              tournamentId_playerId: { tournamentId: id, playerId: winnerId }
+            },
+            data: {
+              draws: { increment: 1 },
+              matchPoints: { increment: 1 }
+            }
+          })
+        );
+        updateOperations.push(
+          prisma.playerStanding.update({
+            where: {
+              tournamentId_playerId: { tournamentId: id, playerId: loserId }
+            },
+            data: {
+              draws: { increment: 1 },
+              matchPoints: { increment: 1 }
+            }
+          })
+        );
       } else if (winnerId && loserId) {
-        // Update winner and loser
-        await updatePlayerStanding(id, winnerId, { 
-          wins: 1, 
-          matchPoints: 3,
-          gameWins: gameWins || 2,
-          gameLosses: gameLosses || 0
-        });
-        await updatePlayerStanding(id, loserId, { 
-          losses: 1, 
-          matchPoints: 0,
-          gameWins: gameLosses || 0,
-          gameLosses: gameWins || 2
-        });
+        // Winner gets 3 points, loser gets 0
+        updateOperations.push(
+          prisma.playerStanding.update({
+            where: {
+              tournamentId_playerId: { tournamentId: id, playerId: winnerId }
+            },
+            data: {
+              wins: { increment: 1 },
+              matchPoints: { increment: 3 }
+            }
+          })
+        );
+        updateOperations.push(
+          prisma.playerStanding.update({
+            where: {
+              tournamentId_playerId: { tournamentId: id, playerId: loserId }
+            },
+            data: {
+              losses: { increment: 1 }
+            }
+          })
+        );
       }
+    }
+
+    // Execute all updates in a single transaction
+    if (updateOperations.length > 0) {
+      await prisma.$transaction(updateOperations);
     }
 
     // Recalculate win percentages and tiebreakers
@@ -145,63 +188,86 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 }
 
-// Helper function to update player standing
-async function updatePlayerStanding(
-  tournamentId: string, 
-  playerId: string, 
-  updates: {
-    wins?: number;
-    losses?: number; 
-    draws?: number;
-    matchPoints?: number;
-    gameWins?: number;
-    gameLosses?: number;
-  }
-) {
-  const currentStanding = await prisma.playerStanding.findUnique({
-    where: {
-      tournamentId_playerId: {
-        tournamentId,
-        playerId
-      }
-    }
-  });
-
-  if (!currentStanding) return;
-
-  await prisma.playerStanding.update({
-    where: {
-      tournamentId_playerId: {
-        tournamentId,
-        playerId
-      }
-    },
-    data: {
-      wins: currentStanding.wins + (updates.wins || 0),
-      losses: currentStanding.losses + (updates.losses || 0),
-      draws: currentStanding.draws + (updates.draws || 0),
-      matchPoints: currentStanding.matchPoints + (updates.matchPoints || 0)
-    }
-  });
-}
-
 // Helper function to recalculate tiebreakers
+// Optimized to batch all updates in a single transaction
 async function recalculateTiebreakers(tournamentId: string) {
   const standings = await prisma.playerStanding.findMany({
     where: { tournamentId }
   });
 
+  // Fetch completed matches to calculate opponent win percentages
+  const matches = await prisma.match.findMany({
+    where: {
+      tournamentId,
+      status: 'completed',
+    },
+    select: {
+      players: true,
+      results: true,
+    }
+  });
+
+  // Build opponent map: playerId -> list of opponent IDs
+  const opponentMap = new Map<string, string[]>();
+  for (const match of matches) {
+    const players = match.players as Array<{ id: string }>;
+    if (players.length === 2) {
+      const [p1, p2] = players;
+      const p1Opponents = opponentMap.get(p1.id) || [];
+      const p2Opponents = opponentMap.get(p2.id) || [];
+      p1Opponents.push(p2.id);
+      p2Opponents.push(p1.id);
+      opponentMap.set(p1.id, p1Opponents);
+      opponentMap.set(p2.id, p2Opponents);
+    }
+  }
+
+  // Create standings lookup for match win percentage calculation
+  const standingsByPlayer = new Map(
+    standings.map(s => [
+      s.playerId,
+      {
+        wins: s.wins,
+        losses: s.losses,
+        draws: s.draws,
+        matchPoints: s.matchPoints,
+      }
+    ])
+  );
+
   // Calculate game win percentages and opponent match win percentages
-  for (const standing of standings) {
+  const updateOperations = standings.map((standing) => {
     const totalGames = standing.wins * 2 + standing.losses * 2 + standing.draws * 2;
     const gameWins = standing.wins * 2 + standing.draws;
     const gameWinPercentage = totalGames > 0 ? Math.max(0.33, gameWins / totalGames) : 0.33;
 
-    // For opponent match win percentage, we'd need to analyze actual matches
-    // For now, use a placeholder calculation
-    const opponentMatchWinPercentage = 0.5;
+    // Calculate opponent match win percentage (OMW%)
+    // Average the match win % of all opponents this player has faced
+    const opponents = opponentMap.get(standing.playerId) || [];
+    let opponentMatchWinPercentage = 0.33; // Default minimum
 
-    await prisma.playerStanding.update({
+    if (opponents.length > 0) {
+      let totalOppMWP = 0;
+      let validOpponents = 0;
+
+      for (const oppId of opponents) {
+        const oppStanding = standingsByPlayer.get(oppId);
+        if (oppStanding) {
+          const oppMatches = oppStanding.wins + oppStanding.losses + oppStanding.draws;
+          if (oppMatches > 0) {
+            const oppMWP = Math.max(0.33, oppStanding.matchPoints / (oppMatches * 3));
+            totalOppMWP += oppMWP;
+            validOpponents++;
+          }
+        }
+      }
+
+      if (validOpponents > 0) {
+        opponentMatchWinPercentage = totalOppMWP / validOpponents;
+      }
+    }
+
+    return prisma.playerStanding.update({
       where: {
         tournamentId_playerId: {
           tournamentId,
@@ -213,5 +279,10 @@ async function recalculateTiebreakers(tournamentId: string) {
         opponentMatchWinPercentage
       }
     });
+  });
+
+  // Execute all tiebreaker updates in a single transaction
+  if (updateOperations.length > 0) {
+    await prisma.$transaction(updateOperations);
   }
 }

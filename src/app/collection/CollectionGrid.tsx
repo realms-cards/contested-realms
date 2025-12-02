@@ -3,6 +3,10 @@
 import { useRef, useState, useEffect } from "react";
 import type { CollectionCardResponse } from "@/lib/collection/types";
 import CollectionCard from "./CollectionCard";
+import VirtualizedCollectionGrid from "./VirtualizedCollectionGrid";
+
+// Threshold for enabling virtualization (improves performance with large collections)
+const VIRTUALIZATION_THRESHOLD = 50;
 
 interface CollectionGridProps {
   cards: CollectionCardResponse[];
@@ -15,6 +19,7 @@ export default function CollectionGrid({
   loading,
   onQuantityChange,
 }: CollectionGridProps) {
+  // Always call hooks at the top level (Rules of Hooks)
   // Local optimistic state for quantities
   const [localQuantities, setLocalQuantities] = useState<Map<number, number>>(
     new Map()
@@ -25,6 +30,19 @@ export default function CollectionGrid({
   useEffect(() => {
     setLocalQuantities(new Map());
   }, [cards]);
+
+  // Use virtualization for large collections (50+ cards) to maintain 60fps
+  if (!loading && cards.length >= VIRTUALIZATION_THRESHOLD) {
+    return (
+      <VirtualizedCollectionGrid
+        cards={cards}
+        loading={loading}
+        onQuantityChange={onQuantityChange}
+      />
+    );
+  }
+
+  // Standard grid for smaller collections (< 50 cards)
 
   const debouncedRefresh = () => {
     if (refreshDebounceRef.current) {

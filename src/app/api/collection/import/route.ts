@@ -124,8 +124,11 @@ export async function POST(req: NextRequest) {
       }
     } else if (format === "csv") {
       // Simple CSV format: "quantity,name" per line
+      // Optimized: Batch all lookups and upserts instead of sequential queries
       const lines = text.split(/[\r\n]+/).filter((l: string) => l.trim());
 
+      // Parse all lines first
+      const parsedLines: Array<{ name: string; count: number }> = [];
       for (const line of lines) {
         // Skip header line if present
         if (
@@ -144,46 +147,85 @@ export async function POST(req: NextRequest) {
 
         const count = parseInt(match[1], 10);
         const name = match[2].trim().replace(/^["']|["']$/g, ""); // Remove quotes
+        parsedLines.push({ name, count });
+      }
 
-        // Look up card
-        const card = await prisma.card.findFirst({
-          where: { name: { equals: name, mode: "insensitive" } },
-          select: { id: true, name: true },
-        });
+      // Batch lookup all card names at once (1 query instead of N)
+      const cardNames = parsedLines.map(p => p.name);
+      const cards = await prisma.card.findMany({
+        where: {
+          name: {
+            in: cardNames,
+            mode: "insensitive",
+          },
+        },
+        select: { id: true, name: true },
+      });
 
+      // Create lookup map (case-insensitive)
+      const cardByName = new Map(
+        cards.map(c => [c.name.toLowerCase(), c])
+      );
+
+      // Match parsed lines to cards
+      const matchedCards: Array<{ cardId: number; name: string; count: number }> = [];
+      for (const line of parsedLines) {
+        const card = cardByName.get(line.name.toLowerCase());
         if (!card) {
-          errors.push({ name, message: "Card not found" });
-          added.push({ name, quantity: count, matched: false });
+          errors.push({ name: line.name, message: "Card not found" });
+          added.push({ name: line.name, quantity: line.count, matched: false });
           continue;
         }
+        matchedCards.push({ cardId: card.id, name: card.name, count: line.count });
+      }
 
-        // Upsert into collection
-        const existing = await prisma.collectionCard.findFirst({
-          where: {
-            userId,
-            cardId: card.id,
-            finish: "Standard",
-          },
-        });
+      // Batch check existing collection cards (1 query instead of N)
+      const cardIds = matchedCards.map(m => m.cardId);
+      const existingCards = await prisma.collectionCard.findMany({
+        where: {
+          userId,
+          cardId: { in: cardIds },
+          finish: "Standard",
+        },
+        select: { id: true, cardId: true, quantity: true },
+      });
 
+      const existingByCardId = new Map(
+        existingCards.map(e => [e.cardId, e])
+      );
+
+      // Batch upsert operations
+      const updateOps = [];
+      const createOps = [];
+
+      for (const match of matchedCards) {
+        const existing = existingByCardId.get(match.cardId);
         if (existing) {
-          const newQuantity = Math.min(99, existing.quantity + count);
-          await prisma.collectionCard.update({
-            where: { id: existing.id },
-            data: { quantity: newQuantity },
-          });
+          const newQuantity = Math.min(99, existing.quantity + match.count);
+          updateOps.push(
+            prisma.collectionCard.update({
+              where: { id: existing.id },
+              data: { quantity: newQuantity },
+            })
+          );
         } else {
-          await prisma.collectionCard.create({
-            data: {
-              userId,
-              cardId: card.id,
-              finish: "Standard",
-              quantity: Math.min(99, count),
-            },
-          });
+          createOps.push(
+            prisma.collectionCard.create({
+              data: {
+                userId,
+                cardId: match.cardId,
+                finish: "Standard",
+                quantity: Math.min(99, match.count),
+              },
+            })
+          );
         }
+        added.push({ name: match.name, quantity: match.count, matched: true, cardId: match.cardId });
+      }
 
-        added.push({ name, quantity: count, matched: true, cardId: card.id });
+      // Execute all upserts in a single transaction (1 transaction instead of N queries)
+      if (updateOps.length > 0 || createOps.length > 0) {
+        await prisma.$transaction([...updateOps, ...createOps]);
       }
     } else {
       return new Response(

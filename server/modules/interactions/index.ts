@@ -17,10 +17,20 @@ export const INTERACTION_ENFORCEMENT_ENABLED = (() => {
   const raw = process.env.INTERACTION_ENFORCEMENT_ENABLED;
   if (!raw) return false;
   const normalized = raw.trim().toLowerCase();
-  if (normalized === "1" || normalized === "true" || normalized === "on" || normalized === "yes") {
+  if (
+    normalized === "1" ||
+    normalized === "true" ||
+    normalized === "on" ||
+    normalized === "yes"
+  ) {
     return true;
   }
-  if (normalized === "0" || normalized === "false" || normalized === "off" || normalized === "no") {
+  if (
+    normalized === "0" ||
+    normalized === "false" ||
+    normalized === "off" ||
+    normalized === "no"
+  ) {
     return false;
   }
   return false;
@@ -37,9 +47,15 @@ export const INTERACTION_REQUEST_KINDS = new Set([
   "inspectBanished",
   "unbanishCard",
   "restoreSnapshot",
+  // Site manipulation (Earthquake, Rift Valley)
+  "switchSite",
 ]);
 
-export const INTERACTION_DECISIONS = new Set(["approved", "declined", "cancelled"]);
+export const INTERACTION_DECISIONS = new Set([
+  "approved",
+  "declined",
+  "cancelled",
+]);
 
 interface InteractionModuleDeps {
   io: import("socket.io").Server;
@@ -47,7 +63,12 @@ interface InteractionModuleDeps {
   enrichPatchWithCosts: (patch: any, prismaClient: any) => Promise<any>;
   deepMergeReplaceArrays: (base: any, patch: any) => any;
   finalizeMatch: (match: any, options?: any) => Promise<void> | void;
-  persistMatchUpdate: (match: any, patch: any, playerId: string, ts: number) => Promise<void>;
+  persistMatchUpdate: (
+    match: any,
+    patch: any,
+    playerId: string,
+    ts: number
+  ) => Promise<void>;
   prisma: any;
 }
 
@@ -82,15 +103,21 @@ export function createInteractionModule({
     }
     const json = raw as JsonRecord;
     const targetSeat =
-      json.targetSeat === "p1" || json.targetSeat === "p2" ? json.targetSeat : fallbackSeat || null;
-    const expiresAt = Number.isFinite(Number(json.expiresAt)) ? Number(json.expiresAt) : null;
+      json.targetSeat === "p1" || json.targetSeat === "p2"
+        ? json.targetSeat
+        : fallbackSeat || null;
+    const expiresAt = Number.isFinite(Number(json.expiresAt))
+      ? Number(json.expiresAt)
+      : null;
     const result: Record<string, unknown> = {
       targetSeat,
     };
     if (expiresAt !== null) result.expiresAt = expiresAt;
     if (json.singleUse === true) result.singleUse = true;
-    if (json.allowOpponentZoneWrite === true) result.allowOpponentZoneWrite = true;
-    if (json.allowRevealOpponentHand === true) result.allowRevealOpponentHand = true;
+    if (json.allowOpponentZoneWrite === true)
+      result.allowOpponentZoneWrite = true;
+    if (json.allowRevealOpponentHand === true)
+      result.allowRevealOpponentHand = true;
     return result as JsonRecord;
   }
 
@@ -99,7 +126,9 @@ export function createInteractionModule({
     if (!match || !(match.interactionGrants instanceof Map)) return;
     for (const [playerId, grants] of match.interactionGrants.entries()) {
       const filtered = Array.isArray(grants)
-        ? grants.filter((grant) => !grant || !grant.expiresAt || grant.expiresAt > now)
+        ? grants.filter(
+            (grant) => !grant || !grant.expiresAt || grant.expiresAt > now
+          )
         : [];
       if (filtered.length > 0) {
         match.interactionGrants.set(playerId, filtered);
@@ -114,7 +143,12 @@ export function createInteractionModule({
     const opponentSeat = getOpponentSeat(actorSeat);
     if (!opponentSeat) return false;
     const zones = patch.zones;
-    if (zones && typeof zones === "object" && zones[opponentSeat] && typeof zones[opponentSeat] === "object") {
+    if (
+      zones &&
+      typeof zones === "object" &&
+      zones[opponentSeat] &&
+      typeof zones[opponentSeat] === "object"
+    ) {
       const zonePayload = zones[opponentSeat];
       for (const key of Object.keys(zonePayload)) {
         if (zonePayload[key] !== undefined) {
@@ -142,7 +176,13 @@ export function createInteractionModule({
     };
   }
 
-  function usePermitForRequirement(match: any, playerId: string, actorSeat: any, requirement: string, now: number) {
+  function usePermitForRequirement(
+    match: any,
+    playerId: string,
+    actorSeat: any,
+    requirement: string,
+    now: number
+  ) {
     ensureInteractionState(match);
     const grants = match.interactionGrants.get(playerId);
     if (!Array.isArray(grants) || grants.length === 0) return null;
@@ -152,7 +192,11 @@ export function createInteractionModule({
       if (!grant) return false;
       if (grant.expiresAt && grant.expiresAt <= now) return false;
       if (grant.targetSeat && grant.targetSeat !== opponentSeat) return false;
-      if (requirement === "allowOpponentZoneWrite" && grant.allowOpponentZoneWrite !== true) return false;
+      if (
+        requirement === "allowOpponentZoneWrite" &&
+        grant.allowOpponentZoneWrite !== true
+      )
+        return false;
       consumedIndex = idx;
       return true;
     });
@@ -169,7 +213,12 @@ export function createInteractionModule({
     return usableGrant;
   }
 
-  function createGrantRecord(request: any, response: any, grantOpts: any, now: number) {
+  function createGrantRecord(
+    request: any,
+    response: any,
+    grantOpts: any,
+    now: number
+  ) {
     return {
       __grantId: rid("igr"),
       requestId: request.requestId,
@@ -185,7 +234,12 @@ export function createInteractionModule({
     };
   }
 
-  function recordInteractionRequest(match: any, message: any, proposedGrant: any, pendingAction: any) {
+  function recordInteractionRequest(
+    match: any,
+    message: any,
+    proposedGrant: any,
+    pendingAction: any
+  ) {
     ensureInteractionState(match);
     const entry = match.interactionRequests.get(message.requestId) || {};
     const now = message.createdAt || Date.now();
@@ -202,7 +256,11 @@ export function createInteractionModule({
     });
   }
 
-  function recordInteractionResponse(match: any, response: any, grantRecord: any) {
+  function recordInteractionResponse(
+    match: any,
+    response: any,
+    grantRecord: any
+  ) {
     ensureInteractionState(match);
     const entry = match.interactionRequests.get(response.requestId) || {};
     const now = response.respondedAt || Date.now();
@@ -214,7 +272,8 @@ export function createInteractionModule({
       grant: grantRecord || entry.grant || null,
       pendingAction: entry.pendingAction || null,
       result: entry.result || null,
-      createdAt: entry.createdAt || (entry.request && entry.request.createdAt) || now,
+      createdAt:
+        entry.createdAt || (entry.request && entry.request.createdAt) || now,
       updatedAt: now,
     };
     if (!next.request) {
@@ -233,7 +292,11 @@ export function createInteractionModule({
   }
 
   function emitInteraction(matchId: string, message: any) {
-    const envelope = { type: "interaction", version: INTERACTION_VERSION, message };
+    const envelope = {
+      type: "interaction",
+      version: INTERACTION_VERSION,
+      message,
+    };
     const room = `match:${matchId}`;
     io.to(room).emit("interaction", envelope);
     io.to(room).emit(message.type, message);
@@ -244,7 +307,12 @@ export function createInteractionModule({
     io.to(room).emit("interaction:result", result);
   }
 
-  function sanitizePendingAction(kind: string, payload: any, actorSeat: any, requestingPlayerId: string) {
+  function sanitizePendingAction(
+    kind: string,
+    payload: any,
+    actorSeat: any,
+    requestingPlayerId: string
+  ) {
     if (!payload || typeof payload !== "object") return null;
     const safe: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(payload)) {
@@ -258,7 +326,13 @@ export function createInteractionModule({
     return safe;
   }
 
-  function getTopCards(match: any, seat: string, pile: string, count: number, from: string) {
+  function getTopCards(
+    match: any,
+    seat: string,
+    pile: string,
+    count: number,
+    from: string
+  ) {
     if (!match || !match.game || !match.game.zones) return [];
     const zones = match.game.zones;
     const seatZones = zones && typeof zones === "object" ? zones[seat] : null;
@@ -285,13 +359,21 @@ export function createInteractionModule({
       t: now,
     };
     if (kind === "takeFromPile") {
-      const seat = pendingAction.seat === "p1" || pendingAction.seat === "p2" ? pendingAction.seat : null;
+      const seat =
+        pendingAction.seat === "p1" || pendingAction.seat === "p2"
+          ? pendingAction.seat
+          : null;
       const pile = pendingAction.pile === "atlas" ? "atlas" : "spellbook";
       const from = pendingAction.from === "bottom" ? "bottom" : "top";
       const rawCount = Number(pendingAction.count);
-      const count = Number.isFinite(rawCount) && rawCount > 0 ? Math.min(rawCount, 20) : 3;
+      const count =
+        Number.isFinite(rawCount) && rawCount > 0 ? Math.min(rawCount, 20) : 3;
       if (!seat) {
-        return { ...resultBase, success: false, message: "Invalid seat for pile peek" };
+        return {
+          ...resultBase,
+          success: false,
+          message: "Invalid seat for pile peek",
+        };
       }
       const cards = getTopCards(match, seat, pile, count, from).map((card) => {
         if (!card || typeof card !== "object") return {};
@@ -299,8 +381,10 @@ export function createInteractionModule({
         if ((card as any).name) out.name = (card as any).name;
         if ((card as any).type) out.type = (card as any).type;
         if ((card as any).slug) out.slug = (card as any).slug;
-        if (Number.isFinite((card as any).cardId)) out.cardId = Number((card as any).cardId);
-        if (Number.isFinite((card as any).variantId)) out.variantId = Number((card as any).variantId);
+        if (Number.isFinite((card as any).cardId))
+          out.cardId = Number((card as any).cardId);
+        if (Number.isFinite((card as any).variantId))
+          out.variantId = Number((card as any).variantId);
         return out;
       });
       return {
@@ -317,9 +401,16 @@ export function createInteractionModule({
       };
     }
     if (kind === "inspectHand") {
-      const seat = pendingAction.seat === "p1" || pendingAction.seat === "p2" ? pendingAction.seat : null;
+      const seat =
+        pendingAction.seat === "p1" || pendingAction.seat === "p2"
+          ? pendingAction.seat
+          : null;
       if (!seat) {
-        return { ...resultBase, success: false, message: "Invalid seat for hand inspect" };
+        return {
+          ...resultBase,
+          success: false,
+          message: "Invalid seat for hand inspect",
+        };
       }
       const cards = getTopCards(match, seat, "hand", 99, "top").map((card) => {
         if (!card || typeof card !== "object") return {};
@@ -327,8 +418,10 @@ export function createInteractionModule({
         if ((card as any).name) out.name = (card as any).name;
         if ((card as any).type) out.type = (card as any).type;
         if ((card as any).slug) out.slug = (card as any).slug;
-        if (Number.isFinite((card as any).cardId)) out.cardId = Number((card as any).cardId);
-        if (Number.isFinite((card as any).variantId)) out.variantId = Number((card as any).variantId);
+        if (Number.isFinite((card as any).cardId))
+          out.cardId = Number((card as any).cardId);
+        if (Number.isFinite((card as any).variantId))
+          out.variantId = Number((card as any).variantId);
         return out;
       });
       return {
@@ -345,21 +438,33 @@ export function createInteractionModule({
       };
     }
     if (kind === "inspectBanished") {
-      const seat = pendingAction.seat === "p1" || pendingAction.seat === "p2" ? pendingAction.seat : null;
+      const seat =
+        pendingAction.seat === "p1" || pendingAction.seat === "p2"
+          ? pendingAction.seat
+          : null;
       if (!seat) {
-        return { ...resultBase, success: false, message: "Invalid seat for banished inspect" };
+        return {
+          ...resultBase,
+          success: false,
+          message: "Invalid seat for banished inspect",
+        };
       }
-      const cards = getTopCards(match, seat, "banished", 99, "top").map((card) => {
-        if (!card || typeof card !== "object") return {};
-        const out: Record<string, unknown> = {};
-        if ((card as any).name) out.name = (card as any).name;
-        if ((card as any).type) out.type = (card as any).type;
-        if ((card as any).slug) out.slug = (card as any).slug;
-        if (typeof (card as any).instanceId === "string") out.instanceId = (card as any).instanceId;
-        if (Number.isFinite((card as any).cardId)) out.cardId = Number((card as any).cardId);
-        if (Number.isFinite((card as any).variantId)) out.variantId = Number((card as any).variantId);
-        return out;
-      });
+      const cards = getTopCards(match, seat, "banished", 99, "top").map(
+        (card) => {
+          if (!card || typeof card !== "object") return {};
+          const out: Record<string, unknown> = {};
+          if ((card as any).name) out.name = (card as any).name;
+          if ((card as any).type) out.type = (card as any).type;
+          if ((card as any).slug) out.slug = (card as any).slug;
+          if (typeof (card as any).instanceId === "string")
+            out.instanceId = (card as any).instanceId;
+          if (Number.isFinite((card as any).cardId))
+            out.cardId = Number((card as any).cardId);
+          if (Number.isFinite((card as any).variantId))
+            out.variantId = Number((card as any).variantId);
+          return out;
+        }
+      );
       return {
         ...resultBase,
         success: true,
@@ -374,25 +479,48 @@ export function createInteractionModule({
       };
     }
     if (kind === "unbanishCard") {
-      const seat = pendingAction.seat === "p1" || pendingAction.seat === "p2" ? pendingAction.seat : null;
+      const seat =
+        pendingAction.seat === "p1" || pendingAction.seat === "p2"
+          ? pendingAction.seat
+          : null;
       const target = pendingAction.target === "hand" ? "hand" : "graveyard";
-      const instanceId = typeof pendingAction.instanceId === "string" ? pendingAction.instanceId : null;
+      const instanceId =
+        typeof pendingAction.instanceId === "string"
+          ? pendingAction.instanceId
+          : null;
       if (!seat || !instanceId) {
-        return { ...resultBase, success: false, message: "Invalid unbanish parameters" };
+        return {
+          ...resultBase,
+          success: false,
+          message: "Invalid unbanish parameters",
+        };
       }
       try {
         const zones = (match.game && match.game.zones) || {};
-        const seatZonesRaw = zones && typeof zones === "object" ? (zones as any)[seat] : null;
-        const banished = Array.isArray(seatZonesRaw?.banished) ? [...seatZonesRaw.banished] : [];
-        const idx = banished.findIndex((c: any) => c && typeof c === "object" && c.instanceId === instanceId);
+        const seatZonesRaw =
+          zones && typeof zones === "object" ? (zones as any)[seat] : null;
+        const banished = Array.isArray(seatZonesRaw?.banished)
+          ? [...seatZonesRaw.banished]
+          : [];
+        const idx = banished.findIndex(
+          (c: any) => c && typeof c === "object" && c.instanceId === instanceId
+        );
         if (idx < 0) {
-          return { ...resultBase, success: false, message: "Card not found in banished" };
+          return {
+            ...resultBase,
+            success: false,
+            message: "Card not found in banished",
+          };
         }
         const card = banished.splice(idx, 1)[0];
         const moved = { ...(card || {}) } as Record<string, unknown>;
         moved.owner = seat;
-        const hand = Array.isArray(seatZonesRaw?.hand) ? [...seatZonesRaw.hand] : [];
-        const graveyard = Array.isArray(seatZonesRaw?.graveyard) ? [...seatZonesRaw.graveyard] : [];
+        const hand = Array.isArray(seatZonesRaw?.hand)
+          ? [...seatZonesRaw.hand]
+          : [];
+        const graveyard = Array.isArray(seatZonesRaw?.graveyard)
+          ? [...seatZonesRaw.graveyard]
+          : [];
         if (target === "hand") hand.push(moved);
         else graveyard.unshift(moved);
 
@@ -410,11 +538,16 @@ export function createInteractionModule({
         const room = `match:${match.id}`;
         const enrichedPatch = await enrichPatchWithCosts(patch, prisma);
         io.to(room).emit("statePatch", { patch: enrichedPatch, t: now });
-        const name = typeof (card as any)?.name === "string" ? (card as any).name : "Card";
+        const name =
+          typeof (card as any)?.name === "string" ? (card as any).name : "Card";
         return {
           ...resultBase,
           success: true,
-          payload: { seat, target, requestedBy: pendingAction.requestedBy || null },
+          payload: {
+            seat,
+            target,
+            requestedBy: pendingAction.requestedBy || null,
+          },
           message: `Returned '${name}' from banished to ${target}.`,
         };
       } catch (_e) {
@@ -424,21 +557,33 @@ export function createInteractionModule({
     if (kind === "restoreSnapshot") {
       const raw = pendingAction.snapshot;
       if (!raw || typeof raw !== "object") {
-        return { ...resultBase, success: false, message: "Missing snapshot payload" };
+        return {
+          ...resultBase,
+          success: false,
+          message: "Missing snapshot payload",
+        };
       }
       const src = raw as Record<string, unknown>;
       const patch: Record<string, unknown> = {};
-      if (src.players && typeof src.players === "object") patch.players = src.players;
-      if (src.currentPlayer === 1 || src.currentPlayer === 2) patch.currentPlayer = src.currentPlayer as number;
+      if (src.players && typeof src.players === "object")
+        patch.players = src.players;
+      if (src.currentPlayer === 1 || src.currentPlayer === 2)
+        patch.currentPlayer = src.currentPlayer as number;
       if (Number.isFinite(Number(src.turn))) patch.turn = Number(src.turn);
       if (typeof src.phase === "string") patch.phase = src.phase as string;
       if (src.board && typeof src.board === "object") patch.board = src.board;
-      if (src.permanents && typeof src.permanents === "object") patch.permanents = src.permanents;
-      if (src.avatars && typeof src.avatars === "object") patch.avatars = src.avatars;
-      if (src.permanentPositions && typeof src.permanentPositions === "object") patch.permanentPositions = src.permanentPositions;
-      if (src.permanentAbilities && typeof src.permanentAbilities === "object") patch.permanentAbilities = src.permanentAbilities;
-      if (src.sitePositions && typeof src.sitePositions === "object") patch.sitePositions = src.sitePositions;
-      if (src.playerPositions && typeof src.playerPositions === "object") patch.playerPositions = src.playerPositions;
+      if (src.permanents && typeof src.permanents === "object")
+        patch.permanents = src.permanents;
+      if (src.avatars && typeof src.avatars === "object")
+        patch.avatars = src.avatars;
+      if (src.permanentPositions && typeof src.permanentPositions === "object")
+        patch.permanentPositions = src.permanentPositions;
+      if (src.permanentAbilities && typeof src.permanentAbilities === "object")
+        patch.permanentAbilities = src.permanentAbilities;
+      if (src.sitePositions && typeof src.sitePositions === "object")
+        patch.sitePositions = src.sitePositions;
+      if (src.playerPositions && typeof src.playerPositions === "object")
+        patch.playerPositions = src.playerPositions;
       if (src.zones && typeof src.zones === "object") patch.zones = src.zones;
 
       const allowedKeys = new Set([
@@ -468,7 +613,8 @@ export function createInteractionModule({
       try {
         if (rk.length > 0) {
           const mergePatch: Record<string, unknown> = {};
-          for (const [k, v] of Object.entries(patch)) if (!rk.includes(k)) mergePatch[k] = v;
+          for (const [k, v] of Object.entries(patch))
+            if (!rk.includes(k)) mergePatch[k] = v;
           const nextGame = deepMergeReplaceArrays(match.game || {}, mergePatch);
           for (const key of rk) (nextGame as any)[key] = (patch as any)[key];
           match.game = nextGame;
@@ -486,13 +632,18 @@ export function createInteractionModule({
           message: "Snapshot restored",
         };
       } catch (_e) {
-        return { ...resultBase, success: false, message: "Failed to restore snapshot" };
+        return {
+          ...resultBase,
+          success: false,
+          message: "Failed to restore snapshot",
+        };
       }
     }
     if (kind === "tieGame") {
       try {
         const g = match.game || {};
-        const players = g.players && typeof g.players === "object" ? g.players : {};
+        const players =
+          g.players && typeof g.players === "object" ? g.players : {};
         const p1 = players.p1 || {};
         const p2 = players.p2 || {};
         const p1LS = typeof p1.lifeState === "string" ? p1.lifeState : null;
@@ -502,7 +653,8 @@ export function createInteractionModule({
           return {
             ...resultBase,
             success: false,
-            message: "Tie not eligible: both players must be at Death's Door and match not ended",
+            message:
+              "Tie not eligible: both players must be at Death's Door and match not ended",
           };
         }
         const patch = {
@@ -528,10 +680,18 @@ export function createInteractionModule({
           message: "Tie declared: both players died simultaneously.",
         };
       } catch (e) {
-        return { ...resultBase, success: false, message: "Failed to apply tie" };
+        return {
+          ...resultBase,
+          success: false,
+          message: "Failed to apply tie",
+        };
       }
     }
-    return { ...resultBase, success: false, message: "Unsupported pending action kind" };
+    return {
+      ...resultBase,
+      success: false,
+      message: "Unsupported pending action kind",
+    };
   }
 
   return {

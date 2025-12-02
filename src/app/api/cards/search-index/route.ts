@@ -6,7 +6,8 @@ let cachedIndex: string | null = null;
 let cacheTime = 0;
 const CACHE_TTL = 60 * 60 * 1000; // 1 hour
 
-export const dynamic = "force-dynamic";
+// ISR: Combined with in-memory cache for optimal performance
+export const revalidate = 3600; // 1 hour
 
 // GET /api/cards/search-index
 // Returns a compact JSON index for client-side search

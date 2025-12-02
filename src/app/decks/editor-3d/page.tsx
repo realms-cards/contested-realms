@@ -4701,6 +4701,8 @@ function AuthenticatedDeckEditor() {
             );
             setTimeout(() => setFeedbackMessage(null), 2000);
           }}
+          // Tournament context for "Back to Tournament" link
+          tournamentId={searchParams?.get("tournament") || null}
         />
         {/* (Removed background usage text in favor of Help overlay) */}
         <Suspense fallback={null}>

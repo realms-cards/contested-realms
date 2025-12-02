@@ -36,6 +36,25 @@ export const createMagicSlice: StateCreator<GameState, [], [], MagicSlice> = (
     const ownerSeat = seatFromOwner(spell.owner);
     const autoCaster =
       input.presetCaster ?? ({ kind: "avatar", seat: ownerSeat } as const);
+
+    // When magic guides are disabled, skip the targeting flow entirely
+    // to prevent pendingMagic from blocking board interactions
+    if (!magicGuidesActive) {
+      // Just show a toast for feedback, but don't enter the targeting flow
+      const transport = get().transport;
+      if (transport?.sendMessage) {
+        try {
+          const cardName = spell.card?.name || "Magic";
+          const cellNo = getCellNumber(tile.x, tile.y, get().board.size.w);
+          transport.sendMessage({
+            type: "toast",
+            text: `'${cardName}' played at #${cellNo}`,
+          } as unknown as CustomMessage);
+        } catch {}
+      }
+      return;
+    }
+
     const hints = extractMagicTargetingHintsSync(spell.card?.name || "", null);
     // NOTE: Targeting hints may not be accurate for every spell type yet.
     // See reference/SorceryRulebook.pdf for spell targeting rules.
@@ -50,7 +69,7 @@ export const createMagicSlice: StateCreator<GameState, [], [], MagicSlice> = (
         status: "choosingTarget",
         hints,
         createdAt,
-        guidesSuppressed: !magicGuidesActive,
+        guidesSuppressed: false,
       },
     } as Partial<GameState> as GameState);
     // Prefetch rules text early to avoid delay later

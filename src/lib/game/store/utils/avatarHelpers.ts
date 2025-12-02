@@ -51,22 +51,6 @@ export function ensureAvatarState(
   } else {
     delete (next as { counters?: number | null }).counters;
   }
-  // Normalize champion if present (Dragonlord avatar feature)
-  type ChampionType = {
-    cardId: number;
-    name: string;
-    slug: string | null;
-  } | null;
-  if (
-    candidate &&
-    Object.prototype.hasOwnProperty.call(candidate, "champion")
-  ) {
-    next.champion = (candidate as { champion?: ChampionType }).champion ?? null;
-  } else if ((base as { champion?: ChampionType }).champion !== undefined) {
-    next.champion = (base as { champion?: ChampionType }).champion ?? null;
-  } else {
-    delete (next as { champion?: ChampionType }).champion;
-  }
   return next;
 }
 
