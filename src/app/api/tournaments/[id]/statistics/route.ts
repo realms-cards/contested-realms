@@ -62,14 +62,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       orderBy: { finalRanking: 'asc' }
     });
 
-    // Get rounds and matches
+    // Get rounds and matches with player data
     const rounds = await prisma.tournamentRound.findMany({
       where: { tournamentId: id },
       include: {
         matches: {
           include: {
             tournament: { select: { name: true } }
-          }
+          },
+          orderBy: { createdAt: 'asc' }
         }
       },
       orderBy: { roundNumber: 'asc' }
@@ -145,7 +146,25 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         startedAt: round.startedAt?.toISOString() || null,
         completedAt: round.completedAt?.toISOString() || null,
         matchCount: round.matches.length,
-        completedMatches: round.matches.filter(m => m.results !== null).length
+        completedMatches: round.matches.filter(m => m.results !== null).length,
+        matches: round.matches.map(match => {
+          const players = match.players as Array<{ id: string; name: string }>;
+          const results = match.results as { winnerId?: string; isDraw?: boolean; gameResults?: Array<{ winner: string }> } | null;
+
+          return {
+            id: match.id,
+            status: match.status,
+            players: players.map(p => ({
+              id: p.id,
+              name: p.name
+            })),
+            winnerId: results?.winnerId || null,
+            isDraw: results?.isDraw || false,
+            gameCount: results?.gameResults?.length || 0,
+            startedAt: match.startedAt?.toISOString() || null,
+            completedAt: match.completedAt?.toISOString() || null
+          };
+        })
       })),
       finalStatistics: statistics.map(stat => ({
         playerId: stat.playerId,

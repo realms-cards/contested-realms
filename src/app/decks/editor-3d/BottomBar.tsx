@@ -63,6 +63,8 @@ type BottomBarProps = {
     slug: string | null;
   } | null;
   onOpenChampionModal?: () => void;
+  // Cube name for display (when packs are from a cube)
+  cubeName?: string | null;
 };
 
 export default function BottomBar(props: BottomBarProps) {
@@ -113,6 +115,8 @@ export default function BottomBar(props: BottomBarProps) {
     hasDragonlordAvatar = false,
     champion = null,
     onOpenChampionModal,
+    // Cube name for display
+    cubeName,
   } = props;
 
   const standardActive =
@@ -195,7 +199,10 @@ export default function BottomBar(props: BottomBarProps) {
                           className="flex flex-col items-center gap-2"
                         >
                           <div className="text-white text-sm font-medium">
-                            {setName}
+                            {/* Display cube name instead of 'cube' when available */}
+                            {setName.toLowerCase() === "cube" && cubeName
+                              ? cubeName
+                              : setName}
                           </div>
                           <div className="flex gap-1">
                             {setPacks.map((pack) => {
@@ -207,6 +214,9 @@ export default function BottomBar(props: BottomBarProps) {
                                 if (s.includes("alpha"))
                                   return "alphabeta-booster.png";
                                 if (s.includes("beta"))
+                                  return "alphabeta-booster.png";
+                                // Use beta booster image for cube packs
+                                if (s === "cube")
                                   return "alphabeta-booster.png";
                                 return null;
                               })();

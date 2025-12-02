@@ -776,7 +776,7 @@ export default function TournamentDraft3DScreen({
       currentHoverCardRef.current = null;
       setHoverPreview(null);
       clearHoverTimerRef.current = null;
-    }, 20);
+    }, 150);
   }, []);
 
   // Convert DraftCard to BoosterCard format
@@ -1810,7 +1810,7 @@ export default function TournamentDraft3DScreen({
               getTopRenderOrder={getTopRenderOrder}
               lockUpright
               onHoverStart={(preview) => {
-                if (!preview || orbitLocked) return;
+                if (!preview) return;
                 showCardPreview(preview);
               }}
               onHoverEnd={() => {
@@ -1885,7 +1885,7 @@ export default function TournamentDraft3DScreen({
                     lockUpright
                     disabled={isSortingEnabled && !isVisible}
                     onHoverStart={(preview) => {
-                      if (!preview || orbitLocked) return;
+                      if (!preview) return;
                       showCardPreview(preview);
                     }}
                     onHoverEnd={() => {

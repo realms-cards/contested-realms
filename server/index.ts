@@ -1408,6 +1408,15 @@ async function finalizeMatch(
                   where: { id: tMatch.tournament.id },
                   data: { status: "completed", completedAt: new Date() },
                 });
+                // Emit phase_changed so clients show victory screen without reload
+                try {
+                  tournamentBroadcast.emitPhaseChanged(
+                    io,
+                    tMatch.tournament.id,
+                    "completed",
+                    { reason: "final_round_complete" }
+                  );
+                } catch {}
               }
             }
           }

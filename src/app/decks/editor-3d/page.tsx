@@ -252,6 +252,8 @@ function AuthenticatedDeckEditor() {
       opened: boolean;
     }>
   >([]);
+  // Cube name for display when packs are from a cube
+  const [sealedCubeName, setSealedCubeName] = useState<string | null>(null);
 
   const [packCardCache, setPackCardCache] = useState<
     Record<string, SearchResult[]>
@@ -932,6 +934,16 @@ function AuthenticatedDeckEditor() {
       opened: openedById.get(p.id) ?? false,
     }));
     setPacks(serverPacks);
+
+    // Load cube name if available (for display in UI)
+    try {
+      const cubeNameKey = `sealedCubeName_${idKey}`;
+      const cubeName = localStorage.getItem(cubeNameKey);
+      if (cubeName) {
+        setSealedCubeName(cubeName);
+      }
+    } catch {}
+
     setSealedInitDone(true);
   }, [isSealed, sealedInitDone, searchParams]);
 
@@ -1564,61 +1576,74 @@ function AuthenticatedDeckEditor() {
 
   useEffect(() => {
     const draft = searchParams?.get("draft");
+    const sealed = searchParams?.get("sealed");
     const matchId = searchParams?.get("matchId");
     const sessionId = searchParams?.get("sessionId");
+    const tournamentId = searchParams?.get("tournament");
     const draftId = matchId || sessionId;
 
-    if (draft !== "true" || !draftId) {
+    // Check for draft mode cube extras
+    let cubeId: string | null = null;
+
+    if (draft === "true" && draftId) {
+      let raw: string | null = null;
+      try {
+        raw = localStorage.getItem(`draftConfig_${draftId}`);
+      } catch {
+        raw = null;
+      }
+      if (raw) {
+        type StoredDraftConfig = {
+          cubeId?: string | null;
+          cubeName?: string | null;
+          includeCubeSideboardInStandard?: boolean;
+        };
+        try {
+          const cfg = JSON.parse(raw) as StoredDraftConfig;
+          if (cfg?.cubeId && cfg.includeCubeSideboardInStandard) {
+            cubeId = cfg.cubeId;
+          }
+        } catch {}
+      }
+    }
+
+    // Check for sealed mode cube extras
+    if (!cubeId && sealed === "true" && tournamentId) {
+      let raw: string | null = null;
+      try {
+        raw = localStorage.getItem(
+          `sealedCubeSideboard_tournament_${tournamentId}`
+        );
+      } catch {
+        raw = null;
+      }
+      if (raw) {
+        type StoredCubeSideboardConfig = {
+          cubeId?: string | null;
+          includeSideboard?: boolean;
+        };
+        try {
+          const cfg = JSON.parse(raw) as StoredCubeSideboardConfig;
+          if (cfg?.cubeId && cfg.includeSideboard) {
+            cubeId = cfg.cubeId;
+          }
+        } catch {}
+      }
+    }
+
+    if (!cubeId) {
       setCubeStandardCards([]);
       return;
     }
 
-    let raw: string | null = null;
-    try {
-      raw = localStorage.getItem(`draftConfig_${draftId}`);
-    } catch {
-      raw = null;
-    }
-    if (!raw) {
-      console.log(
-        "[Cube Extras] No draftConfig found in localStorage for:",
-        draftId
-      );
-      setCubeStandardCards([]);
-      return;
-    }
-
-    type StoredDraftConfig = {
-      cubeId?: string | null;
-      cubeName?: string | null;
-      includeCubeSideboardInStandard?: boolean;
-    };
-
-    let cfg: StoredDraftConfig | null = null;
-    try {
-      const parsed = JSON.parse(raw) as StoredDraftConfig;
-      cfg = parsed && typeof parsed === "object" ? parsed : null;
-    } catch {
-      cfg = null;
-    }
-
-    console.log("[Cube Extras] Loaded draftConfig:", cfg);
-
-    if (!cfg?.cubeId || !cfg.includeCubeSideboardInStandard) {
-      console.log("[Cube Extras] Skipping cube extras:", {
-        hasCubeId: !!cfg?.cubeId,
-        includeCubeSideboardInStandard: cfg?.includeCubeSideboardInStandard,
-      });
-      setCubeStandardCards([]);
-      return;
-    }
-
-    const cubeId = cfg.cubeId;
+    const fetchCubeId = cubeId;
     let cancelled = false;
 
     (async () => {
       try {
-        const res = await fetch(`/api/cubes/${encodeURIComponent(cubeId)}`);
+        const res = await fetch(
+          `/api/cubes/${encodeURIComponent(fetchCubeId)}`
+        );
         if (!res.ok) {
           if (!cancelled) setCubeStandardCards([]);
           return;
@@ -4442,7 +4467,12 @@ function AuthenticatedDeckEditor() {
                 return aY - bY; // Lower Y values render first (behind higher Y values)
               });
 
-              return sortedCards.map((p, cardIndex) => {
+              // Filter out hidden cards unless showHiddenCards is true
+              const visibleCards = showHiddenCards
+                ? sortedCards
+                : sortedCards.filter((p) => !hiddenCardIds.has(p.card.cardId));
+
+              return visibleCards.map((p, cardIndex) => {
                 const isSite = (p.card.type || "")
                   .toLowerCase()
                   .includes("site");
@@ -5238,6 +5268,8 @@ function AuthenticatedDeckEditor() {
             hasDragonlordAvatar={hasDragonlordAvatar && allowDragonlordChampion}
             champion={champion}
             onOpenChampionModal={() => setShowChampionModal(true)}
+            // Cube name for display
+            cubeName={sealedCubeName}
           />
         </Suspense>
         {error && (

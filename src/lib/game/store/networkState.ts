@@ -175,8 +175,12 @@ export const createNetworkSlice: StateCreator<
             | Record<PlayerKey, number | null>
             | undefined;
           if (!source) return null;
-          const p1 = Number(source.p1 ?? 0);
-          const p2 = Number(source.p2 ?? 0);
+          // Only derive winner if BOTH players have actually rolled (non-null values)
+          if (source.p1 == null || source.p2 == null) {
+            return null;
+          }
+          const p1 = Number(source.p1);
+          const p2 = Number(source.p2);
           if (!Number.isFinite(p1) || !Number.isFinite(p2)) return null;
           if (p1 === p2) return null;
           return p1 > p2 ? ("p1" as PlayerKey) : ("p2" as PlayerKey);

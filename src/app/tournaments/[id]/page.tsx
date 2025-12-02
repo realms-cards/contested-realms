@@ -445,6 +445,78 @@ export default function TournamentDetailsPage() {
   // Check if current user is the creator
   const isCreator = tournament && session?.user?.id === tournament.creatorId;
 
+  // Refresh tournament data when returning to page (covers missed phase_changed events)
+  const lastVisibilityRefreshRef = useRef<number>(0);
+  useEffect(() => {
+    const handleVisibility = async () => {
+      if (document.visibilityState !== "visible") return;
+      if (!tournament || !isRegistered) return;
+      // Only refresh if tournament is active (might have completed while away)
+      if (tournament.status !== "active") return;
+      // Throttle: at most once every 5 seconds
+      const now = Date.now();
+      if (now - lastVisibilityRefreshRef.current < 5000) return;
+      lastVisibilityRefreshRef.current = now;
+      // Fetch tournament detail to get updated status (may have completed)
+      try {
+        const res = await fetch(`/api/tournaments/${tournament.id}`);
+        if (res.ok) {
+          const detail = await res.json();
+          setCurrentTournament(detail);
+        }
+      } catch {}
+      // Also refresh statistics to get latest standings/rounds
+      try {
+        statistics?.actions?.refreshAll?.();
+      } catch {}
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () =>
+      document.removeEventListener("visibilitychange", handleVisibility);
+  }, [
+    tournament,
+    tournament?.id,
+    tournament?.status,
+    isRegistered,
+    statistics?.actions,
+    setCurrentTournament,
+  ]);
+
+  // On mount: check if we're returning from a match and tournament might have completed
+  // This handles navigation (not visibility change) back to the tournament page
+  const didMountRefreshRef = useRef(false);
+  useEffect(() => {
+    // Wait until we have the necessary data
+    if (!tournament?.id || !isRegistered) return;
+    // Skip if already did mount refresh for this tournament
+    if (didMountRefreshRef.current) return;
+    // Only refresh if tournament is active (could have completed while user was on match page)
+    if (tournament.status !== "active") return;
+
+    didMountRefreshRef.current = true;
+
+    // Immediate refresh on mount to catch completed tournaments
+    (async () => {
+      try {
+        const res = await fetch(`/api/tournaments/${tournament.id}`);
+        if (res.ok) {
+          const detail = await res.json();
+          setCurrentTournament(detail);
+        }
+      } catch {}
+      // Also refresh statistics to get final standings
+      try {
+        statistics?.actions?.refreshAll?.();
+      } catch {}
+    })();
+  }, [
+    tournament?.id,
+    tournament?.status,
+    isRegistered,
+    setCurrentTournament,
+    statistics?.actions,
+  ]);
+
   // Load viewer deck card metadata when available (from context detail only)
   useEffect(() => {
     (async () => {
@@ -1536,14 +1608,19 @@ export default function TournamentDetailsPage() {
                               throw new Error(
                                 data?.error || "Failed to start preparation"
                               );
-                            const packs = data?.preparationData?.sealed
-                              ?.generatedPacks as
-                              | Array<{
-                                  packId: string;
-                                  setId: string;
-                                  cards: unknown[];
-                                }>
+                            const sealedData = data?.preparationData?.sealed as
+                              | {
+                                  generatedPacks?: Array<{
+                                    packId: string;
+                                    setId: string;
+                                    cards: unknown[];
+                                  }>;
+                                  cubeName?: string | null;
+                                  cubeId?: string | null;
+                                  includeCubeSideboardInStandard?: boolean;
+                                }
                               | undefined;
+                            const packs = sealedData?.generatedPacks;
                             if (Array.isArray(packs)) {
                               const storePacks = packs.map((p) => ({
                                 id: p.packId,
@@ -1556,6 +1633,27 @@ export default function TournamentDetailsPage() {
                                   `sealedPacks_tournament_${tournament.id}`,
                                   JSON.stringify(storePacks)
                                 );
+                                // Store cube name for display if available
+                                if (sealedData?.cubeName) {
+                                  localStorage.setItem(
+                                    `sealedCubeName_tournament_${tournament.id}`,
+                                    sealedData.cubeName
+                                  );
+                                }
+                                // Store cube sideboard setting if available
+                                if (
+                                  sealedData?.cubeId &&
+                                  sealedData.includeCubeSideboardInStandard
+                                ) {
+                                  localStorage.setItem(
+                                    `sealedCubeSideboard_tournament_${tournament.id}`,
+                                    JSON.stringify({
+                                      cubeId: sealedData.cubeId,
+                                      includeSideboard:
+                                        sealedData.includeCubeSideboardInStandard,
+                                    })
+                                  );
+                                }
                               } catch {}
                             }
                           } catch (e) {

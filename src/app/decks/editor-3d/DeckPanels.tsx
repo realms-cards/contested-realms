@@ -212,7 +212,9 @@ export default function DeckPanels(props: DeckPanelsProps) {
                   showHiddenCards ? "Hide hidden cards" : "Show hidden cards"
                 }
                 className={`${iconButtonStyles.base} ${
-                  showHiddenCards ? iconButtonStyles.active : ""
+                  showHiddenCards
+                    ? iconButtonStyles.active
+                    : "ring-2 ring-yellow-500/50 border-yellow-500/50"
                 }`}
               >
                 <svg

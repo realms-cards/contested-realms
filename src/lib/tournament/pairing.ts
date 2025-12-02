@@ -236,8 +236,8 @@ export async function createRoundMatches(
       roundId,
       status: 'pending',
       players: [
-        { id: pairing.player1.playerId, displayName: pairing.player1.displayName },
-        { id: pairing.player2.playerId, displayName: pairing.player2.displayName }
+        { id: pairing.player1.playerId, name: pairing.player1.displayName },
+        { id: pairing.player2.playerId, name: pairing.player2.displayName }
       ],
     };
 

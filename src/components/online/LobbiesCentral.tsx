@@ -331,9 +331,12 @@ export type CreateTournamentConfig = {
   isPrivate?: boolean;
   sealedConfig?: {
     packCounts: Record<string, number>;
+    packCount?: number;
+    cubeId?: string;
     timeLimit: number;
     replaceAvatars: boolean;
     allowDragonlordChampion?: boolean;
+    includeCubeSideboardInStandard?: boolean;
   };
   draftConfig?: {
     setMix: string[];
@@ -490,6 +493,10 @@ export default function LobbiesCentral({
     useState<boolean>(false);
   const [sealedAllowDragonlordChampion, setSealedAllowDragonlordChampion] =
     useState<boolean>(true);
+  const [sealedUseCube, setSealedUseCube] = useState<boolean>(false);
+  const [sealedCubeId, setSealedCubeId] = useState<string>("");
+  const [sealedIncludeCubeSideboard, setSealedIncludeCubeSideboard] =
+    useState<boolean>(false);
   const [draftBoosterCount, setDraftBoosterCount] = useState<number>(3);
   const [draftBoosters, setDraftBoosters] = useState<string[]>([
     "Beta",
@@ -1744,68 +1751,168 @@ export default function LobbiesCentral({
               </div>
               {tournamentMatchType === "sealed" && (
                 <div className="space-y-3 mt-2">
-                  <div className="flex items-center gap-3">
-                    <div className="text-xs font-medium">Booster Count</div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const newCount = Math.max(1, sealedBoosterCount - 1);
-                          setSealedBoosterCount(newCount);
-                          setSealedBoosters((prev) => prev.slice(0, newCount));
-                        }}
-                        className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-xs font-bold"
-                      >
-                        -
-                      </button>
-                      <span className="w-8 text-center text-xs font-semibold">
-                        {sealedBoosterCount}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const newCount = Math.min(10, sealedBoosterCount + 1);
-                          setSealedBoosterCount(newCount);
-                          setSealedBoosters((prev) => [
-                            ...prev,
-                            ...Array(newCount - prev.length).fill("Beta"),
-                          ]);
-                        }}
-                        className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-xs font-bold"
-                      >
-                        +
-                      </button>
-                    </div>
-                  </div>
-                  <div className="space-y-2 max-h-40 overflow-y-auto">
-                    {sealedBoosters.map((setName, idx) => (
-                      <div
-                        key={`sealed-booster-${idx}`}
-                        className="flex items-center gap-2"
-                      >
-                        <div className="text-xs text-slate-400 w-16">
-                          Pack {idx + 1}
+                  {/* Cube sealed toggle */}
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={sealedUseCube}
+                      onChange={(e) => setSealedUseCube(e.target.checked)}
+                      className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-blue-600"
+                    />
+                    <span className="text-xs">Use Cube for sealed</span>
+                  </label>
+
+                  {!sealedUseCube && (
+                    <>
+                      <div className="flex items-center gap-3">
+                        <div className="text-xs font-medium">Booster Count</div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const newCount = Math.max(
+                                1,
+                                sealedBoosterCount - 1
+                              );
+                              setSealedBoosterCount(newCount);
+                              setSealedBoosters((prev) =>
+                                prev.slice(0, newCount)
+                              );
+                            }}
+                            className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-xs font-bold"
+                          >
+                            -
+                          </button>
+                          <span className="w-8 text-center text-xs font-semibold">
+                            {sealedBoosterCount}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const newCount = Math.min(
+                                10,
+                                sealedBoosterCount + 1
+                              );
+                              setSealedBoosterCount(newCount);
+                              setSealedBoosters((prev) => [
+                                ...prev,
+                                ...Array(newCount - prev.length).fill("Beta"),
+                              ]);
+                            }}
+                            className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-xs font-bold"
+                          >
+                            +
+                          </button>
                         </div>
-                        <select
-                          value={setName}
-                          onChange={(e) => {
-                            setSealedBoosters((prev) => {
-                              const next = [...prev];
-                              next[idx] = e.target.value;
-                              return next;
-                            });
-                          }}
-                          className="flex-1 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-xs"
-                        >
-                          <option value="Beta">Beta</option>
-                          <option value="Arthurian Legends">
-                            Arthurian Legends
-                          </option>
-                          <option value="Alpha">Alpha</option>
-                        </select>
                       </div>
-                    ))}
-                  </div>
+                      <div className="space-y-2 max-h-40 overflow-y-auto">
+                        {sealedBoosters.map((setName, idx) => (
+                          <div
+                            key={`sealed-booster-${idx}`}
+                            className="flex items-center gap-2"
+                          >
+                            <div className="text-xs text-slate-400 w-16">
+                              Pack {idx + 1}
+                            </div>
+                            <select
+                              value={setName}
+                              onChange={(e) => {
+                                setSealedBoosters((prev) => {
+                                  const next = [...prev];
+                                  next[idx] = e.target.value;
+                                  return next;
+                                });
+                              }}
+                              className="flex-1 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-xs"
+                            >
+                              <option value="Beta">Beta</option>
+                              <option value="Arthurian Legends">
+                                Arthurian Legends
+                              </option>
+                              <option value="Alpha">Alpha</option>
+                            </select>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+
+                  {sealedUseCube && (
+                    <>
+                      <div>
+                        <label className="block text-xs opacity-80 mb-1">
+                          Select Cube
+                        </label>
+                        {loadingCubes ? (
+                          <div className="text-xs text-slate-400 py-2">
+                            Loading cubes...
+                          </div>
+                        ) : userCubes.length === 0 ? (
+                          <div className="text-xs text-slate-400 py-2">
+                            No cubes found. Create a cube first to use for
+                            sealed.
+                          </div>
+                        ) : (
+                          <select
+                            value={sealedCubeId}
+                            onChange={(e) => setSealedCubeId(e.target.value)}
+                            className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
+                          >
+                            <option value="">-- Select a cube --</option>
+                            {userCubes.map((cube) => (
+                              <option key={cube.id} value={cube.id}>
+                                {cube.name} ({cube.cardCount} cards)
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                        <p className="text-xs text-slate-400 mt-1">
+                          Choose one of your cubes for this sealed tournament
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="text-xs font-medium">Pack Count</div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setSealedBoosterCount((c) => Math.max(1, c - 1))
+                            }
+                            className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-xs font-bold"
+                          >
+                            -
+                          </button>
+                          <span className="w-8 text-center text-xs font-semibold">
+                            {sealedBoosterCount}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setSealedBoosterCount((c) => Math.min(10, c + 1))
+                            }
+                            className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-xs font-bold"
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+                      <label className="mt-2 flex items-start gap-2 text-xs cursor-pointer">
+                        <input
+                          type="checkbox"
+                          className="mt-0.5 w-3 h-3 rounded border-slate-600 bg-slate-700 text-blue-600"
+                          checked={sealedIncludeCubeSideboard}
+                          onChange={(e) =>
+                            setSealedIncludeCubeSideboard(e.target.checked)
+                          }
+                        />
+                        <span>
+                          Include cube&apos;s sideboard cards in the standard
+                          card pool during deckbuilding.
+                        </span>
+                      </label>
+                    </>
+                  )}
+
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className="block text-xs opacity-80 mb-1">
@@ -1827,7 +1934,10 @@ export default function LobbiesCentral({
                         className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
                       />
                     </div>
-                    <label className="flex items-center gap-2 text-xs mt-5">
+                    <label
+                      className="flex items-center gap-2 text-xs mt-5 cursor-pointer"
+                      title="When enabled, boosters replace the 'guaranteed avatar' slot with another random card (more variety, but no guaranteed avatar per pack)"
+                    >
                       <input
                         type="checkbox"
                         checked={sealedReplaceAvatars}
@@ -1835,7 +1945,12 @@ export default function LobbiesCentral({
                           setSealedReplaceAvatars(e.target.checked)
                         }
                       />
-                      Replace Avatars
+                      <span>
+                        No guaranteed avatar
+                        <span className="text-slate-400 ml-1">
+                          (random cards instead)
+                        </span>
+                      </span>
                     </label>
                     <label className="flex items-center gap-2 text-xs mt-2">
                       <input
@@ -2082,7 +2197,10 @@ export default function LobbiesCentral({
                   !tournamentName.trim() ||
                   (tournamentMatchType === "draft" &&
                     draftUseCube &&
-                    !draftCubeId)
+                    !draftCubeId) ||
+                  (tournamentMatchType === "sealed" &&
+                    sealedUseCube &&
+                    !sealedCubeId)
                 }
                 onClick={() => {
                   const trimmedName = tournamentName.trim();
@@ -2096,6 +2214,14 @@ export default function LobbiesCentral({
                       alert("Please select a cube for the draft tournament");
                       return;
                     }
+                    if (
+                      tournamentMatchType === "sealed" &&
+                      sealedUseCube &&
+                      !sealedCubeId
+                    ) {
+                      alert("Please select a cube for the sealed tournament");
+                      return;
+                    }
                     const payload: CreateTournamentConfig = {
                       name: trimmedName,
                       format: tournamentFormat,
@@ -2104,17 +2230,33 @@ export default function LobbiesCentral({
                       isPrivate: tournamentIsPrivate,
                     };
                     if (tournamentMatchType === "sealed") {
-                      // Convert booster array to packCounts format
-                      const packCounts: Record<string, number> = {};
-                      sealedBoosters.forEach((setName) => {
-                        packCounts[setName] = (packCounts[setName] || 0) + 1;
-                      });
-                      payload.sealedConfig = {
-                        packCounts,
-                        timeLimit: sealedTimeLimit,
-                        replaceAvatars: sealedReplaceAvatars,
-                        allowDragonlordChampion: sealedAllowDragonlordChampion,
-                      };
+                      if (sealedUseCube && sealedCubeId) {
+                        // Cube sealed mode
+                        payload.sealedConfig = {
+                          packCounts: {},
+                          packCount: sealedBoosterCount,
+                          cubeId: sealedCubeId,
+                          timeLimit: sealedTimeLimit,
+                          replaceAvatars: sealedReplaceAvatars,
+                          allowDragonlordChampion:
+                            sealedAllowDragonlordChampion,
+                          includeCubeSideboardInStandard:
+                            sealedIncludeCubeSideboard,
+                        };
+                      } else {
+                        // Convert booster array to packCounts format
+                        const packCounts: Record<string, number> = {};
+                        sealedBoosters.forEach((setName) => {
+                          packCounts[setName] = (packCounts[setName] || 0) + 1;
+                        });
+                        payload.sealedConfig = {
+                          packCounts,
+                          timeLimit: sealedTimeLimit,
+                          replaceAvatars: sealedReplaceAvatars,
+                          allowDragonlordChampion:
+                            sealedAllowDragonlordChampion,
+                        };
+                      }
                     } else if (tournamentMatchType === "draft") {
                       if (draftUseCube && draftCubeId) {
                         // Cube draft mode
