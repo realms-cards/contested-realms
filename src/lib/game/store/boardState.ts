@@ -1,10 +1,5 @@
 import type { StateCreator } from "zustand";
-import type {
-  GameState,
-  PlayerKey,
-  ServerPatchT,
-  Zones,
-} from "./types";
+import type { GameState, PlayerKey, ServerPatchT, Zones } from "./types";
 import {
   getCellNumber,
   ownerLabel,
@@ -26,14 +21,13 @@ type BoardSlice = Pick<
   | "toggleTapSite"
   | "moveSiteToZone"
   | "transferSiteControl"
+  | "switchSitePosition"
 >;
 
-export const createBoardSlice: StateCreator<
-  GameState,
-  [],
-  [],
-  BoardSlice
-> = (set, get) => ({
+export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
+  set,
+  get
+) => ({
   board: createInitialBoard(),
 
   toggleTapSite: () =>
@@ -171,6 +165,136 @@ export const createBoardSlice: StateCreator<
       return {
         board: boardNext,
         ...(zonePatch?.zones ? { zones: zonesNext } : {}),
+      } as Partial<GameState> as GameState;
+    }),
+
+  switchSitePosition: (sourceX, sourceY, targetX, targetY) =>
+    set((state) => {
+      get().pushHistory();
+      const sourceKey = toCellKey(sourceX, sourceY);
+      const targetKey = toCellKey(targetX, targetY);
+
+      // Validate source has a site
+      const sourceSite = state.board.sites[sourceKey];
+      if (!sourceSite) {
+        get().log("No site at source position to move");
+        return state;
+      }
+
+      // Check actor permissions in online mode
+      if (state.transport && state.actorKey) {
+        const ownerSeat = seatFromOwner(sourceSite.owner);
+        if (state.actorKey !== ownerSeat) {
+          get().log("Cannot move opponent's site without consent");
+          return state;
+        }
+      }
+
+      const targetSite = state.board.sites[targetKey];
+      const isSwap = !!targetSite;
+
+      // Build new sites map
+      const sites = { ...state.board.sites };
+      if (isSwap) {
+        // Swap sites
+        sites[sourceKey] = targetSite;
+        sites[targetKey] = sourceSite;
+      } else {
+        // Move to void
+        delete sites[sourceKey];
+        sites[targetKey] = sourceSite;
+      }
+
+      // Build new permanents map - swap all permanents between cells
+      // IMPORTANT: Deep copy the arrays to avoid reference issues
+      const permanents = { ...state.permanents };
+      const sourcePerms = [...(state.permanents[sourceKey] || [])];
+      const targetPerms = [...(state.permanents[targetKey] || [])];
+
+      if (isSwap) {
+        // Swap: source gets target's permanents, target gets source's permanents
+        if (targetPerms.length > 0) {
+          permanents[sourceKey] = targetPerms;
+        } else {
+          delete permanents[sourceKey];
+        }
+        if (sourcePerms.length > 0) {
+          permanents[targetKey] = sourcePerms;
+        } else {
+          delete permanents[targetKey];
+        }
+      } else {
+        // Move to void: target gets source's permanents, source becomes empty
+        delete permanents[sourceKey];
+        if (sourcePerms.length > 0) {
+          permanents[targetKey] = sourcePerms;
+        }
+      }
+
+      // Handle avatars - update positions for any avatar on either cell
+      const avatars = { ...state.avatars };
+      for (const seat of ["p1", "p2"] as PlayerKey[]) {
+        const avatar = avatars[seat];
+        if (!avatar?.pos) continue;
+        const [ax, ay] = avatar.pos;
+        if (ax === sourceX && ay === sourceY) {
+          avatars[seat] = {
+            ...avatar,
+            pos: [targetX, targetY] as [number, number],
+          };
+        } else if (isSwap && ax === targetX && ay === targetY) {
+          avatars[seat] = {
+            ...avatar,
+            pos: [sourceX, sourceY] as [number, number],
+          };
+        }
+      }
+
+      const boardNext = { ...state.board, sites } as GameState["board"];
+      const sourceCellNo = getCellNumber(sourceX, sourceY, state.board.size.w);
+      const targetCellNo = getCellNumber(targetX, targetY, state.board.size.w);
+
+      if (isSwap) {
+        get().log(
+          `Switched site positions: #${sourceCellNo} <-> #${targetCellNo}`
+        );
+      } else {
+        get().log(
+          `Moved site from #${sourceCellNo} to void at #${targetCellNo}`
+        );
+      }
+
+      // Send patch in online mode
+      const tr = get().transport;
+      if (tr) {
+        // Build a sites patch that explicitly sets deleted sites to null
+        // This is necessary because deepMergeReplaceArrays won't remove keys
+        // that are missing from the patch - it only updates present keys
+        const sitesPatch: Record<string, unknown> = {};
+        if (isSwap) {
+          sitesPatch[sourceKey] = sites[sourceKey];
+          sitesPatch[targetKey] = sites[targetKey];
+        } else {
+          // Move to void: explicitly set source to null for deletion
+          sitesPatch[sourceKey] = null;
+          sitesPatch[targetKey] = sites[targetKey];
+        }
+
+        // For site switching, we need to send the COMPLETE permanents state
+        // to avoid merge issues. Use __replaceKeys to force replacement.
+        const patch: ServerPatchT = {
+          __replaceKeys: ["permanents"],
+          board: { ...boardNext, sites: sitesPatch as typeof boardNext.sites },
+          permanents: permanents as ServerPatchT["permanents"],
+          avatars,
+        };
+        get().trySendPatch(patch);
+      }
+
+      return {
+        board: boardNext,
+        permanents,
+        avatars,
       } as Partial<GameState> as GameState;
     }),
 });

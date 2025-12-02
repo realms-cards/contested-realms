@@ -40,6 +40,7 @@ import {
   type PlayerKey,
 } from "@/lib/game/store";
 import { seatFromOwner } from "@/lib/game/store/utils/boardHelpers";
+import { generateInteractionRequestId } from "@/lib/net/interactions";
 
 // Feature flag to isolate snap effects while debugging rapier aliasing
 const ENABLE_SNAP = true;
@@ -189,6 +190,17 @@ export default function Board({
   const localPlayerId = useScopedStore((s) => s.localPlayerId);
   const avatars = useScopedStore((s) => s.avatars);
   const portalState = useScopedStore((s) => s.portalState);
+  const switchSiteSource = useScopedStore((s) => s.switchSiteSource);
+  const setSwitchSiteSource = useScopedStore((s) => s.setSwitchSiteSource);
+  const switchSitePosition = useScopedStore((s) => s.switchSitePosition);
+  const log = useScopedStore((s) => s.log);
+  // Online mode consent infrastructure
+  const transport = useScopedStore((s) => s.transport);
+  const matchId = useScopedStore((s) => s.matchId);
+  const opponentPlayerId = useScopedStore((s) => s.opponentPlayerId);
+  const sendInteractionRequest = useScopedStore(
+    (s) => s.sendInteractionRequest
+  );
   const overlayBlocking = useScopedStore((s) =>
     Boolean(s.peekDialog || s.searchDialog || s.placementDialog)
   );
@@ -334,6 +346,126 @@ export default function Board({
     state.clearSelection();
     state.closeContextMenu();
   }, [resolvedStoreApi]);
+
+  // Complete switch site position when target tile is clicked
+  const onCompleteSwitchSite = useCallback(
+    (targetX: number, targetY: number) => {
+      if (!switchSiteSource) return;
+      const { x: sourceX, y: sourceY } = switchSiteSource;
+      // Don't allow switching to the same cell
+      if (sourceX === targetX && sourceY === targetY) {
+        setSwitchSiteSource(null);
+        return;
+      }
+
+      const apply = () => {
+        switchSitePosition(sourceX, sourceY, targetX, targetY);
+        setSwitchSiteSource(null);
+      };
+
+      // In online mode, request consent
+      const isOnline = Boolean(transport);
+      if (isOnline && localPlayerId && opponentPlayerId && matchId) {
+        const sourceKey = `${sourceX},${sourceY}` as CellKey;
+        const targetKey = `${targetX},${targetY}` as CellKey;
+        const sourceCellNo =
+          (board.size.h - 1 - sourceY) * board.size.w + sourceX + 1;
+        const targetCellNo =
+          (board.size.h - 1 - targetY) * board.size.w + targetX + 1;
+        const hasTargetSite = Boolean(board.sites[targetKey]);
+
+        // Build descriptive text with site names and permanents
+        const sourceSite = board.sites[sourceKey];
+        const targetSite = board.sites[targetKey];
+        const sourceSiteName = sourceSite?.card?.name || "site";
+        const targetSiteName = targetSite?.card?.name || "site";
+
+        // Get permanents at source that will be moved
+        const sourcePerms = permanents[sourceKey] || [];
+        const permNames = sourcePerms
+          .map((p) => p.card?.name)
+          .filter(Boolean)
+          .slice(0, 3); // Limit to first 3
+        const permInfo =
+          permNames.length > 0
+            ? ` (with ${permNames.join(", ")}${
+                sourcePerms.length > 3 ? "..." : ""
+              })`
+            : "";
+
+        const description = hasTargetSite
+          ? `Switch ${sourceSiteName} at #${sourceCellNo} with ${targetSiteName} at #${targetCellNo}${permInfo}`
+          : `Move ${sourceSiteName} at #${sourceCellNo} to void at #${targetCellNo}${permInfo}`;
+
+        const rid = generateInteractionRequestId("switch");
+        const ttlMs = 30000;
+        sendInteractionRequest({
+          requestId: rid,
+          from: localPlayerId,
+          to: opponentPlayerId,
+          kind: "switchSite",
+          matchId,
+          note: description,
+          payload: {
+            sourceCell: sourceKey,
+            targetCell: targetKey,
+            grant: {
+              allowOpponentZoneWrite: true,
+              singleUse: true,
+              expiresAt: Date.now() + ttlMs,
+            },
+          },
+        });
+
+        log(`Requesting consent: ${description}`);
+        // Listen for approval
+        const checkApproval = setInterval(() => {
+          const entry = resolvedStoreApi.getState().interactionLog[rid];
+          if (entry?.status === "approved") {
+            clearInterval(checkApproval);
+            apply();
+          } else if (
+            entry &&
+            (entry.status === "declined" || entry.status === "cancelled")
+          ) {
+            clearInterval(checkApproval);
+            setSwitchSiteSource(null);
+            log("Site switch request declined");
+          }
+        }, 300);
+      } else {
+        // Offline mode: apply directly
+        apply();
+      }
+    },
+    [
+      switchSiteSource,
+      switchSitePosition,
+      setSwitchSiteSource,
+      log,
+      transport,
+      localPlayerId,
+      opponentPlayerId,
+      matchId,
+      sendInteractionRequest,
+      board,
+      permanents,
+      resolvedStoreApi,
+    ]
+  );
+
+  // Cancel switch site selection on Escape key
+  useEffect(() => {
+    if (!switchSiteSource) return undefined;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setSwitchSiteSource(null);
+        log("Site switch cancelled");
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [switchSiteSource, setSwitchSiteSource, log]);
 
   // Attack chooser state moved to store so HUD can render at layout level
   const attackTargetChoice = useScopedStore((s) => s.attackTargetChoice);
@@ -846,6 +978,8 @@ export default function Board({
               attackConfirm={attackConfirm}
               attackTargetChoice={attackTargetChoice}
               portalState={portalState}
+              switchSiteSource={switchSiteSource}
+              onCompleteSwitchSite={onCompleteSwitchSite}
             />
           );
         })}

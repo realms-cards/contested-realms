@@ -26,6 +26,8 @@ export type UiSlice = Pick<
   | "selectPermanent"
   | "setCameraMode"
   | "toggleCameraMode"
+  | "switchSiteSource"
+  | "setSwitchSiteSource"
 >;
 
 type UiStateDefaults = Pick<
@@ -40,6 +42,7 @@ type UiStateDefaults = Pick<
   | "dragFromPile"
   | "hoverCell"
   | "previewCard"
+  | "switchSiteSource"
 >;
 
 export const createInitialUiState = (): UiStateDefaults => ({
@@ -53,6 +56,7 @@ export const createInitialUiState = (): UiStateDefaults => ({
   dragFromPile: null,
   hoverCell: null,
   previewCard: null,
+  switchSiteSource: null,
 });
 
 export const createUiSlice: StateCreator<GameState, [], [], UiSlice> = (
@@ -117,4 +121,7 @@ export const createUiSlice: StateCreator<GameState, [], [], UiSlice> = (
     set((state) => ({
       cameraMode: state.cameraMode === "orbit" ? "topdown" : "orbit",
     })),
+
+  setSwitchSiteSource: (source: { x: number; y: number } | null) =>
+    set({ switchSiteSource: source }),
 });

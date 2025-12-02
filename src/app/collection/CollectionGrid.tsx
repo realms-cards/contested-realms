@@ -19,6 +19,18 @@ export default function CollectionGrid({
   loading,
   onQuantityChange,
 }: CollectionGridProps) {
+  // Always call hooks at the top level (Rules of Hooks)
+  // Local optimistic state for quantities
+  const [localQuantities, setLocalQuantities] = useState<Map<number, number>>(
+    new Map()
+  );
+  const refreshDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Clear local quantities when cards prop changes (after refresh)
+  useEffect(() => {
+    setLocalQuantities(new Map());
+  }, [cards]);
+
   // Use virtualization for large collections (50+ cards) to maintain 60fps
   if (!loading && cards.length >= VIRTUALIZATION_THRESHOLD) {
     return (
@@ -31,16 +43,6 @@ export default function CollectionGrid({
   }
 
   // Standard grid for smaller collections (< 50 cards)
-  // Local optimistic state for quantities
-  const [localQuantities, setLocalQuantities] = useState<Map<number, number>>(
-    new Map()
-  );
-  const refreshDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Clear local quantities when cards prop changes (after refresh)
-  useEffect(() => {
-    setLocalQuantities(new Map());
-  }, [cards]);
 
   const debouncedRefresh = () => {
     if (refreshDebounceRef.current) {

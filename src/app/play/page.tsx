@@ -14,6 +14,7 @@ import OfflineMulliganScreen from "@/components/game/OfflineMulliganScreen";
 import PileSearchDialog from "@/components/game/PileSearchDialog";
 import PlacementDialog from "@/components/game/PlacementDialog";
 import StatusBar from "@/components/game/StatusBar";
+import SwitchSiteHudOverlay from "@/components/game/SwitchSiteHudOverlay";
 import {
   DynamicBoard as Board,
   DynamicHand3D as Hand3D,
@@ -393,6 +394,9 @@ export default function PlayPage() {
         playerNames={offlinePlayerNames}
         playerNameById={offlineNameById}
       />
+
+      {/* Switch Site HUD Overlay */}
+      <SwitchSiteHudOverlay />
 
       {/* Toolbox overlay (draw/peek/inspect/position tools) */}
       {showToolbox && (

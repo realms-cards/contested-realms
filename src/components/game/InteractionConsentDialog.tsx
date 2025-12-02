@@ -18,6 +18,7 @@ const KIND_LABEL: Record<string, string> = {
   inspectBanished: "Look at Banished",
   unbanishCard: "Return from Banished",
   restoreSnapshot: "Restore Snapshot",
+  switchSite: "Switch Site Position",
 };
 
 function describeGrant(grant?: InteractionGrantRequest | null): string | null {

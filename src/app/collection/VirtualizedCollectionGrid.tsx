@@ -125,6 +125,31 @@ export default function VirtualizedCollectionGrid({
       });
   };
 
+  // Filter out optimistically deleted cards and apply local quantity overrides
+  const visibleCards = cards
+    .filter((card) => {
+      const localQty = localQuantities.get(card.id);
+      return localQty !== 0; // Hide if locally marked as deleted
+    })
+    .map((card) => {
+      const localQty = localQuantities.get(card.id);
+      if (localQty !== undefined && localQty > 0) {
+        return { ...card, quantity: localQty };
+      }
+      return card;
+    });
+
+  // Calculate rows (each row contains `columns` cards)
+  const rowCount = Math.ceil(visibleCards.length / columns);
+
+  // Virtualizer for rows (must be called before any early returns)
+  const rowVirtualizer = useVirtualizer({
+    count: rowCount,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 280, // Approximate row height (card height + gap)
+    overscan: 2, // Render 2 extra rows above/below viewport for smooth scrolling
+  });
+
   if (loading) {
     return (
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
@@ -145,31 +170,6 @@ export default function VirtualizedCollectionGrid({
       </div>
     );
   }
-
-  // Filter out optimistically deleted cards and apply local quantity overrides
-  const visibleCards = cards
-    .filter((card) => {
-      const localQty = localQuantities.get(card.id);
-      return localQty !== 0; // Hide if locally marked as deleted
-    })
-    .map((card) => {
-      const localQty = localQuantities.get(card.id);
-      if (localQty !== undefined && localQty > 0) {
-        return { ...card, quantity: localQty };
-      }
-      return card;
-    });
-
-  // Calculate rows (each row contains `columns` cards)
-  const rowCount = Math.ceil(visibleCards.length / columns);
-
-  // Virtualizer for rows
-  const rowVirtualizer = useVirtualizer({
-    count: rowCount,
-    getScrollElement: () => parentRef.current,
-    estimateSize: () => 280, // Approximate row height (card height + gap)
-    overscan: 2, // Render 2 extra rows above/below viewport for smooth scrolling
-  });
 
   return (
     <div

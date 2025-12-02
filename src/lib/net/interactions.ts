@@ -12,10 +12,11 @@ export const InteractionRequestKinds = [
   "inspectBanished",
   "unbanishCard",
   "restoreSnapshot",
+  // Site manipulation (Earthquake, Rift Valley, etc.)
+  "switchSite",
 ] as const;
 
-export type InteractionRequestKind =
-  typeof InteractionRequestKinds[number];
+export type InteractionRequestKind = (typeof InteractionRequestKinds)[number];
 
 export const InteractionDecisionSchema = z.enum([
   "approved",
@@ -138,9 +139,7 @@ export function grantFromRequest(
   overrides: InteractionGrantRequest = {}
 ): InteractionGrant {
   const targetSeat =
-    typeof overrides.targetSeat !== "undefined"
-      ? overrides.targetSeat
-      : null;
+    typeof overrides.targetSeat !== "undefined" ? overrides.targetSeat : null;
   return {
     requestId: request.requestId,
     kind: request.kind,
