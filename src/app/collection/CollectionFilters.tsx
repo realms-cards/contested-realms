@@ -93,6 +93,10 @@ export default function CollectionFilters({
           placeholder="Search cards..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
           className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>

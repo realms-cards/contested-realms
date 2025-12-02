@@ -9,10 +9,10 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { type MatchEvent, formatMatchEvent } from "@/hooks/useMatchEvents";
 import { PLAYER_COLORS } from "@/lib/game/constants";
 import { useGameStore } from "@/lib/game/store";
 import type { ServerChatPayloadT, ChatScope } from "@/lib/net/protocol";
-import { type MatchEvent, formatMatchEvent } from "@/hooks/useMatchEvents";
 
 interface OnlineConsoleProps {
   dragFromHand: boolean;

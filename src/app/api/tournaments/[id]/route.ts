@@ -1,8 +1,8 @@
 import { NextRequest } from "next/server";
 import { getServerAuthSession } from "@/lib/auth";
+import { withCache, CacheKeys } from "@/lib/cache/redis-cache";
 import { logPerformance } from "@/lib/monitoring/performance";
 import { prisma } from "@/lib/prisma";
-import { withCache, CacheKeys } from "@/lib/cache/redis-cache";
 
 export const dynamic = "force-dynamic";
 

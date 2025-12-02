@@ -33,7 +33,10 @@ interface PersistenceDeps {
   metricsInc: MetricsCounterFn;
   metricsObserveMs: MetricsTimerFn;
   matches: Map<string, Record<string, unknown>>;
-  hydrateMatchFromDatabase: (matchId: string, match: Record<string, unknown>) => Promise<void>;
+  hydrateMatchFromDatabase: (
+    matchId: string,
+    match: Record<string, unknown>
+  ) => Promise<void>;
   config: PersistenceConfig;
 }
 
@@ -77,7 +80,8 @@ const createPersistenceLayerInternal = ({
   const persistBuffers: Map<string, PersistBuffer> = new Map();
 
   function toPlainPlayerDecks(playerDecks: unknown) {
-    if (!playerDecks || !(playerDecks instanceof Map)) return playerDecks || null;
+    if (!playerDecks || !(playerDecks instanceof Map))
+      return playerDecks || null;
     return Object.fromEntries(playerDecks);
   }
 
@@ -95,21 +99,27 @@ const createPersistenceLayerInternal = ({
       sealedConfig: match.sealedConfig || null,
       draftConfig: match.draftConfig || null,
       draftState: match.draftState || null,
-      playerDecks: match.playerDecks ? toPlainPlayerDecks(match.playerDecks) : null,
+      playerDecks: match.playerDecks
+        ? toPlainPlayerDecks(match.playerDecks)
+        : null,
       sealedPacks: match.sealedPacks || null,
       game: match.game || null,
       lastTs: BigInt(Number(match.lastTs || Date.now())),
     };
   }
 
-  async function cacheSessionToRedis(sessionData: Record<string, unknown> & { id: string }) {
+  async function cacheSessionToRedis(
+    sessionData: Record<string, unknown> & { id: string }
+  ) {
     try {
       const client = storeRedis || pubClient;
       if (!client) return;
       const key = `match:session:${sessionData.id}`;
       await client.set(
         key,
-        JSON.stringify(sessionData, (_k, v) => (typeof v === "bigint" ? Number(v) : v)),
+        JSON.stringify(sessionData, (_k, v) =>
+          typeof v === "bigint" ? Number(v) : v
+        ),
         "EX",
         redisSessionTtlSec
       );
@@ -125,13 +135,12 @@ const createPersistenceLayerInternal = ({
     action: PersistedAction | null
   ) {
     if (!isWriteBehind) return;
-    const buf: PersistBuffer =
-      persistBuffers.get(matchId) ?? {
-        latestData: null,
-        actions: [],
-        timer: null,
-        lastFlushAt: 0,
-      };
+    const buf: PersistBuffer = persistBuffers.get(matchId) ?? {
+      latestData: null,
+      actions: [],
+      timer: null,
+      lastFlushAt: 0,
+    };
     buf.latestData = data;
     if (action) {
       buf.actions.push(action);
@@ -149,15 +158,17 @@ const createPersistenceLayerInternal = ({
     schedulePersistFlush(matchId);
   }
 
-  function schedulePersistFlush(matchId: string, dataOverride: Record<string, unknown> | null = null) {
+  function schedulePersistFlush(
+    matchId: string,
+    dataOverride: Record<string, unknown> | null = null
+  ) {
     if (!isWriteBehind) return;
-    const buf: PersistBuffer =
-      persistBuffers.get(matchId) ?? {
-        latestData: null,
-        actions: [],
-        timer: null,
-        lastFlushAt: 0,
-      };
+    const buf: PersistBuffer = persistBuffers.get(matchId) ?? {
+      latestData: null,
+      actions: [],
+      timer: null,
+      lastFlushAt: 0,
+    };
     if (dataOverride) buf.latestData = dataOverride;
     if (buf.timer) return;
     buf.timer = setTimeout(() => {
@@ -179,21 +190,27 @@ const createPersistenceLayerInternal = ({
       buf.timer = null;
     }
     const data = buf.latestData;
-    const actions = buf.actions.splice(0, actionBatchSize);
+    // Take a snapshot of actions to persist, but DON'T remove them yet
+    const actionsToFlush = buf.actions.slice(0, actionBatchSize);
     persistBuffers.set(matchId, buf);
+
+    const t0 = Date.now();
+    let actionsSuccess = false;
+    let persistedActionCount = 0;
+
     try {
-      const t0 = Date.now();
       try {
         metricsInc("persist.flush.attempt", 1);
       } catch {}
+
       await prisma.onlineMatchSession.upsert({
         where: { id: matchId },
         create: { id: matchId, ...data },
         update: data,
       });
 
-      if (actions.length > 0) {
-        const rows = actions.map((a) => ({
+      if (actionsToFlush.length > 0) {
+        const rows = actionsToFlush.map((a) => ({
           matchId,
           playerId: a.playerId || "system",
           timestamp: BigInt(Number(a.timestamp || Date.now())),
@@ -201,28 +218,69 @@ const createPersistenceLayerInternal = ({
         }));
         try {
           await prisma.onlineMatchAction.createMany({ data: rows });
+          actionsSuccess = true;
+          persistedActionCount = rows.length;
           try {
             metricsInc("persist.actions.createMany.ok", rows.length);
           } catch {}
-        } catch (e) {
+        } catch (batchErr) {
+          // createMany failed, try individual inserts
+          console.warn(
+            `[persist] createMany failed for ${matchId} (${reason}), trying individual inserts:`,
+            safeErrorMessage(batchErr)
+          );
+          let individualSuccessCount = 0;
           for (const r of rows) {
             try {
               await prisma.onlineMatchAction.create({ data: r });
-            } catch {}
+              individualSuccessCount++;
+            } catch (individualErr) {
+              console.error(
+                `[persist] individual action create failed for ${matchId}:`,
+                safeErrorMessage(individualErr)
+              );
+            }
           }
+          persistedActionCount = individualSuccessCount;
+          actionsSuccess = individualSuccessCount === rows.length;
           try {
-            metricsInc("persist.actions.createMany.fallback", rows.length);
+            metricsInc(
+              "persist.actions.createMany.fallback",
+              individualSuccessCount
+            );
+            if (individualSuccessCount < rows.length) {
+              metricsInc(
+                "persist.actions.lost",
+                rows.length - individualSuccessCount
+              );
+            }
           } catch {}
         }
+      } else {
+        actionsSuccess = true; // No actions to persist
       }
+
+      // Only NOW remove successfully persisted actions from the buffer
+      if (actionsSuccess && persistedActionCount > 0) {
+        buf.actions.splice(0, persistedActionCount);
+      } else if (!actionsSuccess && persistedActionCount > 0) {
+        // Partial success - only remove the ones that succeeded
+        buf.actions.splice(0, persistedActionCount);
+        console.warn(
+          `[persist] partial action flush for ${matchId}: ${persistedActionCount}/${actionsToFlush.length} actions persisted`
+        );
+      }
+
       try {
         metricsInc("persist.flush.success", 1);
         metricsObserveMs("persist.flush.ms", Date.now() - t0);
       } catch {}
     } catch (e) {
-      try {
-        console.warn(`[persist] flush failed for ${matchId} (${reason}):`, safeErrorMessage(e));
-      } catch {}
+      // Session upsert failed - actions stay in buffer for retry
+      console.error(
+        `[persist] flush failed for ${matchId} (${reason}), ${actionsToFlush.length} actions will retry:`,
+        safeErrorMessage(e)
+      );
       try {
         metricsInc("persist.flush.failure", 1);
       } catch {}
@@ -257,7 +315,10 @@ const createPersistenceLayerInternal = ({
       }
     } catch (e) {
       try {
-        console.warn(`[persist] create session failed for ${match.id}:`, safeErrorMessage(e));
+        console.warn(
+          `[persist] create session failed for ${match.id}:`,
+          safeErrorMessage(e)
+        );
       } catch {}
     }
   }
@@ -318,7 +379,10 @@ const createPersistenceLayerInternal = ({
       }
     } catch (e) {
       try {
-        console.warn(`[persist] update session failed for ${match.id}:`, safeErrorMessage(e));
+        console.warn(
+          `[persist] update session failed for ${match.id}:`,
+          safeErrorMessage(e)
+        );
       } catch {}
     }
   }
@@ -337,22 +401,38 @@ const createPersistenceLayerInternal = ({
       if (isWriteBehind) {
         try {
           await flushPersistBuffer(match.id, "match_end");
-        } catch {}
+        } catch (flushErr) {
+          console.error(
+            `[persist] failed to flush buffer on match end for ${match.id}:`,
+            safeErrorMessage(flushErr)
+          );
+        }
         await prisma.onlineMatchSession.upsert({
           where: { id: match.id },
-          create: { id: match.id, ...matchToSessionUpsertData(match), ...endData },
+          create: {
+            id: match.id,
+            ...matchToSessionUpsertData(match),
+            ...endData,
+          },
           update: endData,
         });
       } else {
         await prisma.onlineMatchSession.upsert({
           where: { id: match.id },
-          create: { id: match.id, ...matchToSessionUpsertData(match), ...endData },
+          create: {
+            id: match.id,
+            ...matchToSessionUpsertData(match),
+            ...endData,
+          },
           update: endData,
         });
       }
     } catch (e) {
       try {
-        console.warn(`[persist] end session failed for ${match.id}:`, safeErrorMessage(e));
+        console.warn(
+          `[persist] end session failed for ${match.id}:`,
+          safeErrorMessage(e)
+        );
       } catch {}
     }
   }
@@ -372,7 +452,9 @@ const createPersistenceLayerInternal = ({
         matchType: row.matchType || "constructed",
         sealedConfig: row.sealedConfig || null,
         draftConfig: row.draftConfig || null,
-        playerDecks: row.playerDecks ? new Map(Object.entries(row.playerDecks)) : null,
+        playerDecks: row.playerDecks
+          ? new Map(Object.entries(row.playerDecks))
+          : null,
         sealedPacks: row.sealedPacks || null,
         draftState: row.draftState || null,
         game: row.game || {},
@@ -382,7 +464,9 @@ const createPersistenceLayerInternal = ({
     } catch (e) {
       try {
         console.warn(
-          `[persist] rehydrate failed for ${row && row.id ? row.id : "unknown"}:`,
+          `[persist] rehydrate failed for ${
+            row && row.id ? row.id : "unknown"
+          }:`,
           safeErrorMessage(e)
         );
       } catch {}
@@ -393,7 +477,9 @@ const createPersistenceLayerInternal = ({
   async function recoverActiveMatches() {
     try {
       const rows = await prisma.onlineMatchSession.findMany({
-        where: { status: { in: ["waiting", "deck_construction", "in_progress"] } },
+        where: {
+          status: { in: ["waiting", "deck_construction", "in_progress"] },
+        },
         orderBy: { updatedAt: "desc" },
         take: 50,
       });
@@ -414,7 +500,10 @@ const createPersistenceLayerInternal = ({
       } catch {}
     } catch (e) {
       try {
-        console.warn(`[persist] recover active matches failed:`, safeErrorMessage(e));
+        console.warn(
+          `[persist] recover active matches failed:`,
+          safeErrorMessage(e)
+        );
       } catch {}
     }
   }

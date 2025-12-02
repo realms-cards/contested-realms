@@ -1,7 +1,7 @@
 "use client";
 
-import { useRef, useState, useEffect } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import { useRef, useState, useEffect } from "react";
 import type { CollectionCardResponse } from "@/lib/collection/types";
 import CollectionCard from "./CollectionCard";
 

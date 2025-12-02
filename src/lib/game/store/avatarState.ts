@@ -2,7 +2,6 @@ import type { StateCreator } from "zustand";
 import type {
   AvatarState,
   CellKey,
-  ChampionRef,
   GameState,
   ServerPatchT,
 } from "./types";

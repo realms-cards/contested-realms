@@ -13,14 +13,13 @@ import CombatHudOverlay from "@/components/game/CombatHudOverlay";
 import ContextMenu from "@/components/game/ContextMenu";
 import EnhancedOnlineDraft3DScreen from "@/components/game/EnhancedOnlineDraft3DScreen";
 import GameToolbox from "@/components/game/GameToolbox";
+import HarbingerPortalScreen from "@/components/game/HarbingerPortalScreen";
 import { InteractionConsentDialog } from "@/components/game/InteractionConsentDialog";
 import MagicHudOverlay from "@/components/game/MagicHudOverlay";
-import SwitchSiteHudOverlay from "@/components/game/SwitchSiteHudOverlay";
 import MatchEndOverlay from "@/components/game/MatchEndOverlay";
 import MatchInfoPopup from "@/components/game/MatchInfoPopup";
 import OnlineConsole from "@/components/game/OnlineConsole";
 import OnlineD20Screen from "@/components/game/OnlineD20Screen";
-import HarbingerPortalScreen from "@/components/game/HarbingerPortalScreen";
 import OnlineDeckSelector from "@/components/game/OnlineDeckSelector";
 import OnlineDraftDeckLoader from "@/components/game/OnlineDraftDeckLoader";
 import OnlineLifeCounters from "@/components/game/OnlineLifeCounters";
@@ -29,6 +28,7 @@ import OnlineSealedDeckLoader from "@/components/game/OnlineSealedDeckLoader";
 import OnlineStatusBar from "@/components/game/OnlineStatusBar";
 import PileSearchDialog from "@/components/game/PileSearchDialog";
 import PlacementDialog from "@/components/game/PlacementDialog";
+import SwitchSiteHudOverlay from "@/components/game/SwitchSiteHudOverlay";
 import {
   DynamicBoard as Board,
   DynamicHand3D as Hand3D,
@@ -39,6 +39,10 @@ import {
 import { GlobalVideoOverlay } from "@/components/ui/GlobalVideoOverlay";
 import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
 import TrackpadOrbitAdapter from "@/lib/controls/TrackpadOrbitAdapter";
+import {
+  detectHarbingerSeats,
+  hasAnyHarbinger,
+} from "@/lib/game/avatarAbilities";
 import type { CardPreviewData } from "@/lib/game/card-preview.types";
 import TextureCache from "@/lib/game/components/TextureCache";
 import {
@@ -50,10 +54,6 @@ import {
 import { useCardHover } from "@/lib/game/hooks/useCardHover";
 import { Physics } from "@/lib/game/physics";
 import { useGameStore, type PlayerKey } from "@/lib/game/store";
-import {
-  detectHarbingerSeats,
-  hasAnyHarbinger,
-} from "@/lib/game/avatarAbilities";
 import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
 import { LegacySeatVideo3D } from "@/lib/rtc/SeatVideo3D";
 import {

@@ -2,14 +2,14 @@
 
 import { useLayoutEffect, useRef, useState, useEffect } from "react";
 import { useSound } from "@/lib/contexts/SoundContext";
-import AttachmentTargetSelectionDialog, {
-  type AttachmentTarget,
-} from "@/lib/game/components/AttachmentTargetSelectionDialog";
 import {
   detectBurrowSubmergeAbilities,
   detectBurrowSubmergeAbilitiesSync,
   detectRangedAbilitySync,
 } from "@/lib/game/cardAbilities";
+import AttachmentTargetSelectionDialog, {
+  type AttachmentTarget,
+} from "@/lib/game/components/AttachmentTargetSelectionDialog";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef } from "@/lib/game/store";
 import {

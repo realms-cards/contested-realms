@@ -1,9 +1,9 @@
 import { NextRequest } from 'next/server';
 import { getServerAuthSession } from '@/lib/auth';
+import { invalidateCache, CacheKeys } from '@/lib/cache/redis-cache';
 import { prisma } from '@/lib/prisma';
 import { tournamentSocketService } from '@/lib/services/tournament-broadcast';
 import { updateStandingsAfterMatch } from '@/lib/tournament/pairing';
-import { invalidateCache, CacheKeys } from '@/lib/cache/redis-cache';
 
 export const dynamic = 'force-dynamic';
 

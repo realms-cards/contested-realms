@@ -1,4 +1,3 @@
-import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -7,7 +6,7 @@ export const dynamic = "force-dynamic";
  * GET /api/cards/unique-dragons
  * Returns all Unique Dragon cards that can be chosen as a Dragonlord champion
  */
-export async function GET(_req: NextRequest) {
+export async function GET() {
   try {
     // Find cards where any variant has "Unique Dragon" in its typeText
     const dragons = await prisma.card.findMany({

@@ -4,8 +4,8 @@ import { useFrame } from "@react-three/fiber";
 import { useRef, useMemo } from "react";
 import * as THREE from "three";
 import { CARD_SHORT } from "@/lib/game/constants";
-import type { PortalState } from "@/lib/game/store/types";
 import { isPortalTile } from "@/lib/game/store/portalState";
+import type { PortalState } from "@/lib/game/store/types";
 
 export type PortalOverlayProps = {
   tileX: number;

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 
 export interface MatchEvent {
   id: string;
@@ -18,17 +18,12 @@ export interface MatchEvent {
   };
 }
 
-interface UseMatchEventsOptions {
-  matchId?: string | null;
-  tournamentId?: string | null;
-}
-
 /**
  * Hook to track match and tournament-level events
  * These are separate from game events (card plays, attacks, etc.)
  * and provide context about players, matches, and tournament flow
  */
-export function useMatchEvents(options: UseMatchEventsOptions = {}) {
+export function useMatchEvents() {
   const [events, setEvents] = useState<MatchEvent[]>([]);
 
   const addEvent = useCallback((
