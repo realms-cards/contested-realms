@@ -15,6 +15,7 @@ import EnhancedOnlineDraft3DScreen from "@/components/game/EnhancedOnlineDraft3D
 import GameToolbox from "@/components/game/GameToolbox";
 import { InteractionConsentDialog } from "@/components/game/InteractionConsentDialog";
 import MagicHudOverlay from "@/components/game/MagicHudOverlay";
+import SwitchSiteHudOverlay from "@/components/game/SwitchSiteHudOverlay";
 import MatchEndOverlay from "@/components/game/MatchEndOverlay";
 import MatchInfoPopup from "@/components/game/MatchInfoPopup";
 import OnlineConsole from "@/components/game/OnlineConsole";
@@ -93,6 +94,7 @@ export default function OnlineMatchPage() {
 
   const setActorKey = useGameStore((s) => s.setActorKey);
   const setLocalPlayerId = useGameStore((s) => s.setLocalPlayerId);
+  const setOpponentPlayerId = useGameStore((s) => s.setOpponentPlayerId);
 
   const matchId = useMemo(() => {
     const idParam = (params as Record<string, string | string[]>)?.id;
@@ -176,15 +178,24 @@ export default function OnlineMatchPage() {
     [isSpectatorView, spectatorSeat, myPlayerNumber]
   );
 
-  // Initialize actor seat and localPlayerId in store for ownership guards
+  // Initialize actor seat and player IDs in store for ownership guards and consent
   useEffect(() => {
     setActorKey(resolvedSeat);
     setLocalPlayerId(myPlayerId ?? null);
+    setOpponentPlayerId(opponentPlayerId ?? null);
     return () => {
       setActorKey(null);
       setLocalPlayerId(null);
+      setOpponentPlayerId(null);
     };
-  }, [setActorKey, setLocalPlayerId, resolvedSeat, myPlayerId]);
+  }, [
+    setActorKey,
+    setLocalPlayerId,
+    setOpponentPlayerId,
+    resolvedSeat,
+    myPlayerId,
+    opponentPlayerId,
+  ]);
 
   useRemoteCursorTelemetry(transport);
   useBoardPingListener(transport);
@@ -2424,6 +2435,8 @@ export default function OnlineMatchPage() {
           <CombatHudOverlay />
           {/* Magic HUD Overlay (layout-level, not inside Canvas) */}
           <MagicHudOverlay />
+          {/* Switch Site HUD Overlay (layout-level, not inside Canvas) */}
+          <SwitchSiteHudOverlay />
 
           {/* 3D Board Canvas - fills entire viewport */}
           {!setupOpen && (

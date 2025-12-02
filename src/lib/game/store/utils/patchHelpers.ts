@@ -75,8 +75,12 @@ function makePermanentFallbackKey(record: PermanentRecord): string | null {
   }
   const cardId =
     card.cardId ?? card.slug ?? card.name ?? record.instanceId ?? "unknown";
-  const attached = record.attachedTo as { at?: string; index?: number } | undefined;
-  const attachedKey = attached ? `${attached.at ?? ""}|${attached.index ?? ""}` : "none";
+  const attached = record.attachedTo as
+    | { at?: string; index?: number }
+    | undefined;
+  const attachedKey = attached
+    ? `${attached.at ?? ""}|${attached.index ?? ""}`
+    : "none";
   return `${owner ?? ""}|${cardId}|${attachedKey}`;
 }
 
@@ -101,17 +105,16 @@ export function mergeArrayByInstanceId(
   const seen = new Set<string>();
   for (const baseItem of baseArr) {
     if (!baseItem || typeof baseItem !== "object") continue;
-    const baseRecord = ensurePermanentRecord(
-      baseItem as PermanentRecord
-    );
+    const baseRecord = ensurePermanentRecord(baseItem as PermanentRecord);
     if (!baseRecord) continue;
     let id = extractInstanceId(baseRecord);
     const ensureFallbackMatch = () => {
       const fallbackKey = makePermanentFallbackKey(baseRecord);
       if (fallbackKey && fallbackMap.has(fallbackKey)) {
-        const patchRecord = fallbackMap.get(
-          fallbackKey
-        ) as Record<string, unknown>;
+        const patchRecord = fallbackMap.get(fallbackKey) as Record<
+          string,
+          unknown
+        >;
         const patchId = extractInstanceId(patchRecord);
         if (patchId) {
           baseRecord.instanceId = patchId;
@@ -233,12 +236,17 @@ export function deepMergeReplaceArrays<T>(
       : ({} as Record<string, unknown>);
   const out: Record<string, unknown> = { ...baseObj };
   for (const [k, v] of Object.entries(patch as Record<string, unknown>)) {
+    // If patch value is null, delete the key from the result
+    // This is important for site switching where sites are removed from cells
+    if (v === null) {
+      delete out[k];
+      continue;
+    }
     const cur = out[k];
-    out[k] = deepMergeReplaceArrays(
-      cur as unknown,
-      v as unknown,
-      [...path, k]
-    ) as unknown;
+    out[k] = deepMergeReplaceArrays(cur as unknown, v as unknown, [
+      ...path,
+      k,
+    ]) as unknown;
   }
   return out as unknown as T;
 }
@@ -265,8 +273,14 @@ export function mergePermanentsMap(
   const perPatch = patch as Record<string, unknown>;
   for (const [cell, value] of Object.entries(perPatch)) {
     const nextArr = Array.isArray(value) ? (value as unknown[]) : [];
+    // If the patch explicitly sets an empty array for a cell, clear that cell
+    if (nextArr.length === 0) {
+      (result as Record<string, PermanentItem[]>)[cell] = [];
+      continue;
+    }
+    // Normal merge for non-move operations
     const baseArr = Array.isArray(result[cell as keyof Permanents])
-      ? ((result[cell as keyof Permanents] as unknown[]) || [])
+      ? (result[cell as keyof Permanents] as unknown[]) || []
       : [];
     const merged = mergeArrayByInstanceId(
       baseArr,
@@ -443,7 +457,10 @@ export function buildMoveDeltaPatch(
       if (entry.version !== undefined) {
         patchEntry.version = entry.version;
       }
-      console.log("[buildMoveDeltaPatch] Created patch entry for added:", patchEntry);
+      console.log(
+        "[buildMoveDeltaPatch] Created patch entry for added:",
+        patchEntry
+      );
       deltaUpdates.push({
         at: toKey,
         entry: patchEntry,
@@ -454,30 +471,38 @@ export function buildMoveDeltaPatch(
     deltaValid && deltaUpdates.length > 0
       ? createPermanentDeltaPatch(deltaUpdates)
       : null;
-  const fallbackPatch = createPermanentsPatch(per ?? prevPer, [
-    fromKey,
-    toKey,
-  ]);
+  const fallbackPatch = createPermanentsPatch(per ?? prevPer, [fromKey, toKey]);
 
   if (!deltaPatch) {
     console.log("[buildMoveDeltaPatch] Delta invalid, using fallback patch");
-    console.log("[buildMoveDeltaPatch] Fallback includes cells:", [fromKey, toKey]);
-    console.log("[buildMoveDeltaPatch] Fallback fromKey permanents:",
+    console.log("[buildMoveDeltaPatch] Fallback includes cells:", [
+      fromKey,
+      toKey,
+    ]);
+    console.log(
+      "[buildMoveDeltaPatch] Fallback fromKey permanents:",
       (per ?? prevPer)[fromKey]?.map((p) => ({
         name: p.card.name,
         tapped: p.tapped,
         owner: p.owner,
-        attachedTo: p.attachedTo
-      })));
-    console.log("[buildMoveDeltaPatch] Fallback toKey permanents:",
+        attachedTo: p.attachedTo,
+      }))
+    );
+    console.log(
+      "[buildMoveDeltaPatch] Fallback toKey permanents:",
       (per ?? prevPer)[toKey]?.map((p) => ({
         name: p.card.name,
         tapped: p.tapped,
         owner: p.owner,
-        attachedTo: p.attachedTo
-      })));
+        attachedTo: p.attachedTo,
+      }))
+    );
   } else {
-    console.log("[buildMoveDeltaPatch] Using delta patch with", deltaUpdates.length, "updates");
+    console.log(
+      "[buildMoveDeltaPatch] Using delta patch with",
+      deltaUpdates.length,
+      "updates"
+    );
   }
 
   return deltaPatch ?? fallbackPatch;

@@ -60,6 +60,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   );
   const detachToken = useGameStore((s) => s.detachToken);
   const log = useGameStore((s) => s.log);
+  const setSwitchSiteSource = useGameStore((s) => s.setSwitchSiteSource);
 
   // Permanent position management (burrow/submerge)
   const getAvailableActions = useGameStore((s) => s.getAvailableActions);
@@ -340,6 +341,19 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         });
         onClose();
       };
+    }
+
+    // Switch Site Position (Earthquake, Rift Valley)
+    // Can move a site to a void or swap with another site
+    if (site) {
+      extraActions.push({
+        actionId: "__switch_site_position__",
+        displayText: "Switch Position",
+        isEnabled: true,
+        targetPermanentId: 0,
+        description:
+          "Click another tile to move this site there (swap or move to void). All minions and avatars move with the site.",
+      });
     }
   } else if (t.kind === "permanent") {
     const arr = permanents[t.at] || [];
@@ -1178,6 +1192,27 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                                   candidates: [],
                                 });
                               }
+                            }
+                            onClose();
+                          }}
+                        >
+                          {action.displayText}
+                        </button>
+                      );
+                    }
+                    // Switch Site Position action
+                    if (action.actionId === "__switch_site_position__") {
+                      return (
+                        <button
+                          key={action.actionId}
+                          className="w-full text-left rounded bg-amber-600/20 hover:bg-amber-600/30 px-3 py-1"
+                          title={action.description}
+                          onClick={() => {
+                            if (t.kind === "site") {
+                              setSwitchSiteSource({ x: t.x, y: t.y });
+                              log(
+                                "Site selected for switch. Click another tile to complete the move."
+                              );
                             }
                             onClose();
                           }}

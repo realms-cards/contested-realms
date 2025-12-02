@@ -12,8 +12,8 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: NextRequest) {
   const session = await getServerAuthSession();
 
-  // Only admins can access monitoring endpoints
-  if (!session?.user || session.user.role !== 'admin') {
+  // Require authentication
+  if (!session?.user) {
     return new Response(
       JSON.stringify({ error: 'Unauthorized' }),
       {

@@ -1,10 +1,10 @@
-import { TournamentStatus } from '@prisma/client';
-import { NextRequest } from 'next/server';
-import { getServerAuthSession } from '@/lib/auth';
-import { logPerformance } from '@/lib/monitoring/performance';
-import { prisma } from '@/lib/prisma';
+import { TournamentStatus } from "@prisma/client";
+import { NextRequest } from "next/server";
+import { getServerAuthSession } from "@/lib/auth";
+import { logPerformance } from "@/lib/monitoring/performance";
+import { prisma } from "@/lib/prisma";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
 // GET /api/tournaments/my
 // Returns tournaments the signed-in user created or participated in, with search and pagination
@@ -12,24 +12,38 @@ export async function GET(req: NextRequest) {
   const startTime = performance.now();
   const session = await getServerAuthSession();
   if (!session?.user) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+    });
   }
 
   try {
     const url = new URL(req.url);
     const sp = url.searchParams;
-    const q = (sp.get('q') || '').trim();
-    const statusParam = sp.get('status'); // e.g. 'completed', 'active', 'all', or CSV
-    const role = (sp.get('role') || 'any').toLowerCase(); // 'any' | 'creator' | 'participant'
-    const page = Math.max(1, Number(sp.get('page') || 1) || 1);
-    const pageSize = Math.max(1, Math.min(50, Number(sp.get('pageSize') || 12) || 12));
+    const q = (sp.get("q") || "").trim();
+    const statusParam = sp.get("status"); // e.g. 'completed', 'active', 'all', or CSV
+    const role = (sp.get("role") || "any").toLowerCase(); // 'any' | 'creator' | 'participant'
+    const page = Math.max(1, Number(sp.get("page") || 1) || 1);
+    const pageSize = Math.max(
+      1,
+      Math.min(50, Number(sp.get("pageSize") || 12) || 12)
+    );
     const skip = (page - 1) * pageSize;
 
     // Parse statuses
     let statuses: TournamentStatus[] | null = null; // default to ALL for "my" history
-    if (statusParam && statusParam !== 'all') {
-      const parts = statusParam.split(',').map((s) => s.trim()).filter(Boolean);
-      const allowed = new Set(['registering', 'preparing', 'active', 'completed', 'cancelled']);
+    if (statusParam && statusParam !== "all") {
+      const parts = statusParam
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const allowed = new Set([
+        "registering",
+        "preparing",
+        "active",
+        "completed",
+        "cancelled",
+      ]);
       const parsed = parts.filter((p) => allowed.has(p)) as TournamentStatus[];
       statuses = parsed.length ? parsed : null;
     }
@@ -37,15 +51,20 @@ export async function GET(req: NextRequest) {
     // Build where clause
     const userId = session.user.id;
     const roleClause =
-      role === 'creator'
+      role === "creator"
         ? { creatorId: userId }
-        : role === 'participant'
+        : role === "participant"
         ? { registrations: { some: { playerId: userId } } }
-        : { OR: [{ creatorId: userId }, { registrations: { some: { playerId: userId } } }] };
+        : {
+            OR: [
+              { creatorId: userId },
+              { registrations: { some: { playerId: userId } } },
+            ],
+          };
 
     const where = {
       ...(statuses ? { status: { in: statuses } } : {}),
-      ...(q ? { name: { contains: q, mode: 'insensitive' as const } } : {}),
+      ...(q ? { name: { contains: q, mode: "insensitive" as const } } : {}),
       ...roleClause,
     };
 
@@ -74,7 +93,7 @@ export async function GET(req: NextRequest) {
               opponentMatchWinPercentage: true,
               isEliminated: true,
               currentMatchId: true,
-            }
+            },
           },
           rounds: {
             select: {
@@ -84,18 +103,21 @@ export async function GET(req: NextRequest) {
             },
           },
         },
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
         take: pageSize,
         skip,
       }),
     ]);
 
     // Fetch match IDs separately for all rounds (batch query more efficient than nested include)
-    const roundIds = tournaments.flatMap(t => t.rounds.map(r => r.id));
-    const matchesByRound = roundIds.length > 0 ? await prisma.match.findMany({
-      where: { roundId: { in: roundIds } },
-      select: { id: true, roundId: true },
-    }) : [];
+    const roundIds = tournaments.flatMap((t) => t.rounds.map((r) => r.id));
+    const matchesByRound =
+      roundIds.length > 0
+        ? await prisma.match.findMany({
+            where: { roundId: { in: roundIds } },
+            select: { id: true, roundId: true },
+          })
+        : [];
 
     // Create lookup map for quick access
     const matchIdsByRound = new Map<string, string[]>();
@@ -118,10 +140,12 @@ export async function GET(req: NextRequest) {
       maxPlayers: tournament.maxPlayers,
       currentPlayers: tournament.registrations.length,
       registeredPlayers: tournament.registrations.map((reg) => {
-        const prepData = (reg.preparationData as Record<string, unknown> | null) || {};
+        const prepData =
+          (reg.preparationData as Record<string, unknown> | null) || {};
         return {
           id: reg.playerId,
-          displayName: (reg.player as { name?: string } | null)?.name || 'Anonymous',
+          displayName:
+            (reg.player as { name?: string } | null)?.name || "Anonymous",
           ready: Boolean((prepData as { ready?: boolean }).ready),
           deckSubmitted: Boolean(reg.deckSubmitted),
         };
@@ -138,28 +162,49 @@ export async function GET(req: NextRequest) {
         isEliminated: standing.isEliminated,
         currentMatchId: standing.currentMatchId,
       })),
-      currentRound: tournament.rounds.length > 0 ? Math.max(...tournament.rounds.map((r) => r.roundNumber)) : 0,
-      totalRounds: ((tournament.settings as Record<string, unknown>)?.totalRounds as number) || 3,
+      currentRound:
+        tournament.rounds.length > 0
+          ? Math.max(...tournament.rounds.map((r) => r.roundNumber))
+          : 0,
+      totalRounds:
+        ((tournament.settings as Record<string, unknown>)
+          ?.totalRounds as number) || 3,
       rounds: tournament.rounds.map((round) => ({
         roundNumber: round.roundNumber,
         status: round.status,
         matches: matchIdsByRound.get(round.id) || [],
       })),
       settings: tournament.settings,
-      createdAt: tournament.createdAt.getTime(),
-      startedAt: tournament.startedAt ? tournament.startedAt.getTime() : undefined,
-      completedAt: tournament.completedAt ? tournament.completedAt.getTime() : undefined,
+      createdAt:
+        typeof tournament.createdAt === "string"
+          ? new Date(tournament.createdAt).getTime()
+          : tournament.createdAt.getTime(),
+      startedAt: tournament.startedAt
+        ? typeof tournament.startedAt === "string"
+          ? new Date(tournament.startedAt).getTime()
+          : tournament.startedAt.getTime()
+        : undefined,
+      completedAt: tournament.completedAt
+        ? typeof tournament.completedAt === "string"
+          ? new Date(tournament.completedAt).getTime()
+          : tournament.completedAt.getTime()
+        : undefined,
     }));
 
-    logPerformance('GET /api/tournaments/my', performance.now() - startTime);
-    return new Response(
-      JSON.stringify({ items, total, page, pageSize }),
-      { status: 200, headers: { 'content-type': 'application/json' } }
-    );
+    logPerformance("GET /api/tournaments/my", performance.now() - startTime);
+    return new Response(JSON.stringify({ items, total, page, pageSize }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
   } catch (e: unknown) {
-    console.error('Error fetching my tournaments:', e);
-    logPerformance('GET /api/tournaments/my', performance.now() - startTime);
-    const message = e instanceof Error ? e.message : typeof e === 'string' ? e : 'Unknown error';
+    console.error("Error fetching my tournaments:", e);
+    logPerformance("GET /api/tournaments/my", performance.now() - startTime);
+    const message =
+      e instanceof Error
+        ? e.message
+        : typeof e === "string"
+        ? e
+        : "Unknown error";
     return new Response(JSON.stringify({ error: message }), { status: 500 });
   }
 }

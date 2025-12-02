@@ -304,6 +304,8 @@ export type GameState = {
   setActorKey: (key: PlayerKey | null) => void;
   localPlayerId: string | null;
   setLocalPlayerId: (id: string | null) => void;
+  opponentPlayerId: string | null;
+  setOpponentPlayerId: (id: string | null) => void;
   // Match end detection
   matchEnded: boolean;
   winner: PlayerKey | null;
@@ -637,6 +639,13 @@ export type GameState = {
   // Transfer control
   transferPermanentControl: (at: CellKey, index: number, to?: 1 | 2) => void;
   transferSiteControl: (x: number, y: number, to?: 1 | 2) => void;
+  // Switch site position (Earthquake, Rift Valley) - moves all permanents/avatars with the site
+  switchSitePosition: (
+    sourceX: number,
+    sourceY: number,
+    targetX: number,
+    targetY: number
+  ) => void;
   avatars: Record<PlayerKey, AvatarState>;
   permanents: Permanents;
   setAvatarCard: (who: PlayerKey, card: CardRef) => void;
@@ -711,6 +720,9 @@ export type GameState = {
     screen?: { x: number; y: number }
   ) => void;
   closeContextMenu: () => void;
+  // Switch site position selection (Earthquake, Rift Valley)
+  switchSiteSource: { x: number; y: number } | null;
+  setSwitchSiteSource: (source: { x: number; y: number } | null) => void;
   // Placement dialog for cards to piles
   placementDialog: {
     cardName: string;

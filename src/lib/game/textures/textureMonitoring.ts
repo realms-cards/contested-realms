@@ -7,6 +7,7 @@
  * Use these utilities to debug texture-related issues and optimize cache settings.
  */
 
+import { useState, useEffect } from "react";
 import type { Texture } from "three";
 
 export interface TextureCacheStats {
@@ -255,9 +256,6 @@ export function forceClearUnreferencedTextures(): number {
 export function useTextureCacheStats(updateInterval = 1000): TextureCacheStats {
   // This function must be imported and used in client components only
   // SSR will return empty stats
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { useState, useEffect } = require('react');
-
   const [stats, setStats] = useState<TextureCacheStats>(() =>
     typeof window !== 'undefined'
       ? getTextureCacheStats()

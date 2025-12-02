@@ -13,6 +13,8 @@ type SessionSlice = Pick<
   | "setActorKey"
   | "localPlayerId"
   | "setLocalPlayerId"
+  | "opponentPlayerId"
+  | "setOpponentPlayerId"
 >;
 
 export const createSessionSlice: StateCreator<
@@ -72,4 +74,8 @@ export const createSessionSlice: StateCreator<
 
   localPlayerId: null,
   setLocalPlayerId: (id: string | null) => set({ localPlayerId: id ?? null }),
+
+  opponentPlayerId: null,
+  setOpponentPlayerId: (id: string | null) =>
+    set({ opponentPlayerId: id ?? null }),
 });

@@ -24,6 +24,9 @@ export type TileInteractionPlaneProps = {
   emitBoardPing: (pos: { x: number; z: number }) => void;
   clearBoardSelection: () => void;
   lastDropAt: MutableRefObject<number>;
+  // Switch site position support
+  switchSiteSource: GameState["switchSiteSource"];
+  onCompleteSwitchSite?: (targetX: number, targetY: number) => void;
 };
 
 export function TileInteractionPlane({
@@ -41,14 +44,11 @@ export function TileInteractionPlane({
   emitBoardPing,
   clearBoardSelection,
   lastDropAt,
+  switchSiteSource,
+  onCompleteSwitchSite,
 }: TileInteractionPlaneProps) {
-  const {
-    dragAvatar,
-    dragging,
-    setGhost,
-    draggedBody,
-    moveDraggedBody,
-  } = dragContext;
+  const { dragAvatar, dragging, setGhost, draggedBody, moveDraggedBody } =
+    dragContext;
 
   return (
     <mesh
@@ -76,17 +76,24 @@ export function TileInteractionPlane({
         e.stopPropagation();
         emitBoardPing({ x: e.point.x, z: e.point.z });
       }}
-      onPointerUp={(e: ThreeEvent<PointerEvent>) =>
+      onPointerUp={(e: ThreeEvent<PointerEvent>) => {
+        // Complete switch site if a source is selected - check this first before other handlers
+        if (switchSiteSource && onCompleteSwitchSite) {
+          e.stopPropagation();
+          onCompleteSwitchSite(tileX, tileY);
+          return;
+        }
         handleTilePointerUp({
           event: e,
           tileX,
           tileY,
           tileWorldPosition: position,
-        })
-      }
+        });
+      }}
       onClick={(e) => {
         e.stopPropagation();
         if (Date.now() - lastDropAt.current < 200) return;
+        // Switch site is now handled in onPointerUp
         clearBoardSelection();
       }}
     >

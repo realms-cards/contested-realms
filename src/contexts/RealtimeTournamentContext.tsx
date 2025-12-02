@@ -2,7 +2,15 @@
 
 import { useRouter, usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { createContext, useContext, useEffect, useState, useCallback, ReactNode, useRef } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useCallback,
+  ReactNode,
+  useRef,
+} from "react";
 import type { Socket } from "socket.io-client";
 import { useTournamentPhases } from "@/hooks/useTournamentPhases";
 import { useTournamentPreparation } from "@/hooks/useTournamentPreparation";
@@ -12,8 +20,8 @@ import { useTournamentStatistics } from "@/hooks/useTournamentStatistics";
 interface TournamentInfo {
   id: string;
   name: string;
-  format: 'sealed' | 'draft' | 'constructed';
-  status: 'registering' | 'preparing' | 'active' | 'completed' | 'cancelled';
+  format: "sealed" | "draft" | "constructed";
+  status: "registering" | "preparing" | "active" | "completed" | "cancelled";
   maxPlayers: number;
   currentPlayers: number;
   creatorId: string;
@@ -37,7 +45,7 @@ interface RealtimeTournamentContextValue {
   currentTournament: TournamentInfo | null;
   setCurrentTournament: (tournament: TournamentInfo | null) => void;
   setCurrentTournamentById: (id: string | null) => void;
-  
+
   // Real-time connection status
   isSocketConnected: boolean;
   connectionError: string | null;
@@ -46,7 +54,7 @@ interface RealtimeTournamentContextValue {
   // Tournament actions
   createTournament: (config: {
     name: string;
-    format: 'sealed' | 'draft' | 'constructed';
+    format: "sealed" | "draft" | "constructed";
     maxPlayers: number;
     isPrivate?: boolean;
     settings?: Record<string, unknown>;
@@ -55,22 +63,28 @@ interface RealtimeTournamentContextValue {
   leaveTournament: (tournamentId: string) => Promise<void>;
   startTournament: (tournamentId: string) => Promise<void>;
   endTournament: (tournamentId: string) => Promise<void>;
-  updateTournamentSettings: (tournamentId: string, settings: Record<string, unknown>) => Promise<void>;
-  toggleTournamentReady: (tournamentId: string, ready: boolean) => Promise<void>;
+  updateTournamentSettings: (
+    tournamentId: string,
+    settings: Record<string, unknown>
+  ) => Promise<void>;
+  toggleTournamentReady: (
+    tournamentId: string,
+    ready: boolean
+  ) => Promise<void>;
   sendTournamentChat: (tournamentId: string, content: string) => void;
-  
+
   // Enhanced state management
   refreshTournaments: () => Promise<void>;
-  
+
   // Real-time preparation management
   preparation: ReturnType<typeof useTournamentPreparation> | null;
-  
+
   // Real-time statistics management
   statistics: ReturnType<typeof useTournamentStatistics> | null;
-  
+
   // Phase management
   phases: ReturnType<typeof useTournamentPhases> | null;
-  
+
   // Real-time events
   realtimeEvents: {
     playerJoinedCount: number;
@@ -79,29 +93,47 @@ interface RealtimeTournamentContextValue {
     lastEventTime: string | null;
   };
   // Presence for current tournament (umbrella presence)
-  tournamentPresence: Array<{ playerId: string; playerName: string; isConnected: boolean; lastActivity: number }>;
+  tournamentPresence: Array<{
+    playerId: string;
+    playerName: string;
+    isConnected: boolean;
+    lastActivity: number;
+  }>;
   // Presence selector for arbitrary tournament id
-  getPresenceFor: (tournamentId: string | null) => Array<{ playerId: string; playerName: string; isConnected: boolean; lastActivity: number }>;
+  getPresenceFor: (tournamentId: string | null) => Array<{
+    playerId: string;
+    playerName: string;
+    isConnected: boolean;
+    lastActivity: number;
+  }>;
   // Current user's assignment for quick CTA
   assignedMatchId: string | null;
   assignedOpponentName: string | null;
-  
+
   // Global state
   loading: boolean;
   error: string | null;
   lastUpdated: string | null;
 }
 
-const RealtimeTournamentContext = createContext<RealtimeTournamentContextValue | null>(null);
+const RealtimeTournamentContext =
+  createContext<RealtimeTournamentContextValue | null>(null);
 
-export function RealtimeTournamentProvider({ children }: { children: ReactNode }) {
+export function RealtimeTournamentProvider({
+  children,
+}: {
+  children: ReactNode;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const { data: sessionData } = useSession();
   const currentUserId = sessionData?.user?.id ?? null;
   const [tournaments, setTournaments] = useState<TournamentInfo[]>([]);
-  const [currentTournament, setCurrentTournamentState] = useState<TournamentInfo | null>(null);
-  const [requestedTournamentId, setRequestedTournamentId] = useState<string | null>(null);
+  const [currentTournament, setCurrentTournamentState] =
+    useState<TournamentInfo | null>(null);
+  const [requestedTournamentId, setRequestedTournamentId] = useState<
+    string | null
+  >(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [connectionError, setConnectionError] = useState<string | null>(null);
@@ -111,26 +143,43 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
     playerLeftCount: 0,
     phaseChangeCount: 0,
     preparationUpdateCount: 0,
-    lastEventTime: null as string | null
+    lastEventTime: null as string | null,
   });
-  const [presenceByTournament, setPresenceByTournament] = useState<Record<string, Array<{ playerId: string; playerName: string; isConnected: boolean; lastActivity: number }>>>({});
-  const [assignedMatch, setAssignedMatch] = useState<{ matchId: string; opponentName: string | null } | null>(null);
+  const [presenceByTournament, setPresenceByTournament] = useState<
+    Record<
+      string,
+      Array<{
+        playerId: string;
+        playerName: string;
+        isConnected: boolean;
+        lastActivity: number;
+      }>
+    >
+  >({});
+  const [assignedMatch, setAssignedMatch] = useState<{
+    matchId: string;
+    opponentName: string | null;
+  } | null>(null);
   // Track which tournament we've already joined on this connection to avoid spam re-joins
   const joinedTournamentIdRef = useRef<string | null>(null);
 
-  const setCurrentTournament = useCallback((tournament: TournamentInfo | null) => {
-    setRequestedTournamentId(tournament?.id ?? null);
-    setCurrentTournamentState(tournament);
-    // If setting a tournament that's not in the list, add it
-    if (tournament) {
-      setTournaments(prev => {
-        if (prev.some(t => t.id === tournament.id)) return prev;
-        return [...prev, tournament];
-      });
-    }
-  }, []);
+  const setCurrentTournament = useCallback(
+    (tournament: TournamentInfo | null) => {
+      setRequestedTournamentId(tournament?.id ?? null);
+      setCurrentTournamentState(tournament);
+      // If setting a tournament that's not in the list, add it
+      if (tournament) {
+        setTournaments((prev) => {
+          if (prev.some((t) => t.id === tournament.id)) return prev;
+          return [...prev, tournament];
+        });
+      }
+    },
+    []
+  );
 
-  const activeTournamentId = currentTournament?.id ?? requestedTournamentId ?? null;
+  const activeTournamentId =
+    currentTournament?.id ?? requestedTournamentId ?? null;
   // Initialize state management hooks for current tournament
   // Use null as safe fallback - hooks will handle this gracefully
   const preparationId = activeTournamentId;
@@ -141,139 +190,171 @@ export function RealtimeTournamentProvider({ children }: { children: ReactNode }
   }, [currentTournament?.id]);
   const isRefreshingRef = useRef(false);
   // Refs to latest hook instances so handlers can call without re-declaring
-const prepHookRef = useRef<ReturnType<typeof useTournamentPreparation> | null>(null);
-const statsHookRef = useRef<ReturnType<typeof useTournamentStatistics> | null>(null);
-const phasesHookRef = useRef<ReturnType<typeof useTournamentPhases> | null>(null);
-const statsRefreshQueueRef = useRef<{
-  standings: boolean;
-  matches: boolean;
-  rounds: boolean;
-  overview: boolean;
-  timer: number | null;
-}>({ standings: false, matches: false, rounds: false, overview: false, timer: null });
-const detailRefreshTimersRef = useRef<Record<string, number>>({});
-const lastDetailFetchAtRef = useRef<Record<string, number>>({});
+  const prepHookRef = useRef<ReturnType<
+    typeof useTournamentPreparation
+  > | null>(null);
+  const statsHookRef = useRef<ReturnType<
+    typeof useTournamentStatistics
+  > | null>(null);
+  const phasesHookRef = useRef<ReturnType<typeof useTournamentPhases> | null>(
+    null
+  );
+  const statsRefreshQueueRef = useRef<{
+    standings: boolean;
+    matches: boolean;
+    rounds: boolean;
+    overview: boolean;
+    timer: number | null;
+  }>({
+    standings: false,
+    matches: false,
+    rounds: false,
+    overview: false,
+    timer: null,
+  });
+  const detailRefreshTimersRef = useRef<Record<string, number>>({});
+  const lastDetailFetchAtRef = useRef<Record<string, number>>({});
 
-const queueStatisticsRefresh = useCallback(
-  (options: { standings?: boolean; matches?: boolean; rounds?: boolean; overview?: boolean }) => {
-    const queue = statsRefreshQueueRef.current;
-    if (options.standings) queue.standings = true;
-    if (options.matches) queue.matches = true;
-    if (options.rounds) queue.rounds = true;
-    if (options.overview) queue.overview = true;
+  const queueStatisticsRefresh = useCallback(
+    (options: {
+      standings?: boolean;
+      matches?: boolean;
+      rounds?: boolean;
+      overview?: boolean;
+    }) => {
+      const queue = statsRefreshQueueRef.current;
+      if (options.standings) queue.standings = true;
+      if (options.matches) queue.matches = true;
+      if (options.rounds) queue.rounds = true;
+      if (options.overview) queue.overview = true;
 
-    const run = () => {
-      const actions = statsHookRef.current?.actions;
-      queue.timer = null;
-      const flags = { ...queue };
-      queue.standings = queue.matches = queue.rounds = queue.overview = false;
-      if (!actions) return;
-      const tasks: Promise<unknown>[] = [];
-      if (flags.standings) tasks.push(actions.refreshStandings());
-      if (flags.matches) tasks.push(actions.refreshMatches());
-      if (flags.rounds) tasks.push(actions.refreshRounds());
-      if (flags.overview) tasks.push(actions.refreshStatistics());
-      if (tasks.length > 0) {
-        void Promise.allSettled(tasks);
+      const run = () => {
+        const actions = statsHookRef.current?.actions;
+        queue.timer = null;
+        const flags = { ...queue };
+        queue.standings = queue.matches = queue.rounds = queue.overview = false;
+        if (!actions) return;
+        const tasks: Promise<unknown>[] = [];
+        if (flags.standings) tasks.push(actions.refreshStandings());
+        if (flags.matches) tasks.push(actions.refreshMatches());
+        if (flags.rounds) tasks.push(actions.refreshRounds());
+        if (flags.overview) tasks.push(actions.refreshStatistics());
+        if (tasks.length > 0) {
+          void Promise.allSettled(tasks);
+        }
+      };
+
+      if (typeof window === "undefined") {
+        run();
+        return;
+      }
+
+      if (queue.timer != null) return;
+      queue.timer = window.setTimeout(run, 250);
+    },
+    []
+  );
+
+  useEffect(() => {
+    const ref = statsRefreshQueueRef;
+    return () => {
+      const queue = ref.current;
+      if (queue.timer != null) {
+        clearTimeout(queue.timer);
+        queue.timer = null;
       }
     };
+  }, []);
 
-    if (typeof window === "undefined") {
-      run();
-      return;
-    }
+  const refreshTournamentDetail = useCallback(
+    (
+      id: string | null | undefined,
+      delay = 200,
+      opts?: { force?: boolean }
+    ) => {
+      if (!id) return;
+      if (typeof window === "undefined") {
+        void fetch(`/api/tournaments/${id}`)
+          .then((res) => (res.ok ? res.json() : null))
+          .then((detail) => {
+            if (!detail) return;
+            setTournaments((prev) => {
+              let found = false;
+              const next = prev.map((t) => {
+                if (t.id === detail.id) {
+                  found = true;
+                  return detail as TournamentInfo;
+                }
+                return t;
+              });
+              if (!found) {
+                return [...next, detail as TournamentInfo];
+              }
+              return next;
+            });
+            setCurrentTournamentState((prev) =>
+              prev && prev.id === (detail as TournamentInfo).id
+                ? (detail as TournamentInfo)
+                : prev
+            );
+          })
+          .catch((err) => {
+            console.warn(
+              "[RealtimeTournamentContext] Failed to refresh tournament detail",
+              err
+            );
+          });
+        return;
+      }
 
-    if (queue.timer != null) return;
-    queue.timer = window.setTimeout(run, 250);
-  },
-  []
-);
+      // Throttle: enforce a minimum interval per tournament id unless forced
+      const now = Date.now();
+      const last = lastDetailFetchAtRef.current[id] || 0;
+      const minInterval = 3000; // 3 seconds to reduce request spam
+      if (!(opts && opts.force) && now - last < minInterval) {
+        return;
+      }
+      lastDetailFetchAtRef.current[id] = now;
 
-useEffect(() => {
-  const ref = statsRefreshQueueRef;
-  return () => {
-    const queue = ref.current;
-    if (queue.timer != null) {
-      clearTimeout(queue.timer);
-      queue.timer = null;
-    }
-  };
-}, []);
+      const timers = detailRefreshTimersRef.current;
+      const existing = timers[id];
+      if (existing != null) {
+        window.clearTimeout(existing);
+      }
 
-  const refreshTournamentDetail = useCallback((id: string | null | undefined, delay = 200, opts?: { force?: boolean }) => {
-    if (!id) return;
-    if (typeof window === "undefined") {
-      void fetch(`/api/tournaments/${id}`)
-        .then((res) => (res.ok ? res.json() : null))
-        .then((detail) => {
-          if (!detail) return;
+      const handle = window.setTimeout(async () => {
+        delete timers[id];
+        try {
+          const res = await fetch(`/api/tournaments/${id}`);
+          if (!res.ok) return;
+          const detail = (await res.json()) as TournamentInfo;
           setTournaments((prev) => {
             let found = false;
             const next = prev.map((t) => {
               if (t.id === detail.id) {
                 found = true;
-                return detail as TournamentInfo;
+                return detail;
               }
               return t;
             });
-            if (!found) {
-              return [...next, detail as TournamentInfo];
-            }
+            if (!found) return [...next, detail];
             return next;
           });
-          setCurrentTournamentState((prev) =>
-            prev && prev.id === (detail as TournamentInfo).id ? (detail as TournamentInfo) : prev
-          );
-        })
-        .catch((err) => {
-          console.warn("[RealtimeTournamentContext] Failed to refresh tournament detail", err);
-        });
-      return;
-    }
-
-    // Throttle: enforce a minimum interval per tournament id unless forced
-    const now = Date.now();
-    const last = lastDetailFetchAtRef.current[id] || 0;
-    const minInterval = 1000;
-    if (!(opts && opts.force) && now - last < minInterval) {
-      return;
-    }
-    lastDetailFetchAtRef.current[id] = now;
-
-    const timers = detailRefreshTimersRef.current;
-    const existing = timers[id];
-    if (existing != null) {
-      window.clearTimeout(existing);
-    }
-
-    const handle = window.setTimeout(async () => {
-      delete timers[id];
-      try {
-        const res = await fetch(`/api/tournaments/${id}`);
-        if (!res.ok) return;
-        const detail = (await res.json()) as TournamentInfo;
-        setTournaments((prev) => {
-          let found = false;
-          const next = prev.map((t) => {
-            if (t.id === detail.id) {
-              found = true;
-              return detail;
-            }
-            return t;
+          setCurrentTournamentState((prev) => {
+            if (!prev || prev.id !== detail.id) return prev;
+            return detail;
           });
-          if (!found) return [...next, detail];
-          return next;
-        });
-        setCurrentTournamentState((prev) => {
-          if (!prev || prev.id !== detail.id) return prev;
-          return detail;
-        });
-      } catch (err) {
-        console.warn("[RealtimeTournamentContext] Failed to refresh tournament detail", err);
-      }
-    }, delay);
-    timers[id] = handle;
-  }, []);
+        } catch (err) {
+          console.warn(
+            "[RealtimeTournamentContext] Failed to refresh tournament detail",
+            err
+          );
+        }
+      }, delay);
+      timers[id] = handle;
+    },
+    []
+  );
 
   useEffect(() => {
     const timersRef = detailRefreshTimersRef;
@@ -288,68 +369,95 @@ useEffect(() => {
       }
     };
   }, []);
-  
+
   // Hooks below need socket connectivity; we'll initialize them after setting up handlers and socket
 
   // Helper: set current tournament by id (uses the loaded list)
-  const setCurrentTournamentById = useCallback((id: string | null) => {
-    setRequestedTournamentId(id);
-    if (!id) {
-      setCurrentTournamentState(null);
-      return;
-    }
-    setCurrentTournamentState(prev => {
-      if (prev?.id === id) return prev;
-      const found = tournaments.find(t => t.id === id) || null;
-      return found ?? prev ?? null;
-    });
-    // Force a clean snapshot on explicit navigation/selection
-    refreshTournamentDetail(id, 100, { force: true });
-  }, [tournaments, refreshTournamentDetail]);
-
-  const handleDraftReady = useCallback((data: { tournamentId: string; draftSessionId: string; totalPlayers?: number }) => {
-    // If we've already submitted our draft deck for this tournament, never auto-redirect back into the draft/editor
-    try {
-      const submitted =
-        localStorage.getItem(`draft_submitted_tournament_${data.tournamentId}`) === "true" ||
-        localStorage.getItem(`sealed_submitted_tournament_${data.tournamentId}`) === "true";
-      if (submitted) {
+  const setCurrentTournamentById = useCallback(
+    (id: string | null) => {
+      setRequestedTournamentId(id);
+      if (!id) {
+        setCurrentTournamentState(null);
         return;
       }
-    } catch {}
-    setCurrentTournamentState((prev) => {
-      if (!prev || prev.id !== data.tournamentId) return prev;
-      return { ...(prev as unknown as Record<string, unknown>), draftSessionId: data.draftSessionId } as unknown as TournamentInfo;
-    });
-    refreshTournamentDetail(data.tournamentId, 150);
+      const found = tournaments.find((t) => t.id === id) || null;
+      setCurrentTournamentState((prev) => {
+        if (prev?.id === id) return prev;
+        return found ?? prev ?? null;
+      });
+      // Only fetch if we don't have the tournament in the list yet
+      if (!found) {
+        refreshTournamentDetail(id, 100, { force: true });
+      }
+    },
+    [tournaments, refreshTournamentDetail]
+  );
 
-    if (!currentUserId) return;
+  const handleDraftReady = useCallback(
+    (data: {
+      tournamentId: string;
+      draftSessionId: string;
+      totalPlayers?: number;
+    }) => {
+      // If we've already submitted our draft deck for this tournament, never auto-redirect back into the draft/editor
+      try {
+        const submitted =
+          localStorage.getItem(
+            `draft_submitted_tournament_${data.tournamentId}`
+          ) === "true" ||
+          localStorage.getItem(
+            `sealed_submitted_tournament_${data.tournamentId}`
+          ) === "true";
+        if (submitted) {
+          return;
+        }
+      } catch {}
+      setCurrentTournamentState((prev) => {
+        if (!prev || prev.id !== data.tournamentId) return prev;
+        return {
+          ...(prev as unknown as Record<string, unknown>),
+          draftSessionId: data.draftSessionId,
+        } as unknown as TournamentInfo;
+      });
+      // Trust socket data - no HTTP refresh needed
+      setLastUpdated(new Date().toISOString());
 
-    const activeId = activeTournamentId;
-    if (!activeId || activeId !== data.tournamentId) return;
+      if (!currentUserId) return;
 
-    const registered = (currentTournament as unknown as { registeredPlayers?: Array<{ id: string }> })?.registeredPlayers;
-    if (Array.isArray(registered) && !registered.some((p) => p.id === currentUserId)) {
-      return;
-    }
+      const activeId = activeTournamentId;
+      if (!activeId || activeId !== data.tournamentId) return;
 
-    const targetPath = `/online/draft/${data.draftSessionId}`;
-    if (pathname?.startsWith(targetPath)) return;
+      const registered = (
+        currentTournament as unknown as {
+          registeredPlayers?: Array<{ id: string }>;
+        }
+      )?.registeredPlayers;
+      if (
+        Array.isArray(registered) &&
+        !registered.some((p) => p.id === currentUserId)
+      ) {
+        return;
+      }
 
-    router.replace(`${targetPath}?tournament=${data.tournamentId}`);
-  }, [activeTournamentId, currentTournament, currentUserId, pathname, refreshTournamentDetail, router]);
+      const targetPath = `/online/draft/${data.draftSessionId}`;
+      if (pathname?.startsWith(targetPath)) return;
+
+      router.replace(`${targetPath}?tournament=${data.tournamentId}`);
+    },
+    [activeTournamentId, currentTournament, currentUserId, pathname, router]
+  );
 
   useEffect(() => {
     if (!requestedTournamentId) return;
-    const found = tournaments.find(t => t.id === requestedTournamentId);
+    const found = tournaments.find((t) => t.id === requestedTournamentId);
     if (!found) return;
-    setCurrentTournamentState(prev => {
+    setCurrentTournamentState((prev) => {
       if (prev && prev.id === found.id) return prev;
       return found;
     });
-    // Force a clean snapshot when the requested tournament becomes available
-    refreshTournamentDetail(requestedTournamentId, 120, { force: true });
-  }, [refreshTournamentDetail, requestedTournamentId, tournaments]);
+    // No longer force refresh here - we already have data from the list
+    // Detail fetch happens only when needed (e.g., status changes to active)
+  }, [requestedTournamentId, tournaments]);
 
   // Socket event handlers
   const refreshTournaments = useCallback(async () => {
@@ -360,31 +468,39 @@ useEffect(() => {
     try {
       // Only fetch active tournaments (registering, preparing, active)
       // Limit to recent 6 tournaments to avoid loading all history
-      const response = await fetch('/api/tournaments?status=registering,preparing,active&limit=6');
+      const response = await fetch(
+        "/api/tournaments?status=registering,preparing,active&limit=6"
+      );
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || 'Failed to fetch tournaments');
+        throw new Error(error.error || "Failed to fetch tournaments");
       }
-      const tournamentsData = await response.json() as TournamentInfo[];
+      const tournamentsData = (await response.json()) as TournamentInfo[];
       setTournaments(tournamentsData);
       setLastUpdated(new Date().toISOString());
       const ctId = currentTournamentIdRef.current;
       if (ctId) {
-        const updatedCurrent = tournamentsData.find(t => t.id === ctId);
+        const updatedCurrent = tournamentsData.find((t) => t.id === ctId);
         if (updatedCurrent) {
           // Merge shallow list data into existing detail without dropping fields like creatorId
           setCurrentTournamentState((prev) => {
-            if (!prev || prev.id !== ctId) return updatedCurrent as TournamentInfo;
+            if (!prev || prev.id !== ctId)
+              return updatedCurrent as TournamentInfo;
             return { ...prev, ...updatedCurrent } as TournamentInfo;
           });
         }
         // Only force a heavy detail refresh when list shows major phases
-        if (updatedCurrent && (updatedCurrent.status === 'active' || updatedCurrent.status === 'completed')) {
+        if (
+          updatedCurrent &&
+          (updatedCurrent.status === "active" ||
+            updatedCurrent.status === "completed")
+        ) {
           refreshTournamentDetail(ctId, 150, { force: true });
         }
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to fetch tournaments';
+      const message =
+        err instanceof Error ? err.message : "Failed to fetch tournaments";
       setError(message);
     } finally {
       isRefreshingRef.current = false;
@@ -394,322 +510,498 @@ useEffect(() => {
 
   // Debounced refresher to coalesce bursts
   const refreshTimeoutRef = useRef<number | null>(null);
-  const refreshTournamentsDebounced = useCallback((delay = 300) => {
-    if (refreshTimeoutRef.current != null) {
-      clearTimeout(refreshTimeoutRef.current);
-      refreshTimeoutRef.current = null;
-    }
-    refreshTimeoutRef.current = window.setTimeout(() => {
-      refreshTimeoutRef.current = null;
-      void refreshTournaments();
-    }, delay);
-  }, [refreshTournaments]);
+  const refreshTournamentsDebounced = useCallback(
+    (delay = 300) => {
+      if (refreshTimeoutRef.current != null) {
+        clearTimeout(refreshTimeoutRef.current);
+        refreshTimeoutRef.current = null;
+      }
+      refreshTimeoutRef.current = window.setTimeout(() => {
+        refreshTimeoutRef.current = null;
+        void refreshTournaments();
+      }, delay);
+    },
+    [refreshTournaments]
+  );
 
-  const handleTournamentUpdated = useCallback((data: { id: string; name?: string; status?: string; [key: string]: unknown }) => {
-    setTournaments((prev) =>
-      prev.map((t) => {
-        if (t.id !== data.id) return t;
-        const next = { ...t } as TournamentInfo & Record<string, unknown>;
+  const handleTournamentUpdated = useCallback(
+    (data: {
+      id: string;
+      name?: string;
+      status?: string;
+      [key: string]: unknown;
+    }) => {
+      setTournaments((prev) =>
+        prev.map((t) => {
+          if (t.id !== data.id) return t;
+          const next = { ...t } as TournamentInfo & Record<string, unknown>;
+          for (const [key, value] of Object.entries(data)) {
+            if (value !== undefined) {
+              next[key] = value as unknown;
+            }
+          }
+          if (data.status !== undefined) {
+            next.status = data.status as TournamentInfo["status"];
+          }
+          return next as TournamentInfo;
+        })
+      );
+      // Trust socket data - no HTTP refresh needed
+
+      setCurrentTournamentState((prev) => {
+        if (!prev || prev.id !== data.id) return prev;
+        const next = { ...prev } as typeof prev & Record<string, unknown>;
         for (const [key, value] of Object.entries(data)) {
           if (value !== undefined) {
             next[key] = value as unknown;
           }
         }
         if (data.status !== undefined) {
-          next.status = data.status as TournamentInfo["status"];
+          (next as { status: TournamentInfo["status"] }).status =
+            data.status as TournamentInfo["status"];
         }
-        return next as TournamentInfo;
-      })
-    );
-    refreshTournamentsDebounced(250);
+        return next as typeof prev;
+      });
+      // Trust socket data - no HTTP refresh needed
+      setLastUpdated(new Date().toISOString());
+    },
+    []
+  );
 
-    setCurrentTournamentState((prev) => {
-      if (!prev || prev.id !== data.id) return prev;
-      const next = { ...prev } as typeof prev & Record<string, unknown>;
-      for (const [key, value] of Object.entries(data)) {
-        if (value !== undefined) {
-          next[key] = value as unknown;
-        }
-      }
-      if (data.status !== undefined) {
-        (next as { status: TournamentInfo["status"] }).status = data.status as TournamentInfo["status"];
-      }
-      return next as typeof prev;
-    });
-    // Avoid heavy detail fetch here; rely on local merge + stats refresh
-    setLastUpdated(new Date().toISOString());
-  }, [refreshTournamentsDebounced]);
-
-  const handlePresenceUpdated = useCallback((data: {
-    tournamentId: string;
-    players: Array<{ playerId: string; playerName: string; isConnected: boolean; lastActivity: number }>;
-  }) => {
-    setPresenceByTournament(prev => ({ ...prev, [data.tournamentId]: data.players }));
-    setLastUpdated(new Date().toISOString());
-  }, []);
-
-  const handlePhaseChanged = useCallback((data: { 
-    tournamentId: string; 
-    newPhase: string; 
-    newStatus: string; 
-    timestamp: string; 
-  }) => {
-    console.log('Tournament phase changed:', data);
-    
-    // Update tournament status
-    setTournaments(prev => 
-      prev.map(t => 
-        t.id === data.tournamentId 
-          ? { ...t, status: data.newStatus as TournamentInfo['status'] }
-          : t
-      )
-    );
-    
-    // Update current tournament & phase state
-    setCurrentTournamentState(prev => {
-      if (!prev || prev.id !== data.tournamentId) return prev;
-      return {
+  const handlePresenceUpdated = useCallback(
+    (data: {
+      tournamentId: string;
+      players: Array<{
+        playerId: string;
+        playerName: string;
+        isConnected: boolean;
+        lastActivity: number;
+      }>;
+    }) => {
+      setPresenceByTournament((prev) => ({
         ...prev,
-        status: data.newStatus as TournamentInfo['status']
-      };
-    });
+        [data.tournamentId]: data.players,
+      }));
+      setLastUpdated(new Date().toISOString());
+    },
+    []
+  );
 
-    // Toast hint for phase changes
-    try {
-      // Generate user-friendly messages based on status transitions
-      let msg = '';
-      if (data.newStatus === 'preparing') {
-        msg = 'Tournament is preparing - waiting for players to ready up';
-      } else if (data.newStatus === 'active') {
-        msg = 'Tournament has started!';
-      } else if (data.newStatus === 'completed') {
-        msg = 'Tournament has ended';
-      } else if (data.newStatus === 'cancelled') {
-        msg = 'Tournament was cancelled';
-      }
+  const handlePhaseChanged = useCallback(
+    (data: {
+      tournamentId: string;
+      newPhase: string;
+      newStatus: string;
+      timestamp: string;
+    }) => {
+      console.log("Tournament phase changed:", data);
 
-      if (msg) {
-        localStorage.setItem('app:toast', msg);
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('app:toast', { detail: { message: msg } }));
-        }
-      }
-    } catch {}
+      // Update tournament status
+      setTournaments((prev) =>
+        prev.map((t) =>
+          t.id === data.tournamentId
+            ? { ...t, status: data.newStatus as TournamentInfo["status"] }
+            : t
+        )
+      );
 
-    // Update phase hook
-    if (phasesHookRef.current && data.tournamentId === preparationId) {
-      phasesHookRef.current.actions.updatePhase(data.newStatus as TournamentInfo['status']);
-    }
-    
-    // Only force a heavy detail refresh when transitioning into major phases
-    if (data.newStatus === 'active' || data.newStatus === 'completed') {
-      refreshTournamentDetail(data.tournamentId, 200, { force: true });
-    }
-    setRealtimeEvents(prev => ({
-      ...prev,
-      phaseChangeCount: prev.phaseChangeCount + 1,
-      lastEventTime: data.timestamp
-    }));
-  }, [preparationId, refreshTournamentDetail]);
-
-  const handlePlayerJoined = useCallback((data: { 
-    tournamentId: string;
-    playerId: string; 
-    playerName: string; 
-    currentPlayerCount: number; 
-  }) => {
-    console.log('Player joined tournament:', data);
-    setTournaments(prev => prev.map(t => {
-      if (t.id !== data.tournamentId) return t;
-      const reg = (t as unknown as { registeredPlayers?: Array<{ id: string; displayName: string; ready?: boolean }> }).registeredPlayers || [];
-      const without = reg.filter(p => p.id !== data.playerId);
-      const updated = [...without, { id: data.playerId, displayName: data.playerName, ready: false }];
-      return { ...(t as unknown as Record<string, unknown>), currentPlayers: data.currentPlayerCount, registeredPlayers: updated } as unknown as TournamentInfo;
-    }));
-    refreshTournamentsDebounced(250);
-    // Update current tournament if it matches
-    setCurrentTournamentState(prev => {
-      if (!prev || prev.id !== data.tournamentId) return prev;
-      const reg = (prev as unknown as { registeredPlayers?: Array<{ id: string; displayName: string; ready?: boolean }> }).registeredPlayers || [];
-      const without = reg.filter(p => p.id !== data.playerId);
-      const updated = [...without, { id: data.playerId, displayName: data.playerName, ready: false }];
-      return { ...(prev as unknown as Record<string, unknown>), currentPlayers: data.currentPlayerCount, registeredPlayers: updated } as unknown as TournamentInfo;
-    });
-    setRealtimeEvents(prev => ({
-      ...prev,
-      playerJoinedCount: prev.playerJoinedCount + 1,
-      lastEventTime: new Date().toISOString()
-    }));
-    queueStatisticsRefresh({ standings: true, overview: true });
-  }, [queueStatisticsRefresh, refreshTournamentsDebounced]);
-
-  const handlePlayerLeft = useCallback((data: { 
-    tournamentId: string;
-    playerId: string; 
-    playerName: string; 
-    currentPlayerCount: number; 
-  }) => {
-    console.log('Player left tournament:', data);
-    setTournaments(prev => prev.map(t => {
-      if (t.id !== data.tournamentId) return t;
-      const reg = (t as unknown as { registeredPlayers?: Array<{ id: string; displayName: string; ready?: boolean }> }).registeredPlayers || [];
-      const updated = reg.filter(p => p.id !== data.playerId);
-      return { ...(t as unknown as Record<string, unknown>), currentPlayers: data.currentPlayerCount, registeredPlayers: updated } as unknown as TournamentInfo;
-    }));
-    refreshTournamentsDebounced(250);
-    setCurrentTournamentState(prev => {
-      if (!prev || prev.id !== data.tournamentId) return prev;
-      const reg = (prev as unknown as { registeredPlayers?: Array<{ id: string; displayName: string; ready?: boolean }> }).registeredPlayers || [];
-      const updated = reg.filter(p => p.id !== data.playerId);
-      return { ...(prev as unknown as Record<string, unknown>), currentPlayers: data.currentPlayerCount, registeredPlayers: updated } as unknown as TournamentInfo;
-    });
-    try {
-      const hostId = currentTournament?.creatorId || null;
-      if (hostId && hostId === currentUserId && currentTournament?.id === data.tournamentId) {
-        const msg = `${data.playerName} forfeited and left the tournament.`;
-        localStorage.setItem('app:toast', msg);
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('app:toast', { detail: { message: msg } }));
-        }
-      }
-    } catch {}
-    setRealtimeEvents(prev => ({
-      ...prev,
-      playerLeftCount: prev.playerLeftCount + 1,
-      lastEventTime: new Date().toISOString()
-    }));
-    queueStatisticsRefresh({ standings: true, overview: true });
-  }, [queueStatisticsRefresh, refreshTournamentsDebounced, currentTournament?.creatorId, currentTournament?.id, currentUserId]);
-
-  const handlePreparationUpdate = useCallback((data: { 
-    tournamentId: string; 
-    playerId: string; 
-    preparationStatus: string; 
-    deckSubmitted: boolean; 
-    readyPlayerCount: number; 
-    totalPlayerCount: number; 
-  }) => {
-    console.log('Preparation update:', data);
-    const isReady = data.preparationStatus === 'ready' || data.deckSubmitted === true;
-    setTournaments(prev => prev.map(t => {
-      if (t.id !== data.tournamentId) return t;
-      const reg = (t as unknown as { registeredPlayers?: Array<{ id: string; displayName: string; ready?: boolean; deckSubmitted?: boolean }> }).registeredPlayers;
-      if (!Array.isArray(reg)) return t;
-      const updated = reg.map(p => p.id === data.playerId ? { ...p, ready: isReady, deckSubmitted: Boolean(data.deckSubmitted) } : p);
-      return { ...(t as unknown as Record<string, unknown>), registeredPlayers: updated } as unknown as TournamentInfo;
-    }));
-    refreshTournamentsDebounced(250);
-    // Update current tournament mirror if present
-    if (currentTournament?.id === data.tournamentId) {
-      const reg = (currentTournament as unknown as { registeredPlayers?: Array<{ id: string; displayName: string; ready?: boolean; deckSubmitted?: boolean }> }).registeredPlayers;
-      if (Array.isArray(reg)) {
-        const updated = reg.map(p => p.id === data.playerId ? { ...p, ready: isReady, deckSubmitted: Boolean(data.deckSubmitted) } : p);
-        setCurrentTournamentState({ ...(currentTournament as unknown as Record<string, unknown>), registeredPlayers: updated } as unknown as TournamentInfo);
-      }
-    }
-    // Refresh preparation status only on significant milestones
-    if (currentTournament?.id === data.tournamentId && prepHookRef.current) {
-      if (data.deckSubmitted || data.preparationStatus === 'completed') {
-        prepHookRef.current.actions.refreshStatus();
-      }
-    }
-    
-    setRealtimeEvents(prev => ({
-      ...prev,
-      preparationUpdateCount: prev.preparationUpdateCount + 1,
-      lastEventTime: new Date().toISOString()
-    }));
-    queueStatisticsRefresh({ standings: true, overview: true });
-  }, [currentTournament, refreshTournamentsDebounced, queueStatisticsRefresh]);
-
-  const handleStatisticsUpdated = useCallback((data: { tournamentId: string; [key: string]: unknown }) => {
-    console.log('Statistics updated:', data);
-
-    if (currentTournament?.id === data.tournamentId) {
-      queueStatisticsRefresh({
-        standings: true,
-        matches: true,
-        rounds: true,
-        overview: true,
+      // Update current tournament & phase state
+      setCurrentTournamentState((prev) => {
+        if (!prev || prev.id !== data.tournamentId) return prev;
+        return {
+          ...prev,
+          status: data.newStatus as TournamentInfo["status"],
+        };
       });
-    }
-    // Skip heavy detail refresh; statistics hooks will fetch targeted data
-  }, [currentTournament, queueStatisticsRefresh]);
 
-  const handleRoundStarted = useCallback((data: { 
-    tournamentId: string; 
-    roundNumber: number; 
-    matches: Array<{
-      id: string;
-      player1Id: string;
-      player1Name: string;
-      player2Id: string | null;
-      player2Name: string | null;
-    }>;
-  }) => {
-    console.log('Round started:', data);
+      // Toast hint for phase changes
+      try {
+        // Generate user-friendly messages based on status transitions
+        let msg = "";
+        if (data.newStatus === "preparing") {
+          msg = "Tournament is preparing - waiting for players to ready up";
+        } else if (data.newStatus === "active") {
+          msg = "Tournament has started!";
+        } else if (data.newStatus === "completed") {
+          msg = "Tournament has ended";
+        } else if (data.newStatus === "cancelled") {
+          msg = "Tournament was cancelled";
+        }
 
-    if (currentTournament?.id === data.tournamentId) {
-      queueStatisticsRefresh({
-        standings: true,
-        matches: true,
-        rounds: true,
-        overview: true,
+        if (msg) {
+          localStorage.setItem("app:toast", msg);
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(
+              new CustomEvent("app:toast", { detail: { message: msg } })
+            );
+          }
+        }
+      } catch {}
+
+      // Update phase hook
+      if (phasesHookRef.current && data.tournamentId === preparationId) {
+        phasesHookRef.current.actions.updatePhase(
+          data.newStatus as TournamentInfo["status"]
+        );
+      }
+
+      // Refresh standings for victory screen on completion, or matches on active
+      if (data.newStatus === "completed") {
+        queueStatisticsRefresh({ standings: true, overview: true });
+      } else if (data.newStatus === "active") {
+        queueStatisticsRefresh({ matches: true, rounds: true });
+      }
+
+      setLastUpdated(new Date().toISOString());
+      setRealtimeEvents((prev) => ({
+        ...prev,
+        phaseChangeCount: prev.phaseChangeCount + 1,
+        lastEventTime: data.timestamp,
+      }));
+    },
+    [preparationId, queueStatisticsRefresh]
+  );
+
+  const handlePlayerJoined = useCallback(
+    (data: {
+      tournamentId: string;
+      playerId: string;
+      playerName: string;
+      currentPlayerCount: number;
+    }) => {
+      console.log("Player joined tournament:", data);
+      setTournaments((prev) =>
+        prev.map((t) => {
+          if (t.id !== data.tournamentId) return t;
+          const reg =
+            (
+              t as unknown as {
+                registeredPlayers?: Array<{
+                  id: string;
+                  displayName: string;
+                  ready?: boolean;
+                }>;
+              }
+            ).registeredPlayers || [];
+          const without = reg.filter((p) => p.id !== data.playerId);
+          const updated = [
+            ...without,
+            { id: data.playerId, displayName: data.playerName, ready: false },
+          ];
+          return {
+            ...(t as unknown as Record<string, unknown>),
+            currentPlayers: data.currentPlayerCount,
+            registeredPlayers: updated,
+          } as unknown as TournamentInfo;
+        })
+      );
+      // Trust socket data - no HTTP refresh needed
+      // Update current tournament if it matches
+      setCurrentTournamentState((prev) => {
+        if (!prev || prev.id !== data.tournamentId) return prev;
+        const reg =
+          (
+            prev as unknown as {
+              registeredPlayers?: Array<{
+                id: string;
+                displayName: string;
+                ready?: boolean;
+              }>;
+            }
+          ).registeredPlayers || [];
+        const without = reg.filter((p) => p.id !== data.playerId);
+        const updated = [
+          ...without,
+          { id: data.playerId, displayName: data.playerName, ready: false },
+        ];
+        return {
+          ...(prev as unknown as Record<string, unknown>),
+          currentPlayers: data.currentPlayerCount,
+          registeredPlayers: updated,
+        } as unknown as TournamentInfo;
       });
-      // Derive my assignment immediately from payload
-      if (currentUserId) {
-        const mine = data.matches.find(m => m.player1Id === currentUserId || m.player2Id === currentUserId);
-        if (mine) {
-          const opp = mine.player1Id === currentUserId ? mine.player2Name : mine.player1Name;
-          setAssignedMatch({ matchId: String(mine.id), opponentName: opp ?? null });
+      setLastUpdated(new Date().toISOString());
+      setRealtimeEvents((prev) => ({
+        ...prev,
+        playerJoinedCount: prev.playerJoinedCount + 1,
+        lastEventTime: new Date().toISOString(),
+      }));
+      // Trust socket data - no HTTP refresh needed
+    },
+    []
+  );
+
+  const handlePlayerLeft = useCallback(
+    (data: {
+      tournamentId: string;
+      playerId: string;
+      playerName: string;
+      currentPlayerCount: number;
+    }) => {
+      console.log("Player left tournament:", data);
+      setTournaments((prev) =>
+        prev.map((t) => {
+          if (t.id !== data.tournamentId) return t;
+          const reg =
+            (
+              t as unknown as {
+                registeredPlayers?: Array<{
+                  id: string;
+                  displayName: string;
+                  ready?: boolean;
+                }>;
+              }
+            ).registeredPlayers || [];
+          const updated = reg.filter((p) => p.id !== data.playerId);
+          return {
+            ...(t as unknown as Record<string, unknown>),
+            currentPlayers: data.currentPlayerCount,
+            registeredPlayers: updated,
+          } as unknown as TournamentInfo;
+        })
+      );
+      // Trust socket data - no HTTP refresh needed
+      setCurrentTournamentState((prev) => {
+        if (!prev || prev.id !== data.tournamentId) return prev;
+        const reg =
+          (
+            prev as unknown as {
+              registeredPlayers?: Array<{
+                id: string;
+                displayName: string;
+                ready?: boolean;
+              }>;
+            }
+          ).registeredPlayers || [];
+        const updated = reg.filter((p) => p.id !== data.playerId);
+        return {
+          ...(prev as unknown as Record<string, unknown>),
+          currentPlayers: data.currentPlayerCount,
+          registeredPlayers: updated,
+        } as unknown as TournamentInfo;
+      });
+      try {
+        const hostId = currentTournament?.creatorId || null;
+        if (
+          hostId &&
+          hostId === currentUserId &&
+          currentTournament?.id === data.tournamentId
+        ) {
+          const msg = `${data.playerName} forfeited and left the tournament.`;
+          localStorage.setItem("app:toast", msg);
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(
+              new CustomEvent("app:toast", { detail: { message: msg } })
+            );
+          }
+        }
+      } catch {}
+      setLastUpdated(new Date().toISOString());
+      setRealtimeEvents((prev) => ({
+        ...prev,
+        playerLeftCount: prev.playerLeftCount + 1,
+        lastEventTime: new Date().toISOString(),
+      }));
+    },
+    [currentTournament?.creatorId, currentTournament?.id, currentUserId]
+  );
+
+  const handlePreparationUpdate = useCallback(
+    (data: {
+      tournamentId: string;
+      playerId: string;
+      preparationStatus: string;
+      deckSubmitted: boolean;
+      readyPlayerCount: number;
+      totalPlayerCount: number;
+    }) => {
+      console.log("Preparation update:", data);
+      const isReady =
+        data.preparationStatus === "ready" || data.deckSubmitted === true;
+      setTournaments((prev) =>
+        prev.map((t) => {
+          if (t.id !== data.tournamentId) return t;
+          const reg = (
+            t as unknown as {
+              registeredPlayers?: Array<{
+                id: string;
+                displayName: string;
+                ready?: boolean;
+                deckSubmitted?: boolean;
+              }>;
+            }
+          ).registeredPlayers;
+          if (!Array.isArray(reg)) return t;
+          const updated = reg.map((p) =>
+            p.id === data.playerId
+              ? {
+                  ...p,
+                  ready: isReady,
+                  deckSubmitted: Boolean(data.deckSubmitted),
+                }
+              : p
+          );
+          return {
+            ...(t as unknown as Record<string, unknown>),
+            registeredPlayers: updated,
+          } as unknown as TournamentInfo;
+        })
+      );
+      // Trust socket data - no HTTP refresh needed
+      // Update current tournament mirror if present
+      if (currentTournament?.id === data.tournamentId) {
+        const reg = (
+          currentTournament as unknown as {
+            registeredPlayers?: Array<{
+              id: string;
+              displayName: string;
+              ready?: boolean;
+              deckSubmitted?: boolean;
+            }>;
+          }
+        ).registeredPlayers;
+        if (Array.isArray(reg)) {
+          const updated = reg.map((p) =>
+            p.id === data.playerId
+              ? {
+                  ...p,
+                  ready: isReady,
+                  deckSubmitted: Boolean(data.deckSubmitted),
+                }
+              : p
+          );
+          setCurrentTournamentState({
+            ...(currentTournament as unknown as Record<string, unknown>),
+            registeredPlayers: updated,
+          } as unknown as TournamentInfo);
         }
       }
-    }
-  }, [currentTournament, currentUserId, queueStatisticsRefresh]);
-
-  const handleMatchAssigned = useCallback((data: { 
-    tournamentId: string; 
-    matchId: string; 
-    opponentId: string | null; 
-    opponentName: string | null; 
-    lobbyName: string; 
-  }) => {
-    console.log('Match assigned:', data);
-    if (currentTournament?.id === data.tournamentId) {
-      queueStatisticsRefresh({ standings: true, matches: true });
-      // Treat this as an assignment for the current user
-      setAssignedMatch({ matchId: String(data.matchId), opponentName: data.opponentName ?? null });
-    }
-    // Broadcast a browser event for UI surfaces (e.g., Join CTA on details page)
-    try {
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('tournament:matchAssigned', {
-          detail: {
-            tournamentId: data.tournamentId,
-            matchId: data.matchId,
-            opponentName: data.opponentName ?? null,
-          },
-        }));
+      // Refresh preparation status only on significant milestones
+      if (currentTournament?.id === data.tournamentId && prepHookRef.current) {
+        if (data.deckSubmitted || data.preparationStatus === "completed") {
+          prepHookRef.current.actions.refreshStatus();
+        }
       }
-    } catch {}
-  }, [currentTournament, queueStatisticsRefresh]);
 
-  const handleSocketError = useCallback((error: { 
-    code: string; 
-    message: string; 
-    details?: string; 
-  }) => {
-    console.error('Tournament socket error:', error);
-    setConnectionError(error.message);
-    setError(error.message);
-  }, []);
+      setLastUpdated(new Date().toISOString());
+      setRealtimeEvents((prev) => ({
+        ...prev,
+        preparationUpdateCount: prev.preparationUpdateCount + 1,
+        lastEventTime: new Date().toISOString(),
+      }));
+      // Trust socket data - no HTTP refresh needed
+    },
+    [currentTournament]
+  );
+
+  const handleStatisticsUpdated = useCallback(
+    (data: {
+      tournamentId: string;
+      standings?: unknown;
+      matches?: unknown;
+      rounds?: unknown;
+      [key: string]: unknown;
+    }) => {
+      console.log("Statistics updated:", data);
+      // Trust socket data - update state directly if payload includes data
+      // For now, just mark as updated - server should send full data in future
+      setLastUpdated(new Date().toISOString());
+    },
+    []
+  );
+
+  const handleRoundStarted = useCallback(
+    (data: {
+      tournamentId: string;
+      roundNumber: number;
+      matches: Array<{
+        id: string;
+        player1Id: string;
+        player1Name: string;
+        player2Id: string | null;
+        player2Name: string | null;
+      }>;
+    }) => {
+      console.log("Round started:", data);
+
+      if (currentTournament?.id === data.tournamentId) {
+        // Refresh matches/rounds so Join button appears
+        queueStatisticsRefresh({ matches: true, rounds: true });
+        setLastUpdated(new Date().toISOString());
+        // Derive my assignment immediately from payload
+        if (currentUserId) {
+          const mine = data.matches.find(
+            (m) =>
+              m.player1Id === currentUserId || m.player2Id === currentUserId
+          );
+          if (mine) {
+            const opp =
+              mine.player1Id === currentUserId
+                ? mine.player2Name
+                : mine.player1Name;
+            setAssignedMatch({
+              matchId: String(mine.id),
+              opponentName: opp ?? null,
+            });
+          }
+        }
+      }
+    },
+    [currentTournament, currentUserId, queueStatisticsRefresh]
+  );
+
+  const handleMatchAssigned = useCallback(
+    (data: {
+      tournamentId: string;
+      matchId: string;
+      opponentId: string | null;
+      opponentName: string | null;
+      lobbyName: string;
+    }) => {
+      console.log("Match assigned:", data);
+      if (currentTournament?.id === data.tournamentId) {
+        // Refresh matches so Join button appears
+        queueStatisticsRefresh({ matches: true });
+        setLastUpdated(new Date().toISOString());
+        // Treat this as an assignment for the current user
+        setAssignedMatch({
+          matchId: String(data.matchId),
+          opponentName: data.opponentName ?? null,
+        });
+      }
+      // Broadcast a browser event for UI surfaces (e.g., Join CTA on details page)
+      try {
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("tournament:matchAssigned", {
+              detail: {
+                tournamentId: data.tournamentId,
+                matchId: data.matchId,
+                opponentName: data.opponentName ?? null,
+              },
+            })
+          );
+        }
+      } catch {}
+    },
+    [currentTournament, queueStatisticsRefresh]
+  );
+
+  const handleSocketError = useCallback(
+    (error: { code: string; message: string; details?: string }) => {
+      console.error("Tournament socket error:", error);
+      setConnectionError(error.message);
+      setError(error.message);
+    },
+    []
+  );
 
   // Initialize socket and socket-aware hooks
-  const { 
+  const {
     socket,
-    isConnected, 
+    isConnected,
     joinTournament: socketJoinTournament,
-    leaveTournament: socketLeaveTournament
+    leaveTournament: socketLeaveTournament,
   } = useTournamentSocket({
     onTournamentUpdated: handleTournamentUpdated,
     onPhaseChanged: handlePhaseChanged,
@@ -721,51 +1013,71 @@ useEffect(() => {
     onMatchAssigned: handleMatchAssigned,
     onPresenceUpdated: handlePresenceUpdated,
     onDraftReady: handleDraftReady,
-    onError: handleSocketError
+    onError: handleSocketError,
   });
   // Ensure tournament socket identifies the user for presence mapping
   useEffect(() => {
     if (!socket) return;
     const sendHello = () => {
       const playerId = sessionData?.user?.id || null;
-      const displayName = ((sessionData?.user?.name ?? '') || 'Player').slice(0, 40);
+      const displayName = ((sessionData?.user?.name ?? "") || "Player").slice(
+        0,
+        40
+      );
       try {
-        socket.emit('hello', { displayName, playerId });
+        socket.emit("hello", { displayName, playerId });
       } catch {}
     };
-    socket.on('connect', sendHello);
+    socket.on("connect", sendHello);
     if (socket.connected) sendHello();
-    return () => { socket.off('connect', sendHello); };
+    return () => {
+      socket.off("connect", sendHello);
+    };
   }, [socket, sessionData?.user?.id, sessionData?.user?.name]);
   const preparation = useTournamentPreparation(preparationId, { isConnected });
   const statistics = useTournamentStatistics(preparationId, { isConnected });
-  const phases = useTournamentPhases(preparationId, currentTournament?.status, { isConnected });
+  const phases = useTournamentPhases(preparationId, currentTournament?.status, {
+    isConnected,
+  });
   // Only return hook results if we have a current tournament
   const activePreparation = currentTournament ? preparation : null;
   const activeStatistics = currentTournament ? statistics : null;
   const activePhases = currentTournament ? phases : null;
   // Keep refs in sync with latest instances
-  useEffect(() => { prepHookRef.current = activePreparation; }, [activePreparation]);
-  useEffect(() => { statsHookRef.current = activeStatistics; }, [activeStatistics]);
-  useEffect(() => { phasesHookRef.current = activePhases; }, [activePhases]);
+  useEffect(() => {
+    prepHookRef.current = activePreparation;
+  }, [activePreparation]);
+  useEffect(() => {
+    statsHookRef.current = activeStatistics;
+  }, [activeStatistics]);
+  useEffect(() => {
+    phasesHookRef.current = activePhases;
+  }, [activePhases]);
 
-  const sendTournamentChat = useCallback((tournamentId: string, content: string) => {
-    if (!socket) return;
-    const trimmed = content.trim();
-    if (!trimmed) return;
-    socket.emit("TOURNAMENT_CHAT", {
-      tournamentId,
-      content: trimmed,
-      timestamp: Date.now()
-    });
-  }, [socket]);
+  const sendTournamentChat = useCallback(
+    (tournamentId: string, content: string) => {
+      if (!socket) return;
+      const trimmed = content.trim();
+      if (!trimmed) return;
+      socket.emit("TOURNAMENT_CHAT", {
+        tournamentId,
+        content: trimmed,
+        timestamp: Date.now(),
+      });
+    },
+    [socket]
+  );
 
   // Fallback polling: keep list fresh even if socket events are missed
   // Only poll when the realtime socket is disconnected
   useEffect(() => {
     if (isConnected) return;
     const id = setInterval(() => {
-      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+      if (
+        typeof document !== "undefined" &&
+        document.visibilityState !== "visible"
+      )
+        return;
       void refreshTournaments();
     }, 15000);
     return () => clearInterval(id);
@@ -777,10 +1089,10 @@ useEffect(() => {
     const id = activeTournamentId;
     if (!id) return;
     if (joinedTournamentIdRef.current === id) {
-      console.log('[RealtimeTournamentContext] Already joined tournament:', id);
+      console.log("[RealtimeTournamentContext] Already joined tournament:", id);
       return;
     }
-    console.log('[RealtimeTournamentContext] Auto-joining tournament:', id);
+    console.log("[RealtimeTournamentContext] Auto-joining tournament:", id);
     joinedTournamentIdRef.current = id;
     socketJoinTournament(id);
   }, [isConnected, activeTournamentId, socketJoinTournament]);
@@ -793,263 +1105,321 @@ useEffect(() => {
   }, [isConnected]);
 
   // Tournament management functions
-  const createTournament = useCallback(async (config: {
-    name: string;
-    format: 'sealed' | 'draft' | 'constructed';
-    maxPlayers: number;
-    isPrivate?: boolean;
-    settings?: Record<string, unknown>;
-  }) => {
-    setLoading(true);
-    setError(null);
+  const createTournament = useCallback(
+    async (config: {
+      name: string;
+      format: "sealed" | "draft" | "constructed";
+      maxPlayers: number;
+      isPrivate?: boolean;
+      settings?: Record<string, unknown>;
+    }) => {
+      setLoading(true);
+      setError(null);
 
-    try {
-      console.log("Creating tournament:", config);
-      
-      const response = await fetch('/api/tournaments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to create tournament');
-      }
-
-      const tournament = await response.json();
-      console.log("Tournament created:", tournament);
-      // Join this tournament room to receive real-time updates immediately
       try {
-        socketJoinTournament(tournament.id);
-      } catch {}
-      // Also refresh list only if socket is not connected (socket will broadcast otherwise)
-      if (!isConnected) { refreshTournamentsDebounced(); }
-      // Fetch full details and set as current tournament for downstream hooks
-      let fullDetail = tournament;
-      try {
-        const detailRes = await fetch(`/api/tournaments/${tournament.id}`);
-        if (detailRes.ok) {
-          const detail = await detailRes.json();
-          fullDetail = detail;
-          setCurrentTournament(detail as unknown as TournamentInfo);
+        console.log("Creating tournament:", config);
+
+        const response = await fetch("/api/tournaments", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(config),
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || "Failed to create tournament");
         }
-      } catch {}
-      return fullDetail;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to create tournament';
-      setError(message);
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, [socketJoinTournament, isConnected, refreshTournamentsDebounced, setCurrentTournament]);
 
-  const joinTournament = useCallback(async (tournamentId: string) => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      console.log("Joining tournament:", tournamentId);
-      
-      const response = await fetch(`/api/tournaments/${tournamentId}/join`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to join tournament');
-      }
-
-      console.log("Joined tournament successfully");
-      // Join the tournament room immediately for real-time updates
-      try {
-        socketJoinTournament(tournamentId);
-      } catch {}
-      // Refresh list only if socket is not connected
-      if (!isConnected) { refreshTournamentsDebounced(); }
-      // Fetch full details and set as current tournament for downstream hooks
-      try {
-        const detailRes = await fetch(`/api/tournaments/${tournamentId}`);
-        if (detailRes.ok) {
-          const detail = await detailRes.json();
-          setCurrentTournament(detail as unknown as TournamentInfo);
+        const tournament = await response.json();
+        console.log("Tournament created:", tournament);
+        // Join this tournament room to receive real-time updates immediately
+        try {
+          socketJoinTournament(tournament.id);
+        } catch {}
+        // Also refresh list only if socket is not connected (socket will broadcast otherwise)
+        if (!isConnected) {
+          refreshTournamentsDebounced();
         }
-      } catch {}
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to join tournament';
-      setError(message);
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, [socketJoinTournament, isConnected, refreshTournamentsDebounced, setCurrentTournament]);
-
-  const leaveTournament = useCallback(async (tournamentId: string) => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      console.log("Leaving tournament:", tournamentId);
-      
-      const response = await fetch(`/api/tournaments/${tournamentId}/leave`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to leave tournament');
+        // Fetch full details and set as current tournament for downstream hooks
+        let fullDetail = tournament;
+        try {
+          const detailRes = await fetch(`/api/tournaments/${tournament.id}`);
+          if (detailRes.ok) {
+            const detail = await detailRes.json();
+            fullDetail = detail;
+            setCurrentTournament(detail as unknown as TournamentInfo);
+          }
+        } catch {}
+        return fullDetail;
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Failed to create tournament";
+        setError(message);
+        throw err;
+      } finally {
+        setLoading(false);
       }
+    },
+    [
+      socketJoinTournament,
+      isConnected,
+      refreshTournamentsDebounced,
+      setCurrentTournament,
+    ]
+  );
 
-      console.log("Left tournament successfully");
-      
-      // Leave socket room
-      socketLeaveTournament(tournamentId);
-      
-      // Clear current tournament if leaving it
-      if (currentTournament?.id === tournamentId) {
-        setCurrentTournament(null);
-      }
-      
-      // Rely on server events to update list
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to leave tournament';
-      setError(message);
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, [currentTournament, socketLeaveTournament, setCurrentTournament]);
+  const joinTournament = useCallback(
+    async (tournamentId: string) => {
+      setLoading(true);
+      setError(null);
 
-  const startTournament = useCallback(async (tournamentId: string) => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      console.log("Starting tournament:", tournamentId);
-      
-      const response = await fetch(`/api/tournaments/${tournamentId}/start`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to start tournament');
-      }
-
-      console.log("Tournament started successfully");
-      // Join the room to receive tournament-scoped updates immediately
       try {
-        socketJoinTournament(tournamentId);
-      } catch {}
-      // Real-time events will propagate updates; fetch details only
-      try {
-        const detailRes = await fetch(`/api/tournaments/${tournamentId}`);
-        if (detailRes.ok) {
-          const detail = await detailRes.json();
-          setCurrentTournament(detail as unknown as TournamentInfo);
+        console.log("Joining tournament:", tournamentId);
+
+        const response = await fetch(`/api/tournaments/${tournamentId}/join`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || "Failed to join tournament");
         }
-      } catch {}
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to start tournament';
-      setError(message);
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, [socketJoinTournament, setCurrentTournament]);
 
-  const endTournament = useCallback(async (tournamentId: string) => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      console.log("Ending tournament:", tournamentId);
-      
-      const response = await fetch(`/api/tournaments/${tournamentId}/end`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to end tournament');
+        console.log("Joined tournament successfully");
+        // Join the tournament room immediately for real-time updates
+        try {
+          socketJoinTournament(tournamentId);
+        } catch {}
+        // Refresh list only if socket is not connected
+        if (!isConnected) {
+          refreshTournamentsDebounced();
+        }
+        // Fetch full details and set as current tournament for downstream hooks
+        try {
+          const detailRes = await fetch(`/api/tournaments/${tournamentId}`);
+          if (detailRes.ok) {
+            const detail = await detailRes.json();
+            setCurrentTournament(detail as unknown as TournamentInfo);
+          }
+        } catch {}
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Failed to join tournament";
+        setError(message);
+        throw err;
+      } finally {
+        setLoading(false);
       }
+    },
+    [
+      socketJoinTournament,
+      isConnected,
+      refreshTournamentsDebounced,
+      setCurrentTournament,
+    ]
+  );
 
-      console.log("Tournament ended successfully");
-      if (!isConnected) { refreshTournamentsDebounced(); }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to end tournament';
-      setError(message);
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, [isConnected, refreshTournamentsDebounced]);
+  const leaveTournament = useCallback(
+    async (tournamentId: string) => {
+      setLoading(true);
+      setError(null);
 
-  const updateTournamentSettings = useCallback(async (
-    tournamentId: string, 
-    settings: Record<string, unknown>
-  ) => {
-    setLoading(true);
-    setError(null);
+      try {
+        console.log("Leaving tournament:", tournamentId);
 
-    try {
-      console.log("Updating tournament settings:", { tournamentId, settings });
-      
-      const response = await fetch(`/api/tournaments/${tournamentId}/settings`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(settings),
-      });
+        const response = await fetch(`/api/tournaments/${tournamentId}/leave`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to update tournament settings');
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || "Failed to leave tournament");
+        }
+
+        console.log("Left tournament successfully");
+
+        // Leave socket room
+        socketLeaveTournament(tournamentId);
+
+        // Clear current tournament if leaving it
+        if (currentTournament?.id === tournamentId) {
+          setCurrentTournament(null);
+        }
+
+        // Rely on server events to update list
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Failed to leave tournament";
+        setError(message);
+        throw err;
+      } finally {
+        setLoading(false);
       }
+    },
+    [currentTournament, socketLeaveTournament, setCurrentTournament]
+  );
 
-      console.log("Tournament settings updated successfully");
-      if (!isConnected) { refreshTournamentsDebounced(); }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to update tournament settings';
-      setError(message);
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, [isConnected, refreshTournamentsDebounced]);
+  const startTournament = useCallback(
+    async (tournamentId: string) => {
+      setLoading(true);
+      setError(null);
 
-  const toggleTournamentReady = useCallback(async (tournamentId: string, ready: boolean) => {
-    setLoading(true);
-    setError(null);
+      try {
+        console.log("Starting tournament:", tournamentId);
 
-    try {
-      console.log("Toggling tournament ready status:", { tournamentId, ready });
-      
-      const response = await fetch(`/api/tournaments/${tournamentId}/ready`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ready }),
-      });
+        const response = await fetch(`/api/tournaments/${tournamentId}/start`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to update ready status');
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || "Failed to start tournament");
+        }
+
+        console.log("Tournament started successfully");
+        // Join the room to receive tournament-scoped updates immediately
+        try {
+          socketJoinTournament(tournamentId);
+        } catch {}
+        // Real-time events will propagate updates; fetch details only
+        try {
+          const detailRes = await fetch(`/api/tournaments/${tournamentId}`);
+          if (detailRes.ok) {
+            const detail = await detailRes.json();
+            setCurrentTournament(detail as unknown as TournamentInfo);
+          }
+        } catch {}
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Failed to start tournament";
+        setError(message);
+        throw err;
+      } finally {
+        setLoading(false);
       }
+    },
+    [socketJoinTournament, setCurrentTournament]
+  );
 
-      // Only refresh if socket is not connected
-      if (!isConnected) { refreshTournamentsDebounced(); }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to update ready status';
-      setError(message);
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, [isConnected, refreshTournamentsDebounced]);
+  const endTournament = useCallback(
+    async (tournamentId: string) => {
+      setLoading(true);
+      setError(null);
+
+      try {
+        console.log("Ending tournament:", tournamentId);
+
+        const response = await fetch(`/api/tournaments/${tournamentId}/end`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || "Failed to end tournament");
+        }
+
+        console.log("Tournament ended successfully");
+        if (!isConnected) {
+          refreshTournamentsDebounced();
+        }
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Failed to end tournament";
+        setError(message);
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [isConnected, refreshTournamentsDebounced]
+  );
+
+  const updateTournamentSettings = useCallback(
+    async (tournamentId: string, settings: Record<string, unknown>) => {
+      setLoading(true);
+      setError(null);
+
+      try {
+        console.log("Updating tournament settings:", {
+          tournamentId,
+          settings,
+        });
+
+        const response = await fetch(
+          `/api/tournaments/${tournamentId}/settings`,
+          {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(settings),
+          }
+        );
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(
+            error.error || "Failed to update tournament settings"
+          );
+        }
+
+        console.log("Tournament settings updated successfully");
+        if (!isConnected) {
+          refreshTournamentsDebounced();
+        }
+      } catch (err) {
+        const message =
+          err instanceof Error
+            ? err.message
+            : "Failed to update tournament settings";
+        setError(message);
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [isConnected, refreshTournamentsDebounced]
+  );
+
+  const toggleTournamentReady = useCallback(
+    async (tournamentId: string, ready: boolean) => {
+      setLoading(true);
+      setError(null);
+
+      try {
+        console.log("Toggling tournament ready status:", {
+          tournamentId,
+          ready,
+        });
+
+        const response = await fetch(`/api/tournaments/${tournamentId}/ready`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ready }),
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || "Failed to update ready status");
+        }
+
+        // Only refresh if socket is not connected
+        if (!isConnected) {
+          refreshTournamentsDebounced();
+        }
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Failed to update ready status";
+        setError(message);
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [isConnected, refreshTournamentsDebounced]
+  );
 
   // Auto-fetch tournaments on mount and when socket connects
   useEffect(() => {
@@ -1079,8 +1449,11 @@ useEffect(() => {
     statistics: activeStatistics,
     phases: activePhases,
     realtimeEvents,
-    tournamentPresence: activeTournamentId ? (presenceByTournament[activeTournamentId] || []) : [],
-    getPresenceFor: (tournamentId: string | null) => (tournamentId ? (presenceByTournament[tournamentId] || []) : []),
+    tournamentPresence: activeTournamentId
+      ? presenceByTournament[activeTournamentId] || []
+      : [],
+    getPresenceFor: (tournamentId: string | null) =>
+      tournamentId ? presenceByTournament[tournamentId] || [] : [],
     assignedMatchId: assignedMatch?.matchId ?? null,
     assignedOpponentName: assignedMatch?.opponentName ?? null,
     loading,
@@ -1098,7 +1471,9 @@ useEffect(() => {
 export function useRealtimeTournaments() {
   const context = useContext(RealtimeTournamentContext);
   if (!context) {
-    throw new Error("useRealtimeTournaments must be used within a RealtimeTournamentProvider");
+    throw new Error(
+      "useRealtimeTournaments must be used within a RealtimeTournamentProvider"
+    );
   }
   return context;
 }
