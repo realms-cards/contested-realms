@@ -13,13 +13,15 @@ import { createPortal } from "react-dom";
 import { useRealtimeTournamentsOptional } from "@/contexts/RealtimeTournamentContext";
 import { useTournamentSocket } from "@/hooks/useTournamentSocket";
 
-type EventKind = "players" | "phases" | "matches" | "prep" | "presence";
+type EventKind = "players" | "phases" | "matches" | "match_results" | "prep" | "presence" | "system";
 
 interface TournamentEventItem {
   ts: number;
   kind: EventKind;
   text: string;
   mine?: boolean;
+  icon?: string;
+  color?: string;
 }
 
 interface FloatingChatProps {
@@ -49,15 +51,19 @@ export default function FloatingChat({
     players: boolean;
     phases: boolean;
     matches: boolean;
+    match_results: boolean;
     prep: boolean;
     presence: boolean;
+    system: boolean;
     mineOnly: boolean;
   } = {
     players: true,
     phases: true,
     matches: true,
+    match_results: true,
     prep: true,
     presence: true,
+    system: true,
     mineOnly: false,
   };
   const [mounted, setMounted] = useState(false);
@@ -71,26 +77,34 @@ export default function FloatingChat({
         kind: "phases",
         ts: Date.now(),
         text: `Phase changed → ${d.newStatus}`,
+        icon: "🔄",
+        color: "text-blue-400"
       }),
     onPlayerJoined: (d) =>
       pushEvent({
         kind: "players",
         ts: Date.now(),
-        text: `${d.playerName} joined (${d.currentPlayerCount})`,
+        text: `${d.playerName} joined (${d.currentPlayerCount} players)`,
         mine: myId != null && d.playerId === myId,
+        icon: "✅",
+        color: "text-green-400"
       }),
     onPlayerLeft: (d) =>
       pushEvent({
         kind: "players",
         ts: Date.now(),
-        text: `${d.playerName} left (${d.currentPlayerCount})`,
+        text: `${d.playerName} left (${d.currentPlayerCount} players)`,
         mine: myId != null && d.playerId === myId,
+        icon: "👋",
+        color: "text-slate-400"
       }),
     onRoundStarted: (d) => {
       pushEvent({
         kind: "matches",
         ts: Date.now(),
         text: `Round ${d.roundNumber} started`,
+        icon: "🔔",
+        color: "text-purple-400"
       });
       notifyCollapsed(`Round ${d.roundNumber} started`);
     },
@@ -99,6 +113,8 @@ export default function FloatingChat({
         kind: "matches",
         ts: Date.now(),
         text: `Match assigned${d.opponentName ? ` vs ${d.opponentName}` : ""}`,
+        icon: "⚔️",
+        color: "text-cyan-400"
       });
       notifyCollapsed(
         `Match assigned${d.opponentName ? ` vs ${d.opponentName}` : ""}`
@@ -108,8 +124,10 @@ export default function FloatingChat({
       pushEvent({
         kind: "prep",
         ts: Date.now(),
-        text: `Preparation updated (${d.readyPlayerCount}/${d.totalPlayerCount})`,
+        text: `${d.readyPlayerCount}/${d.totalPlayerCount} players ready`,
         mine: myId != null && d.playerId === myId,
+        icon: "⏳",
+        color: "text-amber-400"
       }),
     // Do not log presence-only updates to reduce noise
     onPresenceUpdated: () => {},
@@ -170,6 +188,103 @@ export default function FloatingChat({
       socket.off("TOURNAMENT_CHAT", onChat);
     };
   }, [socket, tournamentId, notifyCollapsed]);
+
+  // Listen for match results
+  useEffect(() => {
+    if (!socket || !tournamentId) return;
+
+    const onMatchCompleted = (data: {
+      tournamentId: string;
+      matchId: string;
+      winnerId?: string;
+      winnerName?: string;
+      loserId?: string;
+      loserName?: string;
+      isDraw?: boolean;
+      player1Name?: string;
+      player2Name?: string;
+    }) => {
+      if (data.tournamentId !== tournamentId) return;
+
+      const isMine = !!(myId && (myId === data.winnerId || myId === data.loserId));
+
+      if (data.isDraw) {
+        pushEvent({
+          kind: "match_results",
+          ts: Date.now(),
+          text: `Match ended in a draw${data.player1Name && data.player2Name ? ` (${data.player1Name} vs ${data.player2Name})` : ''}`,
+          mine: isMine,
+          icon: "🤝",
+          color: "text-slate-300"
+        });
+      } else if (data.winnerName) {
+        const text = data.loserName
+          ? `${data.winnerName} defeated ${data.loserName}`
+          : `${data.winnerName} won their match`;
+
+        pushEvent({
+          kind: "match_results",
+          ts: Date.now(),
+          text,
+          mine: isMine,
+          icon: "🏆",
+          color: myId === data.winnerId ? "text-amber-400" : "text-slate-300"
+        });
+
+        if (isMine) {
+          notifyCollapsed(text);
+        }
+      }
+    };
+
+    const onRoundCompleted = (data: {
+      tournamentId: string;
+      roundNumber: number;
+    }) => {
+      if (data.tournamentId !== tournamentId) return;
+
+      pushEvent({
+        kind: "system",
+        ts: Date.now(),
+        text: `Round ${data.roundNumber} completed`,
+        icon: "✓",
+        color: "text-emerald-400"
+      });
+    };
+
+    const onTournamentCompleted = (data: {
+      tournamentId: string;
+      winnerId?: string;
+      winnerName?: string;
+    }) => {
+      if (data.tournamentId !== tournamentId) return;
+
+      const text = data.winnerName
+        ? `Tournament completed! Winner: ${data.winnerName}`
+        : 'Tournament completed!';
+
+      pushEvent({
+        kind: "system",
+        ts: Date.now(),
+        text,
+        mine: !!(myId && myId === data.winnerId),
+        icon: "🎉",
+        color: "text-yellow-400"
+      });
+
+      notifyCollapsed(text);
+    };
+
+    socket.on("MATCH_COMPLETED", onMatchCompleted);
+    socket.on("ROUND_COMPLETED", onRoundCompleted);
+    socket.on("TOURNAMENT_COMPLETED", onTournamentCompleted);
+
+    return () => {
+      socket.off("MATCH_COMPLETED", onMatchCompleted);
+      socket.off("ROUND_COMPLETED", onRoundCompleted);
+      socket.off("TOURNAMENT_COMPLETED", onTournamentCompleted);
+    };
+  }, [socket, tournamentId, myId, pushEvent, notifyCollapsed]);
 
   // Send chat
   const send = () => {
@@ -310,13 +425,19 @@ export default function FloatingChat({
                     )
                     .slice(-200)
                     .map((ev, i) => (
-                      <div key={i} className="opacity-85">
-                        •{" "}
-                        {new Date(ev.ts).toLocaleTimeString([], {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}{" "}
-                        — {ev.text}
+                      <div
+                        key={i}
+                        className={`opacity-90 ${ev.color || ''} ${ev.mine ? 'font-medium' : ''}`}
+                      >
+                        {ev.icon ? `${ev.icon} ` : '• '}
+                        <span className="opacity-70">
+                          {new Date(ev.ts).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
+                        {" — "}
+                        {ev.text}
                       </div>
                     ))}
                 </div>

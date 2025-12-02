@@ -60,13 +60,15 @@ export default function OnlineD20Screen({
     phase,
   ]);
 
-  const bothRolled = myRoll !== null && opponentRoll !== null;
+  // Use typeof check to ensure both are actual numbers (catches null and undefined)
+  const bothRolled =
+    typeof myRoll === "number" && typeof opponentRoll === "number";
   const canChoose = setupWinner === myPlayerKey;
   const isTie =
     bothRolled &&
-    d20Rolls.p1 !== null &&
-    d20Rolls.p2 !== null &&
-    Number(d20Rolls.p1) === Number(d20Rolls.p2);
+    typeof d20Rolls.p1 === "number" &&
+    typeof d20Rolls.p2 === "number" &&
+    d20Rolls.p1 === d20Rolls.p2;
 
   // Track when both dice have completed their roll animations
   const [myDiceComplete, setMyDiceComplete] = useState(false);
@@ -114,7 +116,7 @@ export default function OnlineD20Screen({
   }, [myRoll, opponentRoll]);
 
   const handleRoll = () => {
-    if (myRoll === null) {
+    if (myRoll == null) {
       rollD20(myPlayerKey);
     }
   };
@@ -187,7 +189,7 @@ export default function OnlineD20Screen({
             player="p1"
             position={[-2, 0, 0]}
             roll={d20Rolls.p1}
-            isRolling={d20Rolls.p1 !== null}
+            isRolling={typeof d20Rolls.p1 === "number"}
             onRoll={myPlayerKey === "p1" ? handleRoll : undefined}
             onRollComplete={
               myPlayerKey === "p1"
@@ -202,7 +204,7 @@ export default function OnlineD20Screen({
             player="p2"
             position={[2, 0, 0]}
             roll={d20Rolls.p2}
-            isRolling={d20Rolls.p2 !== null}
+            isRolling={typeof d20Rolls.p2 === "number"}
             onRoll={myPlayerKey === "p2" ? handleRoll : undefined}
             onRollComplete={
               myPlayerKey === "p2"

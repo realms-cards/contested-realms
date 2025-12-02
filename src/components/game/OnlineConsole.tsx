@@ -12,6 +12,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { PLAYER_COLORS } from "@/lib/game/constants";
 import { useGameStore } from "@/lib/game/store";
 import type { ServerChatPayloadT, ChatScope } from "@/lib/net/protocol";
+import { type MatchEvent, formatMatchEvent } from "@/hooks/useMatchEvents";
 
 interface OnlineConsoleProps {
   dragFromHand: boolean;
@@ -27,6 +28,8 @@ interface OnlineConsoleProps {
   defaultOpen?: boolean;
   hideChat?: boolean;
   position?: "bottom-left" | "top-right" | "top-left";
+  matchEvents?: MatchEvent[]; // Tournament/match-level events
+  playerNames?: { p1?: string; p2?: string }; // Player names to replace P1/P2
 }
 
 type TabType = "events" | "chat";
@@ -45,6 +48,8 @@ export default function OnlineConsole({
   defaultOpen = false,
   hideChat = false,
   position = "bottom-left",
+  matchEvents = [],
+  playerNames,
 }: OnlineConsoleProps) {
   const router = useRouter();
   const [consoleOpen, setConsoleOpen] = useState<boolean>(defaultOpen);
@@ -165,17 +170,28 @@ export default function OnlineConsole({
   }
 
   // Render text with color markup [p1:Name] or [p2:Name] as colored spans
+  // Also replaces P1/P2 with actual player names if provided
   function renderColoredText(text: string): React.ReactNode {
+    let processedText = text;
+
+    // Replace P1/P2 with actual player names if provided
+    if (playerNames?.p1) {
+      processedText = processedText.replace(/\bP1\b/g, playerNames.p1);
+    }
+    if (playerNames?.p2) {
+      processedText = processedText.replace(/\bP2\b/g, playerNames.p2);
+    }
+
     const parts: React.ReactNode[] = [];
     const regex = /\[(p[12]):([^\]]+)\]/g;
     let lastIndex = 0;
     let match;
     let key = 0;
 
-    while ((match = regex.exec(text)) !== null) {
+    while ((match = regex.exec(processedText)) !== null) {
       // Add text before the match
       if (match.index > lastIndex) {
-        parts.push(text.slice(lastIndex, match.index));
+        parts.push(processedText.slice(lastIndex, match.index));
       }
       // Add the colored name
       const playerKey = match[1] as "p1" | "p2";
@@ -192,12 +208,38 @@ export default function OnlineConsole({
     }
 
     // Add remaining text
-    if (lastIndex < text.length) {
-      parts.push(text.slice(lastIndex));
+    if (lastIndex < processedText.length) {
+      parts.push(processedText.slice(lastIndex));
     }
 
-    return parts.length > 0 ? parts : text;
+    return parts.length > 0 ? parts : processedText;
   }
+
+  // Combine game events and match events with timestamps for unified display
+  const combinedEvents = useMemo(() => {
+    const gameEvs = events.map(ev => ({
+      id: ev.id,
+      timestamp: Date.now(), // Game events don't have timestamps, show them first
+      type: 'game' as const,
+      data: ev
+    }));
+
+    const matchEvs = matchEvents.map(ev => ({
+      id: ev.id,
+      timestamp: ev.timestamp,
+      type: 'match' as const,
+      data: ev
+    }));
+
+    // Combine and sort by timestamp
+    return [...gameEvs, ...matchEvs].sort((a, b) => {
+      // If timestamps are equal, prioritize match events
+      if (a.timestamp === b.timestamp) {
+        return a.type === 'match' ? -1 : 1;
+      }
+      return a.timestamp - b.timestamp;
+    });
+  }, [events, matchEvents]);
 
   // Auto-scroll to latest content when tab changes or new content arrives
   useEffect(() => {
@@ -206,7 +248,7 @@ export default function OnlineConsole({
     const el = targetRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
-  }, [events.length, matchChat.length, activeTab, consoleOpen]);
+  }, [combinedEvents.length, matchChat.length, activeTab, consoleOpen]);
 
   const handleSendChat = () => {
     const msg = chatInput.trim();
@@ -352,55 +394,71 @@ export default function OnlineConsole({
                 data-allow-wheel="true"
                 className="flex-1 overflow-y-scroll thin-scrollbar px-3 py-3 text-xs space-y-1 min-h-0"
               >
-                {events.length === 0 && (
+                {combinedEvents.length === 0 && (
                   <div className="opacity-60">No events yet</div>
                 )}
-                {events.slice(-100).map((ev, index) => {
-                  const t = ev.text || "";
-                  const low = t.toLowerCase();
-                  // Detect warnings: messages starting with [warning], warning, cannot, or other error patterns
-                  const isWarn =
-                    low.startsWith("[warning]") ||
-                    low.startsWith("warning") ||
-                    low.startsWith("cannot") ||
-                    low.includes("cannot") ||
-                    low.startsWith("insufficient") ||
-                    low.startsWith("first site must") ||
-                    low.startsWith("new sites must") ||
-                    low.startsWith("sites cannot") ||
-                    low.startsWith("permanents can only") ||
-                    low.startsWith("avatar must");
-                  const isSearch = low.startsWith("search:");
-                  const turnPrefix = ev.turn ? `[T${ev.turn}] ` : "";
-                  // Color turn prefix by which player's turn it was
-                  const turnColor =
-                    ev.player === 1
-                      ? PLAYER_COLORS.p1
-                      : ev.player === 2
-                      ? PLAYER_COLORS.p2
-                      : undefined;
-                  return (
-                    <div
-                      key={`${ev.id}-${index}`}
-                      className={`opacity-85 ${
-                        isWarn
-                          ? "text-yellow-400"
-                          : isSearch
-                          ? "text-blue-400"
-                          : ""
-                      }`}
-                    >
-                      {turnPrefix && (
-                        <span
-                          className="opacity-70"
-                          style={turnColor ? { color: turnColor } : undefined}
-                        >
-                          {turnPrefix}
-                        </span>
-                      )}
-                      • {renderColoredText(formatEventText(ev.text))}
-                    </div>
-                  );
+                {combinedEvents.slice(-100).map((item, index) => {
+                  if (item.type === 'match') {
+                    // Render match/tournament event
+                    const matchEv = item.data;
+                    const formatted = formatMatchEvent(matchEv);
+                    return (
+                      <div
+                        key={`${item.id}-${index}`}
+                        className={`opacity-90 ${formatted.color || ''}`}
+                      >
+                        {formatted.icon} {formatted.text}
+                      </div>
+                    );
+                  } else {
+                    // Render game event
+                    const ev = item.data;
+                    const t = ev.text || "";
+                    const low = t.toLowerCase();
+                    // Detect warnings: messages starting with [warning], warning, cannot, or other error patterns
+                    const isWarn =
+                      low.startsWith("[warning]") ||
+                      low.startsWith("warning") ||
+                      low.startsWith("cannot") ||
+                      low.includes("cannot") ||
+                      low.startsWith("insufficient") ||
+                      low.startsWith("first site must") ||
+                      low.startsWith("new sites must") ||
+                      low.startsWith("sites cannot") ||
+                      low.startsWith("permanents can only") ||
+                      low.startsWith("avatar must");
+                    const isSearch = low.startsWith("search:");
+                    const turnPrefix = ev.turn ? `[T${ev.turn}] ` : "";
+                    // Color turn prefix by which player's turn it was
+                    const turnColor =
+                      ev.player === 1
+                        ? PLAYER_COLORS.p1
+                        : ev.player === 2
+                        ? PLAYER_COLORS.p2
+                        : undefined;
+                    return (
+                      <div
+                        key={`${item.id}-${index}`}
+                        className={`opacity-85 ${
+                          isWarn
+                            ? "text-yellow-400"
+                            : isSearch
+                            ? "text-blue-400"
+                            : ""
+                        }`}
+                      >
+                        {turnPrefix && (
+                          <span
+                            className="opacity-70"
+                            style={turnColor ? { color: turnColor } : undefined}
+                          >
+                            {turnPrefix}
+                          </span>
+                        )}
+                        • {renderColoredText(formatEventText(ev.text))}
+                      </div>
+                    );
+                  }
                 })}
               </div>
             )}

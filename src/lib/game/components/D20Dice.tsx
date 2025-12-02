@@ -81,12 +81,12 @@ export default function D20Dice({
         geometry={d20Geometry}
         onClick={(e) => {
           e.stopPropagation();
-          if (!isRolling && roll === null && onRoll) {
+          if (!isRolling && roll == null && onRoll) {
             onRoll();
           }
         }}
         onPointerEnter={() => {
-          if (!isRolling && roll === null && onRoll) {
+          if (!isRolling && roll == null && onRoll) {
             document.body.style.cursor = "pointer";
           }
         }}
@@ -99,18 +99,18 @@ export default function D20Dice({
           emissive={
             isDuplicate
               ? duplicateHighlight
-              : !isRolling && roll === null && onRoll
+              : !isRolling && roll == null && onRoll
               ? diceColor
               : "#000000"
           }
           emissiveIntensity={
-            isDuplicate ? 0.4 : !isRolling && roll === null && onRoll ? 0.1 : 0
+            isDuplicate ? 0.4 : !isRolling && roll == null && onRoll ? 0.1 : 0
           }
         />
       </mesh>
 
       {/* Show the result number above the dice */}
-      {roll !== null && hasCompletedRoll && (
+      {roll != null && hasCompletedRoll && (
         <Text
           font="/fantaisie_artistiqu.ttf"
           position={[0, 1.2, 0]}

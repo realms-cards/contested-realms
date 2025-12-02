@@ -647,7 +647,11 @@ export function RealtimeTournamentProvider({
 
       // Refresh standings for victory screen on completion, or matches on active
       if (data.newStatus === "completed") {
-        queueStatisticsRefresh({ standings: true, overview: true });
+        queueStatisticsRefresh({
+          standings: true,
+          overview: true,
+          rounds: true,
+        });
       } else if (data.newStatus === "active") {
         queueStatisticsRefresh({ matches: true, rounds: true });
       }

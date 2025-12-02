@@ -169,9 +169,9 @@ export function useTournamentStatistics(
     if (!tournamentId) {
       return;
     }
-    
+
     setState(prev => ({ ...prev, loading: true, error: null }));
-    
+
     try {
       const response = await fetch(`/api/tournaments/${tournamentId}/rounds`);
 
@@ -181,10 +181,10 @@ export function useTournamentStatistics(
       }
 
       const result = await response.json();
-      
+
       setState(prev => ({
         ...prev,
-        rounds: result.rounds,
+        rounds: result.rounds, // Now preserves matches with player data
         overview: {
           ...prev.overview,
           totalRounds: result.summary.totalRounds,
@@ -220,15 +220,12 @@ export function useTournamentStatistics(
       }
 
       const result = await response.json();
-      
+
       setState(prev => ({
         ...prev,
         standings: result.standings,
         overview: result.overview,
-        rounds: result.rounds.map((round: Record<string, unknown>) => ({
-          ...round,
-          matches: [] // Matches loaded separately
-        })),
+        rounds: result.rounds || [],
         lastUpdated: new Date().toISOString(),
         loading: false
       }));
