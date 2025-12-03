@@ -1,0 +1,14 @@
+# Card Scanner Training Dependencies for Apple Silicon (M1/M2/M3)
+#
+# Usage:
+#   python3 -m venv venv
+#   source venv/bin/activate
+#   pip install -r scripts/scanner/requirements-macos.txt
+#
+# This uses Apple's optimized TensorFlow with Metal GPU acceleration.
+
+tensorflow-macos>=2.12.0
+tensorflow-metal>=1.0.0
+tensorflowjs>=4.0.0
+pillow>=9.0.0
+numpy>=1.23.0

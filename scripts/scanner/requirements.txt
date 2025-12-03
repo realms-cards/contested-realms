@@ -1,0 +1,9 @@
+# Card Scanner Training Dependencies
+#
+# For Apple Silicon (M1/M2/M3), use requirements-macos.txt instead:
+#   pip install -r scripts/scanner/requirements-macos.txt
+#
+tensorflow>=2.13.0
+tensorflowjs>=4.0.0
+pillow>=9.0.0
+numpy>=1.24.0
