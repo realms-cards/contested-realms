@@ -15,6 +15,7 @@ import CreateCubeFromCollection from "./CreateCubeFromCollection";
 const tabs = [
   { href: "/collection", label: "My Collection", exact: true },
   { href: "/collection/browser", label: "Browse Cards" },
+  { href: "/collection/lists", label: "Lists" },
   { href: "/collection/decks", label: "My Decks" },
   { href: "/collection/stats", label: "Statistics" },
 ];

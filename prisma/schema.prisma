@@ -36,6 +36,7 @@ model Set {
   deckCards   DeckCard[] @relation("DeckCardSet")
   cubeCards   CubeCard[] @relation("CubeCardSet")
   collectionCards CollectionCard[] @relation("CollectionCardSet")
+  cardListCards   CardListCard[]   @relation("CardListCardSet")
 
   @@index([name])
 }
@@ -54,6 +55,7 @@ model Card {
   cubeCards  CubeCard[]
   evaluation CardEvaluation?
   collectionCards CollectionCard[]
+  cardListCards CardListCard[]
   championedByDecks Deck[] @relation("DeckChampion")
 
   @@index([name])
@@ -98,6 +100,7 @@ model Variant {
   deckCards DeckCard[] @relation("DeckCardVariant")
   cubeCards CubeCard[] @relation("CubeCardVariant")
   collectionCards CollectionCard[] @relation("CollectionCardVariant")
+  cardListCards   CardListCard[]   @relation("CardListCardVariant")
 
   @@index([setId])
   @@index([cardId])
@@ -277,6 +280,7 @@ model User {
   friendshipsTargeted   Friendship[] @relation("FriendshipTarget")
   tournamentInvitations TournamentInvitation[]
   collectionCards       CollectionCard[]
+  cardLists             CardList[]
 }
 
 model VerificationToken {
@@ -751,4 +755,42 @@ model CodexEntry {
   updatedAt DateTime @updatedAt
 
   @@index([title])
+}
+
+// User-defined card lists for arbitrary groupings (wishlists, want-to-buy, trade binders, etc.)
+model CardList {
+  id          String   @id @default(cuid())
+  name        String
+  description String?  @db.Text
+  userId      String
+  isPublic    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user  User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cards CardListCard[]
+
+  @@index([userId])
+  @@index([isPublic, createdAt])
+}
+
+model CardListCard {
+  id        Int      @id @default(autoincrement())
+  listId    String
+  cardId    Int
+  setId     Int?
+  variantId Int?
+  finish    Finish   @default(Standard)
+  quantity  Int      @default(1)
+  notes     String?  @db.Text
+  createdAt DateTime @default(now())
+
+  list    CardList @relation(fields: [listId], references: [id], onDelete: Cascade)
+  card    Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  set     Set?     @relation("CardListCardSet", fields: [setId], references: [id])
+  variant Variant? @relation("CardListCardVariant", fields: [variantId], references: [id])
+
+  @@unique([listId, cardId, variantId, finish])
+  @@index([listId])
+  @@index([cardId])
 }
