@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { memo } from "react";
+import { memo, useState } from "react";
 import { CodexTooltip } from "@/components/collection/CodexTooltip";
 import { useCodex } from "@/contexts/CodexContext";
 import type { CollectionCardResponse } from "@/lib/collection/types";
@@ -21,12 +21,18 @@ function CollectionCardInner({
   onDelete,
 }: CollectionCardProps) {
   const { showCodex } = useCodex();
+  const [imageError, setImageError] = useState(false);
 
-  // Build image URL
-  const imageSlug =
-    card.variant?.slug ||
-    `${card.card.name.toLowerCase().replace(/\s+/g, "_")}_b_s`;
-  const imageUrl = `/api/images/${imageSlug}`;
+  // Build image URL - only use variant slug if available
+  // Cards without variants (e.g., promo/special products) use placeholder
+  const imageSlug = card.variant?.slug;
+  const hasValidImage = !!imageSlug;
+  const primaryUrl = hasValidImage
+    ? `/api/images/${imageSlug}`
+    : "/placeholder-card.png"; // No CDN fallback - use placeholder for cards without variant
+
+  // Use placeholder if image failed to load
+  const imageUrl = imageError ? "/placeholder-card.png" : primaryUrl;
 
   const isFoil = card.finish === "Foil";
   const isSite = card.meta?.type?.toLowerCase().includes("site") || false;
@@ -66,9 +72,9 @@ function CollectionCardInner({
           fill
           className={isSite ? "object-contain rotate-90" : "object-cover"}
           sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, 16vw"
-          onError={(e) => {
-            // Fallback to placeholder
-            (e.target as HTMLImageElement).src = "/placeholder-card.png";
+          onError={() => {
+            // Use state to switch to placeholder (prevents flicker from direct src manipulation)
+            if (!imageError) setImageError(true);
           }}
         />
 
@@ -76,6 +82,16 @@ function CollectionCardInner({
         {isFoil && (
           <div className="absolute top-2 right-2 bg-yellow-500 text-black text-xs px-2 py-0.5 rounded font-bold">
             FOIL
+          </div>
+        )}
+
+        {/* No Image Warning */}
+        {!hasValidImage && (
+          <div
+            className="absolute top-2 left-2 bg-orange-500 text-white text-xs px-2 py-0.5 rounded font-bold"
+            title="This card has no image - it may be from a special product not in our database"
+          >
+            ⚠️
           </div>
         )}
 
@@ -104,45 +120,48 @@ function CollectionCardInner({
         )}
       </div>
 
-      {/* Hover Actions - hidden in codex mode */}
-      {!showCodex && (
-        <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center gap-2 p-2 opacity-0 group-hover:opacity-100 transition-opacity">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => onQuantityChange?.(card.quantity - 1)}
-              disabled={card.quantity <= 1}
-              className="w-8 h-8 bg-gray-700 hover:bg-gray-600 rounded-full font-bold disabled:opacity-50"
-            >
-              −
-            </button>
-            <span className="text-xl font-bold w-8 text-center">
-              {card.quantity}
-            </span>
-            <button
-              onClick={() => onQuantityChange?.(card.quantity + 1)}
-              disabled={card.quantity >= 99}
-              className="w-8 h-8 bg-gray-700 hover:bg-gray-600 rounded-full font-bold disabled:opacity-50"
-            >
-              +
-            </button>
-          </div>
-
+      {/* Hover Actions */}
+      <div
+        className={`absolute inset-0 bg-black/70 flex flex-col items-center justify-center gap-2 p-2 opacity-0 group-hover:opacity-100 transition-opacity ${
+          showCodex ? "pt-16" : ""
+        }`}
+      >
+        {/* Quantity controls */}
+        <div className="flex items-center gap-2">
           <button
-            onClick={onDelete}
-            className="text-red-400 hover:text-red-300 text-xs underline"
+            onClick={() => onQuantityChange?.(card.quantity - 1)}
+            disabled={card.quantity <= 1}
+            className="w-8 h-8 bg-gray-700 hover:bg-gray-600 rounded-full font-bold disabled:opacity-50"
           >
-            Remove
+            −
           </button>
-
-          {/* Price/Buy Link */}
-          <CardPriceTag
-            cardId={card.cardId}
-            cardName={card.card.name}
-            variantId={card.variantId}
-            finish={card.finish}
-          />
+          <span className="text-xl font-bold w-8 text-center">
+            {card.quantity}
+          </span>
+          <button
+            onClick={() => onQuantityChange?.(card.quantity + 1)}
+            disabled={card.quantity >= 99}
+            className="w-8 h-8 bg-gray-700 hover:bg-gray-600 rounded-full font-bold disabled:opacity-50"
+          >
+            +
+          </button>
         </div>
-      )}
+
+        <button
+          onClick={onDelete}
+          className="text-red-400 hover:text-red-300 text-xs underline"
+        >
+          Remove
+        </button>
+
+        {/* Price/Buy Link */}
+        <CardPriceTag
+          cardId={card.cardId}
+          cardName={card.card.name}
+          variantId={card.variantId}
+          finish={card.finish}
+        />
+      </div>
     </div>
   );
 }

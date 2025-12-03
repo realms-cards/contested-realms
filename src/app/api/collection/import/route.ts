@@ -122,6 +122,214 @@ export async function POST(req: NextRequest) {
           cardId: card.id,
         });
       }
+    } else if (format === "curiosa") {
+      // Curiosa Collection CSV format: card name,set,finish,product,quantity,notes
+      const lines = text.split(/[\r\n]+/).filter((l: string) => l.trim());
+
+      const parsedLines: Array<{
+        name: string;
+        count: number;
+        finish: string;
+        set: string;
+        notes: string;
+      }> = [];
+      for (const line of lines) {
+        // Skip header line
+        if (line.toLowerCase().startsWith("card name,")) {
+          continue;
+        }
+
+        // Parse CSV - handle quoted fields properly
+        const fields = parseCSVLine(line);
+        if (fields.length < 5) {
+          errors.push({
+            name: line.substring(0, 30),
+            message: "Invalid CSV format",
+          });
+          continue;
+        }
+
+        const name = fields[0].trim();
+        const set = fields[1]?.trim() || "";
+        const finish = fields[2]?.trim() || "Standard";
+        // product is fields[3] - we don't need it
+        const count = parseInt(fields[4], 10) || 1;
+        const notes = fields[5]?.trim() || "";
+
+        if (!name) {
+          errors.push({
+            name: line.substring(0, 30),
+            message: "Missing card name",
+          });
+          continue;
+        }
+
+        parsedLines.push({ name, count, finish, set, notes });
+      }
+
+      // Batch lookup all card names with their variants
+      const cardNames = parsedLines.map((p) => p.name);
+      const cards = await prisma.card.findMany({
+        where: { name: { in: cardNames, mode: "insensitive" } },
+        select: {
+          id: true,
+          name: true,
+          variants: {
+            select: {
+              id: true,
+              setId: true,
+              finish: true,
+              set: { select: { name: true } },
+            },
+          },
+        },
+      });
+
+      // Build lookup map: cardName -> { id, variants }
+      const cardByName = new Map(cards.map((c) => [c.name.toLowerCase(), c]));
+
+      // Match parsed lines to cards with variant resolution
+      const matchedCards: Array<{
+        cardId: number;
+        variantId: number | null;
+        setId: number | null;
+        name: string;
+        count: number;
+        finish: string;
+        notes: string;
+      }> = [];
+      for (const line of parsedLines) {
+        const card = cardByName.get(line.name.toLowerCase());
+        if (!card) {
+          errors.push({ name: line.name, message: "Card not found" });
+          added.push({ name: line.name, quantity: line.count, matched: false });
+          continue;
+        }
+
+        // Try to find a matching variant by set name and finish
+        let variantId: number | null = null;
+        let setId: number | null = null;
+        const normalizedFinish = normalizeFinish(line.finish);
+
+        if (card.variants && card.variants.length > 0) {
+          // First try exact set name + finish match
+          let variant = card.variants.find(
+            (v) =>
+              v.set?.name?.toLowerCase() === line.set.toLowerCase() &&
+              v.finish === normalizedFinish
+          );
+
+          // Fall back to just set name match
+          if (!variant && line.set) {
+            variant = card.variants.find(
+              (v) => v.set?.name?.toLowerCase() === line.set.toLowerCase()
+            );
+          }
+
+          // Fall back to any variant with matching finish
+          if (!variant) {
+            variant = card.variants.find((v) => v.finish === normalizedFinish);
+          }
+
+          // Final fallback: first available variant
+          if (!variant) {
+            variant = card.variants[0];
+          }
+
+          if (variant) {
+            variantId = variant.id;
+            setId = variant.setId;
+          }
+        }
+
+        // Warn if no variant found (e.g., special product cards)
+        if (!variantId) {
+          errors.push({
+            name: card.name,
+            message: `No variant found for set "${line.set}" - card will show placeholder image`,
+          });
+        }
+
+        matchedCards.push({
+          cardId: card.id,
+          variantId,
+          setId,
+          name: card.name,
+          count: line.count,
+          finish: normalizedFinish,
+          notes: line.notes,
+        });
+      }
+
+      // Batch check existing collection cards
+      const cardIds = matchedCards.map((m) => m.cardId);
+      const existingCards = await prisma.collectionCard.findMany({
+        where: { userId, cardId: { in: cardIds } },
+        select: {
+          id: true,
+          cardId: true,
+          variantId: true,
+          quantity: true,
+          finish: true,
+          notes: true,
+        },
+      });
+
+      // Group by cardId+variantId+finish for proper matching
+      const existingByKey = new Map(
+        existingCards.map((e) => [
+          `${e.cardId}-${e.variantId || "null"}-${e.finish}`,
+          e,
+        ])
+      );
+
+      const updateOps = [];
+      const createOps = [];
+
+      for (const match of matchedCards) {
+        const key = `${match.cardId}-${match.variantId || "null"}-${
+          match.finish
+        }`;
+        const existing = existingByKey.get(key);
+        if (existing) {
+          const newQuantity = Math.min(99, existing.quantity + match.count);
+          // Append notes if both have them, otherwise use whichever has content
+          const newNotes =
+            existing.notes && match.notes
+              ? `${existing.notes}; ${match.notes}`
+              : existing.notes || match.notes || null;
+          updateOps.push(
+            prisma.collectionCard.update({
+              where: { id: existing.id },
+              data: { quantity: newQuantity, notes: newNotes },
+            })
+          );
+        } else {
+          createOps.push(
+            prisma.collectionCard.create({
+              data: {
+                userId,
+                cardId: match.cardId,
+                variantId: match.variantId,
+                setId: match.setId,
+                finish: match.finish as "Standard" | "Foil",
+                quantity: Math.min(99, match.count),
+                notes: match.notes || null,
+              },
+            })
+          );
+        }
+        added.push({
+          name: match.name,
+          quantity: match.count,
+          matched: true,
+          cardId: match.cardId,
+        });
+      }
+
+      if (updateOps.length > 0 || createOps.length > 0) {
+        await prisma.$transaction([...updateOps, ...createOps]);
+      }
     } else if (format === "csv") {
       // Simple CSV format: "quantity,name" per line
       // Optimized: Batch all lookups and upserts instead of sequential queries
@@ -151,7 +359,7 @@ export async function POST(req: NextRequest) {
       }
 
       // Batch lookup all card names at once (1 query instead of N)
-      const cardNames = parsedLines.map(p => p.name);
+      const cardNames = parsedLines.map((p) => p.name);
       const cards = await prisma.card.findMany({
         where: {
           name: {
@@ -163,12 +371,14 @@ export async function POST(req: NextRequest) {
       });
 
       // Create lookup map (case-insensitive)
-      const cardByName = new Map(
-        cards.map(c => [c.name.toLowerCase(), c])
-      );
+      const cardByName = new Map(cards.map((c) => [c.name.toLowerCase(), c]));
 
       // Match parsed lines to cards
-      const matchedCards: Array<{ cardId: number; name: string; count: number }> = [];
+      const matchedCards: Array<{
+        cardId: number;
+        name: string;
+        count: number;
+      }> = [];
       for (const line of parsedLines) {
         const card = cardByName.get(line.name.toLowerCase());
         if (!card) {
@@ -176,11 +386,15 @@ export async function POST(req: NextRequest) {
           added.push({ name: line.name, quantity: line.count, matched: false });
           continue;
         }
-        matchedCards.push({ cardId: card.id, name: card.name, count: line.count });
+        matchedCards.push({
+          cardId: card.id,
+          name: card.name,
+          count: line.count,
+        });
       }
 
       // Batch check existing collection cards (1 query instead of N)
-      const cardIds = matchedCards.map(m => m.cardId);
+      const cardIds = matchedCards.map((m) => m.cardId);
       const existingCards = await prisma.collectionCard.findMany({
         where: {
           userId,
@@ -190,9 +404,7 @@ export async function POST(req: NextRequest) {
         select: { id: true, cardId: true, quantity: true },
       });
 
-      const existingByCardId = new Map(
-        existingCards.map(e => [e.cardId, e])
-      );
+      const existingByCardId = new Map(existingCards.map((e) => [e.cardId, e]));
 
       // Batch upsert operations
       const updateOps = [];
@@ -220,7 +432,12 @@ export async function POST(req: NextRequest) {
             })
           );
         }
-        added.push({ name: match.name, quantity: match.count, matched: true, cardId: match.cardId });
+        added.push({
+          name: match.name,
+          quantity: match.count,
+          matched: true,
+          cardId: match.cardId,
+        });
       }
 
       // Execute all upserts in a single transaction (1 transaction instead of N queries)
@@ -252,4 +469,40 @@ export async function POST(req: NextRequest) {
       }
     );
   }
+}
+
+// Helper: Parse a CSV line handling quoted fields
+function parseCSVLine(line: string): string[] {
+  const result: string[] = [];
+  let current = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    if (char === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        // Escaped quote
+        current += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === "," && !inQuotes) {
+      result.push(current);
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+  result.push(current);
+  return result;
+}
+
+// Helper: Normalize finish string to match our enum
+function normalizeFinish(finish: string): string {
+  const lower = finish.toLowerCase();
+  if (lower === "foil" || lower === "premium" || lower === "holo") {
+    return "Foil";
+  }
+  return "Standard";
 }

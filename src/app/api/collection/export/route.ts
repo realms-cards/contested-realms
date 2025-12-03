@@ -77,6 +77,31 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    if (format === "curiosa") {
+      // Curiosa Collection CSV format: card name,set,finish,product,quantity,notes
+      const header = "card name,set,finish,product,quantity,notes";
+      const rows = collection.map((c) => {
+        const cardName = c.card.name.replace(/,/g, ""); // Remove commas for unquoted CSV
+        const setName = c.set?.name || "";
+        const finish = c.finish;
+        const product = "Booster"; // Default product type
+        const quantity = c.quantity;
+        const notes = (c.notes || "").replace(/,/g, ""); // Remove commas
+        return `${cardName},${setName},${finish},${product},${quantity},${notes}`;
+      });
+
+      const csv = [header, ...rows].join("\n");
+      const timestamp = new Date().toISOString();
+
+      return new Response(csv, {
+        status: 200,
+        headers: {
+          "content-type": "text/csv",
+          "content-disposition": `attachment; filename="collection-${timestamp}.csv"`,
+        },
+      });
+    }
+
     // Default: CSV format
     const header = '"Quantity","Card Name","Set","Finish","Variant"';
     const rows = collection.map((c) => {
