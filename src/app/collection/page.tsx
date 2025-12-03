@@ -212,6 +212,12 @@ export default function CollectionPage() {
             Quick Add Cards
           </button>
           <Link
+            href="/collection/scan"
+            className="px-6 py-3 bg-cyan-600 hover:bg-cyan-700 rounded-lg font-medium transition-colors flex items-center gap-2"
+          >
+            📷 Scan Cards
+          </Link>
+          <Link
             href="/collection/browser"
             className="px-6 py-3 bg-gray-700 hover:bg-gray-600 rounded-lg font-medium transition-colors"
           >
@@ -250,13 +256,19 @@ export default function CollectionPage() {
             </div>
             <div className="text-gray-400 text-sm">Est. Value</div>
           </div>
-          <div className="bg-gray-800 rounded-lg p-4 flex items-center justify-center">
+          <div className="bg-gray-800 rounded-lg p-4 flex items-center justify-center gap-2">
             <button
               onClick={() => setShowQuickAdd(true)}
               className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-medium transition-colors"
             >
               + Quick Add
             </button>
+            <Link
+              href="/collection/scan"
+              className="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 rounded-lg text-sm font-medium transition-colors"
+            >
+              📷 Scan
+            </Link>
           </div>
         </div>
       )}

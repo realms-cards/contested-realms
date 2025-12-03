@@ -48,6 +48,8 @@ next-env.d.ts
 /data/arthurian_legends
 
 /data/tokens/
+/data/scanner-training
+/data/scanner-feedback
 /data-ktx2
 /data-webp
 /data/Dragonlord
