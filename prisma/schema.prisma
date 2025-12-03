@@ -209,6 +209,7 @@ model CollectionCard {
   variantId Int?
   finish    Finish   @default(Standard)
   quantity  Int      @default(1)
+  notes     String?  // Optional notes (e.g., condition, source, Curiosa notes)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

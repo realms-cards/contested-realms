@@ -26,7 +26,7 @@ export interface CollectionCardUpdate {
 /** Batch import input */
 export interface CollectionImportInput {
   text: string;
-  format: "sorcery" | "csv";
+  format: "sorcery" | "csv" | "curiosa";
 }
 
 // ============================================================================
@@ -227,4 +227,4 @@ export type CollectionSortField = "name" | "quantity" | "recent" | "value";
 export type SortOrder = "asc" | "desc";
 
 /** Export format options */
-export type ExportFormat = "csv" | "json" | "text";
+export type ExportFormat = "csv" | "json" | "text" | "curiosa";
