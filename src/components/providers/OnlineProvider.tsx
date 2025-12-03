@@ -106,7 +106,10 @@ export default function OnlineProvider({
   >(null);
   const [socialError, setSocialError] = useState<string | null>(null);
   const socialErrorTimer = useRef<number | null>(null);
-  const [connToast, setConnToast] = useState<string | null>(null);
+  const [connToast, setConnToast] = useState<{
+    message: string;
+    tone: "info" | "error";
+  } | null>(null);
   const [appToast, setAppToast] = useState<string | null>(null);
   const [resyncing, setResyncing] = useState<boolean>(false);
   const [voicePlaybackEnabled, setVoicePlaybackEnabled] = useState(true);
@@ -156,61 +159,77 @@ export default function OnlineProvider({
   useEffect(() => {
     if (!transport) return;
     let mounted = true;
-    let disconnectedSince: number | null = null;
-    let toastTimerId: number | null = null;
+    let reconnectToastTimer: number | null = null;
+    let disconnectToastTimer: number | null = null;
 
-    const readConnected = () => {
+    const readConnectionState = (): string => {
       try {
         const anyT = transport as unknown as {
           isConnected?: () => boolean;
           getConnectionState?: () => string;
         };
-        if (anyT?.isConnected) return !!anyT.isConnected();
-        if (anyT?.getConnectionState)
-          return anyT.getConnectionState() === "connected";
-        return false;
-      } catch {
-        return false;
+        if (anyT?.getConnectionState) return anyT.getConnectionState();
+        if (anyT?.isConnected && anyT.isConnected()) return "connected";
+      } catch {}
+      return "disconnected";
+    };
+
+    const showConnToast = (
+      message: string,
+      tone: "info" | "error",
+      duration = 4000
+    ) => {
+      setConnToast({ message, tone });
+      window.setTimeout(() => {
+        if (mounted) setConnToast(null);
+      }, duration);
+    };
+
+    const clearToastTimers = () => {
+      if (reconnectToastTimer !== null) {
+        window.clearTimeout(reconnectToastTimer);
+        reconnectToastTimer = null;
+      }
+      if (disconnectToastTimer !== null) {
+        window.clearTimeout(disconnectToastTimer);
+        disconnectToastTimer = null;
       }
     };
-    let prev = readConnected();
+
+    let prevConnected = readConnectionState() === "connected";
+
     const tick = () => {
       if (!mounted) return;
-      const now = readConnected();
-      if (now !== prev) {
-        prev = now;
-        setConnected(now);
-        if (!now) {
-          // Connection lost - start grace period timer
-          if (disconnectedSince === null) {
-            disconnectedSince = Date.now();
-            // Show toast after 3 seconds if still disconnected
-            toastTimerId = window.setTimeout(() => {
-              if (!mounted || prev) return; // Reconnected in the meantime
-              setConnToast("Lost connection to the server");
-              window.setTimeout(() => setConnToast(null), 4000);
-            }, 3000);
-          }
+      const state = readConnectionState();
+      const nowConnected = state === "connected";
+      if (nowConnected !== prevConnected) {
+        prevConnected = nowConnected;
+        setConnected(nowConnected);
+        if (!nowConnected) {
+          clearToastTimers();
+          reconnectToastTimer = window.setTimeout(() => {
+            if (!mounted || prevConnected) return; // Reconnected in the meantime
+            showConnToast("Reconnecting to Server", "info");
+          }, 3000);
+          disconnectToastTimer = window.setTimeout(() => {
+            if (!mounted || prevConnected) return;
+            if (readConnectionState() !== "connected") {
+              showConnToast("Disconnected from Server", "error");
+            }
+          }, 15000);
         } else {
-          // Reconnected - clear grace period timer
-          if (toastTimerId !== null) {
-            window.clearTimeout(toastTimerId);
-            toastTimerId = null;
-          }
-          disconnectedSince = null;
+          clearToastTimers();
+          setConnToast(null);
         }
       }
     };
+
     const id = window.setInterval(tick, 1000);
-    try {
-      tick();
-    } catch {}
+    tick();
     return () => {
       mounted = false;
+      clearToastTimers();
       window.clearInterval(id);
-      if (toastTimerId !== null) {
-        window.clearTimeout(toastTimerId);
-      }
     };
   }, [transport]);
 
@@ -1477,8 +1496,14 @@ export default function OnlineProvider({
     <OnlineContext.Provider value={ctxValue}>
       {children}
       {connToast && (
-        <div className="fixed top-3 right-3 z-[3000] bg-red-600/90 text-white text-sm px-3 py-2 rounded shadow ring-1 ring-white/20">
-          {connToast}
+        <div
+          className={`fixed top-3 right-3 z-[3000] text-white text-sm px-3 py-2 rounded shadow ring-1 ring-white/20 ${
+            connToast.tone === "error"
+              ? "bg-red-600/90"
+              : "bg-green-600/90"
+          }`}
+        >
+          {connToast.message}
         </div>
       )}
       {appToast && (
