@@ -20,15 +20,17 @@ export default function CollectionGrid({
   onQuantityChange,
 }: CollectionGridProps) {
   // Always call hooks at the top level (Rules of Hooks)
-  // Local optimistic state for quantities
+  // Local optimistic state for quantities and notes
   const [localQuantities, setLocalQuantities] = useState<Map<number, number>>(
     new Map()
   );
+  const [localNotes, setLocalNotes] = useState<Map<number, string>>(new Map());
   const refreshDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Clear local quantities when cards prop changes (after refresh)
+  // Clear local state when cards prop changes (after refresh)
   useEffect(() => {
     setLocalQuantities(new Map());
+    setLocalNotes(new Map());
   }, [cards]);
 
   // Use virtualization for large collections (50+ cards) to maintain 60fps
@@ -113,7 +115,14 @@ export default function CollectionGrid({
   };
 
   const handleNotesUpdate = (id: number, notes: string) => {
-    // Fire API call async
+    // Optimistic update - immediately reflect in UI
+    setLocalNotes((prev) => {
+      const next = new Map(prev);
+      next.set(id, notes);
+      return next;
+    });
+
+    // Fire API call async (no refresh needed - it's just metadata)
     fetch(`/api/collection/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -125,7 +134,7 @@ export default function CollectionGrid({
             console.error("Failed to update notes:", err.error);
           });
         }
-        debouncedRefresh();
+        // No refresh - notes are purely local UI metadata
       })
       .catch((e) => {
         console.error("Failed to update notes:", e);
@@ -153,7 +162,7 @@ export default function CollectionGrid({
     );
   }
 
-  // Filter out optimistically deleted cards and apply local quantity overrides
+  // Filter out optimistically deleted cards and apply local overrides
   const visibleCards = cards
     .filter((card) => {
       const localQty = localQuantities.get(card.id);
@@ -161,10 +170,15 @@ export default function CollectionGrid({
     })
     .map((card) => {
       const localQty = localQuantities.get(card.id);
+      const localNote = localNotes.get(card.id);
+      let updated = card;
       if (localQty !== undefined && localQty > 0) {
-        return { ...card, quantity: localQty };
+        updated = { ...updated, quantity: localQty };
       }
-      return card;
+      if (localNote !== undefined) {
+        updated = { ...updated, notes: localNote };
+      }
+      return updated;
     });
 
   return (
