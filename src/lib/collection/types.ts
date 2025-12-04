@@ -62,6 +62,7 @@ export interface CollectionCardResponse {
   setId: number | null;
   finish: Finish;
   quantity: number;
+  notes: string | null;
   card: {
     name: string;
     elements: string | null;

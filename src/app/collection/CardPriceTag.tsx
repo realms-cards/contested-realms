@@ -1,5 +1,6 @@
 "use client";
 
+import type { Finish } from "@prisma/client";
 import { useEffect, useState, useRef } from "react";
 
 // Feature flag for pricing - set to true when pricing API is available
@@ -9,7 +10,7 @@ interface CardPriceTagProps {
   cardId: number;
   cardName: string;
   variantId?: number | null;
-  finish?: "Standard" | "Foil";
+  finish?: Finish;
   showLink?: boolean;
 }
 

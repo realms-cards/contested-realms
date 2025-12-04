@@ -149,5 +149,9 @@ jobs:
           # Cleanup migrate container to allow re-run on next deploy
           $COMPOSE -f docker-compose.prod.single.yml rm -f migrate || true
 
+          # Prune unused Docker images to prevent disk from filling up
+          echo "Pruning unused Docker images..."
+          docker image prune -af --filter "until=24h" || true
+
           echo "Deployment complete."
           EOF

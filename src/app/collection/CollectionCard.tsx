@@ -11,17 +11,74 @@ interface CollectionCardProps {
   card: CollectionCardResponse;
   updating?: boolean;
   onQuantityChange?: (quantity: number) => void;
+  onNotesChange?: (notes: string) => void;
   onDelete?: () => void;
+}
+
+// Tag definitions for parsing notes
+const TAG_PATTERNS = [
+  {
+    tag: "promo",
+    pattern: /\bpromo\b/i,
+    color: "bg-purple-500",
+    label: "Promo",
+  },
+  { tag: "mint", pattern: /\bmint\b/i, color: "bg-green-500", label: "Mint" },
+  {
+    tag: "nm",
+    pattern: /\b(near[- ]?mint|nm)\b/i,
+    color: "bg-green-400",
+    label: "NM",
+  },
+  {
+    tag: "normal",
+    pattern: /\bnormal\b/i,
+    color: "bg-gray-500",
+    label: "Normal",
+  },
+  { tag: "poor", pattern: /\bpoor\b/i, color: "bg-red-500", label: "Poor" },
+  {
+    tag: "wanted",
+    pattern: /\bwanted\b/i,
+    color: "bg-blue-500",
+    label: "Wanted",
+  },
+  {
+    tag: "selling",
+    pattern: /\b(selling|for sale|fs)\b/i,
+    color: "bg-yellow-500 text-black",
+    label: "Selling",
+  },
+] as const;
+
+function parseNoteTags(notes: string | null): string[] {
+  if (!notes) return [];
+  return TAG_PATTERNS.filter(({ pattern }) => pattern.test(notes)).map(
+    ({ tag }) => tag
+  );
+}
+
+function getTagStyle(tag: string): { color: string; label: string } {
+  const found = TAG_PATTERNS.find((t) => t.tag === tag);
+  return found
+    ? { color: found.color, label: found.label }
+    : { color: "bg-gray-500", label: tag };
 }
 
 function CollectionCardInner({
   card,
   updating,
   onQuantityChange,
+  onNotesChange,
   onDelete,
 }: CollectionCardProps) {
   const { showCodex } = useCodex();
   const [imageError, setImageError] = useState(false);
+  const [editingNotes, setEditingNotes] = useState(false);
+  const [notesValue, setNotesValue] = useState(card.notes || "");
+
+  // Parse tags from notes
+  const tags = parseNoteTags(card.notes);
 
   // Build image URL - only use variant slug if available
   // Cards without variants (e.g., promo/special products) use placeholder
@@ -99,6 +156,23 @@ function CollectionCardInner({
         <div className="absolute bottom-2 right-2 bg-black/80 text-white px-2 py-1 rounded-full text-sm font-bold min-w-[2rem] text-center">
           ×{card.quantity}
         </div>
+
+        {/* Tags from notes */}
+        {tags.length > 0 && (
+          <div className="absolute top-2 left-2 flex flex-wrap gap-1">
+            {tags.map((tag) => {
+              const { color, label } = getTagStyle(tag);
+              return (
+                <span
+                  key={tag}
+                  className={`${color} text-xs px-1.5 py-0.5 rounded font-medium`}
+                >
+                  {label}
+                </span>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Card Info */}
@@ -114,6 +188,15 @@ function CollectionCardInner({
             </span>
           )}
         </div>
+        {/* Notes preview */}
+        {card.notes && (
+          <div
+            className="text-xs text-gray-500 truncate mt-0.5"
+            title={card.notes}
+          >
+            📝 {card.notes}
+          </div>
+        )}
         {/* Codex errata info */}
         {showCodex && (
           <CodexTooltip cardName={card.card.name} className="mt-1" />
@@ -146,6 +229,57 @@ function CollectionCardInner({
             +
           </button>
         </div>
+
+        {/* Notes editing */}
+        {editingNotes ? (
+          <div className="w-full px-2">
+            <textarea
+              value={notesValue}
+              onChange={(e) => setNotesValue(e.target.value)}
+              placeholder="Add notes... (promo, mint, nm, poor, wanted, selling)"
+              className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-white resize-none"
+              rows={2}
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  onNotesChange?.(notesValue);
+                  setEditingNotes(false);
+                } else if (e.key === "Escape") {
+                  setNotesValue(card.notes || "");
+                  setEditingNotes(false);
+                }
+              }}
+            />
+            <div className="flex gap-1 mt-1">
+              <button
+                onClick={() => {
+                  onNotesChange?.(notesValue);
+                  setEditingNotes(false);
+                }}
+                className="text-xs bg-green-600 hover:bg-green-500 px-2 py-0.5 rounded"
+              >
+                Save
+              </button>
+              <button
+                onClick={() => {
+                  setNotesValue(card.notes || "");
+                  setEditingNotes(false);
+                }}
+                className="text-xs bg-gray-600 hover:bg-gray-500 px-2 py-0.5 rounded"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={() => setEditingNotes(true)}
+            className="text-cyan-400 hover:text-cyan-300 text-xs"
+          >
+            {card.notes ? "📝 Edit Notes" : "📝 Add Notes"}
+          </button>
+        )}
 
         <button
           onClick={onDelete}

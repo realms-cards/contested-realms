@@ -112,6 +112,26 @@ export default function CollectionGrid({
       });
   };
 
+  const handleNotesUpdate = (id: number, notes: string) => {
+    // Fire API call async
+    fetch(`/api/collection/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ notes }),
+    })
+      .then((res) => {
+        if (!res.ok) {
+          res.json().then((err) => {
+            console.error("Failed to update notes:", err.error);
+          });
+        }
+        debouncedRefresh();
+      })
+      .catch((e) => {
+        console.error("Failed to update notes:", e);
+      });
+  };
+
   if (loading) {
     return (
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
@@ -154,6 +174,7 @@ export default function CollectionGrid({
           key={card.id}
           card={card}
           onQuantityChange={(qty) => handleQuantityUpdate(card.id, qty)}
+          onNotesChange={(notes) => handleNotesUpdate(card.id, notes)}
           onDelete={() => handleDelete(card.id)}
         />
       ))}

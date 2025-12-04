@@ -245,7 +245,10 @@ export class OCRScanner {
       }
       ctx.putImageData(imgData, 0, 0);
 
-      const res = await this.worker!.recognize(canvas);
+      if (!this.worker) {
+        throw new Error("OCR worker not initialized");
+      }
+      const res = await this.worker.recognize(canvas);
       return {
         text: res.data.text.trim(),
         confidence: res.data.confidence / 100,

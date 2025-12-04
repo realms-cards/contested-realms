@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 export const dynamic = "force-dynamic";
 
 // PATCH /api/collection/[id]
-// Body: { quantity: number }
+// Body: { quantity?: number, notes?: string }
 // If quantity <= 0, deletes the entry
 export async function PATCH(
   req: NextRequest,
@@ -54,42 +54,56 @@ export async function PATCH(
 
     const body = await req.json();
     const newQuantity = body?.quantity;
+    const newNotes = body?.notes;
 
-    if (typeof newQuantity !== "number") {
+    // Build update data
+    const updateData: { quantity?: number; notes?: string | null } = {};
+
+    // Handle quantity update
+    if (typeof newQuantity === "number") {
+      // If quantity is 0 or less, delete the entry
+      if (newQuantity <= 0) {
+        await prisma.collectionCard.delete({
+          where: { id: entryId },
+        });
+
+        return new Response(JSON.stringify({ deleted: true, id: entryId }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+
+      // Validate quantity
+      const validation = validateQuantity(newQuantity);
+      if (!validation.valid) {
+        return new Response(
+          JSON.stringify({ error: validation.error, code: "INVALID_QUANTITY" }),
+          { status: 400, headers: { "content-type": "application/json" } }
+        );
+      }
+      updateData.quantity = newQuantity;
+    }
+
+    // Handle notes update (can be string or null to clear)
+    if (typeof newNotes === "string" || newNotes === null) {
+      updateData.notes = newNotes || null;
+    }
+
+    // Must have at least one field to update
+    if (Object.keys(updateData).length === 0) {
       return new Response(
         JSON.stringify({
-          error: "Quantity is required",
-          code: "INVALID_QUANTITY",
+          error: "No valid fields to update",
+          code: "INVALID_REQUEST",
         }),
         { status: 400, headers: { "content-type": "application/json" } }
       );
     }
 
-    // If quantity is 0 or less, delete the entry
-    if (newQuantity <= 0) {
-      await prisma.collectionCard.delete({
-        where: { id: entryId },
-      });
-
-      return new Response(JSON.stringify({ deleted: true, id: entryId }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      });
-    }
-
-    // Validate quantity
-    const validation = validateQuantity(newQuantity);
-    if (!validation.valid) {
-      return new Response(
-        JSON.stringify({ error: validation.error, code: "INVALID_QUANTITY" }),
-        { status: 400, headers: { "content-type": "application/json" } }
-      );
-    }
-
-    // Update quantity
+    // Update the entry
     const updated = await prisma.collectionCard.update({
       where: { id: entryId },
-      data: { quantity: newQuantity },
+      data: updateData,
     });
 
     return new Response(
@@ -97,6 +111,7 @@ export async function PATCH(
         id: updated.id,
         cardId: updated.cardId,
         quantity: updated.quantity,
+        notes: updated.notes,
         updatedAt: updated.updatedAt.toISOString(),
       }),
       { status: 200, headers: { "content-type": "application/json" } }

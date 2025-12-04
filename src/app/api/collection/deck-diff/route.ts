@@ -154,7 +154,7 @@ export async function GET(req: NextRequest) {
       select: { cardId: true, rarity: true },
     });
     for (const meta of cardMetas) {
-      if (!rarityByCardId.has(meta.cardId)) {
+      if (!rarityByCardId.has(meta.cardId) && meta.rarity) {
         rarityByCardId.set(meta.cardId, meta.rarity);
       }
     }
@@ -349,7 +349,7 @@ export async function POST(req: NextRequest) {
       select: { cardId: true, rarity: true },
     });
     for (const meta of cardMetas) {
-      if (!rarityByCardId.has(meta.cardId)) {
+      if (!rarityByCardId.has(meta.cardId) && meta.rarity) {
         rarityByCardId.set(meta.cardId, meta.rarity);
       }
     }
