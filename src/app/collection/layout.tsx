@@ -74,7 +74,7 @@ function CollectionLayoutContent({
   userName: string;
 }) {
   const { connected } = usePresence();
-  const { showCodex, setShowCodex } = useCodex();
+  const { showCodex, setShowCodex, showNotes, setShowNotes } = useCodex();
 
   // Trigger refresh event for collection components
   const handleCollectionRefresh = () => {
@@ -111,6 +111,20 @@ function CollectionLayoutContent({
 
               {/* Create Cube */}
               <CreateCubeFromCollection />
+
+              {/* Notes toggle */}
+              <button
+                onClick={() => setShowNotes(!showNotes)}
+                className={`flex items-center gap-1.5 px-2 py-1 rounded text-xs transition-colors ${
+                  showNotes
+                    ? "bg-cyan-600/30 text-cyan-300 border border-cyan-500/50"
+                    : "text-gray-400 hover:text-cyan-300 hover:bg-gray-800"
+                }`}
+                title="Show/hide notes on cards"
+              >
+                <span>📝</span>
+                <span className="hidden sm:inline">Notes</span>
+              </button>
 
               {/* Codex toggle */}
               <button

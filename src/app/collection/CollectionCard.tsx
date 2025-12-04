@@ -72,7 +72,28 @@ function CollectionCardInner({
   onNotesChange,
   onDelete,
 }: CollectionCardProps) {
-  const { showCodex } = useCodex();
+  const { showCodex, showNotes } = useCodex();
+
+  // Toggle a tag in the notes text
+  const toggleTag = (tagLabel: string) => {
+    const lower = tagLabel.toLowerCase();
+    const pattern = new RegExp(`\\b${lower}\\b`, "i");
+    if (pattern.test(notesValue)) {
+      // Remove tag
+      setNotesValue(
+        notesValue.replace(pattern, "").replace(/\s+/g, " ").trim()
+      );
+    } else {
+      // Add tag
+      setNotesValue((notesValue + " " + lower).trim());
+    }
+  };
+
+  // Check if a tag is active in current notes value
+  const isTagActive = (tagLabel: string) => {
+    const lower = tagLabel.toLowerCase();
+    return new RegExp(`\\b${lower}\\b`, "i").test(notesValue);
+  };
   const [imageError, setImageError] = useState(false);
   const [editingNotes, setEditingNotes] = useState(false);
   const [notesValue, setNotesValue] = useState(card.notes || "");
@@ -189,7 +210,7 @@ function CollectionCardInner({
           )}
         </div>
         {/* Notes preview */}
-        {card.notes && (
+        {showNotes && card.notes && (
           <div
             className="text-xs text-gray-500 truncate mt-0.5"
             title={card.notes}
@@ -251,6 +272,22 @@ function CollectionCardInner({
                 }
               }}
             />
+            {/* Quick tag buttons */}
+            <div className="flex flex-wrap gap-1 mt-1">
+              {TAG_PATTERNS.map(({ tag, label, color }) => (
+                <button
+                  key={tag}
+                  onClick={() => toggleTag(label)}
+                  className={`text-xs px-1.5 py-0.5 rounded transition-all ${
+                    isTagActive(label)
+                      ? `${color} ring-2 ring-white/50`
+                      : "bg-gray-700 hover:bg-gray-600 text-gray-300"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
             <div className="flex gap-1 mt-1">
               <button
                 onClick={() => {
