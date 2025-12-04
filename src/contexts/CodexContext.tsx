@@ -11,20 +11,27 @@ import {
 interface CodexContextType {
   showCodex: boolean;
   setShowCodex: (show: boolean) => void;
+  showNotes: boolean;
+  setShowNotes: (show: boolean) => void;
 }
 
 const CodexContext = createContext<CodexContextType>({
   showCodex: false,
   setShowCodex: () => {},
+  showNotes: true,
+  setShowNotes: () => {},
 });
 
 export function CodexProvider({ children }: { children: ReactNode }) {
   const [showCodex, setShowCodex] = useState(false);
+  const [showNotes, setShowNotes] = useState(true);
 
-  // Persist preference
+  // Persist preferences
   useEffect(() => {
-    const stored = localStorage.getItem("collection:showCodex");
-    if (stored === "1") setShowCodex(true);
+    const storedCodex = localStorage.getItem("collection:showCodex");
+    if (storedCodex === "1") setShowCodex(true);
+    const storedNotes = localStorage.getItem("collection:showNotes");
+    if (storedNotes === "0") setShowNotes(false); // Default to showing notes
   }, []);
 
   const handleSetShowCodex = (show: boolean) => {
@@ -32,9 +39,19 @@ export function CodexProvider({ children }: { children: ReactNode }) {
     localStorage.setItem("collection:showCodex", show ? "1" : "0");
   };
 
+  const handleSetShowNotes = (show: boolean) => {
+    setShowNotes(show);
+    localStorage.setItem("collection:showNotes", show ? "1" : "0");
+  };
+
   return (
     <CodexContext.Provider
-      value={{ showCodex, setShowCodex: handleSetShowCodex }}
+      value={{
+        showCodex,
+        setShowCodex: handleSetShowCodex,
+        showNotes,
+        setShowNotes: handleSetShowNotes,
+      }}
     >
       {children}
     </CodexContext.Provider>
