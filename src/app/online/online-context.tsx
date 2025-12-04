@@ -9,6 +9,8 @@ import type {
   LobbyInvitePayloadT,
   LobbyVisibility,
   ChatScope,
+  MatchmakingStatus,
+  MatchmakingPreferences,
 } from "@/lib/net/protocol";
 import type { SocketTransport } from "@/lib/net/socketTransport";
 import type { StartMatchConfig } from "@/lib/net/transport";
@@ -117,6 +119,19 @@ export type OnlineContextValue = {
     connectedPeerIds: string[];
     connectedPeers: VoiceRequestPeer[];
   } | null;
+  // Matchmaking state and actions
+  matchmaking: {
+    status: MatchmakingStatus;
+    preferences: MatchmakingPreferences | null;
+    queuePosition: number | null;
+    estimatedWait: number | null; // seconds
+    matchedPlayerId: string | null;
+    isHost: boolean | null; // true if this player is host for sealed/draft config
+  };
+  joinMatchmaking: (
+    matchTypes: Array<"constructed" | "sealed" | "draft">
+  ) => void;
+  leaveMatchmaking: () => void;
 };
 
 export const OnlineContext = createContext<OnlineContextValue | undefined>(

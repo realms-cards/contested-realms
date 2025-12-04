@@ -40,6 +40,7 @@ import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
 import type { DraftState, CustomMessage } from "@/lib/net/transport";
 import { LegacySeatVideo3D } from "@/lib/rtc/SeatVideo3D";
 import { useDraft3DSession } from "@/lib/stores/draft-3d-online";
+import { getBoosterAssetName } from "@/lib/utils/booster-assets";
 import type { DraftCard } from "@/types/draft";
 
 // Player ready message type
@@ -1459,13 +1460,7 @@ export default function EnhancedOnlineDraft3DScreen({
               const setName =
                 availableSets[packIdx] ||
                 availableSets[packIdx % Math.max(1, availableSets.length)];
-              const assetName = (() => {
-                const s = (setName || "").toLowerCase();
-                if (s.includes("arthur")) return "arthurian-booster.png";
-                if (s.includes("alpha")) return "alphabeta-booster.png";
-                if (s.includes("beta")) return "alphabeta-booster.png";
-                return "alphabeta-booster.png";
-              })();
+              const assetName = getBoosterAssetName(setName);
 
               return (
                 <button

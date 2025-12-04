@@ -89,6 +89,7 @@ function createLobbyFeature(deps) {
       maxPlayers: lobby.maxPlayers,
       visibility: lobby.visibility,
       plannedMatchType: lobby.plannedMatchType,
+      isMatchmakingLobby: lobby.isMatchmakingLobby || false,
       lastActive: lobby.lastActive,
       playerIds: Array.from(lobby.playerIds || []),
       ready: Array.from(lobby.ready || []),
@@ -106,6 +107,7 @@ function createLobbyFeature(deps) {
       ready: new Set(),
       visibility: "open",
       plannedMatchType: "constructed",
+      isMatchmakingLobby: false,
       lastActive: Date.now(),
     };
     lb.name = obj.name;
@@ -114,6 +116,7 @@ function createLobbyFeature(deps) {
     lb.maxPlayers = obj.maxPlayers;
     lb.visibility = obj.visibility;
     lb.plannedMatchType = obj.plannedMatchType;
+    lb.isMatchmakingLobby = obj.isMatchmakingLobby || false;
     lb.lastActive = obj.lastActive || Date.now();
     lb.playerIds = new Set(Array.isArray(obj.playerIds) ? obj.playerIds : []);
     lb.ready = new Set(Array.isArray(obj.ready) ? obj.ready : []);

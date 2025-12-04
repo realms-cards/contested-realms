@@ -2,7 +2,9 @@
   Seed PackConfig for known sets (Alpha, Beta).
 */
 // Load .env for local development
-try { require('dotenv').config(); } catch {}
+try {
+  require("dotenv").config();
+} catch {}
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
@@ -73,7 +75,26 @@ async function main() {
     foilReplacesOrdinary: true,
   });
 
-  console.log("Seeded PackConfig for Alpha, Beta, and Arthurian Legends.");
+  // Dragonlord (mini-set with fixed booster - all cards in one pack)
+  const dragonlord = await upsertSet("Dragonlord");
+  await upsertPackConfig(dragonlord.id, {
+    ordinaryCount: 0, // Not used for fixed packs
+    exceptionalCount: 0,
+    eliteOrUniqueCount: 0,
+    uniqueChance: 0,
+    siteOrAvatarCount: 0,
+    foilChance: 0,
+    foilUniqueWeight: 0,
+    foilEliteWeight: 0,
+    foilExceptionalWeight: 0,
+    foilOrdinaryWeight: 0,
+    foilReplacesOrdinary: false,
+    isFixedPack: true, // All cards come in one booster
+  });
+
+  console.log(
+    "Seeded PackConfig for Alpha, Beta, Arthurian Legends, and Dragonlord."
+  );
 }
 
 main()

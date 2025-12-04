@@ -26,7 +26,7 @@ function mapRarity(r) {
 function mapFinish(f) {
   if (!f) return null;
   const v = String(f).trim();
-  if (v === "Standard" || v === "Foil") return v;
+  if (v === "Standard" || v === "Foil" || v === "Rainbow") return v;
   throw new Error(`Unknown finish: ${f}`);
 }
 
@@ -118,8 +118,8 @@ async function main() {
         await prisma.cardSetMetadata.upsert({
           where: { cardId_setId: { cardId: dbCard.id, setId: dbSet.id } },
           create: {
-            cardId: dbCard.id,
-            setId: dbSet.id,
+            card: { connect: { id: dbCard.id } },
+            set: { connect: { id: dbSet.id } },
             rarity: mapRarity(meta.rarity),
             type: meta.type || "",
             rulesText: meta.rulesText || null,
@@ -153,8 +153,8 @@ async function main() {
 
             await prisma.variant.create({
               data: {
-                cardId: dbCard.id,
-                setId: dbSet.id,
+                card: { connect: { id: dbCard.id } },
+                set: { connect: { id: dbSet.id } },
                 slug,
                 finish: mapFinish(v.finish),
                 product: normalizeProduct(v.product),

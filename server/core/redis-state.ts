@@ -294,10 +294,28 @@ export function createRedisStateManager(config: RedisStateConfig) {
     const current = await redis.get(key);
 
     if (current === instanceId) {
+      // We're still the leader, refresh TTL
       await redis.expire(key, MATCH_LEADER_TTL_SEC);
       return true;
     }
 
+    if (!current) {
+      // No leader exists (key expired), try to reclaim
+      const result = await redis.set(
+        key,
+        instanceId,
+        "EX",
+        MATCH_LEADER_TTL_SEC,
+        "NX"
+      );
+      if (result) {
+        return true; // Successfully reclaimed
+      }
+      // Someone else claimed it between our GET and SET
+      return false;
+    }
+
+    // Another instance is the leader
     return false;
   }
 

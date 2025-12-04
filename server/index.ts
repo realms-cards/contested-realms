@@ -845,31 +845,32 @@ container.registerValue("playerIdBySocket", playerIdBySocket);
 container.registerValue("prisma", prisma);
 container.registerValue("config", serverConfig);
 
-const { lobby: lobbyFeature, tournament: tournamentFeature } = registerFeatures(
-  container,
-  {
-    rid,
-    ensurePlayerCached,
-    players,
-    matches,
-    playerIdBySocket,
-    getPlayerInfo,
-    getMatchInfo,
-    lobbyHasHumanPlayers,
-    createRngFromString,
-    generateBoosterDeterministic,
-    startMatchRecording,
-    persistMatchCreated,
-    hydrateMatchFromDatabase,
-    lobbyControlChannel: LOBBY_CONTROL_CHANNEL,
-    lobbyStateChannel: LOBBY_STATE_CHANNEL,
-    cpuBotsEnabled: CPU_BOTS_ENABLED,
-    loadBotClientCtor,
-    port: PORT,
-    isCpuPlayerId,
-    tournamentBroadcast,
-  }
-);
+const {
+  lobby: lobbyFeature,
+  tournament: tournamentFeature,
+  matchmaking: matchmakingFeature,
+} = registerFeatures(container, {
+  rid,
+  ensurePlayerCached,
+  players,
+  matches,
+  playerIdBySocket,
+  getPlayerInfo,
+  getMatchInfo,
+  lobbyHasHumanPlayers,
+  createRngFromString,
+  generateBoosterDeterministic,
+  startMatchRecording,
+  persistMatchCreated,
+  hydrateMatchFromDatabase,
+  lobbyControlChannel: LOBBY_CONTROL_CHANNEL,
+  lobbyStateChannel: LOBBY_STATE_CHANNEL,
+  cpuBotsEnabled: CPU_BOTS_ENABLED,
+  loadBotClientCtor,
+  port: PORT,
+  isCpuPlayerId,
+  tournamentBroadcast,
+});
 
 const {
   lobbies,
@@ -4600,6 +4601,14 @@ io.on("connection", async (socket: SocketClient) => {
       // Keep player record for potential rejoin, just clear socket association
       player.socketId = null;
     }
+
+    // Remove player from matchmaking queue on disconnect
+    if (pid) {
+      try {
+        matchmakingFeature.handleDisconnect(pid);
+      } catch {}
+    }
+
     broadcastPlayers();
   });
 });

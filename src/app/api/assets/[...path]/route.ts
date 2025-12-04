@@ -62,7 +62,9 @@ export async function GET(
     })();
 
     // If a CDN origin is configured, permanently redirect there instead of streaming from disk.
-    const cdn = (process.env.ASSET_CDN_ORIGIN || process.env.NEXT_PUBLIC_TEXTURE_ORIGIN)?.trim();
+    const cdn = (
+      process.env.ASSET_CDN_ORIGIN || process.env.NEXT_PUBLIC_TEXTURE_ORIGIN
+    )?.trim();
     if (cdn) {
       const last = segments[segments.length - 1];
       const baseName = last.replace(/\.[^.]+$/, ""); // filename without extension
@@ -70,24 +72,35 @@ export async function GET(
       // Assets that should be at CDN root (elements, card backs, playmat)
       const rootAssets = new Set([
         "playmat.jpg",
-        "fire.png", "fire.webp",
-        "air.png", "air.webp",
-        "water.png", "water.webp",
-        "earth.png", "earth.webp",
-        "cardback_spellbook.png", "cardback_spellbook.webp",
-        "cardback_atlas.png", "cardback_atlas.webp"
+        "fire.png",
+        "fire.webp",
+        "air.png",
+        "air.webp",
+        "water.png",
+        "water.webp",
+        "earth.png",
+        "earth.webp",
+        "cardback_spellbook.png",
+        "cardback_spellbook.webp",
+        "cardback_atlas.png",
+        "cardback_atlas.webp",
       ]);
 
       // Check if this is a root asset
       if (rootAssets.has(last)) {
         // First try .webp version for elements and cardbacks (except playmat which is .jpg)
         let cdnFile = last;
-        if (!last.includes("playmat") && (last.endsWith(".png") || last.endsWith(".jpg"))) {
+        if (
+          !last.includes("playmat") &&
+          (last.endsWith(".png") || last.endsWith(".jpg"))
+        ) {
           // For elements and cardbacks, prefer .webp at root
           cdnFile = baseName + ".webp";
         }
         const cdnUrl = `${cdn.replace(/\/$/, "")}/${cdnFile}`;
-        console.log(`[API assets] Redirecting ${last} to CDN root as ${cdnFile}: ${cdnUrl}`);
+        console.log(
+          `[API assets] Redirecting ${last} to CDN root as ${cdnFile}: ${cdnUrl}`
+        );
         return new Response(null, {
           status: 308,
           headers: {
@@ -110,7 +123,6 @@ export async function GET(
         // Do not redirect boosters to CDN; serve from local data below to avoid 404s
         // Fall through to local file resolution
       } else {
-
         // For card images and other assets
         // Determine the CDN directory based on format preference
         let cdnPath = "";
@@ -121,7 +133,9 @@ export async function GET(
         const normalizedSubdir = hasSubdir
           ? segments
               .slice(0, -1)
-              .map((segment, idx) => (idx === 0 ? segment.toLowerCase() : segment))
+              .map((segment, idx) =>
+                idx === 0 ? segment.toLowerCase() : segment
+              )
               .join("/")
           : "";
 
@@ -134,7 +148,11 @@ export async function GET(
             cdnPath = `data-ktx2/tokens/${ktx2Name}`;
           } else if (requestedExt === "webp") {
             cdnPath = `data-webp/tokens/${last}`;
-          } else if (requestedExt === "png" || requestedExt === "jpg" || requestedExt === "jpeg") {
+          } else if (
+            requestedExt === "png" ||
+            requestedExt === "jpg" ||
+            requestedExt === "jpeg"
+          ) {
             const webpName = baseName + ".webp";
             cdnPath = `data-webp/tokens/${webpName}`;
           } else {
@@ -146,7 +164,11 @@ export async function GET(
             cdnPath = `data-ktx2/dragonlord/${ktx2Name}`;
           } else if (requestedExt === "webp") {
             cdnPath = `data-webp/dragonlord/${last}`;
-          } else if (requestedExt === "png" || requestedExt === "jpg" || requestedExt === "jpeg") {
+          } else if (
+            requestedExt === "png" ||
+            requestedExt === "jpg" ||
+            requestedExt === "jpeg"
+          ) {
             const webpName = baseName + ".webp";
             cdnPath = `data-webp/dragonlord/${webpName}`;
           } else {
@@ -159,7 +181,11 @@ export async function GET(
             cdnPath = `data-ktx2/${normalizedSubdir}/${ktx2Name}`;
           } else if (requestedExt === "webp") {
             cdnPath = `data-webp/${normalizedSubdir}/${last}`;
-          } else if (requestedExt === "png" || requestedExt === "jpg" || requestedExt === "jpeg") {
+          } else if (
+            requestedExt === "png" ||
+            requestedExt === "jpg" ||
+            requestedExt === "jpeg"
+          ) {
             const webpName = baseName + ".webp";
             cdnPath = `data-webp/${normalizedSubdir}/${webpName}`;
           } else {
@@ -172,7 +198,11 @@ export async function GET(
         } else if (requestedExt === "webp") {
           // Already requesting webp
           cdnPath = `data-webp/${last}`;
-        } else if (requestedExt === "png" || requestedExt === "jpg" || requestedExt === "jpeg") {
+        } else if (
+          requestedExt === "png" ||
+          requestedExt === "jpg" ||
+          requestedExt === "jpeg"
+        ) {
           // For raster images, try webp first
           const webpName = baseName + ".webp";
           cdnPath = `data-webp/${webpName}`;
@@ -190,9 +220,12 @@ export async function GET(
           format: requestedExt,
           wantKtx2,
           hasSubdir,
-          subdir
+          subdir,
         };
-        console.log(`[API assets] Texture request:`, JSON.stringify(logDetails, null, 2));
+        console.log(
+          `[API assets] Texture request:`,
+          JSON.stringify(logDetails, null, 2)
+        );
 
         return new Response(null, {
           status: 308,
@@ -214,6 +247,7 @@ export async function GET(
       "beta-booster.png",
       "alpha-booster.png",
       "arthurian-legends-booster.png",
+      "dragonlord-booster.png",
       // Our current filenames used by UI
       "alphabeta-booster.png",
       "arthurian-booster.png",
@@ -225,9 +259,10 @@ export async function GET(
         dataOnlyAssets.has(segment.replace(/\.[^.]+$/, ".png"))
     );
 
-    const roots = wantKtx2 && !shouldForceDataOnly
-      ? [ROOT_KTX2, ROOT_WEBP, ROOT_DATA]
-      : [ROOT_WEBP, ROOT_DATA];
+    const roots =
+      wantKtx2 && !shouldForceDataOnly
+        ? [ROOT_KTX2, ROOT_WEBP, ROOT_DATA]
+        : [ROOT_WEBP, ROOT_DATA];
 
     // Build candidate paths.
     // If ?ktx2 was requested for a raster path, first try swapping extension to .ktx2.
@@ -260,16 +295,16 @@ export async function GET(
         candidates.push(path.join(root, ...variant));
       }
     }
-    
+
     // Debug logging for cardback files
     if (last.includes("cardback")) {
       console.log("[API assets] Debug for", last, {
         wantKtx2,
         shouldForceDataOnly,
-        roots: roots.map(r => path.basename(r)),
+        roots: roots.map((r) => path.basename(r)),
         candidates,
         requestedExt,
-        segments
+        segments,
       });
     }
 

@@ -1,6 +1,7 @@
 "use strict";
 
 const { createLobbyFeature } = require("./lobby");
+const { createMatchmakingFeature } = require("./matchmaking");
 const { createTournamentFeature } = require("./tournament");
 
 /**
@@ -57,7 +58,21 @@ function registerFeatures(container, deps) {
     })
   );
 
-  return { lobby, tournament };
+  const matchmaking = container.registerFeature("matchmaking", () =>
+    createMatchmakingFeature({
+      io: container.resolve("io"),
+      storeRedis: container.resolve("storeRedis"),
+      instanceId: container.resolve("instanceId"),
+      rid: deps.rid,
+      getOrClaimLobbyLeader: lobby.getOrClaimLobbyLeader,
+      handleLobbyControlAsLeader: lobby.handleLobbyControlAsLeader,
+      ensurePlayerCached: deps.ensurePlayerCached,
+      matchmakingChannel: "matchmaking:control",
+      lobbies: lobby.lobbies,
+    })
+  );
+
+  return { lobby, tournament, matchmaking };
 }
 
 module.exports = { registerFeatures };

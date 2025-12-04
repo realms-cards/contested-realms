@@ -47,11 +47,26 @@ export async function OPTIONS() {
   });
 }
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ slug: string }> }
+) {
   try {
     const { slug: slugRaw } = await params;
-    const slug = decodeURIComponent(slugRaw || "").toLowerCase();
+    // Normalize slug: accept both hyphen and underscore formats (bet-card-b-s or bet_card_b_s)
+    let slug = decodeURIComponent(slugRaw || "").toLowerCase();
+    // Convert set prefix separator: bet-card -> bet_card
+    slug = slug.replace(/^([a-z]{3})-/, "$1_");
+    // Convert finish suffix separators: card-b-s -> card_b_s
+    slug = slug.replace(/-([bfr])-([sfe])$/, "_$1_$2");
+
     if (!slug || !/^[a-z]{3}_[a-z0-9_]+$/.test(slug)) {
+      console.warn(
+        "[api/images] Bad slug after normalization:",
+        slugRaw,
+        "->",
+        slug
+      );
       return new Response("Bad slug", { status: 400 });
     }
 
@@ -75,10 +90,15 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
     })();
 
     // If a CDN origin is configured, permanently redirect there instead of streaming from disk.
-    const cdn = (process.env.ASSET_CDN_ORIGIN || process.env.NEXT_PUBLIC_TEXTURE_ORIGIN)?.trim();
+    const cdn = (
+      process.env.ASSET_CDN_ORIGIN || process.env.NEXT_PUBLIC_TEXTURE_ORIGIN
+    )?.trim();
     const forceCdn = (process.env.FORCE_TEXTURE_CDN || "").toLowerCase();
     const shouldRedirectToCdn =
-      !!cdn && (process.env.NODE_ENV === "production" || forceCdn === "1" || forceCdn === "true");
+      !!cdn &&
+      (process.env.NODE_ENV === "production" ||
+        forceCdn === "1" ||
+        forceCdn === "true");
     if (shouldRedirectToCdn) {
       // Build CDN path using the same set/slug logic
       const setDir = setDirFromSlug(slug);
@@ -86,14 +106,15 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
       const base = imageBasenameFromSlug(slug);
       const suffix = suffixDirFromBasename(base);
       const normalizedSetDir = setDir.toLowerCase();
-      const cdnSuffix = suffix && SETS_WITH_SUFFIX_DIRS.has(normalizedSetDir) ? suffix : null;
+      const cdnSuffix =
+        suffix && SETS_WITH_SUFFIX_DIRS.has(normalizedSetDir) ? suffix : null;
       // Prefer .ktx2 when requested, otherwise default to .webp for better raster compression
       const name = wantKtx2 ? `${base}.ktx2` : `${base}.webp`;
       const baseDir = wantKtx2 ? "data-ktx2" : "data-webp";
       const pathParts = cdnSuffix
         ? [baseDir, normalizedSetDir, cdnSuffix, name]
         : [baseDir, normalizedSetDir, name];
-      const cdnUrl = `${cdn.replace(/\/$/, '')}/${pathParts.join('/')}`;
+      const cdnUrl = `${cdn.replace(/\/$/, "")}/${pathParts.join("/")}`;
       return new Response(null, {
         status: 308,
         headers: {

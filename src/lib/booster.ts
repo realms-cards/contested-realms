@@ -82,15 +82,50 @@ export async function generateBooster(
     throw new Error(`Set or PackConfig not found for set=${setName}`);
   const cfg = set.packConfig;
 
+  // Handle fixed packs (mini-sets like Dragonlord) - return all cards from the set
+  if (cfg.isFixedPack) {
+    const allVariants = await client.variant.findMany({
+      where: { setId: set.id, product: "Booster", finish: "Standard" },
+      select: {
+        id: true,
+        cardId: true,
+        slug: true,
+        finish: true,
+        product: true,
+      },
+    });
+    const metas = await client.cardSetMetadata.findMany({
+      where: { setId: set.id },
+      select: { cardId: true, rarity: true, type: true },
+    });
+    const metaByCardId = new Map<number, CardMeta>();
+    for (const m of metas)
+      metaByCardId.set(m.cardId, {
+        rarity: m.rarity as Rarity,
+        type: m.type ?? null,
+      });
+
+    return allVariants.map((v) => {
+      const meta = metaByCardId.get(v.cardId) ?? {
+        rarity: "Ordinary" as Rarity,
+        type: null,
+      };
+      return toBoosterCard(v, meta);
+    });
+  }
+
   // Build meta map: cardId -> { rarity, type }
-  const metas: { cardId: number; rarity: Rarity; type: string }[] =
+  const metas: { cardId: number; rarity: Rarity | null; type: string }[] =
     await client.cardSetMetadata.findMany({
       where: { setId: set.id },
       select: { cardId: true, rarity: true, type: true },
     });
   const metaByCardId = new Map<number, CardMeta>();
   for (const m of metas)
-    metaByCardId.set(m.cardId, { rarity: m.rarity, type: m.type ?? null });
+    metaByCardId.set(m.cardId, {
+      rarity: m.rarity ?? "Ordinary",
+      type: m.type ?? null,
+    });
 
   // Fetch all booster variants by finish
   const [variantsStd, variantsFoil]: [VariantSel[], VariantSel[]] =

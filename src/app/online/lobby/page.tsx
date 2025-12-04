@@ -9,6 +9,7 @@ import InvitesPanel from "@/components/online/InvitesPanel";
 import LobbiesCentral, {
   CreateTournamentConfig,
 } from "@/components/online/LobbiesCentral";
+import MatchmakingPanel from "@/components/online/MatchmakingPanel";
 import OnlinePageShell from "@/components/online/OnlinePageShell";
 import PlayersInvitePanel from "@/components/online/PlayersInvitePanel";
 import { useRealtimeTournaments } from "@/contexts/RealtimeTournamentContext";
@@ -17,6 +18,12 @@ import {
   normalizeCubeSummary,
   type CubeSummaryInput,
 } from "@/lib/cubes/normalizers";
+import {
+  useAvailableSets,
+  buildDefaultPackCounts,
+  DEFAULT_SET,
+  DEFAULT_DRAFTABLE_SETS,
+} from "@/lib/hooks/useAvailableSets";
 import type {
   TournamentInfo as ProtocolTournamentInfo,
   SealedConfig,
@@ -329,12 +336,32 @@ function LobbyPageContent({
   const [matchType, setMatchType] = useState<
     "constructed" | "sealed" | "draft"
   >("constructed");
-  const [sealedConfig, setSealedConfig] = useState({
-    packCounts: { Beta: 6, "Arthurian Legends": 0 } as Record<string, number>,
+
+  // Fetch available sets from the database
+  const { setNames: availableSetNames, loading: setsLoading } =
+    useAvailableSets();
+  // Use fetched sets or fall back to defaults
+  const draftableSets =
+    availableSetNames.length > 0 ? availableSetNames : DEFAULT_DRAFTABLE_SETS;
+
+  const [sealedConfig, setSealedConfig] = useState<{
+    packCounts: Record<string, number>;
+    timeLimit: number;
+    replaceAvatars: boolean;
+    allowDragonlordChampion: boolean;
+    cubeId: string | null;
+    cubeName: string | null;
+    includeCubeSideboardInStandard?: boolean;
+  }>(() => ({
+    packCounts: buildDefaultPackCounts(DEFAULT_DRAFTABLE_SETS, DEFAULT_SET, 6),
     timeLimit: 40, // minutes
     replaceAvatars: false,
     allowDragonlordChampion: true,
-  });
+    cubeId: null,
+    cubeName: null,
+    includeCubeSideboardInStandard: false,
+  }));
+  const [sealedUseCube, setSealedUseCube] = useState(false);
   const [draftConfig, setDraftConfig] = useState<{
     setMix: string[];
     packCount: number;
@@ -345,16 +372,45 @@ function LobbyPageContent({
     includeCubeSideboardInStandard?: boolean;
     allowDragonlordChampion?: boolean;
   }>(() => ({
-    // Available sets restricted for now
-    setMix: ["Beta"],
+    setMix: [DEFAULT_SET],
     packCount: 3,
     packSize: 15,
-    packCounts: { Beta: 3, "Arthurian Legends": 0 },
+    packCounts: buildDefaultPackCounts(DEFAULT_DRAFTABLE_SETS, DEFAULT_SET, 3),
     cubeId: null,
     cubeName: null,
     includeCubeSideboardInStandard: false,
     allowDragonlordChampion: true,
   }));
+
+  // Update configs when sets load from API
+  useEffect(() => {
+    if (setsLoading || availableSetNames.length === 0) return;
+    // Update sealed config with all available sets (only if new sets exist)
+    setSealedConfig((prev) => {
+      const missingSets = availableSetNames.filter(
+        (name) => !(name in prev.packCounts)
+      );
+      if (missingSets.length === 0) return prev; // No change needed
+      const newPackCounts = { ...prev.packCounts };
+      for (const name of missingSets) {
+        newPackCounts[name] = 0;
+      }
+      return { ...prev, packCounts: newPackCounts };
+    });
+    // Update draft config with all available sets (only if new sets exist)
+    setDraftConfig((prev) => {
+      if (prev.cubeId) return prev; // Don't modify if using a cube
+      const missingSets = availableSetNames.filter(
+        (name) => !(name in prev.packCounts)
+      );
+      if (missingSets.length === 0) return prev; // No change needed
+      const newPackCounts = { ...prev.packCounts };
+      for (const name of missingSets) {
+        newPackCounts[name] = 0;
+      }
+      return { ...prev, packCounts: newPackCounts };
+    });
+  }, [setsLoading, availableSetNames]);
   const [draftUseCube, setDraftUseCube] = useState(false);
   const [availableCubes, setAvailableCubes] = useState<CubeOption[]>([]);
   const [cubesLoading, setCubesLoading] = useState(false);
@@ -438,9 +494,9 @@ function LobbyPageContent({
   }, [draftUseCube, selectedCubeId, setDraftConfig]);
 
   useEffect(() => {
-    if (!draftUseCube) return;
+    if (!draftUseCube && !sealedUseCube) return;
     void loadCubes();
-  }, [draftUseCube, loadCubes]);
+  }, [draftUseCube, sealedUseCube, loadCubes]);
 
   const handleCubeToggle = (enabled: boolean) => {
     if (enabled) {
@@ -463,21 +519,24 @@ function LobbyPageContent({
       setAvailableCubes([]);
       setSelectedCubeId(null);
       setDraftConfig((prev) => {
-        const restore = savedPackCounts ?? {
-          Beta: prev.packCount,
-          "Arthurian Legends": 0,
-        };
+        const restore =
+          savedPackCounts ??
+          buildDefaultPackCounts(draftableSets, DEFAULT_SET, prev.packCount);
         const total = Object.values(restore).reduce(
           (sum, count) => sum + count,
           0
         );
-        const fallback = { Beta: prev.packCount, "Arthurian Legends": 0 };
+        const fallback = buildDefaultPackCounts(
+          draftableSets,
+          DEFAULT_SET,
+          prev.packCount
+        );
         return {
           ...prev,
           cubeId: null,
           cubeName: null,
           packCounts: total === prev.packCount ? restore : fallback,
-          setMix: total === prev.packCount ? prev.setMix : ["Beta"],
+          setMix: total === prev.packCount ? prev.setMix : [DEFAULT_SET],
           includeCubeSideboardInStandard: isHost
             ? prev.includeCubeSideboardInStandard
             : false,
@@ -523,8 +582,9 @@ function LobbyPageContent({
       Object.entries(sealedConfig.packCounts).filter(([, c]) => c > 0).length,
     [sealedConfig.packCounts]
   );
-  const sealedValid =
-    sealedActiveSets > 0 && sealedTotalPacks >= 3 && sealedTotalPacks <= 8;
+  const sealedValid = sealedUseCube
+    ? !!sealedConfig.cubeId // Cube mode: just need a cube selected
+    : sealedActiveSets > 0 && sealedTotalPacks >= 3 && sealedTotalPacks <= 8;
 
   const draftAssigned = useMemo(
     () => Object.values(draftConfig.packCounts).reduce((sum, c) => sum + c, 0),
@@ -571,6 +631,48 @@ function LobbyPageContent({
     }
     prevLobbyIdRef.current = currId;
   }, [lobby]);
+
+  // For quick matches: sync matchType with lobby's planned type and auto-open setup for host
+  const isQuickMatch = !!lobby?.isMatchmakingLobby;
+  const prevLobbyPlayerCountRef = useRef<number>(0);
+
+  useEffect(() => {
+    if (!lobby) return;
+    // Sync match type with lobby's planned type for quick matches
+    if (lobby.plannedMatchType && lobby.isMatchmakingLobby) {
+      setMatchType(lobby.plannedMatchType);
+    }
+    // Auto-open config for host in quick match lobbies (sealed/draft need configuration)
+    if (lobby.isMatchmakingLobby && me?.id === lobby.hostId && !match) {
+      if (
+        lobby.plannedMatchType === "sealed" ||
+        lobby.plannedMatchType === "draft"
+      ) {
+        // Small delay to let the UI settle
+        setTimeout(() => setConfigOpen(true), 300);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    lobby?.id,
+    lobby?.isMatchmakingLobby,
+    lobby?.plannedMatchType,
+    lobby?.hostId,
+    me?.id,
+    match,
+  ]);
+
+  // Notify when a player leaves the lobby
+  const lobbyPlayerCount = lobby?.players.length ?? 0;
+  useEffect(() => {
+    const prevCount = prevLobbyPlayerCountRef.current;
+    // Detect player leaving (count decreased)
+    if (prevCount > 0 && lobbyPlayerCount < prevCount && lobbyPlayerCount > 0) {
+      // Show a toast or notification that opponent left
+      console.log("[Lobby] A player left the lobby");
+    }
+    prevLobbyPlayerCountRef.current = lobbyPlayerCount;
+  }, [lobbyPlayerCount]);
 
   // Note: Removed match leaving tracking since we don't have persistent sessions
 
@@ -812,6 +914,9 @@ function LobbyPageContent({
   return (
     <OnlinePageShell>
       <div className="space-y-6">
+        {/* Quick Play / Matchmaking - show when not in a lobby or match */}
+        {!lobby && !match && <MatchmakingPanel />}
+
         {/* Match Controls - show when a match exists in context */}
         {match && (
           <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -990,16 +1095,24 @@ function LobbyPageContent({
                     // Apply provided pack settings or sensible defaults
                     if (cfg.matchType === "sealed") {
                       settings.sealedConfig = cfg.sealedConfig ?? {
-                        packCounts: { Beta: 6, "Arthurian Legends": 0 },
+                        packCounts: buildDefaultPackCounts(
+                          draftableSets,
+                          DEFAULT_SET,
+                          6
+                        ),
                         timeLimit: 40,
                         replaceAvatars: false,
                       };
                     } else if (cfg.matchType === "draft") {
                       settings.draftConfig = cfg.draftConfig ?? {
-                        setMix: ["Beta"],
+                        setMix: [DEFAULT_SET],
                         packCount: 3,
                         packSize: 15,
-                        packCounts: { Beta: 3, "Arthurian Legends": 0 },
+                        packCounts: buildDefaultPackCounts(
+                          draftableSets,
+                          DEFAULT_SET,
+                          3
+                        ),
                       };
                     }
 
@@ -1220,6 +1333,11 @@ function LobbyPageContent({
                 <div>
                   <label className="block text-xs font-medium mb-2">
                     Match Type
+                    {isQuickMatch && (
+                      <span className="ml-2 text-xs text-slate-400">
+                        (locked for Quick Play)
+                      </span>
+                    )}
                   </label>
                   <div className="flex gap-2">
                     <button
@@ -1227,11 +1345,13 @@ function LobbyPageContent({
                         matchType === "constructed"
                           ? "bg-indigo-600/80 text-white"
                           : "bg-slate-700/60 text-slate-300 hover:bg-slate-600/60"
-                      }`}
+                      } ${isQuickMatch ? "opacity-60 cursor-not-allowed" : ""}`}
                       onClick={() => {
+                        if (isQuickMatch) return;
                         setMatchType("constructed");
                         if (isHost && setLobbyPlan) setLobbyPlan("constructed");
                       }}
+                      disabled={isQuickMatch}
                     >
                       Constructed
                     </button>
@@ -1240,11 +1360,13 @@ function LobbyPageContent({
                         matchType === "sealed"
                           ? "bg-indigo-600/80 text-white"
                           : "bg-slate-700/60 text-slate-300 hover:bg-slate-600/60"
-                      }`}
+                      } ${isQuickMatch ? "opacity-60 cursor-not-allowed" : ""}`}
                       onClick={() => {
+                        if (isQuickMatch) return;
                         setMatchType("sealed");
                         if (isHost && setLobbyPlan) setLobbyPlan("sealed");
                       }}
+                      disabled={isQuickMatch}
                     >
                       Sealed
                     </button>
@@ -1253,11 +1375,13 @@ function LobbyPageContent({
                         matchType === "draft"
                           ? "bg-indigo-600/80 text-white"
                           : "bg-slate-700/60 text-slate-300 hover:bg-slate-600/60"
-                      }`}
+                      } ${isQuickMatch ? "opacity-60 cursor-not-allowed" : ""}`}
                       onClick={() => {
+                        if (isQuickMatch) return;
                         setMatchType("draft");
                         if (isHost && setLobbyPlan) setLobbyPlan("draft");
                       }}
+                      disabled={isQuickMatch}
                     >
                       Draft
                     </button>
@@ -1395,7 +1519,8 @@ function LobbyPageContent({
                               ).reduce((s, c) => s + c, 0);
                               const packs = { ...prev.packCounts };
                               if (total > nextCount) {
-                                const order = ["Arthurian Legends", "Beta"];
+                                // Remove from sets in reverse order (newest sets first)
+                                const order = [...draftableSets].reverse();
                                 let excess = total - nextCount;
                                 for (const name of order) {
                                   const take = Math.min(
@@ -1409,8 +1534,12 @@ function LobbyPageContent({
                                   if (excess <= 0) break;
                                 }
                               } else if (total < nextCount) {
-                                packs["Beta"] =
-                                  (packs["Beta"] || 0) + (nextCount - total);
+                                // Add to default set
+                                const defaultSet =
+                                  draftableSets[0] || DEFAULT_SET;
+                                packs[defaultSet] =
+                                  (packs[defaultSet] || 0) +
+                                  (nextCount - total);
                               }
                               return {
                                 ...prev,
@@ -1449,7 +1578,7 @@ function LobbyPageContent({
                             </span>
                           </label>
                           <div className="space-y-2">
-                            {["Beta", "Arthurian Legends"].map((set) => {
+                            {draftableSets.map((set) => {
                               const count = draftConfig.packCounts[set] || 0;
                               const total = Object.values(
                                 draftConfig.packCounts
@@ -1528,75 +1657,202 @@ function LobbyPageContent({
                   <>
                     <div>
                       <label className="block text-xs font-medium mb-3">
-                        Pack Configuration
-                        <span className="text-xs opacity-70 ml-2">
-                          (Total: {sealedTotalPacks} packs, 3-8 required)
-                        </span>
-                        <span
-                          className={`ml-2 inline-flex items-center px-2 py-0.5 rounded text-[10px] ring-1 ${
-                            sealedValid
-                              ? "bg-emerald-500/15 text-emerald-300 ring-emerald-500/30"
-                              : "bg-rose-500/15 text-rose-300 ring-rose-500/30"
-                          }`}
-                        >
-                          {sealedValid
-                            ? "OK"
-                            : sealedActiveSets === 0
-                            ? "No packs set"
-                            : sealedTotalPacks < 3
-                            ? `Need ${3 - sealedTotalPacks} more`
-                            : `Remove ${sealedTotalPacks - 8}`}
-                        </span>
+                        Sealed Configuration
                       </label>
                       <div className="space-y-3">
-                        {Object.entries(sealedConfig.packCounts).map(
-                          ([set, count]) => (
-                            <div
-                              key={set}
-                              className="flex items-center justify-between"
-                            >
-                              <span className="text-sm">{set}</span>
-                              <div className="flex items-center gap-2">
-                                <button
-                                  className="w-6 h-6 bg-slate-700 hover:bg-slate-600 rounded text-xs flex items-center justify-center transition-colors disabled:opacity-40"
-                                  onClick={() =>
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={sealedUseCube}
+                            onChange={(e) => {
+                              const useCube = e.target.checked;
+                              setSealedUseCube(useCube);
+                              if (useCube) {
+                                // When enabling cube mode, load cubes
+                                setSealedConfig((prev) => ({
+                                  ...prev,
+                                  cubeId: null,
+                                  cubeName: null,
+                                  packCounts: {},
+                                }));
+                              } else {
+                                // Reset to default set boosters
+                                setSealedConfig((prev) => ({
+                                  ...prev,
+                                  cubeId: null,
+                                  cubeName: null,
+                                  packCounts: buildDefaultPackCounts(
+                                    draftableSets,
+                                    DEFAULT_SET,
+                                    6
+                                  ),
+                                  allowDragonlordChampion: false,
+                                }));
+                              }
+                            }}
+                            className="rounded"
+                          />
+                          <span>
+                            Use one of your cubes as the booster source
+                          </span>
+                        </label>
+                        {sealedUseCube ? (
+                          <div className="space-y-2 rounded-lg bg-slate-800/60 ring-1 ring-slate-700 p-3 text-sm">
+                            {cubesLoading ? (
+                              <div className="text-xs text-slate-300">
+                                Loading cubes...
+                              </div>
+                            ) : cubeError ? (
+                              <div className="text-xs text-red-300 bg-red-900/30 rounded px-3 py-2 ring-1 ring-red-800/40">
+                                {cubeError}
+                              </div>
+                            ) : (
+                              <>
+                                <label className="block text-xs font-medium mb-1">
+                                  Select cube
+                                </label>
+                                <select
+                                  value={sealedConfig.cubeId ?? ""}
+                                  onChange={(e) => {
+                                    const cubeId = e.target.value;
+                                    const cube =
+                                      availableCubes.find(
+                                        (c) => c.id === cubeId
+                                      ) ?? null;
                                     setSealedConfig((prev) => ({
                                       ...prev,
-                                      packCounts: {
-                                        ...prev.packCounts,
-                                        [set]: Math.max(0, count - 1),
-                                      },
-                                    }))
-                                  }
-                                  disabled={count <= 0}
+                                      cubeId: cube?.id ?? null,
+                                      cubeName: cube?.name ?? null,
+                                      packCounts: cube
+                                        ? { [cube.name]: 6 }
+                                        : {},
+                                    }));
+                                  }}
+                                  className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
                                 >
-                                  −
-                                </button>
-                                <span className="w-8 text-center text-sm font-medium">
-                                  {count}
+                                  <option value="" disabled>
+                                    Choose a cube…
+                                  </option>
+                                  {availableCubes.map((cube) => (
+                                    <option key={cube.id} value={cube.id}>
+                                      {cube.name} ({cube.cardCount} cards)
+                                    </option>
+                                  ))}
+                                </select>
+                                {sealedConfig.cubeId && (
+                                  <div className="text-xs text-slate-300/90">
+                                    Packs will be generated from{" "}
+                                    {sealedConfig.cubeName ?? "your cube"}.
+                                  </div>
+                                )}
+                                <p className="text-xs text-slate-400">
+                                  Manage cubes on the{" "}
+                                  <Link
+                                    href="/cubes"
+                                    className="underline text-slate-200 hover:text-white"
+                                  >
+                                    Cubes page
+                                  </Link>
+                                  .
+                                </p>
+                                <label className="mt-2 flex items-center gap-2 text-xs">
+                                  <input
+                                    type="checkbox"
+                                    className="rounded"
+                                    checked={
+                                      !!sealedConfig.includeCubeSideboardInStandard
+                                    }
+                                    onChange={(e) =>
+                                      setSealedConfig((prev) => ({
+                                        ...prev,
+                                        includeCubeSideboardInStandard:
+                                          e.target.checked,
+                                      }))
+                                    }
+                                  />
+                                  <span>
+                                    When building from a cube, offer the
+                                    cube&apos;s sideboard cards in the standard
+                                    card pool during deckbuilding.
+                                  </span>
+                                </label>
+                              </>
+                            )}
+                          </div>
+                        ) : (
+                          <>
+                            <div>
+                              <label className="block text-xs font-medium mb-2">
+                                Pack Configuration
+                                <span className="text-xs opacity-70 ml-2">
+                                  (Total: {sealedTotalPacks} packs, 3-8
+                                  required)
                                 </span>
-                                <button
-                                  className="w-6 h-6 bg-slate-700 hover:bg-slate-600 rounded text-xs flex items-center justify-center transition-colors disabled:opacity-40"
-                                  onClick={() =>
-                                    setSealedConfig((prev) => ({
-                                      ...prev,
-                                      packCounts: {
-                                        ...prev.packCounts,
-                                        [set]: Math.min(8, count + 1),
-                                      },
-                                    }))
-                                  }
-                                  disabled={
-                                    Object.values(
-                                      sealedConfig.packCounts
-                                    ).reduce((sum, c) => sum + c, 0) >= 8
-                                  }
+                                <span
+                                  className={`ml-2 inline-flex items-center px-2 py-0.5 rounded text-[10px] ring-1 ${
+                                    sealedValid
+                                      ? "bg-emerald-500/15 text-emerald-300 ring-emerald-500/30"
+                                      : "bg-rose-500/15 text-rose-300 ring-rose-500/30"
+                                  }`}
                                 >
-                                  +
-                                </button>
+                                  {sealedValid
+                                    ? "OK"
+                                    : sealedActiveSets === 0
+                                    ? "No packs set"
+                                    : sealedTotalPacks < 3
+                                    ? `Need ${3 - sealedTotalPacks} more`
+                                    : `Remove ${sealedTotalPacks - 8}`}
+                                </span>
+                              </label>
+                              <div className="space-y-2">
+                                {Object.entries(sealedConfig.packCounts).map(
+                                  ([set, count]) => (
+                                    <div
+                                      key={set}
+                                      className="flex items-center justify-between"
+                                    >
+                                      <span className="text-sm">{set}</span>
+                                      <div className="flex items-center gap-2">
+                                        <button
+                                          className="w-6 h-6 bg-slate-700 hover:bg-slate-600 rounded text-xs flex items-center justify-center transition-colors disabled:opacity-40"
+                                          onClick={() =>
+                                            setSealedConfig((prev) => ({
+                                              ...prev,
+                                              packCounts: {
+                                                ...prev.packCounts,
+                                                [set]: Math.max(0, count - 1),
+                                              },
+                                            }))
+                                          }
+                                          disabled={count <= 0}
+                                        >
+                                          −
+                                        </button>
+                                        <span className="w-8 text-center text-sm font-medium">
+                                          {count}
+                                        </span>
+                                        <button
+                                          className="w-6 h-6 bg-slate-700 hover:bg-slate-600 rounded text-xs flex items-center justify-center transition-colors disabled:opacity-40"
+                                          onClick={() =>
+                                            setSealedConfig((prev) => ({
+                                              ...prev,
+                                              packCounts: {
+                                                ...prev.packCounts,
+                                                [set]: Math.min(8, count + 1),
+                                              },
+                                            }))
+                                          }
+                                          disabled={sealedTotalPacks >= 8}
+                                        >
+                                          +
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )
+                                )}
                               </div>
                             </div>
-                          )
+                          </>
                         )}
                       </div>
                     </div>
@@ -1712,6 +1968,33 @@ function LobbyPageContent({
                         setConfigOpen(false);
                         return;
                       }
+                      // Handle sealed with cube mode
+                      if (sealedUseCube) {
+                        if (!sealedConfig.cubeId) {
+                          alert("Select a cube before starting sealed.");
+                          return;
+                        }
+                        const cubeSealedConfig = {
+                          packCount: 6,
+                          setMix: [sealedConfig.cubeName || "Cube"],
+                          timeLimit: sealedConfig.timeLimit,
+                          packCounts: sealedConfig.packCounts,
+                          replaceAvatars: sealedConfig.replaceAvatars,
+                          allowDragonlordChampion:
+                            sealedConfig.allowDragonlordChampion,
+                          cubeId: sealedConfig.cubeId,
+                          cubeName: sealedConfig.cubeName,
+                          includeCubeSideboardInStandard:
+                            sealedConfig.includeCubeSideboardInStandard,
+                        };
+                        startMatch({
+                          matchType: "sealed",
+                          sealedConfig: cubeSealedConfig,
+                        });
+                        setConfigOpen(false);
+                        return;
+                      }
+                      // Regular sealed from boosters
                       const totalPacks = Object.values(
                         sealedConfig.packCounts
                       ).reduce((sum, count) => sum + count, 0);

@@ -36,6 +36,7 @@ import { useDraft3DTransport } from "@/lib/hooks/useDraft3DTransport";
 import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
 import type { DraftState } from "@/lib/net/transport";
 import { useDraft3DSession } from "@/lib/stores/draft-3d-online";
+import { getBoosterAssetName } from "@/lib/utils/booster-assets";
 import type { DraftCard } from "@/types/draft";
 
 const TournamentPresenceOverlay = dynamic(
@@ -2187,10 +2188,7 @@ export default function TournamentDraft3DScreen({
                   ? packSequence
                   : ["Booster", "Booster", "Booster"]
                 ).map((setName, packIdx) => {
-                  const s = (setName || "").toLowerCase();
-                  const assetName = s.includes("arthur")
-                    ? "arthurian-booster.png"
-                    : "alphabeta-booster.png";
+                  const assetName = getBoosterAssetName(setName);
                   const isAlreadyUsed =
                     usedPacks.includes(packIdx) ||
                     packIdx < draftState.packIndex;

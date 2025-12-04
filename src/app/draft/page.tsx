@@ -10,7 +10,6 @@ import {
   choiceWeighted,
 } from "@/lib/game/cardSorting";
 
-
 export default function DraftPage() {
   const router = useRouter();
   const [setName, setSetName] = useState("Alpha");
@@ -24,7 +23,6 @@ export default function DraftPage() {
   const [pickNumber, setPickNumber] = useState(1); // 1..15
 
   const [yourPicks, setYourPicks] = useState<BoosterCard[]>([]);
-  const [botPicks, setBotPicks] = useState<BoosterCard[][]>([]); // [botIndex][cards], botIndex 0 = seat 2 overall
   const [saving, setSaving] = useState(false);
   const [deckName, setDeckName] = useState("Draft Deck");
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
@@ -42,7 +40,6 @@ export default function DraftPage() {
       setError(null);
       setSaveMsg(null);
       setYourPicks([]);
-      setBotPicks([]);
       setSeatPacks([]);
       setCurrentPacks([]);
       setPackIndex(0);
@@ -70,7 +67,6 @@ export default function DraftPage() {
       }
       setSeatPacks(seats);
       setCurrentPacks(seats.map((seat) => [...seat[0]]));
-      setBotPicks(Array.from({ length: Math.max(0, players - 1) }, () => []));
       setPackIndex(0);
       setPickNumber(1);
     } catch (e) {
@@ -115,24 +111,12 @@ export default function DraftPage() {
 
     const picked = myPack.splice(cardIdx, 1)[0];
 
-    // Bots pick simultaneously and we record their picks
-    const botChosen: { botIdx: number; card: BoosterCard | null }[] = [];
+    // Bots pick simultaneously
     for (let s = 1; s < cur.length; s++) {
       const idx = botPickFrom(cur[s]);
-      let chosen: BoosterCard | null = null;
       if (idx >= 0 && idx < cur[s].length) {
-        chosen = cur[s].splice(idx, 1)[0];
+        cur[s].splice(idx, 1);
       }
-      botChosen.push({ botIdx: s - 1, card: chosen });
-    }
-    if (botChosen.length) {
-      setBotPicks((prev) => {
-        const out = prev.length === botChosen.length ? prev.map((arr) => [...arr]) : Array.from({ length: botChosen.length }, (_, i) => (prev[i] ? [...prev[i]] : []));
-        for (const { botIdx, card } of botChosen) {
-          if (card) out[botIdx].push(card);
-        }
-        return out;
-      });
     }
 
     // Determine if pack ended
@@ -200,20 +184,7 @@ export default function DraftPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Failed to save deck");
 
-      // Auto-save first bot's deck if available
-      let botMsg = "";
-      const firstBot = botPicks[0] || [];
-      if (firstBot.length) {
-        const botCards = firstBot.map((c) => ({ cardId: c.cardId, variantId: c.variantId, zone: "Spellbook" as const, count: 1 }));
-        const resBot = await fetch("/api/decks", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ name: `${deckName || "Draft Deck"} (Bot)`, format: "Draft", set: setName, cards: botCards }),
-        });
-        const dataBot = await resBot.json();
-        if (resBot.ok) botMsg = ` and bot deck ${dataBot.name} (id: ${dataBot.id})`;
-      }
-      setSaveMsg(`Saved deck ${data.name} (id: ${data.id})${botMsg}`);
+      setSaveMsg(`Saved deck ${data.name} (id: ${data.id})`);
 
       // Redirect to editor with the new deck loaded
       router.push(`/decks/editor?id=${encodeURIComponent(data.id)}`);
@@ -280,13 +251,19 @@ export default function DraftPage() {
             {(() => {
               const pack = currentPacks[0] || [];
               const entries = pack.map((c, idx) => ({ c, idx }));
-              const sites = entries.filter((e) => (e.c.type || "").toLowerCase().includes("site"));
-              const spells = entries.filter((e) => !(e.c.type || "").toLowerCase().includes("site"));
+              const sites = entries.filter((e) =>
+                (e.c.type || "").toLowerCase().includes("site")
+              );
+              const spells = entries.filter(
+                (e) => !(e.c.type || "").toLowerCase().includes("site")
+              );
               return (
                 <div className="space-y-4 text-sm">
                   {!!spells.length && (
                     <div>
-                      <div className="text-xs uppercase opacity-70 mb-2">Spellbook</div>
+                      <div className="text-xs uppercase opacity-70 mb-2">
+                        Spellbook
+                      </div>
                       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
                         {spells.map(({ c, idx }) => (
                           <button
@@ -305,7 +282,9 @@ export default function DraftPage() {
                               />
                             </div>
                             <div className="font-semibold">{c.cardName}</div>
-                            <div className="opacity-80">{c.rarity} • {c.finish}</div>
+                            <div className="opacity-80">
+                              {c.rarity} • {c.finish}
+                            </div>
                             <div className="opacity-70 text-xs">{c.slug}</div>
                           </button>
                         ))}
@@ -314,7 +293,9 @@ export default function DraftPage() {
                   )}
                   {!!sites.length && (
                     <div>
-                      <div className="text-xs uppercase opacity-70 mb-2">Sites</div>
+                      <div className="text-xs uppercase opacity-70 mb-2">
+                        Sites
+                      </div>
                       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
                         {sites.map(({ c, idx }) => (
                           <button
@@ -333,7 +314,9 @@ export default function DraftPage() {
                               />
                             </div>
                             <div className="font-semibold">{c.cardName}</div>
-                            <div className="opacity-80">{c.rarity} • {c.finish}</div>
+                            <div className="opacity-80">
+                              {c.rarity} • {c.finish}
+                            </div>
                             <div className="opacity-70 text-xs">{c.slug}</div>
                           </button>
                         ))}

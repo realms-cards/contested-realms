@@ -1302,13 +1302,35 @@ export default function OnlineMatchPage() {
         const packsByPlayer = match.sealedPacks as unknown as
           | Record<string, unknown[]>
           | undefined;
+        console.log("[Sealed Redirect] Checking sealedPacks:", {
+          myId,
+          hasSealedPacks: !!packsByPlayer,
+          playerIds: packsByPlayer ? Object.keys(packsByPlayer) : [],
+          myPackCount: myId && packsByPlayer ? packsByPlayer[myId]?.length : 0,
+        });
         if (myId && packsByPlayer && Array.isArray(packsByPlayer[myId])) {
+          console.log(
+            "[Sealed Redirect] Saving packs to localStorage:",
+            packsByPlayer[myId].length
+          );
           localStorage.setItem(
             `sealedPacks_${match.id}`,
             JSON.stringify(packsByPlayer[myId])
           );
+        } else {
+          console.warn(
+            "[Sealed Redirect] No sealedPacks found for player",
+            myId
+          );
         }
-      } catch {}
+      } catch (e) {
+        console.error("[Sealed Redirect] Error saving packs:", e);
+      }
+
+      // Also pass packCounts in URL as backup
+      if (match.sealedConfig?.packCounts) {
+        params.set("packCounts", JSON.stringify(match.sealedConfig.packCounts));
+      }
 
       // Redirect to editor
       window.location.href = `/decks/editor-3d?${params.toString()}`;

@@ -28,6 +28,9 @@ import type {
   LobbyInvitePayloadT,
   LobbyVisibility,
   ChatScope,
+  MatchmakingStatus,
+  MatchmakingPreferences,
+  MatchmakingUpdatePayloadT,
 } from "@/lib/net/protocol";
 import { SocketTransport } from "@/lib/net/socketTransport";
 import type { StartMatchConfig } from "@/lib/net/transport";
@@ -112,6 +115,23 @@ export default function OnlineProvider({
   } | null>(null);
   const [appToast, setAppToast] = useState<string | null>(null);
   const [resyncing, setResyncing] = useState<boolean>(false);
+  // Matchmaking state
+  const [matchmakingStatus, setMatchmakingStatus] =
+    useState<MatchmakingStatus>("idle");
+  const [matchmakingPreferences, setMatchmakingPreferences] =
+    useState<MatchmakingPreferences | null>(null);
+  const [matchmakingQueuePosition, setMatchmakingQueuePosition] = useState<
+    number | null
+  >(null);
+  const [matchmakingEstimatedWait, setMatchmakingEstimatedWait] = useState<
+    number | null
+  >(null);
+  const [matchmakingMatchedPlayerId, setMatchmakingMatchedPlayerId] = useState<
+    string | null
+  >(null);
+  const [matchmakingIsHost, setMatchmakingIsHost] = useState<boolean | null>(
+    null
+  );
   const [voicePlaybackEnabled, setVoicePlaybackEnabled] = useState(true);
   const toggleVoicePlayback = useCallback(() => {
     setVoicePlaybackEnabled((prev) => !prev);
@@ -1230,13 +1250,43 @@ export default function OnlineProvider({
       })
     );
 
+    // Matchmaking event handler via onGeneric for server-only events
+    const handleMatchmakingUpdate = (payload: unknown) => {
+      if (!payload || typeof payload !== "object") return;
+      const data = payload as MatchmakingUpdatePayloadT;
+      setMatchmakingStatus(data.status);
+      setMatchmakingPreferences(data.preferences ?? null);
+      setMatchmakingQueuePosition(data.queuePosition ?? null);
+      setMatchmakingEstimatedWait(data.estimatedWait ?? null);
+      setMatchmakingMatchedPlayerId(data.matchedPlayerId ?? null);
+      setMatchmakingIsHost(data.isHost ?? null);
+
+      // If match was found, auto-navigate to lobby
+      if (data.status === "found" && data.lobbyId) {
+        console.log("[matchmaking] Match found, joining lobby:", data.lobbyId);
+      }
+    };
+    transport.onGeneric("matchmakingUpdate", handleMatchmakingUpdate);
+
+    const cleanupMatchmaking = () => {
+      transport.offGeneric("matchmakingUpdate", handleMatchmakingUpdate);
+    };
+
     return () => {
+      cleanupMatchmaking();
       unsubscribers.forEach((u) => u());
       transport.disconnect();
       setConnected(false);
       setLobbies([]);
       setPlayers([]);
       setInvites([]);
+      // Reset matchmaking state on cleanup
+      setMatchmakingStatus("idle");
+      setMatchmakingPreferences(null);
+      setMatchmakingQueuePosition(null);
+      setMatchmakingEstimatedWait(null);
+      setMatchmakingMatchedPlayerId(null);
+      setMatchmakingIsHost(null);
     };
   }, [transport, session, sessionStatus]);
 
@@ -1490,6 +1540,34 @@ export default function OnlineProvider({
       } catch {}
     },
     voice,
+    // Matchmaking state and actions
+    matchmaking: {
+      status: matchmakingStatus,
+      preferences: matchmakingPreferences,
+      queuePosition: matchmakingQueuePosition,
+      estimatedWait: matchmakingEstimatedWait,
+      matchedPlayerId: matchmakingMatchedPlayerId,
+      isHost: matchmakingIsHost,
+    },
+    joinMatchmaking: (
+      matchTypes: Array<"constructed" | "sealed" | "draft">
+    ) => {
+      try {
+        transport.emit("joinMatchmaking", { preferences: { matchTypes } });
+      } catch {}
+    },
+    leaveMatchmaking: () => {
+      try {
+        transport.emit("leaveMatchmaking", {});
+      } catch {}
+      // Also reset local state immediately for responsiveness
+      setMatchmakingStatus("idle");
+      setMatchmakingPreferences(null);
+      setMatchmakingQueuePosition(null);
+      setMatchmakingEstimatedWait(null);
+      setMatchmakingMatchedPlayerId(null);
+      setMatchmakingIsHost(null);
+    },
   };
 
   return (
@@ -1498,9 +1576,7 @@ export default function OnlineProvider({
       {connToast && (
         <div
           className={`fixed top-3 right-3 z-[3000] text-white text-sm px-3 py-2 rounded shadow ring-1 ring-white/20 ${
-            connToast.tone === "error"
-              ? "bg-red-600/90"
-              : "bg-green-600/90"
+            connToast.tone === "error" ? "bg-red-600/90" : "bg-green-600/90"
           }`}
         >
           {connToast.message}
