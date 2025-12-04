@@ -1780,8 +1780,7 @@ function LobbyPageContent({
                             )}
                           </div>
                         ) : (
-                          <>
-                            <div>
+                          <div>
                               <label className="block text-xs font-medium mb-2">
                                 Pack Configuration
                                 <span className="text-xs opacity-70 ml-2">
@@ -1852,7 +1851,6 @@ function LobbyPageContent({
                                 )}
                               </div>
                             </div>
-                          </>
                         )}
                       </div>
                     </div>

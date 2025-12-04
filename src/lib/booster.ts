@@ -1,8 +1,7 @@
-import type { PrismaClient } from "@prisma/client";
+import type { Finish, PrismaClient } from "@prisma/client";
 import { prisma as defaultPrisma } from "./prisma";
 
 type Rarity = "Ordinary" | "Exceptional" | "Elite" | "Unique";
-type Finish = "Standard" | "Foil";
 
 type VariantSel = {
   id: number;

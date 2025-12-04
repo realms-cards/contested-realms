@@ -48,8 +48,8 @@ export default function VirtualizedCollectionGrid({
     };
 
     updateColumns();
-    window.addEventListener('resize', updateColumns);
-    return () => window.removeEventListener('resize', updateColumns);
+    window.addEventListener("resize", updateColumns);
+    return () => window.removeEventListener("resize", updateColumns);
   }, []);
 
   // Clear local quantities when cards prop changes (after refresh)
@@ -125,6 +125,25 @@ export default function VirtualizedCollectionGrid({
       });
   };
 
+  const handleNotesUpdate = (id: number, notes: string) => {
+    fetch(`/api/collection/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ notes }),
+    })
+      .then((res) => {
+        if (!res.ok) {
+          res.json().then((err) => {
+            console.error("Failed to update notes:", err.error);
+          });
+        }
+        debouncedRefresh();
+      })
+      .catch((e) => {
+        console.error("Failed to update notes:", e);
+      });
+  };
+
   // Filter out optimistically deleted cards and apply local quantity overrides
   const visibleCards = cards
     .filter((card) => {
@@ -175,13 +194,13 @@ export default function VirtualizedCollectionGrid({
     <div
       ref={parentRef}
       className="h-[calc(100vh-16rem)] overflow-auto"
-      style={{ contain: 'strict' }} // Optimize rendering performance
+      style={{ contain: "strict" }} // Optimize rendering performance
     >
       <div
         style={{
           height: `${rowVirtualizer.getTotalSize()}px`,
-          width: '100%',
-          position: 'relative',
+          width: "100%",
+          position: "relative",
         }}
       >
         {rowVirtualizer.getVirtualItems().map((virtualRow) => {
@@ -202,7 +221,10 @@ export default function VirtualizedCollectionGrid({
                   <CollectionCard
                     key={card.id}
                     card={card}
-                    onQuantityChange={(qty) => handleQuantityUpdate(card.id, qty)}
+                    onQuantityChange={(qty) =>
+                      handleQuantityUpdate(card.id, qty)
+                    }
+                    onNotesChange={(notes) => handleNotesUpdate(card.id, notes)}
                     onDelete={() => handleDelete(card.id)}
                   />
                 ))}

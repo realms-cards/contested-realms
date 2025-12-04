@@ -143,6 +143,7 @@ export async function GET(req: NextRequest) {
         setId: c.setId,
         finish: c.finish,
         quantity: c.quantity,
+        notes: c.notes,
         card: {
           name: c.card.name,
           elements: c.card.elements,
@@ -164,7 +165,7 @@ export async function GET(req: NextRequest) {
         meta: c.card.meta[0]
           ? {
               type: c.card.meta[0].type,
-              rarity: c.card.meta[0].rarity,
+              rarity: c.card.meta[0].rarity ?? 'Unknown',
               cost: c.card.meta[0].cost,
               attack: c.card.meta[0].attack,
               defence: c.card.meta[0].defence,
@@ -187,13 +188,13 @@ export async function GET(req: NextRequest) {
       },
     };
 
-    logPerformance('GET /api/collection', performance.now() - startTime);
+    logPerformance("GET /api/collection", performance.now() - startTime);
     return new Response(JSON.stringify(response), {
       status: 200,
       headers: { "content-type": "application/json" },
     });
   } catch (e) {
-    logPerformance('GET /api/collection', performance.now() - startTime);
+    logPerformance("GET /api/collection", performance.now() - startTime);
     const message = e instanceof Error ? e.message : "Unknown error";
     return new Response(JSON.stringify({ error: message }), {
       status: 500,
@@ -393,13 +394,13 @@ export async function POST(req: NextRequest) {
     // Invalidate user's collection caches (cards were added/updated)
     await invalidateCache(CacheKeys.collection.invalidateUser(userId));
 
-    logPerformance('POST /api/collection', performance.now() - startTime);
+    logPerformance("POST /api/collection", performance.now() - startTime);
     return new Response(JSON.stringify(response), {
       status: 201,
       headers: { "content-type": "application/json" },
     });
   } catch (e) {
-    logPerformance('POST /api/collection', performance.now() - startTime);
+    logPerformance("POST /api/collection", performance.now() - startTime);
     if (e instanceof Error && e.message === "USER_NOT_FOUND") {
       return new Response(
         JSON.stringify({

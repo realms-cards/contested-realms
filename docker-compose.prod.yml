@@ -9,6 +9,11 @@ services:
     env_file:
       - .env.production
     command: ["npx", "prisma", "migrate", "deploy"]
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   # Self-hosted Redis for Socket.IO adapter and shared state
   redis:
@@ -22,12 +27,17 @@ services:
     ports:
       - "6380:6379" # Expose Redis on port 6380 for Vercel Next.js access
     healthcheck:
-      test: ["CMD", "sh", "-c", "redis-cli -a \"$$REDIS_PASSWORD\" ping"]
+      test: ["CMD", "sh", "-c", 'redis-cli -a "$$REDIS_PASSWORD" ping']
       interval: 5s
       timeout: 3s
       retries: 10
     volumes:
       - redisdata:/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   # Socket.IO server instances (horizontal scaling via Redis adapter)
   server1:
@@ -58,6 +68,11 @@ services:
       timeout: 3s
       retries: 20
       start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
 
   server2:
     build:
@@ -87,6 +102,11 @@ services:
       timeout: 3s
       retries: 20
       start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
 
   # Public entrypoint: TLS + reverse-proxy/load-balancer
   caddy:
@@ -110,6 +130,11 @@ services:
     depends_on:
       - server1
       - server2
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
 
 volumes:
   redisdata:

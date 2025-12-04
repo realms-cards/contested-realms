@@ -9,6 +9,11 @@ services:
     env_file:
       - .env.production
     command: ["npx", "prisma", "migrate", "deploy"]
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   # Self-hosted Redis for Socket.IO adapter and shared state
   redis:
@@ -22,12 +27,17 @@ services:
     ports:
       - "6380:6379" # Expose Redis on port 6380 for Vercel Next.js access
     healthcheck:
-      test: ["CMD", "sh", "-c", "redis-cli -a \"$$REDIS_PASSWORD\" ping"]
+      test: ["CMD", "sh", "-c", 'redis-cli -a "$$REDIS_PASSWORD" ping']
       interval: 5s
       timeout: 3s
       retries: 10
     volumes:
       - redisdata:/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   # Single Socket.IO server instance
   server1:
@@ -58,6 +68,11 @@ services:
       timeout: 3s
       retries: 20
       start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
 
   turn:
     image: instrumentisto/coturn:latest
@@ -93,6 +108,11 @@ services:
           echo "[turn] Using TLS certificate at $${CERT_FILE}"; 
           exec turnserver --listening-port=3478 --tls-listening-port=5349 --fingerprint --lt-cred-mech --user="$${USERNAME}:$${PASSWORD}" --realm="$${REALM}" --min-port=49160 --max-port=49200 --cert="$${CERT_FILE}" --pkey="$${KEY_FILE}" --no-cli --log-file=stdout --verbose $${EXT}; 
         fi
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   # Public entrypoint: TLS + reverse-proxy to single server
   caddy:
@@ -115,6 +135,11 @@ services:
       - caddy_config:/config
     depends_on:
       - server1
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
 
 volumes:
   redisdata:
