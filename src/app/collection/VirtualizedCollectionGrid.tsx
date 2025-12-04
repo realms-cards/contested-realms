@@ -26,10 +26,11 @@ export default function VirtualizedCollectionGrid({
   loading,
   onQuantityChange,
 }: VirtualizedCollectionGridProps) {
-  // Local optimistic state for quantities
+  // Local optimistic state for quantities and notes
   const [localQuantities, setLocalQuantities] = useState<Map<number, number>>(
     new Map()
   );
+  const [localNotes, setLocalNotes] = useState<Map<number, string>>(new Map());
   const refreshDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const parentRef = useRef<HTMLDivElement>(null);
 
@@ -52,9 +53,10 @@ export default function VirtualizedCollectionGrid({
     return () => window.removeEventListener("resize", updateColumns);
   }, []);
 
-  // Clear local quantities when cards prop changes (after refresh)
+  // Clear local state when cards prop changes (after refresh)
   useEffect(() => {
     setLocalQuantities(new Map());
+    setLocalNotes(new Map());
   }, [cards]);
 
   const debouncedRefresh = () => {
@@ -126,6 +128,14 @@ export default function VirtualizedCollectionGrid({
   };
 
   const handleNotesUpdate = (id: number, notes: string) => {
+    // Optimistic update - immediately reflect in UI
+    setLocalNotes((prev) => {
+      const next = new Map(prev);
+      next.set(id, notes);
+      return next;
+    });
+
+    // Fire API call async (no refresh needed)
     fetch(`/api/collection/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -137,14 +147,14 @@ export default function VirtualizedCollectionGrid({
             console.error("Failed to update notes:", err.error);
           });
         }
-        debouncedRefresh();
+        // No refresh - notes are purely local UI metadata
       })
       .catch((e) => {
         console.error("Failed to update notes:", e);
       });
   };
 
-  // Filter out optimistically deleted cards and apply local quantity overrides
+  // Filter out optimistically deleted cards and apply local overrides
   const visibleCards = cards
     .filter((card) => {
       const localQty = localQuantities.get(card.id);
@@ -152,10 +162,15 @@ export default function VirtualizedCollectionGrid({
     })
     .map((card) => {
       const localQty = localQuantities.get(card.id);
+      const localNote = localNotes.get(card.id);
+      let updated = card;
       if (localQty !== undefined && localQty > 0) {
-        return { ...card, quantity: localQty };
+        updated = { ...updated, quantity: localQty };
       }
-      return card;
+      if (localNote !== undefined) {
+        updated = { ...updated, notes: localNote };
+      }
+      return updated;
     });
 
   // Calculate rows (each row contains `columns` cards)
