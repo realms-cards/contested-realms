@@ -45,6 +45,7 @@ import { Physics } from "@/lib/game/physics";
 import { useGameStore } from "@/lib/game/store";
 import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
 import type { DraftState, CustomMessage } from "@/lib/net/transport";
+import { getBoosterAssetName } from "@/lib/utils/booster-assets";
 
 // Import new draft sync system
 
@@ -1142,13 +1143,7 @@ export default function OnlineDraft3DScreen({
               const setName =
                 availableSets[packIdx] ||
                 availableSets[packIdx % availableSets.length]; // Cycle through available sets
-              const assetName = (() => {
-                const s = (setName || "").toLowerCase();
-                if (s.includes("arthur")) return "arthurian-booster.png";
-                if (s.includes("alpha")) return "alphabeta-booster.png";
-                if (s.includes("beta")) return "alphabeta-booster.png";
-                return "alphabeta-booster.png"; // Default
-              })();
+              const assetName = getBoosterAssetName(setName);
 
               return (
                 <button

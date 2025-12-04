@@ -5,6 +5,11 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useState, useEffect } from "react";
 import { useRealtimeTournaments } from "@/contexts/RealtimeTournamentContext";
+import {
+  useAvailableSets,
+  DEFAULT_SET,
+  DEFAULT_DRAFTABLE_SETS,
+} from "@/lib/hooks/useAvailableSets";
 import { generateTournamentName } from "@/lib/random-name-generator";
 interface Tournament {
   id: string;
@@ -76,24 +81,24 @@ export default function TournamentsPage() {
     },
   });
 
+  // Fetch available sets from the database
+  const { setNames: availableSetNames } = useAvailableSets();
+  // Use fetched sets or fall back to defaults
+  const draftableSets =
+    availableSetNames.length > 0 ? availableSetNames : DEFAULT_DRAFTABLE_SETS;
+  const defaultSetName = draftableSets[0] || DEFAULT_SET;
+
   // Pack configuration (pack size is fixed at 15; do not expose)
   // Tournament pairing format is always Swiss
   // New format: array of set names, one per booster
   const [sealedBoosterCount, setSealedBoosterCount] = useState<number>(6);
-  const [sealedBoosters, setSealedBoosters] = useState<string[]>([
-    "Beta",
-    "Beta",
-    "Beta",
-    "Beta",
-    "Beta",
-    "Beta",
-  ]);
+  const [sealedBoosters, setSealedBoosters] = useState<string[]>(() =>
+    Array(6).fill(DEFAULT_SET)
+  );
   const [draftBoosterCount, setDraftBoosterCount] = useState<number>(3);
-  const [draftBoosters, setDraftBoosters] = useState<string[]>([
-    "Beta",
-    "Arthurian Legends",
-    "Arthurian Legends",
-  ]);
+  const [draftBoosters, setDraftBoosters] = useState<string[]>(() =>
+    Array(3).fill(DEFAULT_SET)
+  );
 
   // Time limit configuration
   const [sealedTimeLimit, setSealedTimeLimit] = useState<number>(40);
@@ -302,9 +307,9 @@ export default function TournamentsPage() {
         },
       });
       setSealedBoosterCount(6);
-      setSealedBoosters(["Beta", "Beta", "Beta", "Beta", "Beta", "Beta"]);
+      setSealedBoosters(Array(6).fill(defaultSetName));
       setDraftBoosterCount(3);
-      setDraftBoosters(["Beta", "Arthurian Legends", "Arthurian Legends"]);
+      setDraftBoosters(Array(3).fill(defaultSetName));
       setUseCube(false);
       if (cubes.length > 0) {
         setCubeId(cubes[0].id);
@@ -872,7 +877,9 @@ export default function TournamentsPage() {
                                 setSealedBoosterCount(newCount);
                                 setSealedBoosters((prev) => [
                                   ...prev,
-                                  ...Array(newCount - prev.length).fill("Beta"),
+                                  ...Array(newCount - prev.length).fill(
+                                    defaultSetName
+                                  ),
                                 ]);
                               }}
                               className="px-3 py-1 bg-slate-700 hover:bg-slate-600 rounded text-white font-bold"
@@ -901,11 +908,11 @@ export default function TournamentsPage() {
                                 }}
                                 className="flex-1 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white"
                               >
-                                <option value="Beta">Beta</option>
-                                <option value="Arthurian Legends">
-                                  Arthurian Legends
-                                </option>
-                                <option value="Alpha">Alpha</option>
+                                {draftableSets.map((name) => (
+                                  <option key={name} value={name}>
+                                    {name}
+                                  </option>
+                                ))}
                               </select>
                             </div>
                           ))}
@@ -1036,7 +1043,7 @@ export default function TournamentsPage() {
                                 setDraftBoosters((prev) => [
                                   ...prev,
                                   ...Array(newCount - prev.length).fill(
-                                    "Arthurian Legends"
+                                    defaultSetName
                                   ),
                                 ]);
                               }}
@@ -1066,11 +1073,11 @@ export default function TournamentsPage() {
                                 }}
                                 className="flex-1 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white"
                               >
-                                <option value="Beta">Beta</option>
-                                <option value="Arthurian Legends">
-                                  Arthurian Legends
-                                </option>
-                                <option value="Alpha">Alpha</option>
+                                {draftableSets.map((name) => (
+                                  <option key={name} value={name}>
+                                    {name}
+                                  </option>
+                                ))}
                               </select>
                             </div>
                           ))}

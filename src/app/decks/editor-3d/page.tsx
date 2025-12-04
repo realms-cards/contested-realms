@@ -556,10 +556,11 @@ function AuthenticatedDeckEditor() {
       } else {
         const avatarParam = sealedReplaceAvatars ? "&replaceAvatars=true" : "";
         try {
+          // Pass sealed=true to allow Dragonlord and other mini-sets
           const res = await fetch(
             `/api/booster?set=${encodeURIComponent(
               pack.set
-            )}&count=1${avatarParam}`
+            )}&count=1&sealed=true${avatarParam}`
           );
           const data = await res.json();
           if (res.ok) {
@@ -612,25 +613,34 @@ function AuthenticatedDeckEditor() {
       return;
     }
 
-    const packsWithCards = packs.filter(
-      (p) => Array.isArray(p.cards) && p.cards.length > 0
-    );
-    if (!packsWithCards.length) {
+    console.log("[Sealed Pack Load] Starting pack load check", {
+      totalPacks: packs.length,
+      packs: packs.map((p) => ({
+        id: p.id,
+        set: p.set,
+        cardCount: p.cards?.length ?? 0,
+      })),
+    });
+
+    // Load all unopened packs - those with server cards and those without (will fetch from API)
+    const packsToLoad = packs.filter((p) => !p.opened);
+    if (!packsToLoad.length) {
+      console.log("[Sealed Pack Load] No unopened packs found");
       setPackLoadProgress({ processed: 0, total: 0, inProgress: false });
       return;
     }
 
-    const alreadyReady = packsWithCards.filter((p) =>
+    const alreadyReady = packsToLoad.filter((p) =>
       Boolean(packCardCacheRef.current[p.id])
     );
-    const remaining = packsWithCards.filter(
+    const remaining = packsToLoad.filter(
       (p) => !packCardCacheRef.current[p.id]
     );
 
     if (!remaining.length) {
       setPackLoadProgress({
         processed: alreadyReady.length,
-        total: packsWithCards.length,
+        total: packsToLoad.length,
         inProgress: false,
       });
       return;
@@ -639,7 +649,7 @@ function AuthenticatedDeckEditor() {
     let cancelled = false;
     setPackLoadProgress({
       processed: alreadyReady.length,
-      total: packsWithCards.length,
+      total: packsToLoad.length,
       inProgress: true,
     });
 
@@ -652,8 +662,8 @@ function AuthenticatedDeckEditor() {
         processed += 1;
         setPackLoadProgress({
           processed,
-          total: packsWithCards.length,
-          inProgress: processed < packsWithCards.length,
+          total: packsToLoad.length,
+          inProgress: processed < packsToLoad.length,
         });
       }
     })();
@@ -858,17 +868,52 @@ function AuthenticatedDeckEditor() {
       const matchName = searchParams?.get("matchName");
       setDeckName(matchName || "Deck Editor");
 
-      // Generate packs for sealed construction (inline to avoid TDZ on generateSealedPacks)
+      // Generate packs for sealed construction using packCounts if available
       const { packCount, setMix } = config;
       const generatedPacks = [] as typeof packs;
-      for (let i = 0; i < packCount; i++) {
-        const randomSet = setMix[Math.floor(Math.random() * setMix.length)];
-        generatedPacks.push({
-          id: `pack_${i}`,
-          set: randomSet,
-          cards: [],
-          opened: false,
-        });
+
+      // Try to use packCounts from URL for correct distribution
+      const packCountsParam = searchParams?.get("packCounts");
+      let packCounts: Record<string, number> | null = null;
+      if (packCountsParam) {
+        try {
+          packCounts = JSON.parse(packCountsParam);
+        } catch {}
+      }
+
+      if (packCounts && typeof packCounts === "object") {
+        // Use exact pack counts from config
+        let packIdx = 0;
+        for (const [setName, count] of Object.entries(packCounts)) {
+          const c = Math.max(0, Number(count) || 0);
+          for (let i = 0; i < c; i++) {
+            generatedPacks.push({
+              id: `pack_${packIdx++}`,
+              set: setName,
+              cards: [],
+              opened: false,
+            });
+          }
+        }
+        console.log(
+          "[Sealed] Generated packs from packCounts:",
+          generatedPacks.map((p) => p.set)
+        );
+      } else {
+        // Fallback: random selection from setMix
+        for (let i = 0; i < packCount; i++) {
+          const randomSet = setMix[Math.floor(Math.random() * setMix.length)];
+          generatedPacks.push({
+            id: `pack_${i}`,
+            set: randomSet,
+            cards: [],
+            opened: false,
+          });
+        }
+        console.log(
+          "[Sealed] Generated packs randomly from setMix:",
+          generatedPacks.map((p) => p.set)
+        );
       }
       setPacks(generatedPacks);
     }
@@ -918,7 +963,21 @@ function AuthenticatedDeckEditor() {
     } catch {
       stored = [];
     }
+
+    console.log("[Sealed Init] Loaded from localStorage:", {
+      idKey,
+      packCount: stored.length,
+      packs: stored.map((p) => ({
+        id: p.id,
+        set: p.set,
+        cardCount: p.cards?.length ?? 0,
+      })),
+    });
+
     if (!Array.isArray(stored) || stored.length === 0) {
+      console.log(
+        "[Sealed Init] No valid stored packs, falling back to generation"
+      );
       setSealedInitDone(true);
       return;
     }
@@ -933,6 +992,14 @@ function AuthenticatedDeckEditor() {
         : ([] as unknown[]),
       opened: openedById.get(p.id) ?? false,
     }));
+    console.log(
+      "[Sealed Init] Setting packs with cards:",
+      serverPacks.map((p) => ({
+        id: p.id,
+        set: p.set,
+        cardCount: (p.cards as unknown[])?.length ?? 0,
+      }))
+    );
     setPacks(serverPacks);
 
     // Load cube name if available (for display in UI)

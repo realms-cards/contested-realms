@@ -65,9 +65,12 @@ export async function GET() {
       },
     });
   } catch (e) {
-    console.error("Failed to build search index:", e);
+    const errorMessage = e instanceof Error ? e.message : String(e);
+    const errorStack = e instanceof Error ? e.stack : undefined;
+    console.error("Failed to build search index:", errorMessage);
+    if (errorStack) console.error("Stack:", errorStack);
     return NextResponse.json(
-      { error: "Failed to build index" },
+      { error: "Failed to build index", details: errorMessage },
       { status: 500 }
     );
   }

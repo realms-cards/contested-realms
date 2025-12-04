@@ -88,6 +88,8 @@ export const LobbyInfoSchema = z.object({
   readyPlayerIds: z.array(z.string()).default([]),
   // New: planned match type visible to all clients (host-controlled)
   plannedMatchType: z.enum(["constructed", "sealed", "draft"]).optional(),
+  // Quick Play lobby: game mode is locked, host configures and starts
+  isMatchmakingLobby: z.boolean().optional(),
 });
 export type LobbyInfo = z.infer<typeof LobbyInfoSchema>;
 
@@ -343,6 +345,47 @@ export type RequestLobbiesPayloadT = z.infer<typeof RequestLobbiesPayload>;
 export type RequestPlayersPayloadT = z.infer<typeof RequestPlayersPayload>;
 export type SetLobbyPlanPayloadT = z.infer<typeof SetLobbyPlanPayload>;
 
+// Matchmaking payloads
+export const MatchmakingPreferencesSchema = z.object({
+  matchTypes: z
+    .array(z.enum(["constructed", "sealed", "draft"]))
+    .min(1)
+    .max(3),
+});
+export type MatchmakingPreferences = z.infer<
+  typeof MatchmakingPreferencesSchema
+>;
+
+export const JoinMatchmakingPayload = z.object({
+  preferences: MatchmakingPreferencesSchema,
+});
+export const LeaveMatchmakingPayload = z.object({});
+
+export type JoinMatchmakingPayloadT = z.infer<typeof JoinMatchmakingPayload>;
+export type LeaveMatchmakingPayloadT = z.infer<typeof LeaveMatchmakingPayload>;
+
+// Matchmaking status for server -> client
+export const MatchmakingStatusSchema = z.enum([
+  "idle", // Not in queue
+  "searching", // In queue, looking for match
+  "found", // Match found, transitioning to lobby
+]);
+export type MatchmakingStatus = z.infer<typeof MatchmakingStatusSchema>;
+
+export const MatchmakingUpdatePayload = z.object({
+  status: MatchmakingStatusSchema,
+  preferences: MatchmakingPreferencesSchema.nullable(),
+  queuePosition: z.number().int().min(0).optional(),
+  estimatedWait: z.number().int().min(0).optional(), // seconds
+  matchedPlayerId: z.string().optional(),
+  lobbyId: z.string().optional(),
+  matchType: z.enum(["constructed", "sealed", "draft"]).optional(),
+  isHost: z.boolean().optional(), // true if this player is the host (for sealed/draft config)
+});
+export type MatchmakingUpdatePayloadT = z.infer<
+  typeof MatchmakingUpdatePayload
+>;
+
 export type ClientEventMap = {
   hello: HelloPayloadT;
   createLobby: CreateLobbyPayloadT;
@@ -363,6 +406,9 @@ export type ClientEventMap = {
   requestPlayers: RequestPlayersPayloadT;
   mulliganDone: MulliganDonePayloadT;
   setLobbyPlan: SetLobbyPlanPayloadT;
+  // Matchmaking
+  joinMatchmaking: JoinMatchmakingPayloadT;
+  leaveMatchmaking: LeaveMatchmakingPayloadT;
 };
 
 // Server -> Client payloads
@@ -447,6 +493,8 @@ export type ServerEventMap = {
   playerList: PlayerListPayloadT;
   lobbyInvite: LobbyInvitePayloadT;
   inviteResponseReceived: InviteResponsePayloadT;
+  // Matchmaking
+  matchmakingUpdate: MatchmakingUpdatePayloadT;
 };
 
 export const Protocol = {
@@ -473,6 +521,8 @@ export const Protocol = {
   RequestPlayersPayload,
   SetLobbyPlanPayload,
   MulliganDonePayload,
+  JoinMatchmakingPayload,
+  LeaveMatchmakingPayload,
   // Server -> Client
   WelcomePayload,
   JoinedLobbyPayload,
@@ -488,4 +538,5 @@ export const Protocol = {
   PlayerListPayload,
   LobbyInvitePayload,
   InviteResponsePayload,
+  MatchmakingUpdatePayload,
 };

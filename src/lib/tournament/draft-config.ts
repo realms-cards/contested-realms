@@ -1,5 +1,9 @@
 import type { Prisma } from "@prisma/client";
 
+// Default set for fallback when no configuration is provided
+// This should match the most commonly used draftable set
+const DEFAULT_FALLBACK_SET = "Beta";
+
 type PackConfigurationEntry = { setId: string; packCount: number };
 
 type DraftSetup = {
@@ -40,7 +44,7 @@ export function deriveDraftSetupFromSettings(settings: unknown): DraftSetup {
   }
 
   if (packConfiguration.length === 0) {
-    packConfiguration = [{ setId: "Beta", packCount: 3 }];
+    packConfiguration = [{ setId: DEFAULT_FALLBACK_SET, packCount: 3 }];
   }
 
   const timePerPick = toNumber(draftConfig.draftTimeLimit, 90);
@@ -52,7 +56,7 @@ export function deriveDraftSetupFromSettings(settings: unknown): DraftSetup {
 
   return {
     packConfiguration: packConfiguration.map((entry) => ({
-      setId: entry.setId || "Beta",
+      setId: entry.setId || DEFAULT_FALLBACK_SET,
       packCount: Math.max(0, Number(entry.packCount) || 0),
     })),
     cubeId,

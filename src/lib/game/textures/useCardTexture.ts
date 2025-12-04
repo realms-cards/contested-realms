@@ -33,7 +33,7 @@ const textureCache = new Map<string, CacheEntry>();
 const pendingLoads = new Map<string, Promise<Texture>>();
 
 // Expose cache to monitoring utilities for debugging and performance tracking
-if (typeof globalThis !== 'undefined') {
+if (typeof globalThis !== "undefined") {
   exposeTextureCache(textureCache, pendingLoads);
 }
 
@@ -344,6 +344,9 @@ export function useCardTexture({
         "beta-booster.png",
         "alpha-booster.png",
         "arthurian-legends-booster.png",
+        "dragonlord-booster.png",
+        "alphabeta-booster.png",
+        "arthurian-booster.png",
       ]);
 
       const shouldForceDataOnly = u.pathname

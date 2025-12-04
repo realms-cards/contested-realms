@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import type { SearchResult, SearchType } from "@/lib/deckEditor/search";
+import { getBoosterAssetName } from "@/lib/utils/booster-assets";
 
 type Pack = { id: string; set: string; opened: boolean; cards: unknown[] };
 type CubeSummary = {
@@ -207,19 +208,7 @@ export default function BottomBar(props: BottomBarProps) {
                           <div className="flex gap-1">
                             {setPacks.map((pack) => {
                               const ready = Boolean(packCardCache[pack.id]);
-                              const assetName = (() => {
-                                const s = (pack.set || "").toLowerCase();
-                                if (s.includes("arthur"))
-                                  return "arthurian-booster.png";
-                                if (s.includes("alpha"))
-                                  return "alphabeta-booster.png";
-                                if (s.includes("beta"))
-                                  return "alphabeta-booster.png";
-                                // Use beta booster image for cube packs
-                                if (s === "cube")
-                                  return "alphabeta-booster.png";
-                                return null;
-                              })();
+                              const assetName = getBoosterAssetName(pack.set);
                               return (
                                 <button
                                   key={pack.id}

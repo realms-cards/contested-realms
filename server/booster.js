@@ -1,7 +1,7 @@
 // Deterministic booster generation for the Node server
 // Uses Prisma and a seeded RNG passed in from the caller
 
-const { PrismaClient } = require('@prisma/client');
+const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
 // Cache heavy booster metadata since sealed generation may call this repeatedly per match.
@@ -27,17 +27,34 @@ async function getBoosterMetadata(setName) {
             select: { cardId: true, rarity: true, type: true, cost: true },
           }),
           prisma.variant.findMany({
-            where: { setId: set.id, product: 'Booster', finish: 'Standard' },
-            select: { id: true, cardId: true, slug: true, finish: true, product: true },
+            where: { setId: set.id, product: "Booster", finish: "Standard" },
+            select: {
+              id: true,
+              cardId: true,
+              slug: true,
+              finish: true,
+              product: true,
+            },
           }),
           prisma.variant.findMany({
-            where: { setId: set.id, product: 'Booster', finish: 'Foil' },
-            select: { id: true, cardId: true, slug: true, finish: true, product: true },
-          })
+            where: { setId: set.id, product: "Booster", finish: "Foil" },
+            select: {
+              id: true,
+              cardId: true,
+              slug: true,
+              finish: true,
+              product: true,
+            },
+          }),
         ]);
 
         const metaByCardId = new Map();
-        for (const m of metas) metaByCardId.set(m.cardId, { rarity: m.rarity, type: m.type, cost: m.cost });
+        for (const m of metas)
+          metaByCardId.set(m.cardId, {
+            rarity: m.rarity,
+            type: m.type,
+            cost: m.cost,
+          });
 
         const cardIds = Array.from(metaByCardId.keys());
         const cardNames = await prisma.card.findMany({
@@ -70,7 +87,10 @@ function xmur3(str) {
 
 function sfc32(a, b, c, d) {
   return function () {
-    a >>>= 0; b >>>= 0; c >>>= 0; d >>>= 0;
+    a >>>= 0;
+    b >>>= 0;
+    c >>>= 0;
+    d >>>= 0;
     let t = (a + b) | 0;
     a = b ^ (b >>> 9);
     b = (c + (c << 3)) | 0;
@@ -112,12 +132,39 @@ function pickUniqueFrom(pool, used, rng) {
   return choice(candidates, rng);
 }
 
-async function generateBoosterDeterministic(setName, rng, replaceAvatars = false) {
-  const { set, variantsStd, variantsFoil, metaByCardId, nameByCardId } = await getBoosterMetadata(setName);
+async function generateBoosterDeterministic(
+  setName,
+  rng,
+  replaceAvatars = false
+) {
+  const { set, variantsStd, variantsFoil, metaByCardId, nameByCardId } =
+    await getBoosterMetadata(setName);
   const cfg = set.packConfig;
 
+  // Handle fixed packs (mini-sets like Dragonlord) - return all cards from the set
+  if (cfg.isFixedPack) {
+    return variantsStd.map((v) => {
+      const meta = metaByCardId.get(v.cardId) || {
+        rarity: "Ordinary",
+        type: null,
+      };
+      const cardName = nameByCardId.get(v.cardId) || "";
+      return {
+        variantId: v.id,
+        slug: v.slug,
+        finish: v.finish,
+        product: v.product,
+        rarity: meta.rarity || "Ordinary",
+        type: meta.type || null,
+        cardId: v.cardId,
+        cardName,
+        setName,
+      };
+    });
+  }
+
   // Group by rarity using meta map
-  const rarities = ['Ordinary', 'Exceptional', 'Elite', 'Unique'];
+  const rarities = ["Ordinary", "Exceptional", "Elite", "Unique"];
   const stdByRarity = Object.fromEntries(rarities.map((r) => [r, []]));
   for (const v of variantsStd) {
     const meta = metaByCardId.get(v.cardId);
@@ -134,22 +181,30 @@ async function generateBoosterDeterministic(setName, rng, replaceAvatars = false
   // Site/Avatar pool (standard only)
   const siteAvatarCardIds = [];
   for (const [cardId, meta] of metaByCardId.entries()) {
-    const t = (meta.type || '').toLowerCase();
-    if (t.includes('site') || t.includes('avatar')) siteAvatarCardIds.push(cardId);
+    const t = (meta.type || "").toLowerCase();
+    if (t.includes("site") || t.includes("avatar"))
+      siteAvatarCardIds.push(cardId);
   }
-  const siteAvatarStd = variantsStd.filter((v) => siteAvatarCardIds.includes(v.cardId));
+  const siteAvatarStd = variantsStd.filter((v) =>
+    siteAvatarCardIds.includes(v.cardId)
+  );
 
   const picks = [];
   const used = new Set(); // track cardIds to prevent duplicates in a pack
 
   // Top rarity slot (Elite or Unique)
   const pickUnique = rng() < cfg.uniqueChance;
-  const topPool = pickUnique ? stdByRarity['Unique'] : stdByRarity['Elite'];
-  const topVariant = pickUniqueFrom(topPool, used, rng)
-    || pickUniqueFrom(stdByRarity['Elite'], used, rng)
-    || pickUniqueFrom(stdByRarity['Unique'], used, rng);
+  const topPool = pickUnique ? stdByRarity["Unique"] : stdByRarity["Elite"];
+  const topVariant =
+    pickUniqueFrom(topPool, used, rng) ||
+    pickUniqueFrom(stdByRarity["Elite"], used, rng) ||
+    pickUniqueFrom(stdByRarity["Unique"], used, rng);
   if (topVariant) {
-    const meta = metaByCardId.get(topVariant.cardId) || { rarity: 'Elite', type: null, cost: null };
+    const meta = metaByCardId.get(topVariant.cardId) || {
+      rarity: "Elite",
+      type: null,
+      cost: null,
+    };
     picks.push({
       variantId: topVariant.id,
       slug: topVariant.slug,
@@ -158,7 +213,7 @@ async function generateBoosterDeterministic(setName, rng, replaceAvatars = false
       rarity: meta.rarity,
       type: meta.type ?? null,
       cardId: topVariant.cardId,
-      cardName: '', // fill later
+      cardName: "", // fill later
       cost: meta.cost ?? null,
     });
     used.add(topVariant.cardId);
@@ -166,9 +221,13 @@ async function generateBoosterDeterministic(setName, rng, replaceAvatars = false
 
   // Exceptional slots
   for (let i = 0; i < cfg.exceptionalCount; i++) {
-    const v = pickUniqueFrom(stdByRarity['Exceptional'], used, rng);
+    const v = pickUniqueFrom(stdByRarity["Exceptional"], used, rng);
     if (!v) break;
-    const meta = metaByCardId.get(v.cardId) || { rarity: 'Exceptional', type: null, cost: null };
+    const meta = metaByCardId.get(v.cardId) || {
+      rarity: "Exceptional",
+      type: null,
+      cost: null,
+    };
     picks.push({
       variantId: v.id,
       slug: v.slug,
@@ -177,7 +236,7 @@ async function generateBoosterDeterministic(setName, rng, replaceAvatars = false
       rarity: meta.rarity,
       type: meta.type ?? null,
       cardId: v.cardId,
-      cardName: '',
+      cardName: "",
       cost: meta.cost ?? null,
     });
     used.add(v.cardId);
@@ -185,9 +244,13 @@ async function generateBoosterDeterministic(setName, rng, replaceAvatars = false
 
   // Ordinary slots
   for (let i = 0; i < cfg.ordinaryCount; i++) {
-    const v = pickUniqueFrom(stdByRarity['Ordinary'], used, rng);
+    const v = pickUniqueFrom(stdByRarity["Ordinary"], used, rng);
     if (!v) break;
-    const meta = metaByCardId.get(v.cardId) || { rarity: 'Ordinary', type: null, cost: null };
+    const meta = metaByCardId.get(v.cardId) || {
+      rarity: "Ordinary",
+      type: null,
+      cost: null,
+    };
     picks.push({
       variantId: v.id,
       slug: v.slug,
@@ -196,7 +259,7 @@ async function generateBoosterDeterministic(setName, rng, replaceAvatars = false
       rarity: meta.rarity,
       type: meta.type ?? null,
       cardId: v.cardId,
-      cardName: '',
+      cardName: "",
       cost: meta.cost ?? null,
     });
     used.add(v.cardId);
@@ -204,9 +267,15 @@ async function generateBoosterDeterministic(setName, rng, replaceAvatars = false
 
   // Site/Avatar extra slot if configured
   for (let i = 0; i < (cfg.siteOrAvatarCount || 0); i++) {
-    const v = pickUniqueFrom(siteAvatarStd, used, rng) || pickUniqueFrom(stdByRarity['Ordinary'], used, rng);
+    const v =
+      pickUniqueFrom(siteAvatarStd, used, rng) ||
+      pickUniqueFrom(stdByRarity["Ordinary"], used, rng);
     if (!v) break;
-    const meta = metaByCardId.get(v.cardId) || { rarity: 'Ordinary', type: null, cost: null };
+    const meta = metaByCardId.get(v.cardId) || {
+      rarity: "Ordinary",
+      type: null,
+      cost: null,
+    };
     picks.push({
       variantId: v.id,
       slug: v.slug,
@@ -215,7 +284,7 @@ async function generateBoosterDeterministic(setName, rng, replaceAvatars = false
       rarity: meta.rarity,
       type: meta.type ?? null,
       cardId: v.cardId,
-      cardName: '',
+      cardName: "",
       cost: meta.cost ?? null,
     });
     used.add(v.cardId);
@@ -223,19 +292,26 @@ async function generateBoosterDeterministic(setName, rng, replaceAvatars = false
 
   // Foil replacement logic (replace one ordinary slot)
   if (cfg.foilChance && rng() < cfg.foilChance) {
-    const foilRarity = weightedChoice([
-      { item: 'Unique', weight: cfg.foilUniqueWeight },
-      { item: 'Elite', weight: cfg.foilEliteWeight },
-      { item: 'Exceptional', weight: cfg.foilExceptionalWeight },
-      { item: 'Ordinary', weight: cfg.foilOrdinaryWeight },
-    ], rng);
+    const foilRarity = weightedChoice(
+      [
+        { item: "Unique", weight: cfg.foilUniqueWeight },
+        { item: "Elite", weight: cfg.foilEliteWeight },
+        { item: "Exceptional", weight: cfg.foilExceptionalWeight },
+        { item: "Ordinary", weight: cfg.foilOrdinaryWeight },
+      ],
+      rng
+    );
     const foilPool = foilRarity ? foilByRarity[foilRarity] : [];
     const foil = pickUniqueFrom(foilPool, used, rng);
     if (foil) {
       // Find an ordinary index to replace
-      const ordIdx = picks.findIndex((p) => p.rarity === 'Ordinary');
+      const ordIdx = picks.findIndex((p) => p.rarity === "Ordinary");
       if (ordIdx !== -1) {
-        const meta = metaByCardId.get(foil.cardId) || { rarity: 'Ordinary', type: null, cost: null };
+        const meta = metaByCardId.get(foil.cardId) || {
+          rarity: "Ordinary",
+          type: null,
+          cost: null,
+        };
         // update used set: remove the replaced ordinary and add the foil card
         used.delete(picks[ordIdx].cardId);
         picks[ordIdx] = {
@@ -246,7 +322,7 @@ async function generateBoosterDeterministic(setName, rng, replaceAvatars = false
           rarity: meta.rarity,
           type: meta.type ?? null,
           cardId: foil.cardId,
-          cardName: '',
+          cardName: "",
           cost: meta.cost ?? null,
         };
         used.add(foil.cardId);
@@ -255,49 +331,67 @@ async function generateBoosterDeterministic(setName, rng, replaceAvatars = false
   }
 
   // Fill card names from cached map
-  for (const p of picks) p.cardName = nameByCardId.get(p.cardId) || '';
+  for (const p of picks) p.cardName = nameByCardId.get(p.cardId) || "";
 
   // Avatar replacement for Alpha/Beta
-  if (replaceAvatars && (setName === 'Alpha' || setName === 'Beta')) {
+  if (replaceAvatars && (setName === "Alpha" || setName === "Beta")) {
     try {
       const sorcererIndices = [];
       for (let i = 0; i < picks.length; i++) {
         const pick = picks[i];
         const meta = metaByCardId.get(pick.cardId);
-        if ((meta?.type || '').toLowerCase().includes('avatar') && (pick.cardName || '').toLowerCase().includes('sorcerer')) {
+        if (
+          (meta?.type || "").toLowerCase().includes("avatar") &&
+          (pick.cardName || "").toLowerCase().includes("sorcerer")
+        ) {
           sorcererIndices.push(i);
         }
       }
       if (sorcererIndices.length > 0) {
-        const betaAvatarNames = ['Geomancer', 'Flamecaller', 'Sparkmage', 'Waveshaper'];
+        const betaAvatarNames = [
+          "Geomancer",
+          "Flamecaller",
+          "Sparkmage",
+          "Waveshaper",
+        ];
         const betaAvatars = await prisma.card.findMany({
           where: { name: { in: betaAvatarNames } },
           select: { id: true, name: true },
         });
         if (betaAvatars.length > 0) {
-          const betaSet = await prisma.set.findUnique({ where: { name: 'Beta' } });
+          const betaSet = await prisma.set.findUnique({
+            where: { name: "Beta" },
+          });
           if (betaSet) {
             const betaVariants = await prisma.variant.findMany({
               where: {
                 cardId: { in: betaAvatars.map((c) => c.id) },
                 setId: betaSet.id,
-                product: 'Booster',
-                finish: 'Standard',
+                product: "Booster",
+                finish: "Standard",
               },
-              select: { id: true, cardId: true, slug: true, finish: true, product: true },
+              select: {
+                id: true,
+                cardId: true,
+                slug: true,
+                finish: true,
+                product: true,
+              },
             });
             for (const idx of sorcererIndices) {
               const randomAvatar = choice(betaVariants, rng);
               if (!randomAvatar) continue;
-              const avatarCard = betaAvatars.find((c) => c.id === randomAvatar.cardId);
+              const avatarCard = betaAvatars.find(
+                (c) => c.id === randomAvatar.cardId
+              );
               if (!avatarCard) continue;
               picks[idx] = {
                 variantId: randomAvatar.id,
                 slug: randomAvatar.slug,
                 finish: randomAvatar.finish,
                 product: randomAvatar.product,
-                rarity: 'Ordinary',
-                type: 'Avatar',
+                rarity: "Ordinary",
+                type: "Avatar",
                 cardId: randomAvatar.cardId,
                 cardName: avatarCard.name,
                 cost: null,
@@ -307,7 +401,7 @@ async function generateBoosterDeterministic(setName, rng, replaceAvatars = false
         }
       }
     } catch (err) {
-      console.error('Avatar replacement failed:', err);
+      console.error("Avatar replacement failed:", err);
     }
   }
 
@@ -321,7 +415,15 @@ async function generateCubeBoosterDeterministic(cubeId, rng, packSize) {
       cards: {
         include: {
           card: { select: { name: true, elements: true } },
-          variant: { select: { id: true, slug: true, finish: true, product: true, cardId: true } },
+          variant: {
+            select: {
+              id: true,
+              slug: true,
+              finish: true,
+              product: true,
+              cardId: true,
+            },
+          },
           set: { select: { id: true, name: true } },
         },
       },
@@ -342,7 +444,13 @@ async function generateCubeBoosterDeterministic(cubeId, rng, packSize) {
   if (metaPairs.length) {
     const metas = await prisma.cardSetMetadata.findMany({
       where: { OR: metaPairs },
-      select: { cardId: true, setId: true, type: true, rarity: true, cost: true },
+      select: {
+        cardId: true,
+        setId: true,
+        type: true,
+        rarity: true,
+        cost: true,
+      },
     });
     for (const meta of metas) {
       metaMap.set(`${meta.cardId}:${meta.setId}`, {

@@ -30,6 +30,7 @@ import { CARD_LONG } from "@/lib/game/constants";
 import { Physics } from "@/lib/game/physics";
 import { createStackHoverState } from "@/lib/game/stackHover";
 import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
+import { getBoosterAssetName } from "@/lib/utils/booster-assets";
 
 // --- Draft data types (mirrors /draft 2D) ---
 // Types moved to src/lib/game/cardSorting.ts
@@ -1505,13 +1506,7 @@ export default function Draft3DPage() {
                   );
                   const setName =
                     seatPacks[0]?.[i]?.[0]?.setName || setNames[i] || "";
-                  const assetName = (() => {
-                    const s = (setName || "").toLowerCase();
-                    if (s.includes("arthur")) return "arthurian-booster.png";
-                    if (s.includes("alpha")) return "alphabeta-booster.png";
-                    if (s.includes("beta")) return "alphabeta-booster.png";
-                    return null;
-                  })();
+                  const assetName = getBoosterAssetName(setName);
                   return (
                     <button
                       key={`pack-opt-${i}`}

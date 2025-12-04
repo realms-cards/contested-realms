@@ -18,6 +18,7 @@ import {
 import CardPlane from "@/lib/game/components/CardPlane";
 import { Physics } from "@/lib/game/physics";
 import { DraftState, TransportEventMap } from "@/lib/net/transport";
+import { getBoosterAssetName } from "@/lib/utils/booster-assets";
 
 type Card = {
   id: string;
@@ -537,13 +538,7 @@ export default function OnlineDraftScreen({
               const setName =
                 availableSets[packIdx] ||
                 availableSets[packIdx % availableSets.length]; // Use exact pack or cycle if needed
-              const assetName = (() => {
-                const s = (setName || "").toLowerCase();
-                if (s.includes("arthur")) return "arthurian-booster.png";
-                if (s.includes("alpha")) return "alphabeta-booster.png";
-                if (s.includes("beta")) return "alphabeta-booster.png";
-                return "alphabeta-booster.png"; // Default
-              })();
+              const assetName = getBoosterAssetName(setName);
 
               return (
                 <button

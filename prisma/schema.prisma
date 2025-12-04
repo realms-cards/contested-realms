@@ -23,6 +23,7 @@ enum Rarity {
 enum Finish {
   Standard
   Foil
+  Rainbow
 }
 
 model Set {
@@ -66,7 +67,7 @@ model CardSetMetadata {
   id         Int      @id @default(autoincrement())
   cardId     Int
   setId      Int
-  rarity     Rarity
+  rarity     Rarity?
   type       String
   rulesText  String?
   cost       Int?
@@ -121,6 +122,7 @@ model PackConfig {
   foilExceptionalWeight  Int     @default(6)
   foilOrdinaryWeight     Int     @default(7)
   foilReplacesOrdinary   Boolean @default(true)
+  isFixedPack            Boolean @default(false) // If true, booster contains all cards from set (for mini-sets)
 
   set Set @relation(fields: [setId], references: [id], onDelete: Cascade)
 }

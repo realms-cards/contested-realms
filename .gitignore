@@ -60,3 +60,4 @@ next-env.d.ts
 dev.db
 
 /logs/training
+/cardart/original/
