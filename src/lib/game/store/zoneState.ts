@@ -290,8 +290,41 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
       const avatarName = (state.avatars[who]?.card?.name || "").toLowerCase();
       const isSpellslinger = avatarName === "spellslinger";
       const isPathfinder = avatarName === "pathfinder";
-      const sbCount = spellbookCount ?? (isSpellslinger ? 4 : 3);
-      const atCount = atlasCount ?? (isPathfinder ? 0 : 3);
+      const isMagician = avatarName.includes("magician");
+      const isDuplicator = avatarName.includes("duplicator");
+
+      // Determine draw counts based on avatar abilities:
+      // - Magician: 7 cards from spellbook, 0 from atlas (no atlas)
+      // - Duplicator: 2 spells and 2 sites
+      // - Spellslinger: 4 spells, 3 sites (legacy)
+      // - Pathfinder: 3 spells, 0 sites (legacy)
+      // - Default: 3 spells, 3 sites
+      let sbCount: number;
+      let atCount: number;
+
+      if (spellbookCount !== undefined) {
+        sbCount = spellbookCount;
+      } else if (isMagician) {
+        sbCount = 7;
+      } else if (isDuplicator) {
+        sbCount = 2;
+      } else if (isSpellslinger) {
+        sbCount = 4;
+      } else {
+        sbCount = 3;
+      }
+
+      if (atlasCount !== undefined) {
+        atCount = atlasCount;
+      } else if (isMagician) {
+        atCount = 0; // Magician has no atlas
+      } else if (isDuplicator) {
+        atCount = 2;
+      } else if (isPathfinder) {
+        atCount = 0;
+      } else {
+        atCount = 3;
+      }
       const sb = [...state.zones[who].spellbook];
       const at = [...state.zones[who].atlas];
       const hand = [...state.zones[who].hand];
