@@ -10,7 +10,13 @@ import type { PlayerKey, AvatarState } from "./store/types";
 /**
  * Known avatar ability types
  */
-export type AvatarAbility = "harbinger" | "dragonlord" | "elementalist" | null;
+export type AvatarAbility =
+  | "harbinger"
+  | "dragonlord"
+  | "elementalist"
+  | "magician"
+  | "duplicator"
+  | null;
 
 /**
  * Check if an avatar name indicates Harbinger (Gothic expansion)
@@ -41,6 +47,27 @@ export function isElementalist(avatarName: string | null | undefined): boolean {
 }
 
 /**
+ * Check if an avatar name indicates Magician
+ * Uses case-insensitive matching
+ * Magician: No atlas, spellbook may contain sites, starts with 7 cards
+ */
+export function isMagician(avatarName: string | null | undefined): boolean {
+  if (!avatarName) return false;
+  return avatarName.toLowerCase().includes("magician");
+}
+
+/**
+ * Check if an avatar name indicates Duplicator
+ * Uses case-insensitive matching
+ * Duplicator: Spellbook and atlas can only contain matching pairs of Uniques
+ * Starts with 2 spells and 2 sites in hand
+ */
+export function isDuplicator(avatarName: string | null | undefined): boolean {
+  if (!avatarName) return false;
+  return avatarName.toLowerCase().includes("duplicator");
+}
+
+/**
  * Get the primary ability type for an avatar by name
  * Returns null if no special ability detected
  */
@@ -53,6 +80,8 @@ export function getAvatarAbility(
   if (name.includes("harbinger")) return "harbinger";
   if (name.includes("dragonlord")) return "dragonlord";
   if (name.includes("elementalist")) return "elementalist";
+  if (name.includes("magician")) return "magician";
+  if (name.includes("duplicator")) return "duplicator";
 
   return null;
 }
@@ -119,7 +148,10 @@ export function getAvatarAbilityInfo(
   return {
     name,
     ability,
-    // Harbinger has special setup (portal rolls)
-    hasSpecialSetup: ability === "harbinger",
+    // These avatars have special setup requirements
+    hasSpecialSetup:
+      ability === "harbinger" ||
+      ability === "magician" ||
+      ability === "duplicator",
   };
 }

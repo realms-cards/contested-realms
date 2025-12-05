@@ -1,9 +1,68 @@
+import { isDuplicator, isMagician } from "@/lib/game/avatarAbilities";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef, Phase } from "@/lib/game/store";
 import { preCacheDeckFromResponse } from "@/lib/service-worker/registration";
 
 // Internal helper: extend CardRef with an optional classification zone
 type CardRefWithZone = CardRef & { __zone?: string | null };
+
+/**
+ * Validate a Duplicator deck: spellbook and atlas can only contain matching pairs of Uniques.
+ * Each unique card name must appear exactly twice total (can be split across zones).
+ */
+function validateDuplicatorDeck(
+  spellbook: CardRef[],
+  atlas: CardRef[]
+): { valid: boolean; error?: string } {
+  // Count occurrences of each card name across both zones
+  const cardCounts = new Map<string, number>();
+  const allCards = [...spellbook, ...atlas];
+
+  for (const card of allCards) {
+    const name = card.name?.toLowerCase() || "";
+    if (!name) continue;
+    cardCounts.set(name, (cardCounts.get(name) || 0) + 1);
+  }
+
+  // Check that each card appears exactly twice (matching pairs)
+  const invalidCards: string[] = [];
+  for (const [name, count] of cardCounts) {
+    if (count !== 2) {
+      invalidCards.push(`${name} (${count}x)`);
+    }
+  }
+
+  if (invalidCards.length > 0) {
+    // Only show first few invalid cards to keep error message reasonable
+    const sample = invalidCards.slice(0, 3);
+    const more =
+      invalidCards.length > 3 ? ` and ${invalidCards.length - 3} more` : "";
+    return {
+      valid: false,
+      error: `Duplicator deck must contain matching pairs of Uniques. Invalid: ${sample.join(
+        ", "
+      )}${more}`,
+    };
+  }
+
+  // Minimum deck size: need at least 12 pairs for spellbook (24 cards) and 6 pairs for atlas (12 sites)
+  // But the rule might be more flexible - let's just check we have some cards
+  if (spellbook.length < 24) {
+    return {
+      valid: false,
+      error: "Duplicator deck needs at least 24 cards in spellbook (12 pairs)",
+    };
+  }
+
+  if (atlas.length < 12) {
+    return {
+      valid: false,
+      error: "Duplicator deck needs at least 12 sites in atlas (6 pairs)",
+    };
+  }
+
+  return { valid: true };
+}
 
 export async function loadDeckFor(
   who: "p1" | "p2",
@@ -51,20 +110,36 @@ export async function loadDeckFor(
     }
 
     const avatar = avatars[0];
+    const avatarName = avatar.name;
+    const magicianDeck = isMagician(avatarName);
+    const duplicatorDeck = isDuplicator(avatarName);
+
     const spellbook = rawSpellbook.filter((c: CardRef) => !isAvatar(c));
 
     // Collection is optional and does not count towards minimums.
     // Clamp to at most 10 cards to respect collection capacity even for legacy decks.
     const collection = rawCollection.slice(0, 10);
 
-    if (rawAtlas.length < 12) {
-      setError("Atlas needs at least 12 sites");
-      return false;
-    }
+    // Magician: Atlas cards get merged into spellbook at match start
+    // Uses standard deck validation, but atlas becomes part of spellbook
+    if (duplicatorDeck) {
+      // Duplicator: Validate matching pairs of Uniques
+      const validationResult = validateDuplicatorDeck(spellbook, rawAtlas);
+      if (!validationResult.valid) {
+        setError(validationResult.error || "Invalid Duplicator deck");
+        return false;
+      }
+    } else {
+      // Standard deck validation
+      if (rawAtlas.length < 12) {
+        setError("Atlas needs at least 12 sites");
+        return false;
+      }
 
-    if (spellbook.length < 24) {
-      setError("Spellbook needs at least 24 cards (excluding Avatar)");
-      return false;
+      if (spellbook.length < 24) {
+        setError("Spellbook needs at least 24 cards (excluding Avatar)");
+        return false;
+      }
     }
 
     const {
@@ -77,10 +152,17 @@ export async function loadDeckFor(
       drawOpening,
     } = useGameStore.getState();
 
-    // Initialize libraries, including initial collection zone
-    initLibraries(who, spellbook, rawAtlas, collection);
+    // Initialize libraries
+    // Magician: merge atlas into spellbook (sites go in spellbook, no atlas)
+    const spellbookToUse = magicianDeck
+      ? [...spellbook, ...rawAtlas]
+      : spellbook;
+    const atlasToUse = magicianDeck ? [] : rawAtlas;
+    initLibraries(who, spellbookToUse, atlasToUse, collection);
     shuffleSpellbook(who);
-    shuffleAtlas(who);
+    if (!magicianDeck) {
+      shuffleAtlas(who);
+    }
     setAvatarCard(who, avatar);
 
     // Set Dragonlord champion if present

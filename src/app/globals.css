@@ -265,3 +265,17 @@ body[data-colorblind="true"] *[class*="ring-rose-"] {
 .animate-slide-in {
   animation: slide-in 0.3s ease-out;
 }
+
+/* Retro 90s marquee animation */
+@keyframes marquee {
+  0% {
+    transform: translateX(100vw);
+  }
+  100% {
+    transform: translateX(-100%);
+  }
+}
+
+.animate-marquee {
+  animation: marquee 12s linear infinite;
+}
