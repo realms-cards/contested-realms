@@ -116,7 +116,7 @@ export async function GET(
         });
       }
 
-      // Booster pack images live as PNGs under data/; do not try webp/ktx2
+      // Booster pack images - redirect to CDN root as PNG
       const boosterBases = new Set([
         "alphabeta-booster",
         "arthurian-booster",
@@ -128,8 +128,16 @@ export async function GET(
         "arthurian-legends-booster",
       ]);
       if (boosterBases.has(baseName)) {
-        // Do not redirect boosters to CDN; serve from local data below to avoid 404s
-        // Fall through to local file resolution
+        // Boosters are PNGs at CDN root
+        const cdnUrl = `${cdn.replace(/\/$/, "")}/${baseName}.png`;
+        console.log(`[API assets] Redirecting booster to CDN: ${cdnUrl}`);
+        return new Response(null, {
+          status: 308,
+          headers: {
+            Location: cdnUrl,
+            "Cache-Control": "public, max-age=31536000, immutable",
+          },
+        });
       } else {
         // For card images and other assets
         // Determine the CDN directory based on format preference
