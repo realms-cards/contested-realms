@@ -232,6 +232,7 @@ export default function BottomBar(props: BottomBarProps) {
                                       width={64}
                                       height={96}
                                       className="object-cover w-full h-full group-hover:scale-105 transition-transform"
+                                      unoptimized
                                     />
                                   ) : (
                                     <div className="w-full h-full bg-gradient-to-r from-green-600 to-emerald-600 flex items-center justify-center text-white font-bold">

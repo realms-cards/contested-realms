@@ -1781,76 +1781,75 @@ function LobbyPageContent({
                           </div>
                         ) : (
                           <div>
-                              <label className="block text-xs font-medium mb-2">
-                                Pack Configuration
-                                <span className="text-xs opacity-70 ml-2">
-                                  (Total: {sealedTotalPacks} packs, 3-8
-                                  required)
-                                </span>
-                                <span
-                                  className={`ml-2 inline-flex items-center px-2 py-0.5 rounded text-[10px] ring-1 ${
-                                    sealedValid
-                                      ? "bg-emerald-500/15 text-emerald-300 ring-emerald-500/30"
-                                      : "bg-rose-500/15 text-rose-300 ring-rose-500/30"
-                                  }`}
-                                >
-                                  {sealedValid
-                                    ? "OK"
-                                    : sealedActiveSets === 0
-                                    ? "No packs set"
-                                    : sealedTotalPacks < 3
-                                    ? `Need ${3 - sealedTotalPacks} more`
-                                    : `Remove ${sealedTotalPacks - 8}`}
-                                </span>
-                              </label>
-                              <div className="space-y-2">
-                                {Object.entries(sealedConfig.packCounts).map(
-                                  ([set, count]) => (
-                                    <div
-                                      key={set}
-                                      className="flex items-center justify-between"
-                                    >
-                                      <span className="text-sm">{set}</span>
-                                      <div className="flex items-center gap-2">
-                                        <button
-                                          className="w-6 h-6 bg-slate-700 hover:bg-slate-600 rounded text-xs flex items-center justify-center transition-colors disabled:opacity-40"
-                                          onClick={() =>
-                                            setSealedConfig((prev) => ({
-                                              ...prev,
-                                              packCounts: {
-                                                ...prev.packCounts,
-                                                [set]: Math.max(0, count - 1),
-                                              },
-                                            }))
-                                          }
-                                          disabled={count <= 0}
-                                        >
-                                          −
-                                        </button>
-                                        <span className="w-8 text-center text-sm font-medium">
-                                          {count}
-                                        </span>
-                                        <button
-                                          className="w-6 h-6 bg-slate-700 hover:bg-slate-600 rounded text-xs flex items-center justify-center transition-colors disabled:opacity-40"
-                                          onClick={() =>
-                                            setSealedConfig((prev) => ({
-                                              ...prev,
-                                              packCounts: {
-                                                ...prev.packCounts,
-                                                [set]: Math.min(8, count + 1),
-                                              },
-                                            }))
-                                          }
-                                          disabled={sealedTotalPacks >= 8}
-                                        >
-                                          +
-                                        </button>
-                                      </div>
+                            <label className="block text-xs font-medium mb-2">
+                              Pack Configuration
+                              <span className="text-xs opacity-70 ml-2">
+                                (Total: {sealedTotalPacks} packs, 3-8 required)
+                              </span>
+                              <span
+                                className={`ml-2 inline-flex items-center px-2 py-0.5 rounded text-[10px] ring-1 ${
+                                  sealedValid
+                                    ? "bg-emerald-500/15 text-emerald-300 ring-emerald-500/30"
+                                    : "bg-rose-500/15 text-rose-300 ring-rose-500/30"
+                                }`}
+                              >
+                                {sealedValid
+                                  ? "OK"
+                                  : sealedActiveSets === 0
+                                  ? "No packs set"
+                                  : sealedTotalPacks < 3
+                                  ? `Need ${3 - sealedTotalPacks} more`
+                                  : `Remove ${sealedTotalPacks - 8}`}
+                              </span>
+                            </label>
+                            <div className="space-y-2">
+                              {Object.entries(sealedConfig.packCounts).map(
+                                ([set, count]) => (
+                                  <div
+                                    key={set}
+                                    className="flex items-center justify-between"
+                                  >
+                                    <span className="text-sm">{set}</span>
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        className="w-6 h-6 bg-slate-700 hover:bg-slate-600 rounded text-xs flex items-center justify-center transition-colors disabled:opacity-40"
+                                        onClick={() =>
+                                          setSealedConfig((prev) => ({
+                                            ...prev,
+                                            packCounts: {
+                                              ...prev.packCounts,
+                                              [set]: Math.max(0, count - 1),
+                                            },
+                                          }))
+                                        }
+                                        disabled={count <= 0}
+                                      >
+                                        −
+                                      </button>
+                                      <span className="w-8 text-center text-sm font-medium">
+                                        {count}
+                                      </span>
+                                      <button
+                                        className="w-6 h-6 bg-slate-700 hover:bg-slate-600 rounded text-xs flex items-center justify-center transition-colors disabled:opacity-40"
+                                        onClick={() =>
+                                          setSealedConfig((prev) => ({
+                                            ...prev,
+                                            packCounts: {
+                                              ...prev.packCounts,
+                                              [set]: Math.min(8, count + 1),
+                                            },
+                                          }))
+                                        }
+                                        disabled={sealedTotalPacks >= 8}
+                                      >
+                                        +
+                                      </button>
                                     </div>
-                                  )
-                                )}
-                              </div>
+                                  </div>
+                                )
+                              )}
                             </div>
+                          </div>
                         )}
                       </div>
                     </div>
