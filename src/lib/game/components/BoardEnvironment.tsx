@@ -1,7 +1,12 @@
 import { useTexture } from "@react-three/drei";
 import { RigidBody, CuboidCollider } from "@react-three/rapier";
 import { Suspense } from "react";
-import { SRGBColorSpace, type Intersection, type Object3D, type Raycaster } from "three";
+import {
+  SRGBColorSpace,
+  type Intersection,
+  type Object3D,
+  type Raycaster,
+} from "three";
 import {
   EDGE_MARGIN,
   GROUND_HALF_THICK,
@@ -25,7 +30,7 @@ function noopRaycast(
 }
 
 function Playmat({ matW, matH }: { matW: number; matH: number }) {
-  const tex = useTexture("/api/assets/playmat.jpg");
+  const tex = useTexture("/playmat.jpg");
   tex.colorSpace = SRGBColorSpace;
   return (
     <mesh
@@ -40,7 +45,11 @@ function Playmat({ matW, matH }: { matW: number; matH: number }) {
   );
 }
 
-export function BoardEnvironment({ matW, matH, showPlaymat }: BoardEnvironmentProps) {
+export function BoardEnvironment({
+  matW,
+  matH,
+  showPlaymat,
+}: BoardEnvironmentProps) {
   return (
     <>
       {showPlaymat && (

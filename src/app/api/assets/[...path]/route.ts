@@ -69,7 +69,7 @@ export async function GET(
       const last = segments[segments.length - 1];
       const baseName = last.replace(/\.[^.]+$/, ""); // filename without extension
 
-      // Assets that should be at CDN root (elements, card backs, playmat)
+      // Assets that should be at CDN root (elements, card backs, playmat, boosters)
       const rootAssets = new Set([
         "playmat.jpg",
         "fire.png",
@@ -84,14 +84,20 @@ export async function GET(
         "cardback_spellbook.webp",
         "cardback_atlas.png",
         "cardback_atlas.webp",
+        // Booster pack images
+        "alphabeta-booster.png",
+        "arthurian-booster.png",
+        "dragonlord-booster.png",
+        "gothic-booster.png",
       ]);
 
       // Check if this is a root asset
       if (rootAssets.has(last)) {
-        // First try .webp version for elements and cardbacks (except playmat which is .jpg)
+        // First try .webp version for elements and cardbacks (except playmat and boosters)
         let cdnFile = last;
         if (
           !last.includes("playmat") &&
+          !last.includes("booster") &&
           (last.endsWith(".png") || last.endsWith(".jpg"))
         ) {
           // For elements and cardbacks, prefer .webp at root
@@ -114,6 +120,8 @@ export async function GET(
       const boosterBases = new Set([
         "alphabeta-booster",
         "arthurian-booster",
+        "dragonlord-booster",
+        "gothic-booster",
         // historical/alternate names
         "alpha-booster",
         "beta-booster",
