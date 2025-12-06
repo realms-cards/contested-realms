@@ -16,10 +16,11 @@ const prisma = new PrismaClient();
 
 /** Map API rarity string to Prisma enum */
 function mapRarity(r) {
-  if (!r) return null;
+  if (!r) return null; // Promo cards may not have rarity
   const v = String(r).trim();
   if (["Ordinary", "Exceptional", "Elite", "Unique"].includes(v)) return v;
-  throw new Error(`Unknown rarity: ${r}`);
+  console.warn(`Unknown rarity "${r}", treating as null`);
+  return null;
 }
 
 /** Map API finish string to Prisma enum */
