@@ -345,6 +345,7 @@ export function useCardTexture({
         "alpha-booster.png",
         "arthurian-legends-booster.png",
         "dragonlord-booster.png",
+        "gothic-booster.png",
         "alphabeta-booster.png",
         "arthurian-booster.png",
       ]);

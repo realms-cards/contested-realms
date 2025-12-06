@@ -93,6 +93,7 @@ const SETS = [
   "Beta",
   "Arthurian Legends",
   "Dragonlord",
+  "Gothic",
 ] as const;
 
 interface CardBrowserProps {
@@ -112,6 +113,7 @@ export default function CardBrowser({ onCardAdded }: CardBrowserProps) {
   const [selectedSubtype, setSelectedSubtype] =
     useState<string>("All Subtypes");
   const [showFilters, setShowFilters] = useState(false);
+  const [displayLimit, setDisplayLimit] = useState(60);
 
   // Zoom level (number of base columns, sites take 2x)
   const [zoomLevel, setZoomLevel] = useState(6);
@@ -196,7 +198,8 @@ export default function CardBrowser({ onCardAdded }: CardBrowserProps) {
             return true;
           });
 
-          setResults(transformed.slice(0, 100)); // Limit results
+          setResults(transformed);
+          setDisplayLimit(60); // Reset to initial limit on new search
         }
       } catch (e) {
         console.error("Search failed:", e);
@@ -382,83 +385,97 @@ export default function CardBrowser({ onCardAdded }: CardBrowserProps) {
           <div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full" />
         </div>
       ) : results.length > 0 ? (
-        <div
-          className="grid gap-4"
-          style={{
-            gridTemplateColumns: `repeat(${zoomLevel}, minmax(0, 1fr))`,
-          }}
-        >
-          {results.map((card) => {
-            const ownedQty = ownedCards.get(card.id) || 0;
-            const imageSlug =
-              card.variant?.slug ||
-              `${(card.name || "unknown")
+        <>
+          <div
+            className="grid gap-4"
+            style={{
+              gridTemplateColumns: `repeat(${zoomLevel}, minmax(0, 1fr))`,
+            }}
+          >
+            {results.slice(0, displayLimit).map((card) => {
+              const ownedQty = ownedCards.get(card.id) || 0;
+              const imageSlug =
+                card.variant?.slug ||
+                `${(card.name || "unknown")
+                  .toLowerCase()
+                  .replace(/\s+/g, "_")}_b_s`;
+
+              // Sites are landscape cards - detect by type
+              const isSite = (card.meta?.type || "")
                 .toLowerCase()
-                .replace(/\s+/g, "_")}_b_s`;
+                .includes("site");
 
-            // Sites are landscape cards - detect by type
-            const isSite = (card.meta?.type || "")
-              .toLowerCase()
-              .includes("site");
-
-            return (
-              <div
-                key={`${card.id}-${card.variant?.id || "base"}`}
-                className={`relative group rounded-lg overflow-hidden bg-gray-800 cursor-pointer hover:ring-2 hover:ring-blue-500 transition-all ${
-                  isSite ? "col-span-2" : ""
-                }`}
-                onClick={() => setSelectedCard(card)}
-              >
-                {/* Card Image - Sites display in landscape */}
+              return (
                 <div
-                  className={
-                    isSite
-                      ? "aspect-[3.5/2.5] relative bg-black"
-                      : "aspect-[2.5/3.5] relative"
-                  }
+                  key={`${card.id}-${card.variant?.id || "base"}`}
+                  className={`relative group rounded-lg overflow-hidden bg-gray-800 cursor-pointer hover:ring-2 hover:ring-blue-500 transition-all ${
+                    isSite ? "col-span-2" : ""
+                  }`}
+                  onClick={() => setSelectedCard(card)}
                 >
-                  <Image
-                    src={`/api/images/${imageSlug}`}
-                    alt={card.name || "Card"}
-                    fill
+                  {/* Card Image - Sites display in landscape */}
+                  <div
                     className={
-                      isSite ? "object-contain rotate-90" : "object-cover"
-                    }
-                    sizes={
                       isSite
-                        ? "(max-width: 640px) 100vw, 25vw"
-                        : "(max-width: 640px) 50vw, 12.5vw"
+                        ? "aspect-[3.5/2.5] relative bg-black"
+                        : "aspect-[2.5/3.5] relative"
                     }
-                  />
+                  >
+                    <Image
+                      src={`/api/images/${imageSlug}`}
+                      alt={card.name || "Card"}
+                      fill
+                      className={
+                        isSite ? "object-contain rotate-90" : "object-cover"
+                      }
+                      sizes={
+                        isSite
+                          ? "(max-width: 640px) 100vw, 25vw"
+                          : "(max-width: 640px) 50vw, 12.5vw"
+                      }
+                    />
 
-                  {/* Owned Badge */}
-                  {ownedQty > 0 && (
-                    <div className="absolute top-2 left-2 bg-green-600 text-white text-xs px-2 py-0.5 rounded z-10">
-                      Owned: {ownedQty}
+                    {/* Owned Badge */}
+                    {ownedQty > 0 && (
+                      <div className="absolute top-2 left-2 bg-green-600 text-white text-xs px-2 py-0.5 rounded z-10">
+                        Owned: {ownedQty}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Card Info */}
+                  <div className="p-2">
+                    <div className="text-sm font-medium truncate">
+                      {card.name || "Unknown Card"}
                     </div>
-                  )}
-                </div>
-
-                {/* Card Info */}
-                <div className="p-2">
-                  <div className="text-sm font-medium truncate">
-                    {card.name || "Unknown Card"}
+                    <div className="text-xs text-gray-400">
+                      {card.variant?.setName || "Unknown Set"}
+                    </div>
                   </div>
-                  <div className="text-xs text-gray-400">
-                    {card.variant?.setName || "Unknown Set"}
+
+                  {/* Hover Overlay */}
+                  <div className="absolute inset-0 bg-blue-600/0 group-hover:bg-blue-600/20 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                    <span className="bg-blue-600 px-3 py-1 rounded text-sm font-medium">
+                      + Add to Collection
+                    </span>
                   </div>
                 </div>
+              );
+            })}
+          </div>
 
-                {/* Hover Overlay */}
-                <div className="absolute inset-0 bg-blue-600/0 group-hover:bg-blue-600/20 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
-                  <span className="bg-blue-600 px-3 py-1 rounded text-sm font-medium">
-                    + Add to Collection
-                  </span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+          {/* Show More Button */}
+          {results.length > displayLimit && (
+            <div className="flex justify-center mt-6">
+              <button
+                onClick={() => setDisplayLimit((prev) => prev + 60)}
+                className="px-6 py-3 bg-gray-800 hover:bg-gray-700 border border-gray-600 rounded-lg text-sm font-medium transition-colors"
+              >
+                Show More ({results.length - displayLimit} remaining)
+              </button>
+            </div>
+          )}
+        </>
       ) : query.trim() ||
         selectedSet !== "All Sets" ||
         selectedType !== "All Types" ||

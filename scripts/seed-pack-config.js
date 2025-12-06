@@ -92,8 +92,24 @@ async function main() {
     isFixedPack: true, // All cards come in one booster
   });
 
+  // Gothic (standard booster - same as Beta)
+  const gothic = await upsertSet("Gothic");
+  await upsertPackConfig(gothic.id, {
+    ordinaryCount: 9,
+    exceptionalCount: 3,
+    eliteOrUniqueCount: 1,
+    uniqueChance: 0.125, // 1 in 8 packs has Unique instead of Elite
+    siteOrAvatarCount: 2,
+    foilChance: 0.25, // standard rate
+    foilUniqueWeight: 1,
+    foilEliteWeight: 3,
+    foilExceptionalWeight: 6,
+    foilOrdinaryWeight: 7,
+    foilReplacesOrdinary: true,
+  });
+
   console.log(
-    "Seeded PackConfig for Alpha, Beta, Arthurian Legends, and Dragonlord."
+    "Seeded PackConfig for Alpha, Beta, Arthurian Legends, Dragonlord, and Gothic."
   );
 }
 

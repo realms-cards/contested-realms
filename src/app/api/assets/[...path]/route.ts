@@ -248,6 +248,7 @@ export async function GET(
       "alpha-booster.png",
       "arthurian-legends-booster.png",
       "dragonlord-booster.png",
+      "gothic-booster.png",
       // Our current filenames used by UI
       "alphabeta-booster.png",
       "arthurian-booster.png",

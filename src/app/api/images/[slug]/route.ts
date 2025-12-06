@@ -17,6 +17,9 @@ function setDirFromSlug(slug: string): string | null {
       return "dragonlord";
     case "drl":
       return "dragonlord";
+    case "got":
+    case "gth":
+      return "gothic";
     default:
       return null;
   }
@@ -57,8 +60,8 @@ export async function GET(
     let slug = decodeURIComponent(slugRaw || "").toLowerCase();
     // Convert set prefix separator: bet-card -> bet_card
     slug = slug.replace(/^([a-z]{3})-/, "$1_");
-    // Convert finish suffix separators: card-b-s -> card_b_s
-    slug = slug.replace(/-([bfr])-([sfe])$/, "_$1_$2");
+    // Convert finish suffix separators: card-b-s -> card_b_s, card-pd-s -> card_pd_s, card-bt-s -> card_bt_s
+    slug = slug.replace(/-([a-z]{1,2})-([sfea])$/, "_$1_$2");
 
     if (!slug || !/^[a-z]{3}_[a-z0-9_]+$/.test(slug)) {
       console.warn(

@@ -24,7 +24,11 @@ export async function GET(req: NextRequest) {
     }
 
     // Generate cache key based on search parameters
-    const cacheKey = CacheKeys.cards.search({ q, set: setName, type: typeFilt });
+    const cacheKey = CacheKeys.cards.search({
+      q,
+      set: setName,
+      type: typeFilt,
+    });
 
     // Wrap search query with Redis cache (5 minute TTL - card data is stable)
     const out = await withCache(
@@ -45,73 +49,74 @@ export async function GET(req: NextRequest) {
         if (setId != null) whereVariant.setId = setId;
 
         // Limit results for faster response
-        const SEARCH_LIMIT = 50;
+        // Higher limit when browsing a set without search query
+        const SEARCH_LIMIT = setId && !q ? 500 : 50;
 
         const variants = await prisma.variant.findMany({
-      where: {
-        ...whereVariant,
-        // Search by card name OR slug; make it case-insensitive for friendlier UX
-        ...(q
-          ? {
-              OR: [
-                { card: { name: { contains: q, mode: "insensitive" } } },
-                { slug: { contains: q, mode: "insensitive" } },
-              ],
-            }
-          : {}),
-      },
-      select: {
-        id: true,
-        cardId: true,
-        setId: true,
-        slug: true,
-        finish: true,
-        product: true,
-        typeText: true,
-        card: { select: { name: true, subTypes: true } },
-        set: { select: { name: true } },
-      },
-      take: SEARCH_LIMIT,
-    });
+          where: {
+            ...whereVariant,
+            // Search by card name OR slug; make it case-insensitive for friendlier UX
+            ...(q
+              ? {
+                  OR: [
+                    { card: { name: { contains: q, mode: "insensitive" } } },
+                    { slug: { contains: q, mode: "insensitive" } },
+                  ],
+                }
+              : {}),
+          },
+          select: {
+            id: true,
+            cardId: true,
+            setId: true,
+            slug: true,
+            finish: true,
+            product: true,
+            typeText: true,
+            card: { select: { name: true, subTypes: true } },
+            set: { select: { name: true } },
+          },
+          take: SEARCH_LIMIT,
+        });
 
-    if (!variants.length) {
-      return new Response(JSON.stringify([]), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      });
-    }
+        if (!variants.length) {
+          return new Response(JSON.stringify([]), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
 
-    // Fetch type/rarity for (cardId,setId) using IN clauses (faster than OR)
-    type VariantRow = {
-      id: number;
-      cardId: number;
-      setId: number;
-      slug: string;
-      finish: unknown;
-      product: string;
-      typeText: string | null;
-      card: { name: string; subTypes: string | null };
-      set: { name: string };
-    };
-    const cardIds = [...new Set(variants.map((v: VariantRow) => v.cardId))];
-    const setIds = [...new Set(variants.map((v: VariantRow) => v.setId))];
-    const metas = await prisma.cardSetMetadata.findMany({
-      where: {
-        cardId: { in: cardIds },
-        setId: { in: setIds },
-      },
-      select: { cardId: true, setId: true, type: true, rarity: true },
-    });
-    const metaKey = (c: number, s: number) => `${c}:${s}`;
-    const metaMap = new Map<
-      string,
-      { type: string | null; rarity: string | null }
-    >();
-    for (const m of metas)
-      metaMap.set(metaKey(m.cardId, m.setId), {
-        type: m.type || null,
-        rarity: m.rarity || null,
-      });
+        // Fetch type/rarity for (cardId,setId) using IN clauses (faster than OR)
+        type VariantRow = {
+          id: number;
+          cardId: number;
+          setId: number;
+          slug: string;
+          finish: unknown;
+          product: string;
+          typeText: string | null;
+          card: { name: string; subTypes: string | null };
+          set: { name: string };
+        };
+        const cardIds = [...new Set(variants.map((v: VariantRow) => v.cardId))];
+        const setIds = [...new Set(variants.map((v: VariantRow) => v.setId))];
+        const metas = await prisma.cardSetMetadata.findMany({
+          where: {
+            cardId: { in: cardIds },
+            setId: { in: setIds },
+          },
+          select: { cardId: true, setId: true, type: true, rarity: true },
+        });
+        const metaKey = (c: number, s: number) => `${c}:${s}`;
+        const metaMap = new Map<
+          string,
+          { type: string | null; rarity: string | null }
+        >();
+        for (const m of metas)
+          metaMap.set(metaKey(m.cardId, m.setId), {
+            type: m.type || null,
+            rarity: m.rarity || null,
+          });
 
         type SearchOut = {
           variantId: number;
@@ -135,7 +140,9 @@ export async function GET(req: NextRequest) {
             const subTypes = v.card.subTypes || null;
             return {
               variantId: v.id,
-              slug: v.slug.startsWith("dra_") ? "drl_" + v.slug.slice(4) : v.slug,
+              slug: v.slug.startsWith("dra_")
+                ? "drl_" + v.slug.slice(4)
+                : v.slug,
               finish: String(v.finish),
               product: v.product,
               cardId: v.cardId,
@@ -156,20 +163,20 @@ export async function GET(req: NextRequest) {
               return !t.includes("site") && !t.includes("avatar"); // exclude avatars from spells
             return true;
           })
-          .slice(0, 200);
+          .slice(0, 500);
 
         return formattedResults;
       },
       { ttl: 300 } // 5 minute cache for card search - card data is stable
     );
 
-    logPerformance('GET /api/cards/search', performance.now() - startTime);
+    logPerformance("GET /api/cards/search", performance.now() - startTime);
     return new Response(JSON.stringify(out), {
       status: 200,
       headers: { "content-type": "application/json" },
     });
   } catch (e: unknown) {
-    logPerformance('GET /api/cards/search', performance.now() - startTime);
+    logPerformance("GET /api/cards/search", performance.now() - startTime);
     const message =
       e instanceof Error
         ? e.message

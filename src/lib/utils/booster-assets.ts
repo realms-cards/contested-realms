@@ -7,6 +7,7 @@ export function getBoosterAssetName(
 ): string {
   const s = (setName || "").toLowerCase();
 
+  if (s.includes("gothic")) return "gothic-booster.png";
   if (s.includes("dragonlord")) return "dragonlord-booster.png";
   if (s.includes("arthur")) return "arthurian-booster.png";
   if (s.includes("alpha")) return "alphabeta-booster.png";
@@ -25,6 +26,7 @@ export const BOOSTER_ASSET_FILES = [
   "alpha-booster.png",
   "arthurian-legends-booster.png",
   "dragonlord-booster.png",
+  "gothic-booster.png",
   "alphabeta-booster.png",
   "arthurian-booster.png",
 ];
