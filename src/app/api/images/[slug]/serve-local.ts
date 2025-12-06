@@ -16,7 +16,9 @@ function dirVariants(name: string): string[] {
 
 function resolveRoots(primarySetDir: string, wantKtx2: boolean): string[] {
   const variants = dirVariants(primarySetDir);
-  const preferredBases = wantKtx2 ? ["data-ktx2", "data"] : ["data-webp", "data"];
+  const preferredBases = wantKtx2
+    ? ["data-ktx2", "data"]
+    : ["data-webp", "data"];
   const seen = new Set<string>();
   const result: string[] = [];
 
@@ -33,8 +35,17 @@ function resolveRoots(primarySetDir: string, wantKtx2: boolean): string[] {
   return result;
 }
 
-function buildCrossSetRoots(primarySetDir: string, wantKtx2: boolean): string[] {
-  const preferredOrder = ["beta", "alpha", "arthurian_legends", "dragonlord"];
+function buildCrossSetRoots(
+  primarySetDir: string,
+  wantKtx2: boolean
+): string[] {
+  const preferredOrder = [
+    "beta",
+    "alpha",
+    "arthurian_legends",
+    "dragonlord",
+    "gothic",
+  ];
   const searchSets = preferredOrder.filter((set) => set !== primarySetDir);
   const seen = new Set<string>();
   const roots: string[] = [];
@@ -43,8 +54,14 @@ function buildCrossSetRoots(primarySetDir: string, wantKtx2: boolean): string[] 
     const variants = dirVariants(setName);
     for (const variant of variants) {
       const baseDirs = wantKtx2
-        ? [path.join(process.cwd(), "data-ktx2", variant), path.join(process.cwd(), "data", variant)]
-        : [path.join(process.cwd(), "data-webp", variant), path.join(process.cwd(), "data", variant)];
+        ? [
+            path.join(process.cwd(), "data-ktx2", variant),
+            path.join(process.cwd(), "data", variant),
+          ]
+        : [
+            path.join(process.cwd(), "data-webp", variant),
+            path.join(process.cwd(), "data", variant),
+          ];
       for (const baseDir of baseDirs) {
         if (!seen.has(baseDir)) {
           seen.add(baseDir);
@@ -131,7 +148,9 @@ function detectContentType(ext: string): string {
   }
 }
 
-export async function serveLocalAsset(args: ServeLocalAssetArgs): Promise<Response> {
+export async function serveLocalAsset(
+  args: ServeLocalAssetArgs
+): Promise<Response> {
   const primaryCandidates = buildCandidates(args);
   let found = await findExistingPath(primaryCandidates);
 
@@ -143,8 +162,13 @@ export async function serveLocalAsset(args: ServeLocalAssetArgs): Promise<Respon
   if (!found) {
     // Log missing asset in dev for debugging
     if (process.env.NODE_ENV === "development") {
-      console.log(`[serve-local] Asset not found: ${args.base} (suffix: ${args.suffix}, ktx2: ${args.wantKtx2}, set: ${args.primarySetDir})`);
-      console.log(`[serve-local] Tried paths:`, [...primaryCandidates.slice(0, 3), "..."]);
+      console.log(
+        `[serve-local] Asset not found: ${args.base} (suffix: ${args.suffix}, ktx2: ${args.wantKtx2}, set: ${args.primarySetDir})`
+      );
+      console.log(`[serve-local] Tried paths:`, [
+        ...primaryCandidates.slice(0, 3),
+        "...",
+      ]);
     }
     return new Response("Not found", { status: 404 });
   }
@@ -155,7 +179,11 @@ export async function serveLocalAsset(args: ServeLocalAssetArgs): Promise<Respon
 
   // Log successful KTX2 serve in dev
   if (process.env.NODE_ENV === "development" && ext === "ktx2") {
-    console.log(`[serve-local] ✓ Serving KTX2: ${path.basename(found)} (${(buffer.length / 1024).toFixed(1)}KB)`);
+    console.log(
+      `[serve-local] ✓ Serving KTX2: ${path.basename(found)} (${(
+        buffer.length / 1024
+      ).toFixed(1)}KB)`
+    );
   }
 
   return new Response(new Uint8Array(buffer), {

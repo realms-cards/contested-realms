@@ -14,6 +14,7 @@ export const DEFAULT_DRAFTABLE_SETS = [
   "Beta",
   "Arthurian Legends",
   "Dragonlord",
+  "Gothic",
 ];
 
 // Fallback default set for pack configs
