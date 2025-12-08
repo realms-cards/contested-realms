@@ -26,7 +26,7 @@ export async function GET() {
   }
 
   try {
-    // Fetch all variants with card and set info
+    // Fetch all variants with card, set, and metadata info
     const variants = await prisma.variant.findMany({
       select: {
         id: true,
@@ -34,14 +34,24 @@ export async function GET() {
         setId: true,
         slug: true,
         finish: true,
-        card: { select: { name: true } },
+        card: {
+          select: {
+            name: true,
+            meta: {
+              select: {
+                setId: true,
+                type: true,
+              },
+            },
+          },
+        },
         set: { select: { name: true } },
       },
       orderBy: { card: { name: "asc" } },
     });
 
     // Build compact index
-    // Format: { entries: [[cardId, variantId, setId, cardName, slug, setName, isfoil], ...] }
+    // Format: { v: 2, entries: [[cardId, variantId, setId, cardName, slug, setName, isfoil, isSite], ...] }
     type VariantRow = (typeof variants)[number];
 
     // Helper to detect promotional sets
@@ -64,17 +74,25 @@ export async function GET() {
       return 0;
     });
 
-    const entries = sortedVariants.map((v: VariantRow) => [
-      v.cardId,
-      v.id,
-      v.setId,
-      v.card.name,
-      v.slug,
-      v.set.name,
-      v.finish === "Foil" ? 1 : 0,
-    ]);
+    const entries = sortedVariants.map((v: VariantRow) => {
+      // Find the type for this variant's set, or fall back to any available type
+      const metaForSet = v.card.meta.find((m) => m.setId === v.setId);
+      const cardType = metaForSet?.type || v.card.meta[0]?.type || "";
+      const isSite = cardType.toLowerCase().includes("site") ? 1 : 0;
 
-    const index = { v: 1, entries };
+      return [
+        v.cardId,
+        v.id,
+        v.setId,
+        v.card.name,
+        v.slug,
+        v.set.name,
+        v.finish === "Foil" ? 1 : 0,
+        isSite,
+      ];
+    });
+
+    const index = { v: 2, entries };
     cachedIndex = JSON.stringify(index);
     cacheTime = now;
 

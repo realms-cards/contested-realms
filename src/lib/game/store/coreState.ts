@@ -11,9 +11,7 @@ import {
   createPermanentDeltaPatch,
   type PermanentDeltaUpdate,
 } from "./utils/patchHelpers";
-import {
-  bumpPermanentVersion,
-} from "./utils/permanentHelpers";
+import { bumpPermanentVersion } from "./utils/permanentHelpers";
 import { phases } from "./utils/resourceHelpers";
 
 export const createInitialPlayers = (): GameState["players"] => ({
@@ -320,7 +318,9 @@ export const createCoreSlice: StateCreator<
       };
       const deltaPatch =
         updates.length > 0 ? createPermanentDeltaPatch(updates) : undefined;
-      const patch: ServerPatchT = deltaPatch ? { ...deltaPatch, ...base } : base;
+      const patch: ServerPatchT = deltaPatch
+        ? { ...deltaPatch, ...base }
+        : base;
       get().trySendPatch(patch);
 
       set({
@@ -335,26 +335,7 @@ export const createCoreSlice: StateCreator<
         get().clearAllDamageForSeat(nextKey);
       } catch {}
       get().log(`Turn passes to P${nextPlayer}`);
-      try {
-        const snapshotTurn = nextTurn;
-        const snapshotCP = nextPlayer;
-        setTimeout(() => {
-          try {
-            const st = get();
-            const hasForTurn =
-              Array.isArray(st.snapshots) &&
-              st.snapshots.some(
-                (ss) => ss.kind === "auto" && ss.turn === snapshotTurn
-              );
-            if (!hasForTurn && st.phase !== "Setup") {
-              st.createSnapshot(
-                `Turn ${snapshotTurn} start (P${snapshotCP})`,
-                "auto"
-              );
-            }
-          } catch {}
-        }, 0);
-      } catch {}
+      // Snapshot creation is handled by applyServerPatch in networkState.ts
     } else {
       const patch: ServerPatchT = { phase: nextPhase };
       get().trySendPatch(patch);
@@ -430,27 +411,7 @@ export const createCoreSlice: StateCreator<
     try {
       get().clearAllDamageForSeat(nextKey);
     } catch {}
-
-    try {
-      const snapshotTurn = nextTurn;
-      const snapshotCP = nextPlayer;
-      setTimeout(() => {
-        try {
-          const st = get();
-          const hasForTurn =
-            Array.isArray(st.snapshots) &&
-            st.snapshots.some(
-              (ss) => ss.kind === "auto" && ss.turn === snapshotTurn
-            );
-          if (!hasForTurn && st.phase !== "Setup") {
-            st.createSnapshot(
-              `Turn ${snapshotTurn} start (P${snapshotCP})`,
-              "auto"
-            );
-          }
-        } catch {}
-      }, 0);
-    } catch {}
+    // Snapshot creation is handled by applyServerPatch in networkState.ts
     get().log(`Turn passes to P${nextPlayer}`);
   },
 });
