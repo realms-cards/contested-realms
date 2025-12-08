@@ -54,6 +54,11 @@ export type TransportEventMap = {
   welcome: WelcomePayloadT;
   statePatch: StatePatchPayloadT;
   chat: ServerChatPayloadT;
+  chatHistory: {
+    messages: ServerChatPayloadT[];
+    hasMore: boolean;
+    oldestIndex: number;
+  };
   matchStarted: MatchStartedPayloadT;
   matchEnded: { matchId: string; tournamentId?: string; reason?: string };
   resync: ResyncResponsePayloadT;

@@ -117,6 +117,22 @@ export const lobbyKeys = {
 };
 
 /**
+ * Chat Keys
+ *
+ * chat:global - LIST containing last N global chat messages (JSON)
+ */
+export const chatKeys = {
+  /** Global chat history list: chat:global */
+  global: "chat:global" as const,
+
+  /** Max messages to keep in global chat history */
+  maxMessages: 50 as const,
+
+  /** TTL for global chat history (7 days) */
+  ttlSec: 604800 as const,
+};
+
+/**
  * Pub/Sub Channels
  */
 export const channels = {
