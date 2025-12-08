@@ -17,6 +17,8 @@ type BottomBarProps = {
   isDraftMode: boolean;
   // Free mode booster props
   isFreeMode?: boolean;
+  showBoosterControls?: boolean;
+  onToggleBoosterControls?: () => void;
   freeBoosterSet?: string;
   onFreeBoosterSetChange?: (set: string) => void;
   freeBoosterCubeId?: string;
@@ -99,7 +101,9 @@ export default function BottomBar(props: BottomBarProps) {
     formatTime,
     // Free mode props
     isFreeMode = false,
-    freeBoosterSet = "Beta",
+    showBoosterControls = false,
+    onToggleBoosterControls,
+    freeBoosterSet = "Gothic",
     onFreeBoosterSetChange,
     freeBoosterCubeId = "",
     onFreeBoosterCubeChange,
@@ -371,8 +375,39 @@ export default function BottomBar(props: BottomBarProps) {
                         Add Cards
                       </button>
                     )}
+                    {/* Free mode booster toggle */}
+                    {isFreeMode && onToggleBoosterControls && (
+                      <button
+                        onClick={onToggleBoosterControls}
+                        className={`flex items-center gap-1.5 h-8 px-3 rounded text-sm font-medium transition-colors ${
+                          showBoosterControls
+                            ? "bg-amber-600 hover:bg-amber-500 text-white"
+                            : "bg-black/40 hover:bg-black/60 text-white/70 hover:text-white border border-white/10"
+                        }`}
+                        title={
+                          showBoosterControls
+                            ? "Hide booster controls"
+                            : "Show booster controls"
+                        }
+                      >
+                        <svg
+                          className="w-4 h-4"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth={2}
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
+                          />
+                        </svg>
+                        Boosters
+                      </button>
+                    )}
                     {/* Free mode booster opening */}
-                    {isFreeMode && onOpenFreeBooster && (
+                    {isFreeMode && showBoosterControls && onOpenFreeBooster && (
                       <div className="flex items-center gap-2 bg-black/40 rounded-lg px-3 py-1.5 border border-white/10">
                         <select
                           value={
@@ -397,11 +432,12 @@ export default function BottomBar(props: BottomBarProps) {
                           title="Select set or cube for booster"
                         >
                           <optgroup label="Sets">
-                            <option value="Alpha">Alpha</option>
-                            <option value="Beta">Beta</option>
+                            <option value="Gothic">Gothic</option>
                             <option value="Arthurian Legends">
                               Arthurian Legends
                             </option>
+                            <option value="Beta">Beta</option>
+                            <option value="Alpha">Alpha</option>
                           </optgroup>
                           {availableCubes.length > 0 && (
                             <optgroup label="Cubes">

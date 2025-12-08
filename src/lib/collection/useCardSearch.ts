@@ -24,6 +24,14 @@ export interface CardSearchResult {
 let globalIndex: SearchIndex | null = null;
 let loadingPromise: Promise<SearchIndex | null> | null = null;
 
+/**
+ * Check if a set is a promotional/promo set (should be deprioritized)
+ */
+function isPromoSet(setName: string): boolean {
+  const lower = setName.toLowerCase();
+  return lower === "promotional" || lower === "promo";
+}
+
 async function loadIndex(): Promise<SearchIndex | null> {
   if (globalIndex) return globalIndex;
   if (loadingPromise) return loadingPromise;
@@ -73,7 +81,11 @@ export function useCardSearch() {
 
       const q = query.toLowerCase();
       const results: CardSearchResult[] = [];
-      const seenCards = new Map<number, { isFoil: boolean }>(); // Dedupe by cardId, track finish
+      // Dedupe by cardId, track finish and promo status
+      const seenCards = new Map<
+        number,
+        { isFoil: boolean; isPromo: boolean }
+      >();
 
       for (const entry of index.entries) {
         const [cardId, variantId, setId, cardName, slug, setName, isFoil] =
@@ -84,11 +96,18 @@ export function useCardSearch() {
           cardName.toLowerCase().includes(q) ||
           slug.toLowerCase().includes(q)
         ) {
-          // Dedupe: prefer Standard finish over Foil (foil images may not exist)
+          const currIsPromo = isPromoSet(setName);
           const existing = seenCards.get(cardId);
+
           if (existing) {
-            // Replace foil with standard if we find a standard version
-            if (existing.isFoil && !isFoil) {
+            // Prioritize: non-promo over promo, then Standard over Foil
+            const shouldReplace =
+              (existing.isPromo && !currIsPromo) || // Replace promo with non-promo
+              (!existing.isPromo === !currIsPromo && // Same promo status
+                existing.isFoil &&
+                !isFoil); // Prefer Standard over Foil
+
+            if (shouldReplace) {
               const idx = results.findIndex((r) => r.cardId === cardId);
               if (idx !== -1) {
                 results[idx] = {
@@ -98,14 +117,18 @@ export function useCardSearch() {
                   slug,
                   set: setName,
                   setId,
-                  finish: "Standard",
+                  finish: isFoil ? "Foil" : "Standard",
                 };
-                seenCards.set(cardId, { isFoil: false });
+                seenCards.set(cardId, {
+                  isFoil: !!isFoil,
+                  isPromo: currIsPromo,
+                });
               }
             }
             continue;
           }
-          seenCards.set(cardId, { isFoil: !!isFoil });
+
+          seenCards.set(cardId, { isFoil: !!isFoil, isPromo: currIsPromo });
 
           results.push({
             cardId,

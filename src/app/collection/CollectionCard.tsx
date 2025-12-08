@@ -107,10 +107,12 @@ function CollectionCardInner({
   const hasValidImage = !!imageSlug;
   const primaryUrl = hasValidImage
     ? `/api/images/${imageSlug}`
-    : "/placeholder-card.png"; // No CDN fallback - use placeholder for cards without variant
+    : "/api/assets/cardback_spellbook.png"; // No CDN fallback - use cardback for cards without variant
 
   // Use placeholder if image failed to load
-  const imageUrl = imageError ? "/placeholder-card.png" : primaryUrl;
+  const imageUrl = imageError
+    ? "/api/assets/cardback_spellbook.png"
+    : primaryUrl;
 
   const isFoil = card.finish === "Foil";
   const isSite = card.meta?.type?.toLowerCase().includes("site") || false;

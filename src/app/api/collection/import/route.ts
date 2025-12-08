@@ -283,13 +283,48 @@ export async function POST(req: NextRequest) {
         ])
       );
 
-      const updateOps = [];
-      const createOps = [];
+      // Aggregate matched cards by unique key to handle duplicates in CSV
+      // (e.g., same card in different editions resolving to same variant)
+      const aggregatedByKey = new Map<
+        string,
+        {
+          cardId: number;
+          variantId: number | null;
+          setId: number | null;
+          name: string;
+          count: number;
+          finish: string;
+          notes: string;
+        }
+      >();
 
       for (const match of matchedCards) {
         const key = `${match.cardId}-${match.variantId || "null"}-${
           match.finish
         }`;
+        const existing = aggregatedByKey.get(key);
+        if (existing) {
+          existing.count += match.count;
+          if (match.notes) {
+            existing.notes = existing.notes
+              ? `${existing.notes}; ${match.notes}`
+              : match.notes;
+          }
+        } else {
+          aggregatedByKey.set(key, { ...match });
+        }
+        added.push({
+          name: match.name,
+          quantity: match.count,
+          matched: true,
+          cardId: match.cardId,
+        });
+      }
+
+      const updateOps = [];
+      const createOps = [];
+
+      for (const [key, match] of aggregatedByKey) {
         const existing = existingByKey.get(key);
         if (existing) {
           const newQuantity = Math.min(99, existing.quantity + match.count);
@@ -319,12 +354,6 @@ export async function POST(req: NextRequest) {
             })
           );
         }
-        added.push({
-          name: match.name,
-          quantity: match.count,
-          matched: true,
-          cardId: match.cardId,
-        });
       }
 
       if (updateOps.length > 0 || createOps.length > 0) {

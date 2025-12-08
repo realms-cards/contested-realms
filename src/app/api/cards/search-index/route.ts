@@ -43,7 +43,28 @@ export async function GET() {
     // Build compact index
     // Format: { entries: [[cardId, variantId, setId, cardName, slug, setName, isfoil], ...] }
     type VariantRow = (typeof variants)[number];
-    const entries = variants.map((v: VariantRow) => [
+
+    // Helper to detect promotional sets
+    const isPromoSet = (setName: string) => {
+      const lower = setName.toLowerCase();
+      return lower === "promotional" || lower === "promo";
+    };
+
+    // Sort variants to prioritize non-promo sets and Standard finish
+    const sortedVariants = [...variants].sort((a, b) => {
+      // First by card name
+      const nameCompare = a.card.name.localeCompare(b.card.name);
+      if (nameCompare !== 0) return nameCompare;
+      // Then non-promo before promo
+      const aIsPromo = isPromoSet(a.set.name);
+      const bIsPromo = isPromoSet(b.set.name);
+      if (aIsPromo !== bIsPromo) return aIsPromo ? 1 : -1;
+      // Then Standard before Foil
+      if (a.finish !== b.finish) return a.finish === "Standard" ? -1 : 1;
+      return 0;
+    });
+
+    const entries = sortedVariants.map((v: VariantRow) => [
       v.cardId,
       v.id,
       v.setId,

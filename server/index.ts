@@ -4705,6 +4705,20 @@ async function shutdown() {
     playerRegistry.shutdown();
   } catch {}
 
+  // FIX: Flush buffered persists BEFORE closing connections
+  // This ensures all replay actions are persisted before we lose DB/Redis access
+  try {
+    if (PERSIST_IS_WRITE_BEHIND) {
+      console.log("[server] flushing persistence buffers before shutdown...");
+      await flushAllPersistenceBuffers("shutdown");
+    }
+  } catch (err) {
+    console.error(
+      "[server] failed to flush persistence buffers on shutdown:",
+      err
+    );
+  }
+
   try {
     await new Promise<void>((resolve) => io.close(() => resolve()));
   } catch {}
@@ -4716,12 +4730,6 @@ async function shutdown() {
   } catch {}
   try {
     if (subClient) await subClient.quit();
-  } catch {}
-  // Flush any buffered persists before disconnecting from DB
-  try {
-    if (PERSIST_IS_WRITE_BEHIND) {
-      await flushAllPersistenceBuffers("shutdown");
-    }
   } catch {}
   try {
     await prisma.$disconnect();
