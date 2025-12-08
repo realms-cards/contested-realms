@@ -179,6 +179,7 @@ export const MatchInfoSchema = z.object({
   seed: z.string(),
   turn: z.string().optional(),
   winnerId: z.string().nullable().optional(),
+  endReason: z.string().optional(),
   result: z.enum(["win", "loss", "draw"]).nullable().optional(),
   matchType: z.enum(["constructed", "sealed", "draft"]).optional(),
   sealedConfig: SealedConfigSchema.nullable().optional(),

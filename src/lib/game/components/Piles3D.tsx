@@ -202,16 +202,19 @@ export default function Piles3D({
   return (
     <group position={[0, 0.001, 0]}>
       {piles.map(({ key, x, z, cards }) => {
-        // Orientation: Atlas landscape, Spellbook/Cemetery portrait regardless of contents
+        // Orientation: Atlas landscape, Spellbook/Cemetery/Collection portrait regardless of contents
         const isAtlas = key === "atlas";
         const isCemetery = key === "graveyard";
+        const isCollection = key === "collection";
         // Face the pile toward the owning seat: p1 (top) flipped 180°, p2 (bottom) normal
         const ownerRot = owner === "p1" ? Math.PI : 0;
-        const rotZ = isCemetery
-          ? owner === "p1"
-            ? 0
-            : Math.PI
-          : ownerRot + Math.PI;
+        // Cemetery and Collection face the bottom player (p2 perspective)
+        const rotZ =
+          isCemetery || isCollection
+            ? owner === "p1"
+              ? 0
+              : Math.PI
+            : ownerRot + Math.PI;
         const cardbackUrl = isCemetery
           ? undefined
           : key === "atlas"
@@ -297,10 +300,20 @@ export default function Piles3D({
                       );
                       clearHoverPreview();
                     }}
-                    onClick={() => {
+                    onClick={(e: ThreeEvent<PointerEvent>) => {
                       const isDragging = !!dragFromHand || !!dragFromPile;
                       if (isDragging) return;
-                      if (isCemetery || key === "collection") return;
+                      // Collection: single-click opens search (no draw from top)
+                      if (isCollection) {
+                        e.nativeEvent.preventDefault();
+                        e.stopPropagation();
+                        openContextMenu(
+                          { kind: "pile", who: owner, from: "collection" },
+                          { x: e.clientX, y: e.clientY }
+                        );
+                        return;
+                      }
+                      if (isCemetery) return;
                       const store = useGameStore.getState();
                       const actorKey = store.actorKey;
                       const isMine = !actorKey || actorKey === owner;

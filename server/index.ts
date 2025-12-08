@@ -1167,6 +1167,12 @@ async function finalizeMatch(
   match.winnerId = winnerId || null;
   match.lastTs = now;
   match._finalized = true;
+  // Store end reason on match so getMatchInfo can include it
+  const endReason =
+    options && typeof options.reason === "string"
+      ? options.reason
+      : "normal_end";
+  (match as AnyRecord).endReason = endReason;
 
   const detachedPlayers = Array.isArray(match.playerIds)
     ? [...match.playerIds]
@@ -1851,6 +1857,10 @@ function getMatchInfo(match: ServerMatchState): AnyRecord {
     seed: match.seed,
     turn: match.turn ?? undefined,
     winnerId: match.winnerId ?? null,
+    endReason:
+      typeof (match as AnyRecord).endReason === "string"
+        ? (match as AnyRecord).endReason
+        : undefined,
     matchType: match.matchType || "constructed",
     sealedConfig: match.sealedConfig
       ? normalizeSealedConfig(match.sealedConfig)
