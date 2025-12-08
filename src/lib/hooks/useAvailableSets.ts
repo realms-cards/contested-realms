@@ -10,15 +10,17 @@ export interface AvailableSet {
 }
 
 // Default sets to use before API loads or on error
+// Gothic is first as it's the newest set
 export const DEFAULT_DRAFTABLE_SETS = [
-  "Beta",
-  "Arthurian Legends",
-  "Dragonlord",
   "Gothic",
+  "Dragonlord",
+  "Arthurian Legends",
+  "Beta",
+  "Alpha",
 ];
 
-// Fallback default set for pack configs
-export const DEFAULT_SET = "Beta";
+// Fallback default set for pack configs (newest set)
+export const DEFAULT_SET = "Gothic";
 
 interface UseAvailableSetsResult {
   sets: AvailableSet[];
