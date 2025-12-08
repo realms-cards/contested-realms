@@ -82,6 +82,10 @@ export default function GameToolbox({
   const [d20Rolling, setD20Rolling] = useState(false);
   const [d20Value, setD20Value] = useState<number | null>(null);
 
+  // Random spell state
+  const [randomSpellLoading, setRandomSpellLoading] = useState(false);
+  const addCardToHand = useGameStore((s) => s.addCardToHand);
+
   // Burrow/Submerge (forced)
   const selectedPermanent = useGameStore((s) => s.selectedPermanent);
   const permanents = useGameStore((s) => s.permanents);
@@ -586,6 +590,39 @@ export default function GameToolbox({
     } catch {}
   };
 
+  const handleDrawRandomSpell = async () => {
+    if (!mySeat) {
+      log("No seat assigned");
+      return;
+    }
+    setRandomSpellLoading(true);
+    try {
+      const res = await fetch("/api/cards/random-spell");
+      if (!res.ok) {
+        const data = await res.json();
+        log(`Failed to fetch random spell: ${data.error || "Unknown error"}`);
+        return;
+      }
+      const spell = await res.json();
+      addCardToHand(mySeat, {
+        cardId: spell.cardId,
+        variantId: spell.variantId,
+        name: spell.name,
+        type: spell.type,
+        slug: spell.slug,
+        thresholds: spell.thresholds,
+      });
+    } catch (e) {
+      log(
+        `Error fetching random spell: ${
+          e instanceof Error ? e.message : "Unknown"
+        }`
+      );
+    } finally {
+      setRandomSpellLoading(false);
+    }
+  };
+
   const collapsed = !open;
   const containerWidthClass = collapsed ? "w-56 sm:w-64" : "w-72 sm:w-80";
   const headerPaddingClass = collapsed
@@ -957,6 +994,18 @@ export default function GameToolbox({
                       onClick={handleUnbanish}
                     >
                       Return banished card
+                    </button>
+                  </div>
+
+                  {/* Draw Random Spell */}
+                  <div className="rounded-lg bg-white/5 ring-1 ring-white/10 p-2">
+                    <button
+                      className="w-full rounded bg-purple-600/90 hover:bg-purple-500 py-1 disabled:opacity-40"
+                      onClick={handleDrawRandomSpell}
+                      disabled={randomSpellLoading || !mySeat}
+                      title="Draw a random spell from the entire card pool to hand"
+                    >
+                      {randomSpellLoading ? "Drawing..." : "Draw Random Spell"}
                     </button>
                   </div>
 

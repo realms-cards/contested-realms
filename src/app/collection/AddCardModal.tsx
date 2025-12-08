@@ -4,6 +4,7 @@ import type { Finish } from "@prisma/client";
 import Image from "next/image";
 import { useState } from "react";
 import { Modal } from "@/components/ui/Modal";
+import { getImageSlug } from "@/lib/utils/cardSlug";
 
 interface CardData {
   id: number;
@@ -35,8 +36,11 @@ export default function AddCardModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const imageSlug =
-    card.variant?.slug || `${card.name.toLowerCase().replace(/\s+/g, "_")}_b_s`;
+  const imageSlug = getImageSlug(
+    card.variant?.slug,
+    card.name,
+    card.variant?.setName
+  );
 
   const handleAdd = async () => {
     setSaving(true);

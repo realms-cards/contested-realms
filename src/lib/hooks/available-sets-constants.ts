@@ -2,9 +2,9 @@
 
 // Default sets to use before API loads or on error
 // Gothic is first as it's the newest set
+// Note: Dragonlord is a mini-set and not available for draft
 export const DEFAULT_DRAFTABLE_SETS = [
   "Gothic",
-  "Dragonlord",
   "Arthurian Legends",
   "Beta",
   "Alpha",

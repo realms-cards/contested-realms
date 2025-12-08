@@ -41,7 +41,7 @@
   - If Harbinger present, show `HarbingerPortalScreen` before mulligan
   - Skip portal phase if no Harbinger (auto-sets `portalSetupComplete`)
 - [x] 4.2 Add `portalSetupComplete` flag to prevent re-showing on reconnect
-- [ ] 4.3 Update offline play flow (`src/app/play/page.tsx`) similarly (deferred)
+- [x] 4.3 Update offline play flow (`src/app/play/page.tsx`) similarly
 
 ## 5. Portal Visual Overlay
 

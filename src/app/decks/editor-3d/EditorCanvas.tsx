@@ -1,11 +1,12 @@
 "use client";
 
 import { OrbitControls } from "@react-three/drei";
-import { Canvas, useThree } from "@react-three/fiber";
+import { useThree } from "@react-three/fiber";
 import React, { useEffect, useMemo } from "react";
 import { MOUSE, TOUCH } from "three";
 import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
+import { ClientCanvas } from "@/components/game/ClientCanvas";
 import { DynamicBoard as Board } from "@/components/game/dynamic-3d";
 import TrackpadOrbitAdapter from "@/lib/controls/TrackpadOrbitAdapter";
 import { Physics } from "@/lib/game/physics";
@@ -39,7 +40,7 @@ export default function EditorCanvas({
 
   return (
     <div className="absolute inset-0 w-full h-full">
-      <Canvas
+      <ClientCanvas
         camera={{ position: [0, 10, 0], fov: 50 }}
         shadows
         gl={{
@@ -85,7 +86,7 @@ export default function EditorCanvas({
         {/* Clamp panning to board bounds */}
         <PanBounds minX={-8} maxX={8} minZ={-6} maxZ={8} />
         <TrackpadOrbitAdapter />
-      </Canvas>
+      </ClientCanvas>
     </div>
   );
 }

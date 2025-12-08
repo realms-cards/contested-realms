@@ -1,11 +1,11 @@
 "use client";
 
 import { OrbitControls } from "@react-three/drei";
-import { Canvas } from "@react-three/fiber";
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useState, useEffect, useCallback } from "react";
 import CardPreview from "@/components/game/CardPreview";
+import { ClientCanvas } from "@/components/game/ClientCanvas";
 import OnlineConsole from "@/components/game/OnlineConsole";
 import {
   DynamicBoard as Board,
@@ -254,7 +254,7 @@ export default function ReplayViewerPage() {
     <div className="fixed inset-0 w-screen h-screen bg-slate-900">
       {/* 3D Game View */}
       <div className="absolute inset-0 w-full h-full">
-        <Canvas
+        <ClientCanvas
           camera={{ position: [0, 10, 0], fov: 50 }}
           shadows
           gl={{ preserveDrawingBuffer: true, antialias: true, alpha: false }}
@@ -308,7 +308,7 @@ export default function ReplayViewerPage() {
             minPolarAngle={0}
             maxPolarAngle={Math.PI / 2.05}
           />
-        </Canvas>
+        </ClientCanvas>
       </div>
 
       {previewCard?.slug && !contextMenu && (

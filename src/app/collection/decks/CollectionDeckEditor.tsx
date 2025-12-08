@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useState } from "react";
 import { NumberBadge } from "@/components/game/manacost";
 import type { Digit } from "@/components/game/manacost";
+import { getImageSlug } from "@/lib/utils/cardSlug";
 
 interface DeckCard {
   cardId: number;
@@ -79,6 +80,7 @@ export default function CollectionDeckEditor({
           cardId: number;
           card: { name: string };
           variant?: { slug: string };
+          set?: { name: string };
           quantity: number;
           meta?: {
             type?: string;
@@ -101,9 +103,7 @@ export default function CollectionDeckEditor({
               name: c.card.name,
               owned: c.quantity,
               inDeck,
-              slug:
-                c.variant?.slug ||
-                `${c.card.name.toLowerCase().replace(/\s+/g, "_")}_b_s`,
+              slug: getImageSlug(c.variant?.slug, c.card.name, c.set?.name),
               type: c.meta?.type || "",
               cost: c.meta?.cost ?? null,
               thresholds: (c.meta?.thresholds as Record<string, number>) || {},
@@ -243,9 +243,8 @@ export default function CollectionDeckEditor({
         const thresholds =
           (card.meta?.thresholds as Record<string, number>) || {};
         const cost = card.meta?.cost;
-        // Build slug from card name if not provided
-        const imageSlug =
-          card.slug || `${card.name.toLowerCase().replace(/\s+/g, "_")}_b_s`;
+        // Use pre-computed slug from search results
+        const imageSlug = card.slug;
 
         return (
           <div
