@@ -753,6 +753,8 @@ export type GameState = {
   closePeekDialog: () => void;
   // Tokens
   addTokenToHand: (who: PlayerKey, name: string) => void;
+  // Add arbitrary card to hand (for toolbox/debugging)
+  addCardToHand: (who: PlayerKey, card: CardRef) => void;
   attachTokenToTopPermanent: (at: CellKey, index: number) => void;
   attachTokenToPermanent: (
     at: CellKey,

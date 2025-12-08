@@ -32,6 +32,7 @@ type ZoneSlice = Pick<
   | "drawFromPileToHand"
   | "moveCardFromHandToPile"
   | "addTokenToHand"
+  | "addCardToHand"
   | "mulligans"
   | "mulligan"
   | "mulliganWithSelection"
@@ -497,6 +498,30 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
       const card = prepareCardForSeat(baseToken, who);
       hand.push(card);
       get().log(`${who.toUpperCase()} adds token '${def.name}' to hand`);
+      const zonesNext = {
+        ...state.zones,
+        [who]: { ...state.zones[who], hand },
+      } as GameState["zones"];
+      const tr = get().transport;
+      if (tr) {
+        const zonePatch = createZonesPatchFor(zonesNext, who);
+        if (zonePatch) get().trySendPatch(zonePatch);
+      }
+      return { zones: zonesNext } as Partial<GameState> as GameState;
+    }),
+
+  addCardToHand: (who: PlayerKey, card: CardRef) =>
+    set((state) => {
+      const hand = [...state.zones[who].hand];
+      const preparedCard = prepareCardForSeat(
+        {
+          ...card,
+          instanceId: newZoneCardInstanceId(),
+        },
+        who
+      );
+      hand.push(preparedCard);
+      get().log(`${who.toUpperCase()} adds '${card.name}' to hand`);
       const zonesNext = {
         ...state.zones,
         [who]: { ...state.zones[who], hand },

@@ -1,8 +1,9 @@
 "use client";
 
 import { OrbitControls } from "@react-three/drei";
-import { Canvas, useThree, useFrame } from "@react-three/fiber";
+import { useThree, useFrame } from "@react-three/fiber";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { ClientCanvas } from "@/components/game/ClientCanvas";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
@@ -2463,7 +2464,7 @@ export default function OnlineMatchPage() {
           {/* 3D Board Canvas - fills entire viewport */}
           {!setupOpen && (
             <div className="absolute inset-0 w-full h-full">
-              <Canvas
+              <ClientCanvas
                 camera={cameraOptions}
                 shadows
                 gl={glOptions}
@@ -2645,7 +2646,7 @@ export default function OnlineMatchPage() {
                 )}
                 <KeyboardPanControls enabled={canPanCamera} />
                 <TrackpadOrbitAdapter />
-              </Canvas>
+              </ClientCanvas>
             </div>
           )}
         </>

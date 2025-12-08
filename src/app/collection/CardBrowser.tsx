@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useCallback, useEffect, useState } from "react";
+import { getImageSlug } from "@/lib/utils/cardSlug";
 import AddCardModal from "./AddCardModal";
 
 // Response from /api/cards/search
@@ -394,11 +395,11 @@ export default function CardBrowser({ onCardAdded }: CardBrowserProps) {
           >
             {results.slice(0, displayLimit).map((card) => {
               const ownedQty = ownedCards.get(card.id) || 0;
-              const imageSlug =
-                card.variant?.slug ||
-                `${(card.name || "unknown")
-                  .toLowerCase()
-                  .replace(/\s+/g, "_")}_b_s`;
+              const imageSlug = getImageSlug(
+                card.variant?.slug,
+                card.name || "unknown",
+                card.variant?.setName
+              );
 
               // Sites are landscape cards - detect by type
               const isSite = (card.meta?.type || "")

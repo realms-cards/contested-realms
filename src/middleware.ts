@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from "next/server";
 
 // Enable with BASIC_AUTH_ENABLED=true and set BASIC_AUTH_PASSWORD (and optionally BASIC_AUTH_USER)
 // This middleware runs on Vercel Edge and protects the entire site behind HTTP Basic Auth.
@@ -6,24 +6,29 @@ import { NextRequest, NextResponse } from 'next/server'
 const ADMIN_PATHS = [/^\/admin(?:$|\/)/, /^\/api\/admin(?:$|\/)/];
 
 function isEnabled() {
-  const v = (process.env.BASIC_AUTH_ENABLED || process.env.LOCKDOWN_ENABLED || '').toLowerCase();
-  const explicit = v === '1' || v === 'true' || v === 'yes' || v === 'on';
-  const vercelEnv = (process.env.VERCEL_ENV || '').toLowerCase();
-  const preview = vercelEnv === 'preview';
+  const v = (
+    process.env.BASIC_AUTH_ENABLED ||
+    process.env.LOCKDOWN_ENABLED ||
+    ""
+  ).toLowerCase();
+  const explicit = v === "1" || v === "true" || v === "yes" || v === "on";
+  const vercelEnv = (process.env.VERCEL_ENV || "").toLowerCase();
+  const preview = vercelEnv === "preview";
   return explicit || preview;
 }
 
 function setLockdown(res: NextResponse, state: string) {
-  try { res.headers.set('x-lockdown', state); } catch {}
+  try {
+    res.headers.set("x-lockdown", state);
+  } catch {}
   return res;
 }
-
 
 function decodeBase64(b64: string): string {
   try {
     return atob(b64);
   } catch {
-    return '';
+    return "";
   }
 }
 
@@ -36,7 +41,7 @@ function parseAllowlist(raw: string | undefined | null): string[] {
 }
 
 function toIpv4Int(ip: string): number | null {
-  const parts = ip.split('.');
+  const parts = ip.split(".");
   if (parts.length !== 4) return null;
   let result = 0;
   for (const part of parts) {
@@ -50,7 +55,7 @@ function toIpv4Int(ip: string): number | null {
 }
 
 function matchesCidr(ip: string, cidr: string): boolean {
-  const [base, prefixStr] = cidr.split('/');
+  const [base, prefixStr] = cidr.split("/");
   const prefix = Number(prefixStr);
   if (!base || !Number.isInteger(prefix) || prefix < 0 || prefix > 32) {
     return false;
@@ -64,8 +69,8 @@ function matchesCidr(ip: string, cidr: string): boolean {
 
 function normalizeIp(ip: string | null | undefined): string | null {
   if (!ip) return null;
-  if (ip === '::1') return '127.0.0.1';
-  if (ip.startsWith('::ffff:')) {
+  if (ip === "::1") return "127.0.0.1";
+  if (ip.startsWith("::ffff:")) {
     const trimmed = ip.slice(7);
     return trimmed || null;
   }
@@ -75,7 +80,7 @@ function normalizeIp(ip: string | null | undefined): string | null {
 function ipAllowed(ip: string | null, allowlist: string[]): boolean {
   if (!ip) return false;
   for (const entry of allowlist) {
-    if (entry.includes('/')) {
+    if (entry.includes("/")) {
       if (matchesCidr(ip, entry)) return true;
       continue;
     }
@@ -90,121 +95,142 @@ export async function middleware(req: NextRequest) {
   if (adminPathsEnabled) {
     const allowlist = parseAllowlist(process.env.ADMIN_IP_ACCESSLIST);
     if (allowlist.length > 0) {
-      const clientIpHeader = req.headers.get('x-forwarded-for') || '';
+      const clientIpHeader = req.headers.get("x-forwarded-for") || "";
       const clientIpList = clientIpHeader
-        .split(',')
+        .split(",")
         .map((item) => item.trim())
         .filter(Boolean);
       const headerIp = normalizeIp(clientIpList[0]);
-      const realIp = normalizeIp(req.headers.get('x-real-ip'));
+      const realIp = normalizeIp(req.headers.get("x-real-ip"));
       const fallbackIp =
-        headerIp || realIp || (process.env.NODE_ENV !== 'production' ? '127.0.0.1' : null);
-      const allowed = fallbackIp ? ipAllowed(fallbackIp, allowlist) : allowlist.length === 0;
+        headerIp ||
+        realIp ||
+        (process.env.NODE_ENV !== "production" ? "127.0.0.1" : null);
+      const allowed = fallbackIp
+        ? ipAllowed(fallbackIp, allowlist)
+        : allowlist.length === 0;
       if (!allowed) {
-        return new NextResponse('forbidden', { status: 403 });
+        return new NextResponse("forbidden", { status: 403 });
       }
     }
   }
 
-  if (!isEnabled()) return setLockdown(NextResponse.next(), 'disabled');
+  if (!isEnabled()) return setLockdown(NextResponse.next(), "disabled");
 
-  const expectedPass = process.env.BASIC_AUTH_PASSWORD || process.env.BASIC_AUTH_PASS || '';
-  const expectedUser = process.env.BASIC_AUTH_USER || '';
+  const expectedPass =
+    process.env.BASIC_AUTH_PASSWORD || process.env.BASIC_AUTH_PASS || "";
+  const expectedUser = process.env.BASIC_AUTH_USER || "";
 
   // Internal API bypass: allow trusted server-to-server calls to API routes
   // Requires headers:
   //  - x-internal-call: true
   //  - x-internal-key: matches process.env.INTERNAL_API_KEY
-  if (pathname.startsWith('/api')) {
-    const flag = (req.headers.get('x-internal-call') || '').toLowerCase();
-    const key = req.headers.get('x-internal-key') || '';
+  if (pathname.startsWith("/api")) {
+    const flag = (req.headers.get("x-internal-call") || "").toLowerCase();
+    const key = req.headers.get("x-internal-key") || "";
     const expectedKeys = [
-      process.env.INTERNAL_API_KEY || '',
-      process.env.NEXTAUTH_SECRET || '',
+      process.env.INTERNAL_API_KEY || "",
+      process.env.NEXTAUTH_SECRET || "",
     ].filter(Boolean);
-    const isOn = flag === '1' || flag === 'true' || flag === 'yes' || flag === 'on';
-    const allowed = isOn && (
+    const isOn =
+      flag === "1" || flag === "true" || flag === "yes" || flag === "on";
+    const allowed =
+      isOn &&
       // Allow without key in non-production for local/dev
-      process.env.NODE_ENV !== 'production' ||
-      (expectedKeys.length > 0 && expectedKeys.includes(key))
-    );
+      (process.env.NODE_ENV !== "production" ||
+        (expectedKeys.length > 0 && expectedKeys.includes(key)));
     if (allowed) {
-      return setLockdown(NextResponse.next(), 'internal');
+      return setLockdown(NextResponse.next(), "internal");
     }
   }
 
   // Allow Next static assets and image optimizer without auth challenge for better DX
   if (
-    pathname.startsWith('/_next/static') ||
-    pathname.startsWith('/_next/image') ||
-    pathname === '/favicon.ico' ||
-    pathname === '/skull.txt' ||
-    pathname === '/robots.txt' ||
-    pathname === '/sitemap.xml'
+    pathname.startsWith("/_next/static") ||
+    pathname.startsWith("/_next/image") ||
+    pathname === "/favicon.ico" ||
+    pathname === "/skull.txt" ||
+    pathname === "/robots.txt" ||
+    pathname === "/sitemap.xml"
   ) {
-    return setLockdown(NextResponse.next(), 'enabled-static');
+    return setLockdown(NextResponse.next(), "enabled-static");
   }
 
   // Allow the custom lockdown page(s), API, and diagnostics without auth to avoid loops
+  // Also allow public routes like /random-spell
   if (
-    pathname.startsWith('/lock') ||
-    pathname.startsWith('/_lockdown') ||
-    pathname.startsWith('/api/lock') ||
-    pathname.startsWith('/api/assets') ||
-    pathname.startsWith('/api/images') ||
-    pathname.startsWith('/_diag')
+    pathname.startsWith("/lock") ||
+    pathname.startsWith("/_lockdown") ||
+    pathname.startsWith("/api/lock") ||
+    pathname.startsWith("/api/assets") ||
+    pathname.startsWith("/api/images") ||
+    pathname.startsWith("/_diag") ||
+    pathname.startsWith("/random-spell") ||
+    pathname.startsWith("/api/cards/random-spell")
   ) {
-    return setLockdown(NextResponse.next(), 'lockpage');
+    return setLockdown(NextResponse.next(), "lockpage");
   }
 
   // If enabled but password not configured, redirect to lock page with error
   if (!expectedPass) {
-    const url = new URL('/lock', req.url);
-    try { url.searchParams.set('from', req.nextUrl.pathname + req.nextUrl.search); } catch {}
-    try { url.searchParams.set('error', 'server'); } catch {}
-    return setLockdown(NextResponse.redirect(url), 'redirect');
+    const url = new URL("/lock", req.url);
+    try {
+      url.searchParams.set("from", req.nextUrl.pathname + req.nextUrl.search);
+    } catch {}
+    try {
+      url.searchParams.set("error", "server");
+    } catch {}
+    return setLockdown(NextResponse.redirect(url), "redirect");
   }
 
   // If a previous successful auth set a cookie, allow
-  const cookieOk = req.cookies.get('basic_auth')?.value === 'ok';
-  if (cookieOk) return setLockdown(NextResponse.next(), 'enabled-cookie');
+  const cookieOk = req.cookies.get("basic_auth")?.value === "ok";
+  if (cookieOk) return setLockdown(NextResponse.next(), "enabled-cookie");
 
-  const auth = req.headers.get('authorization') || '';
-  if (!auth.startsWith('Basic ')) {
-    const url = new URL('/lock', req.url);
-    try { url.searchParams.set('from', req.nextUrl.pathname + req.nextUrl.search); } catch {}
-    return setLockdown(NextResponse.redirect(url), 'redirect');
+  const auth = req.headers.get("authorization") || "";
+  if (!auth.startsWith("Basic ")) {
+    const url = new URL("/lock", req.url);
+    try {
+      url.searchParams.set("from", req.nextUrl.pathname + req.nextUrl.search);
+    } catch {}
+    return setLockdown(NextResponse.redirect(url), "redirect");
   }
 
   try {
     const base64 = auth.slice(6).trim();
     const decoded = decodeBase64(base64);
-    const [user, pass] = decoded.split(':');
+    const [user, pass] = decoded.split(":");
     const userOk = expectedUser ? user === expectedUser : true;
     const passOk = pass === expectedPass;
 
     if (userOk && passOk) {
-      const res = setLockdown(NextResponse.next(), 'ok');
+      const res = setLockdown(NextResponse.next(), "ok");
       // Cache auth with a short-lived, httpOnly cookie to reduce repeated prompts across navigations
-      res.cookies.set('basic_auth', 'ok', {
+      res.cookies.set("basic_auth", "ok", {
         httpOnly: true,
         secure: true,
-        sameSite: 'lax',
+        sameSite: "lax",
         maxAge: 60 * 60 * 12, // 12 hours
-        path: '/',
+        path: "/",
       });
       return res;
     }
   } catch {}
 
   // On failure, redirect back to lock screen with error
-  const url = new URL('/lock', req.url);
-  try { url.searchParams.set('from', req.nextUrl.pathname + req.nextUrl.search); } catch {}
-  try { url.searchParams.set('error', '1'); } catch {}
-  return setLockdown(NextResponse.redirect(url), 'redirect');
+  const url = new URL("/lock", req.url);
+  try {
+    url.searchParams.set("from", req.nextUrl.pathname + req.nextUrl.search);
+  } catch {}
+  try {
+    url.searchParams.set("error", "1");
+  } catch {}
+  return setLockdown(NextResponse.redirect(url), "redirect");
 }
 
 // Apply to all routes except static/image optimizer/favicon/robots/sitemap
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml).*)'],
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml).*)",
+  ],
 };

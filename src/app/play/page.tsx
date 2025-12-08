@@ -1,13 +1,16 @@
 "use client";
 
 import { OrbitControls } from "@react-three/drei";
-import { Canvas } from "@react-three/fiber";
+import { useThree } from "@react-three/fiber";
 import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import * as THREE from "three";
+import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import CardPreview from "@/components/game/CardPreview";
+import { ClientCanvas } from "@/components/game/ClientCanvas";
 import ContextMenu from "@/components/game/ContextMenu";
 import DeckSelector from "@/components/game/DeckSelector";
 import GameToolbox from "@/components/game/GameToolbox";
+import HarbingerPortalScreen from "@/components/game/HarbingerPortalScreen";
 import { InteractionConsentDialog } from "@/components/game/InteractionConsentDialog";
 import LifeCounters from "@/components/game/LifeCounters";
 import OfflineMulliganScreen from "@/components/game/OfflineMulliganScreen";
@@ -22,6 +25,7 @@ import {
   DynamicPiles3D as Piles3D,
   DynamicTokenPile3D as TokenPile3D,
 } from "@/components/game/dynamic-3d";
+import TrackpadOrbitAdapter from "@/lib/controls/TrackpadOrbitAdapter";
 import { createCardPreviewData } from "@/lib/game/card-preview.types";
 import TextureCache from "@/lib/game/components/TextureCache";
 import {
@@ -32,6 +36,12 @@ import {
 } from "@/lib/game/constants";
 import { Physics } from "@/lib/game/physics";
 import { useGameStore } from "@/lib/game/store";
+import {
+  hasAnyHarbinger,
+  detectHarbingerSeats,
+} from "@/lib/game/avatarAbilities";
+// Note: avatarAbilities import is after store due to type dependency
+import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
 import { LocalTransport } from "@/lib/net/localTransport";
 
 export default function PlayPage() {
@@ -56,6 +66,9 @@ export default function PlayPage() {
   const selectedPermanent = useGameStore((s) => s.selectedPermanent);
   const selectedAvatar = useGameStore((s) => s.selectedAvatar);
   const players = useGameStore((s) => s.players);
+  const avatars = useGameStore((s) => s.avatars);
+  const portalState = useGameStore((s) => s.portalState);
+  const initPortalState = useGameStore((s) => s.initPortalState);
   const boardSize = useGameStore((s) => s.board.size);
   const cameraMode = useGameStore((s) => s.cameraMode);
   const setCameraMode = useGameStore((s) => s.setCameraMode);
@@ -166,6 +179,42 @@ export default function PlayPage() {
   const [p1Ready, setP1Ready] = useState<boolean>(false);
   const [p2Ready, setP2Ready] = useState<boolean>(false);
 
+  // Harbinger portal phase state (Gothic expansion)
+  const [needsPortalPhase, setNeedsPortalPhase] = useState<boolean>(false);
+  const [portalSetupComplete, setPortalSetupComplete] =
+    useState<boolean>(false);
+  const [portalPhaseInitialized, setPortalPhaseInitialized] =
+    useState<boolean>(false);
+
+  // After deck selection, check for Harbinger avatars and initialize portal state
+  useEffect(() => {
+    if (!prepared || portalPhaseInitialized) return;
+    setPortalPhaseInitialized(true);
+
+    // Check if any player has a Harbinger avatar
+    if (avatars && hasAnyHarbinger(avatars)) {
+      const harbingerSeats = detectHarbingerSeats(avatars);
+      if (harbingerSeats.length > 0) {
+        setNeedsPortalPhase(true);
+        initPortalState(harbingerSeats);
+        return;
+      }
+    }
+    // No Harbingers, skip portal phase
+    setPortalSetupComplete(true);
+  }, [prepared, portalPhaseInitialized, avatars, initPortalState]);
+
+  // Mark portal phase complete when portalState indicates completion
+  useEffect(() => {
+    if (
+      needsPortalPhase &&
+      portalState?.setupComplete &&
+      !portalSetupComplete
+    ) {
+      setPortalSetupComplete(true);
+    }
+  }, [needsPortalPhase, portalState?.setupComplete, portalSetupComplete]);
+
   // Event console: autoscroll and text formatting
   const eventsRef = useRef<HTMLDivElement | null>(null);
   // Camera controls ref for reset functionality
@@ -240,24 +289,70 @@ export default function PlayPage() {
     }
   }, [prepared, p1Ready, p2Ready, startGame]);
 
-  function gotoBaseline(mode: "topdown" | "orbit") {
-    const c = controlsRef.current;
-    if (!c) return;
-    c.target.set(0, 0, 0);
-    const cam = c.object as THREE.Camera;
-    if (mode === "topdown") {
-      const dist = Math.max(matW, matH) * 1.1;
-      cam.position.set(0, dist, 0);
-      cam.up.set(0, 0, -1);
-    } else {
-      cam.position.set(0, 10, 5);
-      cam.up.set(0, 1, 0);
-    }
-    cam.lookAt(0, 0, 0);
-    c.update();
+  // Compute playmat world extents from board size for camera clamping
+  // (moved up so gotoBaseline can use matW/matH)
+  const baseGridW = boardSize.w * BASE_TILE_SIZE;
+  const baseGridH = boardSize.h * BASE_TILE_SIZE;
+  let matW = baseGridW;
+  let matH = baseGridW / MAT_RATIO;
+  if (matH < baseGridH) {
+    matH = baseGridH;
+    matW = baseGridH * MAT_RATIO;
   }
 
-  // Camera reset handled via gotoBaseline(cameraMode) where needed
+  const gotoBaseline = useCallback(
+    (mode: "topdown" | "orbit") => {
+      const c = controlsRef.current;
+      if (!c) return;
+      c.target.set(0, 0, 0);
+      const cam = c.object as THREE.Camera;
+      if (mode === "topdown") {
+        const dist = Math.max(matW, matH) * 1.1;
+        cam.position.set(0, dist, 0);
+        cam.up.set(0, 0, -1);
+      } else {
+        cam.position.set(0, 10, 5);
+        cam.up.set(0, 1, 0);
+      }
+      cam.lookAt(0, 0, 0);
+      c.update();
+    },
+    [matW, matH]
+  );
+
+  const resetCamera = useCallback(() => {
+    gotoBaseline(cameraMode);
+  }, [gotoBaseline, cameraMode]);
+
+  // Tab key to reset camera (matches online play behavior)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Tab") return;
+      const t = e.target as HTMLElement | null;
+      if (
+        t &&
+        (t.isContentEditable ||
+          t.tagName === "INPUT" ||
+          t.tagName === "TEXTAREA" ||
+          t.tagName === "SELECT" ||
+          t.tagName === "BUTTON")
+      ) {
+        return;
+      }
+      e.preventDefault();
+      resetCamera();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [resetCamera]);
+
+  // Determine if camera panning should be enabled
+  const canPanCamera =
+    !dragFromHand &&
+    !dragFromPile &&
+    !selected &&
+    !selectedPermanent &&
+    !selectedAvatar;
 
   // Dynamic page title for offline play
   useEffect(() => {
@@ -284,15 +379,6 @@ export default function PlayPage() {
     document.title = title;
   }, [setupOpen, players.p1?.life, players.p2?.life, currentPlayer]);
 
-  // Compute playmat world extents from board size for camera clamping
-  const baseGridW = boardSize.w * BASE_TILE_SIZE;
-  const baseGridH = boardSize.h * BASE_TILE_SIZE;
-  let matW = baseGridW;
-  let matH = baseGridW / MAT_RATIO;
-  if (matH < baseGridH) {
-    matH = baseGridH;
-    matW = baseGridH * MAT_RATIO;
-  }
   const minDist = Math.max(2, Math.min(matW, matH) * 0.25);
   const maxDist = Math.max(14, Math.hypot(matW, matH) * 1.3);
   const clampControls = useCallback(() => {
@@ -363,6 +449,13 @@ export default function PlayPage() {
         <div className="absolute inset-0 z-20 bg-black/70 backdrop-blur-sm flex items-center justify-center p-6">
           {!prepared ? (
             <DeckSelector onPrepareComplete={() => setPrepared(true)} />
+          ) : needsPortalPhase && !portalSetupComplete ? (
+            /* Harbinger portal phase - shows for each Harbinger player sequentially */
+            <HarbingerPortalScreen
+              myPlayerKey={portalState?.currentRoller ?? "p1"}
+              playerNames={{ p1: "Player 1", p2: "Player 2" }}
+              onSetupComplete={() => setPortalSetupComplete(true)}
+            />
           ) : (
             <div className="w-full max-w-6xl mx-auto space-y-4">
               <OfflineMulliganScreen
@@ -526,7 +619,7 @@ export default function PlayPage() {
       {/* Replaced 2D overlays with 3D piles and hand inside Canvas */}
 
       {/* Board */}
-      <Canvas
+      <ClientCanvas
         camera={{ position: [0, 10, 0], fov: 50 }}
         shadows
         gl={{
@@ -577,41 +670,14 @@ export default function PlayPage() {
           ref={controlsRef}
           makeDefault
           target={[0, 0, 0]}
-          mouseButtons={
-            cameraMode === "topdown"
-              ? {
-                  LEFT: THREE.MOUSE.ROTATE,
-                  MIDDLE: THREE.MOUSE.PAN,
-                  RIGHT: THREE.MOUSE.ROTATE,
-                }
-              : {
-                  LEFT: THREE.MOUSE.ROTATE,
-                  MIDDLE: THREE.MOUSE.PAN,
-                  RIGHT: THREE.MOUSE.ROTATE,
-                }
-          }
-          enabled={
-            !dragFromHand &&
-            !dragFromPile &&
-            !selected &&
-            !selectedPermanent &&
-            !selectedAvatar
-          }
-          enablePan={
-            !dragFromHand &&
-            !dragFromPile &&
-            !selected &&
-            !selectedPermanent &&
-            !selectedAvatar
-          }
-          enableRotate={
-            !dragFromHand &&
-            !dragFromPile &&
-            !selected &&
-            !selectedPermanent &&
-            !selectedAvatar &&
-            cameraMode !== "topdown"
-          }
+          mouseButtons={{
+            MIDDLE: THREE.MOUSE.DOLLY,
+            RIGHT: THREE.MOUSE.PAN,
+          }}
+          touches={{ TWO: THREE.TOUCH.PAN }}
+          enabled={canPanCamera}
+          enablePan={canPanCamera}
+          enableRotate={canPanCamera && cameraMode !== "topdown"}
           enableZoom={!dragFromHand && !dragFromPile}
           enableDamping={false}
           onChange={clampControls}
@@ -620,7 +686,23 @@ export default function PlayPage() {
           minPolarAngle={cameraMode === "topdown" ? 0 : 0}
           maxPolarAngle={cameraMode === "topdown" ? 0 : Math.PI / 2.4}
         />
-      </Canvas>
+        <KeyboardPanControls enabled={canPanCamera} />
+        <TrackpadOrbitAdapter />
+      </ClientCanvas>
     </div>
   );
+}
+
+function KeyboardPanControls({
+  enabled = true,
+  step = 0.4,
+}: {
+  enabled?: boolean;
+  step?: number;
+}) {
+  const { controls } = useThree((state) => ({
+    controls: state.controls as OrbitControlsImpl | undefined,
+  }));
+  useOrbitKeyboardPan(controls, { enabled, panStep: step });
+  return null;
 }

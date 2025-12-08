@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { getImageSlug } from "@/lib/utils/cardSlug";
 
 interface ListCard {
   id: number;
@@ -466,9 +467,11 @@ function ListCardItem({
   onRemove: () => void;
   onUpdateQuantity: (qty: number) => void;
 }) {
-  const imageSlug =
-    card.variant?.slug ||
-    `${card.card.name.toLowerCase().replace(/\s+/g, "_")}_b_s`;
+  const imageSlug = getImageSlug(
+    card.variant?.slug,
+    card.card.name,
+    card.set?.name
+  );
   const imageUrl = `/api/images/${imageSlug}`;
 
   const isFoil = card.finish === "Foil";

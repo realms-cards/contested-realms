@@ -117,30 +117,12 @@ export default function HarbingerPortalScreen({
     ]
   );
 
-  // Auto-finalize when all rolls are unique
-  useEffect(() => {
-    if (
-      allUnique &&
-      currentRoller &&
-      isMyTurn &&
-      rollPhase !== "complete" &&
-      diceComplete.every(Boolean)
-    ) {
-      // Small delay to let animation finish
-      const timer = setTimeout(() => {
-        finalizePortalRolls(currentRoller);
-      }, 500);
-      return () => clearTimeout(timer);
+  // Handle confirm button click
+  const handleConfirmPortals = useCallback(() => {
+    if (allUnique && currentRoller && isMyTurn && rollPhase !== "complete") {
+      finalizePortalRolls(currentRoller);
     }
-    return undefined;
-  }, [
-    allUnique,
-    currentRoller,
-    isMyTurn,
-    rollPhase,
-    diceComplete,
-    finalizePortalRolls,
-  ]);
+  }, [allUnique, currentRoller, isMyTurn, rollPhase, finalizePortalRolls]);
 
   // Check if all harbinger players have completed their rolls
   useEffect(() => {
@@ -211,7 +193,11 @@ export default function HarbingerPortalScreen({
           {isMyTurn &&
             hasDuplicates &&
             "Duplicate rolls! Click the highlighted dice to reroll."}
-          {isMyTurn && allUnique && "All unique! Finalizing..."}
+          {isMyTurn &&
+            allUnique &&
+            rollPhase !== "complete" &&
+            "All unique! Click Confirm to set portals."}
+          {isMyTurn && rollPhase === "complete" && "Portals confirmed!"}
           {!isMyTurn &&
             currentRoller &&
             `Watching ${harbingerPlayerName} roll...`}
@@ -289,6 +275,21 @@ export default function HarbingerPortalScreen({
             </span>
           </div>
         )}
+
+        {/* Confirm button - only shown when all dice are unique and it's my turn */}
+        {isMyTurn &&
+          allUnique &&
+          rollPhase !== "complete" &&
+          diceComplete.every(Boolean) && (
+            <div className="flex justify-center mt-4">
+              <button
+                onClick={handleConfirmPortals}
+                className="px-6 py-2 bg-green-600 hover:bg-green-500 text-white font-semibold rounded-lg transition-colors shadow-lg"
+              >
+                Confirm Portal Locations
+              </button>
+            </div>
+          )}
 
         {/* Instructions */}
         {isMyTurn && !allRolled && (

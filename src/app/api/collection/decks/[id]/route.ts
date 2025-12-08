@@ -6,6 +6,7 @@ import {
   type ValidationError,
 } from "@/lib/deck/validation-rules";
 import { prisma } from "@/lib/prisma";
+import { getImageSlug } from "@/lib/utils/cardSlug";
 
 export const dynamic = "force-dynamic";
 
@@ -97,7 +98,7 @@ export async function GET(
       const slug =
         c.variant?.slug ||
         variantLookup.get(c.cardId) ||
-        `${c.card.name.toLowerCase().replace(/\s+/g, "_")}_b_s`;
+        getImageSlug(null, c.card.name, c.set?.name);
       return {
         cardId: c.cardId,
         variantId: c.variantId,

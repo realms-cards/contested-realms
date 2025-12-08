@@ -1,7 +1,8 @@
 "use client";
 
 import { OrbitControls } from "@react-three/drei";
-import { Canvas, useThree } from "@react-three/fiber";
+import { useThree } from "@react-three/fiber";
+import { ClientCanvas } from "@/components/game/ClientCanvas";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -45,20 +46,12 @@ export default function Draft3DPage() {
   // --- Draft state (mirrors /draft 2D page) ---
   // Multi-set support: choose a set per pack column
   // Default to Gothic (newest set) for all 3 packs
-  const [setNames, setSetNames] = useState<string[]>(() => {
-    if (typeof window === "undefined")
-      return [DEFAULT_SET, DEFAULT_SET, DEFAULT_SET];
-    try {
-      const saved = localStorage.getItem("sorcery:draft3d:setNames");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length === 3) {
-          return parsed;
-        }
-      }
-    } catch {}
-    return [DEFAULT_SET, DEFAULT_SET, DEFAULT_SET];
-  });
+  const [setNames, setSetNames] = useState<string[]>([
+    DEFAULT_SET,
+    DEFAULT_SET,
+    DEFAULT_SET,
+  ]);
+  const [setNamesLoaded, setSetNamesLoaded] = useState(false);
   const [players, setPlayers] = useState(8);
   const [replaceAvatars, setReplaceAvatars] = useState(false);
   const [starting, setStarting] = useState(false);
@@ -96,16 +89,30 @@ export default function Draft3DPage() {
     loadCubes();
   }, []);
 
-  // Persist set selection to localStorage
+  // Load saved set selection from localStorage on mount
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    try {
+      const saved = localStorage.getItem("sorcery:draft3d:setNames");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length === 3) {
+          setSetNames(parsed);
+        }
+      }
+    } catch {}
+    setSetNamesLoaded(true);
+  }, []);
+
+  // Persist set selection to localStorage when changed (after initial load)
+  useEffect(() => {
+    if (!setNamesLoaded) return;
     try {
       localStorage.setItem(
         "sorcery:draft3d:setNames",
         JSON.stringify(setNames)
       );
     } catch {}
-  }, [setNames]);
+  }, [setNames, setNamesLoaded]);
 
   const [seatPacks, setSeatPacks] = useState<BoosterCard[][][]>([]); // [seat][packIndex][cards]
   const [currentPacks, setCurrentPacks] = useState<BoosterCard[][]>([]); // [seat][cards]
@@ -827,7 +834,7 @@ export default function Draft3DPage() {
     <div className="fixed inset-0 w-screen h-screen">
       {/* 3D Game View as the stage */}
       <div className="absolute inset-0 w-full h-full">
-        <Canvas
+        <ClientCanvas
           camera={{ position: [0, 10, 0], fov: 50 }}
           shadows
           gl={{ preserveDrawingBuffer: true, antialias: true, alpha: false }}
@@ -1071,7 +1078,7 @@ export default function Draft3DPage() {
           />
           <ClampOrbitTarget bounds={{ minX: -8, maxX: 8, minZ: -6, maxZ: 6 }} />
           <KeyboardPanControls enabled={!orbitLocked} />
-        </Canvas>
+        </ClientCanvas>
       </div>
 
       {/* Overlays */}

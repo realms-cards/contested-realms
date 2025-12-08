@@ -54540,7 +54540,7 @@
             "finish": "Standard",
             "product": "Dust",
             "artist": "Andrea Modesti",
-            "flavorText": "\"Farewell, farewell, O warrier brave,\nNobody can from Death thee save.\"",
+            "flavorText": "\"Farewell, farewell, O warrier brave, \nNobody can from Death thee save.\"",
             "typeText": "Ordinary Mortals march forth"
           }
         ]
@@ -54649,7 +54649,7 @@
             "finish": "Standard",
             "product": "Dust",
             "artist": "Andrea Modesti",
-            "flavorText": "\"Farewell, farewell, O warrier brave,\nNobody can from Death thee save.\"",
+            "flavorText": "\"Farewell, farewell, O warrier brave, \nNobody can from Death thee save.\"",
             "typeText": "Ordinary Mortals march forth"
           }
         ]
@@ -54758,7 +54758,7 @@
             "finish": "Standard",
             "product": "Dust",
             "artist": "Andrea Modesti",
-            "flavorText": "\"Farewell, farewell, O warrier brave,\nNobody can from Death thee save.\"",
+            "flavorText": "\"Farewell, farewell, O warrier brave, \nNobody can from Death thee save.\"",
             "typeText": "Ordinary Mortals march forth"
           }
         ]
@@ -55027,7 +55027,7 @@
             "finish": "Standard",
             "product": "Dust",
             "artist": "Andrea Modesti",
-            "flavorText": "\"Farewell, farewell, O warrier brave,\nNobody can from Death thee save.\"",
+            "flavorText": "\"Farewell, farewell, O warrier brave, \nNobody can from Death thee save.\"",
             "typeText": "Ordinary Mortals march forth"
           }
         ]
@@ -55078,7 +55078,7 @@
             "finish": "Standard",
             "product": "Dust",
             "artist": "Andrea Modesti",
-            "flavorText": "\"Farewell, farewell, O warrier brave,\nNobody can from Death thee save.\"",
+            "flavorText": "\"Farewell, farewell, O warrier brave, \nNobody can from Death thee save.\"",
             "typeText": "Ordinary Mortals march forth"
           }
         ]
@@ -60585,6 +60585,35 @@
     "elements": "None",
     "subTypes": "",
     "sets": [
+      {
+        "name": "Promotional",
+        "releasedAt": "2025-11-20T22:09:50.983Z",
+        "metadata": {
+          "rarity": "Unique",
+          "type": "Site",
+          "rulesText": "(A) — Provides (2) instead but is destroyed when damaged.",
+          "cost": null,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "pro-city_of_glass-scg-f",
+            "finish": "Foil",
+            "product": "Star_City_Games",
+            "artist": "Adam Burke",
+            "flavorText": "",
+            "typeText": "A Unique Site where legends are made, or shattered"
+          }
+        ]
+      },
       {
         "name": "Gothic",
         "releasedAt": "2025-12-05T16:59:59.639Z",
@@ -81739,6 +81768,43 @@
     "elements": "None",
     "subTypes": "",
     "sets": [
+      {
+        "name": "Promotional",
+        "releasedAt": "2025-11-20T22:09:50.983Z",
+        "metadata": {
+          "rarity": "Ordinary",
+          "type": "Minion",
+          "rulesText": "Can't move to defend.",
+          "cost": null,
+          "attack": 1,
+          "defence": 1,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "pro-skeleton-tc-f",
+            "finish": "Foil",
+            "product": "Team_Covenant",
+            "artist": "Vasiliy Ermolaev",
+            "flavorText": "Behind the scenes, fighting the creeping dread\nWith packs, champagne, words that needed said.\nA kind of hope, among those who could view\nBorne on the backs of that small, streaming crew.",
+            "typeText": "Ordinary Undead, sealed away but still playing"
+          },
+          {
+            "slug": "pro-skeleton-ai-f",
+            "finish": "Foil",
+            "product": "Alpha_Investments",
+            "artist": "Juan Machuca",
+            "flavorText": "When your armor is as flimsy as your returns.",
+            "typeText": "Once healthy and fit, now an Ordinary Undead"
+          }
+        ]
+      },
       {
         "name": "Gothic",
         "releasedAt": "2025-12-05T16:59:59.639Z",
