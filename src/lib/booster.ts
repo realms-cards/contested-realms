@@ -360,15 +360,376 @@ export async function generateBooster(
   return picks;
 }
 
+/**
+ * Cached data for batch booster generation to avoid repeated DB queries
+ */
+type BoosterGenCache = {
+  set: { id: number; name: string };
+  cfg: {
+    isFixedPack: boolean;
+    uniqueChance: number;
+    exceptionalCount: number;
+    ordinaryCount: number;
+    siteOrAvatarCount: number;
+    foilChance: number | null;
+    foilUniqueWeight: number;
+    foilEliteWeight: number;
+    foilExceptionalWeight: number;
+    foilOrdinaryWeight: number;
+  };
+  metaByCardId: Map<number, CardMeta>;
+  stdByRarity: Record<Rarity, VariantSel[]>;
+  foilByRarity: Record<Rarity, VariantSel[]>;
+  siteAvatarStd: VariantSel[];
+  nameById: Map<number, string>;
+  // For avatar replacement
+  betaVariants?: VariantSel[];
+  betaAvatars?: { id: number; name: string }[];
+  // For fixed packs
+  fixedPackVariants?: VariantSel[];
+};
+
+/**
+ * Pre-fetch all data needed for booster generation (called once per batch)
+ */
+async function prefetchBoosterData(
+  setName: string,
+  client: PrismaClient,
+  replaceAvatars: boolean
+): Promise<BoosterGenCache> {
+  const set = await client.set.findUnique({
+    where: { name: setName },
+    include: { packConfig: true },
+  });
+  if (!set || !set.packConfig)
+    throw new Error(`Set or PackConfig not found for set=${setName}`);
+  const cfg = set.packConfig;
+
+  // Build meta map: cardId -> { rarity, type }
+  const metas: { cardId: number; rarity: Rarity | null; type: string }[] =
+    await client.cardSetMetadata.findMany({
+      where: { setId: set.id },
+      select: { cardId: true, rarity: true, type: true },
+    });
+  const metaByCardId = new Map<number, CardMeta>();
+  for (const m of metas)
+    metaByCardId.set(m.cardId, {
+      rarity: m.rarity ?? "Ordinary",
+      type: m.type ?? null,
+    });
+
+  // Handle fixed packs early
+  if (cfg.isFixedPack) {
+    const fixedPackVariants = await client.variant.findMany({
+      where: { setId: set.id, product: "Booster", finish: "Standard" },
+      select: {
+        id: true,
+        cardId: true,
+        slug: true,
+        finish: true,
+        product: true,
+      },
+    });
+    // Fetch all card names for fixed pack
+    const cardIds = Array.from(new Set(fixedPackVariants.map((v) => v.cardId)));
+    const cards = await client.card.findMany({
+      where: { id: { in: cardIds } },
+      select: { id: true, name: true },
+    });
+    const nameById = new Map<number, string>();
+    for (const c of cards) nameById.set(c.id, c.name);
+
+    return {
+      set: { id: set.id, name: set.name },
+      cfg,
+      metaByCardId,
+      stdByRarity: { Ordinary: [], Exceptional: [], Elite: [], Unique: [] },
+      foilByRarity: { Ordinary: [], Exceptional: [], Elite: [], Unique: [] },
+      siteAvatarStd: [],
+      nameById,
+      fixedPackVariants,
+    };
+  }
+
+  // Fetch all booster variants by finish
+  const [variantsStd, variantsFoil]: [VariantSel[], VariantSel[]] =
+    await Promise.all([
+      client.variant.findMany({
+        where: { setId: set.id, product: "Booster", finish: "Standard" },
+        select: {
+          id: true,
+          cardId: true,
+          slug: true,
+          finish: true,
+          product: true,
+        },
+      }),
+      client.variant.findMany({
+        where: { setId: set.id, product: "Booster", finish: "Foil" },
+        select: {
+          id: true,
+          cardId: true,
+          slug: true,
+          finish: true,
+          product: true,
+        },
+      }),
+    ]);
+
+  // Group by rarity using meta map
+  const stdByRarity: Record<Rarity, VariantSel[]> = {
+    Ordinary: [],
+    Exceptional: [],
+    Elite: [],
+    Unique: [],
+  };
+  for (const v of variantsStd) {
+    const meta = metaByCardId.get(v.cardId);
+    if (!meta) continue;
+    stdByRarity[meta.rarity].push(v);
+  }
+
+  const foilByRarity: Record<Rarity, VariantSel[]> = {
+    Ordinary: [],
+    Exceptional: [],
+    Elite: [],
+    Unique: [],
+  };
+  for (const v of variantsFoil) {
+    const meta = metaByCardId.get(v.cardId);
+    if (!meta) continue;
+    foilByRarity[meta.rarity].push(v);
+  }
+
+  // Site/Avatar pool (standard only) for sets that use an extra slot (Alpha)
+  const siteAvatarCardIds: number[] = [];
+  for (const m of metas) {
+    const t = m.type?.toLowerCase() ?? "";
+    if (t.includes("site") || t.includes("avatar"))
+      siteAvatarCardIds.push(m.cardId);
+  }
+  const siteAvatarStd = variantsStd.filter((v) =>
+    siteAvatarCardIds.includes(v.cardId)
+  );
+
+  // Pre-fetch all card names
+  const allCardIds = Array.from(metaByCardId.keys());
+  const cards = await client.card.findMany({
+    where: { id: { in: allCardIds } },
+    select: { id: true, name: true },
+  });
+  const nameById = new Map<number, string>();
+  for (const c of cards) nameById.set(c.id, c.name);
+
+  // Pre-fetch avatar replacement data if needed
+  let betaVariants: VariantSel[] | undefined;
+  let betaAvatars: { id: number; name: string }[] | undefined;
+  if (replaceAvatars && (setName === "Alpha" || setName === "Beta")) {
+    const betaAvatarNames = [
+      "Geomancer",
+      "Flamecaller",
+      "Sparkmage",
+      "Waveshaper",
+    ];
+    betaAvatars = await client.card.findMany({
+      where: { name: { in: betaAvatarNames } },
+      select: { id: true, name: true },
+    });
+    if (betaAvatars.length > 0) {
+      const betaSet = await client.set.findUnique({ where: { name: "Beta" } });
+      if (betaSet) {
+        betaVariants = await client.variant.findMany({
+          where: {
+            cardId: { in: betaAvatars.map((c) => c.id) },
+            setId: betaSet.id,
+            product: "Booster",
+            finish: "Standard",
+          },
+          select: {
+            id: true,
+            cardId: true,
+            slug: true,
+            finish: true,
+            product: true,
+          },
+        });
+      }
+    }
+  }
+
+  return {
+    set: { id: set.id, name: set.name },
+    cfg,
+    metaByCardId,
+    stdByRarity,
+    foilByRarity,
+    siteAvatarStd,
+    nameById,
+    betaVariants,
+    betaAvatars,
+  };
+}
+
+/**
+ * Generate a single booster using pre-fetched cached data (no DB calls)
+ */
+function generateBoosterFromCache(cache: BoosterGenCache): BoosterCard[] {
+  const {
+    cfg,
+    metaByCardId,
+    stdByRarity,
+    foilByRarity,
+    siteAvatarStd,
+    nameById,
+  } = cache;
+
+  // Handle fixed packs (mini-sets like Dragonlord)
+  if (cfg.isFixedPack && cache.fixedPackVariants) {
+    return cache.fixedPackVariants.map((v) => {
+      const meta = metaByCardId.get(v.cardId) ?? {
+        rarity: "Ordinary" as Rarity,
+        type: null,
+      };
+      const card = toBoosterCard(v, meta);
+      card.cardName = nameById.get(v.cardId) || "";
+      return card;
+    });
+  }
+
+  const picks: BoosterCard[] = [];
+  const used = new Set<number>(); // track cardIds to prevent duplicates in a pack
+
+  // Top rarity slot (Elite or Unique)
+  const pickUnique = Math.random() < cfg.uniqueChance;
+  const topPool = pickUnique ? stdByRarity.Unique : stdByRarity.Elite;
+  const topVariant =
+    pickUniqueFrom(topPool, used) ??
+    pickUniqueFrom(stdByRarity.Elite, used) ??
+    pickUniqueFrom(stdByRarity.Unique, used);
+  if (topVariant) {
+    const meta = metaByCardId.get(topVariant.cardId);
+    if (meta) {
+      picks.push(toBoosterCard(topVariant, meta));
+      used.add(topVariant.cardId);
+    }
+  }
+
+  // Exceptional slots
+  for (let i = 0; i < cfg.exceptionalCount; i++) {
+    const v = pickUniqueFrom(stdByRarity.Exceptional, used);
+    if (!v) break;
+    const meta = metaByCardId.get(v.cardId);
+    if (!meta) continue;
+    picks.push(toBoosterCard(v, meta));
+    used.add(v.cardId);
+  }
+
+  // Ordinary slots
+  for (let i = 0; i < cfg.ordinaryCount; i++) {
+    const v = pickUniqueFrom(stdByRarity.Ordinary, used);
+    if (!v) break;
+    const meta = metaByCardId.get(v.cardId);
+    if (!meta) continue;
+    picks.push(toBoosterCard(v, meta));
+    used.add(v.cardId);
+  }
+
+  // Site/Avatar extra slot if configured
+  for (let i = 0; i < cfg.siteOrAvatarCount; i++) {
+    const v =
+      pickUniqueFrom(siteAvatarStd, used) ||
+      pickUniqueFrom(stdByRarity.Ordinary, used);
+    if (!v) break;
+    const meta = metaByCardId.get(v.cardId);
+    if (!meta) continue;
+    picks.push(toBoosterCard(v, meta));
+    used.add(v.cardId);
+  }
+
+  // Foil replacement logic (replace one ordinary slot)
+  if (cfg.foilChance && Math.random() < cfg.foilChance) {
+    const foilRarity = weightedChoice<Rarity>([
+      { item: "Unique" as Rarity, weight: cfg.foilUniqueWeight },
+      { item: "Elite" as Rarity, weight: cfg.foilEliteWeight },
+      { item: "Exceptional" as Rarity, weight: cfg.foilExceptionalWeight },
+      { item: "Ordinary" as Rarity, weight: cfg.foilOrdinaryWeight },
+    ]);
+    const foilPool = foilRarity ? foilByRarity[foilRarity] : [];
+    const foil = pickUniqueFrom(foilPool, used);
+    if (foil) {
+      // Find an ordinary index to replace
+      const ordIdx = picks.findIndex((p) => p.rarity === "Ordinary");
+      if (ordIdx !== -1) {
+        const meta = metaByCardId.get(foil.cardId);
+        if (meta) {
+          // update used set: remove the replaced ordinary and add the foil card
+          used.delete(picks[ordIdx].cardId);
+          picks[ordIdx] = toBoosterCard(foil, meta);
+          used.add(foil.cardId);
+        }
+      }
+    }
+  }
+
+  // Fill card names from cache
+  for (const p of picks) p.cardName = nameById.get(p.cardId) || "";
+
+  // Avatar replacement logic for Beta/Alpha packs
+  if (
+    cache.betaVariants &&
+    cache.betaAvatars &&
+    cache.betaVariants.length > 0
+  ) {
+    const sorcererIndices: number[] = [];
+    for (let i = 0; i < picks.length; i++) {
+      const pick = picks[i];
+      const meta = metaByCardId.get(pick.cardId);
+      if (
+        meta?.type?.toLowerCase().includes("avatar") &&
+        pick.cardName.toLowerCase().includes("sorcerer")
+      ) {
+        sorcererIndices.push(i);
+      }
+    }
+
+    for (const sorcererIdx of sorcererIndices) {
+      const randomAvatar = choice(cache.betaVariants);
+      if (randomAvatar) {
+        const avatarCard = cache.betaAvatars.find(
+          (c) => c.id === randomAvatar.cardId
+        );
+        if (avatarCard) {
+          picks[sorcererIdx] = {
+            variantId: randomAvatar.id,
+            slug: randomAvatar.slug,
+            finish: randomAvatar.finish as Finish,
+            product: randomAvatar.product,
+            rarity: "Ordinary",
+            type: "Avatar",
+            cardId: randomAvatar.cardId,
+            cardName: avatarCard.name,
+          };
+        }
+      }
+    }
+  }
+
+  return picks;
+}
+
 export async function generateBoosters(
   setName: string,
   count: number,
   client: PrismaClient = defaultPrisma,
   replaceAvatars = false
 ) {
+  // Pre-fetch all data once
+  const cache = await prefetchBoosterData(setName, client, replaceAvatars);
+
+  // Generate all packs synchronously using cached data (no DB calls)
   const packs: BoosterCard[][] = [];
   for (let i = 0; i < count; i++) {
-    packs.push(await generateBooster(setName, client, replaceAvatars));
+    packs.push(generateBoosterFromCache(cache));
   }
   return packs;
 }

@@ -3,7 +3,7 @@
  * Implements cache-first strategy for card images with background updates
  */
 
-const CACHE_VERSION = "v2";
+const CACHE_VERSION = "v3";
 const CARD_CACHE_NAME = `realms-cards-${CACHE_VERSION}`;
 const STATIC_CACHE_NAME = `realms-static-${CACHE_VERSION}`;
 
@@ -97,7 +97,9 @@ self.addEventListener("fetch", (event) => {
 
   // Card images: Cache-first with background update
   if (isCardImageRequest(request)) {
-    event.respondWith(cacheFirstWithBackgroundUpdate(request, CARD_CACHE_NAME));
+    event.respondWith(
+      cacheFirstWithBackgroundUpdate(request, CARD_CACHE_NAME, event)
+    );
     return;
   }
 
@@ -115,7 +117,7 @@ self.addEventListener("fetch", (event) => {
  * Cache-first strategy with stale-while-revalidate
  * Returns cached response immediately if available, then updates cache in background
  */
-async function cacheFirstWithBackgroundUpdate(request, cacheName) {
+async function cacheFirstWithBackgroundUpdate(request, cacheName, fetchEvent) {
   const cache = await caches.open(cacheName);
   const cachedResponse = await cache.match(request);
 
@@ -124,9 +126,9 @@ async function cacheFirstWithBackgroundUpdate(request, cacheName) {
     // Optionally update in background for fresh content
     // (Skip background update for immutable assets - they never change)
     const cacheControl = cachedResponse.headers.get("Cache-Control") || "";
-    if (!cacheControl.includes("immutable")) {
+    if (!cacheControl.includes("immutable") && fetchEvent) {
       // Update cache in background without blocking
-      event.waitUntil(updateCache(request, cache));
+      fetchEvent.waitUntil(updateCache(request, cache));
     }
     return cachedResponse;
   }
