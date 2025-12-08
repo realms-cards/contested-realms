@@ -32,6 +32,8 @@
     "ingest:cards": "node scripts/ingest-cards.js",
     "ingest:codex": "node scripts/ingest-codex.js",
     "seed:packs": "node scripts/seed-pack-config.js",
+    "seed:precons": "node scripts/seed-precon-decks.js",
+    "seed:gothic": "node scripts/seed-gothic-precons.js",
     "assets:compress": "node scripts/compress-ktx2.js",
     "assets:compress:out": "node scripts/compress-ktx2.js --input data --outDir data-ktx2",
     "assets:compress:etc1s": "node scripts/compress-ktx2.js --format etc1s",

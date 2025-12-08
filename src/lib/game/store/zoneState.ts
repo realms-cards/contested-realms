@@ -543,18 +543,34 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
       const hand = [...state.zones[who].hand];
       const sb = [...state.zones[who].spellbook];
       const at = [...state.zones[who].atlas];
+
+      const avatarName = (state.avatars[who]?.card?.name || "").toLowerCase();
+      const isMagicianAvatar = avatarName.includes("magician");
+      const isDuplicatorAvatar = avatarName.includes("duplicator");
+      const isSpellslinger = avatarName === "spellslinger";
+      const isPathfinder = avatarName === "pathfinder";
+
+      // Return cards to piles
+      // Magician: all cards go to spellbook (no atlas)
       for (const c of hand) {
         const isSite = (c.type || "").toLowerCase().includes("site");
-        if (isSite) at.push(c);
-        else sb.push(c);
+        if (isMagicianAvatar) {
+          sb.push(c); // Magician: all cards in spellbook
+        } else if (isSite) {
+          at.push(c);
+        } else {
+          sb.push(c);
+        }
       }
       for (let i = sb.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [sb[i], sb[j]] = [sb[j], sb[i]];
       }
-      for (let i = at.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [at[i], at[j]] = [at[j], at[i]];
+      if (!isMagicianAvatar) {
+        for (let i = at.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [at[i], at[j]] = [at[j], at[i]];
+        }
       }
       const newHand: CardRef[] = [];
       const drawN = (pile: CardRef[], n: number) => {
@@ -564,11 +580,31 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
           newHand.push(c);
         }
       };
-      const avatarName = (state.avatars[who]?.card?.name || "").toLowerCase();
-      const isSpellslinger = avatarName === "spellslinger";
-      const isPathfinder = avatarName === "pathfinder";
-      const sbCount = isSpellslinger ? 4 : 3;
-      const atCount = isPathfinder ? 0 : 3;
+
+      // Determine draw counts based on avatar abilities:
+      // - Magician: 7 cards from spellbook, 0 from atlas (no atlas)
+      // - Duplicator: 2 spells and 2 sites
+      // - Spellslinger: 4 spells, 3 sites (legacy)
+      // - Pathfinder: 3 spells, 0 sites (legacy)
+      // - Default: 3 spells, 3 sites
+      let sbCount: number;
+      let atCount: number;
+      if (isMagicianAvatar) {
+        sbCount = 7;
+        atCount = 0;
+      } else if (isDuplicatorAvatar) {
+        sbCount = 2;
+        atCount = 2;
+      } else if (isSpellslinger) {
+        sbCount = 4;
+        atCount = 3;
+      } else if (isPathfinder) {
+        sbCount = 3;
+        atCount = 0;
+      } else {
+        sbCount = 3;
+        atCount = 3;
+      }
       drawN(sb, sbCount);
       drawN(at, atCount);
       const mulligansNext = {
@@ -615,13 +651,20 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
         else kept.push(c);
       });
 
+      const avatarName = (state.avatars[who]?.card?.name || "").toLowerCase();
+      const isMagicianAvatar = avatarName.includes("magician");
+
       const sb = [...state.zones[who].spellbook];
       const at = [...state.zones[who].atlas];
       let backSpell = 0;
       let backAtlas = 0;
       for (const c of toReturn) {
         const isSite = (c.type || "").toLowerCase().includes("site");
-        if (isSite) {
+        // Magician: all cards go to spellbook (no atlas)
+        if (isMagicianAvatar) {
+          sb.push(c);
+          backSpell++;
+        } else if (isSite) {
           at.push(c);
           backAtlas++;
         } else {
@@ -640,7 +683,10 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
         }
       };
       drawN(sb, backSpell);
-      drawN(at, backAtlas);
+      // Magician has no atlas, so skip atlas draws
+      if (!isMagicianAvatar) {
+        drawN(at, backAtlas);
+      }
 
       const mulligansNext = {
         ...state.mulligans,
