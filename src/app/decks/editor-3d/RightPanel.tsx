@@ -12,6 +12,7 @@ type RightPanelProps = {
   picksByType: {
     deck: number;
     sideboard: number;
+    collection: number;
     creatures: number;
     spells: number;
     sites: number;
@@ -136,11 +137,14 @@ export default function RightPanel(props: RightPanelProps) {
                     Sideboard: {picksByType.sideboard}
                   </span>
                 </div>
-                {showCollectionZone && (
+                {(picksByType.collection > 0 ||
+                  (showCollectionZone && collectionCount > 0)) && (
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 bg-purple-600 rounded" />
                     <span className="text-purple-300">
-                      Collection: {collectionCount}
+                      Collection:{" "}
+                      {picksByType.collection +
+                        (showCollectionZone ? collectionCount : 0)}
                     </span>
                   </div>
                 )}
