@@ -116,6 +116,11 @@ export default function PlayPage() {
     });
   };
 
+  // Reset game state on mount to clear any stale state from other matches
+  useEffect(() => {
+    useGameStore.getState().resetGameState();
+  }, []);
+
   // Inject transport into store once; remove on unmount
   useEffect(() => {
     useGameStore.getState().setTransport(transport);
@@ -180,15 +185,17 @@ export default function PlayPage() {
   const [p2Ready, setP2Ready] = useState<boolean>(false);
 
   // Harbinger portal phase state (Gothic expansion)
+  // Portal phase happens AFTER mulligan, before game starts
+  const [mulliganComplete, setMulliganComplete] = useState<boolean>(false);
   const [needsPortalPhase, setNeedsPortalPhase] = useState<boolean>(false);
   const [portalSetupComplete, setPortalSetupComplete] =
     useState<boolean>(false);
   const [portalPhaseInitialized, setPortalPhaseInitialized] =
     useState<boolean>(false);
 
-  // After deck selection, check for Harbinger avatars and initialize portal state
+  // After mulligan complete, check for Harbinger avatars and initialize portal state
   useEffect(() => {
-    if (!prepared || portalPhaseInitialized) return;
+    if (!mulliganComplete || portalPhaseInitialized) return;
     setPortalPhaseInitialized(true);
 
     // Check if any player has a Harbinger avatar
@@ -202,7 +209,7 @@ export default function PlayPage() {
     }
     // No Harbingers, skip portal phase
     setPortalSetupComplete(true);
-  }, [prepared, portalPhaseInitialized, avatars, initPortalState]);
+  }, [mulliganComplete, portalPhaseInitialized, avatars, initPortalState]);
 
   // Mark portal phase complete when portalState indicates completion
   useEffect(() => {
@@ -279,15 +286,22 @@ export default function PlayPage() {
     setPhase("Main");
   }, [setPhase]);
 
-  // Start once both players are confirmed in hotseat mulligan
+  // When both players confirm mulligan, finalize and check for portal phase
   useEffect(() => {
-    if (prepared && p1Ready && p2Ready) {
+    if (prepared && p1Ready && p2Ready && !mulliganComplete) {
       try {
         useGameStore.getState().finalizeMulligan();
       } catch {}
+      setMulliganComplete(true);
+    }
+  }, [prepared, p1Ready, p2Ready, mulliganComplete]);
+
+  // Start game after portal phase is complete (or immediately if no Harbinger)
+  useEffect(() => {
+    if (mulliganComplete && portalSetupComplete) {
       startGame();
     }
-  }, [prepared, p1Ready, p2Ready, startGame]);
+  }, [mulliganComplete, portalSetupComplete, startGame]);
 
   // Compute playmat world extents from board size for camera clamping
   // (moved up so gotoBaseline can use matW/matH)
@@ -449,33 +463,38 @@ export default function PlayPage() {
         <div className="absolute inset-0 z-20 bg-black/70 backdrop-blur-sm flex items-center justify-center p-6">
           {!prepared ? (
             <DeckSelector onPrepareComplete={() => setPrepared(true)} />
+          ) : !mulliganComplete ? (
+            /* Mulligan phase - sequential: P1 first, then P2 (P2 is second seat, gets scry) */
+            !p1Ready ? (
+              <OfflineMulliganScreen
+                key="mulligan-p1"
+                myPlayerKey="p1"
+                playerNames={{ p1: "Player 1", p2: "Player 2" }}
+                finalizeLabel="Confirm Mulligan"
+                isSecondSeat={false}
+                onStartGame={() => setP1Ready(true)}
+              />
+            ) : (
+              <OfflineMulliganScreen
+                key="mulligan-p2"
+                myPlayerKey="p2"
+                playerNames={{ p1: "Player 1", p2: "Player 2" }}
+                finalizeLabel="Confirm Mulligan"
+                isSecondSeat={true}
+                onStartGame={() => setP2Ready(true)}
+              />
+            )
           ) : needsPortalPhase && !portalSetupComplete ? (
-            /* Harbinger portal phase - shows for each Harbinger player sequentially */
+            /* Harbinger portal phase - after mulligan, before game starts */
             <HarbingerPortalScreen
               myPlayerKey={portalState?.currentRoller ?? "p1"}
               playerNames={{ p1: "Player 1", p2: "Player 2" }}
               onSetupComplete={() => setPortalSetupComplete(true)}
             />
           ) : (
-            <div className="w-full max-w-6xl mx-auto space-y-4">
-              <OfflineMulliganScreen
-                myPlayerKey="p1"
-                playerNames={{ p1: "Player 1", p2: "Player 2" }}
-                finalizeLabel="Ready"
-                onStartGame={() => setP1Ready(true)}
-              />
-              <OfflineMulliganScreen
-                myPlayerKey="p2"
-                playerNames={{ p1: "Player 1", p2: "Player 2" }}
-                finalizeLabel="Ready"
-                onStartGame={() => setP2Ready(true)}
-              />
-              {!(p1Ready && p2Ready) && (
-                <div className="text-center text-xs opacity-80 text-white">
-                  Hotseat: Player 1 confirms mulligans for both players. Click
-                  Ready on each to begin.
-                </div>
-              )}
+            /* Waiting for portal phase to complete */
+            <div className="text-center text-white">
+              <div className="animate-pulse">Starting game...</div>
             </div>
           )}
         </div>
@@ -533,7 +552,7 @@ export default function PlayPage() {
               {events.length === 0 && (
                 <div className="opacity-60">No events yet</div>
               )}
-              {events.slice(-100).map((ev) => {
+              {events.slice(-100).map((ev, idx) => {
                 const t = ev.text || "";
                 const low = t.toLowerCase();
                 // Detect warnings: messages starting with [warning], warning, cannot, or other error patterns
@@ -551,7 +570,7 @@ export default function PlayPage() {
                 const isSearch = low.startsWith("search:");
                 return (
                   <div
-                    key={ev.id}
+                    key={`${ev.id}-${ev.ts}-${idx}`}
                     className={`opacity-85 ${
                       isWarn
                         ? "text-yellow-400"

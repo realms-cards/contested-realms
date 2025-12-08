@@ -19,6 +19,12 @@ interface HarbingerPortalScreenProps {
 // Green color for Harbinger portal dice
 const PORTAL_DICE_COLOR = "#22c55e"; // green-500
 
+// Player colors (matching game conventions)
+const PLAYER_COLORS = {
+  p1: "text-blue-400",
+  p2: "text-red-400",
+} as const;
+
 export default function HarbingerPortalScreen({
   myPlayerKey,
   playerNames,
@@ -126,7 +132,7 @@ export default function HarbingerPortalScreen({
 
   // Check if all harbinger players have completed their rolls
   useEffect(() => {
-    if (!portalState || setupComplete || isCompleting) return undefined;
+    if (!portalState || setupComplete || isCompleting) return;
 
     const { harbingerSeats, p1, p2 } = portalState;
     const allComplete = harbingerSeats.every((seat) => {
@@ -136,14 +142,18 @@ export default function HarbingerPortalScreen({
 
     if (allComplete && !portalState.currentRoller) {
       setIsCompleting(true);
-      // Delay before completing setup to show final state
-      const timer = setTimeout(() => {
-        completePortalSetup();
-      }, 1500);
-      return () => clearTimeout(timer);
     }
-    return undefined;
-  }, [portalState, setupComplete, isCompleting, completePortalSetup]);
+  }, [portalState, setupComplete, isCompleting]);
+
+  // When isCompleting becomes true, trigger completePortalSetup after delay
+  useEffect(() => {
+    if (!isCompleting || setupComplete) return;
+
+    const timer = setTimeout(() => {
+      completePortalSetup();
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [isCompleting, setupComplete, completePortalSetup]);
 
   // Notify parent when setup is fully complete
   useEffect(() => {
@@ -170,7 +180,9 @@ export default function HarbingerPortalScreen({
         <div className="text-sm opacity-80">
           {currentRoller && (
             <>
-              <span className="font-medium font-fantaisie text-green-300">
+              <span
+                className={`font-medium font-fantaisie ${PLAYER_COLORS[currentRoller]}`}
+              >
                 {harbingerPlayerName}
               </span>{" "}
               is rolling for portal locations
@@ -276,20 +288,17 @@ export default function HarbingerPortalScreen({
           </div>
         )}
 
-        {/* Confirm button - only shown when all dice are unique and it's my turn */}
-        {isMyTurn &&
-          allUnique &&
-          rollPhase !== "complete" &&
-          diceComplete.every(Boolean) && (
-            <div className="flex justify-center mt-4">
-              <button
-                onClick={handleConfirmPortals}
-                className="px-6 py-2 bg-green-600 hover:bg-green-500 text-white font-semibold rounded-lg transition-colors shadow-lg"
-              >
-                Confirm Portal Locations
-              </button>
-            </div>
-          )}
+        {/* Confirm button - shown when all dice are unique and it's my turn */}
+        {isMyTurn && allUnique && rollPhase !== "complete" && (
+          <div className="flex justify-center mt-4">
+            <button
+              onClick={handleConfirmPortals}
+              className="px-6 py-2 bg-green-600 hover:bg-green-500 text-white font-semibold rounded-lg transition-colors shadow-lg"
+            >
+              Confirm Portal Locations
+            </button>
+          </div>
+        )}
 
         {/* Instructions */}
         {isMyTurn && !allRolled && (

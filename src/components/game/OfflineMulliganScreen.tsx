@@ -11,6 +11,8 @@ interface OfflineMulliganScreenProps {
   playerNames: { p1: string; p2: string };
   onStartGame: () => void;
   finalizeLabel?: string;
+  /** Override for second seat detection (useful in hotseat mode) */
+  isSecondSeat?: boolean;
 }
 
 export default function OfflineMulliganScreen({
@@ -18,6 +20,7 @@ export default function OfflineMulliganScreen({
   playerNames,
   onStartGame,
   finalizeLabel = "Start Game",
+  isSecondSeat: isSecondSeatProp,
 }: OfflineMulliganScreenProps) {
   const { updateScreenType } = useVideoOverlay();
   const zones = useGameStore((s) => s.zones);
@@ -40,10 +43,13 @@ export default function OfflineMulliganScreen({
 
   const myHand = zones[myPlayerKey]?.hand || [];
   const myMulligans = mulligans[myPlayerKey] || 0;
-  const isSecondSeat = (() => {
-    const first = currentPlayer === 1 ? "p1" : "p2";
-    return myPlayerKey === (first === "p1" ? "p2" : "p1");
-  })();
+  // Use prop if provided, otherwise calculate from currentPlayer
+  const isSecondSeat =
+    isSecondSeatProp ??
+    (() => {
+      const first = currentPlayer === 1 ? "p1" : "p2";
+      return myPlayerKey === (first === "p1" ? "p2" : "p1");
+    })();
   const [scryOpen, setScryOpen] = useState<boolean>(false);
   const [scryPile, setScryPile] = useState<"spellbook" | "atlas">("spellbook");
   const [scryReveal, setScryReveal] = useState<boolean>(false);
@@ -54,13 +60,16 @@ export default function OfflineMulliganScreen({
     setSelected((prev) =>
       prev.includes(index)
         ? prev.filter((i) => i !== index)
-        : prev.length >= 3 ? prev // Maximum 3 cards can be mulliganed
+        : prev.length >= 3
+        ? prev // Maximum 3 cards can be mulliganed
         : [...prev, index]
     );
   };
 
   const handleMulligan = () => {
-    try { playCardSelect(); } catch {}
+    try {
+      playCardSelect();
+    } catch {}
     if (selected.length === 0) {
       // Keep current hand
       setDone(true);
@@ -90,106 +99,138 @@ export default function OfflineMulliganScreen({
       <div className="mb-4 text-center">
         <div className="text-lg font-semibold mb-1">Mulligan Phase</div>
         <div className="text-sm opacity-80">
-          Playing as: <span className="font-medium text-blue-400">{playerNames[myPlayerKey]}</span>
+          Playing as:{" "}
+          <span className="font-medium text-blue-400">
+            {playerNames[myPlayerKey]}
+          </span>
         </div>
 
-      {scryOpen && isSecondSeat && (
-        <div className="mt-4 bg-black/30 rounded-xl p-4 ring-1 ring-white/10">
-          <div className="flex items-center justify-between mb-3">
-            <div className="font-semibold">Second Player Scry</div>
-            <div className="text-xs opacity-80">Choose a pile and keep on top or put on bottom</div>
-          </div>
-          <div className="flex items-center gap-2 mb-3">
-            <button
-              className={`rounded px-3 py-1 text-sm ${scryPile === "spellbook" ? "bg-white/20" : "bg-white/10 hover:bg-white/20"} ${scryReveal ? "opacity-60 cursor-not-allowed" : ""}`}
-              onClick={() => { if (!scryReveal) setScryPile("spellbook"); }}
-              disabled={scryReveal}
-            >
-              Spellbook
-            </button>
-            <button
-              className={`rounded px-3 py-1 text-sm ${scryPile === "atlas" ? "bg-white/20" : "bg-white/10 hover:bg-white/20"} ${scryReveal ? "opacity-60 cursor-not-allowed" : ""}`}
-              onClick={() => { if (!scryReveal) setScryPile("atlas"); }}
-              disabled={scryReveal}
-            >
-              Atlas
-            </button>
-          </div>
-          {!scryReveal ? (
-            <div className="flex items-center justify-between mt-1">
-              <div className="text-xs opacity-70">Confirm the pile to reveal its top card</div>
+        {scryOpen && isSecondSeat && (
+          <div className="mt-4 bg-black/30 rounded-xl p-4 ring-1 ring-white/10">
+            <div className="flex items-center justify-between mb-3">
+              <div className="font-semibold">Second Player Scry</div>
+              <div className="text-xs opacity-80">
+                Choose a pile and keep on top or put on bottom
+              </div>
+            </div>
+            <div className="flex items-center gap-2 mb-3">
               <button
-                className="rounded bg-white/15 hover:bg-white/25 px-3 py-1 text-sm"
-                onClick={() => setScryReveal(true)}
+                className={`rounded px-3 py-1 text-sm ${
+                  scryPile === "spellbook"
+                    ? "bg-white/20"
+                    : "bg-white/10 hover:bg-white/20"
+                } ${scryReveal ? "opacity-60 cursor-not-allowed" : ""}`}
+                onClick={() => {
+                  if (!scryReveal) setScryPile("spellbook");
+                }}
+                disabled={scryReveal}
               >
-                Confirm Pile
+                Spellbook
+              </button>
+              <button
+                className={`rounded px-3 py-1 text-sm ${
+                  scryPile === "atlas"
+                    ? "bg-white/20"
+                    : "bg-white/10 hover:bg-white/20"
+                } ${scryReveal ? "opacity-60 cursor-not-allowed" : ""}`}
+                onClick={() => {
+                  if (!scryReveal) setScryPile("atlas");
+                }}
+                disabled={scryReveal}
+              >
+                Atlas
               </button>
             </div>
-          ) : (
-            <div className="flex items-center gap-3">
-              <div className="flex-1">
-                {topCard ? (
-                  <div className="relative w-24 h-36 sm:w-28 sm:h-40 rounded overflow-hidden ring-1 ring-white/20 mx-auto">
-                    <Image
-                      src={`/api/images/${topCard.slug}`}
-                      alt={topCard.name}
-                      fill
-                      sizes="112px"
-                      className={`object-contain ${(topCard.type || "").toLowerCase().includes("site") ? "rotate-90" : ""}`}
-                    />
-                  </div>
-                ) : (
-                  <div className="text-xs opacity-70">Selected pile is empty</div>
-                )}
-              </div>
-              <div className="flex flex-col gap-2">
+            {!scryReveal ? (
+              <div className="flex items-center justify-between mt-1">
+                <div className="text-xs opacity-70">
+                  Confirm the pile to reveal its top card
+                </div>
                 <button
-                  className="rounded bg-white/15 hover:bg-white/25 px-3 py-1 text-sm disabled:opacity-40"
-                  disabled={!topCard}
-                  onClick={() => {
-                    try { playCardSelect(); } catch {}
-                    scryTop(myPlayerKey, scryPile, "top");
-                    setScryOpen(false);
-                    handleFinalize();
-                  }}
+                  className="rounded bg-white/15 hover:bg-white/25 px-3 py-1 text-sm"
+                  onClick={() => setScryReveal(true)}
                 >
-                  Keep on Top
-                </button>
-                <button
-                  className="rounded bg-white/15 hover:bg-white/25 px-3 py-1 text-sm disabled:opacity-40"
-                  disabled={!topCard}
-                  onClick={() => {
-                    try { playCardSelect(); } catch {}
-                    scryTop(myPlayerKey, scryPile, "bottom");
-                    setScryOpen(false);
-                    handleFinalize();
-                  }}
-                >
-                  Put on Bottom
-                </button>
-                <button
-                  className="rounded bg-white/10 hover:bg-white/20 px-3 py-1 text-sm"
-                  onClick={() => {
-                    setScryOpen(false);
-                    handleFinalize();
-                  }}
-                >
-                  Skip
+                  Confirm Pile
                 </button>
               </div>
-            </div>
-          )}
-        </div>
-      )}
+            ) : (
+              <div className="flex items-center gap-3">
+                <div className="flex-1">
+                  {topCard ? (
+                    <div className="relative w-24 h-36 sm:w-28 sm:h-40 rounded overflow-hidden ring-1 ring-white/20 mx-auto">
+                      <Image
+                        src={`/api/images/${topCard.slug}`}
+                        alt={topCard.name}
+                        fill
+                        sizes="112px"
+                        className={`object-contain ${
+                          (topCard.type || "").toLowerCase().includes("site")
+                            ? "rotate-90"
+                            : ""
+                        }`}
+                      />
+                    </div>
+                  ) : (
+                    <div className="text-xs opacity-70">
+                      Selected pile is empty
+                    </div>
+                  )}
+                </div>
+                <div className="flex flex-col gap-2">
+                  <button
+                    className="rounded bg-white/15 hover:bg-white/25 px-3 py-1 text-sm disabled:opacity-40"
+                    disabled={!topCard}
+                    onClick={() => {
+                      try {
+                        playCardSelect();
+                      } catch {}
+                      scryTop(myPlayerKey, scryPile, "top");
+                      setScryOpen(false);
+                      handleFinalize();
+                    }}
+                  >
+                    Keep on Top
+                  </button>
+                  <button
+                    className="rounded bg-white/15 hover:bg-white/25 px-3 py-1 text-sm disabled:opacity-40"
+                    disabled={!topCard}
+                    onClick={() => {
+                      try {
+                        playCardSelect();
+                      } catch {}
+                      scryTop(myPlayerKey, scryPile, "bottom");
+                      setScryOpen(false);
+                      handleFinalize();
+                    }}
+                  >
+                    Put on Bottom
+                  </button>
+                  <button
+                    className="rounded bg-white/10 hover:bg-white/20 px-3 py-1 text-sm"
+                    onClick={() => {
+                      setScryOpen(false);
+                      handleFinalize();
+                    }}
+                  >
+                    Skip
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
         <div className="text-xs opacity-60 mt-1">
-          Select up to 3 cards to put back. You&apos;ll draw the same number from the appropriate pile.
+          Select up to 3 cards to put back. You&apos;ll draw the same number
+          from the appropriate pile.
         </div>
       </div>
 
       <div className="bg-black/30 rounded-xl p-4 ring-1 ring-white/10">
         <div className="flex items-center justify-between mb-2">
           <div className="font-semibold">Your Hand</div>
-          <div className="text-xs opacity-80">Mulligans remaining: {myMulligans}</div>
+          <div className="text-xs opacity-80">
+            Mulligans remaining: {myMulligans}
+          </div>
         </div>
 
         <div className="text-xs opacity-80 mb-3">
@@ -210,9 +251,13 @@ export default function OfflineMulliganScreen({
                 <button
                   key={i}
                   className={`relative flex-shrink-0 transition-all duration-200 ${
-                    !done && myMulligans > 0 ? "hover:scale-105 hover:-translate-y-4" : ""
+                    !done && myMulligans > 0
+                      ? "hover:scale-105 hover:-translate-y-4"
+                      : ""
                   } ${isSelected ? "ring-2 ring-red-400 -translate-y-2" : ""} ${
-                    done || myMulligans === 0 ? "cursor-default" : "cursor-pointer"
+                    done || myMulligans === 0
+                      ? "cursor-default"
+                      : "cursor-pointer"
                   }`}
                   onClick={() => handleCardClick(i)}
                   onMouseEnter={() => setPreviewCard(card)}
@@ -250,7 +295,8 @@ export default function OfflineMulliganScreen({
 
         <div className="flex justify-between items-center mt-4">
           <div className="text-xs opacity-70">
-            {selected.length > 0 && `${selected.length} card(s) selected for mulligan`}
+            {selected.length > 0 &&
+              `${selected.length} card(s) selected for mulligan`}
           </div>
 
           <div className="flex gap-2">
@@ -259,18 +305,26 @@ export default function OfflineMulliganScreen({
                 className="bg-orange-600 hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed rounded px-4 py-2 text-sm font-medium transition-colors"
                 onClick={handleMulligan}
               >
-                {selected.length === 0 ? "Keep Hand" : `Mulligan ${selected.length} Cards`}
+                {selected.length === 0
+                  ? "Keep Hand"
+                  : `Mulligan ${selected.length} Cards`}
               </button>
             )}
 
             {(done || myMulligans === 0) && (
               <button
                 className={`rounded px-4 py-2 text-sm font-medium transition-colors ${
-                  submitted ? "bg-green-700/60 cursor-not-allowed" : "bg-green-600 hover:bg-green-700"
+                  submitted
+                    ? "bg-green-700/60 cursor-not-allowed"
+                    : "bg-green-600 hover:bg-green-700"
                 }`}
                 onClick={handleFinalize}
                 disabled={submitted}
-                title={submitted ? "Waiting for other players to finish mulligans" : undefined}
+                title={
+                  submitted
+                    ? "Waiting for other players to finish mulligans"
+                    : undefined
+                }
               >
                 {submitted ? "Ready — Waiting for others…" : finalizeLabel}
               </button>

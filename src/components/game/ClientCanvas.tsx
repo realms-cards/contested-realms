@@ -1,20 +1,26 @@
 "use client";
 
 import { Canvas, type CanvasProps } from "@react-three/fiber";
-import dynamic from "next/dynamic";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 /**
  * Client-only Canvas wrapper that prevents SSR issues with React Three Fiber.
  * The Canvas component from R3F uses hooks that don't work during SSR.
+ * Uses a mounted state to delay rendering until after hydration.
  */
-function ClientCanvasImpl(props: CanvasProps & { children?: ReactNode }) {
+export function ClientCanvas(props: CanvasProps & { children?: ReactNode }) {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    // Return a placeholder with matching dimensions during SSR/hydration
+    return <div style={{ width: "100%", height: "100%" }} />;
+  }
+
   return <Canvas {...props} />;
 }
-
-// Export as dynamic with ssr: false to prevent server-side rendering
-export const ClientCanvas = dynamic(() => Promise.resolve(ClientCanvasImpl), {
-  ssr: false,
-});
 
 export default ClientCanvas;
