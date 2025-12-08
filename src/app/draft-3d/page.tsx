@@ -32,7 +32,7 @@ import { createStackHoverState } from "@/lib/game/stackHover";
 import {
   DEFAULT_DRAFTABLE_SETS,
   DEFAULT_SET,
-} from "@/lib/hooks/useAvailableSets";
+} from "@/lib/hooks/available-sets-constants";
 import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
 import { getBoosterAssetName } from "@/lib/utils/booster-assets";
 

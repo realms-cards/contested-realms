@@ -53,8 +53,9 @@ const SET_PREFIXES = {
   art: "arthurian_legends",
   drl: "dragonlord",
   dra: "dragonlord",
-  got: "gothic", // Gothic - confirm prefix when API available
-  gth: "gothic", // Alternative Gothic prefix
+  got: "gothic",
+  gth: "gothic",
+  pro: "promo", // Organized Play / Promo cards
 };
 
 /**

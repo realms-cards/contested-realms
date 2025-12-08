@@ -1937,16 +1937,18 @@ function AuthenticatedDeckEditor() {
     const res = {
       deck: 0,
       sideboard: 0,
+      collection: 0,
       creatures: 0,
       spells: 0,
       sites: 0,
       avatars: 0,
     };
 
-    // Deck / sideboard counts from picks
+    // Deck / sideboard / collection counts from picks
     for (const item of Object.values(picks)) {
       if (item.zone === "Deck") res.deck += item.count;
       else if (item.zone === "Sideboard") res.sideboard += item.count;
+      else if (item.zone === "Collection") res.collection += item.count;
     }
 
     // Type counts should reflect only cards currently in the deck

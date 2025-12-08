@@ -57,21 +57,29 @@ function getRarityBg(rarity: string, active?: boolean): string {
 }
 
 // Generate slug from card name and set
+// Uses hyphen format expected by /api/images route: set-cardname-b-s
 function getCardSlug(name: string, setName: string): string {
-  const setPrefix = setName.toLowerCase().startsWith("alpha")
+  const lower = setName.toLowerCase();
+  const setPrefix = lower.startsWith("alpha")
     ? "alp"
-    : setName.toLowerCase().startsWith("beta")
+    : lower.startsWith("beta")
     ? "bet"
-    : setName.toLowerCase().startsWith("arthurian")
+    : lower.startsWith("arthurian")
     ? "art"
-    : setName.toLowerCase().startsWith("dragon")
+    : lower.startsWith("dragon")
     ? "dra"
+    : lower.startsWith("gothic")
+    ? "got"
+    : lower.startsWith("promo") || lower.includes("organized")
+    ? "pro"
     : "bet";
+  // Card names use underscores for spaces, but set prefix uses hyphen
   const cardPart = name
     .toLowerCase()
     .replace(/\s+/g, "_")
     .replace(/[^a-z0-9_]/g, "");
-  return `${setPrefix}_${cardPart}_b_s`;
+  // Return hyphen format: alp-cardname-b-s (API normalizes to alp_cardname_b_s internally)
+  return `${setPrefix}-${cardPart}-b-s`;
 }
 
 export default function MissingCards() {

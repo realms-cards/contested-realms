@@ -82,6 +82,7 @@ function canonicalizeCategory(raw: string): DeckTextCategory | null {
     case "site":
       return "Site";
     case "sideboard":
+    case "collection":
       return "Sideboard";
     default:
       return null;
@@ -217,7 +218,7 @@ export function parseSorceryDeckText(rawInput: string): ParsedDeckText {
   return { categories: resultLists, totalByCategory, totalCards, issues };
 }
 
-export type Zone = "Spellbook" | "Atlas";
+export type Zone = "Spellbook" | "Atlas" | "Collection";
 export interface ZoneEntry extends NameCount {
   zone: Zone;
 }
@@ -233,6 +234,7 @@ export function toZones(parsed: ParsedDeckText): ZoneEntry[] {
   pushCat("Minion", "Spellbook");
   pushCat("Magic", "Spellbook");
   pushCat("Site", "Atlas");
+  pushCat("Sideboard", "Collection"); // Collection zone (up to 10 cards)
   return z;
 }
 

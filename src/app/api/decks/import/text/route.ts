@@ -1,6 +1,9 @@
 import { NextRequest } from "next/server";
 import { getServerAuthSession } from "@/lib/auth";
-import { parseSorceryDeckText, toZones } from "@/lib/decks/parsers/sorcery-decktext";
+import {
+  parseSorceryDeckText,
+  toZones,
+} from "@/lib/decks/parsers/sorcery-decktext";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -8,7 +11,9 @@ export const dynamic = "force-dynamic";
 // Minimal JSON typing helpers to avoid any
 type JSONValue = string | number | boolean | null | JSONObject | JSONArray;
 type JSONArray = JSONValue[];
-interface JSONObject { [key: string]: JSONValue }
+interface JSONObject {
+  [key: string]: JSONValue;
+}
 
 // POST /api/decks/import/text
 // Body: { text: string, name?: string }
@@ -17,18 +22,23 @@ interface JSONObject { [key: string]: JSONValue }
 export async function POST(req: NextRequest) {
   const session = await getServerAuthSession();
   if (!session?.user) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { "content-type": "application/json" } });
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { "content-type": "application/json" },
+    });
   }
   try {
     // Ensure the authenticated user exists in the database (useful after local DB resets)
-    const user = await prisma.user.findUnique({ where: { id: session.user.id } });
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+    });
     if (!user) {
       return new Response(
         JSON.stringify({
           error:
             "Your account could not be found in the database. If you already have a user account, please sign out, clear your browser cookies and sign back in",
         }),
-        { status: 401, headers: { "content-type": "application/json" } },
+        { status: 401, headers: { "content-type": "application/json" } }
       );
     }
 
@@ -45,7 +55,9 @@ export async function POST(req: NextRequest) {
     const overrideName = body?.name ? String(body.name).trim() : "";
 
     if (!rawText.trim()) {
-      return new Response(JSON.stringify({ error: "Provide deck text" }), { status: 400 });
+      return new Response(JSON.stringify({ error: "Provide deck text" }), {
+        status: 400,
+      });
     }
 
     // 1) Parse text -> categories and zones
@@ -55,19 +67,37 @@ export async function POST(req: NextRequest) {
     // Basic validation from parsed categories
     if (parsed.totalByCategory.Avatar !== 1) {
       return new Response(
-        JSON.stringify({ error: parsed.totalByCategory.Avatar === 0 ? "Deck requires exactly 1 Avatar" : "Deck has multiple Avatars. Keep only one." }),
+        JSON.stringify({
+          error:
+            parsed.totalByCategory.Avatar === 0
+              ? "Deck requires exactly 1 Avatar"
+              : "Deck has multiple Avatars. Keep only one.",
+        }),
         { status: 400 }
       );
     }
 
-    const atlasCount = zoneEntries.filter((z) => z.zone === "Atlas").reduce((a, b) => a + b.count, 0);
-    const spellbookCount = zoneEntries.filter((z) => z.zone === "Spellbook").reduce((a, b) => a + b.count, 0) - parsed.totalByCategory.Avatar;
+    const atlasCount = zoneEntries
+      .filter((z) => z.zone === "Atlas")
+      .reduce((a, b) => a + b.count, 0);
+    const spellbookCount =
+      zoneEntries
+        .filter((z) => z.zone === "Spellbook")
+        .reduce((a, b) => a + b.count, 0) - parsed.totalByCategory.Avatar;
 
     if (atlasCount < 12) {
-      return new Response(JSON.stringify({ error: "Atlas needs at least 12 sites" }), { status: 400 });
+      return new Response(
+        JSON.stringify({ error: "Atlas needs at least 12 sites" }),
+        { status: 400 }
+      );
     }
     if (spellbookCount < 24) {
-      return new Response(JSON.stringify({ error: "Spellbook needs at least 24 cards (excluding Avatar)" }), { status: 400 });
+      return new Response(
+        JSON.stringify({
+          error: "Spellbook needs at least 24 cards (excluding Avatar)",
+        }),
+        { status: 400 }
+      );
     }
 
     // 2) Map names to variants/cards - BATCH LOOKUP for better performance
@@ -87,7 +117,7 @@ export async function POST(req: NextRequest) {
     const unresolved: { name: string; count: number }[] = [];
 
     // Batch lookup all unique card names at once
-    const uniqueNames = Array.from(new Set(zoneEntries.map(e => e.name)));
+    const uniqueNames = Array.from(new Set(zoneEntries.map((e) => e.name)));
     const nameToVariant = await batchFindVariants(uniqueNames, preferredSets);
 
     for (const e of zoneEntries) {
@@ -109,25 +139,55 @@ export async function POST(req: NextRequest) {
 
     if (unresolved.length) {
       return new Response(
-        JSON.stringify({ error: `Could not map some cards by name`, unresolved }),
+        JSON.stringify({
+          error: `Could not map some cards by name`,
+          unresolved,
+        }),
         { status: 400, headers: { "content-type": "application/json" } }
       );
     }
 
     // 3) Aggregate by (cardId, zone, variantId)
-    const allowedZones = new Set(["Spellbook", "Atlas", "Sideboard"]);
-    type ZoneItem = { cardId: number; variantId: number | null; setId: number | null; zone: string; count: number };
+    const allowedZones = new Set([
+      "Spellbook",
+      "Atlas",
+      "Collection",
+      "Sideboard",
+    ]);
+    type ZoneItem = {
+      cardId: number;
+      variantId: number | null;
+      setId: number | null;
+      zone: string;
+      count: number;
+    };
     const agg = new Map<string, ZoneItem>();
     for (const it of mapped) {
       if (!allowedZones.has(it.zone)) continue;
       const key = `${it.cardId}:${it.zone}:${it.variantId ?? "x"}`;
       const prev = agg.get(key);
-      if (prev) prev.count += it.count; else agg.set(key, { cardId: it.cardId, variantId: it.variantId, setId: it.setId, zone: it.zone, count: it.count });
+      if (prev) prev.count += it.count;
+      else
+        agg.set(key, {
+          cardId: it.cardId,
+          variantId: it.variantId,
+          setId: it.setId,
+          zone: it.zone,
+          count: it.count,
+        });
     }
 
     // 4) Create the deck
-    const deckName = overrideName || `Text Import ${new Date().toLocaleDateString()}`;
-    const deck = await prisma.deck.create({ data: { name: deckName, format: "Constructed", imported: true, user: { connect: { id: session.user.id } } } });
+    const deckName =
+      overrideName || `Text Import ${new Date().toLocaleDateString()}`;
+    const deck = await prisma.deck.create({
+      data: {
+        name: deckName,
+        format: "Constructed",
+        imported: true,
+        user: { connect: { id: session.user.id } },
+      },
+    });
 
     const createRows = Array.from(agg.values()).map((v) => ({
       deckId: deck.id,
@@ -147,19 +207,27 @@ export async function POST(req: NextRequest) {
       { status: 201, headers: { "content-type": "application/json" } }
     );
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : typeof e === "string" ? e : "Unknown error";
+    const message =
+      e instanceof Error
+        ? e.message
+        : typeof e === "string"
+        ? e
+        : "Unknown error";
     return new Response(JSON.stringify({ error: message }), { status: 500 });
   }
 }
 
 // Batch version for much better performance
 async function batchFindVariants(names: string[], setPreference: string[]) {
-  const result = new Map<string, {
-    cardId: number;
-    variantId: number | null;
-    setId: number | null;
-    typeText: string | null;
-  }>();
+  const result = new Map<
+    string,
+    {
+      cardId: number;
+      variantId: number | null;
+      setId: number | null;
+      typeText: string | null;
+    }
+  >();
 
   if (!names.length) return result;
 
@@ -167,18 +235,23 @@ async function batchFindVariants(names: string[], setPreference: string[]) {
   const candidates = await prisma.card.findMany({
     where: {
       name: {
-        in: names.flatMap(name => {
+        in: names.flatMap((name) => {
           const canon = canonicalize(name);
           // Include both exact matches and partial matches
           return [name, canon];
-        })
-      }
+        }),
+      },
     },
     select: {
       id: true,
       name: true,
       variants: {
-        select: { id: true, setId: true, typeText: true, set: { select: { name: true } } }
+        select: {
+          id: true,
+          setId: true,
+          typeText: true,
+          set: { select: { name: true } },
+        },
       },
     },
   });
@@ -187,8 +260,8 @@ async function batchFindVariants(names: string[], setPreference: string[]) {
   const candidatesByName = new Map<string, typeof candidates>();
   for (const name of names) {
     const canon = canonicalize(name);
-    const matches = candidates.filter(c =>
-      canonicalize(c.name) === canon || c.name === name
+    const matches = candidates.filter(
+      (c) => canonicalize(c.name) === canon || c.name === name
     );
     candidatesByName.set(name, matches);
   }
@@ -202,15 +275,33 @@ async function batchFindVariants(names: string[], setPreference: string[]) {
     const pool = exact.length ? exact : cardCandidates;
 
     // Flatten variants, score by set preference
-    type Flat = { cardId: number; variantId: number | null; setId: number | null; typeText: string | null; setName: string | null };
+    type Flat = {
+      cardId: number;
+      variantId: number | null;
+      setId: number | null;
+      typeText: string | null;
+      setName: string | null;
+    };
     const flats: Flat[] = [];
     for (const c of pool) {
       if (!c.variants.length) {
-        flats.push({ cardId: c.id, variantId: null, setId: null, typeText: null, setName: null });
+        flats.push({
+          cardId: c.id,
+          variantId: null,
+          setId: null,
+          typeText: null,
+          setName: null,
+        });
         continue;
       }
       for (const v of c.variants) {
-        flats.push({ cardId: c.id, variantId: v.id, setId: v.setId, typeText: v.typeText, setName: v.set?.name ?? null });
+        flats.push({
+          cardId: c.id,
+          variantId: v.id,
+          setId: v.setId,
+          typeText: v.typeText,
+          setName: v.set?.name ?? null,
+        });
       }
     }
 
@@ -236,7 +327,10 @@ async function batchFindVariants(names: string[], setPreference: string[]) {
   // Batch metadata lookup for cards missing typeText
   const needsMetadata = Array.from(result.entries())
     .filter(([, variant]) => !variant.typeText && variant.setId)
-    .map(([, variant]) => ({ cardId: variant.cardId, setId: variant.setId as number }));
+    .map(([, variant]) => ({
+      cardId: variant.cardId,
+      setId: variant.setId as number,
+    }));
 
   if (needsMetadata.length > 0) {
     const metaMap = new Map<string, string>();

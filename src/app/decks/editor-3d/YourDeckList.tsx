@@ -167,11 +167,15 @@ export default function YourDeckList(props: YourDeckListProps) {
     const cardInDeck = pick3D.filter(
       (p) => p.card.cardId === it.cardId && p.zone === "Deck"
     ).length;
-    const totalNonDeck = pick3D.filter(
+    // Cards in Sideboard zone (for draft picks pool)
+    const cardInSideboard = pick3D.filter(
       (p) => p.card.cardId === it.cardId && p.zone === "Sideboard"
     ).length;
-    const cardInCollection = collectionCountsByCardId[it.cardId] ?? 0;
-    const cardInSideboard = Math.max(totalNonDeck - cardInCollection, 0);
+    // Cards in Collection zone (for constructed 10-card collection)
+    const cardInCollection =
+      pick3D.filter(
+        (p) => p.card.cardId === it.cardId && p.zone === "Collection"
+      ).length + (collectionCountsByCardId[it.cardId] ?? 0);
 
     const handleClick = (e: React.MouseEvent) => {
       e.preventDefault();
@@ -261,7 +265,7 @@ export default function YourDeckList(props: YourDeckListProps) {
                       Sideboard: {cardInSideboard}
                     </span>
                   )}
-                  {showCollectionZone && cardInCollection > 0 && (
+                  {cardInCollection > 0 && (
                     <span className="bg-purple-600/20 text-purple-300 px-1 py-0.5 rounded text-[10px]">
                       Collection: {cardInCollection}
                     </span>

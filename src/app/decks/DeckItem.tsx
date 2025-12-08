@@ -19,15 +19,10 @@ type DeckItemProps = {
     avatarState: "none" | "single" | "multiple";
     avatarCard?: { name: string; slug: string | null } | null;
   };
+  onDelete?: (deckId: string) => void; // Optimistic delete callback
 };
 
-type TagTone =
-  | "default"
-  | "public"
-  | "private"
-  | "info"
-  | "warning"
-  | "error";
+type TagTone = "default" | "public" | "private" | "info" | "warning" | "error";
 
 const TAG_TONE_STYLES: Record<TagTone, string> = {
   default: "bg-foreground/10 text-foreground/80 border-white/10",
@@ -63,7 +58,7 @@ function normalizeFormatLabel(format: string | undefined) {
   return lower.charAt(0).toUpperCase() + lower.slice(1);
 }
 
-export default function DeckItem({ deck }: DeckItemProps) {
+export default function DeckItem({ deck, onDelete }: DeckItemProps) {
   const router = useRouter();
   const [deleting, setDeleting] = useState(false);
   const [updatingPublic, setUpdatingPublic] = useState(false);
@@ -73,7 +68,7 @@ export default function DeckItem({ deck }: DeckItemProps) {
   const [exportingText, setExportingText] = useState(false);
   const [copiedMsg, setCopiedMsg] = useState<string | null>(null);
 
-  async function onDelete(e: MouseEvent) {
+  async function handleDelete(e: MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
     if (deleting) return;
@@ -81,6 +76,12 @@ export default function DeckItem({ deck }: DeckItemProps) {
       `Delete deck "${deck.name}"? This cannot be undone.`
     );
     if (!ok) return;
+
+    // Optimistic update - remove from UI immediately
+    if (onDelete) {
+      onDelete(deck.id);
+    }
+
     try {
       setDeleting(true);
       const res = await fetch(`/api/decks/${encodeURIComponent(deck.id)}`, {
@@ -90,9 +91,12 @@ export default function DeckItem({ deck }: DeckItemProps) {
         const msg = await res.text().catch(() => "");
         throw new Error(msg || "Failed to delete deck");
       }
+      // Still refresh to ensure consistency, but user already sees the change
       router.refresh();
     } catch (err) {
       alert(err instanceof Error ? err.message : String(err));
+      // Refetch to restore the deck if delete failed
+      router.refresh();
     } finally {
       setDeleting(false);
     }
@@ -146,7 +150,14 @@ export default function DeckItem({ deck }: DeckItemProps) {
       );
     }
     return items;
-  }, [deck.avatarState, deck.imported, deck.isPublic, effectiveIsPublic, formatLabel, isOwner]);
+  }, [
+    deck.avatarState,
+    deck.imported,
+    deck.isPublic,
+    effectiveIsPublic,
+    formatLabel,
+    isOwner,
+  ]);
 
   const avatarPreview = useMemo(() => {
     if (deck.avatarState !== "single" || !deck.avatarCard) return null;
@@ -217,17 +228,33 @@ export default function DeckItem({ deck }: DeckItemProps) {
           if (exportingText) return;
           try {
             setExportingText(true);
-            const res = await fetch(`/api/decks/${encodeURIComponent(deck.id)}`, { cache: 'no-store' });
+            const res = await fetch(
+              `/api/decks/${encodeURIComponent(deck.id)}`,
+              { cache: "no-store" }
+            );
             if (!res.ok) {
-              const msg = await res.text().catch(() => '');
-              throw new Error(msg || 'Failed to load deck for export');
+              const msg = await res.text().catch(() => "");
+              throw new Error(msg || "Failed to load deck for export");
             }
             const data = await res.json();
-            const spellbook = Array.isArray(data?.spellbook) ? data.spellbook : [];
+            const spellbook = Array.isArray(data?.spellbook)
+              ? data.spellbook
+              : [];
             const atlas = Array.isArray(data?.atlas) ? data.atlas : [];
-            const sideboard = Array.isArray(data?.sideboard) ? data.sideboard : [];
+            // Combine sideboard and collection zones (both are "Collection" in game terms)
+            const sideboard = [
+              ...(Array.isArray(data?.sideboard) ? data.sideboard : []),
+              ...(Array.isArray(data?.collection) ? data.collection : []),
+            ];
 
-            type Cat = 'Avatar' | 'Aura' | 'Artifact' | 'Minion' | 'Magic' | 'Site';
+            type Cat =
+              | "Avatar"
+              | "Aura"
+              | "Artifact"
+              | "Minion"
+              | "Magic"
+              | "Site"
+              | "Collection";
             const cats: Record<Cat, Map<string, number>> = {
               Avatar: new Map(),
               Aura: new Map(),
@@ -235,49 +262,71 @@ export default function DeckItem({ deck }: DeckItemProps) {
               Minion: new Map(),
               Magic: new Map(),
               Site: new Map(),
+              Collection: new Map(),
             };
 
             let avatarFound = false;
             const add = (c: Record<string, unknown>) => {
               const rec = c as Record<string, unknown>;
-              const nm = typeof rec.name === 'string' ? rec.name.trim() : '';
+              const nm = typeof rec.name === "string" ? rec.name.trim() : "";
               if (!nm) return;
-              const t = typeof rec.type === 'string' ? rec.type.toLowerCase() : '';
+              const t =
+                typeof rec.type === "string" ? rec.type.toLowerCase() : "";
               let cat: Cat;
-              if (t.includes('avatar')) { cat = 'Avatar'; avatarFound = true; }
-              else if (t.includes('site')) cat = 'Site';
-              else if (t.includes('aura')) cat = 'Aura';
-              else if (t.includes('artifact')) cat = 'Artifact';
-              else if (t.includes('minion') || t.includes('creature')) cat = 'Minion';
-              else cat = 'Magic';
+              if (t.includes("avatar")) {
+                cat = "Avatar";
+                avatarFound = true;
+              } else if (t.includes("site")) cat = "Site";
+              else if (t.includes("aura")) cat = "Aura";
+              else if (t.includes("artifact")) cat = "Artifact";
+              else if (t.includes("minion") || t.includes("creature"))
+                cat = "Minion";
+              else cat = "Magic";
               cats[cat].set(nm, (cats[cat].get(nm) || 0) + 1);
             };
 
             for (const c of [...spellbook, ...atlas]) add(c);
-            if (!avatarFound) {
-              const sideAvatar = sideboard.find((obj: unknown) => {
-                const o = obj as Record<string, unknown>;
-                const t = o?.type;
-                return typeof t === 'string' && t.toLowerCase().includes('avatar');
-              });
-              if (sideAvatar && typeof (sideAvatar as Record<string, unknown>).name === 'string') {
-                add(sideAvatar as Record<string, unknown>);
+
+            // Process sideboard/collection cards
+            for (const obj of sideboard) {
+              const o = obj as Record<string, unknown>;
+              const nm = typeof o.name === "string" ? o.name.trim() : "";
+              const t = typeof o.type === "string" ? o.type.toLowerCase() : "";
+              if (!nm) continue;
+              if (t.includes("avatar")) {
+                if (!avatarFound) {
+                  cats.Avatar.set(nm, (cats.Avatar.get(nm) || 0) + 1);
+                  avatarFound = true;
+                }
+              } else {
+                // Non-avatar sideboard cards go to Collection
+                cats.Collection.set(nm, (cats.Collection.get(nm) || 0) + 1);
               }
             }
 
-            const order: Cat[] = ['Avatar', 'Aura', 'Artifact', 'Minion', 'Magic', 'Site'];
+            const order: Cat[] = [
+              "Avatar",
+              "Aura",
+              "Artifact",
+              "Minion",
+              "Magic",
+              "Site",
+              "Collection",
+            ];
             const lines: string[] = [];
             for (const cat of order) {
-              const entries = Array.from(cats[cat].entries()).sort((a, b) => a[0].localeCompare(b[0]));
+              const entries = Array.from(cats[cat].entries()).sort((a, b) =>
+                a[0].localeCompare(b[0])
+              );
               if (!entries.length) continue;
               const total = entries.reduce((sum, [, n]) => sum + n, 0);
               lines.push(`${cat} (${total})`);
               for (const [name, n] of entries) lines.push(`${n} ${name}`);
-              lines.push('');
+              lines.push("");
             }
-            const text = lines.join('\n').trim();
+            const text = lines.join("\n").trim();
             await navigator.clipboard.writeText(text);
-            setCopiedMsg('Copied deck');
+            setCopiedMsg("Copied deck");
             setTimeout(() => setCopiedMsg(null), 1200);
           } catch (err) {
             alert(err instanceof Error ? err.message : String(err));
@@ -289,7 +338,12 @@ export default function DeckItem({ deck }: DeckItemProps) {
         className="absolute top-2 right-20 inline-flex items-center justify-center h-8 w-8 rounded ring-1 ring-zinc-600 hover:bg-zinc-700/40 text-zinc-300 hover:text-zinc-100 opacity-0 group-hover:opacity-100 transition-opacity"
       >
         {/* Document icon */}
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          fill="currentColor"
+          className="h-5 w-5"
+        >
           <path d="M6 2a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6H6zm8 1.5V8h4.5" />
         </svg>
       </button>
@@ -373,7 +427,7 @@ export default function DeckItem({ deck }: DeckItemProps) {
         <button
           aria-label="Delete deck"
           title="Delete deck"
-          onClick={onDelete}
+          onClick={handleDelete}
           disabled={deleting}
           className="absolute top-2 right-2 inline-flex items-center justify-center h-8 w-8 rounded hover:bg-red-500/20 text-red-400 hover:text-red-300 ring-1 ring-transparent hover:ring-red-500/30 opacity-0 group-hover:opacity-100 transition-opacity"
         >

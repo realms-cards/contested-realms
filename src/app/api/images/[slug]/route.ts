@@ -20,6 +20,8 @@ function setDirFromSlug(slug: string): string | null {
     case "got":
     case "gth":
       return "gothic";
+    case "pro":
+      return "promo";
     default:
       return null;
   }

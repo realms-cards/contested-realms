@@ -80,8 +80,14 @@ function mapMyDeckFromApi(deck: RawDeck): MyDeck {
   const summary = mapAvatarSummary(deck);
   return {
     id: String(deck["id"] ?? ""),
-    name: typeof deck["name"] === "string" ? (deck["name"] as string) : "Untitled Deck",
-    format: typeof deck["format"] === "string" ? (deck["format"] as string) : "Unknown",
+    name:
+      typeof deck["name"] === "string"
+        ? (deck["name"] as string)
+        : "Untitled Deck",
+    format:
+      typeof deck["format"] === "string"
+        ? (deck["format"] as string)
+        : "Unknown",
     isPublic: Boolean(deck["isPublic"]),
     imported: Boolean(deck["imported"]),
     updatedAt: normalizeUpdatedAt(deck["updatedAt"]),
@@ -93,12 +99,19 @@ function mapPublicDeckFromApi(deck: RawDeck): PublicDeck {
   const summary = mapAvatarSummary(deck);
   return {
     id: String(deck["id"] ?? ""),
-    name: typeof deck["name"] === "string" ? (deck["name"] as string) : "Untitled Deck",
-    format: typeof deck["format"] === "string" ? (deck["format"] as string) : "Unknown",
+    name:
+      typeof deck["name"] === "string"
+        ? (deck["name"] as string)
+        : "Untitled Deck",
+    format:
+      typeof deck["format"] === "string"
+        ? (deck["format"] as string)
+        : "Unknown",
     imported: Boolean(deck["imported"]),
-    userName: typeof deck["userName"] === "string" && deck["userName"]
-      ? (deck["userName"] as string)
-      : "Unknown Player",
+    userName:
+      typeof deck["userName"] === "string" && deck["userName"]
+        ? (deck["userName"] as string)
+        : "Unknown Player",
     updatedAt: normalizeUpdatedAt(deck["updatedAt"]),
     isPublic: true,
     ...summary,
@@ -117,14 +130,12 @@ export default function DecksPage() {
     try {
       setLoading(true);
       // Add cache-busting for production
-      const url = force
-        ? `/api/decks?_t=${Date.now()}`
-        : "/api/decks";
+      const url = force ? `/api/decks?_t=${Date.now()}` : "/api/decks";
 
       const res = await fetch(url, {
         // Force fresh data in production
-        cache: force ? 'no-cache' : 'default',
-        headers: force ? { 'Cache-Control': 'no-cache' } : {}
+        cache: force ? "no-cache" : "default",
+        headers: force ? { "Cache-Control": "no-cache" } : {},
       });
 
       if (!res.ok) throw new Error("Failed to load decks");
@@ -132,7 +143,9 @@ export default function DecksPage() {
       const normalizedMyDecks: MyDeck[] = Array.isArray(data?.myDecks)
         ? data.myDecks.map(mapMyDeckFromApi)
         : [];
-      const normalizedPublicDecks: PublicDeck[] = Array.isArray(data?.publicDecks)
+      const normalizedPublicDecks: PublicDeck[] = Array.isArray(
+        data?.publicDecks
+      )
         ? data.publicDecks.map(mapPublicDeckFromApi)
         : [];
       setMyDecks(normalizedMyDecks);
@@ -159,6 +172,12 @@ export default function DecksPage() {
     window.addEventListener("decks:refresh", onRefresh);
     return () => window.removeEventListener("decks:refresh", onRefresh);
   }, [fetchDecks]);
+
+  // Optimistic delete handler - removes deck from state immediately
+  const handleDeleteDeck = useCallback((deckId: string) => {
+    setMyDecks((prev) => prev.filter((d) => d.id !== deckId));
+    setPublicDecks((prev) => prev.filter((d) => d.id !== deckId));
+  }, []);
 
   if (!session) {
     return (
@@ -187,7 +206,8 @@ export default function DecksPage() {
                 Your Decks
               </h1>
               <p className="text-sm text-slate-300/90">
-                Manage your collections, import decklists, and create new builds.
+                Manage your collections, import decklists, and create new
+                builds.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -226,9 +246,15 @@ export default function DecksPage() {
           <div className="space-y-6">
             {myDecks.length === 0 ? (
               <div className="rounded-xl bg-slate-900/70 ring-1 ring-slate-800/80 p-6 text-sm text-slate-300 space-y-2">
-                <div>No decks yet. Create one from the editor, import an existing list, or save from Draft.</div>
+                <div>
+                  No decks yet. Create one from the editor, import an existing
+                  list, or save from Draft.
+                </div>
                 <div className="flex flex-wrap gap-3 text-xs text-slate-400">
-                  <Link href="/decks/editor-3d" className="underline text-slate-200 hover:text-slate-100">
+                  <Link
+                    href="/decks/editor-3d"
+                    className="underline text-slate-200 hover:text-slate-100"
+                  >
                     Open Deck Editor
                   </Link>
                   <button
@@ -259,6 +285,7 @@ export default function DecksPage() {
                         updatedAt: d.updatedAt,
                         isOwner: true,
                       }}
+                      onDelete={handleDeleteDeck}
                     />
                   ))}
                 </div>
