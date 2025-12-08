@@ -29,6 +29,10 @@ import TextureCache from "@/lib/game/components/TextureCache";
 import { CARD_LONG } from "@/lib/game/constants";
 import { Physics } from "@/lib/game/physics";
 import { createStackHoverState } from "@/lib/game/stackHover";
+import {
+  DEFAULT_DRAFTABLE_SETS,
+  DEFAULT_SET,
+} from "@/lib/hooks/useAvailableSets";
 import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
 import { getBoosterAssetName } from "@/lib/utils/booster-assets";
 
@@ -40,11 +44,21 @@ export default function Draft3DPage() {
   const { status } = useSession();
   // --- Draft state (mirrors /draft 2D page) ---
   // Multi-set support: choose a set per pack column
-  const [setNames, setSetNames] = useState<string[]>([
-    "Alpha",
-    "Alpha",
-    "Alpha",
-  ]);
+  // Default to Gothic (newest set) for all 3 packs
+  const [setNames, setSetNames] = useState<string[]>(() => {
+    if (typeof window === "undefined")
+      return [DEFAULT_SET, DEFAULT_SET, DEFAULT_SET];
+    try {
+      const saved = localStorage.getItem("sorcery:draft3d:setNames");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length === 3) {
+          return parsed;
+        }
+      }
+    } catch {}
+    return [DEFAULT_SET, DEFAULT_SET, DEFAULT_SET];
+  });
   const [players, setPlayers] = useState(8);
   const [replaceAvatars, setReplaceAvatars] = useState(false);
   const [starting, setStarting] = useState(false);
@@ -81,6 +95,17 @@ export default function Draft3DPage() {
     }
     loadCubes();
   }, []);
+
+  // Persist set selection to localStorage
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      localStorage.setItem(
+        "sorcery:draft3d:setNames",
+        JSON.stringify(setNames)
+      );
+    } catch {}
+  }, [setNames]);
 
   const [seatPacks, setSeatPacks] = useState<BoosterCard[][][]>([]); // [seat][packIndex][cards]
   const [currentPacks, setCurrentPacks] = useState<BoosterCard[][]>([]); // [seat][cards]
@@ -1188,11 +1213,11 @@ export default function Draft3DPage() {
                         }
                         className="rounded px-3 py-2 bg-black/70 text-white ring-1 ring-white/20 backdrop-blur"
                       >
-                        <option value="Alpha">Alpha</option>
-                        <option value="Beta">Beta</option>
-                        <option value="Arthurian Legends">
-                          Arthurian Legends
-                        </option>
+                        {DEFAULT_DRAFTABLE_SETS.map((setName) => (
+                          <option key={setName} value={setName}>
+                            {setName}
+                          </option>
+                        ))}
                       </select>
                     </label>
                   ))}
