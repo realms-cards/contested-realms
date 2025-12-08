@@ -27,6 +27,7 @@ export default function OfflineMulliganScreen({
   const mulligans = useGameStore((s) => s.mulligans);
   const mulliganWithSelection = useGameStore((s) => s.mulliganWithSelection);
   const setPreviewCard = useGameStore((s) => s.setPreviewCard);
+  const avatars = useGameStore((s) => s.avatars);
 
   const [selected, setSelected] = useState<number[]>([]);
   const [done, setDone] = useState<boolean>(false);
@@ -43,6 +44,11 @@ export default function OfflineMulliganScreen({
 
   const myHand = zones[myPlayerKey]?.hand || [];
   const myMulligans = mulligans[myPlayerKey] || 0;
+  const myAvatar = avatars[myPlayerKey]?.card || null;
+  const myChampion = avatars[myPlayerKey]?.champion || null;
+  const opponentKey: PlayerKey = myPlayerKey === "p1" ? "p2" : "p1";
+  const opponentAvatar = avatars[opponentKey]?.card || null;
+  const opponentChampion = avatars[opponentKey]?.champion || null;
   // Use prop if provided, otherwise calculate from currentPlayer
   const isSecondSeat =
     isSecondSeatProp ??
@@ -96,14 +102,72 @@ export default function OfflineMulliganScreen({
 
   return (
     <div className="w-full max-w-4xl bg-zinc-900/80 text-white rounded-2xl ring-1 ring-white/10 p-6">
-      <div className="mb-4 text-center">
-        <div className="text-lg font-semibold mb-1">Mulligan Phase</div>
-        <div className="text-sm opacity-80">
-          Playing as:{" "}
-          <span className="font-medium text-blue-400">
-            {playerNames[myPlayerKey]}
-          </span>
+      <div className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="text-center sm:text-left">
+          <div className="text-lg font-semibold mb-1">Mulligan Phase</div>
+          <div className="text-sm opacity-80">
+            Playing as:{" "}
+            <span className="font-medium text-blue-400">
+              {playerNames[myPlayerKey]}
+            </span>
+          </div>
         </div>
+        {(myAvatar?.slug || opponentAvatar?.slug) && (
+          <div className="flex-shrink-0 flex flex-row gap-4 items-center sm:items-end">
+            {myAvatar?.slug && (
+              <div className="flex flex-col items-center sm:items-end">
+                <div className="text-[10px] uppercase tracking-wide opacity-70 mb-1">
+                  Your Avatar
+                </div>
+                <div
+                  className="relative aspect-[3/4] w-16 sm:w-20 md:w-24 rounded-lg overflow-hidden ring-1 ring-white/30 shadow-lg"
+                  onMouseEnter={() => setPreviewCard(myAvatar)}
+                  onMouseLeave={() => setPreviewCard(null)}
+                >
+                  <Image
+                    src={`/api/images/${myAvatar.slug}`}
+                    alt={myAvatar.name}
+                    fill
+                    sizes="(max-width: 640px) 64px, 96px"
+                    className="object-contain"
+                  />
+                </div>
+                {myChampion &&
+                  myAvatar.name?.toLowerCase() === "dragonlord" && (
+                    <div className="mt-1 px-2 py-0.5 bg-amber-900/40 rounded text-[10px] text-amber-200 ring-1 ring-amber-500/30">
+                      ⚔ {myChampion.name}
+                    </div>
+                  )}
+              </div>
+            )}
+            {opponentAvatar?.slug && (
+              <div className="flex flex-col items-center sm:items-end">
+                <div className="text-[10px] uppercase tracking-wide opacity-70 mb-1">
+                  Opponent Avatar
+                </div>
+                <div
+                  className="relative aspect-[3/4] w-16 sm:w-20 md:w-24 rounded-lg overflow-hidden ring-1 ring-white/30 shadow-lg"
+                  onMouseEnter={() => setPreviewCard(opponentAvatar)}
+                  onMouseLeave={() => setPreviewCard(null)}
+                >
+                  <Image
+                    src={`/api/images/${opponentAvatar.slug}`}
+                    alt={opponentAvatar.name}
+                    fill
+                    sizes="(max-width: 640px) 64px, 96px"
+                    className="object-contain"
+                  />
+                </div>
+                {opponentChampion &&
+                  opponentAvatar.name?.toLowerCase() === "dragonlord" && (
+                    <div className="mt-1 px-2 py-0.5 bg-amber-900/40 rounded text-[10px] text-amber-200 ring-1 ring-amber-500/30">
+                      ⚔ {opponentChampion.name}
+                    </div>
+                  )}
+              </div>
+            )}
+          </div>
+        )}
 
         {scryOpen && isSecondSeat && (
           <div className="mt-4 bg-black/30 rounded-xl p-4 ring-1 ring-white/10">

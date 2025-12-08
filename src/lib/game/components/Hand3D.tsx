@@ -4,6 +4,7 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Group, PerspectiveCamera } from "three";
 import { useSound } from "@/lib/contexts/SoundContext";
+import { isMagician } from "@/lib/game/avatarAbilities";
 import { cardRefToPreview } from "@/lib/game/card-preview.types";
 import type { CardPreviewData } from "@/lib/game/card-preview.types";
 import CardGlow from "@/lib/game/components/CardGlow";
@@ -31,7 +32,7 @@ export interface Hand3DProps {
   viewerPlayerNumber?: number | null; // 1 or 2, for positioning opponent hands
   // Optional placement override. When set to 'edgeTop'/'edgeBottom', the hand is placed along the board edge
   // regardless of showCardBacks; when omitted, placement falls back to overlayBottom for faces and edge for backs.
-  placement?: 'overlayBottom' | 'edgeTop' | 'edgeBottom';
+  placement?: "overlayBottom" | "edgeTop" | "edgeBottom";
   // When true, render cards flat on the board (used for commentator mode)
   flatCards?: boolean;
   // Enhanced preview functions (optional for compatibility)
@@ -39,16 +40,16 @@ export interface Hand3DProps {
   hideCardPreview?: () => void;
 }
 
-export default function Hand3D({ 
+export default function Hand3D({
   matW: _matW,
   matH: _matH,
-  owner = "p1", 
-  showCardBacks = false, 
+  owner = "p1",
+  showCardBacks = false,
   viewerPlayerNumber = null,
   placement,
   flatCards = false,
   showCardPreview,
-  hideCardPreview 
+  hideCardPreview,
 }: Hand3DProps) {
   // Intentionally unused after layout refactor; keep signature stable
   void _matW;
@@ -64,11 +65,20 @@ export default function Hand3D({
   const dragFromPile = useGameStore((s) => s.dragFromPile);
   const setMouseInHandZone = useGameStore((s) => s.setMouseInHandZone);
   const setHandHoverCount = useGameStore((s) => s.setHandHoverCount);
-  const getRemoteHighlightColor = useGameStore((s) => s.getRemoteHighlightColor);
+  const getRemoteHighlightColor = useGameStore(
+    (s) => s.getRemoteHighlightColor
+  );
+  const avatars = useGameStore((s) => s.avatars);
   const { playCardSelect } = useSound();
 
   const hand = useMemo(() => zones?.[owner]?.hand ?? [], [zones, owner]);
-  
+
+  // Detect if the hand's owner is a Magician (hide card type distinction from opponents)
+  const ownerIsMagician = useMemo(
+    () => isMagician(avatars[owner]?.card?.name),
+    [avatars, owner]
+  );
+
   // Sort hand with sites first, then spells
   const sortedHand = useMemo(() => {
     return [...hand].sort((a, b) => {
@@ -192,8 +202,12 @@ export default function Hand3D({
         hoverCleanupTimeoutRef.current = null;
       }
     }
-    window.addEventListener("touchstart", onTouch, { passive: true } as AddEventListenerOptions);
-    window.addEventListener("touchmove", onTouch, { passive: true } as AddEventListenerOptions);
+    window.addEventListener("touchstart", onTouch, {
+      passive: true,
+    } as AddEventListenerOptions);
+    window.addEventListener("touchmove", onTouch, {
+      passive: true,
+    } as AddEventListenerOptions);
     return () => {
       window.removeEventListener("touchstart", onTouch as EventListener);
       window.removeEventListener("touchmove", onTouch as EventListener);
@@ -208,7 +222,9 @@ export default function Hand3D({
       setTimeout(() => {
         // If drag is still active after Board has had time to process, force clear it
         if (dragFromHand && selected && selected.who === owner) {
-          console.debug('[Hand3D] Emergency drag cleanup - clearing sticky drag state');
+          console.debug(
+            "[Hand3D] Emergency drag cleanup - clearing sticky drag state"
+          );
           setDragFromHand(false);
         }
       }, 50); // Short delay to let Board handle legitimate drops first
@@ -238,20 +254,36 @@ export default function Hand3D({
 
     // Performance optimization: Skip expensive calculations if hand is stable AND camera hasn't moved
     // Check if all lerps are close to their targets (threshold: 0.01)
-    const isEdgePlacementCheck = (typeof placement === 'string' && (placement === 'edgeTop' || placement === 'edgeBottom')) || showCardBacks;
-    const targetShownCheck = isEdgePlacementCheck ? 1 : (overCardsArea || mouseInZone) ? 1 : 0;
-    const handShouldBeSpreadCheck = isEdgePlacementCheck ? true : (overCardsArea || mouseInZone);
+    const isEdgePlacementCheck =
+      (typeof placement === "string" &&
+        (placement === "edgeTop" || placement === "edgeBottom")) ||
+      showCardBacks;
+    const targetShownCheck = isEdgePlacementCheck
+      ? 1
+      : overCardsArea || mouseInZone
+      ? 1
+      : 0;
+    const handShouldBeSpreadCheck = isEdgePlacementCheck
+      ? true
+      : overCardsArea || mouseInZone;
     const spreadTargetCheck = handShouldBeSpreadCheck ? 1 : 0;
 
     const revealDelta = Math.abs(targetShownCheck - revealLerp.current);
     const spreadDelta = Math.abs(spreadTargetCheck - handSpreadLerp.current);
     const focusDelta = Math.abs(focusTargetRef.current - focusLerpRef.current);
-    const hoverTarget = hoverTargetRef.current >= 0 ? hoverTargetRef.current : -1;
+    const hoverTarget =
+      hoverTargetRef.current >= 0 ? hoverTargetRef.current : -1;
     const hoverDelta = Math.abs(hoverTarget - hoverLerpRef.current);
 
     // Skip frame only if animations are stable AND camera is stationary
     const threshold = 0.01;
-    if (!cameraMoved && revealDelta < threshold && spreadDelta < threshold && focusDelta < threshold && hoverDelta < threshold) {
+    if (
+      !cameraMoved &&
+      revealDelta < threshold &&
+      spreadDelta < threshold &&
+      focusDelta < threshold &&
+      hoverDelta < threshold
+    ) {
       // Only update every 4th frame when stable to keep position synchronized
       const last = lastUpdateRef.current;
       const now = performance.now();
@@ -263,22 +295,30 @@ export default function Hand3D({
     const fov = (cam.fov * Math.PI) / 180;
     const worldH = 2 * Math.tan(fov / 2) * dist;
     const margin = HAND_BOTTOM_MARGIN;
-    
+
     // Placement model:
     // - If placement prop is provided: use edgeTop/edgeBottom (spectator mode)
     // - If not provided: original overlay behavior
-    const hasExplicitPlacement = typeof placement === 'string' && placement.length > 0;
+    const hasExplicitPlacement =
+      typeof placement === "string" && placement.length > 0;
     // Edge placement for:
     // - Spectators: explicit placement edgeTop/edgeBottom
     // - Players: opponent hand (showCardBacks) implicitly at board edge (upright)
-    const isEdgePlacement = (hasExplicitPlacement && (placement === 'edgeTop' || placement === 'edgeBottom')) || (!hasExplicitPlacement && showCardBacks);
+    const isEdgePlacement =
+      (hasExplicitPlacement &&
+        (placement === "edgeTop" || placement === "edgeBottom")) ||
+      (!hasExplicitPlacement && showCardBacks);
     const overlayTop = false; // with implicit edge for opponent, overlay top is no longer used
 
     const bottomY = -worldH / 2 + margin + CARD_LONG * 0.5 * HAND_CARD_SCALE; // Bottom overlay baseline
     const topY = worldH / 2 - margin - CARD_LONG * 0.5 * HAND_CARD_SCALE; // Top overlay baseline
 
     // Reveal logic: edge hands always visible; overlay hands show on interaction
-    let targetShown = isEdgePlacement ? 1 : (overCardsArea || mouseInZone) ? 1 : 0;
+    let targetShown = isEdgePlacement
+      ? 1
+      : overCardsArea || mouseInZone
+      ? 1
+      : 0;
     if (!showCardBacks && isCoarsePointer) {
       if (dragFromHand && selected && selected.who === owner) {
         const hScr = window.innerHeight || 1;
@@ -296,7 +336,7 @@ export default function Hand3D({
     // Smooth hand spread animation
     const handShouldBeSpread = isEdgePlacement
       ? true // Edge hands always spread for visibility
-      : (overCardsArea || mouseInZone); // Overlay hand spreads when interacted with
+      : overCardsArea || mouseInZone; // Overlay hand spreads when interacted with
     const spreadTarget = handShouldBeSpread ? 1 : 0;
     const spreadK = 0.25; // Smooth easing for hand spread
     handSpreadLerp.current += (spreadTarget - handSpreadLerp.current) * spreadK;
@@ -311,19 +351,29 @@ export default function Hand3D({
       const gridHalfH = (boardSize?.h || 4) * TILE_SIZE * 0.5;
       const marginZ = CARD_LONG * HAND_CARD_SCALE * 0.65; // keep comfortably outside grid
       const edge = gridHalfH + marginZ;
-      const topZ = (viewerPlayerNumber === 1 ? -edge : edge);
-      const bottomZ = (viewerPlayerNumber === 1 ? edge : -edge);
+      const topZ = viewerPlayerNumber === 1 ? -edge : edge;
+      const bottomZ = viewerPlayerNumber === 1 ? edge : -edge;
       // Decide top vs bottom: explicit placement for spectators; players (implicit edge) place top when showing backs
-      const placeTop = hasExplicitPlacement ? (placement === 'edgeTop') : showCardBacks;
+      const placeTop = hasExplicitPlacement
+        ? placement === "edgeTop"
+        : showCardBacks;
       const z = placeTop ? topZ : bottomZ;
       const elevateY = 0.2; // slight lift above board
       rootRef.current.position.set(0, elevateY, z);
       // Face the viewing player properly
       const rotation = flatCards
-        // Commentator mode: both hands should be readable (no flip for lower hand)
-        ? (viewerPlayerNumber === 1 ? 0 : Math.PI)
-        // Player mode / non-commentator spectators: top vs bottom differ
-        : (placeTop ? (viewerPlayerNumber === 1 ? 0 : Math.PI) : (viewerPlayerNumber === 1 ? Math.PI : 0));
+        ? // Commentator mode: both hands should be readable (no flip for lower hand)
+          viewerPlayerNumber === 1
+          ? 0
+          : Math.PI
+        : // Player mode / non-commentator spectators: top vs bottom differ
+        placeTop
+        ? viewerPlayerNumber === 1
+          ? 0
+          : Math.PI
+        : viewerPlayerNumber === 1
+        ? Math.PI
+        : 0;
       rootRef.current.rotation.set(0, rotation, 0);
     } else {
       // Overlay placement relative to camera (bottom for own, top for opponent when backs)
@@ -446,7 +496,8 @@ export default function Hand3D({
       const w = Math.max(0, 1 - Math.abs(i - focusLerp)); // 0..1 focus weight
       const liftFromFocus = CARD_LONG * 0.06 * w;
       // Sliding hover highlight adds extra lift that moves smoothly across cards
-      const hoverWeight = hoverLerp >= 0 ? Math.max(0, 1 - Math.abs(i - hoverLerp)) : 0;
+      const hoverWeight =
+        hoverLerp >= 0 ? Math.max(0, 1 - Math.abs(i - hoverLerp)) : 0;
       const y = arcY + liftFromFocus + CARD_LONG * 0.08 * hoverWeight;
 
       // Scale: hovered card slightly bigger with smoother scaling
@@ -496,7 +547,15 @@ export default function Hand3D({
         if (sorted != null) focusTargetRef.current = sorted;
       }
     }
-  }, [hoveredCard, selected, owner, dragFromHand, showCardBacks, sortedHand.length, origToSortedIndex]);
+  }, [
+    hoveredCard,
+    selected,
+    owner,
+    dragFromHand,
+    showCardBacks,
+    sortedHand.length,
+    origToSortedIndex,
+  ]);
 
   // Track hover target for sliding highlight animation
   useEffect(() => {
@@ -520,7 +579,8 @@ export default function Hand3D({
       if (t) {
         let el: HTMLElement | null = t;
         while (el && el !== document.body) {
-          if (el.getAttribute && el.getAttribute("data-allow-wheel") === "true") return;
+          if (el.getAttribute && el.getAttribute("data-allow-wheel") === "true")
+            return;
           el = el.parentElement as HTMLElement | null;
         }
       }
@@ -550,7 +610,14 @@ export default function Hand3D({
       window.removeEventListener("wheel", onWheelListener);
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, [mouseInZone, dragFromHand, dragFromPile, sortedHand.length, showCardBacks, hand.length]);
+  }, [
+    mouseInZone,
+    dragFromHand,
+    dragFromPile,
+    sortedHand.length,
+    showCardBacks,
+    hand.length,
+  ]);
 
   // Simplified hover handling
   const hoverTimer = useRef<number | null>(null);
@@ -626,11 +693,7 @@ export default function Hand3D({
   // Emergency cleanup on drag state changes only
   useEffect(() => {
     // Only force cleanup when drags start from other sources (not when selecting from hand)
-    if (
-      dragFromPile ||
-      selectedPermanent ||
-      selectedAvatar
-    ) {
+    if (dragFromPile || selectedPermanent || selectedAvatar) {
       if (hoveredCardCount > 0) {
         console.debug("[Hand] Emergency cleanup due to game state change");
         setHandHoverCount(0);
@@ -658,7 +721,6 @@ export default function Hand3D({
     return () => document.removeEventListener("mouseup", handleGlobalMouseUp);
   }, []); // No dependencies - just cleanup drag start ref
 
-
   // Emergency keyboard shortcut to force hand hiding and clear sticky drags
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -685,7 +747,16 @@ export default function Hand3D({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [hoveredCardCount, mouseInZone, setHandHoverCount, setMouseInHandZone, dragFromHand, selected, owner, setDragFromHand]);
+  }, [
+    hoveredCardCount,
+    mouseInZone,
+    setHandHoverCount,
+    setMouseInHandZone,
+    dragFromHand,
+    selected,
+    owner,
+    setDragFromHand,
+  ]);
 
   // Reset aggregated over-cards-area when drags start to avoid stale 'true'
   useEffect(() => {
@@ -746,12 +817,17 @@ export default function Hand3D({
         if (!layoutInfo) return null;
 
         // Handle dragged card visibility for hand returns
-        const isDraggedCard = selected && selected.card.cardId === c.cardId && dragFromHand && selected.who === owner;
+        const isDraggedCard =
+          selected &&
+          selected.card.cardId === c.cardId &&
+          dragFromHand &&
+          selected.who === owner;
         if (isDraggedCard) {
           // Use a slightly more generous zone for dragged card reappearance than for hand visibility
           const h = window.innerHeight || 1;
           const dragReturnZone = 0.7; // More generous than HAND_ZONE_TOP_FRAC (0.75) but not too much
-          const inDragReturnZone = lastMousePosRef.current.y >= h * dragReturnZone;
+          const inDragReturnZone =
+            lastMousePosRef.current.y >= h * dragReturnZone;
 
           // Show the dragged card when mouse is in return zone or over cards area
           if (!inDragReturnZone && !overCardsArea) {
@@ -759,7 +835,14 @@ export default function Hand3D({
           }
         }
 
-        const { x, y, rot, scale: layoutScale, originalIndex, hoverWeight } = layoutInfo;
+        const {
+          x,
+          y,
+          rot,
+          scale: layoutScale,
+          originalIndex,
+          hoverWeight,
+        } = layoutInfo;
         const isHandDrag = dragFromHand && selected && selected.who === owner;
         const isPileDrag = dragFromHand && dragFromPile && !selected;
         const isDragging = isHandDrag; // Only block interactions for actual hand drags
@@ -768,7 +851,7 @@ export default function Hand3D({
         const baseScale = HAND_CARD_SCALE;
         const scale = baseScale * layoutScale;
         // Spells should render on top of sites: sites get lower render order, spells get higher
-        const baseRenderOrder = showCardBacks ? -5 : (isSite ? 1000 : 2000);
+        const baseRenderOrder = showCardBacks ? -5 : isSite ? 1000 : 2000;
         const renderOrder = showCardBacks
           ? baseRenderOrder + i
           : hoverWeight > 0.5
@@ -778,7 +861,17 @@ export default function Hand3D({
         const remoteHighlightColor = getRemoteHighlightColor(c, {
           instanceKey: handInstanceKey,
         });
-        const cardRotationZ = showCardBacks ? (isSite ? -Math.PI / 2 : 0) : (isSite ? -rot - Math.PI / 2 : -rot);
+        // Magician: when viewing opponent's Magician hand, all cards render upright
+        // (no rotation for sites) to hide which cards are sites
+        const cardRotationZ = showCardBacks
+          ? ownerIsMagician
+            ? 0 // Magician: all cards upright to hide site distinction
+            : isSite
+            ? -Math.PI / 2
+            : 0
+          : isSite
+          ? -rot - Math.PI / 2
+          : -rot;
         const glowWidth = CARD_SHORT + 0.25;
         const glowHeight = CARD_LONG + 0.35;
         return (
@@ -877,7 +970,9 @@ export default function Hand3D({
                   if (held >= DRAG_HOLD_MS && dist > PIX_THRESH) {
                     // Select the card only when drag actually starts
                     selectHandCard(owner, originalIndex);
-                    try { playCardSelect(); } catch {}
+                    try {
+                      playCardSelect();
+                    } catch {}
                     setDragFromHand(true);
                     // Clear preview when drag starts
                     clearHoverPreview();
@@ -891,13 +986,19 @@ export default function Hand3D({
                     0.01,
                   ]}
                 />
-                <meshBasicMaterial transparent opacity={0} depthWrite={false} depthTest={false} /> {/* Invisible */}
+                <meshBasicMaterial
+                  transparent
+                  opacity={0}
+                  depthWrite={false}
+                  depthTest={false}
+                />{" "}
+                {/* Invisible */}
               </mesh>
             )}
 
             <group>
               <CardPlane
-                slug={showCardBacks ? "" : (c.slug || "")}
+                slug={showCardBacks ? "" : c.slug || ""}
                 width={CARD_SHORT}
                 height={CARD_LONG}
                 rotationZ={cardRotationZ}
@@ -907,7 +1008,15 @@ export default function Hand3D({
                 renderOrder={renderOrder}
                 interactive={!isDragging && !showCardBacks}
                 elevation={0.002 + 0.018 * (hoverWeight || 0)}
-                textureUrl={showCardBacks ? (isSite ? "/api/assets/cardback_atlas.png" : "/api/assets/cardback_spellbook.png") : undefined}
+                textureUrl={
+                  showCardBacks
+                    ? ownerIsMagician
+                      ? "/api/assets/cardback_spellbook.png" // Magician: all cards look like spellbook cards
+                      : isSite
+                      ? "/api/assets/cardback_atlas.png"
+                      : "/api/assets/cardback_spellbook.png"
+                    : undefined
+                }
                 forceTextureUrl={showCardBacks}
                 opacity={isDraggedCard ? 0.6 : 1.0} // Make dragged card semi-transparent when shown for return
               />
