@@ -7,9 +7,11 @@ import { useState, useEffect, useCallback } from "react";
 import CardPreview from "@/components/game/CardPreview";
 import { ClientCanvas } from "@/components/game/ClientCanvas";
 import OnlineConsole from "@/components/game/OnlineConsole";
+import OnlineLifeCounters from "@/components/game/OnlineLifeCounters";
 import {
   DynamicBoard as Board,
   DynamicHand3D as Hand3D,
+  DynamicPiles3D as Piles3D,
 } from "@/components/game/dynamic-3d";
 import TextureCache from "@/lib/game/components/TextureCache";
 import { Physics } from "@/lib/game/physics";
@@ -186,19 +188,40 @@ export default function ReplayViewerPage() {
     [recording]
   );
 
-  // Auto-playback
+  // Auto-playback with realistic timing based on action timestamps
   useEffect(() => {
     if (!isPlaying || !recording) return;
 
-    const interval = setInterval(() => {
-      if (currentActionIndex >= recording.actions.length - 1) {
-        setIsPlaying(false);
-        return;
-      }
-      stepForward();
-    }, 1000 / playbackSpeed);
+    if (currentActionIndex >= recording.actions.length - 1) {
+      setIsPlaying(false);
+      return;
+    }
 
-    return () => clearInterval(interval);
+    // Calculate delay based on actual timestamps between actions
+    const currentAction = recording.actions[currentActionIndex];
+    const nextAction = recording.actions[currentActionIndex + 1];
+
+    let delay: number;
+    if (currentAction && nextAction) {
+      // Use actual time difference between actions, scaled by playback speed
+      const timeDiff = nextAction.timestamp - currentAction.timestamp;
+      // Clamp to reasonable bounds: min 200ms, max 3000ms (before speed adjustment)
+      const clampedDiff = Math.max(200, Math.min(3000, timeDiff));
+      delay = clampedDiff / playbackSpeed;
+    } else {
+      // Fallback to fixed delay
+      delay = 800 / playbackSpeed;
+    }
+
+    // Minimum delay to ensure smooth visual transitions
+    const minDelay = 150 / playbackSpeed;
+    delay = Math.max(minDelay, delay);
+
+    const timer = setTimeout(() => {
+      stepForward();
+    }, delay);
+
+    return () => clearTimeout(timer);
   }, [isPlaying, recording, currentActionIndex, playbackSpeed, stepForward]);
 
   const formatTime = (timestamp: number) => {
@@ -288,6 +311,11 @@ export default function ReplayViewerPage() {
               showCardBacks={false}
               flatCards
             />
+
+            {/* Player piles: spellbook, atlas, graveyard, collection (read-only in replay) */}
+            <Piles3D owner="p1" matW={1} matH={1} noRaycast />
+            <Piles3D owner="p2" matW={1} matH={1} noRaycast />
+
             <TextureCache />
           </Physics>
 
@@ -322,6 +350,17 @@ export default function ReplayViewerPage() {
           zIndexClass="z-30"
         />
       )}
+
+      {/* Life Counters */}
+      <OnlineLifeCounters
+        dragFromHand={false}
+        myPlayerKey={null}
+        playerNames={{
+          p1: recording.playerNames[0] || "Player 1",
+          p2: recording.playerNames[1] || "Player 2",
+        }}
+        readOnly={true}
+      />
 
       {/* Replay Controls Overlay */}
       <div className="absolute bottom-0 left-0 right-0 bg-black/80 backdrop-blur-sm p-4">

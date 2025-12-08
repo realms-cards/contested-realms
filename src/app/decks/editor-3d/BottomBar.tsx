@@ -68,6 +68,9 @@ type BottomBarProps = {
   onOpenChampionModal?: () => void;
   // Cube name for display (when packs are from a cube)
   cubeName?: string | null;
+  // Card preview callbacks
+  onHoverPreview?: (slug: string, name: string, type: string | null) => void;
+  onHoverClear?: () => void;
 };
 
 export default function BottomBar(props: BottomBarProps) {
@@ -122,6 +125,9 @@ export default function BottomBar(props: BottomBarProps) {
     onOpenChampionModal,
     // Cube name for display
     cubeName,
+    // Card preview callbacks
+    onHoverPreview,
+    onHoverClear,
   } = props;
 
   const standardActive =
@@ -662,33 +668,48 @@ export default function BottomBar(props: BottomBarProps) {
                   {isFreeMode && liveSearchResults.length > 0 && (
                     <div className="max-h-48 overflow-y-auto">
                       <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2">
-                        {liveSearchResults.map((r, idx) => (
-                          <button
-                            key={r.variantId}
-                            onClick={() => onAddFromLiveSearch?.(r)}
-                            className={`group relative aspect-[3/4] rounded overflow-hidden bg-black/40 border transition-all ${
-                              idx === 0
-                                ? "border-green-400 ring-2 ring-green-400/50 shadow-lg shadow-green-400/20"
-                                : "border-white/20 hover:border-blue-400"
-                            }`}
-                            title={`${idx === 0 ? "[Enter] " : ""}Add ${
-                              r.cardName
-                            } to deck`}
-                          >
-                            <Image
-                              src={`/api/images/${r.slug}`}
-                              alt={r.cardName}
-                              fill
-                              className="object-cover"
-                              sizes="80px"
-                            />
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center pb-1">
-                              <span className="text-[10px] text-white font-medium truncate max-w-full px-1">
-                                {r.cardName}
-                              </span>
-                            </div>
-                          </button>
-                        ))}
+                        {liveSearchResults.map((r, idx) => {
+                          const isSite = (r.type || "")
+                            .toLowerCase()
+                            .includes("site");
+                          return (
+                            <button
+                              key={r.variantId}
+                              onClick={() => onAddFromLiveSearch?.(r)}
+                              onMouseEnter={() =>
+                                onHoverPreview?.(r.slug, r.cardName, r.type)
+                              }
+                              onMouseLeave={() => onHoverClear?.()}
+                              className={`group relative rounded overflow-hidden bg-black/40 border transition-all ${
+                                isSite ? "aspect-[4/3]" : "aspect-[3/4]"
+                              } ${
+                                idx === 0
+                                  ? "border-green-400 ring-2 ring-green-400/50 shadow-lg shadow-green-400/20"
+                                  : "border-white/20 hover:border-blue-400"
+                              }`}
+                              title={`${idx === 0 ? "[Enter] " : ""}Add ${
+                                r.cardName
+                              } to deck`}
+                            >
+                              <Image
+                                src={`/api/images/${r.slug}`}
+                                alt={r.cardName}
+                                fill
+                                className={
+                                  isSite
+                                    ? "object-contain rotate-90"
+                                    : "object-cover"
+                                }
+                                sizes="80px"
+                              />
+                              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center pb-1">
+                                <span className="text-[10px] text-white font-medium truncate max-w-full px-1">
+                                  {r.cardName}
+                                </span>
+                              </div>
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
                   )}

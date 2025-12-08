@@ -2,8 +2,17 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-// Index entry format: [cardId, variantId, setId, cardName, slug, setName, isFoil]
-type IndexEntry = [number, number, number, string, string, string, number];
+// Index entry format: [cardId, variantId, setId, cardName, slug, setName, isFoil, isSite]
+type IndexEntry = [
+  number,
+  number,
+  number,
+  string,
+  string,
+  string,
+  number,
+  number
+];
 
 interface SearchIndex {
   v: number;
@@ -18,6 +27,7 @@ export interface CardSearchResult {
   set: string;
   setId: number;
   finish: string;
+  isSite: boolean;
 }
 
 // Global cache - shared across all hook instances
@@ -88,8 +98,16 @@ export function useCardSearch() {
       >();
 
       for (const entry of index.entries) {
-        const [cardId, variantId, setId, cardName, slug, setName, isFoil] =
-          entry;
+        const [
+          cardId,
+          variantId,
+          setId,
+          cardName,
+          slug,
+          setName,
+          isFoil,
+          isSite,
+        ] = entry;
 
         // Match card name or slug
         if (
@@ -118,6 +136,7 @@ export function useCardSearch() {
                   set: setName,
                   setId,
                   finish: isFoil ? "Foil" : "Standard",
+                  isSite: !!isSite,
                 };
                 seenCards.set(cardId, {
                   isFoil: !!isFoil,
@@ -138,6 +157,7 @@ export function useCardSearch() {
             set: setName,
             setId,
             finish: isFoil ? "Foil" : "Standard",
+            isSite: !!isSite,
           });
 
           if (results.length >= limit) break;

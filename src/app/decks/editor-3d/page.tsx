@@ -3500,7 +3500,7 @@ function AuthenticatedDeckEditor() {
         variantId: r.variantId,
         cardName: r.cardName,
         slug: r.slug,
-        type: "", // Not available in local index
+        type: r.isSite ? "Site" : null, // Derive type from isSite flag
         set: r.set,
         finish: (r.finish || "Standard") as "Standard" | "Foil",
         product: "",
@@ -5342,6 +5342,11 @@ function AuthenticatedDeckEditor() {
             onOpenChampionModal={() => setShowChampionModal(true)}
             // Cube name for display
             cubeName={sealedCubeName}
+            // Card preview callbacks
+            onHoverPreview={(slug, name, type) =>
+              beginHoverPreview({ slug, name, type }, `livesearch:${slug}`)
+            }
+            onHoverClear={() => clearHoverPreviewDebounced()}
           />
         </Suspense>
         {error && (

@@ -45,11 +45,7 @@ function getCardBySlug(slug: string | null): CardLike | null {
       for (const s of sets) {
         const vs = (s as CardLike)?.variants as unknown[];
         if (!Array.isArray(vs)) continue;
-        if (
-          vs.find(
-            (v) => String((v as CardLike).slug) === String(needle)
-          )
-        ) {
+        if (vs.find((v) => String((v as CardLike).slug) === String(needle))) {
           return c;
         }
       }
@@ -80,37 +76,33 @@ function getThresholdsForCard(card: AnyRecord): Thresholds | null {
   if (card && card.thresholds && typeof card.thresholds === "object") {
     return card.thresholds as Thresholds;
   }
-  const slug =
-    card && card.slug ? String(card.slug) : null;
+  const slug = card && card.slug ? String(card.slug) : null;
   if (slug) {
     const found = getCardBySlug(slug);
     const meta =
       (found &&
         ((found.guardian as CardLike | undefined) ||
-          ((Array.isArray(found.sets) &&
-            found.sets[0] &&
-            (found.sets[0] as CardLike).metadata
-            ? ((found.sets[0] as CardLike)
-                .metadata as CardLike)
-            : null)))) ||
+          (Array.isArray(found.sets) &&
+          found.sets[0] &&
+          (found.sets[0] as CardLike).metadata
+            ? ((found.sets[0] as CardLike).metadata as CardLike)
+            : null))) ||
       null;
     if (meta && typeof meta.thresholds === "object") {
       return meta.thresholds as Thresholds;
     }
   }
-  const nm =
-    card && card.name ? String(card.name) : null;
+  const nm = card && card.name ? String(card.name) : null;
   if (nm) {
     const found = getCardByName(nm);
     const meta =
       (found &&
         ((found.guardian as CardLike | undefined) ||
-          ((Array.isArray(found.sets) &&
-            found.sets[0] &&
-            (found.sets[0] as CardLike).metadata
-            ? ((found.sets[0] as CardLike)
-                .metadata as CardLike)
-            : null)))) ||
+          (Array.isArray(found.sets) &&
+          found.sets[0] &&
+          (found.sets[0] as CardLike).metadata
+            ? ((found.sets[0] as CardLike).metadata as CardLike)
+            : null))) ||
       null;
     if (meta && typeof meta.thresholds === "object") {
       return meta.thresholds as Thresholds;
@@ -241,8 +233,7 @@ function countThresholdsForPlayer(
     }
   }
   // Permanents that grant thresholds (e.g., cores)
-  const per =
-    (game.permanents as Record<string, unknown[]>) || {};
+  const per = (game.permanents as Record<string, unknown[]>) || {};
   for (const cellKey of Object.keys(per)) {
     const arrRaw = per[cellKey];
     const arr = Array.isArray(arrRaw) ? arrRaw : [];
@@ -250,9 +241,10 @@ function countThresholdsForPlayer(
       try {
         const perm = (p || {}) as AnyRecord;
         if (!perm || Number(perm.owner) !== playerNum) continue;
-        const nm = (perm.card && (perm.card as AnyRecord).name
-          ? String((perm.card as AnyRecord).name)
-          : ""
+        const nm = (
+          perm.card && (perm.card as AnyRecord).name
+            ? String((perm.card as AnyRecord).name)
+            : ""
         ).toLowerCase();
         const grant = THRESHOLD_GRANT_BY_NAME[nm];
         if (grant) accumulateThresholds(out, grant);
@@ -298,7 +290,9 @@ export function markAndCountNewPlacements(
         : {}) || {};
 
     for (const key of Object.keys(perPatch)) {
-      const arr = Array.isArray(perPatch[key]) ? (perPatch[key] as unknown[]) : [];
+      const arr = Array.isArray(perPatch[key])
+        ? (perPatch[key] as unknown[])
+        : [];
       for (const p of arr) {
         try {
           const perm = p as AnyRecord;
@@ -348,9 +342,10 @@ export function validateAction(
 ): { ok: boolean; error?: string } {
   try {
     if (!action || typeof action !== "object") return { ok: true };
-    const match = context && typeof context === "object"
-      ? ((context as AnyRecord).match as AnyRecord | null | undefined)
-      : null;
+    const match =
+      context && typeof context === "object"
+        ? ((context as AnyRecord).match as AnyRecord | null | undefined)
+        : null;
     const playerIds = Array.isArray(match?.playerIds)
       ? (match!.playerIds as string[])
       : [];
@@ -365,22 +360,20 @@ export function validateAction(
     const effectivePhase =
       typeof (action as AnyRecord).phase === "string"
         ? ((action as AnyRecord).phase as string)
-        : ((game.phase as string | undefined) ?? undefined);
+        : (game.phase as string | undefined) ?? undefined;
 
     if (
       (action as AnyRecord).board &&
       typeof (action as AnyRecord).board === "object"
     ) {
       const boardPatch = (action as AnyRecord).board as AnyRecord;
-      const sitesPatch = boardPatch.sites as Record<string, AnyRecord> | undefined;
+      const sitesPatch = boardPatch.sites as
+        | Record<string, AnyRecord>
+        | undefined;
       if (sitesPatch && typeof sitesPatch === "object") {
         const currentSites: Record<string, AnyRecord> =
-          game.board &&
-          typeof (game.board as AnyRecord).sites === "object"
-            ? ((game.board as AnyRecord).sites as Record<
-                string,
-                AnyRecord
-              >)
+          game.board && typeof (game.board as AnyRecord).sites === "object"
+            ? ((game.board as AnyRecord).sites as Record<string, AnyRecord>)
             : {};
         const avatars: Record<string, AnyRecord> =
           game.avatars && typeof game.avatars === "object"
@@ -389,7 +382,11 @@ export function validateAction(
         for (const key of Object.keys(sitesPatch)) {
           const nextTile = sitesPatch[key];
           const prevTile = currentSites[key];
-          if (nextTile && nextTile.card && meNum) {
+          // Only validate new sites owned by the current player
+          const isNewSite =
+            nextTile && nextTile.card && (!prevTile || !prevTile.card);
+          const isOwnedByMe = Number(nextTile?.owner) === meNum;
+          if (isNewSite && isOwnedByMe && meNum) {
             const sitesOwned = Object.values(currentSites).filter(
               (t) => t && t.card && Number(t.owner) === meNum
             ).length;
@@ -430,8 +427,7 @@ export function validateAction(
         unknown[]
       >;
       if (meNum) {
-        const prevPer =
-          (game.permanents as Record<string, unknown[]>) || {};
+        const prevPer = (game.permanents as Record<string, unknown[]>) || {};
         for (const key of Object.keys(perPatch)) {
           const nextArrRaw = perPatch[key];
           const nextArr = Array.isArray(nextArrRaw) ? nextArrRaw : [];
@@ -469,29 +465,38 @@ export function validateAction(
                   typeof (action as AnyRecord).currentPlayer === "number" &&
                   (action as AnyRecord).currentPlayer !== game.currentPlayer;
                 const isUntapping = prevTapped && !nextTapped;
-                const nextPlayer = (action as AnyRecord).currentPlayer as number;
+                const nextPlayer = (action as AnyRecord)
+                  .currentPlayer as number;
                 const untappingNextPlayer = owner === nextPlayer;
 
-                console.log("[rules-validation] Tapped state change detected:", {
-                  prevTapped,
-                  nextTapped,
-                  owner,
-                  meNum,
-                  isTurnTransition,
-                  isUntapping,
-                  untappingNextPlayer,
-                  actionCurrentPlayer: (action as AnyRecord).currentPlayer,
-                  gameCurrentPlayer: game.currentPlayer,
-                  permanentCard: (prevItem.card as AnyRecord)?.name || "unknown",
-                });
+                console.log(
+                  "[rules-validation] Tapped state change detected:",
+                  {
+                    prevTapped,
+                    nextTapped,
+                    owner,
+                    meNum,
+                    isTurnTransition,
+                    isUntapping,
+                    untappingNextPlayer,
+                    actionCurrentPlayer: (action as AnyRecord).currentPlayer,
+                    gameCurrentPlayer: game.currentPlayer,
+                    permanentCard:
+                      (prevItem.card as AnyRecord)?.name || "unknown",
+                  }
+                );
 
                 if (isTurnTransition && isUntapping && untappingNextPlayer) {
                   // Allow: player ending turn can untap next player's permanents
-                  console.log("[rules-validation] Allowing turn transition untap");
+                  console.log(
+                    "[rules-validation] Allowing turn transition untap"
+                  );
                   continue;
                 }
 
-                console.log("[rules-validation] REJECTING tap/untap of opponent permanent");
+                console.log(
+                  "[rules-validation] REJECTING tap/untap of opponent permanent"
+                );
                 return {
                   ok: false,
                   error: "Cannot tap or untap opponent permanent",
@@ -510,8 +515,10 @@ export function validateAction(
       typeof (action as AnyRecord).zones === "object" &&
       meKey
     ) {
-      const zonesPatch = ((action as AnyRecord).zones ??
-        {}) as Record<string, unknown>;
+      const zonesPatch = ((action as AnyRecord).zones ?? {}) as Record<
+        string,
+        unknown
+      >;
       for (const zk of Object.keys(zonesPatch)) {
         if (zk !== meKey) {
           return {
@@ -556,11 +563,7 @@ export function validateAction(
         unknown[]
       >;
       const available = countThresholdsForPlayer(game, meNum);
-      const { newItems } = markAndCountNewPlacements(
-        game,
-        action,
-        meNum
-      );
+      const { newItems } = markAndCountNewPlacements(game, action, meNum);
       if (newItems.length > 0) {
         // Timing: permanents may only be *played* during the acting player's own turn.
         // We intentionally do NOT enforce a specific phase label here (the whole turn is playable).
