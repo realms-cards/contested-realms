@@ -214,8 +214,15 @@ export async function POST(req: NextRequest) {
     const mapped: Mapped[] = [];
     const unresolved: { name: string; count: number }[] = [];
 
+    // Batch lookup: fetch all cards and variants in one query
+    const uniqueNames = [...new Set(entries.map((e) => e.name))];
+    const resolvedByName = await findBestVariantsForNames(
+      uniqueNames,
+      preferredSets
+    );
+
     for (const { name, count } of entries) {
-      const found = await findBestVariantForName(name, preferredSets);
+      const found = resolvedByName.get(name);
       if (!found) {
         unresolved.push({ name, count });
         continue;
@@ -526,10 +533,45 @@ function normalizeName(s: string): string {
     .trim();
 }
 
-async function findBestVariantForName(name: string, setPreference: string[]) {
-  // First pass: find candidate cards containing the name
-  const candidates = await prisma.card.findMany({
-    where: { name: { contains: name } },
+function canonicalize(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[\s\-–—_,:;.!?()/]+/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/[\u2018\u2019]/g, "'")
+    .trim();
+}
+
+// Batched version: find best variants for multiple names in minimal queries
+async function findBestVariantsForNames(
+  names: string[],
+  setPreference: string[]
+): Promise<
+  Map<
+    string,
+    {
+      cardId: number;
+      variantId: number | null;
+      setId: number | null;
+      typeText: string | null;
+    }
+  >
+> {
+  const result = new Map<
+    string,
+    {
+      cardId: number;
+      variantId: number | null;
+      setId: number | null;
+      typeText: string | null;
+    }
+  >();
+
+  if (names.length === 0) return result;
+
+  // Fetch all cards that might match any of the names (case-insensitive)
+  const cards = await prisma.card.findMany({
+    where: { name: { in: names, mode: "insensitive" } },
     select: {
       id: true,
       name: true,
@@ -542,80 +584,116 @@ async function findBestVariantForName(name: string, setPreference: string[]) {
         },
       },
     },
-    take: 50,
   });
 
-  if (!candidates.length) return null;
+  // Build a map from canonicalized name to card
+  const cardByCanon = new Map<
+    string,
+    {
+      id: number;
+      name: string;
+      variants: {
+        id: number;
+        setId: number | null;
+        typeText: string | null;
+        set: { name: string } | null;
+      }[];
+    }
+  >();
+  for (const c of cards) {
+    cardByCanon.set(canonicalize(c.name), c);
+  }
 
-  const canon = canonicalize(name);
-  const exact = candidates.filter((c) => canonicalize(c.name) === canon);
-  const pool = exact.length ? exact : candidates;
-
-  // Flatten variants, score by set preference
-  type Flat = {
-    cardId: number;
-    variantId: number | null;
-    setId: number | null;
-    typeText: string | null;
-    setName: string | null;
+  // Score function for set preference
+  const score = (setName: string | null) => {
+    if (!setName) return -1;
+    const idx = setPreference.indexOf(setName);
+    return idx < 0 ? 0 : setPreference.length - idx;
   };
-  const flats: Flat[] = [];
-  for (const c of pool) {
-    if (!c.variants.length) {
+
+  // Collect cards that need metadata fallback
+  const needsMetadata: { name: string; cardId: number; setId: number }[] = [];
+
+  // Process each name
+  for (const name of names) {
+    const canon = canonicalize(name);
+    const card = cardByCanon.get(canon);
+
+    if (!card) continue;
+
+    // Flatten variants and score by set preference
+    type Flat = {
+      variantId: number | null;
+      setId: number | null;
+      typeText: string | null;
+      setName: string | null;
+    };
+    const flats: Flat[] = [];
+
+    if (!card.variants.length) {
       flats.push({
-        cardId: c.id,
         variantId: null,
         setId: null,
         typeText: null,
         setName: null,
       });
-      continue;
-    }
-    for (const v of c.variants) {
-      flats.push({
-        cardId: c.id,
-        variantId: v.id,
-        setId: v.setId,
-        typeText: v.typeText,
-        setName: v.set?.name ?? null,
-      });
-    }
-  }
-
-  if (!flats.length) return null;
-
-  const score = (setName: string | null) => {
-    if (!setName) return -1;
-    const idx = setPreference.indexOf(setName);
-    return idx < 0 ? 0 : setPreference.length - idx; // higher is better
-  };
-
-  flats.sort((a, b) => score(b.setName) - score(a.setName));
-  let top = flats[0];
-
-  // Fallback: if typeText is missing, try CardSetMetadata to infer type
-  if ((top.typeText == null || top.typeText === "") && top.setId != null) {
-    try {
-      const meta = await prisma.cardSetMetadata.findFirst({
-        where: { cardId: top.cardId, setId: top.setId },
-        select: { type: true },
-      });
-      if (meta && meta.type) {
-        top = { ...top, typeText: meta.type };
+    } else {
+      for (const v of card.variants) {
+        flats.push({
+          variantId: v.id,
+          setId: v.setId,
+          typeText: v.typeText,
+          setName: v.set?.name ?? null,
+        });
       }
-    } catch {}
+    }
+
+    if (!flats.length) continue;
+
+    flats.sort((a, b) => score(b.setName) - score(a.setName));
+    const top = flats[0];
+
+    result.set(name, {
+      cardId: card.id,
+      variantId: top.variantId,
+      setId: top.setId,
+      typeText: top.typeText,
+    });
+
+    // Track if we need metadata fallback
+    if ((top.typeText == null || top.typeText === "") && top.setId != null) {
+      needsMetadata.push({ name, cardId: card.id, setId: top.setId });
+    }
   }
 
-  return top;
-}
+  // Batch fetch metadata for cards missing typeText
+  if (needsMetadata.length > 0) {
+    const metaConditions = needsMetadata.map((m) => ({
+      cardId: m.cardId,
+      setId: m.setId,
+    }));
 
-function canonicalize(s: string): string {
-  return s
-    .toLowerCase()
-    .replace(/[\s\-–—_,:;.!?()/]+/g, " ")
-    .replace(/\s+/g, " ")
-    .replace(/[\u2018\u2019]/g, "'")
-    .trim();
+    const metadata = await prisma.cardSetMetadata.findMany({
+      where: { OR: metaConditions },
+      select: { cardId: true, setId: true, type: true },
+    });
+
+    const metaByKey = new Map(
+      metadata.map((m) => [`${m.cardId}:${m.setId}`, m.type])
+    );
+
+    for (const { name, cardId, setId } of needsMetadata) {
+      const type = metaByKey.get(`${cardId}:${setId}`);
+      if (type) {
+        const existing = result.get(name);
+        if (existing) {
+          result.set(name, { ...existing, typeText: type });
+        }
+      }
+    }
+  }
+
+  return result;
 }
 
 // Fetch deck data from Curiosa tRPC endpoint using Origin spoofing
@@ -856,25 +934,54 @@ async function importFromTrpcData(
   const mapped: Mapped[] = [];
   const unresolved: { name: string; count: number }[] = [];
 
-  for (const [_key, entry] of grouped) {
-    // Try to find variant by slug (entry.slug is the actual variant slug, _key includes zone)
-    const variant = await prisma.variant.findFirst({
-      where: { slug: entry.slug },
-      select: { id: true, cardId: true, setId: true, typeText: true },
+  // Batch lookup: collect all slugs and fetch variants in one query
+  const groupedEntries = Array.from(grouped.values());
+  const allSlugs = groupedEntries.map((e) => e.slug);
+
+  const variants = await prisma.variant.findMany({
+    where: { slug: { in: allSlugs } },
+    select: { id: true, cardId: true, setId: true, typeText: true, slug: true },
+  });
+
+  const variantBySlug = new Map(variants.map((v) => [v.slug, v]));
+
+  // Find entries that didn't match by slug - need name fallback
+  const needsNameLookup = groupedEntries.filter(
+    (e) => !variantBySlug.has(e.slug)
+  );
+
+  // Batch lookup cards by name for unresolved slugs
+  let cardByNameLower = new Map<
+    string,
+    {
+      id: number;
+      variants: { id: number; setId: number | null; typeText: string | null }[];
+    }
+  >();
+
+  if (needsNameLookup.length > 0) {
+    const names = [...new Set(needsNameLookup.map((e) => e.name))];
+    const cards = await prisma.card.findMany({
+      where: { name: { in: names, mode: "insensitive" } },
+      select: {
+        id: true,
+        name: true,
+        variants: {
+          select: { id: true, setId: true, typeText: true },
+          take: 1,
+        },
+      },
     });
+    cardByNameLower = new Map(cards.map((c) => [c.name.toLowerCase(), c]));
+  }
+
+  // Process all entries using the batched lookups
+  for (const entry of groupedEntries) {
+    const variant = variantBySlug.get(entry.slug);
 
     if (!variant) {
-      // Fallback: try by card name
-      const card = await prisma.card.findFirst({
-        where: { name: { equals: entry.name, mode: "insensitive" } },
-        select: {
-          id: true,
-          variants: {
-            select: { id: true, setId: true, typeText: true },
-            take: 1,
-          },
-        },
-      });
+      // Fallback: try by card name from batch lookup
+      const card = cardByNameLower.get(entry.name.toLowerCase());
 
       if (!card) {
         unresolved.push({ name: entry.name, count: entry.quantity });
