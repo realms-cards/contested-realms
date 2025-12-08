@@ -472,6 +472,32 @@ export class SocketTransport implements GameTransport {
       socket.on("chat", (payload) =>
         this.dispatch("chat", Protocol.ServerChatPayload.parse(payload))
       );
+      socket.on("chatHistory", (payload) => {
+        const p = payload as {
+          messages?: unknown[];
+          hasMore?: boolean;
+          oldestIndex?: number;
+        };
+        if (Array.isArray(p?.messages)) {
+          const messages = p.messages
+            .map((m) => {
+              try {
+                return Protocol.ServerChatPayload.parse(m);
+              } catch {
+                return null;
+              }
+            })
+            .filter(
+              (m): m is import("@/lib/net/protocol").ServerChatPayloadT =>
+                m !== null
+            );
+          this.dispatch("chatHistory", {
+            messages,
+            hasMore: p.hasMore ?? false,
+            oldestIndex: p.oldestIndex ?? messages.length,
+          });
+        }
+      });
       socket.on("interaction", (payload) => {
         this.dispatch("interaction", payload as InteractionEnvelope);
       });
@@ -793,6 +819,10 @@ export class SocketTransport implements GameTransport {
       "chat",
       Protocol.ChatPayload.parse({ content, scope })
     );
+  }
+
+  requestChatHistory(before?: number, limit?: number): void {
+    this.requireSocket().emit("chatHistory:request", { before, limit });
   }
 
   // Generic lightweight message channel for transient signals (e.g., draft ready)

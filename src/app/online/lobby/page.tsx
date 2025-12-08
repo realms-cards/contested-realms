@@ -198,6 +198,8 @@ function LobbyPageContent({
     leaveMatch,
     sendChat,
     chatLog,
+    chatHasMore,
+    requestMoreChatHistory,
     resync,
     // New context state/actions
     lobbies,
@@ -1309,6 +1311,8 @@ function LobbyPageContent({
           setChatInput={setChatInput}
           onSendChat={(message, scope) => sendChat(message, scope)}
           myPlayerId={me?.id ?? null}
+          chatHasMore={chatHasMore}
+          onRequestMoreHistory={requestMoreChatHistory}
         />
         {/* Match Configuration Overlay (Host) */}
         {isHost && configOpen && (

@@ -75,6 +75,9 @@ export type OnlineContextValue = {
   resync: () => void;
   resyncing: boolean;
   chatLog: ServerChatPayloadT[];
+  chatHasMore: boolean;
+  chatOldestIndex: number;
+  requestMoreChatHistory: () => void;
   // Extended state
   lobbies: LobbyInfo[];
   players: PlayerInfo[]; // legacy socket-driven simple presence list (id/displayName)

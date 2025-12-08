@@ -14,6 +14,9 @@ interface LobbyChatConsoleProps {
   onSendChat: (message: string, scope: ChatScope) => void;
   myPlayerId?: string | null;
   position?: "bottom-left" | "top-right" | "top-left";
+  // Pagination for global chat history
+  chatHasMore?: boolean;
+  onRequestMoreHistory?: () => void;
 }
 
 export default function LobbyChatConsole({
@@ -26,6 +29,8 @@ export default function LobbyChatConsole({
   onSendChat,
   myPlayerId,
   position = "bottom-left",
+  chatHasMore,
+  onRequestMoreHistory,
 }: LobbyChatConsoleProps) {
   const [consoleOpen, setConsoleOpen] = useState<boolean>(true);
 
@@ -48,6 +53,17 @@ export default function LobbyChatConsole({
     if (!el) return;
     el.scrollTop = el.scrollHeight;
   }, [consoleOpen, chatTab, activeMessages.length]);
+
+  // Load more history when scrolling to top (global chat only)
+  const handleScroll = () => {
+    if (chatTab !== "global" || !chatHasMore || !onRequestMoreHistory) return;
+    const el = chatRef.current;
+    if (!el) return;
+    // Trigger when scrolled near the top (within 20px)
+    if (el.scrollTop < 20) {
+      onRequestMoreHistory();
+    }
+  };
 
   const handleSend = () => {
     const msg = chatInput.trim();
@@ -139,6 +155,7 @@ export default function LobbyChatConsole({
               ref={chatRef}
               data-allow-wheel="true"
               className="flex-1 overflow-y-scroll thin-scrollbar px-3 py-3 text-xs space-y-1 min-h-0"
+              onScroll={handleScroll}
             >
               {activeMessages.length === 0 && (
                 <div className="opacity-60">No messages</div>

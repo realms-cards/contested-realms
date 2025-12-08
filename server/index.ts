@@ -97,7 +97,10 @@ const draftModules = modules.draft;
 const { replay } = modules;
 const tournamentBroadcast = tournamentModules.broadcast;
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { registerChatHandlers } = require("./socket/chat-handlers");
+const {
+  registerChatHandlers,
+  getGlobalChatHistory,
+} = require("./socket/chat-handlers");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const {
   sanitizeMatchInfoForSpectator,
@@ -2089,6 +2092,7 @@ io.on("connection", async (socket: SocketClient) => {
   registerChatHandlers({
     io,
     socket,
+    storeRedis,
     isAuthed: () => authed,
     getPlayerBySocket,
     getPlayerInfo,
@@ -2181,6 +2185,16 @@ io.on("connection", async (socket: SocketClient) => {
       you: { id: player.id, displayName: player.displayName },
     });
     broadcastPlayers();
+
+    // Send last 5 global chat messages to newly connected client
+    try {
+      const chatHistory = await getGlobalChatHistory(storeRedis, 5);
+      if (chatHistory.messages.length > 0) {
+        socket.emit("chatHistory", chatHistory);
+      }
+    } catch (err) {
+      console.error("[chat] Failed to send chat history:", err);
+    }
 
     if (player.matchId && matches.has(player.matchId)) {
       socket.join(`match:${player.matchId}`);
