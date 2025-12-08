@@ -163,6 +163,21 @@ export async function GET(req: NextRequest) {
               return !t.includes("site") && !t.includes("avatar"); // exclude avatars from spells
             return true;
           })
+          // Sort to prioritize non-promo sets and Standard finish
+          .sort((a: SearchOut, b: SearchOut) => {
+            const isPromo = (setName: string) => {
+              const lower = setName.toLowerCase();
+              return lower === "promotional" || lower === "promo";
+            };
+            const aIsPromo = isPromo(a.set);
+            const bIsPromo = isPromo(b.set);
+            // Non-promo first
+            if (aIsPromo !== bIsPromo) return aIsPromo ? 1 : -1;
+            // Standard finish first
+            if (a.finish !== b.finish) return a.finish === "Standard" ? -1 : 1;
+            // Then by card name for consistency
+            return a.cardName.localeCompare(b.cardName);
+          })
           .slice(0, 500);
 
         return formattedResults;

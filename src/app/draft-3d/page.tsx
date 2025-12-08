@@ -52,7 +52,7 @@ export default function Draft3DPage() {
     DEFAULT_SET,
   ]);
   const [setNamesLoaded, setSetNamesLoaded] = useState(false);
-  const [players, setPlayers] = useState(8);
+  const [players, setPlayers] = useState(4);
   const [replaceAvatars, setReplaceAvatars] = useState(false);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -89,7 +89,7 @@ export default function Draft3DPage() {
     loadCubes();
   }, []);
 
-  // Load saved set selection from localStorage on mount
+  // Load saved set selection and player count from localStorage on mount
   useEffect(() => {
     try {
       const saved = localStorage.getItem("sorcery:draft3d:setNames");
@@ -97,6 +97,13 @@ export default function Draft3DPage() {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length === 3) {
           setSetNames(parsed);
+        }
+      }
+      const savedPlayers = localStorage.getItem("sorcery:draft3d:players");
+      if (savedPlayers) {
+        const parsed = parseInt(savedPlayers, 10);
+        if (!isNaN(parsed) && parsed >= 2 && parsed <= 8) {
+          setPlayers(parsed);
         }
       }
     } catch {}
@@ -113,6 +120,14 @@ export default function Draft3DPage() {
       );
     } catch {}
   }, [setNames, setNamesLoaded]);
+
+  // Persist player count to localStorage when changed (after initial load)
+  useEffect(() => {
+    if (!setNamesLoaded) return;
+    try {
+      localStorage.setItem("sorcery:draft3d:players", String(players));
+    } catch {}
+  }, [players, setNamesLoaded]);
 
   const [seatPacks, setSeatPacks] = useState<BoosterCard[][][]>([]); // [seat][packIndex][cards]
   const [currentPacks, setCurrentPacks] = useState<BoosterCard[][]>([]); // [seat][cards]

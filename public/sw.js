@@ -3,7 +3,7 @@
  * Implements cache-first strategy for card images with background updates
  */
 
-const CACHE_VERSION = "v1";
+const CACHE_VERSION = "v2";
 const CARD_CACHE_NAME = `realms-cards-${CACHE_VERSION}`;
 const STATIC_CACHE_NAME = `realms-static-${CACHE_VERSION}`;
 
@@ -18,10 +18,7 @@ const CARD_IMAGE_PATTERNS = [
 const STATIC_ASSETS = [
   "/icons/icon-192.png",
   "/icons/icon-512.png",
-  "/fire.svg",
-  "/air.svg",
-  "/water.svg",
-  "/earth.svg",
+  // Element icons are served via /api/assets/ from data/ folder
 ];
 
 // Check if a request is for a card image

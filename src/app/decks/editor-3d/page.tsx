@@ -274,7 +274,8 @@ function AuthenticatedDeckEditor() {
 
   // Free mode state (when not in draft or sealed mode)
   const isFreeMode = !isDraftMode && !isSealed;
-  const [freeBoosterSet, setFreeBoosterSet] = useState("Beta");
+  const [freeBoosterSet, setFreeBoosterSet] = useState("Gothic");
+  const [showBoosterControls, setShowBoosterControls] = useState(false);
   const [freeBoosterCubeId, setFreeBoosterCubeId] = useState("");
   const [freeBoosterLoading, setFreeBoosterLoading] = useState(false);
   const [availableCubes, setAvailableCubes] = useState<
@@ -5320,6 +5321,8 @@ function AuthenticatedDeckEditor() {
             formatTime={formatTimeSealed}
             // Free mode props
             isFreeMode={isFreeMode}
+            showBoosterControls={showBoosterControls}
+            onToggleBoosterControls={() => setShowBoosterControls((v) => !v)}
             freeBoosterSet={freeBoosterSet}
             onFreeBoosterSetChange={setFreeBoosterSet}
             freeBoosterCubeId={freeBoosterCubeId}

@@ -13,23 +13,29 @@ import OtherRealms from "@/components/ui/OtherRealms";
 export default function Home() {
   const router = useRouter();
   const { data: session } = useSession();
-  const [showAlphaBanner, setShowAlphaBanner] = useState(true);
-  const [showCookieNotice, setShowCookieNotice] = useState(true);
-  // Set home page title
+  // Start with null (hidden) to avoid hydration mismatch, then show after mount if not dismissed
+  const [showAlphaBanner, setShowAlphaBanner] = useState<boolean | null>(null);
+  const [showCookieNotice, setShowCookieNotice] = useState<boolean | null>(
+    null
+  );
+
+  // Sync with localStorage after mount to avoid hydration mismatch
   useEffect(() => {
     document.title = "Realms.cards";
     try {
-      const alphaDismissed =
-        typeof window !== "undefined"
-          ? window.localStorage.getItem("sorcery:alphaBannerDismissed")
-          : null;
-      if (alphaDismissed === "1") setShowAlphaBanner(false);
-      const cookieDismissed =
-        typeof window !== "undefined"
-          ? window.localStorage.getItem("sorcery:cookieNoticeDismissed")
-          : null;
-      if (cookieDismissed === "1") setShowCookieNotice(false);
-    } catch {}
+      const alphaDismissed = window.localStorage.getItem(
+        "sorcery:alphaBannerDismissed"
+      );
+      setShowAlphaBanner(alphaDismissed !== "1");
+      const cookieDismissed = window.localStorage.getItem(
+        "sorcery:cookieNoticeDismissed"
+      );
+      setShowCookieNotice(cookieDismissed !== "1");
+    } catch {
+      // If localStorage fails, show both
+      setShowAlphaBanner(true);
+      setShowCookieNotice(true);
+    }
   }, []);
 
   return (
@@ -39,7 +45,7 @@ export default function Home() {
 
       <div className="relative z-10 max-w-6xl w-full text-center space-y-6 md:space-y-7 pt-8 md:pt-10 pb-10 md:pb-12">
         {showAlphaBanner && (
-          <div className="max-w-5xl mx-auto">
+          <div className="max-w-5xl mx-auto relative z-30">
             <div className="bg-orange-900/50 border border-orange-500/50 text-orange-100 rounded-md px-4 py-3 flex items-center justify-between shadow">
               <p className="text-sm md:text-base font-medium">
                 Currently in Open Alpha - Data might be lost in the future -

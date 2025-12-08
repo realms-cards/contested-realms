@@ -191,13 +191,44 @@ export default function CardBrowser({ onCardAdded }: CardBrowserProps) {
             });
           }
 
-          // Dedupe by cardId, keeping first (prefer Standard finish)
-          const seen = new Set<number>();
-          transformed = transformed.filter((card) => {
-            if (seen.has(card.id)) return false;
-            seen.add(card.id);
-            return true;
-          });
+          // Dedupe by cardId, prioritizing non-promo sets and Standard finish
+          const isPromoSet = (setName: string) => {
+            const lower = setName.toLowerCase();
+            return lower === "promotional" || lower === "promo";
+          };
+          const byCard = new Map<
+            number,
+            { card: CardResult; isPromo: boolean; isStandard: boolean }
+          >();
+          for (const card of transformed) {
+            const setName = card.variant?.setName || "";
+            const currIsPromo = isPromoSet(setName);
+            const currIsStandard = card.variant?.finish === "Standard";
+            const existing = byCard.get(card.id);
+
+            if (!existing) {
+              byCard.set(card.id, {
+                card,
+                isPromo: currIsPromo,
+                isStandard: currIsStandard,
+              });
+            } else {
+              // Prefer non-promo over promo
+              const shouldReplace =
+                (existing.isPromo && !currIsPromo) ||
+                (!existing.isPromo === !currIsPromo &&
+                  !existing.isStandard &&
+                  currIsStandard);
+              if (shouldReplace) {
+                byCard.set(card.id, {
+                  card,
+                  isPromo: currIsPromo,
+                  isStandard: currIsStandard,
+                });
+              }
+            }
+          }
+          transformed = Array.from(byCard.values()).map((v) => v.card);
 
           setResults(transformed);
           setDisplayLimit(60); // Reset to initial limit on new search

@@ -144,8 +144,25 @@ const createPersistenceLayerInternal = ({
     buf.latestData = data;
     if (action) {
       buf.actions.push(action);
+      // FIX: Instead of silently truncating old actions, trigger an immediate flush
+      // when buffer gets too large. This prevents data loss.
       if (buf.actions.length > actionBatchSize * 2) {
-        buf.actions = buf.actions.slice(-actionBatchSize * 2);
+        console.warn(
+          `[persist] action buffer overflow for ${matchId}: ${buf.actions.length} actions, forcing immediate flush`
+        );
+        try {
+          metricsInc("persist.buffer.overflow", 1);
+        } catch {}
+        // Clear any pending timer and flush immediately
+        if (buf.timer) {
+          try {
+            clearTimeout(buf.timer);
+          } catch {}
+          buf.timer = null;
+        }
+        persistBuffers.set(matchId, buf);
+        void flushPersistBuffer(matchId, "overflow");
+        return;
       }
       try {
         metricsInc("persist.buffer.action", 1);
@@ -387,8 +404,44 @@ const createPersistenceLayerInternal = ({
     }
   }
 
+  /**
+   * Flush buffer with retry logic for critical match-end scenarios.
+   * Uses exponential backoff to handle transient DB issues.
+   */
+  async function flushWithRetry(
+    matchId: string,
+    reason: string,
+    maxRetries = 3
+  ): Promise<boolean> {
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        await flushPersistBuffer(matchId, reason);
+        return true;
+      } catch (err) {
+        if (attempt === maxRetries - 1) {
+          console.error(
+            `[persist] flush failed after ${maxRetries} attempts for ${matchId}:`,
+            safeErrorMessage(err)
+          );
+          return false;
+        }
+        // Exponential backoff: 100ms, 200ms, 400ms
+        const delayMs = 100 * Math.pow(2, attempt);
+        console.warn(
+          `[persist] flush attempt ${
+            attempt + 1
+          } failed for ${matchId}, retrying in ${delayMs}ms:`,
+          safeErrorMessage(err)
+        );
+        await new Promise((r) => setTimeout(r, delayMs));
+      }
+    }
+    return false;
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async function persistMatchEnded(match: Record<string, any>) {
+    const matchId = match.id;
     try {
       const endData = {
         status: "ended",
@@ -398,29 +451,67 @@ const createPersistenceLayerInternal = ({
       try {
         metricsInc("persist.ended", 1);
       } catch {}
+
       if (isWriteBehind) {
-        try {
-          await flushPersistBuffer(match.id, "match_end");
-        } catch (flushErr) {
-          console.error(
-            `[persist] failed to flush buffer on match end for ${match.id}:`,
-            safeErrorMessage(flushErr)
-          );
+        // FIX: Ensure buffer has data before flushing (handles short matches)
+        const buf = persistBuffers.get(matchId);
+        if (buf && !buf.latestData) {
+          buf.latestData = matchToSessionUpsertData(match);
+          persistBuffers.set(matchId, buf);
+        } else if (!buf) {
+          // No buffer exists - create one with current match data so we can persist
+          const newBuf: PersistBuffer = {
+            latestData: matchToSessionUpsertData(match),
+            actions: [],
+            timer: null,
+            lastFlushAt: 0,
+          };
+          persistBuffers.set(matchId, newBuf);
         }
+
+        // FIX: Use retry logic for critical match-end flush
+        const flushSuccess = await flushWithRetry(matchId, "match_end", 3);
+        if (!flushSuccess) {
+          // Log remaining actions that couldn't be persisted
+          const remainingBuf = persistBuffers.get(matchId);
+          if (remainingBuf && remainingBuf.actions.length > 0) {
+            console.error(
+              `[persist] CRITICAL: ${remainingBuf.actions.length} actions lost for match ${matchId} due to flush failure`
+            );
+            try {
+              metricsInc("persist.actions.lost", remainingBuf.actions.length);
+            } catch {}
+          }
+        }
+
         await prisma.onlineMatchSession.upsert({
-          where: { id: match.id },
+          where: { id: matchId },
           create: {
-            id: match.id,
+            id: matchId,
             ...matchToSessionUpsertData(match),
             ...endData,
           },
           update: endData,
         });
+
+        // FIX: Clean up buffer after match end to prevent memory leaks
+        const finalBuf = persistBuffers.get(matchId);
+        if (finalBuf) {
+          if (finalBuf.timer) {
+            try {
+              clearTimeout(finalBuf.timer);
+            } catch {}
+          }
+          persistBuffers.delete(matchId);
+          try {
+            metricsInc("persist.buffer.cleanup", 1);
+          } catch {}
+        }
       } else {
         await prisma.onlineMatchSession.upsert({
-          where: { id: match.id },
+          where: { id: matchId },
           create: {
-            id: match.id,
+            id: matchId,
             ...matchToSessionUpsertData(match),
             ...endData,
           },
@@ -430,7 +521,7 @@ const createPersistenceLayerInternal = ({
     } catch (e) {
       try {
         console.warn(
-          `[persist] end session failed for ${match.id}:`,
+          `[persist] end session failed for ${matchId}:`,
           safeErrorMessage(e)
         );
       } catch {}
@@ -547,10 +638,28 @@ const createPersistenceLayerInternal = ({
   async function flushAll(reason = "manual") {
     if (!isWriteBehind || persistBuffers.size === 0) return;
     const ids = Array.from(persistBuffers.keys());
+    let totalFlushed = 0;
+    let totalFailed = 0;
     for (const matchId of ids) {
       try {
+        const buf = persistBuffers.get(matchId);
+        const actionsBefore = buf?.actions.length ?? 0;
         await flushPersistBuffer(matchId, reason);
-      } catch {}
+        const bufAfter = persistBuffers.get(matchId);
+        const actionsAfter = bufAfter?.actions.length ?? 0;
+        totalFlushed += actionsBefore - actionsAfter;
+      } catch (err) {
+        totalFailed++;
+        console.error(
+          `[persist] flushAll failed for ${matchId}:`,
+          safeErrorMessage(err)
+        );
+      }
+    }
+    if (reason === "shutdown") {
+      console.log(
+        `[persist] shutdown flush complete: ${totalFlushed} actions flushed, ${totalFailed} matches failed`
+      );
     }
   }
 
