@@ -83,8 +83,8 @@ export default function Piles3D({
   const rightX = gridHalfW + TILE_SIZE / 2 - CARD_SHORT / 2;
   const leftX = -gridHalfW - TILE_SIZE / 2 + CARD_SHORT / 2;
   const pilesX = isBottom ? leftX - 0.1 : rightX + 0.1;
-  // Collection pile: fixed at lower-right edge of the board to avoid threshold UI
-  const collectionX = rightX + 0.1;
+  // Collection pile: fixed at bottom-right corner NEXT TO the board (not below)
+  const collectionX = rightX + 1.2;
   // Anchor just outside the grid on the player's own edge
   const topEdgeZ = -gridHalfH;
   const bottomEdgeZ = gridHalfH;
@@ -95,8 +95,8 @@ export default function Piles3D({
   const zSpacing = CARD_LONG * 1.1;
   // Step toward the grid for both players
   const step = isBottom ? -zSpacing : +zSpacing;
-  // Collection pile Z: always just outside the bottom edge for both seats
-  const collectionZ = bottomEdgeZ + TILE_SIZE * 0.8;
+  // Collection pile Z: positioned at the bottom-right of the board, next to it
+  const collectionZ = bottomEdgeZ - TILE_SIZE * 0.5;
 
   const piles: {
     key: PileKey;

@@ -524,10 +524,18 @@ export default function OnlineMatchPage() {
   const initPortalState = useGameStore((s) => s.initPortalState);
   const avatars = useGameStore((s) => s.avatars);
 
-  // Detect if Harbinger portal phase is needed
+  // Track when THIS player confirms mulligan (before portal phase)
+  const [mulliganReady, setMulliganReady] = useState<boolean>(false);
+  const [portalPhaseInitialized, setPortalPhaseInitialized] =
+    useState<boolean>(false);
+
+  // Both players ready when match is in_progress (server confirmed both done with mulligan)
+  const bothPlayersReady = match?.status === "in_progress";
+
+  // Detect if Harbinger portal phase is needed (after BOTH players finish mulligan, before game starts)
   const needsPortalPhase = useMemo(() => {
-    // Only check after D20 rolling is complete
-    if (!d20RollingComplete) return false;
+    // Only check after BOTH players are mulligan-ready
+    if (!bothPlayersReady) return false;
     // If portal setup already done, skip
     if (portalSetupComplete) return false;
     // If portal state already exists and is complete, skip
@@ -535,33 +543,27 @@ export default function OnlineMatchPage() {
     // Check if any player has Harbinger avatar
     return hasAnyHarbinger(avatars);
   }, [
-    d20RollingComplete,
+    bothPlayersReady,
     portalSetupComplete,
     portalState?.setupComplete,
     avatars,
   ]);
 
-  // Initialize portal state when D20 rolling completes and Harbinger is detected
+  // Initialize portal state when BOTH players ready and Harbinger is detected
   useEffect(() => {
-    if (!d20RollingComplete) return;
-    if (portalSetupComplete) return;
-    if (portalState) return; // Already initialized
+    if (!bothPlayersReady) return;
+    if (portalPhaseInitialized) return;
+    setPortalPhaseInitialized(true);
 
     const harbingerSeats = detectHarbingerSeats(avatars);
     if (harbingerSeats.length > 0) {
       console.log("[Portal] Detected Harbinger avatars:", harbingerSeats);
       initPortalState(harbingerSeats);
     } else {
-      // No Harbinger, mark portal phase as complete
+      // No Harbinger, mark portal phase as complete and proceed
       setPortalSetupComplete(true);
     }
-  }, [
-    d20RollingComplete,
-    portalSetupComplete,
-    portalState,
-    avatars,
-    initPortalState,
-  ]);
+  }, [bothPlayersReady, portalPhaseInitialized, avatars, initPortalState]);
 
   // Watch for portal setup completion
   useEffect(() => {
@@ -569,6 +571,14 @@ export default function OnlineMatchPage() {
       setPortalSetupComplete(true);
     }
   }, [portalState?.setupComplete, portalSetupComplete]);
+
+  // After portal phase completes, call finishSetup to finalize game start
+  useEffect(() => {
+    if (bothPlayersReady && portalSetupComplete) {
+      finishSetup();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bothPlayersReady, portalSetupComplete]); // finishSetup intentionally excluded - not memoized
 
   // Track sealed submission flag for this match (used to decide when to load decks)
   const hasSubmittedSealedDeck = useMemo(() => {
@@ -2273,18 +2283,33 @@ export default function OnlineMatchPage() {
               playerNames={playerNames}
               onRollingComplete={() => setD20RollingComplete(true)}
             />
-          ) : needsPortalPhase ? (
+          ) : !mulliganReady ? (
+            <OnlineMulliganScreen
+              myPlayerKey={myPlayerKey}
+              playerNames={playerNames}
+              onStartGame={() => setMulliganReady(true)}
+            />
+          ) : mulliganReady && !bothPlayersReady ? (
+            /* Waiting for opponent to finish mulligan */
+            <div className="w-full max-w-md bg-zinc-900/80 text-white rounded-2xl ring-1 ring-white/10 p-6 text-center">
+              <div className="text-lg font-semibold mb-2">
+                Mulligan Complete
+              </div>
+              <div className="text-sm opacity-80 mb-4">
+                Waiting for opponent to finish mulligan...
+              </div>
+              <div className="animate-pulse text-green-400">Ready!</div>
+            </div>
+          ) : needsPortalPhase && !portalSetupComplete ? (
             <HarbingerPortalScreen
               myPlayerKey={myPlayerKey}
               playerNames={playerNames}
               onSetupComplete={() => setPortalSetupComplete(true)}
             />
           ) : (
-            <OnlineMulliganScreen
-              myPlayerKey={myPlayerKey}
-              playerNames={playerNames}
-              onStartGame={finishSetup}
-            />
+            <div className="text-center text-white">
+              <div className="animate-pulse">Starting game...</div>
+            </div>
           )}
         </div>
       )}
