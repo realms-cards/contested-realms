@@ -2440,6 +2440,7 @@ export default function OnlineMatchPage() {
             playerNames={playerNames}
             myPlayerNumber={myPlayerNumber}
             connected={connected}
+            spectatorMode={isSpectatorView}
           />
 
           {/* Match End Overlay */}
