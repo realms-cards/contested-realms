@@ -127,6 +127,13 @@ export function RealtimeTournamentProvider({
   const router = useRouter();
   const pathname = usePathname();
   const { data: sessionData } = useSession();
+
+  // Only actively fetch tournaments when on tournament-related pages
+  const isOnTournamentPage =
+    pathname?.startsWith("/tournaments") ||
+    pathname?.startsWith("/online/draft") ||
+    pathname?.startsWith("/online/lobby") ||
+    false;
   const currentUserId = sessionData?.user?.id ?? null;
   const [tournaments, setTournaments] = useState<TournamentInfo[]>([]);
   const [currentTournament, setCurrentTournamentState] =
@@ -1073,9 +1080,10 @@ export function RealtimeTournamentProvider({
   );
 
   // Fallback polling: keep list fresh even if socket events are missed
-  // Only poll when the realtime socket is disconnected
+  // Only poll when the realtime socket is disconnected AND user is on a tournament page
   useEffect(() => {
     if (isConnected) return;
+    if (!isOnTournamentPage) return;
     const id = setInterval(() => {
       if (
         typeof document !== "undefined" &&
@@ -1085,7 +1093,7 @@ export function RealtimeTournamentProvider({
       void refreshTournaments();
     }, 15000);
     return () => clearInterval(id);
-  }, [isConnected, refreshTournaments]);
+  }, [isConnected, isOnTournamentPage, refreshTournaments]);
 
   // Auto-join current tournament when socket connects or when the id changes
   useEffect(() => {
@@ -1426,11 +1434,13 @@ export function RealtimeTournamentProvider({
   );
 
   // Auto-fetch tournaments on mount and when socket connects
+  // Only fetch when user is on a tournament-related page to avoid unnecessary API calls
   useEffect(() => {
+    if (!isOnTournamentPage) return;
     // Initial load only once; subsequent updates come from socket events
     void refreshTournaments();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isConnected]); // Only re-fetch when socket connection status changes
+  }, [isConnected, isOnTournamentPage]); // Only re-fetch when socket connection status changes or page changes
 
   const contextValue: RealtimeTournamentContextValue = {
     tournaments,

@@ -1810,15 +1810,16 @@ function AuthenticatedDeckEditor() {
         // Fetch Gothic ordinary cards by name from the API
         const cardPromises = GOTHIC_ORDINARY_CARD_NAMES.map(async (name) => {
           const res = await fetch(
-            `/api/cards/search?q=${encodeURIComponent(name)}&set=Gothic&limit=1`
+            `/api/cards/search?q=${encodeURIComponent(name)}&set=Gothic`
           );
           if (!res.ok) return null;
           const data = await res.json();
-          const cards = Array.isArray(data?.cards) ? data.cards : [];
-          // Find exact match
+          // API returns array directly, not wrapped in { cards: [...] }
+          const cards = Array.isArray(data) ? data : [];
+          // Find exact match by cardName (API returns cardName, not name)
           const match = cards.find(
-            (c: { name?: string }) =>
-              c.name?.toLowerCase() === name.toLowerCase()
+            (c: { cardName?: string }) =>
+              c.cardName?.toLowerCase() === name.toLowerCase()
           );
           return match ?? null;
         });
@@ -1828,19 +1829,20 @@ function AuthenticatedDeckEditor() {
 
         for (const card of results) {
           if (!card) continue;
+          // API returns: { variantId, slug, finish, product, cardId, cardName, set, setId, type, subTypes, rarity }
           const sr = convertCardDataToSearchResult(
             {
               slug: card.slug ?? "",
-              cardName: card.name,
-              set: "Gothic",
+              cardName: card.cardName,
+              set: card.set ?? "Gothic",
               cardId: card.cardId,
               variantId: card.variantId ?? undefined,
-              finish: "Standard",
-              product: "Draft",
+              finish: card.finish ?? "Standard",
+              product: card.product ?? "Draft",
               type: card.type,
               rarity: card.rarity ?? "Ordinary",
             } as unknown as Record<string, unknown>,
-            "Gothic"
+            card.set ?? "Gothic"
           );
           if (sr) converted.push(sr);
         }
