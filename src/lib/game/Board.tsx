@@ -500,7 +500,12 @@ export default function Board({
   // Helper to check if a token can be attached
   const isAttachableToken = (tokenName: string): boolean => {
     const name = tokenName.toLowerCase();
-    return name === "lance" || name === "stealth" || name === "disabled";
+    return (
+      name === "lance" ||
+      name === "stealth" ||
+      name === "disabled" ||
+      name === "ward"
+    );
   };
 
   // Helper to check if a card is a carryable artifact
