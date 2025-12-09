@@ -10,6 +10,7 @@ interface MatchInfoPopupProps {
   playerNames: { p1: string; p2: string };
   myPlayerNumber: number | null;
   connected: boolean;
+  spectatorMode?: boolean;
 }
 
 export default function MatchInfoPopup({
@@ -18,7 +19,8 @@ export default function MatchInfoPopup({
   matchId,
   playerNames,
   myPlayerNumber,
-  connected
+  connected,
+  spectatorMode = false,
 }: MatchInfoPopupProps) {
   const currentPlayer = useGameStore((s) => s.currentPlayer);
   const phase = useGameStore((s) => s.phase);
@@ -69,17 +71,25 @@ export default function MatchInfoPopup({
             <div className="ml-6 space-y-2 text-sm">
               <div className="flex items-center gap-2">
                 <span className="text-blue-400">{playerNames.p1}</span>
-                {myPlayerNumber === 1 && <span className="text-green-400 text-xs">(You)</span>}
+                {myPlayerNumber === 1 && (
+                  <span className="text-green-400 text-xs">(You)</span>
+                )}
                 <span className="opacity-50">•</span>
-                <span className="opacity-70">Life: {players.p1?.life || 20}</span>
+                <span className="opacity-70">
+                  Life: {players.p1?.life || 20}
+                </span>
                 <span className="opacity-50">•</span>
                 <span className="opacity-70">Mana: {p1Mana}</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-red-400">{playerNames.p2}</span>
-                {myPlayerNumber === 2 && <span className="text-green-400 text-xs">(You)</span>}
+                {myPlayerNumber === 2 && (
+                  <span className="text-green-400 text-xs">(You)</span>
+                )}
                 <span className="opacity-50">•</span>
-                <span className="opacity-70">Life: {players.p2?.life || 20}</span>
+                <span className="opacity-70">
+                  Life: {players.p2?.life || 20}
+                </span>
                 <span className="opacity-50">•</span>
                 <span className="opacity-70">Mana: {p2Mana}</span>
               </div>
@@ -93,7 +103,8 @@ export default function MatchInfoPopup({
               <div className="flex justify-between">
                 <span>Current Turn:</span>
                 <span className="font-medium">
-                  {currentPlayer === 1 ? playerNames.p1 : playerNames.p2} (P{currentPlayer})
+                  {currentPlayer === 1 ? playerNames.p1 : playerNames.p2} (P
+                  {currentPlayer})
                 </span>
               </div>
               <div className="flex justify-between">
@@ -108,26 +119,38 @@ export default function MatchInfoPopup({
                 <span>Server Sync:</span>
                 <span className="font-medium">{lastServerTs || 0}</span>
               </div>
-              <div className="flex items-center justify-between pt-1">
-                <span>Combat Guides</span>
-                <button
-                  className={`rounded-full px-3 py-1 text-xs transition-colors ${interactionGuides ? "bg-emerald-600/90 hover:bg-emerald-500" : "bg-white/15 hover:bg-white/25"}`}
-                  onClick={() => setInteractionGuides(!interactionGuides)}
-                  aria-pressed={interactionGuides}
-                >
-                  {interactionGuides ? "On" : "Off"}
-                </button>
-              </div>
-              <div className="flex items-center justify-between pt-1">
-                <span>Magic Guides</span>
-                <button
-                  className={`rounded-full px-3 py-1 text-xs transition-colors ${magicGuides ? "bg-indigo-600/90 hover:bg-indigo-500" : "bg-white/15 hover:bg-white/25"}`}
-                  onClick={() => setMagicGuides(!magicGuides)}
-                  aria-pressed={magicGuides}
-                >
-                  {magicGuides ? "On" : "Off"}
-                </button>
-              </div>
+              {!spectatorMode && (
+                <>
+                  <div className="flex items-center justify-between pt-1">
+                    <span>Combat Guides</span>
+                    <button
+                      className={`rounded-full px-3 py-1 text-xs transition-colors ${
+                        interactionGuides
+                          ? "bg-emerald-600/90 hover:bg-emerald-500"
+                          : "bg-white/15 hover:bg-white/25"
+                      }`}
+                      onClick={() => setInteractionGuides(!interactionGuides)}
+                      aria-pressed={interactionGuides}
+                    >
+                      {interactionGuides ? "On" : "Off"}
+                    </button>
+                  </div>
+                  <div className="flex items-center justify-between pt-1">
+                    <span>Magic Guides</span>
+                    <button
+                      className={`rounded-full px-3 py-1 text-xs transition-colors ${
+                        magicGuides
+                          ? "bg-indigo-600/90 hover:bg-indigo-500"
+                          : "bg-white/15 hover:bg-white/25"
+                      }`}
+                      onClick={() => setMagicGuides(!magicGuides)}
+                      aria-pressed={magicGuides}
+                    >
+                      {magicGuides ? "On" : "Off"}
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
@@ -137,9 +160,13 @@ export default function MatchInfoPopup({
             <div className="flex items-center justify-between">
               <span className="text-sm opacity-80">Status:</span>
               <div className="flex items-center gap-2">
-                <div className={`w-2 h-2 rounded-full ${connected ? 'bg-green-400' : 'bg-red-400'}`} />
+                <div
+                  className={`w-2 h-2 rounded-full ${
+                    connected ? "bg-green-400" : "bg-red-400"
+                  }`}
+                />
                 <span className="text-sm font-medium">
-                  {connected ? 'Connected' : 'Disconnected'}
+                  {connected ? "Connected" : "Disconnected"}
                 </span>
               </div>
             </div>
