@@ -1363,7 +1363,11 @@ export default function OnlineProvider({
               ).Authorization = `Bearer ${availableAuthRef.current.token}`;
             }
           } catch {}
-          const res = await fetch(url.toString(), { method: "GET", headers });
+          const res = await fetch(url.toString(), {
+            method: "GET",
+            headers,
+            cache: "no-store",
+          });
           if (!res.ok) {
             throw new Error(`Failed to fetch players (${res.status})`);
           }

@@ -305,15 +305,26 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
                 select: { id: true, shortId: true, image: true },
               })
             : [];
+        // Debug: Also fetch requester's presenceHidden status to verify
+        let requesterHidden: boolean | null = null;
+        if (requesterId) {
+          try {
+            const requesterUser = await prisma.user.findUnique({
+              where: { id: requesterId },
+              select: { presenceHidden: true },
+            });
+            requesterHidden = requesterUser?.presenceHidden ?? null;
+          } catch {}
+        }
         const debugHiddenStatus = publicUsers
           .map((u) => `${u.id.slice(-6)}`)
           .join(",");
         console.info(
           `[http] /players/available requester=${
             requesterId?.slice(-6) || "anon"
-          } candidates=${candidates.length} publicUsers=${
-            publicUsers.length
-          } visible_ids=${debugHiddenStatus}`
+          } requesterHidden=${requesterHidden} candidates=${
+            candidates.length
+          } publicUsers=${publicUsers.length} visible_ids=${debugHiddenStatus}`
         );
         const publicMap = new Map<
           string,
