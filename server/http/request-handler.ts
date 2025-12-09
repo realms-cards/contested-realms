@@ -266,17 +266,27 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
           // Ignore logging errors
         }
 
-        const candidates: Array<{ id: string; displayName: string }> = [];
+        const candidates: Array<{
+          id: string;
+          displayName: string;
+          inMatch: boolean;
+        }> = [];
         for (const [playerId, player] of players.entries()) {
           if (!player) continue;
-          if (!player.socketId || player.matchId) continue;
+          if (!player.socketId) continue; // Must be connected
           const name = player.displayName || "Player";
           if (!qRaw || name.toLowerCase().includes(qRaw)) {
-            candidates.push({ id: playerId, displayName: name });
+            candidates.push({
+              id: playerId,
+              displayName: name,
+              inMatch: !!player.matchId,
+            });
           }
         }
 
         const ids = candidates.map((c) => c.id);
+        // Fetch users who are publicly visible (presenceHidden: false)
+        // OR the requester themselves (so they always see themselves in the list)
         const publicUsers: Array<{
           id: string;
           shortId: string | null;
@@ -284,10 +294,27 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
         }> =
           ids.length > 0
             ? await prisma.user.findMany({
-                where: { id: { in: ids }, presenceHidden: false },
+                where: {
+                  id: { in: ids },
+                  OR: [
+                    { presenceHidden: false },
+                    // Always include the requester so they see themselves
+                    ...(requesterId ? [{ id: requesterId }] : []),
+                  ],
+                },
                 select: { id: true, shortId: true, image: true },
               })
             : [];
+        const debugHiddenStatus = publicUsers
+          .map((u) => `${u.id.slice(-6)}`)
+          .join(",");
+        console.info(
+          `[http] /players/available requester=${
+            requesterId?.slice(-6) || "anon"
+          } candidates=${candidates.length} publicUsers=${
+            publicUsers.length
+          } visible_ids=${debugHiddenStatus}`
+        );
         const publicMap = new Map<
           string,
           { id: string; shortId: string | null; image: string | null }
@@ -389,13 +416,16 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
             : null;
           // Get player's location from in-memory state
           const player = players.get(candidate.id);
-          const location = player?.location || null;
+          // Use 'match' as location if player is in a match, otherwise use their tracked location
+          const location = candidate.inMatch
+            ? "match"
+            : player?.location || null;
           return {
             userId: candidate.id,
             shortUserId: (user && user.shortId) || candidate.id.slice(-8),
             displayName: candidate.displayName,
             avatarUrl: (user && user.image) || null,
-            presence: { online: true, inMatch: false, location },
+            presence: { online: true, inMatch: candidate.inMatch, location },
             isFriend: requesterId ? friendSet.has(candidate.id) : false,
             lastPlayedAt,
             matchCountInLast10: matchCount,

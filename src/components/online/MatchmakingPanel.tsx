@@ -142,6 +142,12 @@ export default function MatchmakingPanel() {
           <span className="ml-2 px-2 py-0.5 rounded-full bg-emerald-600/30 text-emerald-400 text-xs font-medium">
             {onlineCount} online
           </span>
+          {/* Queue size badge - show when there are players in queue */}
+          {(matchmaking.queueSize ?? 0) > 0 && (
+            <span className="px-2 py-0.5 rounded-full bg-violet-600/30 text-violet-300 text-xs font-medium">
+              {matchmaking.queueSize} in queue
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {isSearching && (

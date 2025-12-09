@@ -384,6 +384,7 @@ export const MatchmakingUpdatePayload = z.object({
   lobbyId: z.string().optional(),
   matchType: z.enum(["constructed", "sealed", "draft", "precon"]).optional(),
   isHost: z.boolean().optional(), // true if this player is the host (for sealed/draft config)
+  queueSize: z.number().int().min(0).optional(), // total players in matchmaking queue
 });
 export type MatchmakingUpdatePayloadT = z.infer<
   typeof MatchmakingUpdatePayload

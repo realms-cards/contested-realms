@@ -134,6 +134,9 @@ export default function OnlineProvider({
   const [matchmakingIsHost, setMatchmakingIsHost] = useState<boolean | null>(
     null
   );
+  const [matchmakingQueueSize, setMatchmakingQueueSize] = useState<
+    number | null
+  >(null);
   const [voicePlaybackEnabled, setVoicePlaybackEnabled] = useState(true);
   const toggleVoicePlayback = useCallback(() => {
     setVoicePlaybackEnabled((prev) => !prev);
@@ -1279,6 +1282,7 @@ export default function OnlineProvider({
       setMatchmakingEstimatedWait(data.estimatedWait ?? null);
       setMatchmakingMatchedPlayerId(data.matchedPlayerId ?? null);
       setMatchmakingIsHost(data.isHost ?? null);
+      setMatchmakingQueueSize(data.queueSize ?? null);
 
       // If match was found, auto-navigate to lobby
       if (data.status === "found" && data.lobbyId) {
@@ -1306,6 +1310,7 @@ export default function OnlineProvider({
       setMatchmakingEstimatedWait(null);
       setMatchmakingMatchedPlayerId(null);
       setMatchmakingIsHost(null);
+      setMatchmakingQueueSize(null);
     };
   }, [transport, session, sessionStatus]);
 
@@ -1575,6 +1580,7 @@ export default function OnlineProvider({
       estimatedWait: matchmakingEstimatedWait,
       matchedPlayerId: matchmakingMatchedPlayerId,
       isHost: matchmakingIsHost,
+      queueSize: matchmakingQueueSize,
     },
     joinMatchmaking: (
       matchTypes: Array<"constructed" | "sealed" | "draft" | "precon">
@@ -1594,6 +1600,7 @@ export default function OnlineProvider({
       setMatchmakingEstimatedWait(null);
       setMatchmakingMatchedPlayerId(null);
       setMatchmakingIsHost(null);
+      setMatchmakingQueueSize(null);
     },
   };
 
