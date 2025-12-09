@@ -60,6 +60,11 @@ const DEFAULT_LINKS: OtherRealmsLink[] = [
     href: "https://www.thepaintedrealm.com/",
     subtitle: "Celebrating the Art Behind Sorcery",
   },
+  {
+    label: "CardNexus",
+    href: "https://cardnexus.com/",
+    subtitle: "Your Cards, Your Rules. Collect, Trade, Connect.",
+  },
 ];
 
 export default function OtherRealms({
@@ -119,7 +124,7 @@ export default function OtherRealms({
           onMouseDown={() => setOpen(false)}
         >
           <div
-            className="relative w-full max-w-2xl bg-slate-900/95 text-white rounded-xl border border-slate-700 shadow-2xl overflow-hidden"
+            className="relative w-full max-w-3xl bg-slate-900/95 text-white rounded-xl border border-slate-700 shadow-2xl max-h-[90vh] flex flex-col"
             onMouseDown={(e) => e.stopPropagation()}
           >
             {/* Header */}
@@ -140,80 +145,82 @@ export default function OtherRealms({
               </button>
             </div>
 
-            {/* Optional Linktree CTA */}
-            {linktreeUrl && (
-              <div className="px-5 pt-4">
-                <a
-                  href={linktreeUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 text-sm text-emerald-300 hover:text-emerald-200 hover:underline"
-                >
-                  <span>Open Linktree</span>
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 24 24"
-                    fill="currentColor"
-                    className="w-4 h-4"
-                    aria-hidden
+            <div className="flex-1 overflow-y-auto">
+              {/* Optional Linktree CTA */}
+              {linktreeUrl && (
+                <div className="px-5 pt-4">
+                  <a
+                    href={linktreeUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 text-sm text-emerald-300 hover:text-emerald-200 hover:underline"
                   >
-                    <path d="M18 13a1 1 0 0 0-1 1v3H6V7h3a1 1 0 1 0 0-2H5a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-4a1 1 0 0 0-1-1Zm3-10h-6a1 1 0 1 0 0 2h3.586l-8.293 8.293a1 1 0 1 0 1.414 1.414L20 6.414V10a1 1 0 1 0 2 0V3a1 1 0 0 0-1-1Z" />
-                  </svg>
-                </a>
-              </div>
-            )}
+                    <span>Open Linktree</span>
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                      className="w-4 h-4"
+                      aria-hidden
+                    >
+                      <path d="M18 13a1 1 0 0 0-1 1v3H6V7h3a1 1 0 1 0 0-2H5a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-4a1 1 0 0 0-1-1Zm3-10h-6a1 1 0 1 0 0 2h3.586l-8.293 8.293a1 1 0 1 0 1.414 1.414L20 6.414V10a1 1 0 1 0 2 0V3a1 1 0 0 0-1-1Z" />
+                    </svg>
+                  </a>
+                </div>
+              )}
 
-            {/* Links */}
-            <div className="px-5 py-4">
-              <ul className="space-y-3">
-                {links.map((link) => {
-                  const isDisabled = link.href === "#" || link.disabledReason;
-                  return (
-                    <li key={link.label}>
-                      {isDisabled ? (
-                        <div
-                          className="w-full px-4 py-3 rounded-lg border border-slate-700 bg-slate-800/50 text-slate-400 cursor-not-allowed text-center"
-                          title={link.disabledReason || "Coming soon"}
-                        >
-                          <div className="font-medium">{link.label}</div>
-                          {link.subtitle && (
-                            <div className="text-xs opacity-80">
-                              {link.subtitle}
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <a
-                          href={link.href}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="block w-full pl-4 pr-10 py-3 rounded-lg border border-slate-700 bg-slate-800/70 hover:bg-slate-700/70 transition-colors group relative"
-                        >
-                          <div className="text-center">
-                            <div className="font-medium group-hover:underline">
-                              {link.label}
-                            </div>
+              {/* Links */}
+              <div className="px-5 py-4">
+                <ul className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {links.map((link) => {
+                    const isDisabled = link.href === "#" || link.disabledReason;
+                    return (
+                      <li key={link.label} className="h-full">
+                        {isDisabled ? (
+                          <div
+                            className="w-full h-full px-4 py-3 rounded-lg border border-slate-700 bg-slate-800/50 text-slate-400 cursor-not-allowed text-center flex flex-col justify-center"
+                            title={link.disabledReason || "Coming soon"}
+                          >
+                            <div className="font-medium">{link.label}</div>
                             {link.subtitle && (
-                              <div className="text-xs text-slate-300/80">
+                              <div className="text-xs opacity-80">
                                 {link.subtitle}
                               </div>
                             )}
                           </div>
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            viewBox="0 0 24 24"
-                            fill="currentColor"
-                            className="w-5 h-5 text-slate-300 group-hover:text-white absolute right-3 top-1/2 -translate-y-1/2"
-                            aria-hidden
+                        ) : (
+                          <a
+                            href={link.href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block w-full h-full pl-4 pr-10 py-3 rounded-lg border border-slate-700 bg-slate-800/70 hover:bg-slate-700/70 transition-colors group relative"
                           >
-                            <path d="M14 3a1 1 0 1 0 0 2h3.586l-9.293 9.293a1 1 0 0 0 1.414 1.414L19 6.414V10a1 1 0 1 0 2 0V3a1 1 0 0 0-1-1h-6ZM5 6a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-6a1 1 0 1 0-2 0v5H6V8h5a1 1 0 1 0 0-2H5Z" />
-                          </svg>
-                        </a>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
+                            <div className="text-center">
+                              <div className="font-medium group-hover:underline">
+                                {link.label}
+                              </div>
+                              {link.subtitle && (
+                                <div className="text-xs text-slate-300/80">
+                                  {link.subtitle}
+                                </div>
+                              )}
+                            </div>
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              viewBox="0 0 24 24"
+                              fill="currentColor"
+                              className="w-5 h-5 text-slate-300 group-hover:text-white absolute right-3 top-1/2 -translate-y-1/2"
+                              aria-hidden
+                            >
+                              <path d="M14 3a1 1 0 1 0 0 2h3.586l-9.293 9.293a1 1 0 0 0 1.414 1.414L19 6.414V10a1 1 0 1 0 2 0V3a1 1 0 0 0-1-1h-6ZM5 6a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-6a1 1 0 1 0-2 0v5H6V8h5a1 1 0 1 0 0-2H5Z" />
+                            </svg>
+                          </a>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
             </div>
 
             {/* Footer */}
