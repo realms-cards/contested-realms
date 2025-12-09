@@ -1,4 +1,4 @@
-import { getRedis } from '@/lib/redis';
+import { getRedis } from "@/lib/redis";
 
 /**
  * Cache utility for Redis with TTL support and automatic JSON serialization
@@ -14,22 +14,37 @@ export interface CacheOptions {
 /**
  * Generate a cache key from route and parameters
  */
-export function generateCacheKey(route: string, params: Record<string, unknown> = {}): string {
+export function generateCacheKey(
+  route: string,
+  params: Record<string, unknown> = {}
+): string {
   const sortedParams = Object.keys(params)
     .sort()
-    .map(key => `${key}=${JSON.stringify(params[key])}`)
-    .join('&');
+    .map((key) => `${key}=${JSON.stringify(params[key])}`)
+    .join("&");
 
   return sortedParams ? `${route}?${sortedParams}` : route;
 }
 
+// Timeout wrapper to prevent slow Redis from blocking requests
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
+  return Promise.race([
+    promise,
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), ms)),
+  ]);
+}
+
+// Cache timeout in ms - if Redis is slow, skip cache and hit DB
+const CACHE_TIMEOUT_MS = 500;
+
 /**
  * Get cached value with automatic JSON deserialization
+ * Times out after 500ms to prevent slow Redis from blocking requests
  */
 export async function getCached<T>(key: string): Promise<T | null> {
   try {
     const redis = getRedis();
-    const cached = await redis.get(key);
+    const cached = await withTimeout(redis.get(key), CACHE_TIMEOUT_MS);
 
     if (!cached) {
       return null;
@@ -37,13 +52,18 @@ export async function getCached<T>(key: string): Promise<T | null> {
 
     return JSON.parse(cached) as T;
   } catch (e) {
-    console.warn('[cache] get failed:', key, e instanceof Error ? e.message : e);
+    console.warn(
+      "[cache] get failed:",
+      key,
+      e instanceof Error ? e.message : e
+    );
     return null;
   }
 }
 
 /**
  * Set cached value with automatic JSON serialization and TTL
+ * Fire-and-forget with timeout - don't block on cache writes
  */
 export async function setCached<T>(
   key: string,
@@ -54,13 +74,25 @@ export async function setCached<T>(
     const redis = getRedis();
     const serialized = JSON.stringify(value);
 
-    if (options.ttl) {
-      await redis.setex(key, options.ttl, serialized);
-    } else {
-      await redis.set(key, serialized);
-    }
+    // Fire-and-forget with timeout - don't block response on cache write
+    const writePromise = options.ttl
+      ? redis.setex(key, options.ttl, serialized)
+      : redis.set(key, serialized);
+
+    // Don't await - let it complete in background
+    withTimeout(writePromise, CACHE_TIMEOUT_MS).catch((e) => {
+      console.warn(
+        "[cache] set timeout:",
+        key,
+        e instanceof Error ? e.message : e
+      );
+    });
   } catch (e) {
-    console.warn('[cache] set failed:', key, e instanceof Error ? e.message : e);
+    console.warn(
+      "[cache] set failed:",
+      key,
+      e instanceof Error ? e.message : e
+    );
   }
 }
 
@@ -84,7 +116,11 @@ export async function invalidateCache(pattern: string): Promise<number> {
 
     return deleted;
   } catch (e) {
-    console.warn('[cache] invalidation failed:', pattern, e instanceof Error ? e.message : e);
+    console.warn(
+      "[cache] invalidation failed:",
+      pattern,
+      e instanceof Error ? e.message : e
+    );
     return 0;
   }
 }
@@ -119,22 +155,26 @@ export async function withCache<T>(
  */
 export const CacheKeys = {
   tournaments: {
-    list: (params: Record<string, unknown>) => generateCacheKey('tournaments:list', params),
+    list: (params: Record<string, unknown>) =>
+      generateCacheKey("tournaments:list", params),
     detail: (id: string) => `tournaments:detail:${id}`,
-    matches: (id: string, params: Record<string, unknown>) => generateCacheKey(`tournaments:matches:${id}`, params),
+    matches: (id: string, params: Record<string, unknown>) =>
+      generateCacheKey(`tournaments:matches:${id}`, params),
     standings: (id: string) => `tournaments:standings:${id}`,
-    invalidateAll: () => 'tournaments:*',
+    invalidateAll: () => "tournaments:*",
     invalidateTournament: (id: string) => `tournaments:*:${id}*`,
   },
 
   cards: {
-    search: (params: Record<string, unknown>) => generateCacheKey('cards:search', params),
+    search: (params: Record<string, unknown>) =>
+      generateCacheKey("cards:search", params),
     byId: (id: number) => `cards:detail:${id}`,
-    invalidateAll: () => 'cards:*',
+    invalidateAll: () => "cards:*",
   },
 
   collection: {
-    list: (userId: string, params: Record<string, unknown>) => generateCacheKey(`collection:${userId}`, params),
+    list: (userId: string, params: Record<string, unknown>) =>
+      generateCacheKey(`collection:${userId}`, params),
     stats: (userId: string) => `collection:stats:${userId}`,
     invalidateUser: (userId: string) => `collection:${userId}*`,
   },

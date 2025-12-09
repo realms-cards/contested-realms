@@ -451,69 +451,40 @@ export const authOptions: NextAuthOptions = {
         if (uid) {
           (session.user as { id?: string }).id = uid;
         }
-        // Prefer fresh DB values for name/image to reflect profile changes
-        if (uid) {
-          try {
-            const dbUser = await prisma.user.findUnique({
-              where: { id: uid },
-              select: {
-                name: true,
-                image: true,
-                email: true,
-                emailVerified: true,
-              },
-            });
-            if (dbUser) {
-              (session.user as { name?: string | null }).name =
-                dbUser.name ?? session.user.name;
-              (session.user as { image?: string | null }).image =
-                sanitizeUserImage(dbUser.image) ?? null;
-              (session.user as { email?: string | null }).email =
-                dbUser.email ?? null;
-              (
-                session.user as { emailVerified?: string | null }
-              ).emailVerified = dbUser.emailVerified
-                ? dbUser.emailVerified.toISOString()
-                : null;
-            }
-          } catch {
-            // Fallback to token-provided values when DB is unavailable
-            const tokenName = token.name as string | undefined;
-            if (tokenName) {
-              (session.user as { name?: string }).name = tokenName;
-            } else if (!session.user.name) {
-              const inferredName =
-                (session.user.email
-                  ? session.user.email.split("@")[0]
-                  : undefined) || "Player";
-              (session.user as { name?: string }).name = inferredName;
-            }
-            const tokenImage =
-              ((token as Record<string, unknown>).picture as
-                | string
-                | undefined) ??
-              ((token as Record<string, unknown>).image as string | undefined);
-            if (typeof tokenImage === "string") {
-              (session.user as { image?: string | null }).image =
-                sanitizeUserImage(tokenImage);
-            }
-            const tokenEmail = token.email as string | null | undefined;
-            if (typeof tokenEmail === "string") {
-              (session.user as { email?: string | null }).email = tokenEmail;
-            } else if (tokenEmail === null) {
-              (session.user as { email?: string | null }).email = null;
-            }
-            const tokenEmailVerified = (token as Record<string, unknown>)
-              .emailVerified;
-            if (
-              typeof tokenEmailVerified === "string" ||
-              tokenEmailVerified === null
-            ) {
-              (
-                session.user as { emailVerified?: string | null }
-              ).emailVerified = tokenEmailVerified ?? null;
-            }
-          }
+        // PERFORMANCE FIX: Use token values directly instead of DB query on every request.
+        // The JWT already contains name/email/image from login or update trigger.
+        // This eliminates ~500-1000ms DB latency per API call.
+        const tokenName = token.name as string | undefined;
+        if (tokenName) {
+          (session.user as { name?: string }).name = tokenName;
+        } else if (!session.user.name) {
+          const inferredName =
+            (session.user.email
+              ? session.user.email.split("@")[0]
+              : undefined) || "Player";
+          (session.user as { name?: string }).name = inferredName;
+        }
+        const tokenImage =
+          ((token as Record<string, unknown>).picture as string | undefined) ??
+          ((token as Record<string, unknown>).image as string | undefined);
+        if (typeof tokenImage === "string") {
+          (session.user as { image?: string | null }).image =
+            sanitizeUserImage(tokenImage);
+        }
+        const tokenEmail = token.email as string | null | undefined;
+        if (typeof tokenEmail === "string") {
+          (session.user as { email?: string | null }).email = tokenEmail;
+        } else if (tokenEmail === null) {
+          (session.user as { email?: string | null }).email = null;
+        }
+        const tokenEmailVerified = (token as Record<string, unknown>)
+          .emailVerified;
+        if (
+          typeof tokenEmailVerified === "string" ||
+          tokenEmailVerified === null
+        ) {
+          (session.user as { emailVerified?: string | null }).emailVerified =
+            tokenEmailVerified ?? null;
         }
       }
       return session;
