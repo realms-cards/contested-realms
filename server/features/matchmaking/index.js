@@ -79,6 +79,9 @@ function createMatchmakingFeature(deps) {
     // Send status update to player
     sendStatusUpdate(playerId, socketId, "searching", matchTypes);
 
+    // Broadcast updated queue size to all players in queue
+    broadcastQueueSize();
+
     // Trigger immediate match check
     checkForMatches();
 
@@ -117,6 +120,9 @@ function createMatchmakingFeature(deps) {
     const socketId = entry.socketId;
     sendStatusUpdate(playerId, socketId, "idle", null);
 
+    // Broadcast updated queue size to remaining players
+    broadcastQueueSize();
+
     console.log(`[Matchmaking] ${playerId.slice(-6)} left queue (${reason})`);
   }
 
@@ -133,6 +139,7 @@ function createMatchmakingFeature(deps) {
     const payload = {
       status,
       preferences: matchTypes ? { matchTypes } : null,
+      queueSize: queue.size, // Always include total queue size
       ...extra,
     };
 
@@ -151,6 +158,15 @@ function createMatchmakingFeature(deps) {
     try {
       io.to(socketId).emit("matchmakingUpdate", payload);
     } catch {}
+  }
+
+  /**
+   * Broadcast queue size update to all players in the queue
+   */
+  function broadcastQueueSize() {
+    for (const [playerId, entry] of queue) {
+      sendStatusUpdate(playerId, entry.socketId, "searching", entry.matchTypes);
+    }
   }
 
   /**

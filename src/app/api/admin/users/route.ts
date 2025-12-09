@@ -63,49 +63,90 @@ export async function GET(request: Request): Promise<NextResponse> {
     }
 
     const userIds = users.map((u) => u.id);
-    const [sessions, matchResults, registrations] = await Promise.all([
-      prisma.session.findMany({
-        where: { userId: { in: userIds } },
-        select: { userId: true, expires: true },
-        orderBy: { expires: "desc" },
-      }),
-      prisma.matchResult.findMany({
-        where: {
-          OR: [{ winnerId: { in: userIds } }, { loserId: { in: userIds } }],
-        },
-        select: { winnerId: true, loserId: true },
-      }),
-      prisma.tournamentRegistration.findMany({
-        where: { playerId: { in: userIds } },
-        select: { playerId: true },
-      }),
-    ]);
+    const [matchResults, registrations, decks, collectionCards, cardLists] =
+      await Promise.all([
+        prisma.matchResult.findMany({
+          where: {
+            OR: [{ winnerId: { in: userIds } }, { loserId: { in: userIds } }],
+          },
+          select: { winnerId: true, loserId: true, completedAt: true },
+        }),
+        prisma.tournamentRegistration.findMany({
+          where: { playerId: { in: userIds } },
+          select: { playerId: true },
+        }),
+        prisma.deck.findMany({
+          where: { userId: { in: userIds } },
+          select: { userId: true, createdAt: true, updatedAt: true },
+        }),
+        // Collection activity (solo/collection users)
+        prisma.collectionCard.findMany({
+          where: { userId: { in: userIds } },
+          select: { userId: true, createdAt: true, updatedAt: true },
+        }),
+        // Card lists activity (wishlists, trade binders, etc.)
+        prisma.cardList.findMany({
+          where: { userId: { in: userIds } },
+          select: { userId: true, createdAt: true, updatedAt: true },
+        }),
+      ]);
 
-    const lastSeenMap = new Map<string, string>();
-    for (const session of sessions) {
-      const expiresIso =
-        session.expires instanceof Date
-          ? session.expires.toISOString()
-          : new Date(session.expires).toISOString();
-      const previous = lastSeenMap.get(session.userId);
-      if (!previous || previous < expiresIso) {
-        lastSeenMap.set(session.userId, expiresIso);
-      }
-    }
-
+    // Track first and last activity dates per user
+    const firstSeenMap = new Map<string, Date>();
+    const lastSeenMap = new Map<string, Date>();
     const matchCountMap = new Map<string, number>();
+
+    // Helper to update first/last seen
+    const updateActivity = (userId: string, date: Date | null) => {
+      if (!date) return;
+      const first = firstSeenMap.get(userId);
+      if (!first || date < first) firstSeenMap.set(userId, date);
+      const last = lastSeenMap.get(userId);
+      if (!last || date > last) lastSeenMap.set(userId, date);
+    };
+
+    // Process match results
     for (const result of matchResults) {
+      const completedAt = result.completedAt
+        ? new Date(result.completedAt)
+        : null;
       if (result.winnerId) {
         matchCountMap.set(
           result.winnerId,
           (matchCountMap.get(result.winnerId) || 0) + 1
         );
+        updateActivity(result.winnerId, completedAt);
       }
       if (result.loserId) {
         matchCountMap.set(
           result.loserId,
           (matchCountMap.get(result.loserId) || 0) + 1
         );
+        updateActivity(result.loserId, completedAt);
+      }
+    }
+
+    // Process deck activity
+    for (const deck of decks) {
+      updateActivity(deck.userId, new Date(deck.createdAt));
+      if (deck.updatedAt) {
+        updateActivity(deck.userId, new Date(deck.updatedAt));
+      }
+    }
+
+    // Process collection activity (solo/collection users)
+    for (const card of collectionCards) {
+      updateActivity(card.userId, new Date(card.createdAt));
+      if (card.updatedAt) {
+        updateActivity(card.userId, new Date(card.updatedAt));
+      }
+    }
+
+    // Process card list activity
+    for (const list of cardLists) {
+      updateActivity(list.userId, new Date(list.createdAt));
+      if (list.updatedAt) {
+        updateActivity(list.userId, new Date(list.updatedAt));
       }
     }
 
@@ -117,14 +158,22 @@ export async function GET(request: Request): Promise<NextResponse> {
       );
     }
 
-    const summaries: AdminUserSummary[] = users.map((user) => ({
-      id: user.id,
-      name: user.name,
-      createdAt: user.emailVerified?.toISOString() ?? null,
-      lastSeenAt: lastSeenMap.get(user.id) ?? null,
-      matchCount: matchCountMap.get(user.id) || 0,
-      tournamentRegistrations: registrationCountMap.get(user.id) || 0,
-    }));
+    const summaries: AdminUserSummary[] = users.map((user) => {
+      // Use emailVerified as primary, fall back to first activity
+      const createdAt =
+        user.emailVerified?.toISOString() ??
+        firstSeenMap.get(user.id)?.toISOString() ??
+        null;
+      const lastSeenAt = lastSeenMap.get(user.id)?.toISOString() ?? null;
+      return {
+        id: user.id,
+        name: user.name,
+        createdAt,
+        lastSeenAt,
+        matchCount: matchCountMap.get(user.id) || 0,
+        tournamentRegistrations: registrationCountMap.get(user.id) || 0,
+      };
+    });
 
     return NextResponse.json({
       users: summaries,

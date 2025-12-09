@@ -18,6 +18,9 @@ async function buildSnapshot(
     matchParticipants,
     tournamentParticipants,
     draftParticipants,
+    deckActivity,
+    collectionActivity,
+    cardListActivity,
   ] = await Promise.all([
     // New users: users created after `from` (using emailVerified as proxy for creation date)
     prisma.user.count({
@@ -49,6 +52,27 @@ async function buildSnapshot(
       },
       select: { playerId: true },
     }),
+    // Active users from deck creation/updates
+    prisma.deck.findMany({
+      where: {
+        OR: [{ createdAt: { gte: from } }, { updatedAt: { gte: from } }],
+      },
+      select: { userId: true },
+    }),
+    // Active users from collection updates (solo/collection users)
+    prisma.collectionCard.findMany({
+      where: {
+        OR: [{ createdAt: { gte: from } }, { updatedAt: { gte: from } }],
+      },
+      select: { userId: true },
+    }),
+    // Active users from card list updates (wishlists, trade binders, etc.)
+    prisma.cardList.findMany({
+      where: {
+        OR: [{ createdAt: { gte: from } }, { updatedAt: { gte: from } }],
+      },
+      select: { userId: true },
+    }),
   ]);
 
   // Collect unique active user IDs from all activity sources
@@ -62,6 +86,15 @@ async function buildSnapshot(
   }
   for (const draft of draftParticipants) {
     activeUserIds.add(draft.playerId);
+  }
+  for (const deck of deckActivity) {
+    activeUserIds.add(deck.userId);
+  }
+  for (const card of collectionActivity) {
+    activeUserIds.add(card.userId);
+  }
+  for (const list of cardListActivity) {
+    activeUserIds.add(list.userId);
   }
 
   return {

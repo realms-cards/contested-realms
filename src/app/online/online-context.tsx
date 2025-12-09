@@ -130,6 +130,7 @@ export type OnlineContextValue = {
     estimatedWait: number | null; // seconds
     matchedPlayerId: string | null;
     isHost: boolean | null; // true if this player is host for sealed/draft config
+    queueSize: number | null; // total players in matchmaking queue
   };
   joinMatchmaking: (
     matchTypes: Array<"constructed" | "sealed" | "draft" | "precon">
