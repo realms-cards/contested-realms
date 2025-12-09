@@ -314,6 +314,9 @@ export default function PlayPage() {
     matW = baseGridH * MAT_RATIO;
   }
 
+  // Natural tilt angle for 2D mode (matches online play)
+  const naturalTiltAngle = useMemo(() => 0.14, []);
+
   const gotoBaseline = useCallback(
     (mode: "topdown" | "orbit") => {
       const c = controlsRef.current;
@@ -321,22 +324,44 @@ export default function PlayPage() {
       c.target.set(0, 0, 0);
       const cam = c.object as THREE.Camera;
       if (mode === "topdown") {
+        // Natural 2D view: almost top-down from the current player's side, slightly tilted
         const dist = Math.max(matW, matH) * 1.1;
-        cam.position.set(0, dist, 0);
-        cam.up.set(0, 0, -1);
+        const tilt = naturalTiltAngle;
+        // Player 2 views from opposite side (negative Z)
+        const sign = currentPlayer === 2 ? -1 : 1;
+        cam.position.set(
+          0,
+          Math.cos(tilt) * dist,
+          sign * Math.sin(tilt) * dist
+        );
+        cam.up.set(0, 1, 0);
       } else {
-        cam.position.set(0, 10, 5);
+        // Reasonable default orbit position based on seat (slightly offset)
+        const orbitZ = currentPlayer === 2 ? -5 : 5;
+        cam.position.set(0, 10, orbitZ);
         cam.up.set(0, 1, 0);
       }
       cam.lookAt(0, 0, 0);
       c.update();
     },
-    [matW, matH]
+    [currentPlayer, matW, matH, naturalTiltAngle]
   );
 
   const resetCamera = useCallback(() => {
     gotoBaseline(cameraMode);
   }, [gotoBaseline, cameraMode]);
+
+  // When switching seats (currentPlayer changes), rotate camera to the new player's perspective
+  useEffect(() => {
+    const id = requestAnimationFrame(() => {
+      if (!controlsRef.current) {
+        setTimeout(() => gotoBaseline(cameraMode), 0);
+      } else {
+        gotoBaseline(cameraMode);
+      }
+    });
+    return () => cancelAnimationFrame(id);
+  }, [cameraMode, gotoBaseline, currentPlayer]);
 
   // Tab key to reset camera (matches online play behavior)
   useEffect(() => {
