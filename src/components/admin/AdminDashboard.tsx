@@ -72,6 +72,7 @@ export default function AdminDashboard({
     null
   );
   const [errorsData, setErrorsData] = useState<AdminErrorRecord[]>([]);
+  const [errorsExpanded, setErrorsExpanded] = useState(false);
   const [errorsError, setErrorsError] = useState<string | null>(null);
   const [jobsData, setJobsData] = useState<AdminJobStatus[]>([]);
   const [jobsError, setJobsError] = useState<string | null>(null);
@@ -740,79 +741,104 @@ export default function AdminDashboard({
         </section>
 
         <section className="flex flex-col gap-3">
-          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <h2 className="text-lg font-semibold text-white">Recent errors</h2>
+          <button
+            onClick={() => setErrorsExpanded((prev) => !prev)}
+            className="flex items-center justify-between gap-2 text-left"
+          >
+            <div className="flex items-center gap-2">
+              <span
+                className={clsx(
+                  "inline-block transition-transform",
+                  errorsExpanded ? "rotate-90" : ""
+                )}
+              >
+                ▶
+              </span>
+              <h2 className="text-lg font-semibold text-white">
+                Recent errors
+              </h2>
+              {errorsData.length > 0 && (
+                <span className="rounded bg-rose-500/20 px-2 py-0.5 text-xs text-rose-200">
+                  {errorsData.length}
+                </span>
+              )}
+            </div>
             <button
-              onClick={() => {
+              onClick={(e) => {
+                e.stopPropagation();
                 void refreshErrors();
               }}
               className="inline-flex items-center justify-center rounded border border-slate-600 px-3 py-1 text-xs font-medium text-slate-200 hover:bg-slate-800"
             >
               Refresh
             </button>
-          </div>
-          {errorsError && (
-            <div className="rounded border border-rose-500/50 bg-rose-500/10 px-3 py-2 text-xs text-rose-100">
-              {errorsError}
-            </div>
-          )}
-          {errorsData.length === 0 ? (
-            <div className="rounded border border-slate-800 bg-slate-900/50 px-3 py-2 text-xs text-slate-300">
-              No error events recorded in the last 50 entries.
-            </div>
-          ) : (
-            <div className="overflow-auto rounded border border-slate-800 bg-slate-900/40">
-              <table className="min-w-full text-left text-xs text-slate-200">
-                <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400">
-                  <tr>
-                    <th className="px-3 py-2">Timestamp</th>
-                    <th className="px-3 py-2">Event</th>
-                    <th className="px-3 py-2">Status</th>
-                    <th className="px-3 py-2">Message</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {errorsData.map((record) => (
-                    <tr
-                      key={record.id}
-                      className="border-t border-slate-800/60"
-                    >
-                      <td className="px-3 py-2">
-                        {formatTimestamp(record.timestamp)}
-                      </td>
-                      <td className="px-3 py-2">
-                        <span className="font-medium text-white">
-                          {record.eventType}
-                        </span>
-                        <div className="text-[10px] text-slate-400">
-                          {record.targetUrl}
-                        </div>
-                      </td>
-                      <td className="px-3 py-2">
-                        {record.statusCode ?? "—"}{" "}
-                        {!record.success ? (
-                          <span className="ml-1 rounded bg-rose-500/30 px-1 py-0.5 text-[10px] text-rose-100">
-                            failed
-                          </span>
-                        ) : (
-                          <span className="ml-1 rounded bg-emerald-500/20 px-1 py-0.5 text-[10px] text-emerald-100">
-                            ok
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2 text-[11px] text-slate-300">
-                        {record.errorMessage ?? "—"}{" "}
-                        {record.retryCount > 0 && (
-                          <span className="ml-2 text-slate-400">
-                            (retries: {record.retryCount})
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+          </button>
+          {errorsExpanded && (
+            <>
+              {errorsError && (
+                <div className="rounded border border-rose-500/50 bg-rose-500/10 px-3 py-2 text-xs text-rose-100">
+                  {errorsError}
+                </div>
+              )}
+              {errorsData.length === 0 ? (
+                <div className="rounded border border-slate-800 bg-slate-900/50 px-3 py-2 text-xs text-slate-300">
+                  No error events recorded in the last 50 entries.
+                </div>
+              ) : (
+                <div className="overflow-auto rounded border border-slate-800 bg-slate-900/40">
+                  <table className="min-w-full text-left text-xs text-slate-200">
+                    <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400">
+                      <tr>
+                        <th className="px-3 py-2">Timestamp</th>
+                        <th className="px-3 py-2">Event</th>
+                        <th className="px-3 py-2">Status</th>
+                        <th className="px-3 py-2">Message</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {errorsData.map((record) => (
+                        <tr
+                          key={record.id}
+                          className="border-t border-slate-800/60"
+                        >
+                          <td className="px-3 py-2">
+                            {formatTimestamp(record.timestamp)}
+                          </td>
+                          <td className="px-3 py-2">
+                            <span className="font-medium text-white">
+                              {record.eventType}
+                            </span>
+                            <div className="text-[10px] text-slate-400">
+                              {record.targetUrl}
+                            </div>
+                          </td>
+                          <td className="px-3 py-2">
+                            {record.statusCode ?? "—"}{" "}
+                            {!record.success ? (
+                              <span className="ml-1 rounded bg-rose-500/30 px-1 py-0.5 text-[10px] text-rose-100">
+                                failed
+                              </span>
+                            ) : (
+                              <span className="ml-1 rounded bg-emerald-500/20 px-1 py-0.5 text-[10px] text-emerald-100">
+                                ok
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 text-[11px] text-slate-300">
+                            {record.errorMessage ?? "—"}{" "}
+                            {record.retryCount > 0 && (
+                              <span className="ml-2 text-slate-400">
+                                (retries: {record.retryCount})
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
           )}
         </section>
 
@@ -1028,7 +1054,6 @@ export default function AdminDashboard({
                 <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400">
                   <tr>
                     <th className="px-3 py-2">Name</th>
-                    <th className="px-3 py-2">Email</th>
                     <th className="px-3 py-2">Created</th>
                     <th className="px-3 py-2">Last seen</th>
                     <th className="px-3 py-2">Matches</th>
@@ -1049,7 +1074,6 @@ export default function AdminDashboard({
                           {user.id}
                         </div>
                       </td>
-                      <td className="px-3 py-2">{user.email ?? "—"}</td>
                       <td className="px-3 py-2">
                         {formatTimestamp(user.createdAt)}
                       </td>

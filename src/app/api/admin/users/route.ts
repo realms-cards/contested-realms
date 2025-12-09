@@ -50,7 +50,6 @@ export async function GET(request: Request): Promise<NextResponse> {
       select: {
         id: true,
         name: true,
-        email: true,
         emailVerified: true,
       },
     });
@@ -72,10 +71,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       }),
       prisma.matchResult.findMany({
         where: {
-          OR: [
-            { winnerId: { in: userIds } },
-            { loserId: { in: userIds } },
-          ],
+          OR: [{ winnerId: { in: userIds } }, { loserId: { in: userIds } }],
         },
         select: { winnerId: true, loserId: true },
       }),
@@ -124,7 +120,6 @@ export async function GET(request: Request): Promise<NextResponse> {
     const summaries: AdminUserSummary[] = users.map((user) => ({
       id: user.id,
       name: user.name,
-      email: user.email,
       createdAt: user.emailVerified?.toISOString() ?? null,
       lastSeenAt: lastSeenMap.get(user.id) ?? null,
       matchCount: matchCountMap.get(user.id) || 0,

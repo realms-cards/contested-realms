@@ -37,7 +37,6 @@ export interface HealthSnapshot {
 export interface AdminUserSummary {
   id: string;
   name: string | null;
-  email: string | null;
   createdAt: string | null;
   lastSeenAt: string | null;
   matchCount: number;
