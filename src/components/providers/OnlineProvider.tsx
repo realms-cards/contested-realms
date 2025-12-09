@@ -85,6 +85,8 @@ export default function OnlineProvider({
   const [match, setMatch] = useState<MatchInfo | null>(null);
   const [ready, setReady] = useState<boolean>(false);
   const [chatLog, setChatLog] = useState<ServerChatPayloadT[]>([]);
+  const [chatHasMore, setChatHasMore] = useState<boolean>(false);
+  const [chatOldestIndex, setChatOldestIndex] = useState<number>(0);
   const [me, setMe] = useState<PlayerInfo | null>(null);
   const [lobbies, setLobbies] = useState<LobbyInfo[]>([]);
   const [players, setPlayers] = useState<PlayerInfo[]>([]);
@@ -1015,6 +1017,23 @@ export default function OnlineProvider({
           return [...prev, p];
         })
       ),
+      transport.on("chatHistory", (p) => {
+        // Update pagination state
+        setChatHasMore(p.hasMore);
+        setChatOldestIndex(p.oldestIndex);
+        // Merge server chat history with existing messages, avoiding duplicates
+        setChatLog((prev) => {
+          const existingKeys = new Set(
+            prev.map((m) => `${m.from?.id ?? "system"}:${m.content}`)
+          );
+          const newMessages = p.messages.filter(
+            (m) => !existingKeys.has(`${m.from?.id ?? "system"}:${m.content}`)
+          );
+          if (newMessages.length === 0) return prev;
+          // Prepend history (older messages) before current messages
+          return [...newMessages, ...prev];
+        });
+      }),
       transport.on("resync", (p) => {
         // Enter resync mode to pause physics world on clients
         const gen = ++resyncGenRef.current;
@@ -1496,6 +1515,14 @@ export default function OnlineProvider({
     },
     resyncing,
     chatLog,
+    chatHasMore,
+    chatOldestIndex,
+    requestMoreChatHistory: () => {
+      if (!chatHasMore) return;
+      try {
+        transport.requestChatHistory(chatOldestIndex, 10);
+      } catch {}
+    },
     lobbies,
     players,
     availablePlayers,
