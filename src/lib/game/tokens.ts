@@ -13,13 +13,27 @@ export type TokenDef = {
 export const TOKEN_DEFS: TokenDef[] = [
   { key: "Bruin", name: "Bruin", fileBase: "Bruin", size: "normal" },
   { key: "Disabled", name: "Disabled", fileBase: "Disabled", size: "small" },
-  { key: "Foot_Soldier", name: "Foot Soldier", fileBase: "Foot_Soldier", size: "small" },
+  {
+    key: "Foot_Soldier",
+    name: "Foot Soldier",
+    fileBase: "Foot_Soldier",
+    size: "small",
+  },
   { key: "Flooded", name: "Flooded", fileBase: "Flooded", size: "small" },
   { key: "Lance", name: "Lance", fileBase: "Lance", size: "small" },
   { key: "Frog", name: "Frog", fileBase: "Frog", size: "small" },
+  { key: "Skeleton", name: "Skeleton", fileBase: "Skeleton", size: "small" },
   { key: "Stealth", name: "Stealth", fileBase: "Stealth", size: "small" },
   { key: "Tawny", name: "Tawny", fileBase: "Tawny", size: "small" },
-  { key: "Rubble", name: "Rubble", fileBase: "Rubble", size: "normal", siteReplacement: true, textureRotation: -Math.PI / 2 },
+  { key: "Ward", name: "Ward", fileBase: "ward", size: "small" },
+  {
+    key: "Rubble",
+    name: "Rubble",
+    fileBase: "Rubble",
+    size: "normal",
+    siteReplacement: true,
+    textureRotation: -Math.PI / 2,
+  },
 ];
 
 export const TOKEN_BY_KEY = Object.fromEntries(
@@ -44,7 +58,7 @@ export function tokenCardId(def: TokenDef): number {
     hash ^= s.charCodeAt(i);
     hash = (hash * 0x01000193) >>> 0;
   }
-  const asSigned = (hash | 0) || 1;
+  const asSigned = hash | 0 || 1;
   return -Math.abs(asSigned);
 }
 

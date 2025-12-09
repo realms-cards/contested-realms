@@ -436,7 +436,8 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
       const isAttachableToken =
         tokenName === "lance" ||
         tokenName === "stealth" ||
-        tokenName === "disabled";
+        tokenName === "disabled" ||
+        tokenName === "ward";
 
       if (item?.attachedTo) {
         doDetachToken = () => {
