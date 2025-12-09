@@ -1791,16 +1791,40 @@ async function cleanupMatchNow(
   try {
     console.log(`[match] cleaning up ${matchId} (reason=${reason})`);
   } catch {}
-  // Delete from DB and cache
+
+  // Check if this match has a MatchResult (completed game) - if so, preserve replay data
+  let hasMatchResult = false;
+  try {
+    const result = await prisma.matchResult.findFirst({
+      where: { matchId },
+      select: { id: true },
+    });
+    hasMatchResult = !!result;
+  } catch {}
+
+  // Delete from Redis cache (always safe)
   try {
     if (storeRedis) await storeRedis.del(`match:session:${matchId}`);
   } catch {}
-  try {
-    await prisma.onlineMatchAction.deleteMany({ where: { matchId } });
-  } catch {}
-  try {
-    await prisma.onlineMatchSession.delete({ where: { id: matchId } });
-  } catch {}
+
+  // Only delete replay data if there's no MatchResult (incomplete/abandoned match)
+  // Completed matches should preserve their actions for replay viewing
+  if (!hasMatchResult) {
+    try {
+      await prisma.onlineMatchAction.deleteMany({ where: { matchId } });
+    } catch {}
+    try {
+      await prisma.onlineMatchSession.delete({ where: { id: matchId } });
+    } catch {}
+  } else {
+    try {
+      console.log(
+        `[match] preserving replay data for completed match ${matchId}`
+      );
+    } catch {}
+  }
+
+  // Always remove from in-memory map
   try {
     matches.delete(matchId);
   } catch {}

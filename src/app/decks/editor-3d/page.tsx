@@ -64,6 +64,19 @@ const STANDARD_SITE_NAMES = ["Spire", "Stream", "Valley", "Wasteland"] as const;
 // Known avatar names (for fallback when type info is missing from local search)
 const KNOWN_AVATARS = ["dragonlord", "spellslinger"];
 
+// Gothic set ordinary cards available for collection zone (max 4 copies each)
+const GOTHIC_ORDINARY_CARD_NAMES = [
+  "Hellhounds",
+  "Ghoul",
+  "Horrible Hybrids",
+  "Penitent Knight",
+  "Consecrated Ground",
+  "Desecrated Ground",
+  "Eltham Townsfolk",
+  "Serava Townsfolk",
+  "Shoggoth",
+] as const;
+
 function pickStandardSiteResult(
   results: SearchResult[],
   name: (typeof STANDARD_SITE_NAMES)[number]
@@ -269,6 +282,10 @@ function AuthenticatedDeckEditor() {
   const [cubeStandardCards, setCubeStandardCards] = useState<SearchResult[]>(
     []
   );
+  // Gothic ordinary cards available for collection zone when Gothic set is in the draft/sealed
+  const [gothicOrdinaryCards, setGothicOrdinaryCards] = useState<
+    SearchResult[]
+  >([]);
   const sealedReplaceAvatars = sealedConfig?.replaceAvatars ?? false;
   const [bulkOpenInProgress, setBulkOpenInProgress] = useState(false);
 
@@ -1774,6 +1791,73 @@ function AuthenticatedDeckEditor() {
     };
   }, [searchParamsKey, searchParams, convertCardDataToSearchResult]);
 
+  // Load Gothic ordinary cards when Gothic set is included in sealed/draft packs
+  useEffect(() => {
+    // Check if any pack contains Gothic set
+    const hasGothic =
+      packs.some((p) => p.set.toLowerCase() === "gothic") ||
+      (sealedConfig?.setMix ?? []).some((s) => s.toLowerCase() === "gothic");
+
+    if (!hasGothic || !isSealed) {
+      setGothicOrdinaryCards([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        // Fetch Gothic ordinary cards by name from the API
+        const cardPromises = GOTHIC_ORDINARY_CARD_NAMES.map(async (name) => {
+          const res = await fetch(
+            `/api/cards/search?q=${encodeURIComponent(name)}&set=Gothic&limit=1`
+          );
+          if (!res.ok) return null;
+          const data = await res.json();
+          const cards = Array.isArray(data?.cards) ? data.cards : [];
+          // Find exact match
+          const match = cards.find(
+            (c: { name?: string }) =>
+              c.name?.toLowerCase() === name.toLowerCase()
+          );
+          return match ?? null;
+        });
+
+        const results = await Promise.all(cardPromises);
+        const converted: SearchResult[] = [];
+
+        for (const card of results) {
+          if (!card) continue;
+          const sr = convertCardDataToSearchResult(
+            {
+              slug: card.slug ?? "",
+              cardName: card.name,
+              set: "Gothic",
+              cardId: card.cardId,
+              variantId: card.variantId ?? undefined,
+              finish: "Standard",
+              product: "Draft",
+              type: card.type,
+              rarity: card.rarity ?? "Ordinary",
+            } as unknown as Record<string, unknown>,
+            "Gothic"
+          );
+          if (sr) converted.push(sr);
+        }
+
+        if (!cancelled) {
+          setGothicOrdinaryCards(converted);
+        }
+      } catch {
+        if (!cancelled) setGothicOrdinaryCards([]);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [packs, sealedConfig?.setMix, isSealed, convertCardDataToSearchResult]);
+
   // (moved) Load deck from URL parameter after loadDeck is declared
 
   // Tab state for cards view - default to "Your Deck"
@@ -1784,7 +1868,7 @@ function AuthenticatedDeckEditor() {
 
   // Tournament legal controls visibility
   const [tournamentControlsMode, setTournamentControlsMode] = useState<
-    "standard" | "cube" | null
+    "standard" | "cube" | "gothic" | null
   >(null);
   const tournamentControlsVisible = tournamentControlsMode !== null;
 
@@ -2381,6 +2465,49 @@ function AuthenticatedDeckEditor() {
       });
     },
     [setPicks]
+  );
+
+  // Add Gothic ordinary card to collection zone (max 4 copies per card, max 10 total in collection)
+  const addGothicCardToCollection = useCallback(
+    (r: SearchResult) => {
+      // Check collection limit (max 10 total)
+      if (collectionCount >= 10) {
+        setFeedbackMessage("Collection is full (maximum 10 cards)");
+        setTimeout(() => setFeedbackMessage(null), 2000);
+        return;
+      }
+
+      // Check per-card limit (max 4 copies)
+      const currentCopies = collectionCountsByCardId[r.cardId] ?? 0;
+      if (currentCopies >= 4) {
+        setFeedbackMessage(`Maximum 4 copies of ${r.cardName} in collection`);
+        setTimeout(() => setFeedbackMessage(null), 2000);
+        return;
+      }
+
+      const zone: Zone = "Collection";
+      const key = `${r.cardId}:${zone}:${r.variantId ?? "x"}` as PickKey;
+      setPicks((prev) => {
+        const exists = prev[key];
+        const next: PickItem = exists
+          ? { ...exists, count: exists.count + 1 }
+          : {
+              cardId: r.cardId,
+              variantId: r.variantId ?? null,
+              name: r.cardName,
+              type: r.type,
+              slug: r.slug,
+              zone,
+              count: 1,
+              set: r.set,
+            };
+        return { ...prev, [key]: next };
+      });
+
+      setFeedbackMessage(`Added ${r.cardName} to Collection`);
+      setTimeout(() => setFeedbackMessage(null), 2000);
+    },
+    [collectionCount, collectionCountsByCardId, setPicks, setFeedbackMessage]
   );
 
   // Minimal deck actions
@@ -4828,7 +4955,8 @@ function AuthenticatedDeckEditor() {
               setTimeout(() => setFeedbackMessage(null), 2000);
             }}
             showCollectionZone={
-              cubeStandardCards.length > 0 && cubeBoostersOpened
+              (cubeStandardCards.length > 0 && cubeBoostersOpened) ||
+              gothicOrdinaryCards.length > 0
             }
             collectionCount={collectionCount}
             collectionCountsByCardId={collectionCountsByCardId}
@@ -5298,6 +5426,7 @@ function AuthenticatedDeckEditor() {
             tournamentControlsVisible={tournamentControlsVisible}
             tournamentControlsMode={tournamentControlsMode}
             cubeExtrasAvailable={cubeExtrasAvailable}
+            gothicExtrasAvailable={gothicOrdinaryCards.length > 0}
             onShowStandardCards={() =>
               setTournamentControlsMode((prev) =>
                 prev === "standard" ? null : "standard"
@@ -5306,6 +5435,11 @@ function AuthenticatedDeckEditor() {
             onShowCubeExtras={() =>
               setTournamentControlsMode((prev) =>
                 prev === "cube" ? null : "cube"
+              )
+            }
+            onShowGothicExtras={() =>
+              setTournamentControlsMode((prev) =>
+                prev === "gothic" ? null : "gothic"
               )
             }
             packs={packs}
@@ -5431,6 +5565,9 @@ function AuthenticatedDeckEditor() {
           onAddStandardSite={addStandardSiteByName}
           cubeStandardCards={cubeStandardCards}
           onAddCubeStandardCard={addToSideboardFromSearch}
+          gothicOrdinaryCards={gothicOrdinaryCards}
+          onAddGothicCard={addGothicCardToCollection}
+          collectionCountsByCardId={collectionCountsByCardId}
         />
       </Suspense>
 

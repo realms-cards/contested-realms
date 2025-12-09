@@ -7,7 +7,7 @@ type StandardSiteName = "Spire" | "Stream" | "Valley" | "Wasteland";
 
 interface TournamentControlsProps {
   isVisible: boolean;
-  mode?: "standard" | "cube";
+  mode?: "standard" | "cube" | "gothic";
   onClose: () => void;
   spellslingerCard: SearchResult | null;
   standardSites: Record<StandardSiteName, SearchResult | null>;
@@ -15,6 +15,9 @@ interface TournamentControlsProps {
   onAddStandardSite: (name: StandardSiteName) => void;
   cubeStandardCards?: SearchResult[];
   onAddCubeStandardCard?: (card: SearchResult) => void;
+  gothicOrdinaryCards?: SearchResult[];
+  onAddGothicCard?: (card: SearchResult) => void;
+  collectionCountsByCardId?: Record<number, number>;
 }
 
 const STANDARD_SITE_NAMES: StandardSiteName[] = [
@@ -34,6 +37,9 @@ export default function TournamentControls({
   onAddStandardSite,
   cubeStandardCards,
   onAddCubeStandardCard,
+  gothicOrdinaryCards,
+  onAddGothicCard,
+  collectionCountsByCardId,
 }: TournamentControlsProps) {
   if (!isVisible) return null;
 
@@ -42,6 +48,10 @@ export default function TournamentControls({
     (!mode || mode === "cube") &&
     Array.isArray(cubeStandardCards) &&
     cubeStandardCards.length > 0;
+  const showGothicExtras =
+    (!mode || mode === "gothic") &&
+    Array.isArray(gothicOrdinaryCards) &&
+    gothicOrdinaryCards.length > 0;
 
   return (
     <div className="absolute bottom-6 right-6 z-30 pointer-events-auto">
@@ -158,6 +168,65 @@ export default function TournamentControls({
                   </div>
                 </button>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* Gothic ordinary cards for collection zone */}
+        {showGothicExtras && Array.isArray(gothicOrdinaryCards) && (
+          <div className="mt-4">
+            <div className="text-xs uppercase opacity-70 text-white mb-2">
+              Gothic Extras (Collection)
+            </div>
+            <div className="text-[10px] text-white/60 mb-2">
+              Add up to 4 copies each to your collection
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {gothicOrdinaryCards.map((card) => {
+                const copies = collectionCountsByCardId?.[card.cardId] ?? 0;
+                const isSite = (card.type || "").toLowerCase().includes("site");
+                return (
+                  <button
+                    key={`gothic:${card.cardId}:${card.slug}`}
+                    onClick={() => onAddGothicCard?.(card)}
+                    className={`group relative hover:bg-white/10 rounded p-1 transition-colors ${
+                      copies >= 4 ? "opacity-50" : ""
+                    }`}
+                    title={
+                      copies >= 4
+                        ? `Maximum 4 copies of ${card.cardName}`
+                        : `Add ${card.cardName} to collection (${copies}/4)`
+                    }
+                    disabled={copies >= 4}
+                  >
+                    <div
+                      className={`relative rounded overflow-hidden bg-black/40 ${
+                        isSite ? "aspect-[4/3] rotate-90" : "aspect-[3/4]"
+                      }`}
+                    >
+                      <Image
+                        src={
+                          card.slug
+                            ? `/api/images/${card.slug}`
+                            : "/api/assets/cardback_spellbook.png"
+                        }
+                        alt={card.cardName}
+                        fill
+                        className="object-contain"
+                        sizes="100px"
+                      />
+                    </div>
+                    <div className="mt-1 text-[10px] text-center opacity-80 text-white line-clamp-1">
+                      {card.cardName}
+                    </div>
+                    {copies > 0 && (
+                      <div className="absolute top-0 right-0 bg-purple-600 text-white text-[9px] px-1 rounded-bl font-bold">
+                        {copies}/4
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}
