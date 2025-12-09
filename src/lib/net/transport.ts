@@ -106,7 +106,7 @@ export type TransportHandler<E extends TransportEvent> = (
 
 // Optional match configuration for starting a match
 export type StartMatchConfig = {
-  matchType?: "constructed" | "sealed" | "draft";
+  matchType?: "constructed" | "sealed" | "draft" | "precon";
   sealedConfig?: SealedConfig & {
     // Extended fields used by the lobby UI; tolerated by server
     packCounts?: Record<string, number>;

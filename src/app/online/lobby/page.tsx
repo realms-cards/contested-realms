@@ -336,7 +336,7 @@ function LobbyPageContent({
 
   // Match type and sealed/draft configuration
   const [matchType, setMatchType] = useState<
-    "constructed" | "sealed" | "draft"
+    "constructed" | "sealed" | "draft" | "precon"
   >("constructed");
 
   // Fetch available sets from the database
@@ -831,8 +831,8 @@ function LobbyPageContent({
 
     autoStartAttemptedRef.current = true;
 
-    if (matchType === "constructed") {
-      startMatch({ matchType: "constructed" });
+    if (matchType === "constructed" || matchType === "precon") {
+      startMatch({ matchType });
       return;
     }
 
@@ -885,6 +885,7 @@ function LobbyPageContent({
   // Planned match summary (client-side, only reliable for host)
   const plannedSummary = useMemo(() => {
     if (!isHost) return null;
+    if (matchType === "precon") return "Planned: Precon Match";
     if (matchType === "constructed") return "Planned: Constructed";
     if (matchType === "draft") {
       if (draftConfig.cubeId) {

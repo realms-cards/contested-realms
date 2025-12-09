@@ -927,7 +927,8 @@ function createLobbyFeature(deps) {
       if (
         plannedMatchType !== "constructed" &&
         plannedMatchType !== "sealed" &&
-        plannedMatchType !== "draft"
+        plannedMatchType !== "draft" &&
+        plannedMatchType !== "precon"
       )
         return;
       lobby.plannedMatchType = plannedMatchType;

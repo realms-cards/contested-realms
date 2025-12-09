@@ -2273,7 +2273,11 @@ export default function OnlineMatchPage() {
                 playerNames={playerNames}
                 onPrepareComplete={() => setPrepared(true)}
                 matchType={
-                  match?.matchType as "constructed" | "sealed" | "draft"
+                  match?.matchType as
+                    | "constructed"
+                    | "sealed"
+                    | "draft"
+                    | "precon"
                 }
               />
             )

@@ -1577,7 +1577,7 @@ export default function OnlineProvider({
       isHost: matchmakingIsHost,
     },
     joinMatchmaking: (
-      matchTypes: Array<"constructed" | "sealed" | "draft">
+      matchTypes: Array<"constructed" | "sealed" | "draft" | "precon">
     ) => {
       try {
         transport.emit("joinMatchmaking", { preferences: { matchTypes } });

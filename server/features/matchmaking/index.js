@@ -157,8 +157,8 @@ function createMatchmakingFeature(deps) {
    * Find compatible match types between two players
    */
   function findCompatibleType(types1, types2) {
-    // Priority order: constructed (fastest), then sealed, then draft
-    const priority = ["constructed", "sealed", "draft"];
+    // Priority order: precon/constructed (fastest auto-start), then sealed, then draft
+    const priority = ["precon", "constructed", "sealed", "draft"];
     for (const type of priority) {
       if (types1.includes(type) && types2.includes(type)) {
         return type;
@@ -356,9 +356,9 @@ function createMatchmakingFeature(deps) {
         lobbyId: createdLobbyId,
       });
 
-      // For constructed: auto-start immediately (no configuration needed)
+      // For constructed/precon: auto-start immediately (no configuration needed)
       // For sealed/draft: host needs to configure, so just ready both players
-      if (matchType === "constructed") {
+      if (matchType === "constructed" || matchType === "precon") {
         // Both are auto-ready, start the match
         await handleLobbyControlAsLeader({
           type: "startMatch",
@@ -485,7 +485,7 @@ function createMatchmakingFeature(deps) {
         return;
       }
 
-      const validTypes = ["constructed", "sealed", "draft"];
+      const validTypes = ["constructed", "sealed", "draft", "precon"];
       const filtered = matchTypes.filter((t) => validTypes.includes(t));
       if (filtered.length === 0) {
         socket.emit("error", {

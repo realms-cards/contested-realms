@@ -690,6 +690,77 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
         return;
       }
 
+      // Active matches endpoint for admin dashboard
+      if (pathname === "/matches/active" && method === "GET") {
+        allowCors(res, reqOrigin);
+        try {
+          const activeMatches: Array<{
+            matchId: string;
+            playerIds: string[];
+            playerNames: string[];
+            matchType: string;
+            status: string;
+            lobbyName: string | null;
+            startedAt: number | null;
+            tournamentId: string | null;
+          }> = [];
+
+          for (const [matchId, match] of matchesMap.entries()) {
+            if (!match) continue;
+            const status =
+              typeof match.status === "string" ? match.status : "unknown";
+            // Skip ended matches
+            if (status === "ended" || status === "completed") continue;
+            if (match._finalized) continue;
+
+            const playerIds = Array.isArray(match.playerIds)
+              ? match.playerIds.map((id: unknown) => String(id))
+              : [];
+
+            const playerNames = playerIds.map((pid: string) => {
+              const player = players.get(pid);
+              return player?.displayName || `Player ${pid.slice(-6)}`;
+            });
+
+            activeMatches.push({
+              matchId,
+              playerIds,
+              playerNames,
+              matchType:
+                typeof match.matchType === "string"
+                  ? match.matchType
+                  : "constructed",
+              status,
+              lobbyName:
+                typeof match.lobbyName === "string" ? match.lobbyName : null,
+              startedAt: typeof match.lastTs === "number" ? match.lastTs : null,
+              tournamentId:
+                typeof match.tournamentId === "string"
+                  ? match.tournamentId
+                  : null,
+            });
+          }
+
+          // Sort by most recent first
+          activeMatches.sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));
+
+          res.statusCode = 200;
+          res.setHeader("Content-Type", "application/json");
+          res.end(
+            JSON.stringify({
+              matches: activeMatches,
+              total: activeMatches.length,
+            })
+          );
+        } catch (err) {
+          console.error("[http] /matches/active error:", safeErrorMessage(err));
+          res.statusCode = 500;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ error: "Failed to fetch active matches" }));
+        }
+        return;
+      }
+
       res.statusCode = 404;
       res.end("Not Found");
     } catch (e) {

@@ -132,7 +132,7 @@ export type OnlineContextValue = {
     isHost: boolean | null; // true if this player is host for sealed/draft config
   };
   joinMatchmaking: (
-    matchTypes: Array<"constructed" | "sealed" | "draft">
+    matchTypes: Array<"constructed" | "sealed" | "draft" | "precon">
   ) => void;
   leaveMatchmaking: () => void;
 };

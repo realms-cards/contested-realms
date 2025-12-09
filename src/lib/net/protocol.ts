@@ -87,7 +87,9 @@ export const LobbyInfoSchema = z.object({
   // New: readiness information per lobby
   readyPlayerIds: z.array(z.string()).default([]),
   // New: planned match type visible to all clients (host-controlled)
-  plannedMatchType: z.enum(["constructed", "sealed", "draft"]).optional(),
+  plannedMatchType: z
+    .enum(["constructed", "sealed", "draft", "precon"])
+    .optional(),
   // Quick Play lobby: game mode is locked, host configures and starts
   isMatchmakingLobby: z.boolean().optional(),
 });
@@ -181,7 +183,7 @@ export const MatchInfoSchema = z.object({
   winnerId: z.string().nullable().optional(),
   endReason: z.string().optional(),
   result: z.enum(["win", "loss", "draw"]).nullable().optional(),
-  matchType: z.enum(["constructed", "sealed", "draft"]).optional(),
+  matchType: z.enum(["constructed", "sealed", "draft", "precon"]).optional(),
   sealedConfig: SealedConfigSchema.nullable().optional(),
   draftConfig: DraftConfigSchema.nullable().optional(),
   deckSubmissions: z.array(z.string()).optional(),
@@ -307,7 +309,7 @@ export const RequestPlayersPayload = z.object({});
 
 // New Client -> Server payload: host sets planned match type for lobby
 export const SetLobbyPlanPayload = z.object({
-  plannedMatchType: z.enum(["constructed", "sealed", "draft"]),
+  plannedMatchType: z.enum(["constructed", "sealed", "draft", "precon"]),
 });
 
 // Tournament payloads
@@ -349,9 +351,9 @@ export type SetLobbyPlanPayloadT = z.infer<typeof SetLobbyPlanPayload>;
 // Matchmaking payloads
 export const MatchmakingPreferencesSchema = z.object({
   matchTypes: z
-    .array(z.enum(["constructed", "sealed", "draft"]))
+    .array(z.enum(["constructed", "sealed", "draft", "precon"]))
     .min(1)
-    .max(3),
+    .max(4),
 });
 export type MatchmakingPreferences = z.infer<
   typeof MatchmakingPreferencesSchema
@@ -380,7 +382,7 @@ export const MatchmakingUpdatePayload = z.object({
   estimatedWait: z.number().int().min(0).optional(), // seconds
   matchedPlayerId: z.string().optional(),
   lobbyId: z.string().optional(),
-  matchType: z.enum(["constructed", "sealed", "draft"]).optional(),
+  matchType: z.enum(["constructed", "sealed", "draft", "precon"]).optional(),
   isHost: z.boolean().optional(), // true if this player is the host (for sealed/draft config)
 });
 export type MatchmakingUpdatePayloadT = z.infer<
