@@ -1,4 +1,5 @@
 import { isDuplicator, isMagician } from "@/lib/game/avatarAbilities";
+import { getSpawnedCollectionCards } from "@/lib/game/collectionSpawners";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef, Phase } from "@/lib/game/store";
 import { preCacheDeckFromResponse } from "@/lib/service-worker/registration";
@@ -324,7 +325,67 @@ export async function loadSealedDeckFor(
       drawOpening,
     } = useGameStore.getState();
 
-    initLibraries(who, spellbook, rawAtlas);
+    // For sealed/draft, inject collection cards for spawner effects
+    // Per limited rules: "whenever an effect specifies a named card in your collection,
+    // you simply get one as if it were in your collection"
+    const deckCardNames = cards.map((c) => c.name || "").filter(Boolean);
+    const spawnedCardNames = getSpawnedCollectionCards(deckCardNames);
+    let collection: CardRef[] = [];
+
+    if (spawnedCardNames.length > 0) {
+      console.debug(
+        "[loadSealedDeckFor] Injecting collection cards for spawners:",
+        spawnedCardNames
+      );
+      try {
+        // Fetch card metadata for spawned cards
+        const searchPromises = spawnedCardNames.map(async (name) => {
+          const res = await fetch(
+            `/api/cards/search?q=${encodeURIComponent(name)}`
+          );
+          if (!res.ok) return null;
+          const results = (await res.json()) as Array<{
+            cardId: number;
+            variantId: number;
+            cardName: string;
+            slug: string;
+            type: string | null;
+          }>;
+          // Find exact match by name (case-insensitive)
+          const match = results.find(
+            (r) => r.cardName.toLowerCase() === name.toLowerCase()
+          );
+          if (!match) {
+            console.warn(
+              `[loadSealedDeckFor] Could not find card "${name}" for collection`
+            );
+            return null;
+          }
+          return {
+            cardId: match.cardId,
+            variantId: match.variantId,
+            name: match.cardName,
+            slug: match.slug,
+            type: match.type || "",
+            thresholds: null,
+          } as CardRef;
+        });
+
+        const fetchedCards = await Promise.all(searchPromises);
+        collection = fetchedCards.filter((c): c is CardRef => c !== null);
+        console.debug(
+          `[loadSealedDeckFor] Injected ${collection.length} collection cards`
+        );
+      } catch (e) {
+        console.error(
+          "[loadSealedDeckFor] Failed to fetch collection cards:",
+          e
+        );
+        // Continue without collection cards - not critical
+      }
+    }
+
+    initLibraries(who, spellbook, rawAtlas, collection);
     shuffleSpellbook(who);
     shuffleAtlas(who);
 
