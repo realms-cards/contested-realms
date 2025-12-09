@@ -4,6 +4,7 @@ import clsx from "clsx";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
+  ActiveMatchInfo,
   AdminActionResult,
   AdminStats,
   ConnectionTestResult,
@@ -83,6 +84,11 @@ export default function AdminDashboard({
   const [usersError, setUsersError] = useState<string | null>(null);
   const [usersNextCursor, setUsersNextCursor] = useState<string | null>(null);
   const [usersFetchedAt, setUsersFetchedAt] = useState<string | null>(null);
+  const [activeMatches, setActiveMatches] = useState<ActiveMatchInfo[]>([]);
+  const [activeMatchesLoading, setActiveMatchesLoading] = useState(false);
+  const [activeMatchesError, setActiveMatchesError] = useState<string | null>(
+    null
+  );
 
   const refreshHealthHistory = useCallback(async () => {
     setLoadingHealthHistory(true);
@@ -207,6 +213,34 @@ export default function AdminDashboard({
     }
   }, []);
 
+  const refreshActiveMatches = useCallback(async () => {
+    setActiveMatchesLoading(true);
+    setActiveMatchesError(null);
+    try {
+      const response = await fetch("/api/admin/matches/active", {
+        method: "GET",
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as {
+          error?: string;
+        } | null;
+        throw new Error(body?.error || `HTTP ${response.status}`);
+      }
+      const payload = (await response.json()) as {
+        matches: ActiveMatchInfo[];
+        total: number;
+      };
+      setActiveMatches(payload.matches ?? []);
+    } catch (error) {
+      setActiveMatchesError(
+        error instanceof Error ? error.message : "Failed to load active matches"
+      );
+    } finally {
+      setActiveMatchesLoading(false);
+    }
+  }, []);
+
   const loadUsers = useCallback(
     async (mode: "initial" | "more" = "initial") => {
       if (mode === "more" && !usersNextCursor) return;
@@ -284,6 +318,7 @@ export default function AdminDashboard({
         refreshJobs(),
         refreshSessions(),
         refreshUsage(),
+        refreshActiveMatches(),
       ]);
     } catch (error) {
       setStatusError(
@@ -293,6 +328,7 @@ export default function AdminDashboard({
       setRefreshingStatus(false);
     }
   }, [
+    refreshActiveMatches,
     refreshErrors,
     refreshHealthHistory,
     refreshJobs,
@@ -306,7 +342,9 @@ export default function AdminDashboard({
     void refreshJobs();
     void refreshSessions();
     void refreshUsage();
+    void refreshActiveMatches();
   }, [
+    refreshActiveMatches,
     refreshErrors,
     refreshHealthHistory,
     refreshJobs,
@@ -441,6 +479,122 @@ export default function AdminDashboard({
               valueLabel={formatTimestamp(stats.updatedAt)}
             />
           </div>
+        </section>
+
+        <section className="flex flex-col gap-3">
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-white">Live Matches</h2>
+              <p className="text-xs text-slate-400">
+                Currently active matches on the server. Click to spectate.
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                void refreshActiveMatches();
+              }}
+              className="inline-flex items-center justify-center rounded border border-slate-600 px-3 py-1 text-xs font-medium text-slate-200 hover:bg-slate-800"
+              disabled={activeMatchesLoading}
+            >
+              {activeMatchesLoading ? "Refreshing…" : "Refresh"}
+            </button>
+          </div>
+          {activeMatchesError && (
+            <div className="rounded border border-rose-500/50 bg-rose-500/10 px-3 py-2 text-xs text-rose-100">
+              {activeMatchesError}
+            </div>
+          )}
+          {activeMatchesLoading && activeMatches.length === 0 && (
+            <div className="rounded border border-slate-800 bg-slate-900/50 px-3 py-4 text-center text-xs text-slate-300">
+              Loading active matches…
+            </div>
+          )}
+          {!activeMatchesLoading && activeMatches.length === 0 && (
+            <div className="rounded border border-slate-800 bg-slate-900/50 px-3 py-2 text-xs text-slate-300">
+              No active matches at the moment.
+            </div>
+          )}
+          {activeMatches.length > 0 && (
+            <div className="overflow-auto rounded border border-slate-800 bg-slate-900/40">
+              <table className="min-w-full text-left text-xs text-slate-200">
+                <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400">
+                  <tr>
+                    <th className="px-3 py-2">Match ID</th>
+                    <th className="px-3 py-2">Players</th>
+                    <th className="px-3 py-2">Type</th>
+                    <th className="px-3 py-2">Status</th>
+                    <th className="px-3 py-2">Started</th>
+                    <th className="px-3 py-2">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {activeMatches.map((match) => {
+                    const startedStr = match.startedAt
+                      ? formatTimestamp(new Date(match.startedAt).toISOString())
+                      : "—";
+                    return (
+                      <tr
+                        key={match.matchId}
+                        className="border-t border-slate-800/60 hover:bg-slate-800/30"
+                      >
+                        <td className="px-3 py-2 font-mono text-[10px]">
+                          {match.matchId.slice(0, 8)}…
+                        </td>
+                        <td className="px-3 py-2">
+                          <div
+                            className="max-w-xs truncate"
+                            title={match.playerNames.join(" vs ")}
+                          >
+                            {match.playerNames.join(" vs ")}
+                          </div>
+                          {match.lobbyName && (
+                            <div className="text-[10px] text-slate-400">
+                              {match.lobbyName}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-3 py-2">
+                          <span className="rounded bg-slate-700/50 px-1.5 py-0.5 text-[10px] uppercase">
+                            {match.matchType}
+                          </span>
+                          {match.tournamentId && (
+                            <span className="ml-1 rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] text-amber-200">
+                              Tournament
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2">
+                          <span
+                            className={clsx(
+                              "rounded px-1.5 py-0.5 text-[10px]",
+                              match.status === "playing"
+                                ? "bg-emerald-500/20 text-emerald-200"
+                                : match.status === "waiting"
+                                ? "bg-amber-500/20 text-amber-200"
+                                : "bg-slate-700/50 text-slate-300"
+                            )}
+                          >
+                            {match.status}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-[10px] text-slate-400">
+                          {startedStr}
+                        </td>
+                        <td className="px-3 py-2">
+                          <Link
+                            href={`/online/play/${match.matchId}?watch=true`}
+                            className="rounded bg-blue-600/20 px-2 py-1 text-[10px] text-blue-200 hover:bg-blue-600/30"
+                          >
+                            Spectate
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </section>
 
         <section className="rounded border border-slate-700 bg-slate-900/60 px-6 py-5">
