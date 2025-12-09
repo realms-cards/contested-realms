@@ -453,13 +453,11 @@ const createPersistenceLayerInternal = ({
       } catch {}
 
       if (isWriteBehind) {
-        // FIX: Ensure buffer has data before flushing (handles short matches)
         const buf = persistBuffers.get(matchId);
         if (buf && !buf.latestData) {
           buf.latestData = matchToSessionUpsertData(match);
           persistBuffers.set(matchId, buf);
         } else if (!buf) {
-          // No buffer exists - create one with current match data so we can persist
           const newBuf: PersistBuffer = {
             latestData: matchToSessionUpsertData(match),
             actions: [],
