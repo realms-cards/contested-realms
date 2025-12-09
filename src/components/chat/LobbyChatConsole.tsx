@@ -17,6 +17,8 @@ interface LobbyChatConsoleProps {
   // Pagination for global chat history
   chatHasMore?: boolean;
   onRequestMoreHistory?: () => void;
+  // Inline mode: renders as a normal flow element instead of fixed position
+  inline?: boolean;
 }
 
 export default function LobbyChatConsole({
@@ -31,6 +33,7 @@ export default function LobbyChatConsole({
   position = "bottom-left",
   chatHasMore,
   onRequestMoreHistory,
+  inline = false,
 }: LobbyChatConsoleProps) {
   const [consoleOpen, setConsoleOpen] = useState<boolean>(true);
 
@@ -87,11 +90,18 @@ export default function LobbyChatConsole({
   const containerWidth = consoleOpen ? "w-80" : "w-64";
   const headerPadding = consoleOpen ? "px-3 py-2" : "px-2 py-1";
 
+  // Inline mode: normal flow element; fixed mode: floating overlay
+  const containerClasses = inline
+    ? "text-white w-full h-full flex flex-col"
+    : `fixed ${positionClasses} z-30 text-white ${containerWidth} transition-all pointer-events-auto`;
+
+  const innerClasses = inline
+    ? "bg-slate-900/60 ring-1 ring-slate-800 rounded-xl flex flex-col h-full"
+    : "bg-black/60 backdrop-blur rounded-xl ring-1 ring-white/10 shadow";
+
   return (
-    <div
-      className={`fixed ${positionClasses} z-30 text-white ${containerWidth} transition-all pointer-events-auto`}
-    >
-      <div className="bg-black/60 backdrop-blur rounded-xl ring-1 ring-white/10 shadow">
+    <div className={containerClasses}>
+      <div className={innerClasses}>
         {/* Header */}
         <div
           className={`flex items-center justify-between ${headerPadding} text-sm border-b border-white/10 select-none`}
@@ -150,7 +160,11 @@ export default function LobbyChatConsole({
 
         {/* Content */}
         {consoleOpen && (
-          <div className="h-56 flex flex-col">
+          <div
+            className={
+              inline ? "flex-1 flex flex-col min-h-0" : "h-56 flex flex-col"
+            }
+          >
             <div
               ref={chatRef}
               data-allow-wheel="true"

@@ -1269,8 +1269,7 @@ function LobbyPageContent({
         )}
 
         {/* Social and Chat row */}
-        {/* We present Friends/Invites here; chat is handled by the bottom-left LobbyChatConsole */}
-        <div className="grid grid-cols-1 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {/* Friends + Invites Panel */}
           <div
             className={`rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 space-y-3`}
@@ -1300,21 +1299,24 @@ function LobbyPageContent({
               onInvite={(pid, lid) => inviteToLobby(pid, lid)}
             />
           </div>
-        </div>
 
-        {/* Bottom-left lobby chat console (global + lobby scopes) */}
-        <LobbyChatConsole
-          connected={connected}
-          chatLog={chatLog}
-          chatTab={chatTab}
-          setChatTab={setChatTab}
-          chatInput={chatInput}
-          setChatInput={setChatInput}
-          onSendChat={(message, scope) => sendChat(message, scope)}
-          myPlayerId={me?.id ?? null}
-          chatHasMore={chatHasMore}
-          onRequestMoreHistory={requestMoreChatHistory}
-        />
+          {/* Inline lobby chat console (global + lobby scopes) */}
+          <div className="h-80 lg:h-auto">
+            <LobbyChatConsole
+              connected={connected}
+              chatLog={chatLog}
+              chatTab={chatTab}
+              setChatTab={setChatTab}
+              chatInput={chatInput}
+              setChatInput={setChatInput}
+              onSendChat={(message, scope) => sendChat(message, scope)}
+              myPlayerId={me?.id ?? null}
+              chatHasMore={chatHasMore}
+              onRequestMoreHistory={requestMoreChatHistory}
+              inline
+            />
+          </div>
+        </div>
         {/* Match Configuration Overlay (Host) */}
         {isHost && configOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center">
