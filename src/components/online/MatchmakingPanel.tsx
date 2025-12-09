@@ -11,12 +11,16 @@ import {
 import { useState, useMemo, useEffect } from "react";
 import { useOnline } from "@/app/online/online-context";
 
-type MatchType = "constructed" | "sealed" | "draft";
+type MatchType = "constructed" | "sealed" | "draft" | "precon";
 
 const MATCH_TYPE_LABELS: Record<
   MatchType,
   { label: string; description: string }
 > = {
+  precon: {
+    label: "Precon Match",
+    description: "Play with prebuilt decks",
+  },
   constructed: {
     label: "Constructed",
     description: "Bring your own deck",
@@ -42,7 +46,7 @@ export default function MatchmakingPanel() {
     players,
   } = useOnline();
   const [selectedTypes, setSelectedTypes] = useState<Set<MatchType>>(
-    () => new Set<MatchType>(["constructed"])
+    () => new Set<MatchType>(["precon"])
   );
   // Start collapsed by default
   const [expanded, setExpanded] = useState(false);

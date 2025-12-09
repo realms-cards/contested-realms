@@ -23,7 +23,7 @@ interface OnlineDeckSelectorProps {
   myPlayerKey: PlayerKey;
   playerNames: { p1: string; p2: string };
   onPrepareComplete: () => void;
-  matchType?: "constructed" | "sealed" | "draft";
+  matchType?: "constructed" | "sealed" | "draft" | "precon";
 }
 
 export default function OnlineDeckSelector({
@@ -52,6 +52,12 @@ export default function OnlineDeckSelector({
   const [decksLoaded, setDecksLoaded] = useState<boolean>(false);
 
   const isConstructed = (matchType ?? "constructed") === "constructed";
+  const isPrecon = matchType === "precon";
+
+  // Filter decks for precon mode - only show public decks with "precon" in name
+  const preconDecks = useMemo(() => {
+    return publicDecks.filter((d) => d.name.toLowerCase().includes("precon"));
+  }, [publicDecks]);
 
   useEffect(() => {
     (async () => {
@@ -158,7 +164,9 @@ export default function OnlineDeckSelector({
   return (
     <div className="w-full max-w-2xl bg-zinc-900/80 text-white rounded-2xl ring-1 ring-white/10 p-6">
       <div className="mb-6 text-center">
-        <h2 className="text-xl font-semibold mb-2">Select Your Deck</h2>
+        <h2 className="text-xl font-semibold mb-2">
+          {isPrecon ? "Select a Precon Deck" : "Select Your Deck"}
+        </h2>
         <p className="text-sm opacity-80">
           Playing as:{" "}
           <span className="font-medium text-blue-400">
@@ -168,8 +176,8 @@ export default function OnlineDeckSelector({
       </div>
 
       <div className="space-y-4">
-        {/* Curiosa import inline panel */}
-        {curiosaEnabled && (
+        {/* Curiosa import inline panel - hidden for precon matches */}
+        {curiosaEnabled && !isPrecon && (
           <div className="bg-zinc-900/60 ring-1 ring-zinc-700 rounded p-3 space-y-2">
             <div className="text-sm font-medium">Import from Curiosa</div>
             <div className="grid gap-2 sm:grid-cols-5">
@@ -222,32 +230,57 @@ export default function OnlineDeckSelector({
 
         <div>
           <label className="block text-sm font-medium mb-2">Choose Deck</label>
-          <div className="flex items-center justify-between mb-2 text-xs">
-            <span className="opacity-60">Your own decks are always shown.</span>
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                className="rounded"
-                checked={includePublic}
-                onChange={(e) => {
-                  const next = e.target.checked;
-                  setIncludePublic(next);
-                  try {
-                    localStorage.setItem(
-                      "sorcery:includePublicDecks",
-                      next ? "1" : "0"
-                    );
-                  } catch {}
-                }}
-              />
-              Include public decks
-            </label>
-          </div>
+          {/* Hide deck options for precon mode - only precon decks available */}
+          {!isPrecon && (
+            <div className="flex items-center justify-between mb-2 text-xs">
+              <span className="opacity-60">
+                Your own decks are always shown.
+              </span>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  className="rounded"
+                  checked={includePublic}
+                  onChange={(e) => {
+                    const next = e.target.checked;
+                    setIncludePublic(next);
+                    try {
+                      localStorage.setItem(
+                        "sorcery:includePublicDecks",
+                        next ? "1" : "0"
+                      );
+                    } catch {}
+                  }}
+                />
+                Include public decks
+              </label>
+            </div>
+          )}
           {!decksLoaded ? (
             <div className="w-full bg-zinc-800/80 ring-1 ring-zinc-700 rounded px-3 py-2 text-gray-400">
               Loading decks...
             </div>
+          ) : isPrecon ? (
+            /* Precon mode: only show precon decks */
+            <select
+              className="w-full bg-zinc-800/80 ring-1 ring-zinc-700 rounded px-3 py-2 text-white"
+              value={selectedDeck}
+              onChange={(e) => setSelectedDeck(e.target.value)}
+              disabled={isLoading}
+            >
+              <option value="">Select a precon deck...</option>
+              {preconDecks.length > 0 ? (
+                preconDecks.map((deck) => (
+                  <option key={deck.id} value={deck.id}>
+                    {deck.name}
+                  </option>
+                ))
+              ) : (
+                <option disabled>No precon decks available</option>
+              )}
+            </select>
           ) : (
+            /* Normal mode: show user's decks and optionally public decks */
             <select
               className="w-full bg-zinc-800/80 ring-1 ring-zinc-700 rounded px-3 py-2 text-white"
               value={selectedDeck}
@@ -283,10 +316,19 @@ export default function OnlineDeckSelector({
           </div>
         )}
 
-        {isConstructed && isPreconSelected && (
+        {/* Warning for precon decks in constructed mode (not for precon matches) */}
+        {isConstructed && !isPrecon && isPreconSelected && (
           <div className="mt-2 text-amber-300 text-xs bg-amber-900/20 rounded px-3 py-2 ring-1 ring-amber-800">
             You selected a Precon deck. These lists are for learning the game
             and are not competitive constructed-legal.
+          </div>
+        )}
+
+        {/* Helpful info for precon matches */}
+        {isPrecon && (
+          <div className="mt-2 text-blue-300 text-xs bg-blue-900/20 rounded px-3 py-2 ring-1 ring-blue-800">
+            Precon Match: Both players use prebuilt element decks. Great for
+            learning the game!
           </div>
         )}
 

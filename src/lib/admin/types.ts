@@ -84,3 +84,14 @@ export interface UsageSnapshot {
   activeUsers: number;
   generatedAt: string;
 }
+
+export interface ActiveMatchInfo {
+  matchId: string;
+  playerIds: string[];
+  playerNames: string[];
+  matchType: string;
+  status: string;
+  lobbyName: string | null;
+  startedAt: number | null;
+  tournamentId: string | null;
+}
