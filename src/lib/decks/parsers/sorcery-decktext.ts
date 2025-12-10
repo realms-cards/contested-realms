@@ -1,7 +1,9 @@
 /*
  * Parser for Sorcery decklists copied from Curiosa-style text export.
  *
- * Supported format (examples):
+ * Supported formats (examples):
+ *
+ * Sorcery/Curiosa format:
  *   Avatar (1)
  *   1Druid
  *   Aura (1)
@@ -15,10 +17,17 @@
  *   2Autumn River
  *   ...
  *
+ * CardNexus format (with set in parentheses):
+ *   1 Valley (PROMOTIONAL)
+ *   1 Rift Valley (BETA)
+ *   1 Valley of Delight (ARTHURIAN-LEGENDS)
+ *   1 Necromancer (GOTHIC)
+ *
  * Notes:
  * - Copy/paste sometimes introduces standalone numeric lines (cost/threshold icons). We ignore lines that are only digits.
  * - Some lines have no space between quantity and name (e.g., "1Druid"). We accept optional whitespace.
  * - We stop parsing if we encounter a footer like "Deck History".
+ * - Cards starting with numbers (e.g., "13 Treasures of Britain") require a separator (space/comma) between count and name.
  */
 
 export type DeckTextCategory =
@@ -33,6 +42,7 @@ export type DeckTextCategory =
 export interface NameCount {
   name: string;
   count: number;
+  set?: string; // Optional set name from CardNexus format
 }
 
 export interface ParsedDeckText {
@@ -103,15 +113,69 @@ function isOnlyDigits(line: string): boolean {
 
 function parseCountAndName(
   line: string
-): { count: number; name: string } | null {
-  // Accept either "1Druid" or "1 Druid"; require count at start
-  const m = line.match(/^(\d+)\s*(.+)$/);
-  if (!m) return null;
-  const count = parseInt(m[1], 10);
-  if (!Number.isFinite(count) || count <= 0) return null;
-  const name = normalizeName(m[2]);
-  if (!name) return null;
-  return { count, name };
+): { count: number; name: string; set?: string } | null {
+  // Strategy:
+  // 1. First try to match "count separator name" where separator is space or comma
+  //    This handles cards starting with numbers like "1 13 Treasures of Britain"
+  // 2. Fall back to "countName" (no separator) for lines like "1Druid"
+  //    Only if the name part doesn't start with a digit
+
+  // Try with explicit separator first (space or comma after count)
+  // This correctly parses "1 13 Treasures of Britain" as count=1, name="13 Treasures of Britain"
+  const withSep = line.match(/^(\d+)[,\s]+(.+)$/);
+  if (withSep) {
+    const count = parseInt(withSep[1], 10);
+    if (!Number.isFinite(count) || count <= 0) return null;
+    const rawName = normalizeName(withSep[2]);
+    if (!rawName) return null;
+    // Check for CardNexus format: "Card Name (SET-NAME)"
+    const { name, set } = extractSetFromName(rawName);
+    return { count, name, set };
+  }
+
+  // Fall back to no-separator format (e.g., "1Druid")
+  // Only allow if the character after digits is NOT a digit
+  const noSep = line.match(/^(\d+)([^\d].*)$/);
+  if (noSep) {
+    const count = parseInt(noSep[1], 10);
+    if (!Number.isFinite(count) || count <= 0) return null;
+    const rawName = normalizeName(noSep[2]);
+    if (!rawName) return null;
+    // Check for CardNexus format
+    const { name, set } = extractSetFromName(rawName);
+    return { count, name, set };
+  }
+
+  return null;
+}
+
+/**
+ * Extract set name from CardNexus format: "Card Name (SET-NAME)"
+ * Returns the card name without the set suffix and the normalized set name.
+ */
+function extractSetFromName(rawName: string): { name: string; set?: string } {
+  // Match trailing parentheses with set name, e.g., "Valley (BETA)" or "Valley of Delight (ARTHURIAN-LEGENDS)"
+  const setMatch = rawName.match(/^(.+?)\s*\(([A-Z][A-Z0-9-]*)\)\s*$/);
+  if (setMatch) {
+    const name = normalizeName(setMatch[1]);
+    const rawSet = setMatch[2];
+    // Normalize set name: ARTHURIAN-LEGENDS -> Arthurian Legends, BETA -> Beta, etc.
+    const set = normalizeSetName(rawSet);
+    return { name, set };
+  }
+  return { name: rawName };
+}
+
+/**
+ * Normalize CardNexus set names to match our database set names.
+ * E.g., "ARTHURIAN-LEGENDS" -> "Arthurian Legends", "BETA" -> "Beta"
+ */
+function normalizeSetName(raw: string): string {
+  // Replace hyphens with spaces and title-case
+  return raw
+    .toLowerCase()
+    .replace(/-/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 export function parseSorceryDeckText(rawInput: string): ParsedDeckText {
@@ -121,7 +185,10 @@ export function parseSorceryDeckText(rawInput: string): ParsedDeckText {
     .map((x) => x.replace(/\u00A0/g, " ").trim())
     .filter((x) => x.length > 0);
 
-  const categories: Record<DeckTextCategory, Map<string, number>> = {
+  // Track cards by name with their count and optional set
+  // Key is "name" or "name|set" to allow same card from different sets
+  type CardEntry = { count: number; set?: string };
+  const categories: Record<DeckTextCategory, Map<string, CardEntry>> = {
     Avatar: new Map(),
     Aura: new Map(),
     Artifact: new Map(),
@@ -163,8 +230,16 @@ export function parseSorceryDeckText(rawInput: string): ParsedDeckText {
         });
       }
       const map = categories[current];
-      const key = normalizeName(parsed.name);
-      map.set(key, (map.get(key) || 0) + parsed.count);
+      // Use name|set as key to distinguish same card from different sets
+      const key = parsed.set
+        ? `${normalizeName(parsed.name)}|${parsed.set}`
+        : normalizeName(parsed.name);
+      const existing = map.get(key);
+      if (existing) {
+        existing.count += parsed.count;
+      } else {
+        map.set(key, { count: parsed.count, set: parsed.set });
+      }
       continue;
     }
 
@@ -196,7 +271,11 @@ export function parseSorceryDeckText(rawInput: string): ParsedDeckText {
 
   for (const cat of CATEGORY_ORDER) {
     const items = Array.from(categories[cat].entries())
-      .map(([name, count]) => ({ name, count }))
+      .map(([key, entry]) => {
+        // Extract name from key (remove |set suffix if present)
+        const name = key.includes("|") ? key.split("|")[0] : key;
+        return { name, count: entry.count, set: entry.set };
+      })
       .sort((a, b) => a.name.localeCompare(b.name));
     resultLists[cat] = items;
     totalByCategory[cat] = items.reduce((a, b) => a + b.count, 0);
