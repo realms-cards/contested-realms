@@ -325,16 +325,41 @@ export async function loadSealedDeckFor(
       drawOpening,
     } = useGameStore.getState();
 
-    // For sealed/draft, inject collection cards for spawner effects
-    // Per limited rules: "whenever an effect specifies a named card in your collection,
-    // you simply get one as if it were in your collection"
-    const deckCardNames = cards.map((c) => c.name || "").filter(Boolean);
+    // For sealed/draft, build collection from:
+    // 1. Cards submitted with zone: "collection" (sideboard cards from deck construction)
+    // 2. Spawner cards (per limited rules: "whenever an effect specifies a named card
+    //    in your collection, you simply get one as if it were in your collection")
+
+    // Extract collection cards from submitted deck (sideboard cards marked as collection)
+    const submittedCollectionCards: CardRef[] = (cards as CardRefWithZone[])
+      .filter((c) => c.__zone === "collection")
+      .map((c) => ({
+        cardId: c.cardId,
+        variantId: c.variantId,
+        name: c.name,
+        type: c.type,
+        slug: c.slug,
+        thresholds: c.thresholds,
+      }));
+
+    if (submittedCollectionCards.length > 0) {
+      console.debug(
+        `[loadSealedDeckFor] Found ${submittedCollectionCards.length} collection cards from sideboard:`,
+        submittedCollectionCards.map((c) => c.name)
+      );
+    }
+
+    // Also inject spawner cards for cards in the deck
+    const deckCardNames = cards
+      .filter((c: CardRefWithZone) => c.__zone !== "collection")
+      .map((c) => c.name || "")
+      .filter(Boolean);
     const spawnedCardNames = getSpawnedCollectionCards(deckCardNames);
-    let collection: CardRef[] = [];
+    let spawnedCollection: CardRef[] = [];
 
     if (spawnedCardNames.length > 0) {
       console.debug(
-        "[loadSealedDeckFor] Injecting collection cards for spawners:",
+        "[loadSealedDeckFor] Injecting spawner collection cards:",
         spawnedCardNames
       );
       try {
@@ -372,18 +397,29 @@ export async function loadSealedDeckFor(
         });
 
         const fetchedCards = await Promise.all(searchPromises);
-        collection = fetchedCards.filter((c): c is CardRef => c !== null);
+        spawnedCollection = fetchedCards.filter(
+          (c): c is CardRef => c !== null
+        );
         console.debug(
-          `[loadSealedDeckFor] Injected ${collection.length} collection cards`
+          `[loadSealedDeckFor] Injected ${spawnedCollection.length} spawner collection cards`
         );
       } catch (e) {
         console.error(
-          "[loadSealedDeckFor] Failed to fetch collection cards:",
+          "[loadSealedDeckFor] Failed to fetch spawner collection cards:",
           e
         );
-        // Continue without collection cards - not critical
+        // Continue without spawner cards - not critical
       }
     }
+
+    // Combine submitted collection cards with spawner cards
+    const collection: CardRef[] = [
+      ...submittedCollectionCards,
+      ...spawnedCollection,
+    ];
+    console.debug(
+      `[loadSealedDeckFor] Total collection: ${collection.length} cards (${submittedCollectionCards.length} from sideboard, ${spawnedCollection.length} from spawners)`
+    );
 
     initLibraries(who, spellbook, rawAtlas, collection);
     shuffleSpellbook(who);

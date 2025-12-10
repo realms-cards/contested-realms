@@ -64,19 +64,6 @@ const STANDARD_SITE_NAMES = ["Spire", "Stream", "Valley", "Wasteland"] as const;
 // Known avatar names (for fallback when type info is missing from local search)
 const KNOWN_AVATARS = ["dragonlord", "spellslinger"];
 
-// Gothic set ordinary cards available for collection zone (max 4 copies each)
-const GOTHIC_ORDINARY_CARD_NAMES = [
-  "Hellhounds",
-  "Ghoul",
-  "Horrible Hybrids",
-  "Penitent Knight",
-  "Consecrated Ground",
-  "Desecrated Ground",
-  "Eltham Townsfolk",
-  "Serava Townsfolk",
-  "Shoggoth",
-] as const;
-
 function pickStandardSiteResult(
   results: SearchResult[],
   name: (typeof STANDARD_SITE_NAMES)[number]
@@ -282,10 +269,6 @@ function AuthenticatedDeckEditor() {
   const [cubeStandardCards, setCubeStandardCards] = useState<SearchResult[]>(
     []
   );
-  // Gothic ordinary cards available for collection zone when Gothic set is in the draft/sealed
-  const [gothicOrdinaryCards, setGothicOrdinaryCards] = useState<
-    SearchResult[]
-  >([]);
   const sealedReplaceAvatars = sealedConfig?.replaceAvatars ?? false;
   const [bulkOpenInProgress, setBulkOpenInProgress] = useState(false);
 
@@ -972,7 +955,12 @@ function AuthenticatedDeckEditor() {
       product?: string;
       rarity?: string | null;
     };
-    type StoredPack = { id: string; set: string; cards: StoredCard[] };
+    type StoredPack = {
+      id: string;
+      set: string;
+      cards: StoredCard[];
+      opened?: boolean;
+    };
 
     let stored: StoredPack[] = [];
     try {
@@ -989,6 +977,7 @@ function AuthenticatedDeckEditor() {
         id: p.id,
         set: p.set,
         cardCount: p.cards?.length ?? 0,
+        opened: p.opened ?? false,
       })),
     });
 
@@ -1000,15 +989,14 @@ function AuthenticatedDeckEditor() {
       return;
     }
 
-    // Load exact packs (preserving opened flags from ref)
-    const openedById = openedByIdRef.current;
+    // Load exact packs (preserving opened flags from stored data)
     const serverPacks = stored.map((p) => ({
       id: p.id,
       set: p.set,
       cards: Array.isArray(p.cards)
         ? (p.cards as unknown[])
         : ([] as unknown[]),
-      opened: openedById.get(p.id) ?? false,
+      opened: p.opened ?? false,
     }));
     console.log(
       "[Sealed Init] Setting packs with cards:",
@@ -1016,9 +1004,68 @@ function AuthenticatedDeckEditor() {
         id: p.id,
         set: p.set,
         cardCount: (p.cards as unknown[])?.length ?? 0,
+        opened: p.opened,
       }))
     );
     setPacks(serverPacks);
+
+    // Restore sideboard cards from already-opened packs
+    const openedPacks = serverPacks.filter((p) => p.opened);
+    if (openedPacks.length > 0) {
+      console.log(
+        `[Sealed Init] Restoring cards from ${openedPacks.length} already-opened packs`
+      );
+      // We need to restore the cards to sideboard - they will be resolved when pack loading runs
+      // Mark these packs as needing card restoration
+      for (const pack of openedPacks) {
+        const packCards = pack.cards as StoredCard[];
+        if (packCards && packCards.length > 0) {
+          // Convert stored cards to SearchResult format and add to sideboard
+          const converted: SearchResult[] = [];
+          for (const card of packCards) {
+            if (!card.cardId) continue;
+            const sr: SearchResult = {
+              cardId: card.cardId,
+              variantId: card.variantId ?? 0,
+              cardName: card.cardName || card.name || "",
+              slug: card.slug || "",
+              type: card.type || null,
+              set: card.set || card.setName || "",
+              rarity: card.rarity || null,
+              finish: "Standard",
+              product: "Draft",
+            };
+            converted.push(sr);
+          }
+          if (converted.length > 0) {
+            // Add to picks directly since addSearchResultsToSideboard may not be available yet
+            setPicks((prev) => {
+              const next = { ...prev } as Record<PickKey, PickItem>;
+              for (const r of converted) {
+                const zone: Zone = "Sideboard";
+                const key = `${r.cardId}:${zone}:${
+                  r.variantId ?? "x"
+                }` as PickKey;
+                const exists = next[key];
+                next[key] = exists
+                  ? { ...exists, count: exists.count + 1 }
+                  : {
+                      cardId: r.cardId,
+                      variantId: r.variantId ?? null,
+                      name: r.cardName,
+                      type: r.type,
+                      slug: r.slug,
+                      zone,
+                      count: 1,
+                      set: r.set,
+                    };
+              }
+              return next;
+            });
+          }
+        }
+      }
+    }
 
     // Load cube name if available (for display in UI)
     try {
@@ -1791,75 +1838,6 @@ function AuthenticatedDeckEditor() {
     };
   }, [searchParamsKey, searchParams, convertCardDataToSearchResult]);
 
-  // Load Gothic ordinary cards when Gothic set is included in sealed/draft packs
-  useEffect(() => {
-    // Check if any pack contains Gothic set
-    const hasGothic =
-      packs.some((p) => p.set.toLowerCase() === "gothic") ||
-      (sealedConfig?.setMix ?? []).some((s) => s.toLowerCase() === "gothic");
-
-    if (!hasGothic || !isSealed) {
-      setGothicOrdinaryCards([]);
-      return;
-    }
-
-    let cancelled = false;
-
-    (async () => {
-      try {
-        // Fetch Gothic ordinary cards by name from the API
-        const cardPromises = GOTHIC_ORDINARY_CARD_NAMES.map(async (name) => {
-          const res = await fetch(
-            `/api/cards/search?q=${encodeURIComponent(name)}&set=Gothic`
-          );
-          if (!res.ok) return null;
-          const data = await res.json();
-          // API returns array directly, not wrapped in { cards: [...] }
-          const cards = Array.isArray(data) ? data : [];
-          // Find exact match by cardName (API returns cardName, not name)
-          const match = cards.find(
-            (c: { cardName?: string }) =>
-              c.cardName?.toLowerCase() === name.toLowerCase()
-          );
-          return match ?? null;
-        });
-
-        const results = await Promise.all(cardPromises);
-        const converted: SearchResult[] = [];
-
-        for (const card of results) {
-          if (!card) continue;
-          // API returns: { variantId, slug, finish, product, cardId, cardName, set, setId, type, subTypes, rarity }
-          const sr = convertCardDataToSearchResult(
-            {
-              slug: card.slug ?? "",
-              cardName: card.cardName,
-              set: card.set ?? "Gothic",
-              cardId: card.cardId,
-              variantId: card.variantId ?? undefined,
-              finish: card.finish ?? "Standard",
-              product: card.product ?? "Draft",
-              type: card.type,
-              rarity: card.rarity ?? "Ordinary",
-            } as unknown as Record<string, unknown>,
-            card.set ?? "Gothic"
-          );
-          if (sr) converted.push(sr);
-        }
-
-        if (!cancelled) {
-          setGothicOrdinaryCards(converted);
-        }
-      } catch {
-        if (!cancelled) setGothicOrdinaryCards([]);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [packs, sealedConfig?.setMix, isSealed, convertCardDataToSearchResult]);
-
   // (moved) Load deck from URL parameter after loadDeck is declared
 
   // Tab state for cards view - default to "Your Deck"
@@ -1870,7 +1848,7 @@ function AuthenticatedDeckEditor() {
 
   // Tournament legal controls visibility
   const [tournamentControlsMode, setTournamentControlsMode] = useState<
-    "standard" | "cube" | "gothic" | null
+    "standard" | "cube" | null
   >(null);
   const tournamentControlsVisible = tournamentControlsMode !== null;
 
@@ -2469,49 +2447,6 @@ function AuthenticatedDeckEditor() {
     [setPicks]
   );
 
-  // Add Gothic ordinary card to collection zone (max 4 copies per card, max 10 total in collection)
-  const addGothicCardToCollection = useCallback(
-    (r: SearchResult) => {
-      // Check collection limit (max 10 total)
-      if (collectionCount >= 10) {
-        setFeedbackMessage("Collection is full (maximum 10 cards)");
-        setTimeout(() => setFeedbackMessage(null), 2000);
-        return;
-      }
-
-      // Check per-card limit (max 4 copies)
-      const currentCopies = collectionCountsByCardId[r.cardId] ?? 0;
-      if (currentCopies >= 4) {
-        setFeedbackMessage(`Maximum 4 copies of ${r.cardName} in collection`);
-        setTimeout(() => setFeedbackMessage(null), 2000);
-        return;
-      }
-
-      const zone: Zone = "Collection";
-      const key = `${r.cardId}:${zone}:${r.variantId ?? "x"}` as PickKey;
-      setPicks((prev) => {
-        const exists = prev[key];
-        const next: PickItem = exists
-          ? { ...exists, count: exists.count + 1 }
-          : {
-              cardId: r.cardId,
-              variantId: r.variantId ?? null,
-              name: r.cardName,
-              type: r.type,
-              slug: r.slug,
-              zone,
-              count: 1,
-              set: r.set,
-            };
-        return { ...prev, [key]: next };
-      });
-
-      setFeedbackMessage(`Added ${r.cardName} to Collection`);
-      setTimeout(() => setFeedbackMessage(null), 2000);
-    },
-    [collectionCount, collectionCountsByCardId, setPicks, setFeedbackMessage]
-  );
-
   // Minimal deck actions
   const saveDeck = useCallback(async () => {
     if (status !== "authenticated") {
@@ -2791,6 +2726,26 @@ function AuthenticatedDeckEditor() {
           rarity: p.card.rarity || "Common",
         }));
 
+      // Sideboard cards become collection cards (per limited rules: unplayed cards in card pool)
+      const sideboardAsCollection = pick3D
+        .filter((p) => p.zone === "Sideboard")
+        .map((p) => ({
+          id: p.card.cardId.toString(),
+          cardId: p.card.cardId,
+          name: p.card.cardName || `Card ${p.card.cardId}`,
+          type: p.card.type,
+          slug: p.card.slug,
+          set: p.card.setName || setName,
+          cost: metaByCardId[p.card.cardId]?.cost ?? 0,
+          rarity: p.card.rarity || "Common",
+        }));
+
+      // Combine deck cards with sideboard-as-collection for submission
+      const fullDeckSubmission = [
+        ...deckCards,
+        ...sideboardAsCollection.map((c) => ({ ...c, zone: "collection" })),
+      ];
+
       // Auto-save the deck with sealed naming format
       const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD format
       const matchName = searchParams?.get("matchName");
@@ -2863,11 +2818,12 @@ function AuthenticatedDeckEditor() {
         } catch {}
 
         // Submit to match server using postMessage to parent window (online match page)
+        // Include sideboard cards as collection (per limited rules)
         if (window.opener) {
           window.opener.postMessage(
             {
               type: "sealedDeckSubmission",
-              deck: deckCards,
+              deck: fullDeckSubmission,
               matchId,
             },
             window.location.origin
@@ -2876,7 +2832,7 @@ function AuthenticatedDeckEditor() {
           // Fallback: save to localStorage for the match page to pick up
           localStorage.setItem(
             `sealedDeck_${matchId}`,
-            JSON.stringify(deckCards)
+            JSON.stringify(fullDeckSubmission)
           );
         }
         setWaitingOverlayStage("waiting");
@@ -2952,6 +2908,7 @@ function AuthenticatedDeckEditor() {
         set: string;
         cost: number;
         rarity: string;
+        zone?: string;
       }> = pick3D
         .filter((p) => p.zone === "Deck") // only deck zone
         .map((p) => ({
@@ -2964,6 +2921,24 @@ function AuthenticatedDeckEditor() {
           cost: metaByCardId[p.card.cardId]?.cost ?? 0,
           rarity: p.card.rarity || "Common",
         }));
+
+      // Sideboard cards become collection cards (per limited rules: unplayed cards in card pool)
+      const sideboardAsCollection = pick3D
+        .filter((p) => p.zone === "Sideboard")
+        .map((p) => ({
+          id: p.card.cardId.toString(),
+          cardId: p.card.cardId,
+          name: p.card.cardName || `Card ${p.card.cardId}`,
+          type: p.card.type,
+          slug: p.card.slug,
+          set: p.card.setName || setName,
+          cost: metaByCardId[p.card.cardId]?.cost ?? 0,
+          rarity: p.card.rarity || "Common",
+          zone: "collection",
+        }));
+
+      // Combine deck cards with sideboard-as-collection for submission
+      const fullDeckSubmission = [...deckCards, ...sideboardAsCollection];
 
       // Auto-save the deck with draft naming format
       const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD format
@@ -3035,11 +3010,12 @@ function AuthenticatedDeckEditor() {
         } catch {}
 
         // Submit to match server using postMessage to parent window
+        // Include sideboard cards as collection (per limited rules)
         if (window.opener) {
           window.opener.postMessage(
             {
               type: "draftDeckSubmission",
-              deck: deckCards,
+              deck: fullDeckSubmission,
               matchId,
             },
             window.location.origin
@@ -3048,7 +3024,7 @@ function AuthenticatedDeckEditor() {
           // Fallback: save to localStorage for the match page to pick up
           localStorage.setItem(
             `draftDeck_${matchId}`,
-            JSON.stringify(deckCards)
+            JSON.stringify(fullDeckSubmission)
           );
         }
         setWaitingOverlayStage("waiting");
@@ -3402,6 +3378,36 @@ function AuthenticatedDeckEditor() {
 
   // Sealed mode pack functions
 
+  // Helper to persist pack opened state to localStorage
+  const persistPackOpenedState = useCallback(
+    (updatedPacks: typeof packs) => {
+      const matchId = searchParams?.get("matchId");
+      const tournamentId = searchParams?.get("tournament");
+      const idKey =
+        matchId || (tournamentId ? `tournament_${tournamentId}` : null);
+      if (!idKey) return;
+
+      try {
+        // Convert packs to storage format, preserving opened flags
+        const toStore = updatedPacks.map((p) => ({
+          id: p.id,
+          set: p.set,
+          cards: p.cards,
+          opened: p.opened,
+        }));
+        localStorage.setItem(`sealedPacks_${idKey}`, JSON.stringify(toStore));
+        console.log(
+          `[Sealed] Persisted pack state to localStorage: ${
+            updatedPacks.filter((p) => p.opened).length
+          }/${updatedPacks.length} opened`
+        );
+      } catch (e) {
+        console.error("[Sealed] Failed to persist pack state:", e);
+      }
+    },
+    [searchParams]
+  );
+
   const openPack = useCallback(
     async (packId: string) => {
       const pack = packs.find((p) => p.id === packId);
@@ -3419,15 +3425,25 @@ function AuthenticatedDeckEditor() {
         }
         addSearchResultsToSideboard(resolved);
         // Mark pack as opened; keep existing cards array
-        setPacks((prev) =>
-          prev.map((p) => (p.id === packId ? { ...p, opened: true } : p))
-        );
+        setPacks((prev) => {
+          const updated = prev.map((p) =>
+            p.id === packId ? { ...p, opened: true } : p
+          );
+          // Persist opened state to localStorage to prevent reload exploits
+          persistPackOpenedState(updated);
+          return updated;
+        });
       } catch (e) {
         console.error("Pack opening error:", e);
         setError(e instanceof Error ? e.message : String(e));
       }
     },
-    [packs, resolveCardsForPack, addSearchResultsToSideboard]
+    [
+      packs,
+      resolveCardsForPack,
+      addSearchResultsToSideboard,
+      persistPackOpenedState,
+    ]
   );
 
   const openAllPacks = useCallback(async () => {
@@ -3444,9 +3460,14 @@ function AuthenticatedDeckEditor() {
         }
         if (resolved && resolved.length > 0) {
           addSearchResultsToSideboard(resolved);
-          setPacks((prev) =>
-            prev.map((p) => (p.id === pack.id ? { ...p, opened: true } : p))
-          );
+          setPacks((prev) => {
+            const updated = prev.map((p) =>
+              p.id === pack.id ? { ...p, opened: true } : p
+            );
+            // Persist opened state to localStorage to prevent reload exploits
+            persistPackOpenedState(updated);
+            return updated;
+          });
         }
       }
     } catch (err) {
@@ -3463,6 +3484,7 @@ function AuthenticatedDeckEditor() {
     bulkOpenInProgress,
     packs,
     resolveCardsForPack,
+    persistPackOpenedState,
     addSearchResultsToSideboard,
     setPacks,
   ]);
@@ -4957,8 +4979,7 @@ function AuthenticatedDeckEditor() {
               setTimeout(() => setFeedbackMessage(null), 2000);
             }}
             showCollectionZone={
-              (cubeStandardCards.length > 0 && cubeBoostersOpened) ||
-              gothicOrdinaryCards.length > 0
+              cubeStandardCards.length > 0 && cubeBoostersOpened
             }
             collectionCount={collectionCount}
             collectionCountsByCardId={collectionCountsByCardId}
@@ -5428,7 +5449,6 @@ function AuthenticatedDeckEditor() {
             tournamentControlsVisible={tournamentControlsVisible}
             tournamentControlsMode={tournamentControlsMode}
             cubeExtrasAvailable={cubeExtrasAvailable}
-            gothicExtrasAvailable={gothicOrdinaryCards.length > 0}
             onShowStandardCards={() =>
               setTournamentControlsMode((prev) =>
                 prev === "standard" ? null : "standard"
@@ -5437,11 +5457,6 @@ function AuthenticatedDeckEditor() {
             onShowCubeExtras={() =>
               setTournamentControlsMode((prev) =>
                 prev === "cube" ? null : "cube"
-              )
-            }
-            onShowGothicExtras={() =>
-              setTournamentControlsMode((prev) =>
-                prev === "gothic" ? null : "gothic"
               )
             }
             packs={packs}
@@ -5567,9 +5582,6 @@ function AuthenticatedDeckEditor() {
           onAddStandardSite={addStandardSiteByName}
           cubeStandardCards={cubeStandardCards}
           onAddCubeStandardCard={addToSideboardFromSearch}
-          gothicOrdinaryCards={gothicOrdinaryCards}
-          onAddGothicCard={addGothicCardToCollection}
-          collectionCountsByCardId={collectionCountsByCardId}
         />
       </Suspense>
 
