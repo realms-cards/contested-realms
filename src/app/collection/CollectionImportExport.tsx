@@ -309,7 +309,7 @@ export default function CollectionImportExport({
                               : "bg-gray-700 text-gray-300 hover:bg-gray-600"
                           }`}
                         >
-                          Sorcery Text
+                          Text (i.e. CardNexus)
                         </button>
                         <button
                           onClick={() => setImportFormat("curiosa")}
