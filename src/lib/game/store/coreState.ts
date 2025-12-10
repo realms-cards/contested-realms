@@ -45,6 +45,9 @@ type CoreStateSlice = Pick<
   | "rollD20"
   | "setupWinner"
   | "choosePlayerOrder"
+  | "d20PendingRoll"
+  | "retryD20Roll"
+  | "clearD20Pending"
   | "matchEnded"
   | "winner"
   | "checkMatchEnd"
@@ -93,10 +96,14 @@ export const createCoreSlice: StateCreator<
   // D20 Setup phase
   d20Rolls: createInitialD20Rolls(),
   setupWinner: null,
+  d20PendingRoll: null, // Track pending roll for retry logic
   rollD20: (who) => {
     const roll = Math.floor(Math.random() * 20) + 1;
     const state = get();
     const newRolls = { ...state.d20Rolls, [who]: roll };
+
+    // Track this roll as pending for retry logic
+    set({ d20PendingRoll: { seat: who, roll, ts: Date.now() } });
 
     if (newRolls.p1 !== null && newRolls.p2 !== null) {
       let winner: PlayerKey | null = null;
@@ -111,7 +118,7 @@ export const createCoreSlice: StateCreator<
         const tiePatch: ServerPatchT = {
           d20Rolls: newRolls,
         };
-        get().trySendPatch(tiePatch);
+        get().trySendD20Patch(tiePatch);
         set({ d20Rolls: newRolls, setupWinner: null });
         return;
       }
@@ -120,8 +127,8 @@ export const createCoreSlice: StateCreator<
         d20Rolls: newRolls,
         setupWinner: winner,
       };
-      get().trySendPatch(patch);
-      set({ d20Rolls: newRolls, setupWinner: winner });
+      get().trySendD20Patch(patch);
+      set({ d20Rolls: newRolls, setupWinner: winner, d20PendingRoll: null });
       get().log(
         `Player ${
           newRolls.p1 > newRolls.p2 ? "1" : "2"
@@ -132,10 +139,36 @@ export const createCoreSlice: StateCreator<
       );
     } else {
       const patch: ServerPatchT = { d20Rolls: newRolls };
-      get().trySendPatch(patch);
+      get().trySendD20Patch(patch);
       set({ d20Rolls: newRolls });
       get().log(`Player ${who === "p1" ? "1" : "2"} rolled a ${roll}`);
     }
+  },
+  retryD20Roll: () => {
+    const state = get();
+    const pending = state.d20PendingRoll;
+    if (!pending) return false;
+
+    // Only retry if the roll hasn't been acknowledged (still pending)
+    const currentRoll = state.d20Rolls[pending.seat];
+    if (currentRoll !== pending.roll) {
+      // Roll was reset (tie) or changed, clear pending
+      set({ d20PendingRoll: null });
+      return false;
+    }
+
+    console.log("[D20] Retrying roll patch", { pending });
+    const patch: ServerPatchT = {
+      d20Rolls: {
+        p1: pending.seat === "p1" ? pending.roll : state.d20Rolls.p1,
+        p2: pending.seat === "p2" ? pending.roll : state.d20Rolls.p2,
+      },
+    };
+    get().trySendD20Patch(patch);
+    return true;
+  },
+  clearD20Pending: () => {
+    set({ d20PendingRoll: null });
   },
   choosePlayerOrder: (winner, wantsToGoFirst) => {
     const firstPlayer = wantsToGoFirst

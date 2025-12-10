@@ -11,6 +11,7 @@ type TransportSlice = Pick<
   | "transportSubscriptions"
   | "pendingPatches"
   | "trySendPatch"
+  | "trySendD20Patch"
   | "flushPendingPatches"
 >;
 
@@ -751,6 +752,37 @@ export const createTransportSlice: StateCreator<
     }
 
     return true;
+  },
+
+  // D20 patches bypass batching and send immediately for reliability
+  trySendD20Patch: (patch) => {
+    const state = get();
+    const tr = state.transport;
+    if (!patch || typeof patch !== "object") return false;
+
+    const patchObj = patch as ServerPatchT;
+
+    // D20 patches don't need sanitization - they only contain d20Rolls and setupWinner
+    // Send immediately without batching
+    if (!tr) {
+      set((s) => ({ pendingPatches: [...s.pendingPatches, patchObj] }));
+      console.warn("[net] Transport unavailable: queued D20 patch");
+      return false;
+    }
+
+    try {
+      console.log("[D20] Sending patch immediately (bypass batching)", {
+        d20Rolls: patchObj.d20Rolls,
+        setupWinner: patchObj.setupWinner,
+      });
+      tr.sendAction(patchObj);
+      set({ lastLocalActionTs: Date.now() });
+      return true;
+    } catch (err) {
+      set((s) => ({ pendingPatches: [...s.pendingPatches, patchObj] }));
+      console.warn(`[net] D20 patch send failed: ${String(err)}`);
+      return false;
+    }
   },
 
   flushPendingPatches: () => {

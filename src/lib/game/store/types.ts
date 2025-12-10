@@ -287,6 +287,10 @@ export type GameState = {
   rollD20: (who: PlayerKey) => void;
   setupWinner: PlayerKey | null;
   choosePlayerOrder: (winner: PlayerKey, wantsToGoFirst: boolean) => void;
+  // D20 pending roll for retry logic
+  d20PendingRoll: { seat: PlayerKey; roll: number; ts: number } | null;
+  retryD20Roll: () => boolean;
+  clearD20Pending: () => void;
   // Server patch integration
   applyServerPatch: (patch: unknown, t?: number) => void;
   applyPatch: (patch: unknown) => void;
@@ -524,6 +528,8 @@ export type GameState = {
   // Safe patch sending
   pendingPatches: ServerPatchT[];
   trySendPatch: (patch: ServerPatchT) => boolean;
+  // D20 patches bypass batching and send immediately for reliability
+  trySendD20Patch: (patch: ServerPatchT) => boolean;
   flushPendingPatches: () => void;
   addLife: (who: PlayerKey, delta: number) => void;
   addMana: (who: PlayerKey, delta: number) => void;
