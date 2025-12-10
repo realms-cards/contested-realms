@@ -376,15 +376,14 @@ export async function POST(req: NextRequest) {
         }
 
         // Parse CSV line: could be "4,Apprentice Wizard" or "4 Apprentice Wizard"
-        const match = line.match(/^(\d+)[,\s]+(.+)$/);
-        if (!match) {
+        // Also supports CardNexus format: "1 Valley (BETA)" or "1 13 Treasures of Britain"
+        const parsed = parseCountAndNameCSV(line);
+        if (!parsed) {
           errors.push({ name: line, message: "Could not parse line" });
           continue;
         }
 
-        const count = parseInt(match[1], 10);
-        const name = match[2].trim().replace(/^["']|["']$/g, ""); // Remove quotes
-        parsedLines.push({ name, count });
+        parsedLines.push(parsed);
       }
 
       // Batch lookup all card names at once (1 query instead of N)
@@ -534,4 +533,48 @@ function normalizeFinish(finish: string): string {
     return "Foil";
   }
   return "Standard";
+}
+
+/**
+ * Parse a CSV line with count and card name.
+ * Handles:
+ * - "4,Apprentice Wizard" or "4 Apprentice Wizard"
+ * - Cards starting with numbers: "1 13 Treasures of Britain"
+ * - CardNexus format: "1 Valley (BETA)"
+ */
+function parseCountAndNameCSV(
+  line: string
+): { name: string; count: number } | null {
+  // Strategy:
+  // 1. First try to match "count separator name" where separator is space or comma
+  //    This handles cards starting with numbers like "1 13 Treasures of Britain"
+  // 2. Fall back to "countName" (no separator) for lines like "1Druid"
+  //    Only if the name part doesn't start with a digit
+
+  // Try with explicit separator first (space or comma after count)
+  const withSep = line.match(/^(\d+)[,\s]+(.+)$/);
+  if (withSep) {
+    const count = parseInt(withSep[1], 10);
+    if (!Number.isFinite(count) || count <= 0) return null;
+    let name = withSep[2].trim().replace(/^["']|["']$/g, ""); // Remove quotes
+    // Strip CardNexus set suffix like "(BETA)" for now - we just need the name
+    name = name.replace(/\s*\([A-Z][A-Z0-9-]*\)\s*$/, "").trim();
+    if (!name) return null;
+    return { count, name };
+  }
+
+  // Fall back to no-separator format (e.g., "1Druid")
+  // Only allow if the character after digits is NOT a digit
+  const noSep = line.match(/^(\d+)([^\d].*)$/);
+  if (noSep) {
+    const count = parseInt(noSep[1], 10);
+    if (!Number.isFinite(count) || count <= 0) return null;
+    let name = noSep[2].trim().replace(/^["']|["']$/g, "");
+    // Strip CardNexus set suffix
+    name = name.replace(/\s*\([A-Z][A-Z0-9-]*\)\s*$/, "").trim();
+    if (!name) return null;
+    return { count, name };
+  }
+
+  return null;
 }

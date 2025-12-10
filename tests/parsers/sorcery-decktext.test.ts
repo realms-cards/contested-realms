@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { parseSorceryDeckText, toZones } from "@/lib/decks/parsers/sorcery-decktext";
+import {
+  parseSorceryDeckText,
+  toZones,
+} from "@/lib/decks/parsers/sorcery-decktext";
 
 const SAMPLE = `Avatar (1)
 1Druid
@@ -123,5 +126,109 @@ describe("parseSorceryDeckText", () => {
     const druid = zones.find((z) => z.name === "Druid");
     expect(druid?.zone).toBe("Spellbook");
     expect(druid?.count).toBe(1);
+  });
+
+  it("handles cards starting with numbers like '13 Treasures of Britain'", () => {
+    const input = `Artifact (1)
+1 13 Treasures of Britain`;
+
+    const parsed = parseSorceryDeckText(input);
+
+    expect(parsed.totalByCategory.Artifact).toBe(1);
+    const artifacts = parsed.categories.Artifact;
+    const treasures = artifacts.find(
+      (c) => c.name === "13 Treasures of Britain"
+    );
+    expect(treasures).toBeDefined();
+    expect(treasures?.count).toBe(1);
+  });
+
+  it("handles CardNexus format with set names in parentheses", () => {
+    const input = `Site (4)
+1 Valley (PROMOTIONAL)
+1 Rift Valley (BETA)
+1 Valley of Delight (ARTHURIAN-LEGENDS)
+1 Necromancer (GOTHIC)`;
+
+    const parsed = parseSorceryDeckText(input);
+
+    expect(parsed.totalByCategory.Site).toBe(4);
+    const sites = parsed.categories.Site;
+
+    // Check that names are extracted without set suffix
+    const valley = sites.find((c) => c.name === "Valley");
+    expect(valley).toBeDefined();
+    expect(valley?.count).toBe(1);
+    expect(valley?.set).toBe("Promotional");
+
+    const riftValley = sites.find((c) => c.name === "Rift Valley");
+    expect(riftValley).toBeDefined();
+    expect(riftValley?.set).toBe("Beta");
+
+    const valleyOfDelight = sites.find((c) => c.name === "Valley of Delight");
+    expect(valleyOfDelight).toBeDefined();
+    expect(valleyOfDelight?.set).toBe("Arthurian Legends");
+
+    const necromancer = sites.find((c) => c.name === "Necromancer");
+    expect(necromancer).toBeDefined();
+    expect(necromancer?.set).toBe("Gothic");
+  });
+
+  it("handles mixed formats in the same deck", () => {
+    const input = `Avatar (1)
+1Druid
+Artifact (2)
+1 13 Treasures of Britain
+1 Ring of Morrigan (BETA)
+Site (2)
+2Valley
+1 Rift Valley (ARTHURIAN-LEGENDS)`;
+
+    const parsed = parseSorceryDeckText(input);
+
+    expect(parsed.totalByCategory.Avatar).toBe(1);
+    expect(parsed.totalByCategory.Artifact).toBe(2);
+    expect(parsed.totalByCategory.Site).toBe(3);
+
+    // Check "13 Treasures of Britain" is parsed correctly
+    const treasures = parsed.categories.Artifact.find(
+      (c) => c.name === "13 Treasures of Britain"
+    );
+    expect(treasures?.count).toBe(1);
+
+    // Check Ring of Morrigan with set
+    const ring = parsed.categories.Artifact.find(
+      (c) => c.name === "Ring of Morrigan"
+    );
+    expect(ring?.count).toBe(1);
+    expect(ring?.set).toBe("Beta");
+
+    // Check Valley without set (no-separator format)
+    const valley = parsed.categories.Site.find((c) => c.name === "Valley");
+    expect(valley?.count).toBe(2);
+    expect(valley?.set).toBeUndefined();
+
+    // Check Rift Valley with set
+    const riftValley = parsed.categories.Site.find(
+      (c) => c.name === "Rift Valley"
+    );
+    expect(riftValley?.count).toBe(1);
+    expect(riftValley?.set).toBe("Arthurian Legends");
+  });
+
+  it("does not confuse card names with parentheses that are not set names", () => {
+    // Card names with lowercase parentheses should not be treated as set names
+    const input = `Magic (1)
+1 Some Card (with notes)`;
+
+    const parsed = parseSorceryDeckText(input);
+
+    // "(with notes)" is lowercase, so it should NOT be stripped as a set name
+    const card = parsed.categories.Magic.find((c) =>
+      c.name.includes("Some Card")
+    );
+    expect(card).toBeDefined();
+    expect(card?.name).toBe("Some Card (with notes)");
+    expect(card?.set).toBeUndefined();
   });
 });

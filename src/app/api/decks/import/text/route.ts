@@ -118,7 +118,18 @@ export async function POST(req: NextRequest) {
 
     // Batch lookup all unique card names at once
     const uniqueNames = Array.from(new Set(zoneEntries.map((e) => e.name)));
-    const nameToVariant = await batchFindVariants(uniqueNames, preferredSets);
+    // Build a map of name -> preferred set (from CardNexus format)
+    const nameToPreferredSet = new Map<string, string>();
+    for (const e of zoneEntries) {
+      if (e.set) {
+        nameToPreferredSet.set(e.name, e.set);
+      }
+    }
+    const nameToVariant = await batchFindVariants(
+      uniqueNames,
+      preferredSets,
+      nameToPreferredSet
+    );
 
     for (const e of zoneEntries) {
       const found = nameToVariant.get(e.name);
@@ -218,7 +229,12 @@ export async function POST(req: NextRequest) {
 }
 
 // Batch version for much better performance
-async function batchFindVariants(names: string[], setPreference: string[]) {
+// nameToPreferredSet: optional map of card name -> specific set to prefer (from CardNexus format)
+async function batchFindVariants(
+  names: string[],
+  setPreference: string[],
+  nameToPreferredSet?: Map<string, string>
+) {
   const result = new Map<
     string,
     {
@@ -307,8 +323,15 @@ async function batchFindVariants(names: string[], setPreference: string[]) {
 
     if (!flats.length) continue;
 
+    // Check if this card has a specific set preference from CardNexus format
+    const specificSet = nameToPreferredSet?.get(originalName);
+
     const score = (setName: string | null) => {
       if (!setName) return -1;
+      // If a specific set was requested, give it highest priority
+      if (specificSet && setName.toLowerCase() === specificSet.toLowerCase()) {
+        return 1000; // Very high score for exact match
+      }
       const idx = setPreference.indexOf(setName);
       return idx < 0 ? 0 : setPreference.length - idx; // higher is better
     };
