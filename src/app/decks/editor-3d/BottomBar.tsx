@@ -40,12 +40,10 @@ type BottomBarProps = {
   addToSideboardFromSearch: (r: SearchResult) => void;
   pick3DLength: number;
   tournamentControlsVisible: boolean;
-  tournamentControlsMode?: "standard" | "cube" | "gothic" | null;
+  tournamentControlsMode?: "standard" | "cube" | null;
   cubeExtrasAvailable?: boolean;
-  gothicExtrasAvailable?: boolean;
   onShowStandardCards: () => void;
   onShowCubeExtras: () => void;
-  onShowGothicExtras?: () => void;
   packs: Pack[];
   openPack: (packId: string) => void;
   openAllPacks: () => Promise<void>;
@@ -95,10 +93,8 @@ export default function BottomBar(props: BottomBarProps) {
     tournamentControlsVisible,
     tournamentControlsMode,
     cubeExtrasAvailable = false,
-    gothicExtrasAvailable = false,
     onShowStandardCards,
     onShowCubeExtras,
-    onShowGothicExtras,
     packs,
     openPack,
     openAllPacks,
@@ -138,8 +134,6 @@ export default function BottomBar(props: BottomBarProps) {
     tournamentControlsVisible && tournamentControlsMode === "standard";
   const cubeActive =
     tournamentControlsVisible && tournamentControlsMode === "cube";
-  const gothicActive =
-    tournamentControlsVisible && tournamentControlsMode === "gothic";
 
   const unopenedPacks = packs.filter((p) => !p.opened);
   const allUnopenedReady = unopenedPacks.every((pack) =>
@@ -362,19 +356,6 @@ export default function BottomBar(props: BottomBarProps) {
                           Cube Extras
                         </button>
                       )}
-                      {gothicExtrasAvailable && onShowGothicExtras && (
-                        <button
-                          onClick={onShowGothicExtras}
-                          className={`h-10 px-4 rounded font-medium transition-colors ${
-                            gothicActive
-                              ? "bg-rose-600 text-white hover:bg-rose-500"
-                              : "bg-rose-700 text-white hover:bg-rose-600"
-                          }`}
-                          title="Add Gothic ordinary cards to collection"
-                        >
-                          Gothic Extras
-                        </button>
-                      )}
                     </div>
                   </div>
                 ) : (
@@ -537,19 +518,6 @@ export default function BottomBar(props: BottomBarProps) {
                             title="Show cube extras from this cube"
                           >
                             Cube Extras
-                          </button>
-                        )}
-                        {gothicExtrasAvailable && onShowGothicExtras && (
-                          <button
-                            onClick={onShowGothicExtras}
-                            className={`h-10 px-4 rounded font-medium transition-colors ${
-                              gothicActive
-                                ? "bg-rose-600 text-white hover:bg-rose-500"
-                                : "bg-rose-700 text-white hover:bg-rose-600"
-                            }`}
-                            title="Add Gothic ordinary cards to collection"
-                          >
-                            Gothic Extras
                           </button>
                         )}
                         {/* Dragonlord Champion button */}

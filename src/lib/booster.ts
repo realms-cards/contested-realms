@@ -1,7 +1,6 @@
 import type { Finish, PrismaClient } from "@prisma/client";
+import { applyRarityOverride, type Rarity } from "./cards/rarity-overrides";
 import { prisma as defaultPrisma } from "./prisma";
-
-type Rarity = "Ordinary" | "Exceptional" | "Elite" | "Unique";
 
 type VariantSel = {
   id: number;
@@ -97,12 +96,25 @@ export async function generateBooster(
       where: { setId: set.id },
       select: { cardId: true, rarity: true, type: true },
     });
+    // Fetch card names to apply rarity overrides
+    const fixedCardIds = metas.map((m) => m.cardId);
+    const fixedCardNames = await client.card.findMany({
+      where: { id: { in: fixedCardIds } },
+      select: { id: true, name: true },
+    });
+    const fixedNameByCardId = new Map(
+      fixedCardNames.map((c) => [c.id, c.name])
+    );
+
     const metaByCardId = new Map<number, CardMeta>();
-    for (const m of metas)
+    for (const m of metas) {
+      const cardName = fixedNameByCardId.get(m.cardId) ?? "";
       metaByCardId.set(m.cardId, {
-        rarity: m.rarity as Rarity,
+        rarity:
+          (applyRarityOverride(cardName, m.rarity) as Rarity) ?? "Ordinary",
         type: m.type ?? null,
       });
+    }
 
     return allVariants.map((v) => {
       const meta = metaByCardId.get(v.cardId) ?? {
@@ -119,12 +131,23 @@ export async function generateBooster(
       where: { setId: set.id },
       select: { cardId: true, rarity: true, type: true },
     });
+
+  // Fetch card names to apply rarity overrides for cards missing rarity (e.g., Gothic avatars)
+  const cardIds = metas.map((m) => m.cardId);
+  const cardNames = await client.card.findMany({
+    where: { id: { in: cardIds } },
+    select: { id: true, name: true },
+  });
+  const nameByCardId = new Map(cardNames.map((c) => [c.id, c.name]));
+
   const metaByCardId = new Map<number, CardMeta>();
-  for (const m of metas)
+  for (const m of metas) {
+    const cardName = nameByCardId.get(m.cardId) ?? "";
     metaByCardId.set(m.cardId, {
-      rarity: m.rarity ?? "Ordinary",
+      rarity: (applyRarityOverride(cardName, m.rarity) as Rarity) ?? "Ordinary",
       type: m.type ?? null,
     });
+  }
 
   // Fetch all booster variants by finish
   const [variantsStd, variantsFoil]: [VariantSel[], VariantSel[]] =

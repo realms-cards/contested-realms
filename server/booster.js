@@ -2,6 +2,7 @@
 // Uses Prisma and a seeded RNG passed in from the caller
 
 const { PrismaClient } = require("@prisma/client");
+const { applyRarityOverride } = require("./rarity-overrides");
 const prisma = new PrismaClient();
 
 // Cache heavy booster metadata since sealed generation may call this repeatedly per match.
@@ -48,20 +49,25 @@ async function getBoosterMetadata(setName) {
           }),
         ]);
 
-        const metaByCardId = new Map();
-        for (const m of metas)
-          metaByCardId.set(m.cardId, {
-            rarity: m.rarity,
-            type: m.type,
-            cost: m.cost,
-          });
-
-        const cardIds = Array.from(metaByCardId.keys());
+        // First fetch card names so we can apply rarity overrides
+        const cardIds = metas.map((m) => m.cardId);
         const cardNames = await prisma.card.findMany({
           where: { id: { in: cardIds } },
           select: { id: true, name: true },
         });
         const nameByCardId = new Map(cardNames.map((c) => [c.id, c.name]));
+
+        // Build metadata map with rarity overrides applied
+        const metaByCardId = new Map();
+        for (const m of metas) {
+          const cardName = nameByCardId.get(m.cardId) || "";
+          metaByCardId.set(m.cardId, {
+            // Apply manual rarity override for cards missing rarity (e.g., Gothic avatars)
+            rarity: applyRarityOverride(cardName, m.rarity),
+            type: m.type,
+            cost: m.cost,
+          });
+        }
 
         return { set, variantsStd, variantsFoil, metaByCardId, nameByCardId };
       })()

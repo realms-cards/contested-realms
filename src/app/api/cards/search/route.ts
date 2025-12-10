@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 export const dynamic = "force-dynamic";
 import { getSetIdByName } from "@/lib/api/cached-lookups";
 import { withCache, CacheKeys } from "@/lib/cache/redis-cache";
+import { applyRarityOverride } from "@/lib/cards/rarity-overrides";
 import { logPerformance } from "@/lib/monitoring/performance";
 import { prisma } from "@/lib/prisma";
 
@@ -136,7 +137,8 @@ export async function GET(req: NextRequest) {
             const meta = metaMap.get(metaKey(v.cardId, v.setId));
             // Prefer metadata.type over typeText (flavor text)
             const type = meta?.type || v.typeText || null;
-            const rarity = meta?.rarity || null;
+            // Apply manual rarity override for cards missing rarity (e.g., Gothic avatars)
+            const rarity = applyRarityOverride(v.card.name, meta?.rarity);
             const subTypes = v.card.subTypes || null;
             return {
               variantId: v.id,
