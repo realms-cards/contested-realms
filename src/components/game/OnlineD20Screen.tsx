@@ -1,7 +1,7 @@
 "use client";
 
 import { Canvas } from "@react-three/fiber";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
 import D20Dice from "@/lib/game/components/D20Dice";
 import { useGameStore } from "@/lib/game/store";
@@ -12,6 +12,11 @@ interface OnlineD20ScreenProps {
   playerNames: { p1: string; p2: string };
   onRollingComplete: () => void;
 }
+
+// Constants for retry/resync timing
+const D20_RETRY_INTERVAL_MS = 3000; // Retry sending roll every 3s if not acknowledged
+const D20_RESYNC_TIMEOUT_MS = 10000; // Request resync if waiting >10s for opponent
+const D20_MAX_RETRIES = 5;
 
 export default function OnlineD20Screen({
   myPlayerKey,
@@ -25,6 +30,10 @@ export default function OnlineD20Screen({
   const choosePlayerOrder = useGameStore((s) => s.choosePlayerOrder);
   const phase = useGameStore((s) => s.phase);
   const avatars = useGameStore((s) => s.avatars);
+  const d20PendingRoll = useGameStore((s) => s.d20PendingRoll);
+  const retryD20Roll = useGameStore((s) => s.retryD20Roll);
+  const clearD20Pending = useGameStore((s) => s.clearD20Pending);
+  const transport = useGameStore((s) => s.transport);
 
   // Set screen type for video overlay
   useEffect(() => {
@@ -78,6 +87,11 @@ export default function OnlineD20Screen({
   // Track when choice was made and add delay to show the selection
   const [choiceMade, setChoiceMade] = useState(false);
 
+  // Track retry state for UI feedback
+  const [retryCount, setRetryCount] = useState(0);
+  const [waitingForOpponent, setWaitingForOpponent] = useState(false);
+  const waitStartRef = useRef<number | null>(null);
+
   // Monitor for when choice is made (phase changes to Start) and advance both players
   useEffect(() => {
     console.log(
@@ -112,14 +126,109 @@ export default function OnlineD20Screen({
     // Reset choice state when dice are reset
     if (myRoll === null && opponentRoll === null) {
       setChoiceMade(false);
+      setRetryCount(0);
+      setWaitingForOpponent(false);
+      waitStartRef.current = null;
     }
   }, [myRoll, opponentRoll]);
 
-  const handleRoll = () => {
+  // Retry logic: if we have a pending roll and haven't received acknowledgment, retry
+  useEffect(() => {
+    if (!d20PendingRoll) {
+      // No pending roll, clear retry state
+      if (retryCount > 0) setRetryCount(0);
+      return;
+    }
+
+    // Set up retry interval
+    const retryInterval = setInterval(() => {
+      if (retryCount >= D20_MAX_RETRIES) {
+        console.warn("[D20] Max retries reached, requesting resync");
+        clearInterval(retryInterval);
+        // Request resync via transport
+        if (
+          transport &&
+          typeof (transport as { resync?: () => void }).resync === "function"
+        ) {
+          (transport as { resync: () => void }).resync();
+        }
+        return;
+      }
+
+      const didRetry = retryD20Roll();
+      if (didRetry) {
+        setRetryCount((c) => c + 1);
+        console.log(`[D20] Retry attempt ${retryCount + 1}/${D20_MAX_RETRIES}`);
+      }
+    }, D20_RETRY_INTERVAL_MS);
+
+    return () => clearInterval(retryInterval);
+  }, [d20PendingRoll, retryCount, retryD20Roll, transport]);
+
+  // Resync trigger: if we've been waiting for opponent too long, request resync
+  useEffect(() => {
+    // Start waiting timer when we've rolled but opponent hasn't
+    if (myRoll !== null && opponentRoll === null && !waitingForOpponent) {
+      setWaitingForOpponent(true);
+      waitStartRef.current = Date.now();
+    }
+
+    // Clear waiting state when opponent rolls
+    if (opponentRoll !== null && waitingForOpponent) {
+      setWaitingForOpponent(false);
+      waitStartRef.current = null;
+    }
+
+    // Set up resync timeout
+    if (!waitingForOpponent || !waitStartRef.current) return;
+
+    const resyncTimeout = setTimeout(() => {
+      console.warn("[D20] Waited too long for opponent, requesting resync");
+      if (
+        transport &&
+        typeof (transport as { resync?: () => void }).resync === "function"
+      ) {
+        (transport as { resync: () => void }).resync();
+      }
+    }, D20_RESYNC_TIMEOUT_MS);
+
+    return () => clearTimeout(resyncTimeout);
+  }, [myRoll, opponentRoll, waitingForOpponent, transport]);
+
+  // Clear pending roll when opponent's roll arrives (means server acknowledged ours)
+  useEffect(() => {
+    if (d20PendingRoll && opponentRoll !== null) {
+      // Both rolls are in, clear pending state
+      clearD20Pending();
+    }
+  }, [d20PendingRoll, opponentRoll, clearD20Pending]);
+
+  // Listen for D20 acknowledgment from server
+  useEffect(() => {
+    if (!transport) return;
+
+    const unsubscribe = transport.on("d20Ack", (payload) => {
+      console.log("[D20] Received server acknowledgment:", payload);
+      // If the ack is for our roll, clear pending state
+      if (
+        d20PendingRoll &&
+        payload.seat === myPlayerKey &&
+        payload.roll === d20PendingRoll.roll
+      ) {
+        console.log("[D20] Clearing pending state after server ack");
+        clearD20Pending();
+        setRetryCount(0);
+      }
+    });
+
+    return unsubscribe;
+  }, [transport, d20PendingRoll, myPlayerKey, clearD20Pending]);
+
+  const handleRoll = useCallback(() => {
     if (myRoll == null) {
       rollD20(myPlayerKey);
     }
-  };
+  }, [myRoll, rollD20, myPlayerKey]);
 
   const handleMyDiceComplete = () => {
     setMyDiceComplete(true);
@@ -243,6 +352,12 @@ export default function OnlineD20Screen({
             {myRoll === null
               ? "Click your die to roll!"
               : `Waiting for ${opponentName} to roll...`}
+            {/* Show retry indicator if we're retrying our roll */}
+            {retryCount > 0 && d20PendingRoll && (
+              <div className="text-yellow-500 text-xs mt-1">
+                Retrying roll... ({retryCount}/{D20_MAX_RETRIES})
+              </div>
+            )}
           </div>
         )}
 

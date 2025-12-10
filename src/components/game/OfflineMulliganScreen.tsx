@@ -172,7 +172,7 @@ export default function OfflineMulliganScreen({
         {scryOpen && isSecondSeat && (
           <div className="mt-4 bg-black/30 rounded-xl p-4 ring-1 ring-white/10">
             <div className="flex items-center justify-between mb-3">
-              <div className="font-semibold">Second Player Scry</div>
+              <div className="font-semibold">Second Player Seer</div>
               <div className="text-xs opacity-80">
                 Choose a pile and keep on top or put on bottom
               </div>

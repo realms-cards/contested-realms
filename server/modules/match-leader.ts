@@ -1485,6 +1485,20 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
               setupWinner: patchToApply.setupWinner ?? null,
             });
           }
+          // Send explicit acknowledgment to the sender so they know their roll was received
+          const sender = players.get(playerId);
+          if (sender?.socketId) {
+            try {
+              io.to(sender.socketId).emit("d20Ack", {
+                matchId,
+                seat: actorSeat,
+                roll: patchToApply.d20Rolls[actorSeat as "p1" | "p2"] ?? null,
+                t: now,
+              });
+            } catch {
+              // ignore ack failures
+            }
+          }
         }
 
         const enrichedPatchToApply =

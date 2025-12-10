@@ -97,6 +97,8 @@ export type TransportEventMap = {
   "interaction:request": InteractionRequestMessage;
   "interaction:response": InteractionResponseMessage;
   "interaction:result": InteractionResultMessage;
+  // D20 acknowledgment - server confirms receipt of D20 roll
+  d20Ack: { matchId: string; seat: string; roll: number | null; t: number };
 } & Draft3DEventMap; // Extend with Draft-3D events for enhanced online integration
 
 export type TransportEvent = keyof TransportEventMap;

@@ -450,6 +450,17 @@ export class SocketTransport implements GameTransport {
       socket.on("statePatch", (payload) =>
         this.dispatch("statePatch", Protocol.StatePatchPayload.parse(payload))
       );
+      // D20 acknowledgment - server confirms receipt of D20 roll
+      socket.on("d20Ack", (payload) => {
+        const p = payload as {
+          matchId: string;
+          seat: string;
+          roll: number | null;
+          t: number;
+        };
+        console.log("[Transport] d20Ack received:", p);
+        this.dispatch("d20Ack", p);
+      });
       // Draft updates (server-emitted, custom payload)
       socket.on("draftUpdate", (payload) => {
         const s = payload as DraftState;
