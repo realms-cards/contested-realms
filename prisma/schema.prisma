@@ -105,6 +105,7 @@ model Variant {
 
   @@index([setId])
   @@index([cardId])
+  @@index([typeText]) // For avatar type filtering in deck queries
 }
 
 // Booster configuration per set
@@ -164,6 +165,8 @@ model DeckCard {
 
   @@index([deckId])
   @@index([cardId])
+  @@index([variantId])
+  @@index([deckId, zone]) // Composite for avatar queries
 }
 
 // Cubes are draftable card pools managed by users

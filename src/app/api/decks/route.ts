@@ -50,7 +50,9 @@ type DeckListResponse = {
 // }
 export async function GET() {
   const startTime = performance.now();
+  const authStart = performance.now();
   const session = await getServerAuthSession();
+  const authTime = performance.now() - authStart;
   if (!session?.user) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401,
@@ -61,41 +63,44 @@ export async function GET() {
 
     // Use Redis cache for the entire response (user-specific)
     const cacheKey = CacheKeys.decks.list(userId);
+    const cacheStart = performance.now();
 
     const response = await withCache<DeckListResponse>(
       cacheKey,
       async () => {
-        // Get user's own decks (both public and private)
-        const myDecks = await prisma.deck.findMany({
-          where: { userId },
-          orderBy: { updatedAt: "desc" },
-          select: {
-            id: true,
-            name: true,
-            format: true,
-            isPublic: true,
-            imported: true,
-            updatedAt: true,
-          },
-        });
-
-        // Get public decks from other users
-        const publicDecks = await prisma.deck.findMany({
-          where: {
-            isPublic: true,
-            userId: { not: userId },
-          },
-          orderBy: { createdAt: "desc" },
-          take: 50, // Limit to recent 50 public decks
-          select: {
-            id: true,
-            name: true,
-            format: true,
-            imported: true,
-            updatedAt: true,
-            user: { select: { name: true } },
-          },
-        });
+        // Run both deck queries in parallel for better performance
+        const [myDecks, publicDecks] = await Promise.all([
+          // Get user's own decks (both public and private)
+          prisma.deck.findMany({
+            where: { userId },
+            orderBy: { updatedAt: "desc" },
+            select: {
+              id: true,
+              name: true,
+              format: true,
+              isPublic: true,
+              imported: true,
+              updatedAt: true,
+            },
+          }),
+          // Get public decks from other users
+          prisma.deck.findMany({
+            where: {
+              isPublic: true,
+              userId: { not: userId },
+            },
+            orderBy: { createdAt: "desc" },
+            take: 50, // Limit to recent 50 public decks
+            select: {
+              id: true,
+              name: true,
+              format: true,
+              imported: true,
+              updatedAt: true,
+              user: { select: { name: true } },
+            },
+          }),
+        ]);
 
         // Compute avatar metadata with caching to improve performance
         const allIds = [
@@ -118,23 +123,28 @@ export async function GET() {
 
         // Only fetch avatar info for uncached decks
         if (uncachedIds.length > 0) {
-          // Simplified query - just get variant typeText directly
-          // This avoids the expensive nested OR with card.meta.some
-          const avatarCards = await prisma.deckCard.findMany({
-            where: {
-              deckId: { in: uncachedIds },
-              zone: { in: ["Spellbook", "Atlas", "Sideboard"] },
-              variant: {
-                typeText: { contains: "Avatar", mode: "insensitive" },
-              },
-            },
-            select: {
-              deckId: true,
-              count: true,
-              card: { select: { name: true } },
-              variant: { select: { slug: true } },
-            },
-          });
+          // Optimized query: fetch deck cards with avatar type
+          // Use raw query for better performance on large datasets
+          const avatarCards = await prisma.$queryRaw<
+            Array<{
+              deckId: string;
+              count: number;
+              cardName: string;
+              variantSlug: string | null;
+            }>
+          >`
+            SELECT 
+              dc."deckId",
+              dc.count,
+              c.name as "cardName",
+              v.slug as "variantSlug"
+            FROM "DeckCard" dc
+            JOIN "Variant" v ON dc."variantId" = v.id
+            JOIN "Card" c ON dc."cardId" = c.id
+            WHERE dc."deckId" = ANY(${uncachedIds})
+              AND dc.zone IN ('Spellbook', 'Atlas', 'Sideboard')
+              AND v."typeText" ILIKE '%Avatar%'
+          `;
 
           type AvatarCardRow = (typeof avatarCards)[number];
           const avatarCardsByDeck = new Map<string, AvatarCardRow[]>();
@@ -158,14 +168,14 @@ export async function GET() {
             if (totalCount === 1) {
               const avatarEntry =
                 entries.find((item) => item.count > 0) ?? entries[0];
-              if (avatarEntry && avatarEntry.card?.name) {
-                const slug = avatarEntry.variant?.slug
-                  ? avatarEntry.variant.slug.toLowerCase()
+              if (avatarEntry?.cardName) {
+                const slug = avatarEntry.variantSlug
+                  ? avatarEntry.variantSlug.toLowerCase()
                   : null;
                 summary = {
                   state: "single",
                   avatarCard: {
-                    name: avatarEntry.card.name,
+                    name: avatarEntry.cardName,
                     slug,
                   },
                 };
@@ -223,10 +233,21 @@ export async function GET() {
           })),
         };
       },
-      { ttl: 30 } // 30 second cache for deck lists
+      { ttl: 120 } // 2 minute cache for deck lists
     );
 
-    logPerformance("GET /api/decks", performance.now() - startTime);
+    const cacheTime = performance.now() - cacheStart;
+    const totalTime = performance.now() - startTime;
+    if (process.env.NODE_ENV === "development") {
+      console.log(
+        `[perf] GET /api/decks: auth=${authTime.toFixed(
+          0
+        )}ms, cache+db=${cacheTime.toFixed(0)}ms, total=${totalTime.toFixed(
+          0
+        )}ms`
+      );
+    }
+    logPerformance("GET /api/decks", totalTime);
     return new Response(JSON.stringify(response), {
       status: 200,
       headers: { "content-type": "application/json" },
