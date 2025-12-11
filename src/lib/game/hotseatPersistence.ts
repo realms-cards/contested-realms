@@ -12,7 +12,7 @@ const DB_NAME = "sorcery-hotseat";
 const DB_VERSION = 1;
 const STORE_NAME = "games";
 const GAME_KEY = "current";
-const STORAGE_VERSION = 2;
+const STORAGE_VERSION = 5; // Bumped for permanent owner preservation
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
@@ -55,6 +55,7 @@ type CompactCardRef = {
   name?: string;
   cardId?: number;
   instanceId?: string;
+  type?: string; // Card type (Site, Minion, Magic, Artifact, Aura, etc.)
 };
 
 type CompactZones = {
@@ -81,6 +82,8 @@ type CompactPermanent = {
   name?: string;
   cardId?: number;
   instanceId?: string;
+  type?: string; // Card type (Minion, Magic, Artifact, Aura, etc.)
+  owner: 1 | 2; // Owner player number
   tapped?: boolean;
   counters?: number;
   offset?: [number, number];
@@ -94,6 +97,20 @@ type CompactSite = {
   owner: 1 | 2;
 };
 
+type CompactPortalPlayerState = {
+  rolls: number[];
+  tileNumbers: number[];
+  rollPhase: "pending" | "rolling" | "complete";
+};
+
+type CompactPortalState = {
+  harbingerSeats: ("p1" | "p2")[];
+  p1: CompactPortalPlayerState | null;
+  p2: CompactPortalPlayerState | null;
+  currentRoller: "p1" | "p2" | null;
+  setupComplete: boolean;
+};
+
 type CompactHotseatState = {
   version: number;
   savedAt: number;
@@ -105,6 +122,7 @@ type CompactHotseatState = {
   avatars: { p1: CompactAvatar; p2: CompactAvatar };
   permanents: Record<string, CompactPermanent[]>;
   boardSites: Record<string, CompactSite>;
+  portalState: CompactPortalState | null;
   setupComplete: boolean;
   mulliganComplete: boolean;
   portalSetupComplete: boolean;
@@ -119,6 +137,7 @@ function compactCard(card: unknown): CompactCardRef | null {
     name?: string;
     cardId?: number;
     instanceId?: string | null;
+    type?: string | null;
   } | null;
   if (!c || !c.slug) return null;
   return {
@@ -126,6 +145,7 @@ function compactCard(card: unknown): CompactCardRef | null {
     name: c.name,
     cardId: c.cardId,
     instanceId: c.instanceId ?? undefined,
+    type: c.type ?? undefined,
   };
 }
 
@@ -199,6 +219,8 @@ function serializeCompact(
         name: p.card?.name,
         cardId: p.card?.cardId,
         instanceId: p.instanceId ?? undefined,
+        type: p.card?.type ?? undefined,
+        owner: p.owner, // Preserve owner for correct assignment on restore
         tapped: p.tapped,
         counters: p.counters ?? undefined,
         offset: p.offset ?? undefined,
@@ -219,6 +241,18 @@ function serializeCompact(
     }
   }
 
+  // Serialize portal state if present
+  let portalState: CompactPortalState | null = null;
+  if (state.portalState) {
+    portalState = {
+      harbingerSeats: state.portalState.harbingerSeats,
+      p1: state.portalState.p1,
+      p2: state.portalState.p2,
+      currentRoller: state.portalState.currentRoller,
+      setupComplete: state.portalState.setupComplete,
+    };
+  }
+
   return {
     currentPlayer: state.currentPlayer,
     turn: state.turn,
@@ -228,6 +262,7 @@ function serializeCompact(
     avatars,
     permanents,
     boardSites,
+    portalState,
   };
 }
 
@@ -406,7 +441,7 @@ export function applyLoadedGame(
     name: c.name || "",
     cardId: c.cardId || 0,
     instanceId: c.instanceId,
-    type: "unknown" as const,
+    type: c.type || null, // Preserve original type for proper rendering
   });
 
   const expandCards = (cards: CompactCardRef[]) => cards.map(expandCard);
@@ -474,8 +509,9 @@ export function applyLoadedGame(
         name: p.name || "",
         cardId: p.cardId || 0,
         instanceId: p.instanceId,
-        type: "unknown",
+        type: p.type || null, // Preserve original type for proper rendering
       },
+      owner: p.owner, // Preserve owner for correct assignment
       instanceId: p.instanceId,
       tapped: p.tapped || false,
       counters: p.counters,
@@ -498,6 +534,17 @@ export function applyLoadedGame(
     };
   }
 
+  // Rebuild portal state if present
+  const portalState = loaded.portalState
+    ? {
+        harbingerSeats: loaded.portalState.harbingerSeats,
+        p1: loaded.portalState.p1,
+        p2: loaded.portalState.p2,
+        currentRoller: loaded.portalState.currentRoller,
+        setupComplete: loaded.portalState.setupComplete,
+      }
+    : null;
+
   // Use type assertion for the full return since we're reconstructing from compact format
   return {
     players: loaded.players,
@@ -513,5 +560,6 @@ export function applyLoadedGame(
       size: { w: 5, h: 4 },
       sites,
     },
+    portalState,
   } as Partial<GameState>;
 }

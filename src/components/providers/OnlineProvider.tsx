@@ -1,6 +1,7 @@
 "use client";
 
 import { useSession } from "next-auth/react";
+import { usePathname } from "next/navigation";
 import React, {
   useCallback,
   useEffect,
@@ -99,6 +100,9 @@ export default function OnlineProvider({
 }: {
   children: React.ReactNode;
 }) {
+  const pathname = usePathname();
+  // Skip applying server patches on hotseat page to avoid overwriting local state
+  const isHotseatPage = pathname === "/play";
   const { startLoading: startGlobalLoading, stopLoading: stopGlobalLoading } =
     useLoadingContext();
   const { data: session, status: sessionStatus } = useSession();
@@ -808,6 +812,10 @@ export default function OnlineProvider({
   const patchQueueRef = useRef<Array<{ patch: unknown; t?: number }>>([]);
   const patchFlushScheduledRef = useRef<boolean>(false);
   const queueServerPatch = (patch: unknown, t?: number) => {
+    // Skip applying server patches on hotseat page to avoid overwriting local game state
+    if (isHotseatPage) {
+      return;
+    }
     patchQueueRef.current.push({ patch, t });
     if (patchFlushScheduledRef.current) return;
     patchFlushScheduledRef.current = true;

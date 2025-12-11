@@ -867,22 +867,17 @@ export function PermanentStack({
                   const draggedInstId =
                     permanents[dragging.from]?.[dragging.index]?.instanceId ||
                     null;
+                  // Calculate offset relative to owner's base position for precise drops
+                  // Rendering uses: position = [offX, y, zBase + offZ]
+                  // So to land at wz, we need: offZ = wz - tileWorldZ - zBase
                   const localZBase =
                     draggedOwner === 1
                       ? -TILE_SIZE * 0.5 + marginZ
                       : TILE_SIZE * 0.5 - marginZ;
+                  const offX = wx - tileWorldX;
+                  const offZ = wz - tileWorldZ - localZBase;
                   if (dragging.from === dropKey) {
-                    const baseX =
-                      tileWorldX +
-                      (-(Math.max((permanents[dropKey] || []).length, 1) - 1) *
-                        spacing) /
-                        2 +
-                      dragging.index * spacing;
-                    const baseZ = tileWorldZ + localZBase;
-                    const newOffset: [number, number] = [
-                      wx - baseX,
-                      wz - baseZ,
-                    ];
+                    const newOffset: [number, number] = [offX, offZ];
                     dragTarget.current = null;
                     draggedBody.current = null;
                     requestAnimationFrame(() => {
@@ -896,14 +891,7 @@ export function PermanentStack({
                   } else {
                     const toItems = permanents[dropKey] || [];
                     const newIndex = toItems.length;
-                    const startX =
-                      -((Math.max(newIndex + 1, 1) - 1) * spacing) / 2;
-                    const baseX = tileWorldX + (startX + newIndex * spacing);
-                    const baseZ = tileWorldZ + localZBase;
-                    const newOffset: [number, number] = [
-                      wx - baseX,
-                      wz - baseZ,
-                    ];
+                    const newOffset: [number, number] = [offX, offZ];
                     dragTarget.current = null;
                     draggedBody.current = null;
                     requestAnimationFrame(() => {

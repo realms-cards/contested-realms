@@ -275,6 +275,7 @@ export type SerializedGame = {
   playerPositions: GameState["playerPositions"];
   events: GameEvent[];
   eventSeq: number;
+  portalState: PortalState | null;
 };
 
 export type GameState = {
