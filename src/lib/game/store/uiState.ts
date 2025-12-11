@@ -1,6 +1,26 @@
 import type { StateCreator } from "zustand";
 import type { CardRef, GameState, PlayerKey } from "./types";
 
+const CAMERA_MODE_KEY = "sorcery:cameraMode";
+
+/** Load persisted camera mode preference from localStorage */
+function loadCameraMode(): GameState["cameraMode"] {
+  if (typeof window === "undefined") return "topdown";
+  try {
+    const stored = localStorage.getItem(CAMERA_MODE_KEY);
+    if (stored === "orbit" || stored === "topdown") return stored;
+  } catch {}
+  return "topdown"; // Default to 2D view
+}
+
+/** Persist camera mode preference to localStorage */
+function saveCameraMode(mode: GameState["cameraMode"]): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(CAMERA_MODE_KEY, mode);
+  } catch {}
+}
+
 export type UiSlice = Pick<
   GameState,
   | "cameraMode"
@@ -46,7 +66,7 @@ type UiStateDefaults = Pick<
 >;
 
 export const createInitialUiState = (): UiStateDefaults => ({
-  cameraMode: "orbit",
+  cameraMode: loadCameraMode(),
   selectedCard: null,
   selectedPermanent: null,
   selectedAvatar: null,
@@ -116,11 +136,16 @@ export const createUiSlice: StateCreator<GameState, [], [], UiSlice> = (
 
   setPreviewCard: (card: CardRef | null) => set({ previewCard: card }),
 
-  setCameraMode: (mode: GameState["cameraMode"]) => set({ cameraMode: mode }),
+  setCameraMode: (mode: GameState["cameraMode"]) => {
+    saveCameraMode(mode);
+    set({ cameraMode: mode });
+  },
   toggleCameraMode: () =>
-    set((state) => ({
-      cameraMode: state.cameraMode === "orbit" ? "topdown" : "orbit",
-    })),
+    set((state) => {
+      const newMode = state.cameraMode === "orbit" ? "topdown" : "orbit";
+      saveCameraMode(newMode);
+      return { cameraMode: newMode };
+    }),
 
   setSwitchSiteSource: (source: { x: number; y: number } | null) =>
     set({ switchSiteSource: source }),

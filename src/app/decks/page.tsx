@@ -215,13 +215,13 @@ export default function DecksPage() {
                 onClick={() => setShowImport((prev) => !prev)}
                 className="rounded-lg bg-slate-800/80 hover:bg-slate-700/80 px-4 py-2 text-sm font-medium text-slate-200 transition-colors"
               >
-                {showImport ? "Hide Importers" : "Import Deck"}
+                {showImport ? "Hide Importers" : "Import New Deck"}
               </button>
               <Link
                 href="/decks/editor-3d"
                 className="rounded-lg bg-blue-600/80 hover:bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors"
               >
-                New Deck
+                Construct New Deck
               </Link>
             </div>
           </div>

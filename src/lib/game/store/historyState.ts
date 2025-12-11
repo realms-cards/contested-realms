@@ -44,6 +44,7 @@ const buildSnapshot = (state: GameState): SerializedGame => ({
   playerPositions: clone(state.playerPositions),
   events: clone(state.events),
   eventSeq: state.eventSeq,
+  portalState: state.portalState ? clone(state.portalState) : null,
 });
 
 const sanitizeBoardSitesForUndo = (
@@ -263,6 +264,7 @@ export const createHistorySlice: StateCreator<
           playerPositions: prev.playerPositions,
           events: prev.events,
           eventSeq: prev.eventSeq,
+          portalState: prev.portalState,
           __replaceKeys: [
             "players",
             "currentPlayer",
@@ -282,6 +284,7 @@ export const createHistorySlice: StateCreator<
             "playerPositions",
             "events",
             "eventSeq",
+            "portalState",
           ],
         } as ServerPatchT;
         try {
@@ -318,6 +321,7 @@ export const createHistorySlice: StateCreator<
           playerPositions: prev.playerPositions,
           events: prev.events,
           eventSeq: prev.eventSeq,
+          portalState: prev.portalState,
         } as Partial<GameState> as GameState;
       }
 
@@ -347,6 +351,7 @@ export const createHistorySlice: StateCreator<
         playerPositions: prev.playerPositions,
         events: prev.events,
         eventSeq: prev.eventSeq,
+        portalState: prev.portalState,
       } as Partial<GameState> as GameState;
     }),
 });

@@ -510,7 +510,7 @@ export default function PlayPage() {
     document.title = title;
   }, [setupOpen, players.p1?.life, players.p2?.life, currentPlayer]);
 
-  const minDist = Math.max(2, Math.min(matW, matH) * 0.25);
+  const minDist = Math.max(1, Math.min(matW, matH) * 0.15);
   const maxDist = Math.max(14, Math.hypot(matW, matH) * 1.3);
   const clampControls = useCallback(() => {
     const c = controlsRef.current;
@@ -537,8 +537,22 @@ export default function PlayPage() {
       t.y = 0;
       changed = true;
     }
+    // In topdown mode, enforce polar angle to prevent tilt during zoom
+    if (cameraMode === "topdown") {
+      const cam = c.object as THREE.Camera;
+      const pos = cam.position;
+      // If camera has any horizontal offset (x or z relative to target), reset to pure top-down
+      const dist = pos.distanceTo(t);
+      if (Math.abs(pos.x - t.x) > 0.01 || Math.abs(pos.z - t.z) > 0.01) {
+        // Keep distance but reset to directly above target with slight tilt
+        const tilt = naturalTiltAngle;
+        const sign = currentPlayer === 2 ? -1 : 1;
+        pos.set(t.x, Math.cos(tilt) * dist, t.z + sign * Math.sin(tilt) * dist);
+        changed = true;
+      }
+    }
     if (changed) c.update();
-  }, [matW, matH]);
+  }, [matW, matH, cameraMode, currentPlayer, naturalTiltAngle]);
 
   return (
     <div className="relative h-screen [height:100dvh] w-full select-none">
@@ -608,7 +622,13 @@ export default function PlayPage() {
       {setupOpen && !showRestorePrompt && checkedForSavedGame && (
         <div className="absolute inset-0 z-20 bg-black/70 backdrop-blur-sm flex items-center justify-center p-6">
           {!prepared ? (
-            <DeckSelector onPrepareComplete={() => setPrepared(true)} />
+            <DeckSelector
+              onPrepareComplete={() => {
+                // Clear any old saved game when starting fresh through deck selection
+                clearHotseatGame();
+                setPrepared(true);
+              }}
+            />
           ) : !mulliganComplete ? (
             /* Mulligan phase - sequential: P1 first, then P2 (P2 is second seat, gets scry) */
             !p1Ready ? (

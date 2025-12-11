@@ -245,23 +245,17 @@ export function useTileDropHandler({
 
       const handleSameTileMove = () => {
         if (!dragging) return;
-        const spacing = STACK_SPACING;
-        const marginZ = STACK_MARGIN_Z;
-        const items = permanents[dropKey] || [];
-        const count = items.length;
-        const startX = -((Math.max(count, 1) - 1) * spacing) / 2;
-        const idxBase = dragging.index;
-        const owner =
-          items[idxBase]?.owner ??
-          permanents[dragging.from]?.[dragging.index]?.owner ??
-          1;
+        // Calculate offset relative to owner's base position for precise drops
+        // Rendering uses: position = [offX, y, zBase + offZ]
+        // So to land at world.z, we need: offZ = world.z - pos[2] - zBase
+        const draggedItem = permanents[dragging.from]?.[dragging.index];
+        const owner = draggedItem?.owner ?? 1;
         const zBase =
-          owner === 1 ? -TILE_SIZE * 0.5 + marginZ : TILE_SIZE * 0.5 - marginZ;
-        const xPos = startX + idxBase * spacing;
-        const baseX = pos[0] + xPos;
-        const baseZ = pos[2] + zBase;
-        const offX = clampOffset(world.x - baseX, TILE_OFFSET_LIMIT_X);
-        const offZ = clampOffset(world.z - baseZ, TILE_OFFSET_LIMIT_Z);
+          owner === 1
+            ? -TILE_SIZE * 0.5 + STACK_MARGIN_Z
+            : TILE_SIZE * 0.5 - STACK_MARGIN_Z;
+        const offX = clampOffset(world.x - pos[0], TILE_OFFSET_LIMIT_X);
+        const offZ = clampOffset(world.z - pos[2] - zBase, TILE_OFFSET_LIMIT_Z);
         const apiAtDrop = draggedBody.current;
         if (!useGhostOnlyBoardDrag && apiAtDrop) {
           setTimeout(() => {
@@ -282,20 +276,19 @@ export function useTileDropHandler({
 
       const handleCrossTileMove = () => {
         if (!dragging) return;
-        const spacing = STACK_SPACING;
-        const marginZ = STACK_MARGIN_Z;
         const toItems = permanents[dropKey] || [];
         const newIndex = toItems.length;
-        const newCount = toItems.length + 1;
-        const startX = -((Math.max(newCount, 1) - 1) * spacing) / 2;
-        const owner = permanents[dragging.from]?.[dragging.index]?.owner ?? 1;
+        // Calculate offset relative to owner's base position for precise drops
+        // Rendering uses: position = [offX, y, zBase + offZ]
+        // So to land at world.z, we need: offZ = world.z - pos[2] - zBase
+        const draggedItem = permanents[dragging.from]?.[dragging.index];
+        const owner = draggedItem?.owner ?? 1;
         const zBase =
-          owner === 1 ? -TILE_SIZE * 0.5 + marginZ : TILE_SIZE * 0.5 - marginZ;
-        const xPos = startX + newIndex * spacing;
-        const baseX = pos[0] + xPos;
-        const baseZ = pos[2] + zBase;
-        const offX = clampOffset(world.x - baseX, TILE_OFFSET_LIMIT_X);
-        const offZ = clampOffset(world.z - baseZ, TILE_OFFSET_LIMIT_Z);
+          owner === 1
+            ? -TILE_SIZE * 0.5 + STACK_MARGIN_Z
+            : TILE_SIZE * 0.5 - STACK_MARGIN_Z;
+        const offX = clampOffset(world.x - pos[0], TILE_OFFSET_LIMIT_X);
+        const offZ = clampOffset(world.z - pos[2] - zBase, TILE_OFFSET_LIMIT_Z);
         dragTarget.current = null;
         draggedBody.current = null;
         try {
@@ -461,20 +454,27 @@ export function useTileDropHandler({
           }
         }
 
-        const spacing = STACK_SPACING;
-        const marginZ = STACK_MARGIN_Z;
+        // Calculate offset relative to owner's base position for precise drops
+        // Rendering uses: position = [offX, y, zBase + offZ]
+        // So to land at wz, we need: offZ = wz - pos[2] - zBase
         const toItemsAfter = permanents[dropKey] || [];
         const newIndex = toItemsAfter.length;
-        const newCount = toItemsAfter.length + 1;
-        const startX = -((Math.max(newCount, 1) - 1) * spacing) / 2;
-        const owner = currentPlayer;
-        const zBase =
-          owner === 1 ? -TILE_SIZE * 0.5 + marginZ : TILE_SIZE * 0.5 - marginZ;
-        const xPos = startX + newIndex * spacing;
-        const baseX = pos[0] + xPos;
-        const baseZ = pos[2] + zBase;
-        const offX = wx - baseX;
-        const offZ = wz - baseZ;
+        // Determine owner from drag source - tokens use dragFromPile.who, hand cards use actorKey
+        const dropOwner: 1 | 2 = dragFromPile?.who
+          ? dragFromPile.who === "p1"
+            ? 1
+            : 2
+          : actorKey === "p1"
+          ? 1
+          : actorKey === "p2"
+          ? 2
+          : currentPlayer;
+        const dropZBase =
+          dropOwner === 1
+            ? -TILE_SIZE * 0.5 + STACK_MARGIN_Z
+            : TILE_SIZE * 0.5 - STACK_MARGIN_Z;
+        const offX = clampOffset(wx - pos[0], TILE_OFFSET_LIMIT_X);
+        const offZ = clampOffset(wz - pos[2] - dropZBase, TILE_OFFSET_LIMIT_Z);
 
         if (dragFromPile?.card) {
           const type = (dragFromPile.card.type || "").toLowerCase();

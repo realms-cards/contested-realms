@@ -2,7 +2,6 @@ import { useEffect, type MutableRefObject } from "react";
 import {
   clampOffset,
   STACK_MARGIN_Z,
-  STACK_SPACING,
   TILE_OFFSET_LIMIT_X,
   TILE_OFFSET_LIMIT_Z,
 } from "@/lib/game/boardShared";
@@ -225,23 +224,19 @@ export function useBoardDropManager({
       const dropKey = `${tx},${ty}`;
       const tileX = offsetX + tx * TILE_SIZE;
       const tileZ = offsetY + ty * TILE_SIZE;
-      const marginZ = STACK_MARGIN_Z;
-      const spacing = STACK_SPACING;
-      const draggedOwner = permanents[d.from]?.[d.index]?.owner ?? 1;
-      const draggedInstId = permanents[d.from]?.[d.index]?.instanceId || null;
+      const draggedItem = permanents[d.from]?.[d.index];
+      const draggedInstId = draggedItem?.instanceId || null;
+      // Calculate offset relative to owner's base position for precise drops
+      // Rendering uses: position = [offX, y, zBase + offZ]
+      // So to land at wz, we need: offZ = wz - tileZ - zBase
+      const owner = draggedItem?.owner ?? 1;
       const zBase =
-        draggedOwner === 1
-          ? -TILE_SIZE * 0.5 + marginZ
-          : TILE_SIZE * 0.5 - marginZ;
+        owner === 1
+          ? -TILE_SIZE * 0.5 + STACK_MARGIN_Z
+          : TILE_SIZE * 0.5 - STACK_MARGIN_Z;
+      const offX = clampOffset(wx - tileX, TILE_OFFSET_LIMIT_X);
+      const offZ = clampOffset(wz - tileZ - zBase, TILE_OFFSET_LIMIT_Z);
       if (d.from === dropKey) {
-        const baseX =
-          tileX +
-          (-((Math.max((permanents[dropKey] || []).length, 1) - 1) * spacing) /
-            2 +
-            d.index * spacing);
-        const baseZ = tileZ + zBase;
-        const offX = clampOffset(wx - baseX, TILE_OFFSET_LIMIT_X);
-        const offZ = clampOffset(wz - baseZ, TILE_OFFSET_LIMIT_Z);
         dragTarget.current = null;
         draggedBody.current = null;
         requestAnimationFrame(() => {
@@ -255,11 +250,6 @@ export function useBoardDropManager({
       } else {
         const toItems = permanents[dropKey] || [];
         const newIndex = toItems.length;
-        const startX = -((Math.max(newIndex + 1, 1) - 1) * spacing) / 2;
-        const baseX = tileX + (startX + newIndex * spacing);
-        const baseZ = tileZ + zBase;
-        const offX = clampOffset(wx - baseX, TILE_OFFSET_LIMIT_X);
-        const offZ = clampOffset(wz - baseZ, TILE_OFFSET_LIMIT_Z);
         dragTarget.current = null;
         draggedBody.current = null;
         requestAnimationFrame(() => {
