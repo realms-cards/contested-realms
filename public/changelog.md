@@ -4,6 +4,9 @@
 
 ### Dec 11
 
+- **Placement jank is gone** Cards and tokens place precise now when dropped
+- **Persist Hotseat Mode** Hotseat mode is now persisted in local storage
+- **Camera settings persist now**
 - **Toolbox Peek**: Added follow-up interactions when peeking at piles
 - **Mana Display**: Now shows spent mana during gameplay
 - **Cemetery Interactions**: Cards can now be dragged from cemetery to hand
