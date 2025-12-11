@@ -47,9 +47,15 @@ export async function getCached<T>(key: string): Promise<T | null> {
     const cached = await withTimeout(redis.get(key), CACHE_TIMEOUT_MS);
 
     if (!cached) {
+      if (process.env.NODE_ENV === "development") {
+        console.log(`[cache] MISS: ${key}`);
+      }
       return null;
     }
 
+    if (process.env.NODE_ENV === "development") {
+      console.log(`[cache] HIT: ${key}`);
+    }
     return JSON.parse(cached) as T;
   } catch (e) {
     console.warn(
