@@ -151,7 +151,8 @@ export default function Home() {
           </div>
         )}
         {session && (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4 max-w-4xl mx-auto">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4 max-w-4xl mx-auto">
+            {/** 
             <AsciiPanel className="p-5 md:p-6">
               <Link
                 href="/solo"
@@ -164,7 +165,8 @@ export default function Home() {
                 </div>
               </Link>
             </AsciiPanel>
-            <AsciiPanel className="p-5 md:p-6">
+            */}
+            <AsciiPanel className="w-full p-5 md:p-6">
               <Link
                 href="/play"
                 className="group block hover:scale-[1.02] transition-transform duration-200"
@@ -176,7 +178,7 @@ export default function Home() {
                 </div>
               </Link>
             </AsciiPanel>
-            <AsciiPanel className="p-5 md:p-6">
+            <AsciiPanel className="w-full p-5 md:p-6">
               <Link
                 href="/draft-3d"
                 className="group block hover:scale-[1.02] transition-transform duration-200"
