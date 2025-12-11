@@ -286,10 +286,35 @@ export default function Piles3D({
                       );
                       clearHoverPreview();
                     }}
-                    onClick={(e: ThreeEvent<PointerEvent>) => {
+                    onPointerDown={(e: ThreeEvent<PointerEvent>) => {
+                      if (e.button !== 0) return; // left button only
                       const isDragging = !!dragFromHand || !!dragFromPile;
                       if (isDragging) return;
                       if (isCemetery) return;
+                      // Start tracking for potential drag from atlas
+                      if (isAtlas && cards.length > 0) {
+                        const store = useGameStore.getState();
+                        const actorKey = store.actorKey;
+                        const isMine = !actorKey || actorKey === owner;
+                        if (store.transport && !isMine) return;
+                        pileDragStartRef.current = {
+                          who: owner,
+                          key: key as PileKey,
+                          start: [e.clientX, e.clientY],
+                          time: Date.now(),
+                        };
+                      }
+                    }}
+                    onClick={(_e: ThreeEvent<PointerEvent>) => {
+                      void _e;
+                      const isDragging = !!dragFromHand || !!dragFromPile;
+                      if (isDragging) return;
+                      if (isCemetery) return;
+                      // If we started a drag, don't process click
+                      if (pileDragStartRef.current) {
+                        pileDragStartRef.current = null;
+                        return;
+                      }
                       const store = useGameStore.getState();
                       const actorKey = store.actorKey;
                       const isMine = !actorKey || actorKey === owner;
@@ -302,11 +327,36 @@ export default function Piles3D({
                         playCardSelect();
                       } catch {}
                     }}
-                    // Dragging from piles is disabled
-                    onPointerMove={(_e: ThreeEvent<PointerEvent>) => {
-                      // touch the arg to avoid unused-var lint
-                      void _e;
-                      // Keep allowing propagation for orbit/ghost updates, but do nothing here
+                    onPointerMove={(e: ThreeEvent<PointerEvent>) => {
+                      // Check if we should initiate a drag from atlas
+                      if (
+                        isAtlas &&
+                        pileDragStartRef.current &&
+                        pileDragStartRef.current.key === "atlas" &&
+                        pileDragStartRef.current.who === owner
+                      ) {
+                        const [startX, startY] = pileDragStartRef.current.start;
+                        const dx = e.clientX - startX;
+                        const dy = e.clientY - startY;
+                        const distance = Math.sqrt(dx * dx + dy * dy);
+                        // Threshold to distinguish drag from click
+                        if (distance > 8) {
+                          // Initiate drag from atlas with top card
+                          const topCard = cards[0];
+                          if (topCard) {
+                            setDragFromPile({
+                              who: owner,
+                              from: "atlas",
+                              card: topCard,
+                            });
+                            setDragFromHand(true);
+                            try {
+                              playCardSelect();
+                            } catch {}
+                          }
+                          pileDragStartRef.current = null;
+                        }
+                      }
                     }}
                     onPointerUp={(e: ThreeEvent<PointerEvent>) => {
                       if (e.button !== 0) return; // only handle left-button releases for drops
