@@ -21,13 +21,18 @@ export default function BoosterPage() {
   const [error, setError] = useState<string | null>(null);
   const [packs, setPacks] = useState<BoosterCard[][]>([]);
 
-  const canFetch = useMemo(() => count >= 1 && count <= 12 && !!setName, [count, setName]);
+  const canFetch = useMemo(
+    () => count >= 1 && count <= 12 && !!setName,
+    [count, setName]
+  );
 
   async function fetchPacks() {
     try {
       setLoading(true);
       setError(null);
-      const res = await fetch(`/api/booster?set=${encodeURIComponent(setName)}&count=${count}`);
+      const res = await fetch(
+        `/api/booster?set=${encodeURIComponent(setName)}&count=${count}`
+      );
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Request failed");
       setPacks(data.packs as BoosterCard[][]);
@@ -83,22 +88,26 @@ export default function BoosterPage() {
         </button>
       </div>
 
-      {error && (
-        <div className="text-red-500">Error: {error}</div>
-      )}
+      {error && <div className="text-red-500">Error: {error}</div>}
 
       <div className="grid gap-6">
         {packs.map((pack, idx) => (
           <div key={idx} className="border rounded p-4">
             <div className="font-medium mb-3">Pack {idx + 1}</div>
             {(() => {
-              const sites = pack.filter((c) => (c.type || "").toLowerCase().includes("site"));
-              const spells = pack.filter((c) => !(c.type || "").toLowerCase().includes("site"));
+              const sites = pack.filter((c) =>
+                (c.type || "").toLowerCase().includes("site")
+              );
+              const spells = pack.filter(
+                (c) => !(c.type || "").toLowerCase().includes("site")
+              );
               return (
                 <div className="space-y-4">
                   {!!spells.length && (
                     <div>
-                      <div className="text-xs uppercase opacity-70 mb-2">Spellbook</div>
+                      <div className="text-xs uppercase opacity-70 mb-2">
+                        Spellbook
+                      </div>
                       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2 text-sm">
                         {spells.map((c) => (
                           <div key={c.variantId} className="border rounded p-2">
@@ -109,10 +118,13 @@ export default function BoosterPage() {
                                 fill
                                 sizes="(max-width:640px) 100vw, (max-width:1024px) 50vw, 33vw"
                                 className="object-cover"
+                                unoptimized
                               />
                             </div>
                             <div className="font-semibold">{c.cardName}</div>
-                            <div className="opacity-80">{c.rarity} • {c.finish}</div>
+                            <div className="opacity-80">
+                              {c.rarity} • {c.finish}
+                            </div>
                             <div className="opacity-70 text-xs">{c.slug}</div>
                           </div>
                         ))}
@@ -121,7 +133,9 @@ export default function BoosterPage() {
                   )}
                   {!!sites.length && (
                     <div>
-                      <div className="text-xs uppercase opacity-70 mb-2">Sites</div>
+                      <div className="text-xs uppercase opacity-70 mb-2">
+                        Sites
+                      </div>
                       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2 text-sm">
                         {sites.map((c) => (
                           <div key={c.variantId} className="border rounded p-2">
@@ -132,10 +146,13 @@ export default function BoosterPage() {
                                 fill
                                 sizes="(max-width:640px) 100vw, (max-width:1024px) 50vw, 33vw"
                                 className="object-contain rotate-90 origin-center"
+                                unoptimized
                               />
                             </div>
                             <div className="font-semibold">{c.cardName}</div>
-                            <div className="opacity-80">{c.rarity} • {c.finish}</div>
+                            <div className="opacity-80">
+                              {c.rarity} • {c.finish}
+                            </div>
                             <div className="opacity-70 text-xs">{c.slug}</div>
                           </div>
                         ))}
@@ -151,4 +168,3 @@ export default function BoosterPage() {
     </div>
   );
 }
-

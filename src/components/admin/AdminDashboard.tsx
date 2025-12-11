@@ -90,6 +90,8 @@ export default function AdminDashboard({
   const [activeMatchesError, setActiveMatchesError] = useState<string | null>(
     null
   );
+  const [cleaningUpMatch, setCleaningUpMatch] = useState<string | null>(null);
+  const [copiedMatchId, setCopiedMatchId] = useState<string | null>(null);
 
   const refreshHealthHistory = useCallback(async () => {
     setLoadingHealthHistory(true);
@@ -240,6 +242,50 @@ export default function AdminDashboard({
     } finally {
       setActiveMatchesLoading(false);
     }
+  }, []);
+
+  const cleanupMatch = useCallback(
+    async (matchId: string) => {
+      if (
+        !confirm(
+          `Are you sure you want to cleanup stale match ${matchId.slice(
+            0,
+            8
+          )}...?`
+        )
+      ) {
+        return;
+      }
+      setCleaningUpMatch(matchId);
+      try {
+        const response = await fetch("/api/admin/matches/cleanup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ matchId }),
+        });
+        if (!response.ok) {
+          const body = (await response.json().catch(() => null)) as {
+            error?: string;
+          } | null;
+          throw new Error(body?.error || `HTTP ${response.status}`);
+        }
+        await refreshActiveMatches();
+      } catch (error) {
+        setActiveMatchesError(
+          error instanceof Error ? error.message : "Failed to cleanup match"
+        );
+      } finally {
+        setCleaningUpMatch(null);
+      }
+    },
+    [refreshActiveMatches]
+  );
+
+  const copyMatchId = useCallback((matchId: string) => {
+    navigator.clipboard.writeText(matchId).then(() => {
+      setCopiedMatchId(matchId);
+      setTimeout(() => setCopiedMatchId(null), 2000);
+    });
   }, []);
 
   const loadUsers = useCallback(
@@ -538,8 +584,18 @@ export default function AdminDashboard({
                         key={match.matchId}
                         className="border-t border-slate-800/60 hover:bg-slate-800/30"
                       >
-                        <td className="px-3 py-2 font-mono text-[10px]">
-                          {match.matchId.slice(0, 8)}…
+                        <td className="px-3 py-2">
+                          <button
+                            onClick={() => copyMatchId(match.matchId)}
+                            className="font-mono text-[10px] hover:text-blue-300 cursor-pointer transition-colors"
+                            title="Click to copy full match ID"
+                          >
+                            {copiedMatchId === match.matchId ? (
+                              <span className="text-emerald-400">Copied!</span>
+                            ) : (
+                              <>{match.matchId.slice(0, 8)}…</>
+                            )}
+                          </button>
                         </td>
                         <td className="px-3 py-2">
                           <div
@@ -581,13 +637,32 @@ export default function AdminDashboard({
                         <td className="px-3 py-2 text-[10px] text-slate-400">
                           {startedStr}
                         </td>
-                        <td className="px-3 py-2">
+                        <td className="px-3 py-2 flex gap-1">
                           <Link
                             href={`/online/play/${match.matchId}?watch=true`}
                             className="rounded bg-blue-600/20 px-2 py-1 text-[10px] text-blue-200 hover:bg-blue-600/30"
                           >
                             Spectate
                           </Link>
+                          {match.startedAt &&
+                            Date.now() - match.startedAt >
+                              2 * 24 * 60 * 60 * 1000 && (
+                              <button
+                                onClick={() => cleanupMatch(match.matchId)}
+                                disabled={cleaningUpMatch === match.matchId}
+                                className={clsx(
+                                  "rounded px-2 py-1 text-[10px]",
+                                  cleaningUpMatch === match.matchId
+                                    ? "bg-slate-700/50 text-slate-400 cursor-wait"
+                                    : "bg-amber-600/20 text-amber-200 hover:bg-amber-600/30"
+                                )}
+                                title="Remove stale match (older than 2 days)"
+                              >
+                                {cleaningUpMatch === match.matchId
+                                  ? "Cleaning…"
+                                  : "Cleanup"}
+                              </button>
+                            )}
                         </td>
                       </tr>
                     );

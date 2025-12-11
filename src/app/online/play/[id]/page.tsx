@@ -25,7 +25,6 @@ import OnlineD20Screen from "@/components/game/OnlineD20Screen";
 import OnlineDeckSelector from "@/components/game/OnlineDeckSelector";
 import OnlineDraftDeckLoader from "@/components/game/OnlineDraftDeckLoader";
 import OnlineLifeCounters from "@/components/game/OnlineLifeCounters";
-import ManaOverlay from "@/components/game/ManaOverlay";
 import OnlineMulliganScreen from "@/components/game/OnlineMulliganScreen";
 import OnlineSealedDeckLoader from "@/components/game/OnlineSealedDeckLoader";
 import OnlineStatusBar from "@/components/game/OnlineStatusBar";
@@ -2376,10 +2375,6 @@ export default function OnlineMatchPage() {
             readOnly={isSpectatorView}
             spectatorMode={isSpectatorView}
           />
-
-          {/* Mana display overlay */}
-          <ManaOverlay owner="p1" />
-          <ManaOverlay owner="p2" />
 
           {/* Online Console with Events and Chat tabs */}
           <OnlineConsole

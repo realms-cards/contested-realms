@@ -195,6 +195,7 @@ export default function ListsPage() {
                     fill
                     className="object-cover opacity-60 group-hover:opacity-80 transition-opacity"
                     sizes="(max-width: 768px) 100vw, 33vw"
+                    unoptimized
                   />
                 )}
                 <div className="absolute inset-0 bg-gradient-to-t from-gray-800 to-transparent" />

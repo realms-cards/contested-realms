@@ -107,6 +107,7 @@ export default function AddCardModal({
                     className={
                       isSite ? "object-contain rotate-90" : "object-cover"
                     }
+                    unoptimized
                   />
                 </div>
               );

@@ -2102,6 +2102,7 @@ export default function EnhancedOnlineDraft3DScreen({
                                     }`}
                                     sizes="(max-width:640px) 20vw, (max-width:1024px) 15vw, 10vw"
                                     priority={false}
+                                    unoptimized
                                   />
                                 </div>
                               ) : null}

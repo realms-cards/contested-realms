@@ -87,6 +87,7 @@ export default function RandomSpellPage() {
               fill
               className="object-contain"
               priority
+              unoptimized
             />
           </div>
 

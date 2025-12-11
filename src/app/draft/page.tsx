@@ -279,6 +279,7 @@ export default function DraftPage() {
                                 fill
                                 sizes="(max-width:640px) 100vw, (max-width:1024px) 50vw, 33vw"
                                 className="object-cover"
+                                unoptimized
                               />
                             </div>
                             <div className="font-semibold">{c.cardName}</div>
@@ -311,6 +312,7 @@ export default function DraftPage() {
                                 fill
                                 sizes="(max-width:640px) 100vw, (max-width:1024px) 50vw, 33vw"
                                 className="object-contain rotate-90 origin-center"
+                                unoptimized
                               />
                             </div>
                             <div className="font-semibold">{c.cardName}</div>

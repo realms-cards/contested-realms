@@ -234,7 +234,7 @@ export function ManaCounterHUD({
 
       {/* Compact mana display: remaining/total */}
       <div
-        className="flex items-center select-none font-fantaisie text-white"
+        className="flex items-center select-none font-mono tabular-nums text-white"
         style={{ fontSize, lineHeight: 1 }}
         title={
           showTotal
@@ -242,7 +242,20 @@ export function ManaCounterHUD({
             : "Available mana"
         }
       >
-        <span className={value < (total ?? value) ? "text-amber-400" : ""}>
+        <span
+          className={
+            value === 0
+              ? "text-red-500"
+              : value < (total ?? value)
+              ? "text-amber-400"
+              : ""
+          }
+          style={{
+            minWidth: "1ch",
+            textAlign: "right",
+            display: "inline-block",
+          }}
+        >
           {value}
         </span>
         {showTotal && (
@@ -253,7 +266,16 @@ export function ManaCounterHUD({
             >
               /
             </span>
-            <span className="text-white/70">{total}</span>
+            <span
+              className="text-white/70"
+              style={{
+                minWidth: "1ch",
+                textAlign: "left",
+                display: "inline-block",
+              }}
+            >
+              {total}
+            </span>
           </>
         )}
       </div>

@@ -1096,15 +1096,17 @@ export default function OnlineProvider({
       }),
       transport.on("chat", (p) =>
         setChatLog((prev) => {
-          // Don't add duplicate messages
-          const lastMessage = prev[prev.length - 1];
-          if (
-            lastMessage &&
-            lastMessage.content === p.content &&
-            lastMessage.from?.displayName === p.from?.displayName
-          ) {
-            return prev;
-          }
+          // Deduplicate using timestamp if available, otherwise content+sender
+          const msgKey = p.ts
+            ? `${p.from?.id ?? "system"}:${p.ts}`
+            : `${p.from?.id ?? "system"}:${p.content}`;
+          const exists = prev.some((m) => {
+            const existingKey = m.ts
+              ? `${m.from?.id ?? "system"}:${m.ts}`
+              : `${m.from?.id ?? "system"}:${m.content}`;
+            return existingKey === msgKey;
+          });
+          if (exists) return prev;
           return [...prev, p];
         })
       ),
@@ -1115,11 +1117,18 @@ export default function OnlineProvider({
         // Merge server chat history with existing messages, avoiding duplicates
         setChatLog((prev) => {
           const existingKeys = new Set(
-            prev.map((m) => `${m.from?.id ?? "system"}:${m.content}`)
+            prev.map((m) =>
+              m.ts
+                ? `${m.from?.id ?? "system"}:${m.ts}`
+                : `${m.from?.id ?? "system"}:${m.content}`
+            )
           );
-          const newMessages = p.messages.filter(
-            (m) => !existingKeys.has(`${m.from?.id ?? "system"}:${m.content}`)
-          );
+          const newMessages = p.messages.filter((m) => {
+            const key = m.ts
+              ? `${m.from?.id ?? "system"}:${m.ts}`
+              : `${m.from?.id ?? "system"}:${m.content}`;
+            return !existingKeys.has(key);
+          });
           if (newMessages.length === 0) return prev;
           // Prepend history (older messages) before current messages
           return [...newMessages, ...prev];

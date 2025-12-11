@@ -173,6 +173,7 @@ export default function DeckItem({ deck, onDelete }: DeckItemProps) {
               sizes="64px"
               className="object-cover"
               priority={false}
+              unoptimized
             />
           </div>
         </div>
@@ -218,10 +219,83 @@ export default function DeckItem({ deck, onDelete }: DeckItemProps) {
         </div>
       )}
 
+      {/* Quick Export (simple list) */}
+      <button
+        aria-label="Quick Export"
+        title="Quick Export (simple list)"
+        onClick={async (e: MouseEvent) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (exportingText) return;
+          try {
+            setExportingText(true);
+            const res = await fetch(
+              `/api/decks/${encodeURIComponent(deck.id)}`,
+              { cache: "no-store" }
+            );
+            if (!res.ok) {
+              const msg = await res.text().catch(() => "");
+              throw new Error(msg || "Failed to load deck for export");
+            }
+            const data = await res.json();
+            const allCards = [
+              ...(Array.isArray(data?.spellbook) ? data.spellbook : []),
+              ...(Array.isArray(data?.atlas) ? data.atlas : []),
+              ...(Array.isArray(data?.sideboard) ? data.sideboard : []),
+              ...(Array.isArray(data?.collection) ? data.collection : []),
+            ];
+            // Separate avatars from other cards
+            const avatarCounts = new Map<string, number>();
+            const otherCounts = new Map<string, number>();
+            for (const c of allCards) {
+              const nm = typeof c.name === "string" ? c.name.trim() : "";
+              if (!nm) continue;
+              const t = typeof c.type === "string" ? c.type.toLowerCase() : "";
+              if (t.includes("avatar")) {
+                avatarCounts.set(nm, (avatarCounts.get(nm) || 0) + 1);
+              } else {
+                otherCounts.set(nm, (otherCounts.get(nm) || 0) + 1);
+              }
+            }
+            // Avatar first, then rest sorted alphabetically
+            const avatarLines = Array.from(avatarCounts.entries())
+              .sort((a, b) => a[0].localeCompare(b[0]))
+              .map(([name, n]) => `${n} ${name}`);
+            const otherLines = Array.from(otherCounts.entries())
+              .sort((a, b) => a[0].localeCompare(b[0]))
+              .map(([name, n]) => `${n} ${name}`);
+            const lines = [...avatarLines, ...otherLines];
+            await navigator.clipboard.writeText(lines.join("\n"));
+            setCopiedMsg("Copied list");
+            setTimeout(() => setCopiedMsg(null), 1200);
+          } catch (err) {
+            alert(err instanceof Error ? err.message : String(err));
+          } finally {
+            setExportingText(false);
+          }
+        }}
+        disabled={exportingText}
+        className="absolute top-2 right-28 inline-flex items-center justify-center h-8 w-8 rounded ring-1 ring-zinc-600 hover:bg-zinc-700/40 text-zinc-300 hover:text-zinc-100 opacity-0 group-hover:opacity-100 transition-opacity"
+      >
+        {/* List icon */}
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          fill="currentColor"
+          className="h-5 w-5"
+        >
+          <path
+            fillRule="evenodd"
+            d="M2.625 6.75a1.125 1.125 0 1 1 2.25 0 1.125 1.125 0 0 1-2.25 0Zm4.875 0A.75.75 0 0 1 8.25 6h12a.75.75 0 0 1 0 1.5h-12a.75.75 0 0 1-.75-.75ZM2.625 12a1.125 1.125 0 1 1 2.25 0 1.125 1.125 0 0 1-2.25 0ZM7.5 12a.75.75 0 0 1 .75-.75h12a.75.75 0 0 1 0 1.5h-12A.75.75 0 0 1 7.5 12Zm-4.875 5.25a1.125 1.125 0 1 1 2.25 0 1.125 1.125 0 0 1-2.25 0Zm4.875 0a.75.75 0 0 1 .75-.75h12a.75.75 0 0 1 0 1.5h-12a.75.75 0 0 1-.75-.75Z"
+            clipRule="evenodd"
+          />
+        </svg>
+      </button>
+
       {/* Export Deck (Sorcery text format) */}
       <button
         aria-label="Export Deck"
-        title="Export Deck"
+        title="Export Deck (categorized)"
         onClick={async (e: MouseEvent) => {
           e.preventDefault();
           e.stopPropagation();

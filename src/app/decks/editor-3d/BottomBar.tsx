@@ -701,6 +701,7 @@ export default function BottomBar(props: BottomBarProps) {
                                     : "object-cover"
                                 }
                                 sizes="80px"
+                                unoptimized
                               />
                               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center pb-1">
                                 <span className="text-[10px] text-white font-medium truncate max-w-full px-1">
@@ -748,6 +749,7 @@ export default function BottomBar(props: BottomBarProps) {
                               : "object-cover"
                           }
                           sizes="120px"
+                          unoptimized
                         />
                         <div className="hidden sm:flex absolute inset-0">
                           <button

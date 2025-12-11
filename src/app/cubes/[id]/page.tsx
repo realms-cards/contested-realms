@@ -260,6 +260,7 @@ export default function CubeViewPage() {
                       fill
                       className="object-cover"
                       sizes="100px"
+                      unoptimized
                     />
                     <div className="absolute top-1 right-1 bg-black/80 rounded px-1.5 py-0.5 text-xs text-white font-bold">
                       {card.count}x
@@ -308,6 +309,7 @@ export default function CubeViewPage() {
                       fill
                       className="object-cover"
                       sizes="100px"
+                      unoptimized
                     />
                     <div className="absolute top-1 right-1 bg-purple-900/80 rounded px-1.5 py-0.5 text-xs text-white font-bold">
                       {card.count}x

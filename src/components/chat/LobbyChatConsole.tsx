@@ -124,11 +124,11 @@ export default function LobbyChatConsole({
 
   // Inline mode: normal flow element; fixed mode: floating overlay
   const containerClasses = inline
-    ? "text-white w-full h-full flex flex-col"
+    ? "text-white w-full h-full flex flex-col overflow-hidden"
     : `fixed ${positionClasses} z-30 text-white ${containerWidth} transition-all pointer-events-auto`;
 
   const innerClasses = inline
-    ? "bg-slate-900/60 ring-1 ring-slate-800 rounded-xl flex flex-col h-full"
+    ? "bg-slate-900/60 ring-1 ring-slate-800 rounded-xl flex flex-col h-full overflow-hidden"
     : "bg-black/60 backdrop-blur rounded-xl ring-1 ring-white/10 shadow";
 
   return (
@@ -194,13 +194,15 @@ export default function LobbyChatConsole({
         {consoleOpen && (
           <div
             className={
-              inline ? "flex-1 flex flex-col min-h-0" : "h-56 flex flex-col"
+              inline
+                ? "flex-1 flex flex-col min-h-0 overflow-hidden"
+                : "h-56 flex flex-col"
             }
           >
             <div
               ref={chatRef}
               data-allow-wheel="true"
-              className="flex-1 overflow-y-scroll thin-scrollbar px-3 py-3 text-xs space-y-1 min-h-0"
+              className="flex-1 overflow-y-auto thin-scrollbar px-3 py-3 text-xs space-y-1 min-h-0 max-h-full"
               onScroll={handleScroll}
             >
               {activeMessages.length === 0 && (

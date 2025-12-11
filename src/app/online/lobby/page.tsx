@@ -1302,7 +1302,7 @@ function LobbyPageContent({
           </div>
 
           {/* Inline lobby chat console (global + lobby scopes) */}
-          <div className="h-80 lg:h-auto">
+          <div className="h-80 lg:h-96">
             <LobbyChatConsole
               connected={connected}
               chatLog={chatLog}

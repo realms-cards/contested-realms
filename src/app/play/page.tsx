@@ -14,7 +14,6 @@ import GameToolbox from "@/components/game/GameToolbox";
 import HarbingerPortalScreen from "@/components/game/HarbingerPortalScreen";
 import { InteractionConsentDialog } from "@/components/game/InteractionConsentDialog";
 import LifeCounters from "@/components/game/LifeCounters";
-import ManaOverlay from "@/components/game/ManaOverlay";
 import OfflineMulliganScreen from "@/components/game/OfflineMulliganScreen";
 import PileSearchDialog from "@/components/game/PileSearchDialog";
 import PlacementDialog from "@/components/game/PlacementDialog";
@@ -555,10 +554,6 @@ export default function PlayPage() {
       <StatusBar dragFromHand={dragFromHand} />
 
       <LifeCounters dragFromHand={dragFromHand} />
-
-      {/* Mana display overlay */}
-      <ManaOverlay owner="p1" />
-      <ManaOverlay owner="p2" />
 
       {/* Event Console */}
       <div

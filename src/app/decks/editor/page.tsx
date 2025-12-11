@@ -79,8 +79,9 @@ export default function DeckEditorPage() {
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [tournamentControlsVisible, setTournamentControlsVisible] =
     useState(false);
-  const [spellslingerCard, setSpellslingerCard] =
-    useState<SearchResult | null>(null);
+  const [spellslingerCard, setSpellslingerCard] = useState<SearchResult | null>(
+    null
+  );
 
   // DnD hover states for visual feedback
   const [isOverDeck, setIsOverDeck] = useState(false);
@@ -174,7 +175,9 @@ export default function DeckEditorPage() {
         let hit: SearchResult | null = null;
         try {
           const resSet = await fetch(
-            `/api/cards/search?q=spellslinger&set=${encodeURIComponent(setName)}&type=avatar`
+            `/api/cards/search?q=spellslinger&set=${encodeURIComponent(
+              setName
+            )}&type=avatar`
           );
           const dataSet = (await resSet.json()) as SearchResult[];
           hit = resSet.ok ? dataSet[0] || null : null;
@@ -183,7 +186,9 @@ export default function DeckEditorPage() {
         // 2) Fallback across all sets
         if (!hit) {
           try {
-            const resAny = await fetch(`/api/cards/search?q=spellslinger&type=avatar`);
+            const resAny = await fetch(
+              `/api/cards/search?q=spellslinger&type=avatar`
+            );
             const dataAny = (await resAny.json()) as SearchResult[];
             hit = resAny.ok ? dataAny[0] || null : null;
           } catch {}
@@ -551,7 +556,9 @@ export default function DeckEditorPage() {
         const matchName = searchParams?.get("matchName");
         const lobbyName = searchParams?.get("lobbyName");
         const gameName = matchName || lobbyName;
-        const finalDeckName = gameName ? `${gameName} (Constructed)` : deckName || "New Deck";
+        const finalDeckName = gameName
+          ? `${gameName} (Constructed)`
+          : deckName || "New Deck";
 
         const res = await fetch("/api/decks", {
           method: "POST",
@@ -588,9 +595,7 @@ export default function DeckEditorPage() {
   const avatars = deckEntries.filter(([, it]) =>
     (it.type || "").toLowerCase().includes("avatar")
   );
-  const atlasCards = deckEntries.filter(([, it]) =>
-    it.zone === "Atlas"
-  );
+  const atlasCards = deckEntries.filter(([, it]) => it.zone === "Atlas");
   const spellbookCards = deckEntries.filter(
     ([, it]) =>
       it.zone === "Spellbook" &&
@@ -621,6 +626,7 @@ export default function DeckEditorPage() {
           className={
             isSite ? "object-contain rotate-90 origin-center" : "object-cover"
           }
+          unoptimized
         />
       )}
     </div>
@@ -710,11 +716,14 @@ export default function DeckEditorPage() {
       <div className="flex flex-wrap items-center gap-3">
         {isRestrictedMode && (
           <div className="px-3 py-2 bg-amber-100 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded text-sm text-amber-800 dark:text-amber-200">
-            📋 {deckFormat} Mode - Card pool is locked (cannot add/remove drafted cards, but can set avatar and add standard sites)
+            📋 {deckFormat} Mode - Card pool is locked (cannot add/remove
+            drafted cards, but can set avatar and add standard sites)
           </div>
         )}
         <button
-          onClick={() => setTournamentControlsVisible(!tournamentControlsVisible)}
+          onClick={() =>
+            setTournamentControlsVisible(!tournamentControlsVisible)
+          }
           className={`px-3 py-2 rounded text-sm transition-colors ${
             tournamentControlsVisible
               ? "bg-yellow-600 text-white hover:bg-yellow-500"
@@ -1006,48 +1015,50 @@ export default function DeckEditorPage() {
                   {searching ? "Searching..." : "Search"}
                 </button>
               </div>
-            {!!results.length && (
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                {results.map((c) => {
-                  const isSite = (c.type || "").toLowerCase().includes("site");
-                  return (
-                    <div
-                      key={c.variantId}
-                      className="border rounded p-2"
-                      draggable
-                      onDragStart={onDragStartFromSearch(c)}
-                    >
-                      <CardThumb
-                        slug={c.slug}
-                        alt={c.cardName}
-                        isSite={isSite}
-                        className="w-full mb-2"
-                      />
-                      <div className="font-semibold line-clamp-1">
-                        {c.cardName}
+              {!!results.length && (
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  {results.map((c) => {
+                    const isSite = (c.type || "")
+                      .toLowerCase()
+                      .includes("site");
+                    return (
+                      <div
+                        key={c.variantId}
+                        className="border rounded p-2"
+                        draggable
+                        onDragStart={onDragStartFromSearch(c)}
+                      >
+                        <CardThumb
+                          slug={c.slug}
+                          alt={c.cardName}
+                          isSite={isSite}
+                          className="w-full mb-2"
+                        />
+                        <div className="font-semibold line-clamp-1">
+                          {c.cardName}
+                        </div>
+                        <div className="opacity-80 line-clamp-1">
+                          {c.type || ""}
+                        </div>
+                        <div className="mt-1 flex gap-1">
+                          <button
+                            className="px-2 py-1 border rounded"
+                            onClick={() => addCardAuto(c)}
+                          >
+                            + Deck
+                          </button>
+                          <button
+                            className="px-2 py-1 border rounded"
+                            onClick={() => addToSideboardFromSearch(c)}
+                          >
+                            + Side
+                          </button>
+                        </div>
                       </div>
-                      <div className="opacity-80 line-clamp-1">
-                        {c.type || ""}
-                      </div>
-                      <div className="mt-1 flex gap-1">
-                        <button
-                          className="px-2 py-1 border rounded"
-                          onClick={() => addCardAuto(c)}
-                        >
-                          + Deck
-                        </button>
-                        <button
-                          className="px-2 py-1 border rounded"
-                          onClick={() => addToSideboardFromSearch(c)}
-                        >
-                          + Side
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
         </div>

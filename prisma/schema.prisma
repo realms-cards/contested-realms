@@ -395,6 +395,7 @@ model PlayerStanding {
   @@unique([tournamentId, playerId])
   @@index([tournamentId])
   @@index([matchPoints])
+  @@index([tournamentId, matchPoints(sort: Desc)]) // Composite index for standings queries
 }
 
 model TournamentRound {
@@ -431,6 +432,7 @@ model Match {
   @@index([tournamentId])
   @@index([roundId])
   @@index([status])
+  @@index([tournamentId, status]) // Composite index for common query pattern
 }
 
 model TournamentStatistics {

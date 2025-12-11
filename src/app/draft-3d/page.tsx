@@ -1461,6 +1461,7 @@ export default function Draft3DPage() {
                                       }`}
                                       sizes="(max-width:640px) 20vw, (max-width:1024px) 15vw, 10vw"
                                       priority={false}
+                                      unoptimized
                                     />
                                   </div>
                                 ) : null}

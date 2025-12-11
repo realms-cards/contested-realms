@@ -182,9 +182,14 @@ export function registerChatHandlers({
     const from = getPlayerInfo(player.id);
 
     if (requestedScope === "global") {
-      const message: ChatMessage = { from, content, scope: "global" };
+      const message: ChatMessage = {
+        from,
+        content,
+        scope: "global",
+        ts: Date.now(),
+      };
       io.emit("chat", message);
-      // Persist to Redis for history
+      // Persist to Redis for history (ts already included)
       persistGlobalMessage(storeRedis, message).catch(() => {});
       incrementMetric("chatSentTotal");
       debugLog(`[chat] global message sent from ${player.id}`);

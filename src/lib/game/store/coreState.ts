@@ -432,11 +432,18 @@ export const createCoreSlice: StateCreator<
       [nextKey]: { ...state.avatars[nextKey], tapped: false },
     } as GameState["avatars"];
 
+    // Reset mana offset to 0 for the next player (refill spent mana)
+    const playersNext = {
+      ...state.players,
+      [nextKey]: { ...state.players[nextKey], mana: 0 },
+    };
+
     const base: ServerPatchT = {
       phase: "Start",
       currentPlayer: nextPlayer,
       turn: nextTurn,
       hasDrawnThisTurn: false, // Reset draw tracking for new turn
+      players: playersNext,
     };
     const deltaPatch =
       updates.length > 0 ? createPermanentDeltaPatch(updates) : undefined;
@@ -450,6 +457,7 @@ export const createCoreSlice: StateCreator<
       hasDrawnThisTurn: false, // Reset draw tracking for new turn
       permanents,
       avatars: avatarsNext,
+      players: playersNext,
       selectedCard: null,
       selectedPermanent: null,
     });

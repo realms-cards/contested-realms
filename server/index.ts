@@ -2217,9 +2217,9 @@ io.on("connection", async (socket: SocketClient) => {
     });
     broadcastPlayers();
 
-    // Send last 5 global chat messages to newly connected client
+    // Send full global chat history to newly connected client (up to 100 messages)
     try {
-      const chatHistory = await getGlobalChatHistory(storeRedis, 5);
+      const chatHistory = await getGlobalChatHistory(storeRedis, 100);
       if (chatHistory.messages.length > 0) {
         socket.emit("chatHistory", chatHistory);
       }
