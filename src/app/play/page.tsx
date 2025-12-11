@@ -41,6 +41,13 @@ import {
   hasAnyHarbinger,
   detectHarbingerSeats,
 } from "@/lib/game/avatarAbilities";
+import {
+  saveHotseatGame,
+  loadHotseatGame,
+  clearHotseatGame,
+  hasSavedHotseatGame,
+  applyLoadedGame,
+} from "@/lib/game/hotseatPersistence";
 // Note: avatarAbilities import is after store due to type dependency
 import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
 import { LocalTransport } from "@/lib/net/localTransport";
@@ -87,6 +94,27 @@ export default function PlayPage() {
     : "hotseat";
   const showToolbox = phase !== "Setup";
 
+  // Setup state - declared early so effects can reference them
+  const [setupOpen, setSetupOpen] = useState<boolean>(true);
+  const [prepared, setPrepared] = useState<boolean>(false);
+  const [consoleOpen, setConsoleOpen] = useState<boolean>(false);
+  // Hotseat: Player 1 performs mulligans for both players; start after both are ready
+  const [p1Ready, setP1Ready] = useState<boolean>(false);
+  const [p2Ready, setP2Ready] = useState<boolean>(false);
+
+  // Harbinger portal phase state (Gothic expansion)
+  // Portal phase happens AFTER mulligan, before game starts
+  const [mulliganComplete, setMulliganComplete] = useState<boolean>(false);
+  const [needsPortalPhase, setNeedsPortalPhase] = useState<boolean>(false);
+  const [portalSetupComplete, setPortalSetupComplete] =
+    useState<boolean>(false);
+  const [portalPhaseInitialized, setPortalPhaseInitialized] =
+    useState<boolean>(false);
+
+  // Saved game restoration prompt
+  const [showRestorePrompt, setShowRestorePrompt] = useState<boolean>(false);
+  const [restoredGame, setRestoredGame] = useState<boolean>(false);
+
   // LocalTransport wiring for offline play
   const transportRef = useRef<LocalTransport | null>(null);
   const transport = useMemo(() => {
@@ -117,10 +145,53 @@ export default function PlayPage() {
     });
   };
 
-  // Reset game state on mount to clear any stale state from other matches
+  // Track if we've checked for saved game
+  const [checkedForSavedGame, setCheckedForSavedGame] = useState(false);
+
+  // Check for saved game on mount and show restore prompt
   useEffect(() => {
-    useGameStore.getState().resetGameState();
+    (async () => {
+      const hasSaved = await hasSavedHotseatGame();
+      console.log("[hotseat] Checking for saved game:", hasSaved);
+      if (hasSaved) {
+        setShowRestorePrompt(true);
+      } else {
+        // No saved game, reset state for new game
+        useGameStore.getState().resetGameState();
+      }
+      setCheckedForSavedGame(true);
+    })();
   }, []);
+
+  // Handle restore or new game decision
+  const handleNewGame = useCallback(async () => {
+    console.log("[hotseat] Starting new game");
+    await clearHotseatGame();
+    useGameStore.getState().resetGameState();
+    setShowRestorePrompt(false);
+  }, []);
+
+  const handleRestoreGame = useCallback(async () => {
+    console.log("[hotseat] Restoring saved game");
+    const saved = await loadHotseatGame();
+    if (saved) {
+      console.log("[hotseat] Loaded saved game:", saved);
+      const state = useGameStore.getState();
+      const updates = applyLoadedGame(state, saved);
+      useGameStore.setState(updates);
+      setSetupOpen(false);
+      setPrepared(true);
+      setP1Ready(true);
+      setP2Ready(true);
+      setMulliganComplete(saved.mulliganComplete);
+      setPortalSetupComplete(saved.portalSetupComplete);
+      setRestoredGame(true);
+      setShowRestorePrompt(false);
+    } else {
+      console.log("[hotseat] No saved game found, starting new");
+      await handleNewGame();
+    }
+  }, [handleNewGame]);
 
   // Inject transport into store once; remove on unmount
   useEffect(() => {
@@ -177,23 +248,6 @@ export default function PlayPage() {
     };
   }, [transport]);
 
-  // Setup state
-  const [setupOpen, setSetupOpen] = useState<boolean>(true);
-  const [prepared, setPrepared] = useState<boolean>(false);
-  const [consoleOpen, setConsoleOpen] = useState<boolean>(false);
-  // Hotseat: Player 1 performs mulligans for both players; start after both are ready
-  const [p1Ready, setP1Ready] = useState<boolean>(false);
-  const [p2Ready, setP2Ready] = useState<boolean>(false);
-
-  // Harbinger portal phase state (Gothic expansion)
-  // Portal phase happens AFTER mulligan, before game starts
-  const [mulliganComplete, setMulliganComplete] = useState<boolean>(false);
-  const [needsPortalPhase, setNeedsPortalPhase] = useState<boolean>(false);
-  const [portalSetupComplete, setPortalSetupComplete] =
-    useState<boolean>(false);
-  const [portalPhaseInitialized, setPortalPhaseInitialized] =
-    useState<boolean>(false);
-
   // After mulligan complete, check for Harbinger avatars and initialize portal state
   useEffect(() => {
     if (!mulliganComplete || portalPhaseInitialized) return;
@@ -249,7 +303,7 @@ export default function PlayPage() {
     el.scrollTop = el.scrollHeight;
   }, [events.length, consoleOpen]);
 
-  // Robust: reset drag flags only on hard-cancel contexts (not every pointerup)
+  // Robust: reset drag flags and stuck interaction states on hard-cancel contexts
   useEffect(() => {
     const reset = (reason?: string) => {
       if (process.env.NODE_ENV !== "production") {
@@ -259,6 +313,12 @@ export default function PlayPage() {
       setTimeout(() => {
         setDragFromHand(false);
         setDragFromPile(null);
+        // Also clear any stuck combat/magic states that could block avatar movement
+        const state = useGameStore.getState();
+        if (state.attackChoice) state.setAttackChoice(null);
+        if (state.attackTargetChoice) state.setAttackTargetChoice(null);
+        if (state.attackConfirm) state.setAttackConfirm(null);
+        if (state.pendingMagic) state.cancelMagic?.();
       }, 0);
     };
 
@@ -303,6 +363,37 @@ export default function PlayPage() {
       startGame();
     }
   }, [mulliganComplete, portalSetupComplete, startGame]);
+
+  // Auto-save game state to localStorage when game is in progress
+  // Subscribe to store changes and debounce saves
+  const saveTimeoutRef = useRef<number | null>(null);
+  useEffect(() => {
+    // Only set up auto-save after setup is complete
+    if (setupOpen || phase === "Setup") return;
+
+    const doSave = () => {
+      if (saveTimeoutRef.current) {
+        window.clearTimeout(saveTimeoutRef.current);
+      }
+      saveTimeoutRef.current = window.setTimeout(() => {
+        const state = useGameStore.getState();
+        saveHotseatGame(state, true, mulliganComplete, portalSetupComplete);
+      }, 1000) as unknown as number;
+    };
+
+    // Subscribe to store changes
+    const unsubscribe = useGameStore.subscribe(doSave);
+
+    // Initial save
+    doSave();
+
+    return () => {
+      unsubscribe();
+      if (saveTimeoutRef.current) {
+        window.clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, [setupOpen, phase, mulliganComplete, portalSetupComplete]);
 
   // Compute playmat world extents from board size for camera clamping
   // (moved up so gotoBaseline can use matW/matH)
@@ -484,8 +575,37 @@ export default function PlayPage() {
           </button>
         </div>
       </div>
-      {/* Setup Overlay */}
-      {setupOpen && (
+      {/* Restore Game Prompt */}
+      {showRestorePrompt && (
+        <div className="absolute inset-0 z-30 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6">
+          <div className="bg-gray-900 rounded-xl p-6 max-w-md text-center ring-1 ring-white/20 shadow-xl">
+            <h2 className="text-xl font-semibold text-white mb-4">
+              Resume Previous Game?
+            </h2>
+            <p className="text-gray-300 mb-6">
+              A saved hotseat game was found. Would you like to continue where
+              you left off?
+            </p>
+            <div className="flex gap-3 justify-center">
+              <button
+                onClick={handleNewGame}
+                className="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-white transition-colors"
+              >
+                Start New Game
+              </button>
+              <button
+                onClick={handleRestoreGame}
+                className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition-colors"
+              >
+                Resume Game
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Setup Overlay - only show after we've checked for saved game */}
+      {setupOpen && !showRestorePrompt && checkedForSavedGame && (
         <div className="absolute inset-0 z-20 bg-black/70 backdrop-blur-sm flex items-center justify-center p-6">
           {!prepared ? (
             <DeckSelector onPrepareComplete={() => setPrepared(true)} />
