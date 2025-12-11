@@ -31,6 +31,7 @@ import OnlineStatusBar from "@/components/game/OnlineStatusBar";
 import PileSearchDialog from "@/components/game/PileSearchDialog";
 import PlacementDialog from "@/components/game/PlacementDialog";
 import SwitchSiteHudOverlay from "@/components/game/SwitchSiteHudOverlay";
+import MobileHandHint from "@/components/game/MobileHandHint";
 import {
   DynamicBoard as Board,
   DynamicHand3D as Hand3D,
@@ -2751,6 +2752,8 @@ export default function OnlineMatchPage() {
 
       {/* Floating user badge (top-right) with presence + volume control */}
       <UserBadge variant="floating" />
+      {/* Mobile hand interaction hint */}
+      <MobileHandHint />
       {/* Video overlay (avatar hidden to avoid duplicate badge) */}
       {voice?.enabled && (
         <GlobalVideoOverlay
