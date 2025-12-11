@@ -23,6 +23,7 @@ import {
 import { DRAG_HOLD_MS } from "@/lib/game/constants";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef, PlayerKey } from "@/lib/game/store";
+import { useTouchDevice } from "@/lib/hooks/useTouchDevice";
 
 export interface Hand3DProps {
   matW: number;
@@ -101,28 +102,22 @@ export default function Hand3D({
   const hoverTimeoutRef = useRef<number | null>(null);
   // Hand card preview enabled for testing
   const HAND_PREVIEW_ENABLED = true;
-  const [isCoarsePointer, setIsCoarsePointer] = useState(false);
+  // Use shared hook for touch device detection
+  const isCoarsePointer = useTouchDevice();
 
-  useEffect(() => {
-    try {
-      const m = window.matchMedia("(pointer: coarse)");
-      setIsCoarsePointer(m.matches);
-      const handler = (e: MediaQueryListEvent) => setIsCoarsePointer(e.matches);
-      if (typeof m.addEventListener === "function") {
-        m.addEventListener("change", handler);
-        return () => m.removeEventListener("change", handler);
-      } else {
-        const anyM = m as unknown as {
-          addListener?: (cb: (e: MediaQueryListEvent) => void) => void;
-          removeListener?: (cb: (e: MediaQueryListEvent) => void) => void;
-        };
-        anyM.addListener?.(handler);
-        return () => anyM.removeListener?.(handler);
-      }
-    } catch {
-      return;
-    }
-  }, []);
+  // Track touch-selected card for mobile tap-to-select pattern
+  const [touchSelectedIndex, setTouchSelectedIndex] = useState<number | null>(
+    null
+  );
+  // Track if we just tapped (to distinguish tap from drag)
+  const tapStartRef = useRef<{
+    x: number;
+    y: number;
+    time: number;
+    index: number;
+  } | null>(null);
+  const TAP_THRESHOLD_PX = 10; // Max movement to count as tap
+  const TAP_THRESHOLD_MS = 300; // Max duration to count as tap
 
   // Hand cycling: focus index target and smoothed value
   const focusTargetRef = useRef(0);
@@ -155,11 +150,13 @@ export default function Hand3D({
 
   // Hand zone: portion of the screen height from the bottom that counts as "in hand zone"
   // Higher value = smaller zone (cursor must be closer to bottom)
-  const HAND_ZONE_TOP_FRAC = 0.85; // Top of trigger zone (85% down = bottom 15%)
-  const HAND_ZONE_BOTTOM_FRAC = 0.95; // Bottom of trigger zone (95% down = not the very edge)
+  // On touch devices, use a larger trigger zone for easier access
+  const HAND_ZONE_TOP_FRAC = isCoarsePointer ? 0.75 : 0.85; // Mobile: bottom 25%, Desktop: bottom 15%
+  const HAND_ZONE_BOTTOM_FRAC = 1.0; // Allow touching very edge on mobile
   // Horizontal zone: center portion of screen width that triggers hand reveal
-  const HAND_ZONE_LEFT_FRAC = 0.42; // Left edge (42% from left)
-  const HAND_ZONE_RIGHT_FRAC = 0.58; // Right edge (58% from left)
+  // On touch devices, use wider zone for easier access
+  const HAND_ZONE_LEFT_FRAC = isCoarsePointer ? 0.25 : 0.42; // Mobile: 25%, Desktop: 42%
+  const HAND_ZONE_RIGHT_FRAC = isCoarsePointer ? 0.75 : 0.58; // Mobile: 75%, Desktop: 58%
 
   useEffect(() => {
     function onMove(e: MouseEvent) {
@@ -199,7 +196,16 @@ export default function Hand3D({
         window.clearTimeout(hoverCleanupTimeoutRef.current);
       }
     };
-  }, [setMouseInHandZone, hoveredCardCount, setHandHoverCount, overCardsArea]);
+  }, [
+    setMouseInHandZone,
+    hoveredCardCount,
+    setHandHoverCount,
+    overCardsArea,
+    HAND_ZONE_TOP_FRAC,
+    HAND_ZONE_BOTTOM_FRAC,
+    HAND_ZONE_LEFT_FRAC,
+    HAND_ZONE_RIGHT_FRAC,
+  ]);
   useEffect(() => {
     function onTouch(e: TouchEvent) {
       const t = e.touches[0] || e.changedTouches?.[0];
@@ -232,7 +238,14 @@ export default function Hand3D({
       window.removeEventListener("touchstart", onTouch as EventListener);
       window.removeEventListener("touchmove", onTouch as EventListener);
     };
-  }, [setMouseInHandZone, overCardsArea]);
+  }, [
+    setMouseInHandZone,
+    overCardsArea,
+    HAND_ZONE_TOP_FRAC,
+    HAND_ZONE_BOTTOM_FRAC,
+    HAND_ZONE_LEFT_FRAC,
+    HAND_ZONE_RIGHT_FRAC,
+  ]);
   // Clear local hand drag start when mouse is released anywhere
   useEffect(() => {
     const onUp = () => {
@@ -786,8 +799,55 @@ export default function Hand3D({
         handAreaLeaveTimeoutRef.current = null;
       }
       setOverCardsArea(false);
+      // Clear touch selection when drag starts
+      if (isCoarsePointer) {
+        setTouchSelectedIndex(null);
+      }
     }
-  }, [dragFromHand, dragFromPile]);
+  }, [dragFromHand, dragFromPile, isCoarsePointer]);
+
+  // Clear touch selection when tapping outside the hand zone on mobile
+  useEffect(() => {
+    if (!isCoarsePointer) return;
+
+    const handleTouchOutside = (e: TouchEvent) => {
+      // Only handle if we have a touch selection
+      if (touchSelectedIndex === null) return;
+
+      const t = e.touches[0];
+      if (!t) return;
+
+      const h = window.innerHeight || 1;
+      const w = window.innerWidth || 1;
+
+      // Check if touch is outside the hand zone
+      const inVerticalZone = t.clientY >= h * HAND_ZONE_TOP_FRAC;
+      const inHorizontalZone =
+        t.clientX >= w * HAND_ZONE_LEFT_FRAC &&
+        t.clientX <= w * HAND_ZONE_RIGHT_FRAC;
+
+      // If touch is outside hand zone, clear selection after a small delay
+      // (to allow card tap to be processed first)
+      if (!inVerticalZone || !inHorizontalZone) {
+        setTimeout(() => {
+          setTouchSelectedIndex(null);
+          clearHoverPreview();
+        }, 100);
+      }
+    };
+
+    window.addEventListener("touchstart", handleTouchOutside, {
+      passive: true,
+    });
+    return () => window.removeEventListener("touchstart", handleTouchOutside);
+  }, [
+    isCoarsePointer,
+    touchSelectedIndex,
+    HAND_ZONE_TOP_FRAC,
+    HAND_ZONE_LEFT_FRAC,
+    HAND_ZONE_RIGHT_FRAC,
+    clearHoverPreview,
+  ]);
 
   // Cleanup on window focus/blur events to handle edge cases
   useEffect(() => {
@@ -894,12 +954,17 @@ export default function Hand3D({
           : -rot;
         const glowWidth = CARD_SHORT + 0.25;
         const glowHeight = CARD_LONG + 0.35;
+        // Touch-selected card gets a cyan glow on mobile
+        const isTouchSelected =
+          isCoarsePointer && touchSelectedIndex === originalIndex;
+        const touchSelectColor = "#22d3ee"; // cyan-400
         return (
           <group
             key={`${c.cardId}-${owner}-${i}`}
             position={[x, y, i * 0.001]}
             scale={[scale, scale, scale]}
           >
+            {/* Remote highlight glow */}
             {remoteHighlightColor ? (
               <CardGlow
                 width={glowWidth}
@@ -910,11 +975,24 @@ export default function Hand3D({
                 renderOrder={renderOrder - 5}
               />
             ) : null}
+            {/* Touch selection glow for mobile - tap again to play */}
+            {isTouchSelected && !remoteHighlightColor && (
+              <CardGlow
+                width={glowWidth}
+                height={glowHeight}
+                rotationZ={cardRotationZ}
+                elevation={0}
+                color={touchSelectColor}
+                renderOrder={renderOrder - 4}
+              />
+            )}
             {/* Invisible larger interaction box to ensure cards are always clickable */}
             {!showCardBacks && !isDraggedCard && (
               <mesh
                 position={[0, 0, 0.01]}
                 onPointerOver={(e) => {
+                  // Skip hover handling on touch devices - use tap instead
+                  if (isCoarsePointer) return;
                   if (isDragging) return; // allow bubbling while dragging
                   e.stopPropagation();
 
@@ -935,6 +1013,8 @@ export default function Hand3D({
                   beginHoverPreview(c);
                 }}
                 onPointerOut={(e) => {
+                  // Skip hover handling on touch devices - use tap instead
+                  if (isCoarsePointer) return;
                   if (isDragging) return; // allow bubbling while dragging
                   e.stopPropagation();
 
@@ -966,6 +1046,18 @@ export default function Hand3D({
                   if (e.button !== 0) return;
                   e.stopPropagation();
 
+                  // On touch devices, track for tap detection
+                  if (isCoarsePointer) {
+                    tapStartRef.current = {
+                      x: e.clientX,
+                      y: e.clientY,
+                      time: Date.now(),
+                      index: originalIndex,
+                    };
+                    // Keep hand visible on touch
+                    if (!overCardsArea) setOverCardsArea(true);
+                  }
+
                   // Clear preview when starting potential drag
                   clearHoverPreview();
 
@@ -986,7 +1078,7 @@ export default function Hand3D({
                   const dx = e.clientX - s.x;
                   const dy = e.clientY - s.y;
                   const dist = Math.hypot(dx, dy);
-                  const PIX_THRESH = 6; // pixels - reduced for more responsive drag initiation
+                  const PIX_THRESH = isCoarsePointer ? 12 : 6; // Higher threshold for touch
                   if (held >= DRAG_HOLD_MS && dist > PIX_THRESH) {
                     // Select the card only when drag actually starts
                     selectHandCard(owner, originalIndex);
@@ -994,8 +1086,47 @@ export default function Hand3D({
                       playCardSelect();
                     } catch {}
                     setDragFromHand(true);
-                    // Clear preview when drag starts
+                    // Clear preview and touch selection when drag starts
                     clearHoverPreview();
+                    setTouchSelectedIndex(null);
+                    tapStartRef.current = null;
+                  }
+                }}
+                onPointerUp={(e) => {
+                  // Mobile tap-to-select handling
+                  if (!isCoarsePointer) return;
+                  const tap = tapStartRef.current;
+                  tapStartRef.current = null;
+                  if (!tap || tap.index !== originalIndex) return;
+
+                  const dx = e.clientX - tap.x;
+                  const dy = e.clientY - tap.y;
+                  const dist = Math.hypot(dx, dy);
+                  const duration = Date.now() - tap.time;
+
+                  // Check if this was a tap (not a drag)
+                  if (dist < TAP_THRESHOLD_PX && duration < TAP_THRESHOLD_MS) {
+                    e.stopPropagation();
+
+                    // If this card is already touch-selected, start drag
+                    if (touchSelectedIndex === originalIndex) {
+                      // Second tap on same card = select and start drag mode
+                      selectHandCard(owner, originalIndex);
+                      try {
+                        playCardSelect();
+                      } catch {}
+                      setDragFromHand(true);
+                      setTouchSelectedIndex(null);
+                    } else {
+                      // First tap = select this card and show preview
+                      setTouchSelectedIndex(originalIndex);
+                      setHoveredCard(originalIndex);
+                      focusTargetRef.current = i; // Focus on this card in fan
+                      beginHoverPreview(c);
+                      try {
+                        playCardSelect();
+                      } catch {}
+                    }
                   }
                 }}
               >
