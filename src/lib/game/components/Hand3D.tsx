@@ -155,16 +155,28 @@ export default function Hand3D({
 
   // Hand zone: portion of the screen height from the bottom that counts as "in hand zone"
   // Higher value = smaller zone (cursor must be closer to bottom)
-  const HAND_ZONE_TOP_FRAC = 0.75; // Changed from 0.85 to 0.75 for more generous 25% zone
+  const HAND_ZONE_TOP_FRAC = 0.85; // Top of trigger zone (85% down = bottom 15%)
+  const HAND_ZONE_BOTTOM_FRAC = 0.95; // Bottom of trigger zone (95% down = not the very edge)
+  // Horizontal zone: center portion of screen width that triggers hand reveal
+  const HAND_ZONE_LEFT_FRAC = 0.42; // Left edge (42% from left)
+  const HAND_ZONE_RIGHT_FRAC = 0.58; // Right edge (58% from left)
 
   useEffect(() => {
     function onMove(e: MouseEvent) {
       const h = window.innerHeight || 1;
-      const inBottomZone = e.clientY >= h * HAND_ZONE_TOP_FRAC;
+      const w = window.innerWidth || 1;
+      // Vertical: between 80% and 95% of screen height (a narrow band near bottom)
+      const inVerticalZone =
+        e.clientY >= h * HAND_ZONE_TOP_FRAC &&
+        e.clientY <= h * HAND_ZONE_BOTTOM_FRAC;
+      // Horizontal: center 30% of screen (35%-65%)
+      const inHorizontalZone =
+        e.clientX >= w * HAND_ZONE_LEFT_FRAC &&
+        e.clientX <= w * HAND_ZONE_RIGHT_FRAC;
 
-      // Use original restrictive zone for hand visibility
-      // Only use overCardsArea or bottom zone for hand showing
-      const inHandZone = inBottomZone || overCardsArea;
+      // Use restrictive zone for hand visibility - a small box near bottom center
+      // Also allow overCardsArea to keep hand visible once hovering over cards
+      const inHandZone = (inVerticalZone && inHorizontalZone) || overCardsArea;
 
       // Update last known mouse position
       lastMousePosRef.current = { x: e.clientX, y: e.clientY };
@@ -193,8 +205,16 @@ export default function Hand3D({
       const t = e.touches[0] || e.changedTouches?.[0];
       if (!t) return;
       const h = window.innerHeight || 1;
-      const inBottomZone = t.clientY >= h * HAND_ZONE_TOP_FRAC;
-      const inHandZone = inBottomZone || overCardsArea;
+      const w = window.innerWidth || 1;
+      // Vertical: between 80% and 95% of screen height
+      const inVerticalZone =
+        t.clientY >= h * HAND_ZONE_TOP_FRAC &&
+        t.clientY <= h * HAND_ZONE_BOTTOM_FRAC;
+      // Horizontal: center 30% of screen
+      const inHorizontalZone =
+        t.clientX >= w * HAND_ZONE_LEFT_FRAC &&
+        t.clientX <= w * HAND_ZONE_RIGHT_FRAC;
+      const inHandZone = (inVerticalZone && inHorizontalZone) || overCardsArea;
       lastMousePosRef.current = { x: t.clientX, y: t.clientY };
       setMouseInHandZone(inHandZone);
       if (inHandZone && hoverCleanupTimeoutRef.current) {
@@ -462,7 +482,7 @@ export default function Hand3D({
 
     // Much wider spacing for proper fan
     const baseSpacingWhenShown = CARD_SHORT * 0.8;
-    const baseSpacingWhenHidden = CARD_SHORT * 0.6;
+    const baseSpacingWhenHidden = CARD_SHORT * 0.25; // Tighter overlap when hidden so less is visible
     const baseSpacing =
       baseSpacingWhenHidden +
       (baseSpacingWhenShown - baseSpacingWhenHidden) * handSpreadLerp.current;

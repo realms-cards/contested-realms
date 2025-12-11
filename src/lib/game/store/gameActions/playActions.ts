@@ -22,6 +22,22 @@ import { randomTilt } from "../utils/permanentHelpers";
 import { computeThresholdTotals } from "../utils/resourceHelpers";
 import { createZonesPatchFor } from "../utils/zoneHelpers";
 
+/** Get mana cost from card (uses cost field, falls back to metaByCardId cache) */
+const getManaCost = (
+  card: CardRef,
+  metaByCardId: Record<
+    number,
+    { attack: number | null; defence: number | null; cost: number | null }
+  >
+): number => {
+  // First try the card's cost field
+  if (typeof card.cost === "number") return card.cost;
+  // Fall back to metaByCardId cache
+  const meta = metaByCardId[card.cardId];
+  if (meta && typeof meta.cost === "number") return meta.cost;
+  return 0;
+};
+
 export type PlayActionsSlice = Pick<
   GameState,
   | "playSelectedTo"
@@ -81,10 +97,34 @@ export const createPlayActionsSlice: StateCreator<
           );
         }
       }
+      // Guard: Must draw a card before playing during Start/Draw phase
+      // (Start phase is where the turn begins, player must draw first)
+      if (
+        (state.phase === "Start" || state.phase === "Draw") &&
+        !state.hasDrawnThisTurn &&
+        isCurrent
+      ) {
+        const message = `Must draw a card before playing. Draw from Spellbook or Atlas first.`;
+        get().log(message);
+        // Show toast to user
+        try {
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(
+              new CustomEvent("app:toast", { detail: { message } })
+            );
+          }
+        } catch {}
+        return state;
+      }
+      // Block non-site/non-token cards outside of Main phase (and Start phase after drawing)
+      const canPlayInCurrentPhase =
+        state.phase === "Main" ||
+        ((state.phase === "Start" || state.phase === "Draw") &&
+          state.hasDrawnThisTurn);
       if (
         !type.includes("site") &&
         !type.includes("token") &&
-        state.phase !== "Main" &&
+        !canPlayInCurrentPhase &&
         !allowInstant
       ) {
         get().log(`Cannot play '${card.name}' during ${state.phase} phase`);
@@ -106,10 +146,35 @@ export const createPlayActionsSlice: StateCreator<
           ...state.board.sites,
           [key]: { owner: ownerFromSeat(who), tapped: false, card },
         };
+        const logPlayerNum = who === "p1" ? "1" : "2";
         get().log(
-          `${who.toUpperCase()} plays site '${card.name}' at #${cellNo}`
+          `[p${logPlayerNum}:PLAYER] plays site '${card.name}' at #${cellNo}`
         );
+        // Broadcast toast to both players with player color and cell for highlighting
+        const playerNum = who === "p1" ? "1" : "2";
+        const toastMessage = `[p${playerNum}:PLAYER] played [p${playerNum}card:${card.name}] at #${cellNo}`;
         const tr = get().transport;
+        if (tr?.sendMessage) {
+          try {
+            tr.sendMessage({
+              type: "toast",
+              text: toastMessage,
+              cellKey: key,
+              seat: who,
+            } as never);
+          } catch {}
+        } else {
+          // Offline: show local toast
+          try {
+            if (typeof window !== "undefined") {
+              window.dispatchEvent(
+                new CustomEvent("app:toast", {
+                  detail: { message: toastMessage, cellKey: key },
+                })
+              );
+            }
+          } catch {}
+        }
         if (tr) {
           const zonesNext = {
             ...state.zones,
@@ -156,7 +221,38 @@ export const createPlayActionsSlice: StateCreator<
         instanceId: cardWithId.instanceId ?? newPermanentInstanceId(),
       });
       per[key] = arr;
-      get().log(`${who.toUpperCase()} plays '${card.name}' at #${cellNo}`);
+      const logPlayerNum = who === "p1" ? "1" : "2";
+      get().log(`[p${logPlayerNum}:PLAYER] plays '${card.name}' at #${cellNo}`);
+      // Broadcast toast to both players with player color and cell for highlighting
+      const playerNum = who === "p1" ? "1" : "2";
+      const toastMessage = `[p${playerNum}:PLAYER] played [p${playerNum}card:${card.name}] at #${cellNo}`;
+      const tr = get().transport;
+      if (tr?.sendMessage) {
+        try {
+          tr.sendMessage({
+            type: "toast",
+            text: toastMessage,
+            cellKey: key,
+            seat: who,
+          } as never);
+        } catch {}
+      } else {
+        // Offline: show local toast
+        try {
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(
+              new CustomEvent("app:toast", {
+                detail: { message: toastMessage, cellKey: key },
+              })
+            );
+          }
+        } catch {}
+      }
+      // Subtract mana cost from available mana when playing non-site cards from hand
+      const manaCost = getManaCost(card, state.metaByCardId);
+      if (manaCost > 0 && !type.includes("token")) {
+        get().addMana(who, -manaCost);
+      }
       const zonesNext = {
         ...state.zones,
         [who]: { ...state.zones[who], hand },
@@ -244,10 +340,39 @@ export const createPlayActionsSlice: StateCreator<
           dragFromHand: false,
         } as Partial<GameState> as GameState;
       }
+      // Guard: Must draw a card before playing during Start/Draw phase
+      // Exception: Playing a site from atlas IS the draw action (counts as free draw)
+      const isPlayingSiteFromAtlas = type.includes("site") && from === "atlas";
+      if (
+        (state.phase === "Start" || state.phase === "Draw") &&
+        !state.hasDrawnThisTurn &&
+        isCurrent &&
+        !isPlayingSiteFromAtlas
+      ) {
+        const message = `Must draw a card before playing. Draw from Spellbook or Atlas first.`;
+        get().log(message);
+        // Show toast to user
+        try {
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(
+              new CustomEvent("app:toast", { detail: { message } })
+            );
+          }
+        } catch {}
+        return {
+          dragFromPile: null,
+          dragFromHand: false,
+        } as Partial<GameState> as GameState;
+      }
+      // Block non-site/non-token cards outside of Main phase (and Start phase after drawing)
+      const canPlayInCurrentPhase =
+        state.phase === "Main" ||
+        ((state.phase === "Start" || state.phase === "Draw") &&
+          state.hasDrawnThisTurn);
       if (
         !type.includes("site") &&
         !type.includes("token") &&
-        state.phase !== "Main" &&
+        !canPlayInCurrentPhase &&
         !allowInstant
       ) {
         get().log(
@@ -314,6 +439,29 @@ export const createPlayActionsSlice: StateCreator<
             dragFromHand: false,
           } as Partial<GameState> as GameState;
         }
+
+        // Playing a site from atlas requires tapping the avatar UNLESS it's the free draw
+        // (Avatar ability: "Tap → Play or draw a site")
+        // The free draw happens during Start/Draw phase when hasDrawnThisTurn is false
+        const isFreeDraw =
+          (state.phase === "Start" || state.phase === "Draw") &&
+          !state.hasDrawnThisTurn;
+        const shouldTapAvatar = from === "atlas" && !isFreeDraw;
+
+        // Check if avatar is already tapped when we need to tap it
+        if (shouldTapAvatar) {
+          const avatar = state.avatars[who];
+          if (avatar?.tapped) {
+            get().log(
+              `Cannot play site from Atlas: ${who.toUpperCase()}'s Avatar is already tapped`
+            );
+            return {
+              dragFromPile: null,
+              dragFromHand: false,
+            } as Partial<GameState> as GameState;
+          }
+        }
+
         const ensuredSiteCard = prepareCardForSeat(card, who);
         const sites = {
           ...state.board.sites,
@@ -323,11 +471,51 @@ export const createPlayActionsSlice: StateCreator<
             card: ensuredSiteCard,
           },
         };
-        get().log(
-          `${who.toUpperCase()} plays site '${
-            card.name
-          }' from ${from} at #${cellNo}`
-        );
+
+        // Build avatar update if we need to tap
+        let avatarsNext = state.avatars;
+        if (shouldTapAvatar) {
+          avatarsNext = {
+            ...state.avatars,
+            [who]: { ...state.avatars[who], tapped: true },
+          } as GameState["avatars"];
+          const logPlayerNum = who === "p1" ? "1" : "2";
+          get().log(
+            `[p${logPlayerNum}:PLAYER] taps Avatar to play site '${card.name}' from ${from} at #${cellNo}`
+          );
+        } else {
+          const logPlayerNum = who === "p1" ? "1" : "2";
+          get().log(
+            `[p${logPlayerNum}:PLAYER] plays site '${card.name}' from ${from} at #${cellNo}`
+          );
+        }
+
+        // Broadcast toast to both players with player color and cell for highlighting
+        const playerNum = who === "p1" ? "1" : "2";
+        const toastMessage = `[p${playerNum}:PLAYER] played [p${playerNum}card:${card.name}] at #${cellNo}`;
+        const toastTr = get().transport;
+        if (toastTr?.sendMessage) {
+          try {
+            toastTr.sendMessage({
+              type: "toast",
+              text: toastMessage,
+              cellKey: key,
+              seat: who,
+            } as never);
+          } catch {}
+        } else {
+          // Offline: show local toast
+          try {
+            if (typeof window !== "undefined") {
+              window.dispatchEvent(
+                new CustomEvent("app:toast", {
+                  detail: { message: toastMessage, cellKey: key },
+                })
+              );
+            }
+          } catch {}
+        }
+
         const zonesNext =
           pileName !== null
             ? ({
@@ -335,6 +523,11 @@ export const createPlayActionsSlice: StateCreator<
                 [who]: { ...z, [pileName]: pile },
               } as GameState["zones"])
             : state.zones;
+
+        // Playing a site from atlas counts as the draw action for the turn
+        // Mark drawn if this is the free draw (isFreeDraw is true means we're using the free draw)
+        const shouldMarkDrawn = isFreeDraw;
+
         const tr = get().transport;
         if (tr) {
           const zonePatch = createZonesPatchFor(zonesNext, who);
@@ -342,6 +535,15 @@ export const createPlayActionsSlice: StateCreator<
             ...(zonePatch?.zones ? { zones: zonePatch.zones } : {}),
             board: { ...state.board, sites } as GameState["board"],
           };
+          if (shouldTapAvatar) {
+            patch.avatars = {
+              [who]: { tapped: true },
+            } as GameState["avatars"];
+          }
+          if (shouldMarkDrawn) {
+            patch.hasDrawnThisTurn = true;
+            patch.phase = "Main"; // Transition to Main phase after free draw
+          }
           get().trySendPatch(patch);
         }
         const nextInteractionLog = expireInteractionGrant(
@@ -351,8 +553,12 @@ export const createPlayActionsSlice: StateCreator<
         return {
           zones: zonesNext,
           board: { ...state.board, sites },
+          avatars: avatarsNext,
           dragFromPile: null,
           dragFromHand: false,
+          ...(shouldMarkDrawn
+            ? { hasDrawnThisTurn: true, phase: "Main" as const }
+            : {}),
           ...(nextInteractionLog ? { interactionLog: nextInteractionLog } : {}),
         } as Partial<GameState> as GameState;
       }
@@ -370,9 +576,37 @@ export const createPlayActionsSlice: StateCreator<
         instanceId: cardWithId.instanceId ?? newPermanentInstanceId(),
       });
       per[key] = arr;
+      const logPlayerNum2 = who === "p1" ? "1" : "2";
       get().log(
-        `${who.toUpperCase()} plays '${card.name}' from ${from} at #${cellNo}`
+        `[p${logPlayerNum2}:PLAYER] plays '${card.name}' from ${from} at #${cellNo}`
       );
+      // Broadcast toast to both players with player color and cell for highlighting (skip tokens)
+      if (!type.includes("token")) {
+        const playerNum = who === "p1" ? "1" : "2";
+        const toastMessage = `[p${playerNum}:PLAYER] played [p${playerNum}card:${card.name}] at #${cellNo}`;
+        const toastTr = get().transport;
+        if (toastTr?.sendMessage) {
+          try {
+            toastTr.sendMessage({
+              type: "toast",
+              text: toastMessage,
+              cellKey: key,
+              seat: who,
+            } as never);
+          } catch {}
+        } else {
+          // Offline: show local toast
+          try {
+            if (typeof window !== "undefined") {
+              window.dispatchEvent(
+                new CustomEvent("app:toast", {
+                  detail: { message: toastMessage, cellKey: key },
+                })
+              );
+            }
+          } catch {}
+        }
+      }
       const zonesNext =
         pileName !== null
           ? ({
@@ -445,12 +679,35 @@ export const createPlayActionsSlice: StateCreator<
         return { dragFromPile: null } as Partial<GameState> as GameState;
       }
       // Collection-to-hand moves are only legal during the controlling player's own Main phase.
-      if (from === "collection" && state.phase !== "Main") {
+      // However, since phase tracking is not strictly enforced in this implementation,
+      // we allow collection draws during Main, Start, or Draw phases (essentially any active gameplay).
+      // Setup phase is still blocked as the game hasn't started yet.
+      if (from === "collection" && state.phase === "Setup") {
         get().log(
-          `Cannot draw '${card.name}' from Collection during ${state.phase} phase (Main phase only)`
+          `Cannot draw '${card.name}' from Collection during ${state.phase} phase`
         );
         return { dragFromPile: null } as Partial<GameState> as GameState;
       }
+
+      // Drawing from atlas requires tapping the avatar UNLESS it's the free draw
+      // (Avatar ability: "Tap → Play or draw a site")
+      // The free draw happens during Start/Draw phase when hasDrawnThisTurn is false
+      const isFreeDraw =
+        (state.phase === "Start" || state.phase === "Draw") &&
+        !state.hasDrawnThisTurn;
+      const shouldTapAvatar = from === "atlas" && !isFreeDraw;
+
+      // Check if avatar is already tapped when we need to tap it
+      if (shouldTapAvatar) {
+        const avatar = state.avatars[who];
+        if (avatar?.tapped) {
+          get().log(
+            `Cannot draw from Atlas: ${who.toUpperCase()}'s Avatar is already tapped`
+          );
+          return { dragFromPile: null } as Partial<GameState> as GameState;
+        }
+      }
+
       get().pushHistory();
       const z = { ...state.zones[who] };
       const pileName = from as keyof Zones;
@@ -477,21 +734,83 @@ export const createPlayActionsSlice: StateCreator<
       }
       const ensured = prepareCardForSeat(removed, who);
       const hand = [...z.hand, ensured];
-      get().log(
-        `${who.toUpperCase()} draws '${card.name}' from ${from} to hand`
-      );
+
+      // Build avatar update if we need to tap
+      let avatarsNext = state.avatars;
+      if (shouldTapAvatar) {
+        avatarsNext = {
+          ...state.avatars,
+          [who]: { ...state.avatars[who], tapped: true },
+        } as GameState["avatars"];
+        const logPlayerNum = who === "p1" ? "1" : "2";
+        get().log(
+          `[p${logPlayerNum}:PLAYER] taps Avatar to draw '${card.name}' from ${from}`
+        );
+      } else {
+        const logPlayerNum = who === "p1" ? "1" : "2";
+        get().log(
+          `[p${logPlayerNum}:PLAYER] draws '${card.name}' from ${from} to hand`
+        );
+      }
+
+      // Show toast for draw action (skip graveyard)
+      if (from !== "graveyard") {
+        const pileLabel =
+          from === "spellbook"
+            ? "Spellbook"
+            : from === "atlas"
+            ? "Atlas"
+            : from === "collection"
+            ? "Collection"
+            : from;
+        try {
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(
+              new CustomEvent("app:toast", {
+                detail: { message: `Drew from ${pileLabel}` },
+              })
+            );
+          }
+        } catch {}
+      }
+
       const zonesNext = {
         ...state.zones,
         [who]: { ...z, [pileName]: pile, hand },
       } as GameState["zones"];
+
+      // Mark that player has drawn this turn (for Draw phase enforcement)
+      // This applies when it's the free draw (Start/Draw phase, not yet drawn)
+      const shouldMarkDrawn = isFreeDraw;
+
       const tr = get().transport;
       if (tr) {
+        const patch: ServerPatchT = {};
         const zonePatch = createZonesPatchFor(zonesNext, who);
-        if (zonePatch) get().trySendPatch(zonePatch);
+        if (zonePatch) {
+          patch.zones = zonePatch.zones;
+        }
+        if (shouldTapAvatar) {
+          patch.avatars = {
+            [who]: { tapped: true },
+          } as GameState["avatars"];
+        }
+        if (shouldMarkDrawn) {
+          patch.hasDrawnThisTurn = true;
+          patch.phase = "Main"; // Transition to Main phase after free draw
+        }
+        if (Object.keys(patch).length > 0) {
+          get().trySendPatch(patch);
+        }
       }
+
       return {
         zones: zonesNext,
+        avatars: avatarsNext,
         dragFromPile: null,
+        ...(shouldMarkDrawn
+          ? { hasDrawnThisTurn: true, phase: "Main" as const }
+          : {}),
       } as Partial<GameState> as GameState;
     }),
   moveCardFromHandToPile: (who, pile, position) =>

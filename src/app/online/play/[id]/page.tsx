@@ -13,6 +13,7 @@ import CardPreview from "@/components/game/CardPreview";
 import CombatHudOverlay from "@/components/game/CombatHudOverlay";
 import ContextMenu from "@/components/game/ContextMenu";
 import EnhancedOnlineDraft3DScreen from "@/components/game/EnhancedOnlineDraft3DScreen";
+import CollectionButton from "@/components/game/CollectionButton";
 import GameToolbox from "@/components/game/GameToolbox";
 import HarbingerPortalScreen from "@/components/game/HarbingerPortalScreen";
 import { InteractionConsentDialog } from "@/components/game/InteractionConsentDialog";
@@ -24,6 +25,7 @@ import OnlineD20Screen from "@/components/game/OnlineD20Screen";
 import OnlineDeckSelector from "@/components/game/OnlineDeckSelector";
 import OnlineDraftDeckLoader from "@/components/game/OnlineDraftDeckLoader";
 import OnlineLifeCounters from "@/components/game/OnlineLifeCounters";
+import ManaOverlay from "@/components/game/ManaOverlay";
 import OnlineMulliganScreen from "@/components/game/OnlineMulliganScreen";
 import OnlineSealedDeckLoader from "@/components/game/OnlineSealedDeckLoader";
 import OnlineStatusBar from "@/components/game/OnlineStatusBar";
@@ -203,8 +205,10 @@ export default function OnlineMatchPage() {
 
   // Spectator presence
   const [spectatorCount, setSpectatorCount] = useState<number | null>(null);
+  // Reserved for future commentator mode where hands may be hidden
   const [spectatorCanViewHands, setSpectatorCanViewHands] =
     useState<boolean>(false);
+  void spectatorCanViewHands; // Suppress unused warning - reserved for commentator mode
   useEffect(() => {
     if (!transport?.on) return;
     const off = transport.on("message", (m) => {
@@ -503,6 +507,7 @@ export default function OnlineMatchPage() {
 
   // Game store selectors needed for setup
   const serverPhase = useGameStore((s) => s.phase);
+  const serverTurn = useGameStore((s) => s.turn);
   const storeSetupWinner = useGameStore((s) => s.setupWinner);
   const storeD20Rolls = useGameStore((s) => s.d20Rolls);
   const storeActorKey = useGameStore((s) => s.actorKey);
@@ -553,6 +558,19 @@ export default function OnlineMatchPage() {
   useEffect(() => {
     if (!bothPlayersReady) return;
     if (portalPhaseInitialized) return;
+
+    // Wait until both avatars have their card data populated before checking for Harbinger.
+    // Avatar cards are set asynchronously when decks are loaded, so we need to wait.
+    const p1HasCard = avatars.p1?.card?.name;
+    const p2HasCard = avatars.p2?.card?.name;
+    if (!p1HasCard || !p2HasCard) {
+      console.log("[Portal] Waiting for avatar cards to be populated...", {
+        p1: p1HasCard ?? "(none)",
+        p2: p2HasCard ?? "(none)",
+      });
+      return;
+    }
+
     setPortalPhaseInitialized(true);
 
     const harbingerSeats = detectHarbingerSeats(avatars);
@@ -1501,10 +1519,14 @@ export default function OnlineMatchPage() {
     let desired = setupOpen;
     const ended = match.status === "ended";
     // Check game phase from game store (which gets updated from resync)
-    // "Main" phase means game started
-    // "Start" phase means D20 rolling complete, in mulligan phase
+    // "Main" phase means game started and player has drawn
+    // "Start" phase on turn 1 means mulligan phase, on turn > 1 means waiting for draw
     // "Setup" phase means D20 rolling OR waiting for players
-    const gameActuallyStarted = serverPhase === "Main";
+    // Game has started if we're in Main phase OR if we're past turn 1
+    const gameActuallyStarted =
+      serverPhase === "Main" ||
+      serverTurn > 1 ||
+      (serverPhase === "Start" && serverTurn === 1 && bothPlayersReady);
     const d20Complete = (() => {
       const r = storeD20Rolls;
       const p1 = r?.p1;
@@ -1573,6 +1595,8 @@ export default function OnlineMatchPage() {
     shouldShowDraft,
     prepared,
     serverPhase,
+    serverTurn,
+    bothPlayersReady,
     setupOpen,
     setPrepared,
     d20RollingComplete,
@@ -1745,8 +1769,8 @@ export default function OnlineMatchPage() {
   const setCameraMode = useGameStore((s) => s.setCameraMode);
 
   // Compute natural tilt angle for 2D mode and reuse across handlers
-  // Keep a small fixed tilt so the board looks flat but avoids strict top-down edge cases
-  const naturalTiltAngle = useMemo(() => 0.14, []);
+  // Use a tiny epsilon (not exactly 0) to avoid gimbal lock in Chrome's OrbitControls
+  const naturalTiltAngle = useMemo(() => 0.001, []);
   const safeMinOrbitTilt = 0.06;
 
   const gotoBaseline = useCallback(
@@ -2114,7 +2138,7 @@ export default function OnlineMatchPage() {
           <button
             onClick={resetCamera}
             aria-label="Reset camera"
-            title="Reset camera"
+            title="Reset camera (Tab)"
             className="p-2 rounded-full hover:bg-white/10 text-white"
           >
             <svg
@@ -2126,9 +2150,12 @@ export default function OnlineMatchPage() {
               strokeLinecap="round"
               strokeLinejoin="round"
             >
-              <path d="M4 4v5h5" />
-              <path d="M20 20v-5h-5" />
-              <path d="M19 9a7 7 0 10-3.5 7.8" />
+              {/* Compass icon */}
+              <circle cx="12" cy="12" r="10" />
+              <polygon
+                points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"
+                fill="currentColor"
+              />
             </svg>
           </button>
           <button
@@ -2338,6 +2365,7 @@ export default function OnlineMatchPage() {
               inDraftMode={shouldShowDraft}
               readOnly={isSpectatorView}
               spectatorCount={spectatorCount}
+              myPlayerKey={viewPlayerKey}
             />
           )}
           <OnlineLifeCounters
@@ -2348,6 +2376,10 @@ export default function OnlineMatchPage() {
             readOnly={isSpectatorView}
             spectatorMode={isSpectatorView}
           />
+
+          {/* Mana display overlay */}
+          <ManaOverlay owner="p1" />
+          <ManaOverlay owner="p2" />
 
           {/* Online Console with Events and Chat tabs */}
           <OnlineConsole
@@ -2421,15 +2453,18 @@ export default function OnlineMatchPage() {
             />
           )}
 
-          {/* Toolbox overlay (draw/peek/inspect/position tools) */}
+          {/* Toolbox and Collection buttons (bottom-right) */}
           {showToolbox && (
-            <GameToolbox
-              myPlayerId={myPlayerId || null}
-              mySeat={myPlayerKey}
-              opponentPlayerId={opponentPlayerId}
-              opponentSeat={opponentSeat}
-              matchId={match?.id || null}
-            />
+            <div className="absolute bottom-3 right-3 z-20 flex items-end gap-2">
+              <CollectionButton mySeat={myPlayerKey} />
+              <GameToolbox
+                myPlayerId={myPlayerId || null}
+                mySeat={myPlayerKey}
+                opponentPlayerId={opponentPlayerId}
+                opponentSeat={opponentSeat}
+                matchId={match?.id || null}
+              />
+            </div>
           )}
 
           {/* Match Info Popup */}
@@ -2546,6 +2581,7 @@ export default function OnlineMatchPage() {
                   matH={MAT_PIXEL_H}
                   showCardPreview={showCardPreview}
                   hideCardPreview={hideCardPreview}
+                  noRaycast={isSpectatorView}
                 />
                 <Piles3D
                   owner="p2"
@@ -2553,10 +2589,11 @@ export default function OnlineMatchPage() {
                   matH={MAT_PIXEL_H}
                   showCardPreview={showCardPreview}
                   hideCardPreview={hideCardPreview}
+                  noRaycast={isSpectatorView}
                 />
                 {/* Token piles (face-up) */}
-                <TokenPile3D owner="p1" />
-                <TokenPile3D owner="p2" />
+                <TokenPile3D owner="p1" noRaycast={isSpectatorView} />
+                <TokenPile3D owner="p2" noRaycast={isSpectatorView} />
 
                 {/* 3D HUD (thresholds, life, mana) */}
                 <Hud3D owner="p1" />
@@ -2569,20 +2606,16 @@ export default function OnlineMatchPage() {
                     matW={MAT_PIXEL_W}
                     matH={MAT_PIXEL_H}
                     viewerPlayerNumber={viewPlayerNumber}
-                    // Own-hand visibility: players always see; spectators see only with commentator permit
-                    showCardBacks={
-                      isSpectatorView ? !spectatorCanViewHands : false
-                    }
+                    // Spectators always see both hands face-up (like replay mode)
+                    showCardBacks={false}
                     // Commentator: bottom edge for oriented seat; Spectator (non-commentator): also use bottom edge for oriented seat
                     placement={isSpectatorView ? "edgeBottom" : undefined}
-                    flatCards={
-                      isSpectatorView ? Boolean(spectatorCanViewHands) : false
-                    }
+                    flatCards={isSpectatorView}
                     showCardPreview={showCardPreview}
                     hideCardPreview={hideCardPreview}
                   />
                 )}
-                {/* Opponent hand with card backs */}
+                {/* Opponent hand with card backs (players) or face-up (spectators like replay) */}
                 {viewPlayerKey &&
                   (() => {
                     const opponentKey = viewPlayerKey === "p1" ? "p2" : "p1";
@@ -2591,18 +2624,12 @@ export default function OnlineMatchPage() {
                         owner={opponentKey}
                         matW={MAT_PIXEL_W}
                         matH={MAT_PIXEL_H}
-                        // Opponent-hand visibility: players see backs; spectators see faces only with commentator permit
-                        showCardBacks={
-                          isSpectatorView ? !spectatorCanViewHands : true
-                        }
+                        // Spectators always see both hands face-up (like replay mode)
+                        showCardBacks={isSpectatorView ? false : true}
                         viewerPlayerNumber={viewPlayerNumber}
                         // Commentator and non-commentator spectators: top edge for the opponent seat
                         placement={isSpectatorView ? "edgeTop" : undefined}
-                        flatCards={
-                          isSpectatorView
-                            ? Boolean(spectatorCanViewHands)
-                            : false
-                        }
+                        flatCards={isSpectatorView}
                         showCardPreview={showCardPreview}
                         hideCardPreview={hideCardPreview}
                       />

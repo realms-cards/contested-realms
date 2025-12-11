@@ -9,10 +9,12 @@ import CardPreview from "@/components/game/CardPreview";
 import { ClientCanvas } from "@/components/game/ClientCanvas";
 import ContextMenu from "@/components/game/ContextMenu";
 import DeckSelector from "@/components/game/DeckSelector";
+import CollectionButton from "@/components/game/CollectionButton";
 import GameToolbox from "@/components/game/GameToolbox";
 import HarbingerPortalScreen from "@/components/game/HarbingerPortalScreen";
 import { InteractionConsentDialog } from "@/components/game/InteractionConsentDialog";
 import LifeCounters from "@/components/game/LifeCounters";
+import ManaOverlay from "@/components/game/ManaOverlay";
 import OfflineMulliganScreen from "@/components/game/OfflineMulliganScreen";
 import PileSearchDialog from "@/components/game/PileSearchDialog";
 import PlacementDialog from "@/components/game/PlacementDialog";
@@ -535,15 +537,18 @@ export default function PlayPage() {
       {/* Switch Site HUD Overlay */}
       <SwitchSiteHudOverlay />
 
-      {/* Toolbox overlay (draw/peek/inspect/position tools) */}
+      {/* Toolbox and Collection buttons (bottom-right) */}
       {showToolbox && (
-        <GameToolbox
-          myPlayerId={null}
-          mySeat={currentPlayerKey}
-          opponentPlayerId={null}
-          opponentSeat={currentPlayerKey === "p1" ? "p2" : "p1"}
-          matchId={null}
-        />
+        <div className="absolute bottom-3 right-3 z-20 flex items-end gap-2">
+          <CollectionButton mySeat={currentPlayerKey} />
+          <GameToolbox
+            myPlayerId={null}
+            mySeat={currentPlayerKey}
+            opponentPlayerId={null}
+            opponentSeat={currentPlayerKey === "p1" ? "p2" : "p1"}
+            matchId={null}
+          />
+        </div>
       )}
 
       {/* HUD */}
@@ -551,7 +556,9 @@ export default function PlayPage() {
 
       <LifeCounters dragFromHand={dragFromHand} />
 
-      {/* <ResourceBar dragFromHand={dragFromHand} /> */}
+      {/* Mana display overlay */}
+      <ManaOverlay owner="p1" />
+      <ManaOverlay owner="p2" />
 
       {/* Event Console */}
       <div

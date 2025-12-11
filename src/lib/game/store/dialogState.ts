@@ -29,12 +29,10 @@ export const createInitialDialogState = (): DialogDefaults => ({
   peekDialog: null,
 });
 
-export const createDialogSlice: StateCreator<
-  GameState,
-  [],
-  [],
-  DialogSlice
-> = (set, get) => ({
+export const createDialogSlice: StateCreator<GameState, [], [], DialogSlice> = (
+  set,
+  get
+) => ({
   ...createInitialDialogState(),
   openContextMenu: (target: ContextMenuTarget, screen) =>
     set({ contextMenu: { target, screen } }),
@@ -53,7 +51,7 @@ export const createDialogSlice: StateCreator<
   closeSearchDialog: () => set({ searchDialog: null }),
 
   peekDialog: null,
-  openPeekDialog: (title, cards) =>
-    set({ peekDialog: { title, cards } }),
+  openPeekDialog: (title, cards, source) =>
+    set({ peekDialog: { title, cards, source } }),
   closePeekDialog: () => set({ peekDialog: null }),
 });

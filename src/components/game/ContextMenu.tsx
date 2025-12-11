@@ -444,7 +444,18 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
           detachToken(t.at, t.index);
           onClose();
         };
-      } else if (nonTokenIndices.length > 0 && isAttachableToken) {
+      } else if (isAttachableToken) {
+        // Check if there's an avatar on this tile (same logic as artifacts)
+        const ownerKey = seatFromOwner(item.owner);
+        const avatar = avatars[ownerKey];
+        const avatarPos =
+          Array.isArray(avatar?.pos) && avatar.pos.length === 2
+            ? avatar.pos
+            : null;
+        const [tokenX, tokenY] = t.at.split(",").map(Number);
+        const isOnAvatarTile =
+          avatarPos && avatarPos[0] === tokenX && avatarPos[1] === tokenY;
+
         // Build list of all possible attachment targets for tokens
         const possibleTargets: AttachmentTarget[] = nonTokenIndices.map(
           ({ it, i }) => ({
@@ -455,31 +466,48 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
           })
         );
 
-        // Allow re-attachment for attachable tokens
-        doAttachToken = () => {
-          console.log(
-            "[ContextMenu] Token attach clicked, targets:",
-            possibleTargets.length
-          );
-          // If only one target, attach directly (old behavior)
-          if (possibleTargets.length === 1) {
-            attachTokenToPermanent(t.at, t.index, possibleTargets[0].index);
-            onClose();
-          } else {
-            // Multiple targets: show selection dialog (don't close menu yet)
+        // Add avatar if on same tile
+        if (isOnAvatarTile && avatar?.card) {
+          possibleTargets.push({
+            type: "avatar",
+            index: -1,
+            card: avatar.card,
+            displayName: `${ownerKey.toUpperCase()} Avatar`,
+          });
+        }
+
+        // Allow attachment if there are any targets
+        if (possibleTargets.length > 0) {
+          doAttachToken = () => {
             console.log(
-              "[ContextMenu] Opening attachment dialog for token",
-              item.card.name
+              "[ContextMenu] Token attach clicked, targets:",
+              possibleTargets.length
             );
-            setAttachmentDialog({
-              artifactName: item.card.name,
-              artifactAt: t.at,
-              artifactIndex: t.index,
-              targets: possibleTargets,
-            });
-            console.log("[ContextMenu] Dialog state set");
-          }
-        };
+            // If only one target, attach directly (old behavior)
+            if (possibleTargets.length === 1) {
+              const target = possibleTargets[0];
+              if (target.type === "avatar") {
+                attachPermanentToAvatar(t.at, t.index, ownerKey);
+              } else {
+                attachTokenToPermanent(t.at, t.index, target.index);
+              }
+              onClose();
+            } else {
+              // Multiple targets: show selection dialog (don't close menu yet)
+              console.log(
+                "[ContextMenu] Opening attachment dialog for token",
+                item.card.name
+              );
+              setAttachmentDialog({
+                artifactName: item.card.name,
+                artifactAt: t.at,
+                artifactIndex: t.index,
+                targets: possibleTargets,
+              });
+              console.log("[ContextMenu] Dialog state set");
+            }
+          };
+        }
       }
       doBanish = () => {
         movePermanentToZone(t.at, t.index, "banished");
@@ -747,7 +775,14 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     header = `${name} (${count} cards)`;
     const isMine = !actorKey || actorKey === t.who;
     const isCurrent = (t.who === "p1" ? 1 : 2) === currentPlayer;
-    if (isMine && isCurrent && count > 0) {
+    // Collection and Cemetery don't support "Draw top" - only search
+    if (
+      isMine &&
+      isCurrent &&
+      count > 0 &&
+      t.from !== "collection" &&
+      t.from !== "graveyard"
+    ) {
       doDrawFromPile = () => {
         const top = pile[0];
         if (!top) return;

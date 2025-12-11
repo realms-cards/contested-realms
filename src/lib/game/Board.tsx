@@ -812,6 +812,7 @@ export default function Board({
     remotePermanentDrags,
     remotePermanentDragLookup,
     remoteHandDrags,
+    remotePileDrags,
     remoteAvatarDrags,
     remoteAvatarDragSet,
     handlePointerMove,
@@ -1007,6 +1008,7 @@ export default function Board({
 
       <RemoteDragOverlays
         handDrags={remoteHandDrags}
+        pileDrags={remotePileDrags}
         permanentDrags={remotePermanentDrags}
         avatarDrags={remoteAvatarDrags}
       />

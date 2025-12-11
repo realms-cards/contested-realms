@@ -148,6 +148,41 @@ export function useBoardDropManager({
           draggedBody.current = null;
           return;
         }
+
+        // Check if dropped beyond board edge toward player - return spellbook cards to hand
+        // Only allow returning spellbook cards (not sites, avatars, or tokens)
+        const inHandDropZone =
+          currentPlayer === 1
+            ? wz > gridHalfH + TILE_SIZE * 0.5
+            : wz < -gridHalfH - TILE_SIZE * 0.5;
+
+        if (inHandDropZone) {
+          const draggedCard = permanents[d.from]?.[d.index]?.card;
+          const cardType = (draggedCard?.type || "").toLowerCase();
+          // Only allow returning spellbook cards (not sites, avatars, or tokens)
+          const isSite = cardType.includes("site");
+          const isAvatar = cardType.includes("avatar");
+          const isToken = cardType.includes("token");
+          const canReturnToHand = !isSite && !isAvatar && !isToken;
+
+          if (canReturnToHand) {
+            try {
+              movePermanentToZone(d.from, d.index, "hand");
+              try {
+                playCardFlip();
+              } catch {}
+            } finally {
+              setDragging(null);
+              setDragFromHand(false);
+              setGhost(null);
+              dragTarget.current = null;
+              lastDropAt.current = Date.now();
+              draggedBody.current = null;
+            }
+            return;
+          }
+        }
+
         if (overP1GY || overP2GY) {
           const draggedCard = permanents[d.from]?.[d.index]?.card;
           const tokenType = (draggedCard?.type || "").toLowerCase();

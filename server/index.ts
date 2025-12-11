@@ -674,8 +674,12 @@ const matchRecordingService = createMatchRecordingService({
   matchRecordings,
 });
 
-const { startMatchRecording, recordMatchAction, finishMatchRecording } =
-  matchRecordingService;
+const {
+  startMatchRecording,
+  recordMatchAction,
+  finishMatchRecording,
+  truncateRecordingAfter,
+} = matchRecordingService;
 
 const persistence = createPersistenceLayer({
   prisma,
@@ -704,6 +708,7 @@ const {
   rehydrateMatch,
   getBufferStats,
   flushAll,
+  truncateActionsAfter,
 } = persistence;
 
 getPersistenceBufferStats = getBufferStats;
@@ -753,6 +758,8 @@ const {
   finalizeMatch,
   persistMatchUpdate,
   prisma,
+  truncateRecordingAfter,
+  truncateActionsAfter,
 });
 
 const matchLeaderService: MatchLeaderService = createMatchLeaderService({

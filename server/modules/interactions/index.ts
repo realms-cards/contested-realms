@@ -70,6 +70,12 @@ interface InteractionModuleDeps {
     ts: number
   ) => Promise<void>;
   prisma: any;
+  // Optional: functions to truncate replay data when snapshot is restored
+  truncateRecordingAfter?: (matchId: string, afterTimestamp: number) => number;
+  truncateActionsAfter?: (
+    matchId: string,
+    afterTimestamp: number
+  ) => Promise<number>;
 }
 
 type JsonRecord = Record<string, unknown>;
@@ -83,6 +89,8 @@ export function createInteractionModule({
   finalizeMatch,
   persistMatchUpdate,
   prisma,
+  truncateRecordingAfter,
+  truncateActionsAfter,
 }: InteractionModuleDeps) {
   function ensureInteractionState(match: any): void {
     if (!match) return;
@@ -586,6 +594,12 @@ export function createInteractionModule({
         patch.playerPositions = src.playerPositions;
       if (src.zones && typeof src.zones === "object") patch.zones = src.zones;
 
+      // Get the snapshot timestamp - this is when the snapshot was taken
+      // All actions after this timestamp should be invalidated
+      const snapshotTimestamp = Number.isFinite(Number(src.__snapshotTs))
+        ? Number(src.__snapshotTs)
+        : null;
+
       const allowedKeys = new Set([
         "players",
         "currentPlayer",
@@ -611,6 +625,30 @@ export function createInteractionModule({
       }
       (patch as any).__replaceKeys = rk;
       try {
+        // Truncate replay data BEFORE applying the snapshot
+        // This removes all actions that happened after the snapshot point
+        if (snapshotTimestamp !== null) {
+          try {
+            console.log(
+              `[interactions] Truncating replay data after snapshot timestamp ${snapshotTimestamp} for match ${match.id}`
+            );
+            // Truncate in-memory recording
+            if (truncateRecordingAfter) {
+              truncateRecordingAfter(match.id, snapshotTimestamp);
+            }
+            // Truncate persisted/buffered actions
+            if (truncateActionsAfter) {
+              await truncateActionsAfter(match.id, snapshotTimestamp);
+            }
+          } catch (truncateErr) {
+            console.error(
+              `[interactions] Failed to truncate replay data for match ${match.id}:`,
+              truncateErr
+            );
+            // Continue with snapshot restore even if truncation fails
+          }
+        }
+
         if (rk.length > 0) {
           const mergePatch: Record<string, unknown> = {};
           for (const [k, v] of Object.entries(patch))

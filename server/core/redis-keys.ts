@@ -126,7 +126,7 @@ export const chatKeys = {
   global: "chat:global" as const,
 
   /** Max messages to keep in global chat history */
-  maxMessages: 50 as const,
+  maxMessages: 500 as const,
 
   /** TTL for global chat history (7 days) */
   ttlSec: 604800 as const,

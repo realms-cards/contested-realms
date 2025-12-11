@@ -10,7 +10,6 @@ import type {
 } from "../types";
 import {
   getCellNumber,
-  ownerLabel,
   parseCellKey,
   seatFromOwner,
   toCellKey,
@@ -205,7 +204,7 @@ export const createPermanentMovementSlice: StateCreator<
       get().pushHistory();
       const per: Permanents = { ...state.permanents };
       const arr = [...(per[at] || [])];
-      const item = arr.splice(index, 1)[0];
+      const item = arr[index];
       if (!item) return state;
       const ownerKey = seatFromOwner(item.owner);
       if (state.transport && state.localPlayerId) {
@@ -220,6 +219,63 @@ export const createPermanentMovementSlice: StateCreator<
           return state as GameState;
         }
       }
+
+      // Find all attachments attached to this permanent before removing it
+      const attachedIndices: number[] = [];
+      arr.forEach((perm, idx) => {
+        if (
+          perm.attachedTo &&
+          perm.attachedTo.at === at &&
+          perm.attachedTo.index === index
+        ) {
+          attachedIndices.push(idx);
+        }
+      });
+
+      // Collect attached items (in reverse order for safe splicing)
+      const attachedItems = attachedIndices
+        .sort((a, b) => b - a)
+        .map((idx) => arr[idx]);
+
+      // Remove attachments first (in reverse order to preserve indices)
+      attachedIndices
+        .sort((a, b) => b - a)
+        .forEach((idx) => {
+          arr.splice(idx, 1);
+        });
+
+      // Now find the new index of the main item after attachments were removed
+      const newMainIndex = arr.findIndex(
+        (p) => ensurePermanentInstanceId(p) === ensurePermanentInstanceId(item)
+      );
+      if (newMainIndex === -1) return state;
+
+      // Remove the main item
+      arr.splice(newMainIndex, 1);
+
+      // Update attachedTo indices for remaining permanents
+      arr.forEach((perm, idx) => {
+        if (perm.attachedTo && perm.attachedTo.at === at) {
+          let newAttachIndex = perm.attachedTo.index;
+          // Adjust for removed attachments
+          for (const removedIdx of attachedIndices) {
+            if (removedIdx < perm.attachedTo.index) {
+              newAttachIndex--;
+            }
+          }
+          // Adjust for removed main item
+          if (index < perm.attachedTo.index) {
+            newAttachIndex--;
+          }
+          if (newAttachIndex !== perm.attachedTo.index) {
+            arr[idx] = {
+              ...perm,
+              attachedTo: { ...perm.attachedTo, index: newAttachIndex },
+            };
+          }
+        }
+      });
+
       per[at] = arr;
       const owner = seatFromOwner(item.owner);
       const zonesNext = { ...state.zones } as Record<PlayerKey, Zones>;
@@ -247,26 +303,107 @@ export const createPermanentMovementSlice: StateCreator<
       } else {
         seatZones.banished = [...seatZones.banished, movedCard];
       }
+
+      // Store the main item's zones first
       zonesNext[owner] = seatZones;
+
+      // Send attachments to graveyard (tokens go to banished)
+      // Each attachment goes to its owner's graveyard
+      const removedIds: string[] = [];
+      const removedId = ensurePermanentInstanceId(item);
+      if (removedId) removedIds.push(removedId);
+
+      for (const attached of attachedItems) {
+        const attachOwner = seatFromOwner(attached.owner);
+        const attachedCard = prepareCardForSeat(attached.card, attachOwner);
+        const attachedIsToken = String(attached.card?.type || "")
+          .toLowerCase()
+          .includes("token");
+
+        // Get the current zones for the attachment's owner (may have been updated already)
+        const attachZones = { ...zonesNext[attachOwner] };
+
+        if (attachedIsToken) {
+          attachZones.banished = [...attachZones.banished, attachedCard];
+        } else {
+          // Non-token attachments (artifacts) go to graveyard
+          attachZones.graveyard = [attachedCard, ...attachZones.graveyard];
+        }
+        zonesNext[attachOwner] = attachZones;
+
+        const attachedId = ensurePermanentInstanceId(attached);
+        if (attachedId) removedIds.push(attachedId);
+
+        const attachPlayerNum = attachOwner === "p1" ? "1" : "2";
+        get().log(
+          `Attachment '${
+            attached.card.name
+          }' sent to [p${attachPlayerNum}:PLAYER] ${
+            attachedIsToken ? "banished" : "graveyard"
+          }`
+        );
+      }
       const { x, y } = parseCellKey(at);
       const cellNo = getCellNumber(x, y, state.board.size.w);
+      const playerNum = owner === "p1" ? "1" : "2";
+      const zoneLabel =
+        finalTarget === "hand"
+          ? "hand"
+          : finalTarget === "graveyard"
+          ? "graveyard"
+          : finalTarget === "banished"
+          ? "banished"
+          : finalTarget === "spellbook"
+          ? "Spellbook"
+          : "Atlas";
       get().log(
-        `Moved '${item.card.name}' from #${cellNo} to ${ownerLabel(
-          owner
-        )} ${finalTarget}`
+        `[p${playerNum}:PLAYER] moved '${item.card.name}' from #${cellNo} to ${zoneLabel}`
       );
-      const removedId = ensurePermanentInstanceId(item);
-      const deltaPatch = removedId
-        ? createPermanentDeltaPatch([
-            {
-              at,
-              entry: { instanceId: removedId },
-              remove: true,
-            },
-          ])
-        : null;
+      // Broadcast toast to both players
+      const toastMessage = `[p${playerNum}:PLAYER] moved [p${playerNum}card:${item.card.name}] to ${zoneLabel}`;
+      const tr = get().transport;
+      if (tr?.sendMessage) {
+        try {
+          tr.sendMessage({
+            type: "toast",
+            text: toastMessage,
+            seat: owner,
+          } as never);
+        } catch {}
+      } else {
+        // Offline: show local toast
+        try {
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(
+              new CustomEvent("app:toast", {
+                detail: { message: toastMessage },
+              })
+            );
+          }
+        } catch {}
+      }
+
+      // Build delta patch for all removed permanents (main + attachments)
+      const deltaPatch =
+        removedIds.length > 0
+          ? createPermanentDeltaPatch(
+              removedIds.map((id) => ({
+                at,
+                entry: { instanceId: id },
+                remove: true,
+              }))
+            )
+          : null;
       const fallbackPatch = deltaPatch ? null : createPermanentsPatch(per, at);
-      const zonePatch = createZonesPatchFor(zonesNext, owner);
+      // Include all affected seats in the zone patch (owner + any attachment owners)
+      const affectedSeats = new Set<PlayerKey>([owner]);
+      for (const attached of attachedItems) {
+        affectedSeats.add(seatFromOwner(attached.owner));
+      }
+      const zonePatch = createZonesPatchFor(
+        zonesNext,
+        Array.from(affectedSeats)
+      );
       const patch: ServerPatchT = {};
       if (deltaPatch?.permanents) patch.permanents = deltaPatch.permanents;
       else if (fallbackPatch?.permanents)

@@ -102,8 +102,10 @@ export function NumberBadge({
 }
 
 export interface ManaCounterProps {
-  /** Current available mana value */
+  /** Current available (remaining) mana value */
   value: number;
+  /** Total mana from untapped sites (optional, for "remaining/total" display) */
+  total?: number;
   /** Increase by +1 (disabled externally if desired) */
   onIncrement?: () => void;
   /** Decrease by -1 (disabled externally if desired) */
@@ -188,11 +190,12 @@ export function ManaCounter({
 }
 
 /**
- * ManaCounterHUD — compact variant for in-game HUD with smaller +/- buttons.
- * API mirrors ManaCounter to avoid breaking callers.
+ * ManaCounterHUD — compact variant for in-game HUD showing available mana.
+ * Displays remaining/total mana (e.g., "2/3") with visible +/- buttons on hover.
  */
 export function ManaCounterHUD({
   value,
+  total,
   onIncrement,
   onDecrement,
   disableInc,
@@ -200,62 +203,80 @@ export function ManaCounterHUD({
   size = 56,
   className,
 }: ManaCounterProps) {
-  const digits = Math.max(0, Math.floor(value))
-    .toString()
-    .split("")
-    .map((d) => Number(d) as Digit);
+  // Font size scales with badge size
+  const fontSize = Math.round(size * 0.7);
+  const slashSize = Math.round(size * 0.5);
+  const btnSize = Math.max(12, Math.round(size * 0.6));
+  // Show remaining/total if total is provided, otherwise just value
+  const showTotal = typeof total === "number";
 
   return (
-    <div className={"flex flex-col items-center " + (className ?? "")}>
-      <div className="relative inline-flex group">
-        <div className="flex items-center gap-1 select-none font-fantaisie">
-          {digits.length === 0 ? (
-            <NumberBadge value={0} size={size} strokeWidth={6} />
-          ) : (
-            digits.map((d, i) => (
-              <NumberBadge key={i} value={d} size={size} strokeWidth={6} />
-            ))
-          )}
-        </div>
+    <div className={"flex items-center gap-1 group " + (className ?? "")}>
+      {/* Minus button - visible on hover */}
+      <button
+        type="button"
+        aria-label="Decrease available mana"
+        title="Decrease available mana"
+        disabled={!!disableDec}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (!disableDec) onDecrement?.();
+        }}
+        style={{ width: btnSize, height: btnSize, fontSize: btnSize * 0.7 }}
+        className={`flex items-center justify-center rounded-full font-bold leading-none transition-all ${
+          disableDec
+            ? "opacity-20 cursor-not-allowed bg-black/20 text-white/30"
+            : "opacity-0 group-hover:opacity-100 bg-rose-600/80 hover:bg-rose-500 text-white cursor-pointer"
+        }`}
+      >
+        −
+      </button>
 
-        {/* Overlay click zones: top half = increment, bottom half = decrement */}
-        <div className="absolute inset-0 flex flex-col opacity-80">
-          <button
-            type="button"
-            aria-label="Increase available mana"
-            title="Increase available mana"
-            disabled={!!disableInc}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (!disableInc) onIncrement?.();
-            }}
-            className={`flex-1 transition-opacity rounded-t-xl ${
-              disableInc ? "cursor-not-allowed" : "cursor-pointer"
-            } ${
-              disableInc ? "opacity-40" : "opacity-0 group-hover:opacity-100"
-            } bg-transparent group-hover:bg-emerald-500/20 hover:bg-emerald-500/30`}
-          >
-            <span className="sr-only">+</span>
-          </button>
-          <button
-            type="button"
-            aria-label="Decrease available mana"
-            title="Decrease available mana"
-            disabled={!!disableDec}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (!disableDec) onDecrement?.();
-            }}
-            className={`flex-1 transition-opacity rounded-b-xl ${
-              disableDec ? "cursor-not-allowed" : "cursor-pointer"
-            } ${
-              disableDec ? "opacity-40" : "opacity-0 group-hover:opacity-100"
-            } bg-transparent group-hover:bg-rose-500/20 hover:bg-rose-500/30`}
-          >
-            <span className="sr-only">−</span>
-          </button>
-        </div>
+      {/* Compact mana display: remaining/total */}
+      <div
+        className="flex items-center select-none font-fantaisie text-white"
+        style={{ fontSize, lineHeight: 1 }}
+        title={
+          showTotal
+            ? `${value} remaining / ${total} total mana`
+            : "Available mana"
+        }
+      >
+        <span className={value < (total ?? value) ? "text-amber-400" : ""}>
+          {value}
+        </span>
+        {showTotal && (
+          <>
+            <span
+              className="text-white/50 mx-px"
+              style={{ fontSize: slashSize }}
+            >
+              /
+            </span>
+            <span className="text-white/70">{total}</span>
+          </>
+        )}
       </div>
+
+      {/* Plus button - visible on hover */}
+      <button
+        type="button"
+        aria-label="Increase available mana"
+        title="Increase available mana"
+        disabled={!!disableInc}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (!disableInc) onIncrement?.();
+        }}
+        style={{ width: btnSize, height: btnSize, fontSize: btnSize * 0.7 }}
+        className={`flex items-center justify-center rounded-full font-bold leading-none transition-all ${
+          disableInc
+            ? "opacity-20 cursor-not-allowed bg-black/20 text-white/30"
+            : "opacity-0 group-hover:opacity-100 bg-emerald-600/80 hover:bg-emerald-500 text-white cursor-pointer"
+        }`}
+      >
+        +
+      </button>
     </div>
   );
 }

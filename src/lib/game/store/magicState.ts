@@ -46,9 +46,11 @@ export const createMagicSlice: StateCreator<GameState, [], [], MagicSlice> = (
         try {
           const cardName = spell.card?.name || "Magic";
           const cellNo = getCellNumber(tile.x, tile.y, get().board.size.w);
+          const playerNum = ownerSeat === "p1" ? "1" : "2";
           transport.sendMessage({
             type: "toast",
-            text: `'${cardName}' played at #${cellNo}`,
+            text: `[p${playerNum}:PLAYER] played [p${playerNum}card:${cardName}] at #${cellNo}`,
+            seat: ownerSeat,
           } as unknown as CustomMessage);
         } catch {}
       }

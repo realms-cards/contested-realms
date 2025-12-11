@@ -37,7 +37,7 @@ export type LifeState = "alive" | "dd" | "dead";
 export type PlayerState = {
   life: number;
   lifeState: LifeState; // 'alive', 'dd' (Death's Door), 'dead'
-  mana: number;
+  mana: number; // manual offset to available mana (can be negative when cards are played)
   thresholds: Thresholds;
 };
 
@@ -108,7 +108,8 @@ export type CardRef = {
   type: string | null;
   subTypes?: string | null; // card subtypes (e.g., "Monument", "Automaton", "Weapon", etc.)
   slug?: string | null; // variant slug for images
-  thresholds?: Partial<Thresholds> | null; // cost/requirements
+  thresholds?: Partial<Thresholds> | null; // threshold requirements
+  cost?: number | null; // mana cost
   owner?: PlayerKey | null;
   instanceId?: string | null;
 };
@@ -282,6 +283,9 @@ export type GameState = {
   turn: number;
   phase: Phase;
   setPhase: (phase: Phase) => void;
+  // Track if current player has drawn their card this turn (for Draw phase enforcement)
+  hasDrawnThisTurn: boolean;
+  setHasDrawnThisTurn: (drawn: boolean) => void;
   // D20 Setup phase
   d20Rolls: Record<PlayerKey, number | null>;
   rollD20: (who: PlayerKey) => void;
@@ -348,6 +352,9 @@ export type GameState = {
   // Effective guide state: enabled only when both seats have their toggles on
   combatGuidesActive: boolean;
   magicGuidesActive: boolean;
+  // Action notifications (toasts for play/draw/move actions)
+  actionNotifications: boolean;
+  setActionNotifications: (on: boolean) => void;
   // Card meta cache (subset) used to detect base power quickly
   metaByCardId: Record<
     number,
@@ -642,6 +649,13 @@ export type GameState = {
     instanceId: string,
     target: "hand" | "graveyard"
   ) => void;
+  // Handle peeked card action (from peek dialog)
+  handlePeekedCard: (
+    who: PlayerKey,
+    pile: "spellbook" | "atlas",
+    cardIndex: number,
+    action: "top" | "bottom" | "hand" | "graveyard"
+  ) => void;
   // Transfer control
   transferPermanentControl: (at: CellKey, index: number, to?: 1 | 2) => void;
   transferSiteControl: (x: number, y: number, to?: 1 | 2) => void;
@@ -753,9 +767,25 @@ export type GameState = {
     onSelectCard: (card: CardRef) => void
   ) => void;
   closeSearchDialog: () => void;
-  // Peek-only dialog used for reveals (no selection handler)
-  peekDialog: { title?: string; cards: CardRef[] } | null;
-  openPeekDialog: (title: string, cards: CardRef[]) => void;
+  // Peek-only dialog used for reveals (with optional card actions)
+  peekDialog: {
+    title?: string;
+    cards: CardRef[];
+    source?: {
+      seat: PlayerKey;
+      pile: "spellbook" | "atlas";
+      from: "top" | "bottom";
+    };
+  } | null;
+  openPeekDialog: (
+    title: string,
+    cards: CardRef[],
+    source?: {
+      seat: PlayerKey;
+      pile: "spellbook" | "atlas";
+      from: "top" | "bottom";
+    }
+  ) => void;
   closePeekDialog: () => void;
   // Tokens
   addTokenToHand: (who: PlayerKey, name: string) => void;
@@ -776,7 +806,8 @@ export type GameState = {
   // Derived selectors (pure getters)
   getPlayerSites: (who: PlayerKey) => Array<[CellKey, SiteTile]>;
   getUntappedSitesCount: (who: PlayerKey) => number;
-  getAvailableMana: (who: PlayerKey) => number; // default: 1 per untapped site
+  getBaseMana: (who: PlayerKey) => number; // total mana from untapped sites (before spending)
+  getAvailableMana: (who: PlayerKey) => number; // remaining mana (base + offset from spending)
   getThresholdTotals: (who: PlayerKey) => Thresholds;
   // History / Undo
   history: SerializedGame[];
@@ -848,6 +879,7 @@ export type ServerPatchT = Partial<{
   currentPlayer: GameState["currentPlayer"];
   turn: GameState["turn"];
   phase: GameState["phase"];
+  hasDrawnThisTurn: GameState["hasDrawnThisTurn"];
   d20Rolls: GameState["d20Rolls"];
   setupWinner: GameState["setupWinner"];
   matchEnded: GameState["matchEnded"];

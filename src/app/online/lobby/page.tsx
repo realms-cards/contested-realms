@@ -12,6 +12,7 @@ import LobbiesCentral, {
 import MatchmakingPanel from "@/components/online/MatchmakingPanel";
 import OnlinePageShell from "@/components/online/OnlinePageShell";
 import PlayersInvitePanel from "@/components/online/PlayersInvitePanel";
+import ChangelogOverlay from "@/components/ui/ChangelogOverlay";
 import { useRealtimeTournaments } from "@/contexts/RealtimeTournamentContext";
 import { tournamentFeatures } from "@/lib/config/features";
 import {
@@ -2053,6 +2054,37 @@ function LobbyPageContent({
         )}
 
         {/* end Social and Chat row */}
+
+        {/* Footer links */}
+        <div className="mt-8 text-center text-xs text-slate-500 space-x-3">
+          <span>Questions?</span>
+          <a
+            href="https://www.sorcerersatthecore.com/discord"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-slate-300"
+          >
+            Discord
+          </a>
+          <span>·</span>
+          <a
+            href="https://github.com/realms-cards/issues/issues"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-slate-300"
+          >
+            Issues
+          </a>
+          <span>·</span>
+          <a
+            href="mailto:kingofthe@realms.cards"
+            className="underline hover:text-slate-300"
+          >
+            Email
+          </a>
+          <span>·</span>
+          <ChangelogOverlay />
+        </div>
       </div>
     </OnlinePageShell>
   );

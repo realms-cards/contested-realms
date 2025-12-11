@@ -130,6 +130,7 @@ export default function OnlineMulliganScreen({
                     fill
                     sizes="(max-width: 640px) 64px, 96px"
                     className="object-contain"
+                    unoptimized
                   />
                 </div>
                 {myChampion &&
@@ -156,6 +157,7 @@ export default function OnlineMulliganScreen({
                     fill
                     sizes="(max-width: 640px) 64px, 96px"
                     className="object-contain"
+                    unoptimized
                   />
                 </div>
                 {opponentChampion &&
@@ -223,6 +225,7 @@ export default function OnlineMulliganScreen({
                       fill
                       sizes="(max-width: 640px) 96px, 120px"
                       className={`object-contain ${isSite ? "rotate-90" : ""}`}
+                      unoptimized
                     />
                     {isSelected && (
                       <div className="absolute inset-0 bg-red-500/30 flex items-center justify-center">
@@ -342,6 +345,7 @@ export default function OnlineMulliganScreen({
                           ? "rotate-90"
                           : ""
                       }`}
+                      unoptimized
                     />
                   </div>
                 ) : (

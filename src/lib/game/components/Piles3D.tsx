@@ -83,8 +83,6 @@ export default function Piles3D({
   const rightX = gridHalfW + TILE_SIZE / 2 - CARD_SHORT / 2;
   const leftX = -gridHalfW - TILE_SIZE / 2 + CARD_SHORT / 2;
   const pilesX = isBottom ? leftX - 0.1 : rightX + 0.1;
-  // Collection pile: fixed at bottom-right corner NEXT TO the board (not below)
-  const collectionX = rightX + 1.2;
   // Anchor just outside the grid on the player's own edge
   const topEdgeZ = -gridHalfH;
   const bottomEdgeZ = gridHalfH;
@@ -95,9 +93,8 @@ export default function Piles3D({
   const zSpacing = CARD_LONG * 1.1;
   // Step toward the grid for both players
   const step = isBottom ? -zSpacing : +zSpacing;
-  // Collection pile Z: positioned at the bottom-right of the board, next to it
-  const collectionZ = bottomEdgeZ - TILE_SIZE * 0.5;
 
+  // Collection is now rendered as a UI button overlay, not a 3D pile
   const piles: {
     key: PileKey;
     x: number;
@@ -125,23 +122,14 @@ export default function Piles3D({
         label: labels.graveyard,
         cards: playerZones.graveyard,
       },
-      {
-        key: "collection",
-        x: collectionX,
-        z: collectionZ,
-        cards: playerZones.collection,
-      },
     ],
     [
       pilesX,
-      collectionX,
-      collectionZ,
       startZ,
       step,
       playerZones.atlas,
       playerZones.spellbook,
       playerZones.graveyard,
-      playerZones.collection,
     ]
   );
 
@@ -202,19 +190,17 @@ export default function Piles3D({
   return (
     <group position={[0, 0.001, 0]}>
       {piles.map(({ key, x, z, cards }) => {
-        // Orientation: Atlas landscape, Spellbook/Cemetery/Collection portrait regardless of contents
+        // Orientation: Atlas landscape, Spellbook/Cemetery portrait regardless of contents
         const isAtlas = key === "atlas";
         const isCemetery = key === "graveyard";
-        const isCollection = key === "collection";
         // Face the pile toward the owning seat: p1 (top) flipped 180°, p2 (bottom) normal
         const ownerRot = owner === "p1" ? Math.PI : 0;
-        // Cemetery and Collection face the bottom player (p2 perspective)
-        const rotZ =
-          isCemetery || isCollection
-            ? owner === "p1"
-              ? 0
-              : Math.PI
-            : ownerRot + Math.PI;
+        // Cemetery faces the bottom player (p2 perspective)
+        const rotZ = isCemetery
+          ? owner === "p1"
+            ? 0
+            : Math.PI
+          : ownerRot + Math.PI;
         const cardbackUrl = isCemetery
           ? undefined
           : key === "atlas"
@@ -303,16 +289,6 @@ export default function Piles3D({
                     onClick={(e: ThreeEvent<PointerEvent>) => {
                       const isDragging = !!dragFromHand || !!dragFromPile;
                       if (isDragging) return;
-                      // Collection: single-click opens search (no draw from top)
-                      if (isCollection) {
-                        e.nativeEvent.preventDefault();
-                        e.stopPropagation();
-                        openContextMenu(
-                          { kind: "pile", who: owner, from: "collection" },
-                          { x: e.clientX, y: e.clientY }
-                        );
-                        return;
-                      }
                       if (isCemetery) return;
                       const store = useGameStore.getState();
                       const actorKey = store.actorKey;
