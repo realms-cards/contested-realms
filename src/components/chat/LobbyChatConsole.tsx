@@ -48,23 +48,55 @@ export default function LobbyChatConsole({
   const activeMessages = chatTab === "lobby" ? lobbyMessages : globalMessages;
 
   const chatRef = useRef<HTMLDivElement | null>(null);
+  const prevMessageCountRef = useRef<number>(0);
+  const isNearBottomRef = useRef<boolean>(true);
 
-  // Auto-scroll to latest message when scope or messages change
+  // Auto-scroll to latest message only when NEW messages arrive (not when loading history)
+  // and only if user is already near the bottom
   useEffect(() => {
     if (!consoleOpen) return;
     const el = chatRef.current;
     if (!el) return;
+
+    const prevCount = prevMessageCountRef.current;
+    const currentCount = activeMessages.length;
+
+    // Detect if new messages were added at the end (vs prepended history)
+    const newMessagesAdded = currentCount > prevCount;
+
+    // Only auto-scroll if new messages arrived AND user is near bottom
+    if (newMessagesAdded && isNearBottomRef.current) {
+      el.scrollTop = el.scrollHeight;
+    }
+
+    prevMessageCountRef.current = currentCount;
+  }, [consoleOpen, activeMessages.length]);
+
+  // Scroll to bottom when switching tabs
+  useEffect(() => {
+    const el = chatRef.current;
+    if (!el || !consoleOpen) return;
     el.scrollTop = el.scrollHeight;
-  }, [consoleOpen, chatTab, activeMessages.length]);
+    isNearBottomRef.current = true;
+    prevMessageCountRef.current = activeMessages.length;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only reset on tab/console toggle, not message changes
+  }, [chatTab, consoleOpen]);
 
   // Load more history when scrolling to top (global chat only)
+  // Also track if user is near bottom for auto-scroll behavior
   const handleScroll = () => {
-    if (chatTab !== "global" || !chatHasMore || !onRequestMoreHistory) return;
     const el = chatRef.current;
     if (!el) return;
-    // Trigger when scrolled near the top (within 20px)
-    if (el.scrollTop < 20) {
-      onRequestMoreHistory();
+
+    // Track if user is near the bottom (within 50px)
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    isNearBottomRef.current = distanceFromBottom < 50;
+
+    // Load more history when near top (global chat only)
+    if (chatTab === "global" && chatHasMore && onRequestMoreHistory) {
+      if (el.scrollTop < 20) {
+        onRequestMoreHistory();
+      }
     }
   };
 
