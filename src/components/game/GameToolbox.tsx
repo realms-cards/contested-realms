@@ -934,6 +934,7 @@ export default function GameToolbox({
                               className={`object-contain ${
                                 isSite ? "rotate-90" : ""
                               }`}
+                              unoptimized
                             />
                           </div>
                           {onBottom && (

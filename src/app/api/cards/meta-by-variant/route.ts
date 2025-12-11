@@ -1,11 +1,13 @@
 import { NextRequest } from "next/server";
 export const dynamic = "force-dynamic";
 import { getSetIdByName } from "@/lib/api/cached-lookups";
+import { getCached, setCached } from "@/lib/cache/redis-cache";
 import { prisma } from "@/lib/prisma";
 
 // ─── In-memory cache for card metadata ───────────────────────────────────────
 // Card stats rarely change (only on ingestion), so caching is safe
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const REDIS_CACHE_TTL_SECONDS = 300; // 5 minutes for Redis
 const MAX_CACHE_ENTRIES = 500;
 
 interface CacheEntry<T> {
@@ -74,14 +76,29 @@ export async function GET(req: NextRequest) {
       )
     );
 
-    // Check cache first
+    // Check in-memory cache first (fastest)
     const cacheKey = getCacheKey(setName, slugs);
-    const cached = getFromCache(cacheKey);
-    if (cached) {
+    const memCached = getFromCache(cacheKey);
+    if (memCached) {
       if (process.env.NODE_ENV === "development") {
-        console.log(`[card-meta-cache] HIT: ${cacheKey.slice(0, 50)}...`);
+        console.log(`[card-meta-cache] MEM HIT: ${cacheKey.slice(0, 50)}...`);
       }
-      return new Response(JSON.stringify(cached), {
+      return new Response(JSON.stringify(memCached), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+
+    // Check Redis cache (shared across instances)
+    const redisCacheKey = `cards:meta:${cacheKey}`;
+    const redisCached = await getCached<CardMetaResult[]>(redisCacheKey);
+    if (redisCached) {
+      // Populate in-memory cache for next request
+      setInCache(cacheKey, redisCached);
+      if (process.env.NODE_ENV === "development") {
+        console.log(`[card-meta-cache] REDIS HIT: ${cacheKey.slice(0, 50)}...`);
+      }
+      return new Response(JSON.stringify(redisCached), {
         status: 200,
         headers: { "content-type": "application/json" },
       });
@@ -168,8 +185,14 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    // Store in cache
+    // Store in both caches
     setInCache(cacheKey, out);
+    // Fire-and-forget Redis cache write
+    setCached(redisCacheKey, out, { ttl: REDIS_CACHE_TTL_SECONDS }).catch(
+      () => {
+        // Ignore Redis errors - in-memory cache is still working
+      }
+    );
     if (process.env.NODE_ENV === "development") {
       console.log(
         `[card-meta-cache] MISS: ${cacheKey.slice(0, 50)}... (cached ${

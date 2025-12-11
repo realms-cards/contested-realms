@@ -245,6 +245,7 @@ export default function QuickAdd({ onClose, onCardAdded }: QuickAddProps) {
                               ? "object-contain rotate-90"
                               : "object-cover"
                           }
+                          unoptimized
                         />
                       </div>
                       <div className="flex-1 text-left">
@@ -286,6 +287,7 @@ export default function QuickAdd({ onClose, onCardAdded }: QuickAddProps) {
                         alt={recent.name}
                         fill
                         className="object-cover"
+                        unoptimized
                       />
                     </div>
                   </button>
@@ -317,6 +319,7 @@ export default function QuickAdd({ onClose, onCardAdded }: QuickAddProps) {
                 }
                 sizes="192px"
                 priority
+                unoptimized
               />
             </div>
             <div className="mt-2 text-center">

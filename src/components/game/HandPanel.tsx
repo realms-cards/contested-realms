@@ -25,23 +25,30 @@ export default function HandPanel({ dragFromHand }: HandPanelProps) {
         } mx-auto max-w-5xl px-3 py-2 text-sm text-white overflow-visible`}
         onClick={() => {
           // Clear hand card selection but preserve avatar selection
-          useGameStore.setState({ selectedCard: null, selectedPermanent: null });
+          useGameStore.setState({
+            selectedCard: null,
+            selectedPermanent: null,
+          });
           closeContextMenu();
           setPreviewCard(null);
         }}
         onContextMenu={(e) => {
           e.preventDefault();
           // Clear hand card selection but preserve avatar selection
-          useGameStore.setState({ selectedCard: null, selectedPermanent: null });
+          useGameStore.setState({
+            selectedCard: null,
+            selectedPermanent: null,
+          });
           closeContextMenu();
           setPreviewCard(null);
         }}
       >
         <div className="flex items-center gap-2 overflow-x-auto overflow-y-visible pt-16">
           {(zones.p1.hand || []).map((c, i) => {
-            const isSel = selected && selected.who === "p1" && selected.index === i;
+            const isSel =
+              selected && selected.who === "p1" && selected.index === i;
             const isSite = (c.type || "").toLowerCase().includes("site");
-            
+
             return (
               <button
                 key={`${c.cardId}-${i}`}
@@ -56,8 +63,11 @@ export default function HandPanel({ dragFromHand }: HandPanelProps) {
                 onClick={(e) => {
                   e.stopPropagation();
                   if (isSel) {
-                    // Clear hand card selection but preserve avatar selection  
-                    useGameStore.setState({ selectedCard: null, selectedPermanent: null });
+                    // Clear hand card selection but preserve avatar selection
+                    useGameStore.setState({
+                      selectedCard: null,
+                      selectedPermanent: null,
+                    });
                   } else {
                     selectHandCard("p1", i);
                     playCardSelect();
@@ -66,7 +76,11 @@ export default function HandPanel({ dragFromHand }: HandPanelProps) {
                 onMouseDown={(e) => {
                   e.stopPropagation();
                   // Start drag only if this card is already selected
-                  if (selected && selected.who === "p1" && selected.index === i) {
+                  if (
+                    selected &&
+                    selected.who === "p1" &&
+                    selected.index === i
+                  ) {
                     setDragFromHand(true);
                   }
                 }}
@@ -87,6 +101,7 @@ export default function HandPanel({ dragFromHand }: HandPanelProps) {
                         isSite ? "object-contain rotate-90" : "object-cover"
                       }`}
                       draggable={false}
+                      unoptimized
                     />
                   </div>
                 ) : (

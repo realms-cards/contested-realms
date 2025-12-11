@@ -511,6 +511,7 @@ function ListCardItem({
             (e.target as HTMLImageElement).src =
               "/api/assets/cardback_spellbook.png";
           }}
+          unoptimized
         />
 
         {/* Foil Indicator */}

@@ -429,6 +429,7 @@ export const ServerChatPayload = z.object({
   from: PlayerInfoSchema.nullable(),
   content: z.string(),
   scope: ChatScopeSchema,
+  ts: z.number().optional(),
 });
 export const ResyncSnapshotSchema = z.object({
   lobby: LobbyInfoSchema.optional(),

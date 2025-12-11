@@ -1468,6 +1468,7 @@ export default function OnlineDraft3DScreen({
                       ? "object-contain rotate-90"
                       : "object-contain"
                   }`}
+                  unoptimized
                 />
               </div>
               <button

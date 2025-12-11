@@ -245,6 +245,7 @@ export default function YourDeckList(props: YourDeckListProps) {
                   isSite ? "object-contain rotate-90" : "object-cover"
                 }`}
                 sizes="(max-width:640px) 20vw, (max-width:1024px) 15vw, 10vw"
+                unoptimized
               />
             </div>
           ) : null}

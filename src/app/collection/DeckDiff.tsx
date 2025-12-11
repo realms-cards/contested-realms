@@ -283,6 +283,7 @@ export default function DeckDiff() {
                                       fill
                                       className="object-cover rounded"
                                       sizes="400px"
+                                      unoptimized
                                     />
                                   </div>
                                 </div>
@@ -293,6 +294,7 @@ export default function DeckDiff() {
                                   fill
                                   className="object-cover"
                                   sizes="288px"
+                                  unoptimized
                                 />
                               )}
                             </div>

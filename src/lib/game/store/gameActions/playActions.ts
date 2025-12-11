@@ -192,6 +192,8 @@ export const createPlayActionsSlice: StateCreator<
             get().toggleTapAvatar(who);
           } catch {}
         }
+        // Site provides mana immediately - baseMana increases (site counted),
+        // and availableMana = baseMana + offset, so both numbers increase automatically
         const nextInteractionLog = expireInteractionGrant(
           state,
           consumeInstantId
@@ -546,6 +548,8 @@ export const createPlayActionsSlice: StateCreator<
           }
           get().trySendPatch(patch);
         }
+        // Site provides mana immediately - baseMana increases (site counted),
+        // and availableMana = baseMana + offset, so both numbers increase automatically
         const nextInteractionLog = expireInteractionGrant(
           state,
           consumeInstantId

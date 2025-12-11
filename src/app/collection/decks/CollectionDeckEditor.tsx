@@ -270,6 +270,7 @@ export default function CollectionDeckEditor({
                     isSite ? "object-contain rotate-90" : "object-cover"
                   }
                   sizes="56px"
+                  unoptimized
                 />
               </div>
             )}
@@ -394,6 +395,7 @@ export default function CollectionDeckEditor({
                         isSite ? "object-contain rotate-90" : "object-cover"
                       }
                       sizes="40px"
+                      unoptimized
                     />
                   </div>
 

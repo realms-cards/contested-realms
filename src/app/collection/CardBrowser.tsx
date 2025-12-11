@@ -465,6 +465,7 @@ export default function CardBrowser({ onCardAdded }: CardBrowserProps) {
                           ? "(max-width: 640px) 100vw, 25vw"
                           : "(max-width: 640px) 50vw, 12.5vw"
                       }
+                      unoptimized
                     />
 
                     {/* Owned Badge */}

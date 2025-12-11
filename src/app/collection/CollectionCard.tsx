@@ -156,6 +156,7 @@ function CollectionCardInner({
             // Use state to switch to placeholder (prevents flicker from direct src manipulation)
             if (!imageError) setImageError(true);
           }}
+          unoptimized
         />
 
         {/* Foil Indicator */}

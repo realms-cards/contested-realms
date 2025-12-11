@@ -746,6 +746,32 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
             tournamentId: string | null;
           }> = [];
 
+          // Collect all player IDs first to batch DB lookup
+          const allPlayerIds = new Set<string>();
+          for (const [, match] of matchesMap.entries()) {
+            if (!match) continue;
+            const status =
+              typeof match.status === "string" ? match.status : "unknown";
+            if (status === "ended" || status === "completed") continue;
+            if (match._finalized) continue;
+            const pids = Array.isArray(match.playerIds)
+              ? match.playerIds.map((id: unknown) => String(id))
+              : [];
+            for (const pid of pids) allPlayerIds.add(pid);
+          }
+
+          // Fetch display names from DB for players not in memory
+          const playerNameMap = new Map<string, string>();
+          if (allPlayerIds.size > 0) {
+            const dbUsers = await prisma.user.findMany({
+              where: { id: { in: Array.from(allPlayerIds) } },
+              select: { id: true, name: true },
+            });
+            for (const u of dbUsers) {
+              if (u.name) playerNameMap.set(u.id, u.name);
+            }
+          }
+
           for (const [matchId, match] of matchesMap.entries()) {
             if (!match) continue;
             const status =
@@ -759,8 +785,14 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
               : [];
 
             const playerNames = playerIds.map((pid: string) => {
+              // First check in-memory players
               const player = players.get(pid);
-              return player?.displayName || `Player ${pid.slice(-6)}`;
+              if (player?.displayName) return player.displayName;
+              // Then check DB lookup
+              if (playerNameMap.has(pid))
+                return playerNameMap.get(pid) ?? `Player ${pid.slice(-6)}`;
+              // Fallback
+              return `Player ${pid.slice(-6)}`;
             });
 
             activeMatches.push({
@@ -799,6 +831,72 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
           res.setHeader("Content-Type", "application/json");
           res.end(JSON.stringify({ error: "Failed to fetch active matches" }));
         }
+        return;
+      }
+
+      // Cleanup stale match endpoint for admin dashboard
+      if (pathname === "/matches/cleanup" && method === "POST") {
+        allowCors(res, reqOrigin);
+        const chunks: Buffer[] = [];
+        req.on("data", (chunk: Buffer) => chunks.push(chunk));
+        req.on("end", async () => {
+          try {
+            const body = Buffer.concat(chunks).toString();
+            const parsed = JSON.parse(body) as { matchId?: string };
+            const matchId = parsed?.matchId;
+
+            if (!matchId || typeof matchId !== "string") {
+              res.statusCode = 400;
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ error: "Missing matchId" }));
+              return;
+            }
+
+            const match = matchesMap.get(matchId);
+            if (!match) {
+              res.statusCode = 404;
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ error: "Match not found" }));
+              return;
+            }
+
+            // Clear player matchId references
+            const playerIds = Array.isArray(match.playerIds)
+              ? match.playerIds.map((id: unknown) => String(id))
+              : [];
+            for (const pid of playerIds) {
+              const player = players.get(pid);
+              if (player && player.matchId === matchId) {
+                player.matchId = null;
+              }
+            }
+
+            // Notify clients
+            deps.io.to(`match:${matchId}`).emit("matchEnded", {
+              matchId,
+              reason: "admin_cleanup",
+              message: "Stale match was cleaned up by an administrator",
+            });
+
+            // Mark match as ended
+            match.status = "ended";
+            match._finalized = true;
+
+            console.log(`[Admin] Cleaned up stale match ${matchId}`);
+
+            res.statusCode = 200;
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ success: true, matchId }));
+          } catch (err) {
+            console.error(
+              "[http] /matches/cleanup error:",
+              safeErrorMessage(err)
+            );
+            res.statusCode = 500;
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ error: "Failed to cleanup match" }));
+          }
+        });
         return;
       }
 

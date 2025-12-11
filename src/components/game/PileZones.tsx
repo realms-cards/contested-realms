@@ -10,7 +10,11 @@ interface PileZonesProps {
   dragFromHand: boolean;
 }
 
-export default function PileZones({ player, position, dragFromHand }: PileZonesProps) {
+export default function PileZones({
+  player,
+  position,
+  dragFromHand,
+}: PileZonesProps) {
   const zones = useGameStore((s) => s.zones);
   const currentPlayer = useGameStore((s) => s.currentPlayer);
   const phase = useGameStore((s) => s.phase);
@@ -21,9 +25,8 @@ export default function PileZones({ player, position, dragFromHand }: PileZonesP
   const playerNum = player === "p1" ? 1 : 2;
   const playerZones = zones[player];
 
-  const positionClasses = position === "top" 
-    ? "absolute left-3 top-20" 
-    : "absolute left-3 bottom-24";
+  const positionClasses =
+    position === "top" ? "absolute left-3 top-20" : "absolute left-3 bottom-24";
 
   const handleDragStart = (
     from: "spellbook" | "atlas" | "graveyard",
@@ -43,14 +46,15 @@ export default function PileZones({ player, position, dragFromHand }: PileZonesP
     cards: CardRef[]
   ) => {
     const topCard = cards[0];
-    const canDraw = currentPlayer === playerNum && (phase === "Draw" || phase === "Main");
-    
+    const canDraw =
+      currentPlayer === playerNum && (phase === "Draw" || phase === "Main");
+
     return (
       <div className="col-span-1">
         <div className="rounded-lg bg-white/10 ring-1 ring-white/10 p-2 text-center">
           <div className="opacity-80">{displayName}</div>
           <div className="text-lg font-mono">{cards.length}</div>
-          
+
           {cards.length > 0 && topCard && (
             <button
               className="mt-1 w-full rounded border border-white/15 bg-white/10 hover:bg-white/20 px-1 py-1"
@@ -67,6 +71,7 @@ export default function PileZones({ player, position, dragFromHand }: PileZonesP
                     sizes="(max-width:640px) 25vw, (max-width:1024px) 20vw, 10vw"
                     className="object-cover"
                     draggable={false}
+                    unoptimized
                   />
                 </div>
               ) : (
@@ -76,7 +81,7 @@ export default function PileZones({ player, position, dragFromHand }: PileZonesP
               )}
             </button>
           )}
-          
+
           {pileType !== "graveyard" && (
             <button
               className="mt-1 w-full rounded bg-white/15 hover:bg-white/25 px-2 py-0.5 disabled:opacity-40"
@@ -98,7 +103,9 @@ export default function PileZones({ player, position, dragFromHand }: PileZonesP
       } text-white`}
     >
       <div className="bg-black/60 backdrop-blur rounded-xl ring-1 ring-white/10 shadow p-3 w-56">
-        <div className="text-sm font-semibold mb-2">{player.toUpperCase()} Piles</div>
+        <div className="text-sm font-semibold mb-2">
+          {player.toUpperCase()} Piles
+        </div>
         <div className="grid grid-cols-3 gap-2 text-xs">
           {renderPile("spellbook", "Spellbook", playerZones.spellbook)}
           {renderPile("atlas", "Atlas", playerZones.atlas)}

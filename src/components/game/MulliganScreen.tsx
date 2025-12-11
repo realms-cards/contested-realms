@@ -15,7 +15,7 @@ export default function MulliganScreen({ onStartGame }: MulliganScreenProps) {
   const mulliganWithSelection = useGameStore((s) => s.mulliganWithSelection);
   const finalizeMulligan = useGameStore((s) => s.finalizeMulligan);
   const setPreviewCard = useGameStore((s) => s.setPreviewCard);
-  
+
   const [selP1, setSelP1] = useState<number[]>([]);
   const [doneP1, setDoneP1] = useState<boolean>(false);
   const [selP2, setSelP2] = useState<number[]>([]);
@@ -24,14 +24,13 @@ export default function MulliganScreen({ onStartGame }: MulliganScreenProps) {
   return (
     <div className="w-full max-w-[92vw] sm:max-w-6xl bg-zinc-900/80 text-white rounded-2xl ring-1 ring-white/10 p-4 sm:p-6">
       <div className="mb-4 flex items-center justify-between">
-        <div className="text-lg font-semibold">
-          Mulligan (one round only)
-        </div>
+        <div className="text-lg font-semibold">Mulligan (one round only)</div>
         <div className="text-sm opacity-80">
-          Select up to 3 cards to put back. You&apos;ll draw the same number from the appropriate pile.
+          Select up to 3 cards to put back. You&apos;ll draw the same number
+          from the appropriate pile.
         </div>
       </div>
-      
+
       <div className="grid grid-cols-1 gap-6">
         <div className="bg-black/30 rounded-xl p-4 ring-1 ring-white/10">
           <div className="flex items-center justify-between mb-2">
@@ -40,11 +39,15 @@ export default function MulliganScreen({ onStartGame }: MulliganScreenProps) {
               Mulligans left: {mulligans.p1}
             </div>
           </div>
-          
+
           <div className="text-xs opacity-80 mb-2">
-            {!doneP1 && mulligans.p1 > 0 ? "Click cards to select for mulligan (max 3)." : mulligans.p1 === 0 ? "Mulligan used." : "Mulligan complete."}
+            {!doneP1 && mulligans.p1 > 0
+              ? "Click cards to select for mulligan (max 3)."
+              : mulligans.p1 === 0
+              ? "Mulligan used."
+              : "Mulligan complete."}
           </div>
-          
+
           <div className="flex items-center gap-2 overflow-x-auto overflow-y-visible pb-2 pt-10 sm:pt-16 min-h-[160px] sm:min-h-[200px]">
             {(zones.p1.hand || []).map((c, i) => {
               const isSite = (c.type || "").toLowerCase().includes("site");
@@ -53,9 +56,13 @@ export default function MulliganScreen({ onStartGame }: MulliganScreenProps) {
                 <button
                   key={`${c.cardId}-${i}`}
                   className={`relative flex-shrink-0 transition-all duration-200 ${
-                    !doneP1 && mulligans.p1 > 0 ? "hover:scale-105 hover:-translate-y-4" : ""
+                    !doneP1 && mulligans.p1 > 0
+                      ? "hover:scale-105 hover:-translate-y-4"
+                      : ""
                   } ${picked ? "ring-2 ring-red-400 -translate-y-2" : ""} ${
-                    mulligans.p1 <= 0 || doneP1 ? "cursor-default" : "cursor-pointer"
+                    mulligans.p1 <= 0 || doneP1
+                      ? "cursor-default"
+                      : "cursor-pointer"
                   }`}
                   title={c.name}
                   onClick={() => {
@@ -63,9 +70,10 @@ export default function MulliganScreen({ onStartGame }: MulliganScreenProps) {
                     setSelP1((arr) =>
                       arr.includes(i)
                         ? arr.filter((x) => x !== i)
-                        : arr.length >= 3 ? arr // Maximum 3 cards can be mulliganed
+                        : arr.length >= 3
+                        ? arr // Maximum 3 cards can be mulliganed
                         : [...arr, i]
-                    )
+                    );
                   }}
                   onMouseEnter={() => setPreviewCard(c)}
                   onMouseLeave={() => setPreviewCard(null)}
@@ -73,17 +81,22 @@ export default function MulliganScreen({ onStartGame }: MulliganScreenProps) {
                   {c.slug ? (
                     <div
                       className={`relative ${
-                        isSite ? "aspect-[4/3] w-24 sm:w-32" : "aspect-[3/4] w-20 sm:w-24"
+                        isSite
+                          ? "aspect-[4/3] w-24 sm:w-32"
+                          : "aspect-[3/4] w-20 sm:w-24"
                       } rounded-lg overflow-hidden ring-1 ring-white/20 shadow-lg ${
-                        picked ? "opacity-70" : ""} ${mulligans.p1 <= 0 || doneP1 ? "opacity-60" : ""
-                      }`}
+                        picked ? "opacity-70" : ""
+                      } ${mulligans.p1 <= 0 || doneP1 ? "opacity-60" : ""}`}
                     >
                       <Image
                         src={`/api/images/${c.slug}`}
                         alt={c.name}
                         fill
                         sizes="(max-width: 640px) 96px, 120px"
-                        className={`${isSite ? "object-contain rotate-90" : "object-contain"}`}
+                        className={`${
+                          isSite ? "object-contain rotate-90" : "object-contain"
+                        }`}
+                        unoptimized
                       />
                     </div>
                   ) : (
@@ -98,7 +111,7 @@ export default function MulliganScreen({ onStartGame }: MulliganScreenProps) {
               <div className="opacity-60">Hand is empty</div>
             )}
           </div>
-          
+
           <div className="mt-2 flex items-center gap-2">
             <button
               className="rounded bg-white/15 hover:bg-white/25 px-3 py-1 text-sm"
@@ -124,7 +137,7 @@ export default function MulliganScreen({ onStartGame }: MulliganScreenProps) {
               Skip
             </button>
           </div>
-          
+
           {mulliganDrawn.p1.length > 0 && (
             <div className="mt-3">
               <div className="text-xs opacity-80 mb-1">Drawn replacements:</div>
@@ -141,7 +154,9 @@ export default function MulliganScreen({ onStartGame }: MulliganScreenProps) {
                       {c.slug ? (
                         <div
                           className={`relative ${
-                            isSite ? "aspect-[4/3] w-24 sm:w-28" : "aspect-[3/4] w-16 sm:w-20"
+                            isSite
+                              ? "aspect-[4/3] w-24 sm:w-28"
+                              : "aspect-[3/4] w-16 sm:w-20"
                           } rounded-lg overflow-hidden ring-1 ring-emerald-400/40 shadow`}
                         >
                           <Image
@@ -149,7 +164,12 @@ export default function MulliganScreen({ onStartGame }: MulliganScreenProps) {
                             alt={c.name}
                             fill
                             sizes="(max-width: 640px) 80px, 100px"
-                            className={`${isSite ? "object-contain rotate-90" : "object-contain"}`}
+                            className={`${
+                              isSite
+                                ? "object-contain rotate-90"
+                                : "object-contain"
+                            }`}
+                            unoptimized
                           />
                         </div>
                       ) : (
@@ -172,11 +192,15 @@ export default function MulliganScreen({ onStartGame }: MulliganScreenProps) {
               Mulligans left: {mulligans.p2}
             </div>
           </div>
-          
+
           <div className="text-xs opacity-80 mb-2">
-            {!doneP2 && mulligans.p2 > 0 ? "Click cards to select for mulligan (max 3)." : mulligans.p2 === 0 ? "Mulligan used." : "Mulligan complete."}
+            {!doneP2 && mulligans.p2 > 0
+              ? "Click cards to select for mulligan (max 3)."
+              : mulligans.p2 === 0
+              ? "Mulligan used."
+              : "Mulligan complete."}
           </div>
-          
+
           <div className="flex items-center gap-2 overflow-x-auto overflow-y-visible pb-2 pt-10 sm:pt-16 min-h-[160px] sm:min-h-[200px]">
             {(zones.p2.hand || []).map((c, i) => {
               const isSite = (c.type || "").toLowerCase().includes("site");
@@ -185,9 +209,13 @@ export default function MulliganScreen({ onStartGame }: MulliganScreenProps) {
                 <button
                   key={`${c.cardId}-${i}`}
                   className={`relative flex-shrink-0 transition-all duration-200 ${
-                    !doneP2 && mulligans.p2 > 0 ? "hover:scale-105 hover:-translate-y-4" : ""
+                    !doneP2 && mulligans.p2 > 0
+                      ? "hover:scale-105 hover:-translate-y-4"
+                      : ""
                   } ${picked ? "ring-2 ring-red-400 -translate-y-2" : ""} ${
-                    mulligans.p2 <= 0 || doneP2 ? "cursor-default" : "cursor-pointer"
+                    mulligans.p2 <= 0 || doneP2
+                      ? "cursor-default"
+                      : "cursor-pointer"
                   }`}
                   title={c.name}
                   onClick={() => {
@@ -195,9 +223,10 @@ export default function MulliganScreen({ onStartGame }: MulliganScreenProps) {
                     setSelP2((arr) =>
                       arr.includes(i)
                         ? arr.filter((x) => x !== i)
-                        : arr.length >= 3 ? arr // Maximum 3 cards can be mulliganed
+                        : arr.length >= 3
+                        ? arr // Maximum 3 cards can be mulliganed
                         : [...arr, i]
-                    )
+                    );
                   }}
                   onMouseEnter={() => setPreviewCard(c)}
                   onMouseLeave={() => setPreviewCard(null)}
@@ -205,17 +234,22 @@ export default function MulliganScreen({ onStartGame }: MulliganScreenProps) {
                   {c.slug ? (
                     <div
                       className={`relative ${
-                        isSite ? "aspect-[4/3] w-24 sm:w-32" : "aspect-[3/4] w-20 sm:w-24"
+                        isSite
+                          ? "aspect-[4/3] w-24 sm:w-32"
+                          : "aspect-[3/4] w-20 sm:w-24"
                       } rounded-lg overflow-hidden ring-1 ring-white/20 shadow-lg ${
-                        picked ? "opacity-70" : ""} ${mulligans.p2 <= 0 || doneP2 ? "opacity-60" : ""
-                      }`}
+                        picked ? "opacity-70" : ""
+                      } ${mulligans.p2 <= 0 || doneP2 ? "opacity-60" : ""}`}
                     >
                       <Image
                         src={`/api/images/${c.slug}`}
                         alt={c.name}
                         fill
                         sizes="(max-width: 640px) 96px, 120px"
-                        className={`${isSite ? "object-contain rotate-90" : "object-contain"}`}
+                        className={`${
+                          isSite ? "object-contain rotate-90" : "object-contain"
+                        }`}
+                        unoptimized
                       />
                     </div>
                   ) : (
@@ -230,7 +264,7 @@ export default function MulliganScreen({ onStartGame }: MulliganScreenProps) {
               <div className="opacity-60">Hand is empty</div>
             )}
           </div>
-          
+
           <div className="mt-2 flex items-center gap-2">
             <button
               className="rounded bg-white/15 hover:bg-white/25 px-3 py-1 text-sm"
@@ -256,7 +290,7 @@ export default function MulliganScreen({ onStartGame }: MulliganScreenProps) {
               Skip
             </button>
           </div>
-          
+
           {mulliganDrawn.p2.length > 0 && (
             <div className="mt-3">
               <div className="text-xs opacity-80 mb-1">Drawn replacements:</div>
@@ -273,7 +307,9 @@ export default function MulliganScreen({ onStartGame }: MulliganScreenProps) {
                       {c.slug ? (
                         <div
                           className={`relative ${
-                            isSite ? "aspect-[4/3] w-24 sm:w-28" : "aspect-[3/4] w-16 sm:w-20"
+                            isSite
+                              ? "aspect-[4/3] w-24 sm:w-28"
+                              : "aspect-[3/4] w-16 sm:w-20"
                           } rounded-lg overflow-hidden ring-1 ring-emerald-400/40 shadow`}
                         >
                           <Image
@@ -281,7 +317,12 @@ export default function MulliganScreen({ onStartGame }: MulliganScreenProps) {
                             alt={c.name}
                             fill
                             sizes="(max-width: 640px) 80px, 100px"
-                            className={`${isSite ? "object-contain rotate-90" : "object-contain"}`}
+                            className={`${
+                              isSite
+                                ? "object-contain rotate-90"
+                                : "object-contain"
+                            }`}
+                            unoptimized
                           />
                         </div>
                       ) : (
@@ -297,7 +338,7 @@ export default function MulliganScreen({ onStartGame }: MulliganScreenProps) {
           )}
         </div>
       </div>
-      
+
       <div className="mt-4 flex items-center justify-between">
         <div className="text-xs opacity-70">
           You can mulligan once only. After you are done, start the game.
