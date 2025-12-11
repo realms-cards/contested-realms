@@ -12,12 +12,8 @@ export interface MaintenanceTimerDeps {
     cleanupBotsForLobby: (lobbyId: string) => void;
   };
   broadcastLobbies: () => void;
-  lobbyHasHumanPlayers: (
-    lobby: LobbyState | null | undefined
-  ) => boolean;
-  matchHasHumanPlayers: (
-    match: ServerMatchState | null | undefined
-  ) => boolean;
+  lobbyHasHumanPlayers: (lobby: LobbyState | null | undefined) => boolean;
+  matchHasHumanPlayers: (match: ServerMatchState | null | undefined) => boolean;
   cleanupMatchNow: (
     matchId: string,
     reason: string,
@@ -74,33 +70,30 @@ export function startMaintenanceTimers({
         if (!match) continue;
         if (matchHasHumanPlayers(match)) continue;
 
-        const age =
-          Date.now() - (Number(match.lastTs) || Date.now());
+        const age = Date.now() - (Number(match.lastTs) || Date.now());
         const shouldCleanup =
           match.status === "completed" || age >= 10 * 60 * 1000;
 
         if (shouldCleanup) {
           try {
             console.log(
-              `[Match] Periodic cleanup of bot-only match ${match.id} (status=${match.status}, age=${Math.floor(
-                age / 1000
-              )}s)`
+              `[Match] Periodic cleanup of bot-only match ${match.id} (status=${
+                match.status
+              }, age=${Math.floor(age / 1000)}s)`
             );
           } catch {
             // Ignore logging failures
           }
-          cleanupMatchNow(match.id, "bot_only_periodic", true).catch(
-            (err) => {
-              try {
-                console.warn(
-                  `[Match] Failed to cleanup bot match ${match.id}:`,
-                  err
-                );
-              } catch {
-                // Ignore logging failures
-              }
+          cleanupMatchNow(match.id, "bot_only_periodic", true).catch((err) => {
+            try {
+              console.warn(
+                `[Match] Failed to cleanup bot match ${match.id}:`,
+                err
+              );
+            } catch {
+              // Ignore logging failures
             }
-          );
+          });
         }
       }
     }, 30 * 1000)
@@ -184,9 +177,9 @@ export function startMaintenanceTimers({
             }
             try {
               console.log(
-                `[match] cleanup inactive match ${match.id} (status: ${match.status}, age: ${Math.round(
-                  age / 1000 / 60
-                )}min)`
+                `[match] cleanup inactive match ${match.id} (status: ${
+                  match.status
+                }, age: ${Math.round(age / 1000 / 60)}min)`
               );
             } catch {
               // Ignore logging failures
@@ -200,15 +193,18 @@ export function startMaintenanceTimers({
     }, 60 * 1000)
   );
 
+  // NOTE: We only clean up "completed" and "cancelled" sessions here.
+  // "ended" sessions are preserved for replay functionality and are cleaned
+  // by the replay retention pruner (REPLAY_RETENTION_DAYS, default 14 days).
+  // Deleting "ended" sessions here would cascade-delete OnlineMatchAction
+  // records, destroying replay data prematurely.
   timers.push(
     setInterval(async () => {
       try {
-        const threshold = new Date(
-          Date.now() - inactiveMatchCleanupMs
-        );
+        const threshold = new Date(Date.now() - inactiveMatchCleanupMs);
         const result = await prisma.onlineMatchSession.deleteMany({
           where: {
-            status: { in: ["completed", "cancelled", "ended"] },
+            status: { in: ["completed", "cancelled"] },
             updatedAt: { lt: threshold },
           },
         });
@@ -224,10 +220,7 @@ export function startMaintenanceTimers({
         }
       } catch (err) {
         try {
-          console.warn(
-            `[db] cleanup failed:`,
-            safeErrorMessage(err)
-          );
+          console.warn(`[db] cleanup failed:`, safeErrorMessage(err));
         } catch {
           // Ignore logging failures
         }
