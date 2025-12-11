@@ -1,6 +1,17 @@
-import { useCallback, useEffect, useMemo, useRef, type MutableRefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  type MutableRefObject,
+} from "react";
 import type { StoreApi, UseBoundStore } from "zustand";
-import { PLAYER_COLORS, TILE_SIZE, CARD_SHORT, CARD_LONG } from "@/lib/game/constants";
+import {
+  PLAYER_COLORS,
+  TILE_SIZE,
+  CARD_SHORT,
+  CARD_LONG,
+} from "@/lib/game/constants";
 import type {
   RemoteCursorDragMeta,
   RemoteCursorHighlight,
@@ -13,7 +24,11 @@ import type {
   Permanents,
   PlayerKey,
 } from "@/lib/game/store/types";
-import { TOKEN_BY_NAME, tokenTextureUrl } from "@/lib/game/tokens";
+import {
+  TOKEN_BY_KEY,
+  TOKEN_BY_NAME,
+  tokenTextureUrl,
+} from "@/lib/game/tokens";
 
 export type RemotePermanentDrag = {
   key: string;
@@ -43,6 +58,18 @@ export type RemoteAvatarDrag = {
   color: string;
 };
 
+export type RemotePileDrag = {
+  key: string;
+  pos: { x: number; z: number };
+  rotZ: number;
+  color: string;
+  width: number;
+  height: number;
+  textureUrl?: string;
+  forceTextureUrl?: boolean;
+  textureRotation?: number;
+};
+
 type UseRemoteCursorSystemOptions = {
   resolvedStoreApi: UseBoundStore<StoreApi<GameState>>;
   isSpectator: boolean;
@@ -67,6 +94,7 @@ type RemoteCursorSystemResult = {
   remotePermanentDrags: RemotePermanentDrag[];
   remotePermanentDragLookup: Map<string, Set<number>>;
   remoteHandDrags: RemoteHandDrag[];
+  remotePileDrags: RemotePileDrag[];
   remoteAvatarDrags: RemoteAvatarDrag[];
   remoteAvatarDragSet: Set<PlayerKey>;
   handlePointerMove: (x: number, z: number) => void;
@@ -223,6 +251,97 @@ export function useRemoteCursorSystem({
     boardSize.h,
   ]);
 
+  // Handle pile drags (tokens, spellbook, atlas, graveyard, collection)
+  const remotePileDrags = useMemo(() => {
+    if (overlayBlocking) {
+      return [] as RemotePileDrag[];
+    }
+    const drags: RemotePileDrag[] = [];
+    const halfTile = TILE_SIZE * 0.5;
+    const boardMinX = boardOffset.x - halfTile;
+    const boardMaxX = boardOffset.x + TILE_SIZE * (boardSize.w - 0.5);
+    const boardMinZ = boardOffset.y - halfTile;
+    const boardMaxZ = boardOffset.y + TILE_SIZE * (boardSize.h - 0.5);
+    const boundaryEps = TILE_SIZE * 0.2;
+    try {
+      const rc = remoteCursors || {};
+      for (const entry of Object.values(rc)) {
+        if (!entry) continue;
+        if (!entry.position) continue;
+        if (localPlayerId && entry.playerId === localPlayerId) continue;
+        const drag = entry.dragging;
+        if (!drag || drag.kind !== "pile") continue;
+        const { x, z } = entry.position;
+        if (
+          x < boardMinX - boundaryEps ||
+          x > boardMaxX + boundaryEps ||
+          z < boardMinZ - boundaryEps ||
+          z > boardMaxZ + boundaryEps
+        ) {
+          continue;
+        }
+        const color =
+          entry.playerKey === "p1"
+            ? PLAYER_COLORS.p1
+            : entry.playerKey === "p2"
+            ? PLAYER_COLORS.p2
+            : PLAYER_COLORS.spectator;
+        const rotZ = entry.playerKey === "p2" ? Math.PI : 0;
+
+        // For tokens, try to get size info from the highlight
+        const isTokenPile = drag.source === "tokens";
+        let w = CARD_SHORT;
+        let h = CARD_LONG;
+        let textureUrl: string | undefined;
+        let forceTextureUrl = false;
+        let textureRotation = 0;
+
+        if (isTokenPile && entry.highlight?.slug) {
+          // Try to find token definition from slug (format: "token:fileBase")
+          const slug = entry.highlight.slug;
+          const tokenKey = slug.replace(/^token[:\-]/, "").toLowerCase();
+          const tokenDef = TOKEN_BY_KEY[tokenKey];
+          if (tokenDef) {
+            if (tokenDef.size === "small") {
+              w = CARD_SHORT * 0.5;
+              h = CARD_LONG * 0.5;
+            }
+            textureUrl = tokenTextureUrl(tokenDef);
+            forceTextureUrl = true;
+            textureRotation = tokenDef.textureRotation ?? 0;
+            // Rubble tokens have site rotation
+            if (tokenDef.siteReplacement) {
+              // Site rotation is handled in the rotZ
+            }
+          }
+        }
+
+        drags.push({
+          key: `rpile:${entry.playerId ?? "unknown"}:${
+            drag.source ?? "unknown"
+          }`,
+          pos: { x, z },
+          rotZ,
+          color,
+          width: w,
+          height: h,
+          textureUrl,
+          forceTextureUrl,
+          textureRotation,
+        });
+      }
+    } catch {}
+    return drags;
+  }, [
+    overlayBlocking,
+    remoteCursors,
+    localPlayerId,
+    boardOffset.x,
+    boardOffset.y,
+    boardSize.w,
+    boardSize.h,
+  ]);
+
   const { remoteAvatarDrags, remoteAvatarDragSet } = useMemo(() => {
     if (overlayBlocking) {
       return {
@@ -355,8 +474,7 @@ export function useRemoteCursorSystem({
     return null;
   }, [dragAvatar, dragging, isSpectator, resolvedStoreApi]);
 
-  const round3 = (n: number) =>
-    Number.isFinite(n) ? Number(n.toFixed(3)) : 0;
+  const round3 = (n: number) => (Number.isFinite(n) ? Number(n.toFixed(3)) : 0);
 
   const positionsEqual = (
     a: RemoteCursorState["position"],
@@ -572,6 +690,7 @@ export function useRemoteCursorSystem({
     remotePermanentDrags,
     remotePermanentDragLookup,
     remoteHandDrags,
+    remotePileDrags,
     remoteAvatarDrags,
     remoteAvatarDragSet,
     handlePointerMove,

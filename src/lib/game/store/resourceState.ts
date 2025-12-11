@@ -1,19 +1,15 @@
 import type { StateCreator } from "zustand";
-import type {
-  CellKey,
-  GameState,
-  ServerPatchT,
-  SiteTile,
-} from "./types";
+import type { CellKey, GameState, ServerPatchT, SiteTile } from "./types";
 import {
-  computeAvailableMana,
   getCachedThresholdTotals,
+  siteProvidesMana,
 } from "./utils/resourceHelpers";
 
 type ResourceSlice = Pick<
   GameState,
   | "getPlayerSites"
   | "getUntappedSitesCount"
+  | "getBaseMana"
   | "getAvailableMana"
   | "getThresholdTotals"
   | "addMana"
@@ -44,9 +40,29 @@ export const createResourceSlice: StateCreator<
     return count;
   },
 
-  getAvailableMana: (who) => {
+  getBaseMana: (who) => {
+    // Total mana = count of all sites that provide mana (sites don't tap)
     const state = get();
-    const base = computeAvailableMana(state.board, state.permanents, who);
+    const owner = who === "p1" ? 1 : 2;
+    let total = 0;
+    for (const site of Object.values(state.board.sites)) {
+      if (site.owner === owner && siteProvidesMana(site.card ?? null)) {
+        total++;
+      }
+    }
+    return total;
+  },
+
+  getAvailableMana: (who) => {
+    // Available mana = total sites + offset (offset is negative when mana is spent)
+    const state = get();
+    const owner = who === "p1" ? 1 : 2;
+    let base = 0;
+    for (const site of Object.values(state.board.sites)) {
+      if (site.owner === owner && siteProvidesMana(site.card ?? null)) {
+        base++;
+      }
+    }
     const offset = Number(state.players[who]?.mana || 0);
     return Math.max(0, base + offset);
   },

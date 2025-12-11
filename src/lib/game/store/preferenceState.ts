@@ -20,6 +20,17 @@ const readInitialMagicGuides = (): boolean => {
   return false;
 };
 
+const readInitialActionNotifications = (): boolean => {
+  try {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("sorcery:actionNotifications");
+      // Default to true if not set
+      return stored === null ? true : stored === "1";
+    }
+  } catch {}
+  return true;
+};
+
 type PreferenceSlice = Pick<
   GameState,
   | "interactionGuides"
@@ -30,10 +41,13 @@ type PreferenceSlice = Pick<
   | "magicGuideSeatPrefs"
   | "combatGuidesActive"
   | "magicGuidesActive"
+  | "actionNotifications"
+  | "setActionNotifications"
 >;
 
 const initialInteractionGuides = readInitialInteractionGuides();
 const initialMagicGuides = readInitialMagicGuides();
+const initialActionNotifications = readInitialActionNotifications();
 
 export const createPreferenceSlice: StateCreator<
   GameState,
@@ -43,6 +57,7 @@ export const createPreferenceSlice: StateCreator<
 > = (set, get) => ({
   interactionGuides: initialInteractionGuides,
   magicGuides: initialMagicGuides,
+  actionNotifications: initialActionNotifications,
   // Initialize per-seat prefs from the local toggle; will be refined once
   // remote guide preference sync is wired in.
   combatGuideSeatPrefs: {
@@ -212,6 +227,16 @@ export const createPreferenceSlice: StateCreator<
     try {
       if (typeof window !== "undefined") {
         localStorage.setItem("sorcery:magicGuides", next ? "1" : "0");
+      }
+    } catch {}
+  },
+
+  setActionNotifications: (on) => {
+    const next = !!on;
+    set({ actionNotifications: next } as Partial<GameState> as GameState);
+    try {
+      if (typeof window !== "undefined") {
+        localStorage.setItem("sorcery:actionNotifications", next ? "1" : "0");
       }
     } catch {}
   },

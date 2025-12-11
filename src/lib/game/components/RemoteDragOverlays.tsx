@@ -6,21 +6,25 @@ import type {
   RemoteAvatarDrag,
   RemoteHandDrag,
   RemotePermanentDrag,
+  RemotePileDrag,
 } from "@/lib/game/hooks/useRemoteCursorSystem";
 
 export type RemoteDragOverlaysProps = {
   handDrags: RemoteHandDrag[];
+  pileDrags: RemotePileDrag[];
   permanentDrags: RemotePermanentDrag[];
   avatarDrags: RemoteAvatarDrag[];
 };
 
 function RemoteDragOverlaysComponent({
   handDrags,
+  pileDrags,
   permanentDrags,
   avatarDrags,
 }: RemoteDragOverlaysProps) {
   if (
     handDrags.length === 0 &&
+    pileDrags.length === 0 &&
     permanentDrags.length === 0 &&
     avatarDrags.length === 0
   ) {
@@ -51,6 +55,37 @@ function RemoteDragOverlaysComponent({
                 interactive={false}
                 textureUrl="/api/assets/cardback_spellbook.png"
                 forceTextureUrl
+              />
+            </group>
+          ))}
+        </group>
+      )}
+
+      {pileDrags.length > 0 && (
+        <group>
+          {pileDrags.map((d) => (
+            <group key={d.key} position={[d.pos.x, 0.31, d.pos.z]}>
+              <CardOutline
+                width={d.width}
+                height={d.height}
+                rotationZ={d.rotZ}
+                elevation={0.0001}
+                color={d.color}
+                renderOrder={1000}
+              />
+              <CardPlane
+                slug=""
+                width={d.width}
+                height={d.height}
+                rotationZ={d.rotZ}
+                elevation={0.003}
+                renderOrder={535}
+                interactive={false}
+                textureUrl={
+                  d.textureUrl ?? "/api/assets/cardback_spellbook.png"
+                }
+                forceTextureUrl={d.forceTextureUrl ?? true}
+                textureRotation={d.textureRotation ?? 0}
               />
             </group>
           ))}
@@ -121,4 +156,3 @@ function RemoteDragOverlaysComponent({
 }
 
 export const RemoteDragOverlays = memo(RemoteDragOverlaysComponent);
-

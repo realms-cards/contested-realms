@@ -32,6 +32,7 @@ import type {
   PlayerKey,
 } from "@/lib/game/store/types";
 import { seatFromOwner } from "@/lib/game/store/utils/boardHelpers";
+import { TOKEN_BY_NAME, tokenTextureUrl } from "@/lib/game/tokens";
 
 type HoverContext = {
   beginHoverPreview: (card?: CardRef | null, sourceKey?: string | null) => void;
@@ -256,14 +257,14 @@ export function AvatarCard({
     return hl;
   }
 
-  const attachedArtifacts = (permanents[tileKey] || [])
+  const attachedItems = (permanents[tileKey] || [])
     .map((p, idx) => ({ p, idx }))
     .filter(
       ({ p }) =>
         p.attachedTo && p.attachedTo.index === -1 && p.attachedTo.at === tileKey
     );
   const seenIds = new Set<string>();
-  const uniqueArtifacts = attachedArtifacts.filter(({ p }) => {
+  const uniqueAttachedItems = attachedItems.filter(({ p }) => {
     const id = (p.instanceId || p.card?.instanceId || "") as string;
     if (!id) return true;
     if (seenIds.has(id)) return false;
@@ -585,7 +586,7 @@ export function AvatarCard({
           />
         </group>
         {renderCounters()}
-        {renderArtifacts()}
+        {renderAttachedItems()}
       </RigidBody>
     </group>
   );
@@ -653,48 +654,92 @@ export function AvatarCard({
     );
   }
 
-  function renderArtifacts() {
-    if (uniqueArtifacts.length === 0) return null;
-    return uniqueArtifacts.map(({ p, idx }, attachIdx) => {
-      const isArtifact = (p.card.type || "").toLowerCase().includes("artifact");
-      if (!isArtifact || !p.card.slug) return null;
-      const artifactW = CARD_SHORT * 0.6;
-      const artifactH = CARD_LONG * 0.6;
+  function renderAttachedItems() {
+    if (uniqueAttachedItems.length === 0) return null;
+    return uniqueAttachedItems.map(({ p, idx }, attachIdx) => {
+      const itemType = (p.card.type || "").toLowerCase();
+      const isArtifact = itemType.includes("artifact");
+      const isToken = itemType.includes("token");
+      const tokenName = (p.card.name || "").toLowerCase();
+      const tokenDef = TOKEN_BY_NAME[tokenName];
+
       const offsetMultiplier = 0.3;
       const offsetX =
         CARD_SHORT *
         offsetMultiplier *
-        (attachIdx - (uniqueArtifacts.length - 1) / 2);
+        (attachIdx - (uniqueAttachedItems.length - 1) / 2);
       const offsetZ = CARD_LONG * 0.4;
       const uniqueKey = `${tileKey}-${p.instanceId || idx}`;
-      const artifactHoverKey = `artifact:avatar:${seat}:${uniqueKey}`;
       const avatarRenderOrder =
         isLastTouched || isSel || dragAvatar === seat ? 1200 : 100;
-      const artifactRenderOrder = avatarRenderOrder - 10 - attachIdx;
-      return (
-        <group
-          key={`avatar-attached-${uniqueKey}`}
-          position={[offsetX, BASE_CARD_ELEVATION - CARD_THICK * 0.05, offsetZ]}
-        >
-          <CardPlane
-            slug={p.card.slug}
-            width={artifactW}
-            height={artifactH}
-            rotationZ={rotZ}
-            elevation={-0.001}
-            renderOrder={artifactRenderOrder}
-            depthWrite={false}
-            onPointerOver={(e) => {
-              e.stopPropagation();
-              beginHoverPreview(p.card, artifactHoverKey);
-            }}
-            onPointerOut={(e) => {
-              e.stopPropagation();
-              clearHoverPreviewDebounced(artifactHoverKey);
-            }}
-          />
-        </group>
-      );
+
+      // Render tokens (Lance, Ward, Stealth, Disabled, etc.)
+      if (isToken && tokenDef) {
+        const texUrl = tokenTextureUrl(tokenDef);
+        const tokenW =
+          tokenDef.size === "small" ? CARD_SHORT * 0.4 : CARD_SHORT * 0.6;
+        const tokenH =
+          tokenDef.size === "small" ? CARD_LONG * 0.4 : CARD_LONG * 0.6;
+        return (
+          <group
+            key={`avatar-attached-token-${uniqueKey}`}
+            position={[
+              offsetX,
+              BASE_CARD_ELEVATION + CARD_THICK * 0.1,
+              offsetZ,
+            ]}
+          >
+            <CardPlane
+              slug=""
+              textureUrl={texUrl}
+              forceTextureUrl
+              width={tokenW}
+              height={tokenH}
+              rotationZ={rotZ}
+              elevation={0.005}
+              renderOrder={50 + attachIdx}
+            />
+          </group>
+        );
+      }
+
+      // Render artifacts
+      if (isArtifact && p.card.slug) {
+        const artifactW = CARD_SHORT * 0.6;
+        const artifactH = CARD_LONG * 0.6;
+        const artifactHoverKey = `artifact:avatar:${seat}:${uniqueKey}`;
+        const artifactRenderOrder = avatarRenderOrder - 10 - attachIdx;
+        return (
+          <group
+            key={`avatar-attached-${uniqueKey}`}
+            position={[
+              offsetX,
+              BASE_CARD_ELEVATION - CARD_THICK * 0.05,
+              offsetZ,
+            ]}
+          >
+            <CardPlane
+              slug={p.card.slug}
+              width={artifactW}
+              height={artifactH}
+              rotationZ={rotZ}
+              elevation={-0.001}
+              renderOrder={artifactRenderOrder}
+              depthWrite={false}
+              onPointerOver={(e) => {
+                e.stopPropagation();
+                beginHoverPreview(p.card, artifactHoverKey);
+              }}
+              onPointerOut={(e) => {
+                e.stopPropagation();
+                clearHoverPreviewDebounced(artifactHoverKey);
+              }}
+            />
+          </group>
+        );
+      }
+
+      return null;
     });
   }
 }

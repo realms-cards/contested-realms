@@ -434,6 +434,12 @@ export function handleCustomMessage(
   }
   if (t === "toast") {
     const text = (msg as { text?: unknown }).text;
+    const cellKey = (msg as { cellKey?: unknown }).cellKey as
+      | string
+      | undefined;
+    // Server sends playerKey, client sends seat - check both
+    const seat = ((msg as { seat?: unknown }).seat ||
+      (msg as { playerKey?: unknown }).playerKey) as string | undefined;
     if (typeof text === "string" && text.trim().length > 0) {
       try {
         get().log(text);
@@ -441,7 +447,9 @@ export function handleCustomMessage(
       try {
         if (typeof window !== "undefined") {
           window.dispatchEvent(
-            new CustomEvent("app:toast", { detail: { message: text } })
+            new CustomEvent("app:toast", {
+              detail: { message: text, cellKey, seat },
+            })
           );
         }
       } catch {}

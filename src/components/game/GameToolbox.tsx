@@ -258,6 +258,8 @@ export default function GameToolbox({
     }
     const replaceKeys = Object.keys(patch).filter((k) => k !== "zones");
     (patch as { __replaceKeys?: string[] }).__replaceKeys = replaceKeys;
+    // Include snapshot timestamp so server can truncate replay actions after this point
+    (patch as { __snapshotTs?: number }).__snapshotTs = item.ts;
     if (isOnline && mySeat && opponentSeat) {
       requestConsent("restoreSnapshot", `Restore the realm: ${item.title}`, {
         snapshot: patch,
@@ -280,6 +282,8 @@ export default function GameToolbox({
     );
     const keys = Object.keys(raw).filter((k) => k !== "__replaceKeys");
     (raw as { __replaceKeys?: string[] }).__replaceKeys = keys;
+    // Include snapshot timestamp so server can truncate replay actions after this point
+    (raw as { __snapshotTs?: number }).__snapshotTs = item.ts;
     if (isOnline && mySeat && opponentSeat) {
       requestConsent("restoreSnapshot", `Restore snapshot: ${item.title}`, {
         snapshot: raw,
@@ -456,7 +460,8 @@ export default function GameToolbox({
         `${seat.toUpperCase()} ${
           pile === "spellbook" ? "Spellbook" : "Atlas"
         } (${from})`,
-        slice
+        slice,
+        { seat, pile, from }
       );
   };
 
@@ -566,18 +571,86 @@ export default function GameToolbox({
   const disabledOnlineOpponentDraw =
     isOnline && mySeat != null && drawSeat !== mySeat;
 
+  // Retry state for toolbox D20 roll
+  const [d20Pending, setD20Pending] = useState<{
+    value: number;
+    ts: number;
+  } | null>(null);
+  const d20RetryRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Clear retry interval on unmount
+  useEffect(() => {
+    return () => {
+      if (d20RetryRef.current) clearInterval(d20RetryRef.current);
+    };
+  }, []);
+
+  // Clear pending when we receive the d20Roll message back (means server got it)
+  useEffect(() => {
+    if (d20Open && d20Pending) {
+      // D20 overlay opened means message was received
+      setD20Pending(null);
+      if (d20RetryRef.current) {
+        clearInterval(d20RetryRef.current);
+        d20RetryRef.current = null;
+      }
+    }
+  }, [d20Open, d20Pending]);
+
   const startToolboxRoll = () => {
     const value = Math.floor(Math.random() * 20) + 1;
     if (isOnline && transport?.sendMessage) {
-      try {
-        transport.sendMessage({ type: "d20Roll", value });
-      } catch {}
-      // Log once; event log is synchronized via server patch in log()
+      // Capture sendMessage to avoid closure issues with possibly undefined transport
+      const sendMsg = transport.sendMessage.bind(transport);
+      const sendD20Message = () => {
+        try {
+          sendMsg({ type: "d20Roll", value });
+          console.log(`[Toolbox] D20 roll sent: ${value}`);
+        } catch (err) {
+          console.warn(`[Toolbox] D20 send failed:`, err);
+        }
+      };
+
+      // Send immediately
+      sendD20Message();
       log(`Toolbox D20 roll: ${value}`);
-      try {
-        console.log(`[Toolbox] D20 roll: ${value}`);
-      } catch {}
-      // Do not open local-only popup here; the shared listener will open it for both players
+
+      // Set up retry mechanism with captured start time
+      const startTs = Date.now();
+      setD20Pending({ value, ts: startTs });
+      if (d20RetryRef.current) clearInterval(d20RetryRef.current);
+
+      let retryCount = 0;
+      const maxRetries = 5;
+      d20RetryRef.current = setInterval(() => {
+        retryCount++;
+        // Check if d20 overlay opened (means message was received)
+        if (d20Open) {
+          setD20Pending(null);
+          if (d20RetryRef.current) clearInterval(d20RetryRef.current);
+          d20RetryRef.current = null;
+          return;
+        }
+        // Retry up to maxRetries times
+        if (retryCount >= maxRetries) {
+          console.warn(
+            `[Toolbox] D20 roll failed after ${maxRetries} retries, showing locally`
+          );
+          // Fallback: show locally if server never responded
+          setD20Value(value);
+          setD20Open(true);
+          setD20Rolling(true);
+          setD20Pending(null);
+          if (d20RetryRef.current) clearInterval(d20RetryRef.current);
+          d20RetryRef.current = null;
+          return;
+        }
+        console.log(
+          `[Toolbox] Retrying D20 roll send (${retryCount}/${maxRetries})...`
+        );
+        sendD20Message();
+      }, 3000);
+
       return;
     }
     // Offline/hotseat fallback: local popup
@@ -585,9 +658,7 @@ export default function GameToolbox({
     setD20Open(true);
     setD20Rolling(true);
     log(`Toolbox D20 roll: ${value}`);
-    try {
-      console.log(`[Toolbox] D20 roll: ${value}`);
-    } catch {}
+    console.log(`[Toolbox] D20 roll: ${value}`);
   };
 
   const handleDrawRandomSpell = async () => {
@@ -640,7 +711,7 @@ export default function GameToolbox({
     : "w-full rounded bg-purple-600/90 hover:bg-purple-500 py-1";
 
   return (
-    <div className="absolute bottom-3 right-3 z-20 text-white">
+    <div className="text-white">
       {/* Instant permission indicator */}
       {(() => {
         // Compute active instant permission and its remaining time
@@ -914,7 +985,8 @@ export default function GameToolbox({
                   title="Roll D20"
                 >
                   <div className="flex items-center justify-center">
-                    <Image src="/d20.svg" alt="D20" width={16} height={16} />
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src="/d20.svg" alt="D20" width={16} height={16} />
                   </div>
                 </button>
               </div>
@@ -1074,6 +1146,7 @@ export default function GameToolbox({
         <HandPeekDialog
           title={peekDialog.title ?? ""}
           cards={peekDialog.cards}
+          source={peekDialog.source}
           onClose={closePeekDialog}
         />
       ) : null}

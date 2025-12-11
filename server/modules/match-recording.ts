@@ -1,6 +1,11 @@
 "use strict";
 
-import type { AnyRecord, MatchPatch, PlayerState, ServerMatchState } from "../types";
+import type {
+  AnyRecord,
+  MatchPatch,
+  PlayerState,
+  ServerMatchState,
+} from "../types";
 
 export interface MatchRecordingEntry {
   matchId: string;
@@ -224,9 +229,7 @@ export function createMatchRecordingService({
             for (const pile of piles) {
               const prevArr =
                 prevSeatZones &&
-                Array.isArray(
-                  (prevSeatZones as Record<string, unknown>)[pile]
-                )
+                Array.isArray((prevSeatZones as Record<string, unknown>)[pile])
                   ? ((prevSeatZones as Record<string, unknown>)[
                       pile
                     ] as unknown[])
@@ -270,12 +273,10 @@ export function createMatchRecordingService({
                 const playedToGraveOrBanished =
                   nextByPile["graveyard"].ids.has(instId) ||
                   nextByPile["banished"].ids.has(instId);
-                const onBattlefield =
-                  nextByPile["battlefield"].ids.has(instId);
+                const onBattlefield = nextByPile["battlefield"].ids.has(instId);
                 if (playedToGraveOrBanished || onBattlefield) {
                   let cardIdNum: number | null = null;
-                  const prevItem =
-                    prevByPile[origin].byId.get(instId) || null;
+                  const prevItem = prevByPile[origin].byId.get(instId) || null;
                   const srcCard =
                     prevItem && typeof prevItem.card === "object"
                       ? (prevItem.card as Record<string, unknown>)
@@ -295,11 +296,8 @@ export function createMatchRecordingService({
                       candidate && typeof candidate.card === "object"
                         ? (candidate.card as Record<string, unknown>)
                         : null;
-                    const raw2 = candCard
-                      ? (candCard.cardId as unknown)
-                      : null;
-                    const cid2 =
-                      typeof raw2 === "number" ? raw2 : Number(raw2);
+                    const raw2 = candCard ? (candCard.cardId as unknown) : null;
+                    const cid2 = typeof raw2 === "number" ? raw2 : Number(raw2);
                     if (Number.isFinite(cid2)) cardIdNum = Number(cid2);
                   }
                   if (cardIdNum) {
@@ -312,8 +310,10 @@ export function createMatchRecordingService({
               }
             }
             if (!recording.lastZones) recording.lastZones = {};
-            recording.lastZones[seat] =
-              nextSeatZones as Record<string, unknown>;
+            recording.lastZones[seat] = nextSeatZones as Record<
+              string,
+              unknown
+            >;
           }
         }
         if (avatars && typeof avatars === "object") {
@@ -357,10 +357,47 @@ export function createMatchRecordingService({
     } catch {}
   }
 
+  /**
+   * Truncate recording actions after a given timestamp.
+   * Called when a snapshot is restored to invalidate the undone timeline.
+   * Returns the number of actions removed.
+   */
+  function truncateRecordingAfter(
+    matchId: string,
+    afterTimestamp: number
+  ): number {
+    const recording = matchRecordings.get(matchId);
+    if (!recording) {
+      try {
+        console.log(
+          `[Recording] No recording found for match ${matchId} to truncate`
+        );
+      } catch {}
+      return 0;
+    }
+
+    const originalLength = recording.actions.length;
+    // Keep only actions with timestamp <= afterTimestamp
+    recording.actions = recording.actions.filter(
+      (action) => action.timestamp <= afterTimestamp
+    );
+    const removedCount = originalLength - recording.actions.length;
+
+    if (removedCount > 0) {
+      try {
+        console.log(
+          `[Recording] Truncated ${removedCount} actions after timestamp ${afterTimestamp} for match ${matchId}, remaining: ${recording.actions.length}`
+        );
+      } catch {}
+    }
+
+    return removedCount;
+  }
+
   return {
     startMatchRecording,
     recordMatchAction,
     finishMatchRecording,
+    truncateRecordingAfter,
   };
 }
-

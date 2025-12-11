@@ -41,6 +41,8 @@ type CoreStateSlice = Pick<
   | "turn"
   | "phase"
   | "setPhase"
+  | "hasDrawnThisTurn"
+  | "setHasDrawnThisTurn"
   | "d20Rolls"
   | "rollD20"
   | "setupWinner"
@@ -67,6 +69,12 @@ export const createCoreSlice: StateCreator<
   currentPlayer: 1,
   turn: 1,
   phase: "Setup",
+  hasDrawnThisTurn: false,
+  setHasDrawnThisTurn: (drawn) => {
+    const patch: ServerPatchT = { hasDrawnThisTurn: drawn };
+    get().trySendPatch(patch);
+    set({ hasDrawnThisTurn: drawn });
+  },
   setPhase: (phase) =>
     set((state) => {
       if (phase === "Start") {
@@ -348,6 +356,7 @@ export const createCoreSlice: StateCreator<
         phase: nextPhase,
         currentPlayer: nextPlayer,
         turn: nextTurn,
+        hasDrawnThisTurn: false, // Reset draw tracking for new turn
       };
       const deltaPatch =
         updates.length > 0 ? createPermanentDeltaPatch(updates) : undefined;
@@ -360,6 +369,7 @@ export const createCoreSlice: StateCreator<
         phase: nextPhase,
         currentPlayer: nextPlayer,
         turn: nextTurn,
+        hasDrawnThisTurn: false, // Reset draw tracking for new turn
         permanents,
         avatars: avatarsNext,
         selectedCard: null,
@@ -423,9 +433,10 @@ export const createCoreSlice: StateCreator<
     } as GameState["avatars"];
 
     const base: ServerPatchT = {
-      phase: "Main",
+      phase: "Start",
       currentPlayer: nextPlayer,
       turn: nextTurn,
+      hasDrawnThisTurn: false, // Reset draw tracking for new turn
     };
     const deltaPatch =
       updates.length > 0 ? createPermanentDeltaPatch(updates) : undefined;
@@ -433,9 +444,10 @@ export const createCoreSlice: StateCreator<
     get().trySendPatch(patch);
 
     set({
-      phase: "Main",
+      phase: "Start",
       currentPlayer: nextPlayer,
       turn: nextTurn,
+      hasDrawnThisTurn: false, // Reset draw tracking for new turn
       permanents,
       avatars: avatarsNext,
       selectedCard: null,

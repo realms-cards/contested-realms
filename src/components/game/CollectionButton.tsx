@@ -1,0 +1,74 @@
+"use client";
+
+import { Gem } from "lucide-react";
+import { useState } from "react";
+import PileSearchDialog from "@/components/game/PileSearchDialog";
+import { useGameStore, type PlayerKey, type CardRef } from "@/lib/game/store";
+
+export type CollectionButtonProps = {
+  mySeat: PlayerKey | null;
+};
+
+export default function CollectionButton({ mySeat }: CollectionButtonProps) {
+  const zones = useGameStore((s) => s.zones);
+  const setDragFromPile = useGameStore((s) => s.setDragFromPile);
+  const drawFromPileToHand = useGameStore((s) => s.drawFromPileToHand);
+  const actorKey = useGameStore((s) => s.actorKey);
+
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
+
+  // Use actorKey if available (online), otherwise mySeat (offline)
+  const myKey = actorKey || mySeat || "p1";
+  const collection = zones[myKey]?.collection || [];
+  const count = collection.length;
+
+  // Don't render if no collection
+  if (count === 0) return null;
+
+  const handleClick = () => {
+    setSearchOpen(true);
+  };
+
+  const handleSelect = (card: CardRef) => {
+    setDragFromPile({ who: myKey, from: "collection", card });
+    drawFromPileToHand();
+    setSearchOpen(false);
+  };
+
+  return (
+    <>
+      <div
+        className="relative"
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+      >
+        <button
+          className="rounded bg-amber-600/80 hover:bg-amber-500 p-1.5 ring-1 ring-white/10 shadow-lg transition-colors"
+          onClick={handleClick}
+          aria-label="Open collection"
+          title={`Collection (${count} cards)`}
+        >
+          <Gem className="w-4 h-4 text-white" />
+        </button>
+
+        {/* Card count tooltip on hover */}
+        {isHovered && (
+          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-black/80 rounded text-xs text-white whitespace-nowrap pointer-events-none">
+            Collection ({count} cards)
+          </div>
+        )}
+      </div>
+
+      {/* Search dialog */}
+      {searchOpen && (
+        <PileSearchDialog
+          pileName="Collection"
+          cards={collection}
+          onSelectCard={handleSelect}
+          onClose={() => setSearchOpen(false)}
+        />
+      )}
+    </>
+  );
+}

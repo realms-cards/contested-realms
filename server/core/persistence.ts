@@ -666,6 +666,64 @@ const createPersistenceLayerInternal = ({
     bufferCount: persistBuffers.size,
   });
 
+  /**
+   * Truncate persisted actions after a given timestamp for a match.
+   * Called when a snapshot is restored to invalidate the undone timeline.
+   * Also truncates any buffered (not yet persisted) actions.
+   * Returns the total number of actions removed.
+   */
+  async function truncateActionsAfter(
+    matchId: string,
+    afterTimestamp: number
+  ): Promise<number> {
+    let totalRemoved = 0;
+
+    // 1. Truncate buffered actions (not yet persisted)
+    const buf = persistBuffers.get(matchId);
+    if (buf && Array.isArray(buf.actions)) {
+      const originalLength = buf.actions.length;
+      buf.actions = buf.actions.filter(
+        (action) => Number(action.timestamp || 0) <= afterTimestamp
+      );
+      const bufferedRemoved = originalLength - buf.actions.length;
+      totalRemoved += bufferedRemoved;
+      if (bufferedRemoved > 0) {
+        try {
+          console.log(
+            `[persist] Truncated ${bufferedRemoved} buffered actions after timestamp ${afterTimestamp} for match ${matchId}`
+          );
+        } catch {}
+      }
+    }
+
+    // 2. Delete persisted actions from database
+    try {
+      const deleteResult = await prisma.onlineMatchAction.deleteMany({
+        where: {
+          matchId,
+          timestamp: { gt: BigInt(afterTimestamp) },
+        },
+      });
+      const dbRemoved = deleteResult.count;
+      totalRemoved += dbRemoved;
+      if (dbRemoved > 0) {
+        try {
+          console.log(
+            `[persist] Deleted ${dbRemoved} persisted actions after timestamp ${afterTimestamp} for match ${matchId}`
+          );
+          metricsInc("persist.actions.truncated", dbRemoved);
+        } catch {}
+      }
+    } catch (err) {
+      console.error(
+        `[persist] Failed to truncate persisted actions for ${matchId}:`,
+        safeErrorMessage(err)
+      );
+    }
+
+    return totalRemoved;
+  }
+
   return {
     persistMatchCreated,
     persistMatchUpdate,
@@ -675,6 +733,7 @@ const createPersistenceLayerInternal = ({
     rehydrateMatch,
     getBufferStats,
     flushAll,
+    truncateActionsAfter,
   };
 };
 

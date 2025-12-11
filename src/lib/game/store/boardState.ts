@@ -1,11 +1,6 @@
 import type { StateCreator } from "zustand";
 import type { GameState, PlayerKey, ServerPatchT, Zones } from "./types";
-import {
-  getCellNumber,
-  ownerLabel,
-  seatFromOwner,
-  toCellKey,
-} from "./utils/boardHelpers";
+import { getCellNumber, seatFromOwner, toCellKey } from "./utils/boardHelpers";
 import { prepareCardForSeat } from "./utils/cardHelpers";
 import { createZonesPatchFor } from "./utils/zoneHelpers";
 import { removeCardInstanceFromAllZones } from "./utils/zoneHelpers";
@@ -83,11 +78,20 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
           : target === "atlas"
           ? "atlas"
           : "banished";
+      const playerNum = owner === "p1" ? "1" : "2";
+      const zoneLabel =
+        label === "hand"
+          ? "hand"
+          : label === "graveyard"
+          ? "graveyard"
+          : label === "atlas"
+          ? "Atlas"
+          : "banished";
       get().log(
-        `Moved site '${site.card.name}' from #${cellNo} to ${ownerLabel(
-          owner
-        )} ${label}`
+        `[p${playerNum}:PLAYER] moved site '${site.card.name}' from #${cellNo} to ${zoneLabel}`
       );
+      // Broadcast toast to both players
+      const toastMessage = `[p${playerNum}:PLAYER] moved [p${playerNum}card:${site.card.name}] to ${zoneLabel}`;
       const boardNext = { ...state.board, sites } as GameState["board"];
       const tr = get().transport;
       if (tr) {
@@ -96,6 +100,24 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
           zones: zones as GameState["zones"],
         };
         get().trySendPatch(patch);
+        try {
+          tr.sendMessage?.({
+            type: "toast",
+            text: toastMessage,
+            seat: owner,
+          } as never);
+        } catch {}
+      } else {
+        // Offline: show local toast
+        try {
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(
+              new CustomEvent("app:toast", {
+                detail: { message: toastMessage },
+              })
+            );
+          }
+        } catch {}
       }
       return {
         board: boardNext,

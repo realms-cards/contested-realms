@@ -112,11 +112,16 @@ export default function MouseTracker({ cards, onHover }: MouseTrackerProps) {
         }
       }
 
-      // Check if mouse is in hand area (bottom 25% of screen) - don't clear hover in hand area
-      // as hand cards have their own hover management
+      // Check if mouse is in hand area (bottom 5-15% of screen, center 16% horizontally)
+      // Don't clear hover in hand area as hand cards have their own hover management
       if (rect) {
         const relativeY = (event.clientY - rect.top) / rect.height;
-        const inHandArea = relativeY > 0.75; // bottom 25% of screen
+        const relativeX = (event.clientX - rect.left) / rect.width;
+        const inHandArea =
+          relativeY >= 0.85 &&
+          relativeY <= 0.95 &&
+          relativeX >= 0.42 &&
+          relativeX <= 0.58;
 
         // Only clear hover if not in hand area
         if (!inHandArea && lastHoveredSlug.current !== null) {

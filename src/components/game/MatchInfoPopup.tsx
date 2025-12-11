@@ -35,6 +35,8 @@ export default function MatchInfoPopup({
   const setInteractionGuides = useGameStore((s) => s.setInteractionGuides);
   const magicGuides = useGameStore((s) => s.magicGuides);
   const setMagicGuides = useGameStore((s) => s.setMagicGuides);
+  const actionNotifications = useGameStore((s) => s.actionNotifications);
+  const setActionNotifications = useGameStore((s) => s.setActionNotifications);
 
   if (!isOpen) return null;
 
@@ -147,6 +149,22 @@ export default function MatchInfoPopup({
                       aria-pressed={magicGuides}
                     >
                       {magicGuides ? "On" : "Off"}
+                    </button>
+                  </div>
+                  <div className="flex items-center justify-between pt-1">
+                    <span>Action Notifications</span>
+                    <button
+                      className={`rounded-full px-3 py-1 text-xs transition-colors ${
+                        actionNotifications
+                          ? "bg-amber-600/90 hover:bg-amber-500"
+                          : "bg-white/15 hover:bg-white/25"
+                      }`}
+                      onClick={() =>
+                        setActionNotifications(!actionNotifications)
+                      }
+                      aria-pressed={actionNotifications}
+                    >
+                      {actionNotifications ? "On" : "Off"}
                     </button>
                   </div>
                 </>

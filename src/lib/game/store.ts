@@ -132,6 +132,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         currentPlayer: 1,
         turn: 1,
         phase: "Setup",
+        hasDrawnThisTurn: false,
         lastServerTs: 0,
         lastLocalActionTs: 0,
         setupWinner: null,

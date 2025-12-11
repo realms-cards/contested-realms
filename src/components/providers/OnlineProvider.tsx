@@ -36,10 +36,11 @@ import { SocketTransport } from "@/lib/net/socketTransport";
 import type { StartMatchConfig } from "@/lib/net/transport";
 import { useMatchWebRTC } from "@/lib/rtc/useMatchWebRTC";
 
-// Helper to parse [p1:Name] and [p2:Name] color markup into styled spans
+// Helper to parse [p1:Name], [p2:Name], [card:Name], and [p1card:Name]/[p2card:Name] markup into styled spans
 function renderColoredText(text: string): React.ReactNode {
   const parts: React.ReactNode[] = [];
-  const regex = /\[p([12]):([^\]]+)\]/g;
+  // Match [p1:Name], [p2:Name], [card:Name], [p1card:Name], or [p2card:Name]
+  const regex = /\[(p[12]|card|p[12]card):([^\]]+)\]/g;
   let lastIndex = 0;
   let match;
   let key = 0;
@@ -49,18 +50,39 @@ function renderColoredText(text: string): React.ReactNode {
     if (match.index > lastIndex) {
       parts.push(text.slice(lastIndex, match.index));
     }
-    // Add the colored span
-    const playerNum = match[1] as "1" | "2";
+    const tag = match[1];
     const name = match[2];
-    const color = playerNum === "1" ? PLAYER_COLORS.p1 : PLAYER_COLORS.p2;
-    parts.push(
-      <span
-        key={key++}
-        style={{ color, fontFamily: "var(--font-fantaisie, inherit)" }}
-      >
-        {name}
-      </span>
-    );
+    if (tag === "card") {
+      // Card name in fantasy font (no color)
+      parts.push(
+        <span key={key++} className="font-fantaisie">
+          {name}
+        </span>
+      );
+    } else if (tag === "p1card" || tag === "p2card") {
+      // Card name with player color and fantasy font
+      const color = tag === "p1card" ? PLAYER_COLORS.p1 : PLAYER_COLORS.p2;
+      parts.push(
+        <span
+          key={key++}
+          style={{ color, fontFamily: "var(--font-fantaisie, inherit)" }}
+        >
+          {name}
+        </span>
+      );
+    } else {
+      // Player name with color (p1 or p2)
+      const playerNum = tag === "p1" ? "1" : "2";
+      const color = playerNum === "1" ? PLAYER_COLORS.p1 : PLAYER_COLORS.p2;
+      parts.push(
+        <span
+          key={key++}
+          style={{ color, fontFamily: "var(--font-fantaisie, inherit)" }}
+        >
+          {name}
+        </span>
+      );
+    }
     lastIndex = regex.lastIndex;
   }
 
@@ -140,26 +162,6 @@ export default function OnlineProvider({
   const [voicePlaybackEnabled, setVoicePlaybackEnabled] = useState(true);
   const toggleVoicePlayback = useCallback(() => {
     setVoicePlaybackEnabled((prev) => !prev);
-  }, []);
-
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail as
-        | { message?: string }
-        | undefined;
-      if (detail?.message) {
-        setAppToast(detail.message);
-        window.setTimeout(() => setAppToast(null), 3500);
-      }
-    };
-    if (typeof window !== "undefined") {
-      window.addEventListener("app:toast", handler as EventListener);
-    }
-    return () => {
-      if (typeof window !== "undefined") {
-        window.removeEventListener("app:toast", handler as EventListener);
-      }
-    };
   }, []);
   const [incomingVoiceRequest, setIncomingVoiceRequest] =
     useState<VoiceIncomingRequest | null>(null);
@@ -846,6 +848,92 @@ export default function OnlineProvider({
     matchRef.current = match;
   }, [match]);
 
+  // Toast handler - placed after refs are declared so they're accessible
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail as
+        | {
+            message?: string;
+            cellKey?: string;
+            seat?: string;
+            isActionToast?: boolean;
+          }
+        | undefined;
+      if (detail?.message) {
+        // Check if action notifications are disabled for action toasts
+        // Action toasts are those with seat or cellKey (play/draw/move actions)
+        const isActionToast =
+          detail.isActionToast || detail.seat || detail.cellKey;
+        if (isActionToast) {
+          try {
+            const stored = localStorage.getItem("sorcery:actionNotifications");
+            // Default to true if not set
+            const actionNotificationsEnabled =
+              stored === null ? true : stored === "1";
+            if (!actionNotificationsEnabled) return;
+          } catch {}
+        }
+
+        // Skip toast for the active player (only show to opponent)
+        const matchPlayers = matchRef.current?.players;
+        const myId = meRef.current?.id;
+
+        if (detail.seat && myId && matchPlayers) {
+          const mySeatIndex = matchPlayers.findIndex((p) => p.id === myId);
+          const myPlayerKey =
+            mySeatIndex === 0 ? "p1" : mySeatIndex === 1 ? "p2" : null;
+          if (myPlayerKey && detail.seat === myPlayerKey) {
+            // This is my own action, skip the toast
+            return;
+          }
+        }
+
+        // Resolve PLAYER placeholder to actual player name if seat is provided
+        let resolvedMessage = detail.message;
+        if (detail.seat && matchPlayers) {
+          const playerIndex = detail.seat === "p1" ? 0 : 1;
+          const playerName =
+            matchPlayers[playerIndex]?.displayName || detail.seat.toUpperCase();
+          resolvedMessage = resolvedMessage.replace(/PLAYER/g, playerName);
+        } else {
+          // Fallback to P1/P2 if no match context
+          resolvedMessage = resolvedMessage.replace(
+            /PLAYER/g,
+            detail.seat?.toUpperCase() || "Player"
+          );
+        }
+        setAppToast(resolvedMessage);
+        // Dispatch highlight event if cellKey is provided
+        if (detail.cellKey) {
+          window.dispatchEvent(
+            new CustomEvent("app:highlight-cell", {
+              detail: { cellKey: detail.cellKey },
+            })
+          );
+        }
+        window.setTimeout(() => {
+          setAppToast(null);
+          // Clear highlight when toast disappears
+          if (detail.cellKey) {
+            window.dispatchEvent(
+              new CustomEvent("app:highlight-cell", {
+                detail: { cellKey: null },
+              })
+            );
+          }
+        }, 3500);
+      }
+    };
+    if (typeof window !== "undefined") {
+      window.addEventListener("app:toast", handler as EventListener);
+    }
+    return () => {
+      if (typeof window !== "undefined") {
+        window.removeEventListener("app:toast", handler as EventListener);
+      }
+    };
+  }, []);
+
   useEffect(() => {
     // Only connect if the user is authenticated and has a display name (previous behavior)
     if (sessionStatus !== "authenticated" || !session?.user?.name) {
@@ -1529,7 +1617,7 @@ export default function OnlineProvider({
     requestMoreChatHistory: () => {
       if (!chatHasMore) return;
       try {
-        transport.requestChatHistory(chatOldestIndex, 10);
+        transport.requestChatHistory(chatOldestIndex, 25);
       } catch {}
     },
     lobbies,
@@ -1621,7 +1709,7 @@ export default function OnlineProvider({
         </div>
       )}
       {appToast && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[3000] bg-black/70 text-white text-sm px-3 py-2 rounded shadow ring-1 ring-white/20">
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[3000] bg-black/90 text-white text-xl px-6 py-3 rounded-lg shadow-lg ring-2 ring-white/30 font-medium animate-fade-in">
           {renderColoredText(appToast)}
         </div>
       )}

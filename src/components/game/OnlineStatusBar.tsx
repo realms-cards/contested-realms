@@ -17,6 +17,8 @@ interface OnlineStatusBarProps {
   readOnly?: boolean;
   /** Number of spectators to display (optional) */
   spectatorCount?: number | null;
+  /** Player key for "Playing as" indicator */
+  myPlayerKey?: "p1" | "p2" | null;
 }
 
 export default function OnlineStatusBar({
@@ -27,6 +29,7 @@ export default function OnlineStatusBar({
   inDraftMode = false,
   readOnly = false,
   spectatorCount = null,
+  myPlayerKey = null,
 }: OnlineStatusBarProps) {
   const currentPlayer = useGameStore((s) => s.currentPlayer);
   const endTurn = useGameStore((s) => s.endTurn);
@@ -62,6 +65,26 @@ export default function OnlineStatusBar({
       onContextMenu={(e) => e.preventDefault()}
     >
       <div className="flex items-center gap-3 rounded-full bg-black/60 backdrop-blur px-4 py-1.5 text-sm text-white shadow-lg ring-1 ring-white/10">
+        {/* Playing as indicator */}
+        {myPlayerKey && !readOnly && (
+          <>
+            <span
+              className={`font-medium font-fantaisie px-2 py-0.5 rounded text-white ${
+                myPlayerKey === "p1"
+                  ? colorBlindEnabled
+                    ? "bg-sky-600"
+                    : "bg-blue-600"
+                  : colorBlindEnabled
+                  ? "bg-amber-600"
+                  : "bg-red-600"
+              }`}
+            >
+              {myPlayerKey === "p1" ? "P1" : "P2"}: {playerNames[myPlayerKey]}
+            </span>
+            <div className="w-px h-4 bg-white/20" />
+          </>
+        )}
+
         {/* Match Info Button */}
         <button
           className="rounded-full bg-white/15 hover:bg-white/25 text-white px-3 py-1 flex items-center gap-1.5"

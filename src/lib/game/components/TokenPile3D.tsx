@@ -16,11 +16,15 @@ import {
 
 export interface TokenPile3DProps {
   owner: PlayerKey; // p1 is TOP, p2 is BOTTOM
+  noRaycast?: boolean; // Disable raycast for spectator mode
 }
 
 // A simple face-up token "pile" that lives on the player's left side, lower third of the playmat.
 // Right-clicking opens a search dialog with all known tokens; selecting one adds it to the player's hand.
-export default function TokenPile3D({ owner }: TokenPile3DProps) {
+export default function TokenPile3D({
+  owner,
+  noRaycast = false,
+}: TokenPile3DProps) {
   const boardSize = useGameStore((s) => s.board.size);
   const openContextMenu = useGameStore((s) => s.openContextMenu);
   const setDragFromPile = useGameStore((s) => s.setDragFromPile);
@@ -82,20 +86,28 @@ export default function TokenPile3D({ owner }: TokenPile3DProps) {
     <group position={[x, 0.002, z]}>
       {/* Base pile */}
       <group
-        onContextMenu={(e: ThreeEvent<PointerEvent>) => {
-          e.nativeEvent.preventDefault();
-          e.stopPropagation();
-          openContextMenu(
-            { kind: "tokenpile", who: owner },
-            { x: e.clientX, y: e.clientY }
-          );
-        }}
-        onClick={(e: ThreeEvent<MouseEvent>) => {
-          e.stopPropagation();
-          setExpanded((v) => !v);
-          bumpInteractClock();
-        }}
-        onPointerMove={() => bumpInteractClock()}
+        onContextMenu={
+          noRaycast
+            ? undefined
+            : (e: ThreeEvent<PointerEvent>) => {
+                e.nativeEvent.preventDefault();
+                e.stopPropagation();
+                openContextMenu(
+                  { kind: "tokenpile", who: owner },
+                  { x: e.clientX, y: e.clientY }
+                );
+              }
+        }
+        onClick={
+          noRaycast
+            ? undefined
+            : (e: ThreeEvent<MouseEvent>) => {
+                e.stopPropagation();
+                setExpanded((v) => !v);
+                bumpInteractClock();
+              }
+        }
+        onPointerMove={noRaycast ? undefined : () => bumpInteractClock()}
       >
         {/* Small stacked visuals with Disabled on top */}
         {(() => {
