@@ -14,6 +14,7 @@ import GameToolbox from "@/components/game/GameToolbox";
 import HarbingerPortalScreen from "@/components/game/HarbingerPortalScreen";
 import { InteractionConsentDialog } from "@/components/game/InteractionConsentDialog";
 import LifeCounters from "@/components/game/LifeCounters";
+import PlayerResourcePanels from "@/components/game/PlayerResourcePanel";
 import OfflineMulliganScreen from "@/components/game/OfflineMulliganScreen";
 import PileSearchDialog from "@/components/game/PileSearchDialog";
 import PlacementDialog from "@/components/game/PlacementDialog";
@@ -695,6 +696,15 @@ export default function PlayPage() {
       <StatusBar dragFromHand={dragFromHand} />
 
       <LifeCounters dragFromHand={dragFromHand} />
+
+      {/* Mana and Thresholds panel on the right */}
+      <PlayerResourcePanels
+        myPlayerKey="p1"
+        playerNames={{ p1: "Player 1", p2: "Player 2" }}
+        showYouLabels={false}
+        readOnly={false}
+        dragFromHand={dragFromHand}
+      />
 
       {/* Event Console */}
       <div

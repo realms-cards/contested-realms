@@ -71,6 +71,8 @@ export const createPermanentMovementSlice: StateCreator<
       const { per, movedName, removed, added, updated, newIndex } =
         movePermanentCore(state.permanents, fromKey, sel.index, toKey, null);
       const cellNo = getCellNumber(x, y, state.board.size.w);
+      const ownerKey = seatFromOwner(exists.owner);
+      const ownerPlayerNum = ownerKey === "p1" ? "1" : "2";
       let finalPer = per;
       const finalUpdated = updated;
       let finalAdded = added;
@@ -92,12 +94,16 @@ export const createPermanentMovementSlice: StateCreator<
               ensurePermanentInstanceId(item) === movedId ? tappedUnit : item
             );
           }
-          get().log(`Moved '${movedName}' to #${cellNo} (tapped)`);
+          get().log(
+            `Moved [p${ownerPlayerNum}card:${movedName}] to #${cellNo} (tapped)`
+          );
         } else {
-          get().log(`Moved '${movedName}' to #${cellNo}`);
+          get().log(
+            `Moved [p${ownerPlayerNum}card:${movedName}] to #${cellNo}`
+          );
         }
       } else {
-        get().log(`Moved '${movedName}' to #${cellNo}`);
+        get().log(`Moved [p${ownerPlayerNum}card:${movedName}] to #${cellNo}`);
       }
       const tr = get().transport;
       if (tr) {
@@ -153,6 +159,8 @@ export const createPermanentMovementSlice: StateCreator<
       const { per, movedName, removed, added, updated, newIndex } =
         movePermanentCore(state.permanents, fromKey, sel.index, toKey, offset);
       const cellNo = getCellNumber(x, y, state.board.size.w);
+      const ownerKey = seatFromOwner(exists.owner);
+      const ownerPlayerNum = ownerKey === "p1" ? "1" : "2";
       let finalPer = per;
       const finalUpdated = updated;
       let finalAdded = added;
@@ -174,12 +182,16 @@ export const createPermanentMovementSlice: StateCreator<
               ensurePermanentInstanceId(item) === movedId ? tappedUnit : item
             );
           }
-          get().log(`Moved '${movedName}' to #${cellNo} (tapped)`);
+          get().log(
+            `Moved [p${ownerPlayerNum}card:${movedName}] to #${cellNo} (tapped)`
+          );
         } else {
-          get().log(`Moved '${movedName}' to #${cellNo}`);
+          get().log(
+            `Moved [p${ownerPlayerNum}card:${movedName}] to #${cellNo}`
+          );
         }
       } else {
-        get().log(`Moved '${movedName}' to #${cellNo}`);
+        get().log(`Moved [p${ownerPlayerNum}card:${movedName}] to #${cellNo}`);
       }
       const tr = get().transport;
       if (tr) {
@@ -336,10 +348,10 @@ export const createPermanentMovementSlice: StateCreator<
 
         const attachPlayerNum = attachOwner === "p1" ? "1" : "2";
         get().log(
-          `Attachment '${
+          `Attachment [p${attachPlayerNum}card:${
             attached.card.name
-          }' sent to [p${attachPlayerNum}:PLAYER] ${
-            attachedIsToken ? "banished" : "graveyard"
+          }] sent to [p${attachPlayerNum}:PLAYER] ${
+            attachedIsToken ? "banished" : "cemetery"
           }`
         );
       }
@@ -350,14 +362,14 @@ export const createPermanentMovementSlice: StateCreator<
         finalTarget === "hand"
           ? "hand"
           : finalTarget === "graveyard"
-          ? "graveyard"
+          ? "cemetery"
           : finalTarget === "banished"
           ? "banished"
           : finalTarget === "spellbook"
           ? "Spellbook"
           : "Atlas";
       get().log(
-        `[p${playerNum}:PLAYER] moved '${item.card.name}' from #${cellNo} to ${zoneLabel}`
+        `[p${playerNum}:PLAYER] moved [p${playerNum}card:${item.card.name}] from #${cellNo} to ${zoneLabel}`
       );
       // Broadcast toast to both players
       const toastMessage = `[p${playerNum}:PLAYER] moved [p${playerNum}card:${item.card.name}] to ${zoneLabel}`;
@@ -484,8 +496,9 @@ export const createPermanentMovementSlice: StateCreator<
       }
       const { x, y } = parseCellKey(at);
       const cellNo = getCellNumber(x, y, state.board.size.w);
+      const newOwnerNum = newOwner === 1 ? "1" : "2";
       get().log(
-        `Control of '${item.card.name}' at #${cellNo} transferred to P${newOwner}`
+        `Control of [p${newOwnerNum}card:${item.card.name}] at #${cellNo} transferred to P${newOwner}`
       );
       const current = arr[index];
       const deltaPatch =

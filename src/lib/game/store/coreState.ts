@@ -76,28 +76,8 @@ export const createCoreSlice: StateCreator<
     set({ hasDrawnThisTurn: drawn });
   },
   setPhase: (phase) =>
-    set((state) => {
-      if (phase === "Start") {
-        try {
-          const turnNow = state.turn;
-          const cpNow = state.currentPlayer;
-          const hasForTurn =
-            Array.isArray(state.snapshots) &&
-            state.snapshots.some(
-              (ss) => ss.kind === "auto" && ss.turn === turnNow
-            );
-          if (!hasForTurn) {
-            setTimeout(() => {
-              try {
-                get().createSnapshot(
-                  `Turn ${turnNow} start (P${cpNow})`,
-                  "auto"
-                );
-              } catch {}
-            }, 0);
-          }
-        } catch {}
-      }
+    set(() => {
+      // Snapshot creation is handled by GameToolbox.tsx useEffect
       return { phase } as Partial<GameState> as GameState;
     }),
 
@@ -318,6 +298,8 @@ export const createCoreSlice: StateCreator<
     if (passTurn) {
       const nextPlayer = state.currentPlayer === 1 ? 2 : 1;
       const nextTurn = state.turn + 1;
+      // Log before updating state so it uses the current turn number
+      get().log(`Turn passes to P${nextPlayer}`);
       const permanents: Permanents = { ...state.permanents };
       const updates: PermanentDeltaUpdate[] = [];
       for (const cellKey of Object.keys(permanents)) {
@@ -377,8 +359,7 @@ export const createCoreSlice: StateCreator<
       try {
         get().clearAllDamageForSeat(nextKey);
       } catch {}
-      get().log(`Turn passes to P${nextPlayer}`);
-      // Snapshot creation is handled by applyServerPatch in networkState.ts
+      // Snapshot creation is handled by GameToolbox.tsx useEffect
     } else {
       const patch: ServerPatchT = { phase: nextPhase };
       get().trySendPatch(patch);
@@ -394,9 +375,11 @@ export const createCoreSlice: StateCreator<
     }
     get().pushHistory();
     const cur = state.currentPlayer;
-    get().log(`P${cur} ends the turn`);
     const nextPlayer = cur === 1 ? 2 : 1;
     const nextTurn = state.turn + 1;
+    // Log both messages before updating state so they use the current turn number
+    get().log(`P${cur} ends the turn`);
+    get().log(`Turn passes to P${nextPlayer}`);
 
     const permanents: Permanents = { ...state.permanents };
     const updates: PermanentDeltaUpdate[] = [];
@@ -464,7 +447,6 @@ export const createCoreSlice: StateCreator<
     try {
       get().clearAllDamageForSeat(nextKey);
     } catch {}
-    // Snapshot creation is handled by applyServerPatch in networkState.ts
-    get().log(`Turn passes to P${nextPlayer}`);
+    // Snapshot creation is handled by GameToolbox.tsx useEffect
   },
 });

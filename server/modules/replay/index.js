@@ -133,13 +133,17 @@ async function listRecordings(prisma, opts = {}) {
   });
 
   const combined = [...finishedSummaries, ...fallbackSummaries];
-  combined.sort((a, b) => {
+
+  // Filter out recordings with no actions (no replay data to show)
+  const withActions = combined.filter((r) => r.actionCount > 0);
+
+  withActions.sort((a, b) => {
     const at = a.endTime || a.startTime || 0;
     const bt = b.endTime || b.startTime || 0;
     return bt - at;
   });
 
-  return combined;
+  return withActions;
 }
 
 /**

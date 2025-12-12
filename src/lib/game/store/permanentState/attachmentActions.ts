@@ -41,7 +41,10 @@ export const createAttachmentActionsSlice: StateCreator<
       });
       list[index] = updatedToken;
       per[at] = list;
-      get().log(`Attached token '${token.card.name}' to permanent at ${at}`);
+      const ownerNum = token.owner === 1 ? "1" : "2";
+      get().log(
+        `Attached token [p${ownerNum}card:${token.card.name}] to permanent at ${at}`
+      );
       const deltaPatch = createPermanentDeltaPatch([
         {
           at,

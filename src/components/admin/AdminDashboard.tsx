@@ -14,6 +14,7 @@ import type {
   AdminJobStatus,
   AdminSessionInfo,
   UsageSnapshot,
+  RecentMatchInfo,
 } from "@/lib/admin/types";
 
 type ActionDescriptor = {
@@ -92,6 +93,11 @@ export default function AdminDashboard({
   );
   const [cleaningUpMatch, setCleaningUpMatch] = useState<string | null>(null);
   const [copiedMatchId, setCopiedMatchId] = useState<string | null>(null);
+  const [recentMatches, setRecentMatches] = useState<RecentMatchInfo[]>([]);
+  const [recentMatchesLoading, setRecentMatchesLoading] = useState(false);
+  const [recentMatchesError, setRecentMatchesError] = useState<string | null>(
+    null
+  );
 
   const refreshHealthHistory = useCallback(async () => {
     setLoadingHealthHistory(true);
@@ -244,6 +250,34 @@ export default function AdminDashboard({
     }
   }, []);
 
+  const refreshRecentMatches = useCallback(async () => {
+    setRecentMatchesLoading(true);
+    setRecentMatchesError(null);
+    try {
+      const response = await fetch("/api/admin/matches/recent?limit=50", {
+        method: "GET",
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as {
+          error?: string;
+        } | null;
+        throw new Error(body?.error || `HTTP ${response.status}`);
+      }
+      const payload = (await response.json()) as {
+        matches: RecentMatchInfo[];
+        total: number;
+      };
+      setRecentMatches(payload.matches ?? []);
+    } catch (error) {
+      setRecentMatchesError(
+        error instanceof Error ? error.message : "Failed to load recent matches"
+      );
+    } finally {
+      setRecentMatchesLoading(false);
+    }
+  }, []);
+
   const cleanupMatch = useCallback(
     async (matchId: string) => {
       if (
@@ -366,6 +400,7 @@ export default function AdminDashboard({
         refreshSessions(),
         refreshUsage(),
         refreshActiveMatches(),
+        refreshRecentMatches(),
       ]);
     } catch (error) {
       setStatusError(
@@ -379,6 +414,7 @@ export default function AdminDashboard({
     refreshErrors,
     refreshHealthHistory,
     refreshJobs,
+    refreshRecentMatches,
     refreshSessions,
     refreshUsage,
   ]);
@@ -390,11 +426,13 @@ export default function AdminDashboard({
     void refreshSessions();
     void refreshUsage();
     void refreshActiveMatches();
+    void refreshRecentMatches();
   }, [
     refreshActiveMatches,
     refreshErrors,
     refreshHealthHistory,
     refreshJobs,
+    refreshRecentMatches,
     refreshSessions,
     refreshUsage,
   ]);
@@ -667,6 +705,120 @@ export default function AdminDashboard({
                       </tr>
                     );
                   })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        <section className="flex flex-col gap-3">
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-white">
+                Recent Matches
+              </h2>
+              <p className="text-xs text-slate-400">
+                Recently completed matches from the database. Click to view
+                replay.
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                void refreshRecentMatches();
+              }}
+              className="inline-flex items-center justify-center rounded border border-slate-600 px-3 py-1 text-xs font-medium text-slate-200 hover:bg-slate-800"
+              disabled={recentMatchesLoading}
+            >
+              {recentMatchesLoading ? "Refreshing…" : "Refresh"}
+            </button>
+          </div>
+          {recentMatchesError && (
+            <div className="rounded border border-rose-500/50 bg-rose-500/10 px-3 py-2 text-xs text-rose-100">
+              {recentMatchesError}
+            </div>
+          )}
+          {recentMatchesLoading && recentMatches.length === 0 && (
+            <div className="rounded border border-slate-800 bg-slate-900/50 px-3 py-4 text-center text-xs text-slate-300">
+              Loading recent matches…
+            </div>
+          )}
+          {!recentMatchesLoading && recentMatches.length === 0 && (
+            <div className="rounded border border-slate-800 bg-slate-900/50 px-3 py-2 text-xs text-slate-300">
+              No completed matches found.
+            </div>
+          )}
+          {recentMatches.length > 0 && (
+            <div className="overflow-auto rounded border border-slate-800 bg-slate-900/40">
+              <table className="min-w-full text-left text-xs text-slate-200">
+                <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400">
+                  <tr>
+                    <th className="px-3 py-2">Match ID</th>
+                    <th className="px-3 py-2">Players</th>
+                    <th className="px-3 py-2">Type</th>
+                    <th className="px-3 py-2">Winner</th>
+                    <th className="px-3 py-2">Completed</th>
+                    <th className="px-3 py-2">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentMatches.map((match) => (
+                    <tr
+                      key={match.matchId}
+                      className="border-t border-slate-800/60 hover:bg-slate-800/30"
+                    >
+                      <td className="px-3 py-2">
+                        <button
+                          onClick={() => copyMatchId(match.matchId)}
+                          className="font-mono text-[10px] hover:text-blue-300 cursor-pointer transition-colors"
+                          title="Click to copy full match ID"
+                        >
+                          {copiedMatchId === match.matchId ? (
+                            <span className="text-emerald-400">Copied!</span>
+                          ) : (
+                            <>{match.matchId.slice(0, 8)}…</>
+                          )}
+                        </button>
+                      </td>
+                      <td className="px-3 py-2">
+                        <div
+                          className="max-w-xs truncate"
+                          title={match.playerNames.join(" vs ")}
+                        >
+                          {match.playerNames.join(" vs ")}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2">
+                        <span className="rounded bg-slate-700/50 px-1.5 py-0.5 text-[10px] uppercase">
+                          {match.matchType}
+                        </span>
+                        {match.tournamentId && (
+                          <span className="ml-1 rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] text-amber-200">
+                            Tournament
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2">
+                        {match.winnerName ? (
+                          <span className="text-emerald-300">
+                            {match.winnerName}
+                          </span>
+                        ) : (
+                          <span className="text-slate-500">Draw/Unknown</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-[10px] text-slate-400">
+                        {formatTimestamp(match.completedAt)}
+                      </td>
+                      <td className="px-3 py-2">
+                        <Link
+                          href={`/replay/${match.matchId}`}
+                          className="rounded bg-blue-600/20 px-2 py-1 text-[10px] text-blue-200 hover:bg-blue-600/30"
+                        >
+                          View Replay
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>

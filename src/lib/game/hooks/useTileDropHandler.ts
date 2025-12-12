@@ -368,7 +368,12 @@ export function useTileDropHandler({
           const isAttachable =
             (isToken && isAttachableToken(tokenName)) ||
             isCarryableArtifact(draggedCard);
-          if (isAttachable && toItems.length > 0) {
+          // Check if there's an avatar on this tile
+          const hasAvatarOnTile = Object.values(avatars).some((avatar) => {
+            const posArr = avatar.pos;
+            return posArr && posArr[0] === tileX && posArr[1] === tileY;
+          });
+          if (isAttachable && (toItems.length > 0 || hasAvatarOnTile)) {
             const spacing = STACK_SPACING;
             const marginZ = STACK_MARGIN_Z;
             let closestPermanent: {
@@ -377,6 +382,22 @@ export function useTileDropHandler({
               card: CardRef;
             } | null = null;
             let closestDistance = Infinity;
+            // Check for avatar on this tile first - always a valid target
+            const avatarEntry = Object.entries(avatars).find(([, avatar]) => {
+              const posArr = avatar.pos;
+              return posArr && posArr[0] === tileX && posArr[1] === tileY;
+            });
+
+            // Build list of all potential targets (minions + avatar)
+            const potentialTargets: Array<{
+              at: string;
+              index: number;
+              card: CardRef;
+              x: number;
+              z: number;
+            }> = [];
+
+            // Add minions as potential targets
             toItems.forEach((perm, realIdx) => {
               const itemType = (perm.card.type || "").toLowerCase();
               if (
@@ -395,37 +416,48 @@ export function useTileDropHandler({
               const xPos = startX + realIdx * spacing;
               const permX = pos[0] + xPos + (perm.offset?.[0] ?? 0);
               const permZ = pos[2] + zBase + (perm.offset?.[1] ?? 0);
+              potentialTargets.push({
+                at: dropKey,
+                index: realIdx,
+                card: perm.card,
+                x: permX,
+                z: permZ,
+              });
+            });
+
+            // Add avatar as a potential target if present on tile
+            if (avatarEntry) {
+              const [avatarKey, avatar] = avatarEntry;
+              const avatarOffset = avatar.offset || [0, 0];
+              const avatarX = pos[0] + avatarOffset[0];
+              const avatarZ = pos[2] + avatarOffset[1];
+              potentialTargets.push({
+                at: dropKey,
+                index: -1,
+                card: avatar.card || {
+                  cardId: 0,
+                  variantId: null,
+                  name: `${avatarKey.toUpperCase()} Avatar`,
+                  type: "Avatar",
+                  slug: null,
+                },
+                x: avatarX,
+                z: avatarZ,
+              });
+            }
+
+            // Find closest target from all potential targets
+            for (const target of potentialTargets) {
               const distance = Math.sqrt(
-                Math.pow(wx - permX, 2) + Math.pow(wz - permZ, 2)
+                Math.pow(wx - target.x, 2) + Math.pow(wz - target.z, 2)
               );
               if (distance < closestDistance) {
                 closestDistance = distance;
                 closestPermanent = {
-                  at: dropKey,
-                  index: realIdx,
-                  card: perm.card,
+                  at: target.at,
+                  index: target.index,
+                  card: target.card,
                 };
-              }
-            });
-            if (!closestPermanent || closestDistance >= TILE_SIZE * 0.5) {
-              const avatarEntry = Object.entries(avatars).find(([, avatar]) => {
-                const posArr = avatar.pos;
-                return posArr && posArr[0] === tileX && posArr[1] === tileY;
-              });
-              if (avatarEntry) {
-                const [avatarKey, avatar] = avatarEntry;
-                closestPermanent = {
-                  at: dropKey,
-                  index: -1,
-                  card: avatar.card || {
-                    cardId: 0,
-                    variantId: null,
-                    name: `${avatarKey.toUpperCase()} Avatar`,
-                    type: "Avatar",
-                    slug: null,
-                  },
-                };
-                closestDistance = 0;
               }
             }
             if (closestPermanent && closestDistance < TILE_SIZE * 0.5) {

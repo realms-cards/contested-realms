@@ -148,7 +148,7 @@ export const createPlayActionsSlice: StateCreator<
         };
         const logPlayerNum = who === "p1" ? "1" : "2";
         get().log(
-          `[p${logPlayerNum}:PLAYER] plays site '${card.name}' at #${cellNo}`
+          `[p${logPlayerNum}:PLAYER] plays site [p${logPlayerNum}card:${card.name}] at #${cellNo}`
         );
         // Broadcast toast to both players with player color and cell for highlighting
         const playerNum = who === "p1" ? "1" : "2";
@@ -224,7 +224,9 @@ export const createPlayActionsSlice: StateCreator<
       });
       per[key] = arr;
       const logPlayerNum = who === "p1" ? "1" : "2";
-      get().log(`[p${logPlayerNum}:PLAYER] plays '${card.name}' at #${cellNo}`);
+      get().log(
+        `[p${logPlayerNum}:PLAYER] plays [p${logPlayerNum}card:${card.name}] at #${cellNo}`
+      );
       // Broadcast toast to both players with player color and cell for highlighting
       const playerNum = who === "p1" ? "1" : "2";
       const toastMessage = `[p${playerNum}:PLAYER] played [p${playerNum}card:${card.name}] at #${cellNo}`;
@@ -252,9 +254,18 @@ export const createPlayActionsSlice: StateCreator<
       }
       // Subtract mana cost from available mana when playing non-site cards from hand
       const manaCost = getManaCost(card, state.metaByCardId);
-      if (manaCost > 0 && !type.includes("token")) {
-        get().addMana(who, -manaCost);
-      }
+      const currentMana = Number(state.players[who]?.mana || 0);
+      const nextMana =
+        manaCost > 0 && !type.includes("token")
+          ? currentMana - manaCost
+          : currentMana;
+      const playersNext =
+        nextMana !== currentMana
+          ? {
+              ...state.players,
+              [who]: { ...state.players[who], mana: nextMana },
+            }
+          : null;
       const zonesNext = {
         ...state.zones,
         [who]: { ...state.zones[who], hand },
@@ -275,6 +286,7 @@ export const createPlayActionsSlice: StateCreator<
       else if (fallbackPatch?.permanents)
         combined.permanents = fallbackPatch.permanents;
       if (zonePatch?.zones) combined.zones = zonePatch.zones;
+      if (playersNext) combined.players = playersNext;
       if (Object.keys(combined).length > 0) get().trySendPatch(combined);
       // If this is a Magic card, begin the magic casting flow after placing it
       try {
@@ -300,6 +312,7 @@ export const createPlayActionsSlice: StateCreator<
         permanents: per,
         selectedCard: null,
         selectedPermanent: null,
+        ...(playersNext ? { players: playersNext } : {}),
         ...(nextInteractionLog ? { interactionLog: nextInteractionLog } : {}),
       } as Partial<GameState> as GameState;
     }),
@@ -483,12 +496,12 @@ export const createPlayActionsSlice: StateCreator<
           } as GameState["avatars"];
           const logPlayerNum = who === "p1" ? "1" : "2";
           get().log(
-            `[p${logPlayerNum}:PLAYER] taps Avatar to play site '${card.name}' from ${from} at #${cellNo}`
+            `[p${logPlayerNum}:PLAYER] taps Avatar to play site [p${logPlayerNum}card:${card.name}] from ${from} at #${cellNo}`
           );
         } else {
           const logPlayerNum = who === "p1" ? "1" : "2";
           get().log(
-            `[p${logPlayerNum}:PLAYER] plays site '${card.name}' from ${from} at #${cellNo}`
+            `[p${logPlayerNum}:PLAYER] plays site [p${logPlayerNum}card:${card.name}] from ${from} at #${cellNo}`
           );
         }
 
@@ -582,7 +595,7 @@ export const createPlayActionsSlice: StateCreator<
       per[key] = arr;
       const logPlayerNum2 = who === "p1" ? "1" : "2";
       get().log(
-        `[p${logPlayerNum2}:PLAYER] plays '${card.name}' from ${from} at #${cellNo}`
+        `[p${logPlayerNum2}:PLAYER] plays [p${logPlayerNum2}card:${card.name}] from ${from} at #${cellNo}`
       );
       // Broadcast toast to both players with player color and cell for highlighting (skip tokens)
       if (!type.includes("token")) {
@@ -748,12 +761,12 @@ export const createPlayActionsSlice: StateCreator<
         } as GameState["avatars"];
         const logPlayerNum = who === "p1" ? "1" : "2";
         get().log(
-          `[p${logPlayerNum}:PLAYER] taps Avatar to draw '${card.name}' from ${from}`
+          `[p${logPlayerNum}:PLAYER] taps Avatar to draw [p${logPlayerNum}card:${card.name}] from ${from}`
         );
       } else {
         const logPlayerNum = who === "p1" ? "1" : "2";
         get().log(
-          `[p${logPlayerNum}:PLAYER] draws '${card.name}' from ${from} to hand`
+          `[p${logPlayerNum}:PLAYER] draws [p${logPlayerNum}card:${card.name}] from ${from} to hand`
         );
       }
 

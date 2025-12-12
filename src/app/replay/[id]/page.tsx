@@ -8,6 +8,7 @@ import CardPreview from "@/components/game/CardPreview";
 import { ClientCanvas } from "@/components/game/ClientCanvas";
 import OnlineConsole from "@/components/game/OnlineConsole";
 import OnlineLifeCounters from "@/components/game/OnlineLifeCounters";
+import PlayerResourcePanels from "@/components/game/PlayerResourcePanel";
 import {
   DynamicBoard as Board,
   DynamicHand3D as Hand3D,
@@ -360,6 +361,17 @@ export default function ReplayViewerPage() {
           p2: recording.playerNames[1] || "Player 2",
         }}
         readOnly={true}
+      />
+
+      {/* Mana and Thresholds panel on the right */}
+      <PlayerResourcePanels
+        myPlayerKey={null}
+        playerNames={{
+          p1: recording.playerNames[0] || "Player 1",
+          p2: recording.playerNames[1] || "Player 2",
+        }}
+        readOnly={true}
+        dragFromHand={false}
       />
 
       {/* Replay Controls Overlay */}

@@ -25,6 +25,7 @@ import OnlineD20Screen from "@/components/game/OnlineD20Screen";
 import OnlineDeckSelector from "@/components/game/OnlineDeckSelector";
 import OnlineDraftDeckLoader from "@/components/game/OnlineDraftDeckLoader";
 import OnlineLifeCounters from "@/components/game/OnlineLifeCounters";
+import PlayerResourcePanels from "@/components/game/PlayerResourcePanel";
 import OnlineMulliganScreen from "@/components/game/OnlineMulliganScreen";
 import OnlineSealedDeckLoader from "@/components/game/OnlineSealedDeckLoader";
 import OnlineStatusBar from "@/components/game/OnlineStatusBar";
@@ -2377,6 +2378,15 @@ export default function OnlineMatchPage() {
             spectatorMode={isSpectatorView}
           />
 
+          {/* Mana and Thresholds panel on the right */}
+          <PlayerResourcePanels
+            myPlayerKey={viewPlayerKey}
+            playerNames={playerNames}
+            showYouLabels={!isSpectatorView}
+            readOnly={isSpectatorView}
+            dragFromHand={dragFromHand}
+          />
+
           {/* Online Console with Events and Chat tabs */}
           <OnlineConsole
             dragFromHand={dragFromHand}
@@ -2389,6 +2399,7 @@ export default function OnlineMatchPage() {
             connected={connected}
             myPlayerId={myPlayerId}
             hideChat={isSpectatorView}
+            playerNames={playerNames}
           />
 
           {/* Enhanced Hover Preview Overlay - uses new CardPreview component */}
