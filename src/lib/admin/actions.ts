@@ -8,7 +8,12 @@ import type { AdminActionResult } from "./types";
 async function runNodeScript(
   relativePath: string,
   args: string[] = []
-): Promise<{ exitCode: number; stdout: string; stderr: string; durationMs: number }> {
+): Promise<{
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+  durationMs: number;
+}> {
   const scriptPath = path.resolve(process.cwd(), relativePath);
   const start = performance.now();
 
@@ -105,16 +110,21 @@ export async function clearReplayRecordings(): Promise<AdminActionResult> {
   const summary = await prisma.$transaction(async (tx) => {
     const actionsDeleted = await tx.onlineMatchAction.deleteMany({});
     const sessionsDeleted = await tx.onlineMatchSession.deleteMany({});
+    // Also delete non-tournament MatchResult records since listRecordings queries them
+    const matchResultsDeleted = await tx.matchResult.deleteMany({
+      where: { tournamentId: null },
+    });
     return {
       actions: actionsDeleted.count,
       sessions: sessionsDeleted.count,
+      matchResults: matchResultsDeleted.count,
     };
   });
 
   return {
     action: "clearReplayRecordings",
     status: "ok",
-    message: `Removed ${summary.sessions} replay sessions and ${summary.actions} actions.`,
+    message: `Removed ${summary.sessions} replay sessions, ${summary.actions} actions, and ${summary.matchResults} match results.`,
     details: summary,
   };
 }
@@ -245,7 +255,7 @@ export const ADMIN_ACTIONS = [
     id: "clearReplayRecordings",
     label: "Clear replay recordings",
     description:
-      "Delete captured online match sessions and action logs (keeps match results).",
+      "Delete captured online match sessions, action logs, and non-tournament match results.",
     dangerous: true,
   },
   {
@@ -307,10 +317,9 @@ export async function executeAdminAction(
       return runSeedPreconDecks();
     case "runDatabaseSeed":
       return runDatabaseSeed();
-    default:
-      {
-        const neverValue: never = actionId;
-        throw new Error(`Unsupported admin action: ${neverValue as string}`);
-      }
+    default: {
+      const neverValue: never = actionId;
+      throw new Error(`Unsupported admin action: ${neverValue as string}`);
+    }
   }
 }

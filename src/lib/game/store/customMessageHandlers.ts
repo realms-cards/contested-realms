@@ -441,9 +441,8 @@ export function handleCustomMessage(
     const seat = ((msg as { seat?: unknown }).seat ||
       (msg as { playerKey?: unknown }).playerKey) as string | undefined;
     if (typeof text === "string" && text.trim().length > 0) {
-      try {
-        get().log(text);
-      } catch {}
+      // Don't log toast messages as events - the original action already logs the event.
+      // Toast is just for visual notification to the opponent.
       try {
         if (typeof window !== "undefined") {
           window.dispatchEvent(

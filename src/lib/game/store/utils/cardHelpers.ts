@@ -1,7 +1,9 @@
 import type { CardRef, PlayerKey, Thresholds } from "../types";
 import { newZoneCardInstanceId } from "./idHelpers";
 
-export function ensureCardInstanceId(card: CardRef | null | undefined): CardRef | null {
+export function ensureCardInstanceId(
+  card: CardRef | null | undefined
+): CardRef | null {
   if (!card) return null;
   if (card.instanceId && card.instanceId.length > 0) {
     return card;
@@ -37,9 +39,7 @@ export function normalizeCardRefEntry(candidate: unknown): CardRef | null {
   let variantId: number | null = null;
   if (src.variantId !== undefined && src.variantId !== null) {
     const candidateVariant =
-      typeof src.variantId === "number"
-        ? src.variantId
-        : Number(src.variantId);
+      typeof src.variantId === "number" ? src.variantId : Number(src.variantId);
     variantId = Number.isFinite(candidateVariant) ? candidateVariant : null;
   }
 
@@ -61,23 +61,29 @@ export function normalizeCardRefEntry(candidate: unknown): CardRef | null {
       : "";
 
   const type =
-    typeof src.type === "string"
-      ? src.type
-      : src.type === null
-      ? null
-      : null;
+    typeof src.type === "string" ? src.type : src.type === null ? null : null;
 
   const slug =
-    typeof src.slug === "string"
-      ? src.slug
-      : src.slug === null
-      ? null
-      : null;
+    typeof src.slug === "string" ? src.slug : src.slug === null ? null : null;
 
   const owner =
-    src.owner === "p1" || src.owner === "p2"
-      ? (src.owner as PlayerKey)
-      : null;
+    src.owner === "p1" || src.owner === "p2" ? (src.owner as PlayerKey) : null;
+
+  // Preserve cost if present
+  const cost =
+    typeof src.cost === "number"
+      ? src.cost
+      : src.cost === null
+      ? null
+      : undefined;
+
+  // Preserve subTypes if present
+  const subTypes =
+    typeof src.subTypes === "string"
+      ? src.subTypes
+      : src.subTypes === null
+      ? null
+      : undefined;
 
   return {
     cardId,
@@ -88,6 +94,8 @@ export function normalizeCardRefEntry(candidate: unknown): CardRef | null {
     thresholds,
     owner,
     instanceId,
+    ...(cost !== undefined && { cost }),
+    ...(subTypes !== undefined && { subTypes }),
   };
 }
 

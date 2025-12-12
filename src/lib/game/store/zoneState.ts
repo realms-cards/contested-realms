@@ -714,7 +714,10 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
       };
       const card = prepareCardForSeat(baseToken, who);
       hand.push(card);
-      get().log(`${who.toUpperCase()} adds token '${def.name}' to hand`);
+      const playerNum = who === "p1" ? "1" : "2";
+      get().log(
+        `[p${playerNum}:PLAYER] adds token [p${playerNum}card:${def.name}] to hand`
+      );
       const zonesNext = {
         ...state.zones,
         [who]: { ...state.zones[who], hand },
@@ -738,7 +741,10 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
         who
       );
       hand.push(preparedCard);
-      get().log(`${who.toUpperCase()} adds '${card.name}' to hand`);
+      const playerNum = who === "p1" ? "1" : "2";
+      get().log(
+        `[p${playerNum}:PLAYER] adds [p${playerNum}card:${card.name}] to hand`
+      );
       const zonesNext = {
         ...state.zones,
         [who]: { ...state.zones[who], hand },
@@ -989,10 +995,11 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
       }
       seatZones.banished = banished;
       zonesNext[who] = seatZones;
+      const playerNum = who === "p1" ? "1" : "2";
       get().log(
-        `Returned '${card.name}' from banished to ${
-          target === "hand" ? "hand" : "graveyard"
-        } (${who.toUpperCase()})`
+        `Returned [p${playerNum}card:${card.name}] from banished to ${
+          target === "hand" ? "hand" : "cemetery"
+        }`
       );
       const patch = createZonesPatchFor(zonesNext as GameState["zones"], who);
       if (patch) get().trySendPatch(patch);

@@ -96,7 +96,7 @@ function LifeCounter({
             <span
               className={`${
                 lifeState === "alive" ? "text-2xl" : "text-xl"
-              } font-bold ${colorClass}`}
+              } font-bold font-fantaisie ${colorClass}`}
             >
               {lifeDisplay}
             </span>

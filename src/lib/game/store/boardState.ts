@@ -74,7 +74,7 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
         target === "hand"
           ? "hand"
           : target === "graveyard"
-          ? "graveyard"
+          ? "cemetery"
           : target === "atlas"
           ? "atlas"
           : "banished";
@@ -82,13 +82,13 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
       const zoneLabel =
         label === "hand"
           ? "hand"
-          : label === "graveyard"
-          ? "graveyard"
+          : label === "cemetery"
+          ? "cemetery"
           : label === "atlas"
           ? "Atlas"
           : "banished";
       get().log(
-        `[p${playerNum}:PLAYER] moved site '${site.card.name}' from #${cellNo} to ${zoneLabel}`
+        `[p${playerNum}:PLAYER] moved site [p${playerNum}card:${site.card.name}] from #${cellNo} to ${zoneLabel}`
       );
       // Broadcast toast to both players
       const toastMessage = `[p${playerNum}:PLAYER] moved [p${playerNum}card:${site.card.name}] to ${zoneLabel}`;

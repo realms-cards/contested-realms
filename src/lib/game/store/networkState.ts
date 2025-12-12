@@ -348,38 +348,7 @@ export const createNetworkSlice: StateCreator<
         next.portalState = null;
       }
 
-      try {
-        const candidatePhase = (p.phase as GameState["phase"]) ?? state.phase;
-        const candidateTurn = (p.turn as GameState["turn"]) ?? state.turn;
-        const candidateCP =
-          (p.currentPlayer as GameState["currentPlayer"]) ??
-          state.currentPlayer;
-        const newTurn = candidateTurn !== state.turn;
-        const seatChanged = candidateCP !== state.currentPlayer;
-        const enteringStart =
-          candidatePhase === "Start" && state.phase !== "Start";
-        if (
-          (enteringStart || newTurn || seatChanged) &&
-          candidatePhase !== "Setup"
-        ) {
-          const prevSnaps = Array.isArray(state.snapshots)
-            ? state.snapshots
-            : [];
-          const hasForTurn = prevSnaps.some(
-            (ss) => ss.kind === "auto" && ss.turn === candidateTurn
-          );
-          if (!hasForTurn) {
-            setTimeout(() => {
-              try {
-                get().createSnapshot(
-                  `Turn ${candidateTurn} start (P${candidateCP})`,
-                  "auto"
-                );
-              } catch {}
-            }, 0);
-          }
-        }
-      } catch {}
+      // Snapshot creation is handled by GameToolbox.tsx useEffect
 
       const lastTs =
         typeof t === "number"

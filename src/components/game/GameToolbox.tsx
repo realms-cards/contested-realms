@@ -172,9 +172,17 @@ export default function GameToolbox({
   };
 
   // Auto-snapshot backstop: once per (turn,currentPlayer) on Start phase
+  // Only create snapshot on the client whose turn is starting to avoid duplicates in online play
   const lastAutoSnapRef = useRef<string | null>(null);
   useEffect(() => {
     if (phase !== "Start") return;
+    // Determine if this is the current player's client
+    const currentPlayerSeat = currentPlayer === 1 ? "p1" : "p2";
+    const isMyTurn = mySeat === currentPlayerSeat;
+    // In online play, only the player whose turn is starting creates the snapshot
+    // In offline play (mySeat is null or undefined), always create
+    if (mySeat && !isMyTurn) return;
+
     const key = `${turn}|${currentPlayer}|Start`;
     if (lastAutoSnapRef.current === key) return;
     const hasForTurn =
@@ -188,7 +196,7 @@ export default function GameToolbox({
     try {
       createSnapshot(`Turn ${turn} start (P${currentPlayer})`, "auto");
     } catch {}
-  }, [phase, turn, currentPlayer, snapshots, createSnapshot]);
+  }, [phase, turn, currentPlayer, snapshots, createSnapshot, mySeat]);
 
   // Derive snapshot lists
   const autoSnapshots = useMemo(

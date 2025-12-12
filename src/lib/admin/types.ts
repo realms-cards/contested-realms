@@ -94,3 +94,14 @@ export interface ActiveMatchInfo {
   startedAt: number | null;
   tournamentId: string | null;
 }
+
+export interface RecentMatchInfo {
+  matchId: string;
+  playerNames: string[];
+  matchType: string;
+  winnerId: string | null;
+  winnerName: string | null;
+  completedAt: string;
+  duration: number | null;
+  tournamentId: string | null;
+}

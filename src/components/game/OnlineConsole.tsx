@@ -169,8 +169,8 @@ export default function OnlineConsole({
     return t;
   }
 
-  // Render text with color markup [p1:Name] or [p2:Name] as colored spans
-  // Also replaces P1/P2 with actual player names if provided
+  // Render text with color markup [p1:Name], [p2:Name], [p1card:Name], [p2card:Name] as colored spans
+  // Also replaces P1/P2 and PLAYER with actual player names if provided
   function renderColoredText(text: string): React.ReactNode {
     let processedText = text;
 
@@ -183,7 +183,8 @@ export default function OnlineConsole({
     }
 
     const parts: React.ReactNode[] = [];
-    const regex = /\[(p[12]):([^\]]+)\]/g;
+    // Match [p1:...], [p2:...], [p1card:...], [p2card:...]
+    const regex = /\[(p[12])(card)?:([^\]]+)\]/g;
     let lastIndex = 0;
     let match;
     let key = 0;
@@ -193,15 +194,23 @@ export default function OnlineConsole({
       if (match.index > lastIndex) {
         parts.push(processedText.slice(lastIndex, match.index));
       }
-      // Add the colored name
+      // Add the colored name/card
       const playerKey = match[1] as "p1" | "p2";
-      const cardName = match[2];
+      const isCard = match[2] === "card";
+      let displayText = match[3];
+
+      // Replace PLAYER placeholder with actual player name
+      if (displayText === "PLAYER") {
+        displayText = playerNames?.[playerKey] || playerKey.toUpperCase();
+      }
+
       parts.push(
         <span
           key={key++}
           style={{ color: PLAYER_COLORS[playerKey], fontWeight: 500 }}
+          className={isCard ? "font-fantaisie" : undefined}
         >
-          {cardName}
+          {displayText}
         </span>
       );
       lastIndex = match.index + match[0].length;
@@ -217,25 +226,25 @@ export default function OnlineConsole({
 
   // Combine game events and match events with timestamps for unified display
   const combinedEvents = useMemo(() => {
-    const gameEvs = events.map(ev => ({
+    const gameEvs = events.map((ev) => ({
       id: ev.id,
       timestamp: Date.now(), // Game events don't have timestamps, show them first
-      type: 'game' as const,
-      data: ev
+      type: "game" as const,
+      data: ev,
     }));
 
-    const matchEvs = matchEvents.map(ev => ({
+    const matchEvs = matchEvents.map((ev) => ({
       id: ev.id,
       timestamp: ev.timestamp,
-      type: 'match' as const,
-      data: ev
+      type: "match" as const,
+      data: ev,
     }));
 
     // Combine and sort by timestamp
     return [...gameEvs, ...matchEvs].sort((a, b) => {
       // If timestamps are equal, prioritize match events
       if (a.timestamp === b.timestamp) {
-        return a.type === 'match' ? -1 : 1;
+        return a.type === "match" ? -1 : 1;
       }
       return a.timestamp - b.timestamp;
     });
@@ -398,14 +407,14 @@ export default function OnlineConsole({
                   <div className="opacity-60">No events yet</div>
                 )}
                 {combinedEvents.slice(-100).map((item, index) => {
-                  if (item.type === 'match') {
+                  if (item.type === "match") {
                     // Render match/tournament event
                     const matchEv = item.data;
                     const formatted = formatMatchEvent(matchEv);
                     return (
                       <div
                         key={`${item.id}-${index}`}
-                        className={`opacity-90 ${formatted.color || ''}`}
+                        className={`opacity-90 ${formatted.color || ""}`}
                       >
                         {formatted.icon} {formatted.text}
                       </div>
