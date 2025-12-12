@@ -1464,7 +1464,7 @@
       }
     },
     "elements": "Air",
-    "subTypes": "Mortal, Royalty",
+    "subTypes": "Mortal",
     "sets": [
       {
         "name": "Alpha",
@@ -3878,7 +3878,7 @@
           "defence": 6,
           "life": null,
           "thresholds": {
-            "air": 2,
+            "air": 3,
             "earth": 0,
             "fire": 0,
             "water": 0
@@ -6351,8 +6351,8 @@
         },
         "variants": [
           {
-            "slug": "pro-waypoint_portal-d-f",
-            "finish": "Foil",
+            "slug": "pro-waypoint_portal-d-s",
+            "finish": "Standard",
             "product": "Dust",
             "artist": "Boris Vallejo",
             "flavorText": "",
@@ -7982,7 +7982,7 @@
       }
     },
     "elements": "Earth",
-    "subTypes": "Mortal, Royalty",
+    "subTypes": "Mortal",
     "sets": [
       {
         "name": "Alpha",
@@ -8654,7 +8654,7 @@
       }
     },
     "elements": "Earth",
-    "subTypes": "Mortal, Royalty",
+    "subTypes": "Mortal",
     "sets": [
       {
         "name": "Alpha",
@@ -9739,7 +9739,7 @@
       }
     },
     "elements": "Earth",
-    "subTypes": "Mortal, Royalty",
+    "subTypes": "Mortal",
     "sets": [
       {
         "name": "Alpha",
@@ -10995,7 +10995,7 @@
       }
     },
     "elements": "Earth",
-    "subTypes": "Knight, Mortal",
+    "subTypes": "Mortal",
     "sets": [
       {
         "name": "Alpha",
@@ -13815,8 +13815,8 @@
         "water": 0
       }
     },
-    "elements": "Earth, Fire, Water, Air, None",
-    "subTypes": "Angel, Beast, Demon, Dragon, Dwarf, Faerie, Giant, Gnome, Goblin, Knight, Merfolk, Monster, Mortal, Ogre, Royalty, Spirit, Sphinx, Troll, Undead",
+    "elements": "Earth, Fire, Water, Air",
+    "subTypes": "Angel, Beast, Demon, Dragon, Dwarf, Faerie, Giant, Gnome, Goblin, Merfolk, Monster, Mortal, Ogre, Sphinx, Spirit, Troll, Undead",
     "sets": [
       {
         "name": "Alpha",
@@ -21733,7 +21733,7 @@
         "metadata": {
           "rarity": "Unique",
           "type": "Minion",
-          "rulesText": "Submerge \n\nOther allies occupying Lord of Unland's body of water have +1 power.",
+          "rulesText": "Submerge\n\nOther allies occupying Lord of Unland's body of water have +1 power.",
           "cost": 4,
           "attack": 3,
           "defence": 3,
@@ -22327,7 +22327,7 @@
             "finish": "Standard",
             "product": "Booster",
             "artist": "Vincent Pompetti",
-            "flavorText": "“Build me straight, O worthy Master! \nStaunch and strong, a goodly vessel,\nThat shall laugh at all disaster, \nAnd with wave and whirlwind wrestle!“\n— Henry Wadsworth Longfellow",
+            "flavorText": "“Build me straight, O worthy Master!\nStaunch and strong, a goodly vessel,\nThat shall laugh at all disaster,\nAnd with wave and whirlwind wrestle!“\n— Henry Wadsworth Longfellow",
             "typeText": "An Ordinary ship of Mortal scum"
           },
           {
@@ -22335,7 +22335,7 @@
             "finish": "Foil",
             "product": "Booster",
             "artist": "Vincent Pompetti",
-            "flavorText": "“Build me straight, O worthy Master! \nStaunch and strong, a goodly vessel,\nThat shall laugh at all disaster, \nAnd with wave and whirlwind wrestle!“\n— Henry Wadsworth Longfellow",
+            "flavorText": "“Build me straight, O worthy Master!\nStaunch and strong, a goodly vessel,\nThat shall laugh at all disaster,\nAnd with wave and whirlwind wrestle!“\n— Henry Wadsworth Longfellow",
             "typeText": "An Ordinary ship of Mortal scum"
           }
         ]
@@ -22693,7 +22693,7 @@
         "metadata": {
           "rarity": "Unique",
           "type": "Minion",
-          "rulesText": "Charge \n\nAllies can move as if the top and bottom edges of the realm were connected. Other allies occupying sites there have +1 power.",
+          "rulesText": "Charge\n\nAllies can move as if the top and bottom edges of the realm were connected. Other allies occupying sites there have +1 power.",
           "cost": 4,
           "attack": 3,
           "defence": 3,
@@ -26149,7 +26149,7 @@
         "metadata": {
           "rarity": "Ordinary",
           "type": "Aura",
-          "rulesText": "Affected sites and units atop them can't be attacked or intercepted. \n\nAt the start of your turn, dispel Blizzard.",
+          "rulesText": "Affected sites and units atop them can't be attacked or intercepted.\n\nAt the start of your turn, dispel Blizzard.",
           "cost": 1,
           "attack": null,
           "defence": null,
@@ -30432,7 +30432,7 @@
         "metadata": {
           "rarity": "Ordinary",
           "type": "Artifact",
-          "rulesText": "Genesis → Return each Airborne minion here to its owner’s hand.\n \nAirborne minions can't enter this location.",
+          "rulesText": "Genesis → Return each Airborne minion here to its owner’s hand.\n\n Airborne minions can't enter this location.",
           "cost": 2,
           "attack": null,
           "defence": null,
@@ -34196,7 +34196,7 @@
         "metadata": {
           "rarity": "Exceptional",
           "type": "Site",
-          "rulesText": "Genesis → Reactivate the Genesis abilities of your nearby Deserts.",
+          "rulesText": "Genesis → Trigger the Genesis ability of each allied Desert nearby.",
           "cost": null,
           "attack": null,
           "defence": null,
@@ -38142,9 +38142,9 @@
       "type": "Avatar",
       "rulesText": "Tap → Play or draw a site.\n\nOnce on your turn, if you occupy an Air site, you may fly a unit atop it to a nearby site.",
       "cost": null,
-      "attack": null,
-      "defence": null,
-      "life": null,
+      "attack": 1,
+      "defence": 1,
+      "life": 20,
       "thresholds": {
         "air": 0,
         "earth": 0,
@@ -38159,7 +38159,7 @@
         "name": "Alpha",
         "releasedAt": "2023-04-19T00:00:00.000Z",
         "metadata": {
-          "rarity": null,
+          "rarity": "Elite",
           "type": "Avatar",
           "rulesText": "Tap → Play or draw a site.\n\nOnce on your turn, if you occupy an Air site, you may fly a unit atop it to a nearby site.",
           "cost": null,
@@ -38200,9 +38200,9 @@
           "type": "Avatar",
           "rulesText": "Tap → Play or draw a site.\n\nOnce on your turn, if you occupy an Air site, you may fly a unit atop it to a nearby site.",
           "cost": null,
-          "attack": null,
-          "defence": null,
-          "life": null,
+          "attack": 1,
+          "defence": 1,
+          "life": 20,
           "thresholds": {
             "air": 0,
             "earth": 0,
@@ -38230,9 +38230,9 @@
       "type": "Avatar",
       "rulesText": "Tap → Play or draw a site.\n\nYou have +1 power for each nearby earth site.",
       "cost": null,
-      "attack": null,
-      "defence": null,
-      "life": null,
+      "attack": 1,
+      "defence": 1,
+      "life": 20,
       "thresholds": {
         "air": 0,
         "earth": 0,
@@ -38247,7 +38247,7 @@
         "name": "Alpha",
         "releasedAt": "2023-04-19T00:00:00.000Z",
         "metadata": {
-          "rarity": null,
+          "rarity": "Elite",
           "type": "Avatar",
           "rulesText": "Tap → Play or draw a site.\n\nYou have +1 power for each nearby earth site.",
           "cost": null,
@@ -38288,9 +38288,9 @@
           "type": "Avatar",
           "rulesText": "Tap → Play or draw a site.\n\nYou have +1 power for each nearby earth site.",
           "cost": null,
-          "attack": null,
-          "defence": null,
-          "life": null,
+          "attack": 1,
+          "defence": 1,
+          "life": 20,
           "thresholds": {
             "air": 0,
             "earth": 0,
@@ -38318,9 +38318,9 @@
       "type": "Avatar",
       "rulesText": "Tap → Play or draw a site.\n\nTap → This turn, fire sites in your hand are also Fireballs.",
       "cost": null,
-      "attack": null,
-      "defence": null,
-      "life": null,
+      "attack": 1,
+      "defence": 1,
+      "life": 20,
       "thresholds": {
         "air": 0,
         "earth": 0,
@@ -38335,7 +38335,7 @@
         "name": "Alpha",
         "releasedAt": "2023-04-19T00:00:00.000Z",
         "metadata": {
-          "rarity": null,
+          "rarity": "Elite",
           "type": "Avatar",
           "rulesText": "Tap → Play or draw a site.\n\nTap → This turn, fire sites in your hand are also Fireballs.",
           "cost": null,
@@ -38376,9 +38376,9 @@
           "type": "Avatar",
           "rulesText": "Tap → Play or draw a site.\n\nTap → This turn, fire sites in your hand are also Fireballs.",
           "cost": null,
-          "attack": null,
-          "defence": null,
-          "life": null,
+          "attack": 1,
+          "defence": 1,
+          "life": 20,
           "thresholds": {
             "air": 0,
             "earth": 0,
@@ -38406,9 +38406,9 @@
       "type": "Avatar",
       "rulesText": "Tap → Play or draw a site.\n\nTap → Flood a site adjacent to your body of water until you do so again. You may teleport there.",
       "cost": null,
-      "attack": null,
-      "defence": null,
-      "life": null,
+      "attack": 1,
+      "defence": 1,
+      "life": 20,
       "thresholds": {
         "air": 0,
         "earth": 0,
@@ -38423,7 +38423,7 @@
         "name": "Alpha",
         "releasedAt": "2023-04-19T00:00:00.000Z",
         "metadata": {
-          "rarity": null,
+          "rarity": "Elite",
           "type": "Avatar",
           "rulesText": "Tap → Play or draw a site.\n\nTap → Flood a site adjacent to your body of water until you do so again. You may teleport there.",
           "cost": null,
@@ -38464,9 +38464,9 @@
           "type": "Avatar",
           "rulesText": "Tap → Play or draw a site.\n\nTap → Flood a site adjacent to your body of water until you do so again. You may teleport there.",
           "cost": null,
-          "attack": null,
-          "defence": null,
-          "life": null,
+          "attack": 1,
+          "defence": 1,
+          "life": 20,
           "thresholds": {
             "air": 0,
             "earth": 0,
@@ -38494,9 +38494,9 @@
       "type": "Avatar",
       "rulesText": "Tap → Play or draw a site.\n\nWhenever Battlemage attacks and kills an enemy, you may draw a spell.",
       "cost": null,
-      "attack": null,
-      "defence": null,
-      "life": null,
+      "attack": 3,
+      "defence": 3,
+      "life": 20,
       "thresholds": {
         "air": 0,
         "earth": 0,
@@ -38511,7 +38511,7 @@
         "name": "Alpha",
         "releasedAt": "2023-04-19T00:00:00.000Z",
         "metadata": {
-          "rarity": null,
+          "rarity": "Elite",
           "type": "Avatar",
           "rulesText": "Tap → Play or draw a site.\n\nWhenever Battlemage attacks and kills an enemy, you may draw a spell.",
           "cost": null,
@@ -38548,7 +38548,7 @@
         "name": "Beta",
         "releasedAt": "2023-11-10T00:00:00.000Z",
         "metadata": {
-          "rarity": null,
+          "rarity": "Elite",
           "type": "Avatar",
           "rulesText": "Tap → Play or draw a site.\n\nWhenever Battlemage attacks and kills an enemy, you may draw a spell.",
           "cost": null,
@@ -38589,9 +38589,9 @@
           "type": "Avatar",
           "rulesText": "Tap → Play or draw a site.\n\nWhenever Battlemage attacks and kills an enemy, you may draw a spell.",
           "cost": null,
-          "attack": null,
-          "defence": null,
-          "life": null,
+          "attack": 3,
+          "defence": 3,
+          "life": 20,
           "thresholds": {
             "air": 0,
             "earth": 0,
@@ -38619,9 +38619,9 @@
       "type": "Avatar",
       "rulesText": "UPDATED: Tap → Play or draw a site.\n\nYou may banish a dead minion each turn to cast a copy of it, and for (0) if you’re on Death’s Door. The copy enters the realm, uses its Genesis, then is banished.",
       "cost": null,
-      "attack": null,
-      "defence": null,
-      "life": null,
+      "attack": 1,
+      "defence": 1,
+      "life": 20,
       "thresholds": {
         "air": 0,
         "earth": 0,
@@ -38636,7 +38636,7 @@
         "name": "Alpha",
         "releasedAt": "2023-04-19T00:00:00.000Z",
         "metadata": {
-          "rarity": null,
+          "rarity": "Elite",
           "type": "Avatar",
           "rulesText": "UPDATED: Tap → Play or draw a site.\n\nYou may banish a dead minion each turn to cast a copy of it, and for (0) if you’re on Death’s Door. The copy enters the realm, uses its Genesis, then is banished.",
           "cost": null,
@@ -38673,7 +38673,7 @@
         "name": "Beta",
         "releasedAt": "2023-11-10T00:00:00.000Z",
         "metadata": {
-          "rarity": null,
+          "rarity": "Elite",
           "type": "Avatar",
           "rulesText": "UPDATED: Tap → Play or draw a site.\n\nYou may banish a dead minion each turn to cast a copy of it, and for (0) if you’re on Death’s Door. The copy enters the realm, uses its Genesis, then is banished.",
           "cost": null,
@@ -38714,9 +38714,9 @@
           "type": "Avatar",
           "rulesText": "UPDATED: Tap → Play or draw a site.\n\nYou may banish a dead minion each turn to cast a copy of it, and for (0) if you’re on Death’s Door. The copy enters the realm, uses its Genesis, then is banished.",
           "cost": null,
-          "attack": null,
-          "defence": null,
-          "life": null,
+          "attack": 1,
+          "defence": 1,
+          "life": 20,
           "thresholds": {
             "air": 0,
             "earth": 0,
@@ -38744,9 +38744,9 @@
       "type": "Avatar",
       "rulesText": "Tap → Play or draw a site.\n\nYou have an additional (E)(F)(W)(A).",
       "cost": null,
-      "attack": null,
-      "defence": null,
-      "life": null,
+      "attack": 1,
+      "defence": 1,
+      "life": 20,
       "thresholds": {
         "air": 0,
         "earth": 0,
@@ -38761,7 +38761,7 @@
         "name": "Alpha",
         "releasedAt": "2023-04-19T00:00:00.000Z",
         "metadata": {
-          "rarity": null,
+          "rarity": "Elite",
           "type": "Avatar",
           "rulesText": "Tap → Play or draw a site.\n\nYou have an additional (E)(F)(W)(A).",
           "cost": null,
@@ -38798,9 +38798,9 @@
         "name": "Beta",
         "releasedAt": "2023-11-10T00:00:00.000Z",
         "metadata": {
-          "rarity": null,
+          "rarity": "Elite",
           "type": "Avatar",
-          "rulesText": "Tap → Play or draw a site.\n\nYou have an additional (E)(F)(W)(A).",
+          "rulesText": "Tap → Play or draw a site.\n \nYou have an additional (E)(F)(W)(A).",
           "cost": null,
           "attack": 1,
           "defence": 1,
@@ -38839,9 +38839,9 @@
           "type": "Avatar",
           "rulesText": "Tap → Play or draw a site.\n\nYou have an additional (E)(F)(W)(A).",
           "cost": null,
-          "attack": null,
-          "defence": null,
-          "life": null,
+          "attack": 1,
+          "defence": 1,
+          "life": 20,
           "thresholds": {
             "air": 0,
             "earth": 0,
@@ -38869,9 +38869,9 @@
       "type": "Avatar",
       "rulesText": "Tap → Play or draw a site.\n\nWhenever you cast a spell, you may animate target aura until your next turn. It’s an aura minion with power equal to its cost.",
       "cost": null,
-      "attack": null,
-      "defence": null,
-      "life": null,
+      "attack": 1,
+      "defence": 1,
+      "life": 20,
       "thresholds": {
         "air": 0,
         "earth": 0,
@@ -38886,7 +38886,7 @@
         "name": "Alpha",
         "releasedAt": "2023-04-19T00:00:00.000Z",
         "metadata": {
-          "rarity": null,
+          "rarity": "Elite",
           "type": "Avatar",
           "rulesText": "Tap → Play or draw a site.\n\nWhenever you cast a spell, you may animate target aura until your next turn. It’s an aura minion with power equal to its cost.",
           "cost": null,
@@ -38923,7 +38923,7 @@
         "name": "Beta",
         "releasedAt": "2023-11-10T00:00:00.000Z",
         "metadata": {
-          "rarity": null,
+          "rarity": "Elite",
           "type": "Avatar",
           "rulesText": "Tap → Play or draw a site.\n\nWhenever you cast a spell, you may animate target aura until your next turn. It’s an aura minion with power equal to its cost.",
           "cost": null,
@@ -38964,9 +38964,9 @@
           "type": "Avatar",
           "rulesText": "Tap → Play or draw a site.\n\nWhenever you cast a spell, you may animate target aura until your next turn. It’s an aura minion with power equal to its cost.",
           "cost": null,
-          "attack": null,
-          "defence": null,
-          "life": null,
+          "attack": 1,
+          "defence": 1,
+          "life": 20,
           "thresholds": {
             "air": 0,
             "earth": 0,
@@ -38994,9 +38994,9 @@
       "type": "Avatar",
       "rulesText": "Your atlas can’t contain duplicates. Draw no sites during setup.\n\nTap → If able, play the topmost site of your atlas to an adjacent location and move there.",
       "cost": null,
-      "attack": null,
-      "defence": null,
-      "life": null,
+      "attack": 1,
+      "defence": 1,
+      "life": 20,
       "thresholds": {
         "air": 0,
         "earth": 0,
@@ -39011,9 +39011,9 @@
         "name": "Alpha",
         "releasedAt": "2023-04-19T00:00:00.000Z",
         "metadata": {
-          "rarity": null,
+          "rarity": "Unique",
           "type": "Avatar",
-          "rulesText": "Your atlas can’t contain duplicates. Draw no sites during setup.\n\nTap → If able, play the topmost site of your atlas to an adjacent location and move there.",
+          "rulesText": "Your atlas can’t contain duplicates. Draw no sites during setup.\n\nTap → If able, play the topmost site of your Atlas to an adjacent location and move there.",
           "cost": null,
           "attack": 1,
           "defence": 1,
@@ -39048,7 +39048,7 @@
         "name": "Beta",
         "releasedAt": "2023-11-10T00:00:00.000Z",
         "metadata": {
-          "rarity": null,
+          "rarity": "Unique",
           "type": "Avatar",
           "rulesText": "Your atlas can’t contain duplicates. Draw no sites during setup.\n\nTap → Reveal and play the topmost site of your atlas to an adjacent void or Rubble and move there.",
           "cost": null,
@@ -39089,9 +39089,9 @@
           "type": "Avatar",
           "rulesText": "Your atlas can’t contain duplicates. Draw no sites during setup.\n\nTap → If able, play the topmost site of your atlas to an adjacent location and move there.",
           "cost": null,
-          "attack": null,
-          "defence": null,
-          "life": null,
+          "attack": 1,
+          "defence": 1,
+          "life": 20,
           "thresholds": {
             "air": 0,
             "earth": 0,
@@ -39119,9 +39119,9 @@
       "type": "Avatar",
       "rulesText": "Tap → Play or draw a site.\n\nAt the start of your turn, look at your topmost site or spell. You may put it on the bottom of its deck.",
       "cost": null,
-      "attack": null,
-      "defence": null,
-      "life": null,
+      "attack": 1,
+      "defence": 1,
+      "life": 20,
       "thresholds": {
         "air": 0,
         "earth": 0,
@@ -39136,7 +39136,7 @@
         "name": "Alpha",
         "releasedAt": "2023-04-19T00:00:00.000Z",
         "metadata": {
-          "rarity": null,
+          "rarity": "Elite",
           "type": "Avatar",
           "rulesText": "Tap → Play or draw a site.\n\nAt the start of your turn, look at your topmost site or spell. You may put it on the bottom of its deck.",
           "cost": null,
@@ -39173,7 +39173,7 @@
         "name": "Beta",
         "releasedAt": "2023-11-10T00:00:00.000Z",
         "metadata": {
-          "rarity": null,
+          "rarity": "Elite",
           "type": "Avatar",
           "rulesText": "Tap → Play or draw a site.\n\nAt the start of your turn, look at your topmost site or spell. You may put it on the bottom of its deck.",
           "cost": null,
@@ -39214,9 +39214,9 @@
           "type": "Avatar",
           "rulesText": "Tap → Play or draw a site.\n\nAt the start of your turn, look at your topmost site or spell. You may put it on the bottom of its deck.",
           "cost": null,
-          "attack": null,
-          "defence": null,
-          "life": null,
+          "attack": 1,
+          "defence": 1,
+          "life": 20,
           "thresholds": {
             "air": 0,
             "earth": 0,
@@ -39261,7 +39261,7 @@
         "name": "Alpha",
         "releasedAt": "2023-04-19T00:00:00.000Z",
         "metadata": {
-          "rarity": null,
+          "rarity": "Ordinary",
           "type": "Avatar",
           "rulesText": "Tap → Play or draw a site.\n\nTap → Draw a spell.",
           "cost": null,
@@ -39306,7 +39306,7 @@
         "name": "Beta",
         "releasedAt": "2023-11-10T00:00:00.000Z",
         "metadata": {
-          "rarity": null,
+          "rarity": "Ordinary",
           "type": "Avatar",
           "rulesText": "Tap → Play or draw a site.\n\nTap → Draw a spell.",
           "cost": null,
@@ -39511,9 +39511,9 @@
       "type": "Avatar",
       "rulesText": "Tap → Play or draw a site.\n\nTap → Target nearby location. Deal damage to another random unit there equal to the sum of (A) on spells you've cast this turn.",
       "cost": null,
-      "attack": null,
-      "defence": null,
-      "life": null,
+      "attack": 1,
+      "defence": 1,
+      "life": 20,
       "thresholds": {
         "air": 0,
         "earth": 0,
@@ -39528,7 +39528,7 @@
         "name": "Beta",
         "releasedAt": "2023-11-10T00:00:00.000Z",
         "metadata": {
-          "rarity": null,
+          "rarity": "Ordinary",
           "type": "Avatar",
           "rulesText": "Tap → Play or draw a site.\n\nTap → Target nearby location. Deal damage to another random unit there equal to the sum of (A) on spells you've cast this turn.",
           "cost": null,
@@ -39569,9 +39569,9 @@
           "type": "Avatar",
           "rulesText": "Tap → Play or draw a site.\n\nTap → Target nearby location. Deal damage to another random unit there equal to the sum of (A) on spells you've cast this turn.",
           "cost": null,
-          "attack": null,
-          "defence": null,
-          "life": null,
+          "attack": 1,
+          "defence": 1,
+          "life": 20,
           "thresholds": {
             "air": 0,
             "earth": 0,
@@ -39599,9 +39599,9 @@
       "type": "Avatar",
       "rulesText": "Tap → Play or draw a site. If you played an earth site, fill a void adjacent to you with Rubble.\n\nTap → Replace an adjacent Rubble with the topmost site of your atlas.",
       "cost": null,
-      "attack": null,
-      "defence": null,
-      "life": null,
+      "attack": 1,
+      "defence": 1,
+      "life": 20,
       "thresholds": {
         "air": 0,
         "earth": 0,
@@ -39616,7 +39616,7 @@
         "name": "Beta",
         "releasedAt": "2023-11-10T00:00:00.000Z",
         "metadata": {
-          "rarity": null,
+          "rarity": "Ordinary",
           "type": "Avatar",
           "rulesText": "Tap → Play or draw a site. If you played an earth site, fill a void adjacent to you with Rubble.\n\nTap → Replace an adjacent Rubble with the topmost site of your atlas.",
           "cost": null,
@@ -39657,9 +39657,9 @@
           "type": "Avatar",
           "rulesText": "Tap → Play or draw a site. If you played an earth site, fill a void adjacent to you with Rubble.\n\nTap → Replace an adjacent Rubble with the topmost site of your atlas.",
           "cost": null,
-          "attack": null,
-          "defence": null,
-          "life": null,
+          "attack": 1,
+          "defence": 1,
+          "life": 20,
           "thresholds": {
             "air": 0,
             "earth": 0,
@@ -39687,9 +39687,9 @@
       "type": "Avatar",
       "rulesText": "Tap → Play or draw a site.\n\nTap, Banish all your dead fire minions → Shoot a projectile. It deals damage equal to to the sum of their (F).",
       "cost": null,
-      "attack": null,
-      "defence": null,
-      "life": null,
+      "attack": 1,
+      "defence": 1,
+      "life": 20,
       "thresholds": {
         "air": 0,
         "earth": 0,
@@ -39704,9 +39704,9 @@
         "name": "Beta",
         "releasedAt": "2023-11-10T00:00:00.000Z",
         "metadata": {
-          "rarity": null,
+          "rarity": "Ordinary",
           "type": "Avatar",
-          "rulesText": "Tap → Play or draw a site.\n\nTap, Banish all your dead fire minions → Shoot a projectile. It deals damage equal to to the sum of their (F).",
+          "rulesText": "Tap → Play or draw a site.\n \nTap, Banish all your dead fire minions → Shoot a projectile. It deals damage equal to to the sum of their (F).",
           "cost": null,
           "attack": 1,
           "defence": 1,
@@ -39745,9 +39745,9 @@
           "type": "Avatar",
           "rulesText": "Tap → Play or draw a site.\n\nTap, Banish all your dead fire minions → Shoot a projectile. It deals damage equal to to the sum of their (F).",
           "cost": null,
-          "attack": null,
-          "defence": null,
-          "life": null,
+          "attack": 1,
+          "defence": 1,
+          "life": 20,
           "thresholds": {
             "air": 0,
             "earth": 0,
@@ -39775,9 +39775,9 @@
       "type": "Avatar",
       "rulesText": "Tap → Play or draw a site.\n\nTap → Flood a site near your body of water until you do so again. Tap minions without submerge there. They don't untap the next time they would.",
       "cost": null,
-      "attack": null,
-      "defence": null,
-      "life": null,
+      "attack": 1,
+      "defence": 1,
+      "life": 20,
       "thresholds": {
         "air": 0,
         "earth": 0,
@@ -39792,7 +39792,7 @@
         "name": "Beta",
         "releasedAt": "2023-11-10T00:00:00.000Z",
         "metadata": {
-          "rarity": null,
+          "rarity": "Ordinary",
           "type": "Avatar",
           "rulesText": "Tap → Play or draw a site.\n\nTap → Flood a site near your body of water until you do so again. Tap minions without submerge there. They don't untap the next time they would.",
           "cost": null,
@@ -39833,9 +39833,9 @@
           "type": "Avatar",
           "rulesText": "Tap → Play or draw a site.\n\nTap → Flood a site near your body of water until you do so again. Tap minions without submerge there. They don't untap the next time they would.",
           "cost": null,
-          "attack": null,
-          "defence": null,
-          "life": null,
+          "attack": 1,
+          "defence": 1,
+          "life": 20,
           "thresholds": {
             "air": 0,
             "earth": 0,
@@ -40577,9 +40577,9 @@
       "type": "Avatar",
       "rulesText": "Tap → Play or draw a site.\n\nBanish three magic spells in your cemetery → Cast a copy of one of them.",
       "cost": null,
-      "attack": null,
-      "defence": null,
-      "life": null,
+      "attack": 1,
+      "defence": 1,
+      "life": 20,
       "thresholds": {
         "air": 0,
         "earth": 0,
@@ -40594,12 +40594,12 @@
         "name": "Arthurian Legends",
         "releasedAt": "2024-10-04T00:00:00.000Z",
         "metadata": {
-          "rarity": null,
+          "rarity": "Elite",
           "type": "Avatar",
           "rulesText": "Tap → Play or draw a site.\n\nBanish three magic spells in your cemetery → Cast a copy of one of them.",
           "cost": null,
           "attack": 1,
-          "defence": 1,
+          "defence": null,
           "life": 20,
           "thresholds": {
             "air": 0,
@@ -40635,9 +40635,9 @@
           "type": "Avatar",
           "rulesText": "Tap → Play or draw a site.\n\nBanish three magic spells in your cemetery → Cast a copy of one of them.",
           "cost": null,
-          "attack": null,
-          "defence": null,
-          "life": null,
+          "attack": 1,
+          "defence": 1,
+          "life": 20,
           "thresholds": {
             "air": 0,
             "earth": 0,
@@ -41148,7 +41148,7 @@
       }
     },
     "elements": "Fire, Water",
-    "subTypes": "Knight, Mortal",
+    "subTypes": "Mortal",
     "sets": [
       {
         "name": "Arthurian Legends",
@@ -41206,7 +41206,7 @@
         "water": 0
       }
     },
-    "elements": "Fire",
+    "elements": "None",
     "subTypes": "Mortal",
     "sets": [
       {
@@ -41325,7 +41325,7 @@
       }
     },
     "elements": "Water, Air",
-    "subTypes": "Knight, Mortal",
+    "subTypes": "Mortal",
     "sets": [
       {
         "name": "Arthurian Legends",
@@ -41826,7 +41826,7 @@
       }
     },
     "elements": "Fire",
-    "subTypes": "Knight, Mortal",
+    "subTypes": "Mortal",
     "sets": [
       {
         "name": "Arthurian Legends",
@@ -42326,7 +42326,7 @@
         "water": 0
       }
     },
-    "elements": "Air",
+    "elements": "None",
     "subTypes": "Mortal",
     "sets": [
       {
@@ -42503,7 +42503,7 @@
         "water": 0
       }
     },
-    "elements": "Earth",
+    "elements": "None",
     "subTypes": "Mortal",
     "sets": [
       {
@@ -42740,7 +42740,7 @@
       }
     },
     "elements": "Earth, Water, Air",
-    "subTypes": "Knight, Mortal",
+    "subTypes": "Mortal",
     "sets": [
       {
         "name": "Arthurian Legends",
@@ -42963,7 +42963,7 @@
     "guardian": {
       "rarity": null,
       "type": "Avatar",
-      "rulesText": "UPDATED: Tap → Play or draw a site. If this is your first turn, summon Tawny here.\n\nTap → Summon Bruin here. Flip this card.",
+      "rulesText": "UPDATED: Tap → Play or draw a site.\n\nNearby allied sites have \"Whenever an enemy enters here, it takes 1 damage.\"",
       "cost": null,
       "attack": 1,
       "defence": 1,
@@ -42982,9 +42982,9 @@
         "name": "Arthurian Legends",
         "releasedAt": "2024-10-04T00:00:00.000Z",
         "metadata": {
-          "rarity": null,
+          "rarity": "Elite",
           "type": "Avatar",
-          "rulesText": "UPDATED: Tap → Play or draw a site. If this is your first turn, summon Tawny here.\n\nTap → Summon Bruin here. Flip this card.",
+          "rulesText": "Tap → Play or draw a site. If you played a site and you don't control Tawny, summon her there.\n\nTap → Summon Bruin here. Flip this card.",
           "cost": null,
           "attack": 1,
           "defence": 1,
@@ -43013,7 +43013,7 @@
         "metadata": {
           "rarity": null,
           "type": "Avatar",
-          "rulesText": "UPDATED: Tap → Play or draw a site. If this is your first turn, summon Tawny here.\n\nTap → Summon Bruin here. Flip this card.",
+          "rulesText": "UPDATED: Tap → Play or draw a site.\n\nNearby allied sites have \"Whenever an enemy enters here, it takes 1 damage.\"",
           "cost": null,
           "attack": 1,
           "defence": 1,
@@ -43026,14 +43026,6 @@
           }
         },
         "variants": [
-          {
-            "slug": "pro-druid-d-f",
-            "finish": "Foil",
-            "product": "Dust",
-            "artist": "Bryon Wackwitz",
-            "flavorText": "",
-            "typeText": "Your Avatar watches over this domain"
-          },
           {
             "slug": "pro-druid-op-rf",
             "finish": "Rainbow",
@@ -43653,7 +43645,7 @@
         "water": 0
       }
     },
-    "elements": "Water",
+    "elements": "None",
     "subTypes": "Mortal",
     "sets": [
       {
@@ -45542,7 +45534,7 @@
       }
     },
     "elements": "Earth, Fire, Water, Air",
-    "subTypes": "Mortal, Royalty",
+    "subTypes": "Mortal",
     "sets": [
       {
         "name": "Arthurian Legends",
@@ -45630,7 +45622,7 @@
       }
     },
     "elements": "Air",
-    "subTypes": "Royalty",
+    "subTypes": "",
     "sets": [
       {
         "name": "Arthurian Legends",
@@ -47754,7 +47746,7 @@
       }
     },
     "elements": "Fire, Air",
-    "subTypes": "Knight, Mortal",
+    "subTypes": "Mortal",
     "sets": [
       {
         "name": "Arthurian Legends",
@@ -47813,7 +47805,7 @@
       }
     },
     "elements": "Earth, Fire, Water, Air",
-    "subTypes": "Mortal, Royalty",
+    "subTypes": "Mortal",
     "sets": [
       {
         "name": "Arthurian Legends",
@@ -49052,7 +49044,7 @@
       }
     },
     "elements": "Fire, Water",
-    "subTypes": "Knight, Mortal",
+    "subTypes": "Mortal",
     "sets": [
       {
         "name": "Arthurian Legends",
@@ -49111,7 +49103,7 @@
       }
     },
     "elements": "Fire, Air",
-    "subTypes": "Knight, Mortal",
+    "subTypes": "Mortal",
     "sets": [
       {
         "name": "Arthurian Legends",
@@ -49170,7 +49162,7 @@
       }
     },
     "elements": "Earth, Water",
-    "subTypes": "Knight, Mortal",
+    "subTypes": "Mortal",
     "sets": [
       {
         "name": "Arthurian Legends",
@@ -49229,7 +49221,7 @@
       }
     },
     "elements": "Earth, Air",
-    "subTypes": "Knight, Mortal",
+    "subTypes": "Mortal",
     "sets": [
       {
         "name": "Arthurian Legends",
@@ -49288,7 +49280,7 @@
       }
     },
     "elements": "Fire, Water",
-    "subTypes": "Knight, Mortal",
+    "subTypes": "Mortal",
     "sets": [
       {
         "name": "Arthurian Legends",
@@ -49347,7 +49339,7 @@
       }
     },
     "elements": "Earth, Air",
-    "subTypes": "Knight, Mortal",
+    "subTypes": "Mortal",
     "sets": [
       {
         "name": "Arthurian Legends",
@@ -49406,7 +49398,7 @@
       }
     },
     "elements": "Water, Air",
-    "subTypes": "Knight, Mortal",
+    "subTypes": "Mortal",
     "sets": [
       {
         "name": "Arthurian Legends",
@@ -49465,7 +49457,7 @@
       }
     },
     "elements": "Earth, Fire, Water",
-    "subTypes": "Knight, Mortal",
+    "subTypes": "Mortal",
     "sets": [
       {
         "name": "Arthurian Legends",
@@ -49524,7 +49516,7 @@
       }
     },
     "elements": "Earth, Water",
-    "subTypes": "Knight, Mortal",
+    "subTypes": "Mortal",
     "sets": [
       {
         "name": "Arthurian Legends",
@@ -49583,7 +49575,7 @@
       }
     },
     "elements": "Earth, Fire, Air",
-    "subTypes": "Knight, Mortal",
+    "subTypes": "Mortal",
     "sets": [
       {
         "name": "Arthurian Legends",
@@ -49642,7 +49634,7 @@
       }
     },
     "elements": "Fire, Air",
-    "subTypes": "Knight, Mortal",
+    "subTypes": "Mortal",
     "sets": [
       {
         "name": "Arthurian Legends",
@@ -49701,7 +49693,7 @@
       }
     },
     "elements": "Earth, Fire",
-    "subTypes": "Knight, Mortal",
+    "subTypes": "Mortal",
     "sets": [
       {
         "name": "Arthurian Legends",
@@ -49789,7 +49781,7 @@
       }
     },
     "elements": "Fire, Water",
-    "subTypes": "Knight, Mortal",
+    "subTypes": "Mortal",
     "sets": [
       {
         "name": "Arthurian Legends",
@@ -49848,7 +49840,7 @@
       }
     },
     "elements": "Earth, Fire",
-    "subTypes": "Knight, Mortal",
+    "subTypes": "Mortal",
     "sets": [
       {
         "name": "Arthurian Legends",
@@ -49907,7 +49899,7 @@
       }
     },
     "elements": "Water, Air",
-    "subTypes": "Faerie, Knight, Mortal",
+    "subTypes": "Faerie, Mortal",
     "sets": [
       {
         "name": "Arthurian Legends",
@@ -49966,7 +49958,7 @@
       }
     },
     "elements": "Fire, Air",
-    "subTypes": "Knight, Mortal",
+    "subTypes": "Mortal",
     "sets": [
       {
         "name": "Arthurian Legends",
@@ -50025,7 +50017,7 @@
       }
     },
     "elements": "Earth, Air",
-    "subTypes": "Knight, Mortal",
+    "subTypes": "Mortal",
     "sets": [
       {
         "name": "Arthurian Legends",
@@ -50084,7 +50076,7 @@
       }
     },
     "elements": "Earth, Fire",
-    "subTypes": "Knight, Mortal",
+    "subTypes": "Mortal",
     "sets": [
       {
         "name": "Arthurian Legends",
@@ -50143,7 +50135,7 @@
       }
     },
     "elements": "Water, Air",
-    "subTypes": "Faerie, Knight",
+    "subTypes": "Faerie",
     "sets": [
       {
         "name": "Arthurian Legends",
@@ -50202,7 +50194,7 @@
       }
     },
     "elements": "Fire, Water, Air",
-    "subTypes": "Knight, Mortal",
+    "subTypes": "Mortal",
     "sets": [
       {
         "name": "Arthurian Legends",
@@ -50261,7 +50253,7 @@
       }
     },
     "elements": "Earth, Water",
-    "subTypes": "Knight, Mortal",
+    "subTypes": "Mortal",
     "sets": [
       {
         "name": "Arthurian Legends",
@@ -51013,13 +51005,13 @@
   {
     "name": "Templar",
     "guardian": {
-      "rarity": null,
+      "rarity": "Elite",
       "type": "Avatar",
       "rulesText": "Tap → Play or draw a site.\n\nThe first Knight, Sir, or Dame you cast each turn costs (1) less.",
       "cost": null,
-      "attack": null,
-      "defence": null,
-      "life": null,
+      "attack": 2,
+      "defence": 2,
+      "life": 20,
       "thresholds": {
         "air": 0,
         "earth": 0,
@@ -51034,12 +51026,12 @@
         "name": "Arthurian Legends",
         "releasedAt": "2024-10-04T00:00:00.000Z",
         "metadata": {
-          "rarity": null,
+          "rarity": "Elite",
           "type": "Avatar",
           "rulesText": "Tap → Play or draw a site.\n\nThe first Knight, Sir, or Dame you cast each turn costs (1) less.",
           "cost": null,
           "attack": 2,
-          "defence": null,
+          "defence": 2,
           "life": 20,
           "thresholds": {
             "air": 0,
@@ -51075,9 +51067,9 @@
           "type": "Avatar",
           "rulesText": "Tap → Play or draw a site.\n\nThe first Knight, Sir, or Dame you cast each turn costs (1) less.",
           "cost": null,
-          "attack": null,
-          "defence": null,
-          "life": null,
+          "attack": 2,
+          "defence": 2,
+          "life": 20,
           "thresholds": {
             "air": 0,
             "earth": 0,
@@ -51411,7 +51403,7 @@
       }
     },
     "elements": "Water",
-    "subTypes": "Knight, Mortal",
+    "subTypes": "Mortal",
     "sets": [
       {
         "name": "Arthurian Legends",
@@ -52591,7 +52583,7 @@
       }
     },
     "elements": "Earth, Water",
-    "subTypes": "Knight, Mortal",
+    "subTypes": "Mortal",
     "sets": [
       {
         "name": "Arthurian Legends",
@@ -53151,7 +53143,7 @@
       }
     },
     "elements": "Earth, Air",
-    "subTypes": "Knight, Mortal",
+    "subTypes": "Mortal",
     "sets": [
       {
         "name": "Arthurian Legends",
@@ -53195,12 +53187,12 @@
   {
     "name": "Witch",
     "guardian": {
-      "rarity": null,
+      "rarity": "Unique",
       "type": "Avatar",
       "rulesText": "Tap → Play or draw a site.\n\nTap → Curse target Avatar, choose one: Their spells cost (1) more to cast on their next turn, they lose 2 life, or they have -3 power until your next turn.",
       "cost": null,
       "attack": 1,
-      "defence": null,
+      "defence": 1,
       "life": 20,
       "thresholds": {
         "air": 0,
@@ -53216,12 +53208,12 @@
         "name": "Arthurian Legends",
         "releasedAt": "2024-10-04T00:00:00.000Z",
         "metadata": {
-          "rarity": null,
+          "rarity": "Unique",
           "type": "Avatar",
           "rulesText": "Tap → Play or draw a site.\n\nTap → Curse target Avatar, choose one: Their spells cost (1) more to cast on their next turn, they lose 2 life, or they have -3 power until your next turn.",
           "cost": null,
           "attack": 1,
-          "defence": 1,
+          "defence": null,
           "life": 20,
           "thresholds": {
             "air": 0,
@@ -53258,7 +53250,7 @@
           "rulesText": "Tap → Play or draw a site.\n\nTap → Curse target Avatar, choose one: Their spells cost (1) more to cast on their next turn, they lose 2 life, or they have -3 power until your next turn.",
           "cost": null,
           "attack": 1,
-          "defence": null,
+          "defence": 1,
           "life": 20,
           "thresholds": {
             "air": 0,
@@ -53601,7 +53593,7 @@
       }
     },
     "elements": "Earth, Fire",
-    "subTypes": "Knight, Mortal",
+    "subTypes": "Mortal",
     "sets": [
       {
         "name": "Arthurian Legends",
@@ -53645,13 +53637,13 @@
   {
     "name": "Dragonlord",
     "guardian": {
-      "rarity": null,
+      "rarity": "Unique",
       "type": "Avatar",
       "rulesText": "Tap → Play or draw a site.\n\nBefore setup, set aside a Unique Dragon. Once on your turn, if you meet its threshold, you may pay (3) to gain its abilities this turn.",
       "cost": null,
-      "attack": null,
-      "defence": null,
-      "life": null,
+      "attack": 1,
+      "defence": 1,
+      "life": 20,
       "thresholds": {
         "air": 0,
         "earth": 0,
@@ -53666,7 +53658,7 @@
         "name": "Dragonlord",
         "releasedAt": "2025-08-01T20:11:58.215Z",
         "metadata": {
-          "rarity": null,
+          "rarity": "Unique",
           "type": "Avatar",
           "rulesText": "Tap → Play or draw a site.\n\nBefore setup, set aside a Unique Dragon. Once on your turn, if you meet its threshold, you may pay (3) to gain its abilities this turn.",
           "cost": null,
@@ -53707,9 +53699,9 @@
           "type": "Avatar",
           "rulesText": "Tap → Play or draw a site.\n\nBefore setup, set aside a Unique Dragon. Once on your turn, if you meet its threshold, you may pay (3) to gain its abilities this turn.",
           "cost": null,
-          "attack": null,
-          "defence": null,
-          "life": null,
+          "attack": 1,
+          "defence": 1,
+          "life": 20,
           "thresholds": {
             "air": 0,
             "earth": 0,
@@ -53748,7 +53740,7 @@
       }
     },
     "elements": "None",
-    "subTypes": "Dragon, Automaton",
+    "subTypes": "Automaton, Dragon",
     "sets": [
       {
         "name": "Dragonlord",
@@ -54482,7 +54474,7 @@
             "finish": "Standard",
             "product": "Box_Topper",
             "artist": "Andrea Modesti",
-            "flavorText": "\"Farewell, farewell, O warrier brave, \nNobody can from Death thee save.\"",
+            "flavorText": "\"Farewell, farewell, O warrier brave,\nNobody can from Death thee save.\"",
             "typeText": "Ordinary Mortals march forth"
           }
         ]
@@ -54591,7 +54583,7 @@
             "finish": "Standard",
             "product": "Box_Topper",
             "artist": "Andrea Modesti",
-            "flavorText": "\"Farewell, farewell, O warrier brave, \nNobody can from Death thee save.\"",
+            "flavorText": "\"Farewell, farewell, O warrier brave,\nNobody can from Death thee save.\"",
             "typeText": ""
           }
         ]
@@ -54700,7 +54692,7 @@
             "finish": "Standard",
             "product": "Box_Topper",
             "artist": "Andrea Modesti",
-            "flavorText": "\"Farewell, farewell, O warrier brave, \nNobody can from Death thee save.\"",
+            "flavorText": "\"Farewell, farewell, O warrier brave,\nNobody can from Death thee save.\"",
             "typeText": ""
           }
         ]
@@ -54844,6 +54836,35 @@
         ]
       },
       {
+        "name": "Arthurian Legends",
+        "releasedAt": "2024-10-04T00:00:00.000Z",
+        "metadata": {
+          "rarity": null,
+          "type": "Site",
+          "rulesText": "Provides no mana.",
+          "cost": null,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "art-rubble-bt-s",
+            "finish": "Standard",
+            "product": "Box_Topper",
+            "artist": "Caio Calazans",
+            "flavorText": "",
+            "typeText": "A barren Site, demolished and destroyed."
+          }
+        ]
+      },
+      {
         "name": "Promotional",
         "releasedAt": "2025-11-20T22:09:50.983Z",
         "metadata": {
@@ -54978,108 +54999,6 @@
             "artist": "Bryon Wackwitz",
             "flavorText": "",
             "typeText": "A Unique, large and fluffy Beast"
-          }
-        ]
-      }
-    ]
-  },
-  {
-    "name": "Foot Soldier (English)",
-    "guardian": {
-      "rarity": "Ordinary",
-      "type": "Minion",
-      "rulesText": "",
-      "cost": null,
-      "attack": 1,
-      "defence": 1,
-      "life": null,
-      "thresholds": {
-        "air": 0,
-        "earth": 0,
-        "fire": 0,
-        "water": 0
-      }
-    },
-    "elements": "None",
-    "subTypes": "Mortal",
-    "sets": [
-      {
-        "name": "Promotional",
-        "releasedAt": "2025-11-20T22:09:50.983Z",
-        "metadata": {
-          "rarity": "Ordinary",
-          "type": "Minion",
-          "rulesText": "",
-          "cost": null,
-          "attack": 1,
-          "defence": 1,
-          "life": null,
-          "thresholds": {
-            "air": 0,
-            "earth": 0,
-            "fire": 0,
-            "water": 0
-          }
-        },
-        "variants": [
-          {
-            "slug": "pro-foot_soldier_english-d-s",
-            "finish": "Standard",
-            "product": "Dust",
-            "artist": "Andrea Modesti",
-            "flavorText": "\"Farewell, farewell, O warrier brave, \nNobody can from Death thee save.\"",
-            "typeText": "Ordinary Mortals march forth"
-          }
-        ]
-      }
-    ]
-  },
-  {
-    "name": "Foot Soldier (Saracen)",
-    "guardian": {
-      "rarity": "Ordinary",
-      "type": "Minion",
-      "rulesText": "",
-      "cost": null,
-      "attack": 1,
-      "defence": 1,
-      "life": null,
-      "thresholds": {
-        "air": 0,
-        "earth": 0,
-        "fire": 0,
-        "water": 0
-      }
-    },
-    "elements": "None",
-    "subTypes": "Mortal",
-    "sets": [
-      {
-        "name": "Promotional",
-        "releasedAt": "2025-11-20T22:09:50.983Z",
-        "metadata": {
-          "rarity": "Ordinary",
-          "type": "Minion",
-          "rulesText": "",
-          "cost": null,
-          "attack": 1,
-          "defence": 1,
-          "life": null,
-          "thresholds": {
-            "air": 0,
-            "earth": 0,
-            "fire": 0,
-            "water": 0
-          }
-        },
-        "variants": [
-          {
-            "slug": "pro-foot_soldier_saracen-d-s",
-            "finish": "Standard",
-            "product": "Dust",
-            "artist": "Andrea Modesti",
-            "flavorText": "\"Farewell, farewell, O warrier brave, \nNobody can from Death thee save.\"",
-            "typeText": "Ordinary Mortals march forth"
           }
         ]
       }
@@ -55870,108 +55789,6 @@
     ]
   },
   {
-    "name": "Foot Soldiers (English)",
-    "guardian": {
-      "rarity": "Ordinary",
-      "type": "Minion",
-      "rulesText": "",
-      "cost": null,
-      "attack": 1,
-      "defence": 1,
-      "life": null,
-      "thresholds": {
-        "air": 0,
-        "earth": 0,
-        "fire": 0,
-        "water": 0
-      }
-    },
-    "elements": "None",
-    "subTypes": "Mortal",
-    "sets": [
-      {
-        "name": "Arthurian Legends",
-        "releasedAt": "2024-10-04T00:00:00.000Z",
-        "metadata": {
-          "rarity": "Ordinary",
-          "type": "Minion",
-          "rulesText": "",
-          "cost": null,
-          "attack": 1,
-          "defence": 1,
-          "life": null,
-          "thresholds": {
-            "air": 0,
-            "earth": 0,
-            "fire": 0,
-            "water": 0
-          }
-        },
-        "variants": [
-          {
-            "slug": "art-foot_soldiers_english-bt-s",
-            "finish": "Standard",
-            "product": "Box_Topper",
-            "artist": "Andrea Modesti",
-            "flavorText": "\"Farewell, farewell, O warrier brave, \nNobody can from Death thee save.\"",
-            "typeText": "Ordinary Mortals march forth"
-          }
-        ]
-      }
-    ]
-  },
-  {
-    "name": "Foot Soldiers (Saracen)",
-    "guardian": {
-      "rarity": "Ordinary",
-      "type": "Minion",
-      "rulesText": "",
-      "cost": null,
-      "attack": 1,
-      "defence": 1,
-      "life": null,
-      "thresholds": {
-        "air": 0,
-        "earth": 0,
-        "fire": 0,
-        "water": 0
-      }
-    },
-    "elements": "None",
-    "subTypes": "Mortal",
-    "sets": [
-      {
-        "name": "Arthurian Legends",
-        "releasedAt": "2024-10-04T00:00:00.000Z",
-        "metadata": {
-          "rarity": "Ordinary",
-          "type": "Minion",
-          "rulesText": "",
-          "cost": null,
-          "attack": 1,
-          "defence": 1,
-          "life": null,
-          "thresholds": {
-            "air": 0,
-            "earth": 0,
-            "fire": 0,
-            "water": 0
-          }
-        },
-        "variants": [
-          {
-            "slug": "art-foot_soldiers_saracen-bt-s",
-            "finish": "Standard",
-            "product": "Box_Topper",
-            "artist": "Andrea Modesti",
-            "flavorText": "\"Farewell, farewell, O warrier brave, \nNobody can from Death thee save.\"",
-            "typeText": "Ordinary Mortals march forth"
-          }
-        ]
-      }
-    ]
-  },
-  {
     "name": "Lance",
     "guardian": {
       "rarity": null,
@@ -56031,7 +55848,7 @@
       "cost": 2,
       "attack": 0,
       "defence": 0,
-      "life": null,
+      "life": 20,
       "thresholds": {
         "air": 0,
         "earth": 0,
@@ -56052,7 +55869,7 @@
           "cost": 2,
           "attack": 0,
           "defence": 0,
-          "life": null,
+          "life": 20,
           "thresholds": {
             "air": 0,
             "earth": 0,
@@ -56090,7 +55907,7 @@
       "cost": 4,
       "attack": 3,
       "defence": 3,
-      "life": null,
+      "life": 20,
       "thresholds": {
         "air": 0,
         "earth": 0,
@@ -56111,7 +55928,7 @@
           "cost": 4,
           "attack": 3,
           "defence": 3,
-          "life": null,
+          "life": 20,
           "thresholds": {
             "air": 0,
             "earth": 0,
@@ -56149,7 +55966,7 @@
       "cost": 4,
       "attack": null,
       "defence": null,
-      "life": null,
+      "life": 20,
       "thresholds": {
         "air": 0,
         "earth": 0,
@@ -56170,7 +55987,7 @@
           "cost": 4,
           "attack": null,
           "defence": null,
-          "life": null,
+          "life": 20,
           "thresholds": {
             "air": 0,
             "earth": 0,
@@ -56208,7 +56025,7 @@
       "cost": null,
       "attack": null,
       "defence": null,
-      "life": null,
+      "life": 20,
       "thresholds": {
         "air": 0,
         "earth": 0,
@@ -56229,7 +56046,7 @@
           "cost": null,
           "attack": null,
           "defence": null,
-          "life": null,
+          "life": 20,
           "thresholds": {
             "air": 0,
             "earth": 0,
@@ -56267,7 +56084,7 @@
       "cost": null,
       "attack": null,
       "defence": null,
-      "life": null,
+      "life": 20,
       "thresholds": {
         "air": 1,
         "earth": 0,
@@ -56288,7 +56105,7 @@
           "cost": null,
           "attack": null,
           "defence": null,
-          "life": null,
+          "life": 20,
           "thresholds": {
             "air": 1,
             "earth": 0,
@@ -56326,7 +56143,7 @@
       "cost": 3,
       "attack": null,
       "defence": null,
-      "life": null,
+      "life": 20,
       "thresholds": {
         "air": 0,
         "earth": 0,
@@ -56347,7 +56164,7 @@
           "cost": 3,
           "attack": null,
           "defence": null,
-          "life": null,
+          "life": 20,
           "thresholds": {
             "air": 0,
             "earth": 0,
@@ -56385,7 +56202,7 @@
       "cost": 3,
       "attack": null,
       "defence": null,
-      "life": null,
+      "life": 20,
       "thresholds": {
         "air": 0,
         "earth": 0,
@@ -56406,7 +56223,7 @@
           "cost": 3,
           "attack": null,
           "defence": null,
-          "life": null,
+          "life": 20,
           "thresholds": {
             "air": 0,
             "earth": 0,
@@ -56444,7 +56261,7 @@
       "cost": null,
       "attack": null,
       "defence": null,
-      "life": null,
+      "life": 20,
       "thresholds": {
         "air": 0,
         "earth": 0,
@@ -56465,7 +56282,7 @@
           "cost": null,
           "attack": null,
           "defence": null,
-          "life": null,
+          "life": 20,
           "thresholds": {
             "air": 0,
             "earth": 0,
@@ -56503,7 +56320,7 @@
       "cost": 3,
       "attack": 0,
       "defence": 0,
-      "life": null,
+      "life": 20,
       "thresholds": {
         "air": 2,
         "earth": 0,
@@ -56524,7 +56341,7 @@
           "cost": 3,
           "attack": 0,
           "defence": 0,
-          "life": null,
+          "life": 20,
           "thresholds": {
             "air": 2,
             "earth": 0,
@@ -56562,7 +56379,7 @@
       "cost": 3,
       "attack": 3,
       "defence": 3,
-      "life": null,
+      "life": 20,
       "thresholds": {
         "air": 0,
         "earth": 0,
@@ -56583,7 +56400,7 @@
           "cost": 3,
           "attack": 3,
           "defence": 3,
-          "life": null,
+          "life": 20,
           "thresholds": {
             "air": 0,
             "earth": 0,
@@ -56621,7 +56438,7 @@
       "cost": 4,
       "attack": null,
       "defence": null,
-      "life": null,
+      "life": 20,
       "thresholds": {
         "air": 0,
         "earth": 0,
@@ -56642,7 +56459,7 @@
           "cost": 4,
           "attack": null,
           "defence": null,
-          "life": null,
+          "life": 20,
           "thresholds": {
             "air": 0,
             "earth": 0,
@@ -56680,7 +56497,7 @@
       "cost": null,
       "attack": null,
       "defence": null,
-      "life": null,
+      "life": 20,
       "thresholds": {
         "air": 0,
         "earth": 0,
@@ -56701,7 +56518,7 @@
           "cost": null,
           "attack": null,
           "defence": null,
-          "life": null,
+          "life": 20,
           "thresholds": {
             "air": 0,
             "earth": 0,
@@ -56739,7 +56556,7 @@
       "cost": 4,
       "attack": null,
       "defence": null,
-      "life": null,
+      "life": 20,
       "thresholds": {
         "air": 0,
         "earth": 0,
@@ -56760,7 +56577,7 @@
           "cost": 4,
           "attack": null,
           "defence": null,
-          "life": null,
+          "life": 20,
           "thresholds": {
             "air": 0,
             "earth": 0,
@@ -56798,7 +56615,7 @@
       "cost": 3,
       "attack": null,
       "defence": null,
-      "life": null,
+      "life": 20,
       "thresholds": {
         "air": 2,
         "earth": 0,
@@ -56819,7 +56636,7 @@
           "cost": 3,
           "attack": null,
           "defence": null,
-          "life": null,
+          "life": 20,
           "thresholds": {
             "air": 2,
             "earth": 0,
@@ -56857,7 +56674,7 @@
       "cost": null,
       "attack": null,
       "defence": null,
-      "life": null,
+      "life": 20,
       "thresholds": {
         "air": 0,
         "earth": 0,
@@ -56878,7 +56695,7 @@
           "cost": null,
           "attack": null,
           "defence": null,
-          "life": null,
+          "life": 20,
           "thresholds": {
             "air": 0,
             "earth": 0,
@@ -56916,7 +56733,7 @@
       "cost": 2,
       "attack": 2,
       "defence": 2,
-      "life": null,
+      "life": 20,
       "thresholds": {
         "air": 0,
         "earth": 1,
@@ -56937,7 +56754,7 @@
           "cost": 2,
           "attack": 2,
           "defence": 2,
-          "life": null,
+          "life": 20,
           "thresholds": {
             "air": 0,
             "earth": 1,
@@ -56975,7 +56792,7 @@
       "cost": 4,
       "attack": 3,
       "defence": 3,
-      "life": null,
+      "life": 20,
       "thresholds": {
         "air": 0,
         "earth": 0,
@@ -56996,7 +56813,7 @@
           "cost": 4,
           "attack": 3,
           "defence": 3,
-          "life": null,
+          "life": 20,
           "thresholds": {
             "air": 0,
             "earth": 0,
@@ -57567,10 +57384,10 @@
       "defence": null,
       "life": null,
       "thresholds": {
-        "air": 1,
-        "earth": 1,
-        "fire": 1,
-        "water": 1
+        "air": 2,
+        "earth": 2,
+        "fire": 2,
+        "water": 2
       }
     },
     "elements": "Earth, Fire, Water, Air",
@@ -57588,10 +57405,10 @@
           "defence": null,
           "life": null,
           "thresholds": {
-            "air": 1,
-            "earth": 1,
-            "fire": 1,
-            "water": 1
+            "air": 2,
+            "earth": 2,
+            "fire": 2,
+            "water": 2
           }
         },
         "variants": [
@@ -59331,7 +59148,7 @@
     "guardian": {
       "rarity": "Unique",
       "type": "Minion",
-      "rulesText": "Can pick up and drop weaker enemy minions at adjacent locations. They're disabled while carried.",
+      "rulesText": "Can pick up adjacent weaker enemy minions. They're disables while carried.",
       "cost": 6,
       "attack": 4,
       "defence": 4,
@@ -59352,7 +59169,7 @@
         "metadata": {
           "rarity": "Unique",
           "type": "Minion",
-          "rulesText": "Can pick up and drop weaker enemy minions at adjacent locations. They're disabled while carried.",
+          "rulesText": "Can pick up adjacent weaker enemy minions. They're disables while carried.",
           "cost": 6,
           "attack": 4,
           "defence": 4,
@@ -59863,7 +59680,7 @@
       "rarity": "Exceptional",
       "type": "Artifact",
       "rulesText": "Once on your turn, bearer may deal 1 damage to target adjacent minion.",
-      "cost": 3,
+      "cost": 4,
       "attack": null,
       "defence": null,
       "life": null,
@@ -59884,7 +59701,7 @@
           "rarity": "Exceptional",
           "type": "Artifact",
           "rulesText": "Once on your turn, bearer may deal 1 damage to target adjacent minion.",
-          "cost": 3,
+          "cost": 4,
           "attack": null,
           "defence": null,
           "life": null,
@@ -61910,7 +61727,7 @@
       }
     },
     "elements": "Earth",
-    "subTypes": "Knight, Undead",
+    "subTypes": "Undead",
     "sets": [
       {
         "name": "Gothic",
@@ -63667,7 +63484,7 @@
     "guardian": {
       "rarity": "Exceptional",
       "type": "Artifact",
-      "rulesText": "Bearer has +1 power and gains Water Spellcaster.",
+      "rulesText": "Bearer has +1 power and is a Water Spellcaster.",
       "cost": 1,
       "attack": null,
       "defence": null,
@@ -63688,7 +63505,7 @@
         "metadata": {
           "rarity": "Exceptional",
           "type": "Artifact",
-          "rulesText": "Bearer has +1 power and gains Water Spellcaster.",
+          "rulesText": "Bearer has +1 power and is a Water Spellcaster.",
           "cost": 1,
           "attack": null,
           "defence": null,
@@ -64906,7 +64723,7 @@
     "guardian": {
       "rarity": "Exceptional",
       "type": "Minion",
-      "rulesText": "Whenever Flaggelant takes damage, you heal 1.",
+      "rulesText": "Whenever Flagellant takes damage, you heal 1.",
       "cost": 2,
       "attack": 2,
       "defence": 2,
@@ -64927,7 +64744,7 @@
         "metadata": {
           "rarity": "Exceptional",
           "type": "Minion",
-          "rulesText": "Whenever Flaggelant takes damage, you heal 1.",
+          "rulesText": "Whenever Flagellant takes damage, you heal 1.",
           "cost": 2,
           "attack": 2,
           "defence": 2,
@@ -67089,7 +66906,7 @@
     "guardian": {
       "rarity": "Exceptional",
       "type": "Artifact",
-      "rulesText": "Bearer has +1 power and gains Fire Spellcaster.",
+      "rulesText": "Bearer has +1 power and is a Fire Spellcaster.",
       "cost": 1,
       "attack": null,
       "defence": null,
@@ -67110,7 +66927,7 @@
         "metadata": {
           "rarity": "Exceptional",
           "type": "Artifact",
-          "rulesText": "Bearer has +1 power and gains Fire Spellcaster.",
+          "rulesText": "Bearer has +1 power and is a Fire Spellcaster.",
           "cost": 1,
           "attack": null,
           "defence": null,
@@ -67845,7 +67662,7 @@
             "product": "Booster",
             "artist": "Melissa A. Benson",
             "flavorText": "",
-            "typeText": "An Elite Faerie with a perculiar palate"
+            "typeText": "An Elite Faerie with a peculiar palate"
           },
           {
             "slug": "got-hemogoblin-b-f",
@@ -67853,7 +67670,7 @@
             "product": "Booster",
             "artist": "Melissa A. Benson",
             "flavorText": "",
-            "typeText": "An Elite Faerie with a perculiar palate"
+            "typeText": "An Elite Faerie with a peculiar palate"
           }
         ]
       }
@@ -68276,7 +68093,7 @@
     "name": "Homecoming",
     "guardian": {
       "rarity": "Elite",
-      "type": "Magic",
+      "type": "Aura",
       "rulesText": "Minions here have \"Tap → Gain (1).\"",
       "cost": 3,
       "attack": null,
@@ -68297,7 +68114,7 @@
         "releasedAt": "2025-12-05T16:59:59.639Z",
         "metadata": {
           "rarity": "Elite",
-          "type": "Magic",
+          "type": "Aura",
           "rulesText": "Minions here have \"Tap → Gain (1).\"",
           "cost": 3,
           "attack": null,
@@ -70697,7 +70514,7 @@
       "rarity": "Ordinary",
       "type": "Magic",
       "rulesText": "An ally tempts an enemy minion at a nearby site into taking a step closer.",
-      "cost": 2,
+      "cost": 1,
       "attack": null,
       "defence": null,
       "life": null,
@@ -70718,7 +70535,7 @@
           "rarity": "Ordinary",
           "type": "Magic",
           "rulesText": "An ally tempts an enemy minion at a nearby site into taking a step closer.",
-          "cost": 2,
+          "cost": 1,
           "attack": null,
           "defence": null,
           "life": null,
@@ -70991,7 +70808,7 @@
     "guardian": {
       "rarity": "Exceptional",
       "type": "Artifact",
-      "rulesText": "Bearer has +1 power and gains Earth Spellcaster.",
+      "rulesText": "Bearer has +1 power and is an Earth Spellcaster.",
       "cost": 1,
       "attack": null,
       "defence": null,
@@ -71012,7 +70829,7 @@
         "metadata": {
           "rarity": "Exceptional",
           "type": "Artifact",
-          "rulesText": "Bearer has +1 power and gains Earth Spellcaster.",
+          "rulesText": "Bearer has +1 power and is an Earth Spellcaster.",
           "cost": 1,
           "attack": null,
           "defence": null,
@@ -73989,7 +73806,7 @@
             "product": "Booster",
             "artist": "Juan Machuca",
             "flavorText": "",
-            "typeText": "An Exceptional Site of curious occurences"
+            "typeText": "An Exceptional Site of curious occurrences"
           },
           {
             "slug": "got-peculiar_port-b-f",
@@ -73997,7 +73814,7 @@
             "product": "Booster",
             "artist": "Juan Machuca",
             "flavorText": "",
-            "typeText": "An Exceptional Site of curious occurences"
+            "typeText": "An Exceptional Site of curious occurrences"
           }
         ]
       }
@@ -74021,7 +73838,7 @@
       }
     },
     "elements": "Earth",
-    "subTypes": "Knight, Mortal",
+    "subTypes": "Mortal",
     "sets": [
       {
         "name": "Gothic",
@@ -74855,7 +74672,7 @@
       }
     },
     "elements": "Earth",
-    "subTypes": "Beast, Monster, Royalty",
+    "subTypes": "Beast, Monster",
     "sets": [
       {
         "name": "Gothic",
@@ -75386,7 +75203,7 @@
       }
     },
     "elements": "Earth",
-    "subTypes": "Royalty, Undead",
+    "subTypes": "Undead",
     "sets": [
       {
         "name": "Gothic",
@@ -76561,7 +76378,7 @@
     "guardian": {
       "rarity": "Exceptional",
       "type": "Artifact",
-      "rulesText": "Bearer has +1 power and gains Air Spellcaster.",
+      "rulesText": "Bearer has +1 power and is an Air Spellcaster.",
       "cost": 1,
       "attack": null,
       "defence": null,
@@ -76582,7 +76399,7 @@
         "metadata": {
           "rarity": "Exceptional",
           "type": "Artifact",
-          "rulesText": "Bearer has +1 power and gains Air Spellcaster.",
+          "rulesText": "Bearer has +1 power and is an Air Spellcaster.",
           "cost": 1,
           "attack": null,
           "defence": null,
@@ -78634,11 +78451,11 @@
       "thresholds": {
         "air": 0,
         "earth": 0,
-        "fire": 0,
+        "fire": 1,
         "water": 0
       }
     },
-    "elements": "None",
+    "elements": "Fire",
     "subTypes": "",
     "sets": [
       {
@@ -78655,7 +78472,7 @@
           "thresholds": {
             "air": 0,
             "earth": 0,
-            "fire": 0,
+            "fire": 1,
             "water": 0
           }
         },
@@ -78744,7 +78561,7 @@
     "guardian": {
       "rarity": "Unique",
       "type": "Site",
-      "rulesText": "When the Tower of Babel is built, draw a card, then you may cast a spell for free.",
+      "rulesText": "When the Tower of Babel is built, draw a spell, then you may cast a spell for free.",
       "cost": null,
       "attack": null,
       "defence": null,
@@ -78765,7 +78582,7 @@
         "metadata": {
           "rarity": "Unique",
           "type": "Site",
-          "rulesText": "When the Tower of Babel is built, draw a card, then you may cast a spell for free.",
+          "rulesText": "When the Tower of Babel is built, draw a spell, then you may cast a spell for free.",
           "cost": null,
           "attack": null,
           "defence": null,
@@ -81172,7 +80989,7 @@
         "air": 0,
         "earth": 0,
         "fire": 0,
-        "water": 1
+        "water": 2
       }
     },
     "elements": "Water",
@@ -81193,7 +81010,7 @@
             "air": 0,
             "earth": 0,
             "fire": 0,
-            "water": 1
+            "water": 2
           }
         },
         "variants": [
@@ -81882,6 +81699,57 @@
             "artist": "Michal Nagypál",
             "flavorText": "",
             "typeText": "An Ordinary and bothersome Beast"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Foot Soldiers",
+    "guardian": {
+      "rarity": "Ordinary",
+      "type": "Minion",
+      "rulesText": "",
+      "cost": null,
+      "attack": 1,
+      "defence": 1,
+      "life": null,
+      "thresholds": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "elements": "None",
+    "subTypes": "Mortal",
+    "sets": [
+      {
+        "name": "Arthurian Legends",
+        "releasedAt": "2024-10-04T00:00:00.000Z",
+        "metadata": {
+          "rarity": "Ordinary",
+          "type": "Minion",
+          "rulesText": "",
+          "cost": null,
+          "attack": 1,
+          "defence": 1,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "art-foot_soldiers-bt-s",
+            "finish": "Standard",
+            "product": "Box_Topper",
+            "artist": "Andrea Modesti",
+            "flavorText": "\"Farewell, farewell, O warrier brave, \nNobody can from Death thee save.\"",
+            "typeText": "Ordinary Mortals march forth"
           }
         ]
       }

@@ -12,6 +12,18 @@ export const createEventSlice: StateCreator<GameState, [], [], EventSlice> = (
   eventSeq: 0,
   log: (text: string) =>
     set((state) => {
+      // In online play, only the acting player should log events.
+      // The opponent will receive events via server patches.
+      // This prevents duplicate logs from both clients logging the same action.
+      const isOnline = Boolean(state.transport && state.actorKey);
+      if (isOnline) {
+        const currentSeat = state.currentPlayer === 1 ? "p1" : "p2";
+        if (state.actorKey !== currentSeat) {
+          // Not the current player's turn - don't log locally, events come from server
+          return state as GameState;
+        }
+      }
+
       const nextId = state.eventSeq + 1;
       const entry = {
         id: nextId,

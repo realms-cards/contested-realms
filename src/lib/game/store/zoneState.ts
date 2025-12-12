@@ -89,7 +89,8 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
         const j = Math.floor(Math.random() * (i + 1));
         [pile[i], pile[j]] = [pile[j], pile[i]];
       }
-      get().log(`${who.toUpperCase()} shuffles Spellbook (${pile.length})`);
+      const playerNum = who === "p1" ? "1" : "2";
+      get().log(`[p${playerNum}:PLAYER] shuffles Spellbook (${pile.length})`);
       const zonesNext = {
         ...state.zones,
         [who]: { ...state.zones[who], spellbook: pile },
@@ -111,7 +112,8 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
         const j = Math.floor(Math.random() * (i + 1));
         [pile[i], pile[j]] = [pile[j], pile[i]];
       }
-      get().log(`${who.toUpperCase()} shuffles Atlas (${pile.length})`);
+      const playerNum = who === "p1" ? "1" : "2";
+      get().log(`[p${playerNum}:PLAYER] shuffles Atlas (${pile.length})`);
       const zonesNext = {
         ...state.zones,
         [who]: { ...state.zones[who], atlas: pile },
@@ -603,12 +605,14 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
           ...state.avatars,
           [who]: { ...state.avatars[who], tapped: true },
         } as GameState["avatars"];
+        const playerNum = who === "p1" ? "1" : "2";
         get().log(
-          `${who.toUpperCase()} taps Avatar to draw '${card.name}' from ${from}`
+          `[p${playerNum}:PLAYER] taps Avatar to draw [p${playerNum}card:${card.name}] from ${from}`
         );
       } else {
+        const playerNum = who === "p1" ? "1" : "2";
         get().log(
-          `${who.toUpperCase()} draws '${card.name}' from ${from} to hand`
+          `[p${playerNum}:PLAYER] draws [p${playerNum}card:${card.name}] from ${from} to hand`
         );
       }
 

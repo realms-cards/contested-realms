@@ -1501,6 +1501,12 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
           }
         }
 
+        // Always include the current turn in the patch so all clients stay in sync
+        const currentTurn = Number(match.game?.turn || 1);
+        if (patchToApply.turn === undefined) {
+          patchToApply = { ...patchToApply, turn: currentTurn };
+        }
+
         const enrichedPatchToApply =
           (await enrichPatchWithCosts(patchToApply, prisma)) ?? patchToApply;
 
@@ -1592,7 +1598,13 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
           }
         }
       } else {
-        const enrichedPatch = await enrichPatchWithCosts(patch, prisma);
+        // Always include the current turn in the patch so all clients stay in sync
+        const currentTurn = Number(match.game?.turn || 1);
+        let patchWithTurn = patch;
+        if (patch && patch.turn === undefined) {
+          patchWithTurn = { ...patch, turn: currentTurn };
+        }
+        const enrichedPatch = await enrichPatchWithCosts(patchWithTurn, prisma);
 
         // Build an events-only patch for the acting player (if any events exist)
         let eventsForSender: MatchPatch | null = null;
