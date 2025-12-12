@@ -27,14 +27,24 @@ import { getOCRScanner, type OCRScanner } from "@/lib/scanner/ocr-scanner";
 
 type ScanMode = "ocr" | "hybrid" | "ml";
 
-export type ScannerSet = "all" | "alpha" | "beta" | "arthurian";
+export type ScannerSet = "all" | "alpha" | "beta" | "arthurian" | "gothic";
 
 const SET_OPTIONS: { value: ScannerSet; label: string }[] = [
   { value: "all", label: "All Sets" },
   { value: "alpha", label: "Alpha" },
   { value: "beta", label: "Beta" },
   { value: "arthurian", label: "Arthurian Legends" },
+  { value: "gothic", label: "Gothic" },
 ];
+
+// Map ScannerSet values to set name patterns in the database
+const SET_NAME_PATTERNS: Record<ScannerSet, string[]> = {
+  all: [],
+  alpha: ["alpha"],
+  beta: ["beta"],
+  arthurian: ["arthurian"],
+  gothic: ["gothic"],
+};
 
 interface CardScannerViewProps {
   onCardDetected?: (result: ScanResult) => void;
@@ -82,6 +92,22 @@ export function CardScannerView({
 
   // All card names for correction search
   const [allCardNames, setAllCardNames] = useState<string[]>([]);
+  // Card name to sets mapping for filtering
+  const cardSetsMapRef = useRef<Map<string, Set<string>>>(new Map());
+
+  // Helper to check if a card belongs to the selected set
+  const isCardInSelectedSet = useCallback(
+    (cardName: string): boolean => {
+      if (selectedSet === "all") return true;
+      const patterns = SET_NAME_PATTERNS[selectedSet];
+      const cardSets = cardSetsMapRef.current.get(cardName);
+      if (!cardSets) return true; // Unknown card, don't filter
+      return patterns.some((pattern) =>
+        Array.from(cardSets).some((setName) => setName.includes(pattern))
+      );
+    },
+    [selectedSet]
+  );
 
   // Scan mode: ML (image classification) or OCR (text recognition)
   const [scanMode, setScanMode] = useState<ScanMode>("ocr"); // Default to OCR
@@ -155,12 +181,24 @@ export function CardScannerView({
             const index = await indexRes.json();
             // index.entries is [[cardId, variantId, setId, cardName, slug, setName, isFoil], ...]
             const uniqueNames = new Set<string>();
+            const cardSetsMap = new Map<string, Set<string>>();
             for (const entry of index.entries || []) {
               const cardName = entry[3]; // cardName is at index 3
+              const setName = entry[5]; // setName is at index 5
               if (typeof cardName === "string" && cardName.length > 0) {
                 uniqueNames.add(cardName);
+                // Build card -> sets mapping
+                if (typeof setName === "string") {
+                  const existingSet = cardSetsMap.get(cardName);
+                  if (existingSet) {
+                    existingSet.add(setName.toLowerCase());
+                  } else {
+                    cardSetsMap.set(cardName, new Set([setName.toLowerCase()]));
+                  }
+                }
               }
             }
+            cardSetsMapRef.current = cardSetsMap;
             const cardNamesArray = Array.from(uniqueNames).sort();
             setAllCardNames(cardNamesArray);
             console.log(
@@ -250,6 +288,55 @@ export function CardScannerView({
             );
           } else if (err.name === "NotFoundError") {
             setError("No camera found. Please connect a camera to scan cards.");
+          } else if (err.name === "AbortError") {
+            // AbortError on iOS often means constraints couldn't be satisfied
+            // or the stream was interrupted - retry with simpler constraints
+            console.log(
+              "[CardScanner] AbortError - retrying with basic constraints..."
+            );
+            try {
+              stream = await navigator.mediaDevices.getUserMedia({
+                video: selectedCameraId
+                  ? { deviceId: { exact: selectedCameraId } }
+                  : { facingMode },
+                audio: false,
+              });
+              if (videoRef.current) {
+                videoRef.current.srcObject = stream;
+                await videoRef.current.play();
+              }
+              setStatus("ready");
+              return;
+            } catch (retryErr) {
+              console.error("[CardScanner] Retry also failed:", retryErr);
+              setError(
+                "Camera initialization failed. Please refresh and try again."
+              );
+            }
+          } else if (err.name === "OverconstrainedError") {
+            // Resolution too high for this camera - retry with lower constraints
+            console.log(
+              "[CardScanner] OverconstrainedError - retrying with lower resolution..."
+            );
+            try {
+              stream = await navigator.mediaDevices.getUserMedia({
+                video: selectedCameraId
+                  ? { deviceId: { exact: selectedCameraId } }
+                  : { facingMode },
+                audio: false,
+              });
+              if (videoRef.current) {
+                videoRef.current.srcObject = stream;
+                await videoRef.current.play();
+              }
+              setStatus("ready");
+              return;
+            } catch (retryErr) {
+              console.error("[CardScanner] Retry also failed:", retryErr);
+              setError(
+                "Camera initialization failed. Please try a different camera."
+              );
+            }
           } else {
             setError(err.message);
           }
@@ -376,6 +463,12 @@ export function CardScannerView({
         result = await scannerRef.current.predictFromVideo(videoRef.current);
       }
 
+      // Filter result by selected set
+      if (result && !isCardInSelectedSet(result.cardName)) {
+        // Card not in selected set - skip this result
+        result = null;
+      }
+
       // Store raw result for feedback
       setCurrentResult(result);
 
@@ -430,7 +523,7 @@ export function CardScannerView({
     animationRef.current = requestAnimationFrame(() => {
       setTimeout(scan, delay);
     });
-  }, [status, onCardDetected, showCorrection, scanMode]);
+  }, [status, onCardDetected, showCorrection, scanMode, isCardInSelectedSet]);
 
   // Start/stop scanning
   const startScanning = useCallback(() => {

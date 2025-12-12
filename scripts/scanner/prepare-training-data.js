@@ -46,6 +46,7 @@ const SET_NAME_TO_CODE = {
   "Arthurian Legends": "art",
   Arthurian: "art",
   Dragonlord: "drl",
+  Gothic: "got",
 };
 
 const CARDS_RAW_PATH = path.join(__dirname, "../../data/cards_raw.json");
@@ -56,6 +57,7 @@ const SET_CODES = {
   Beta: "bet",
   "Arthurian Legends": "art",
   Dragonlord: "drl",
+  Gothic: "got",
 };
 
 const SET_DIRS = {
@@ -63,20 +65,33 @@ const SET_DIRS = {
   bet: "beta",
   art: "arthurian_legends",
   drl: "dragonlord",
+  got: "gothic",
 };
+
+// Sets that use flat structure (no subdirectories)
+const FLAT_SETS = ["got", "drl"];
 
 function slugToLocalPath(slug) {
   const code = slug.slice(0, 3);
   const setDir = SET_DIRS[code];
   if (!setDir) return null;
 
-  const base = slug.replace(/^[a-z]{3}_/, "");
-  // Extract finish suffix (last part like b_s, d_s, etc.)
-  const parts = base.split("_");
-  const finish = parts.slice(-2).join("_"); // e.g., "b_s", "d_s"
+  // Slug format: "alp-apprentice_wizard-b-s" -> remove set prefix and convert to underscore format
+  // Result should be: "apprentice_wizard_b_s.png"
+  const withoutPrefix = slug.replace(/^[a-z]{3}-/, ""); // "apprentice_wizard-b-s"
+  const parts = withoutPrefix.split("-");
+  const finishCode = parts.slice(-2).join("_"); // "b_s"
+  const cardName = parts.slice(0, -2).join("-"); // "apprentice_wizard"
+  const filename = `${cardName}_${finishCode}.png`; // "apprentice_wizard_b_s.png"
 
-  // Local path: data/{set}/{finish}/{name}.png
-  return path.join(LOCAL_DATA_DIR, setDir, finish, `${base}.png`);
+  // Gothic and Dragonlord use flat structure, others use subdirectories
+  if (FLAT_SETS.includes(code)) {
+    // Flat: data/{set}/{filename}.png
+    return path.join(LOCAL_DATA_DIR, setDir, filename);
+  } else {
+    // Subdirectory: data/{set}/{finish}/{filename}.png
+    return path.join(LOCAL_DATA_DIR, setDir, finishCode, filename);
+  }
 }
 
 function slugToImageUrl(slug) {

@@ -250,21 +250,42 @@ def main():
         }, f, indent=2)
     print(f"💾 Saved class map to {class_map_path}")
     
-    # Convert to TensorFlow.js
+    # Convert to TensorFlow.js via SavedModel (Keras 3 compatible)
     print("\n🔄 Converting to TensorFlow.js format...")
     try:
-        import tensorflowjs as tfjs
+        import subprocess
+        import shutil
+        
+        # Save as SavedModel format (better compatibility)
+        saved_model_path = output_dir / 'saved_model'
+        model.export(str(saved_model_path))
+        print(f"💾 Exported SavedModel to {saved_model_path}")
+        
+        # Convert SavedModel to TF.js graph model format
         tfjs_path = output_dir / 'tfjs'
-        tfjs.converters.save_keras_model(model, str(tfjs_path))
+        if tfjs_path.exists():
+            shutil.rmtree(tfjs_path)
+        
+        result = subprocess.run([
+            'tensorflowjs_converter',
+            '--input_format=tf_saved_model',
+            '--output_format=tfjs_graph_model',
+            '--signature_name=serving_default',
+            str(saved_model_path),
+            str(tfjs_path)
+        ], capture_output=True, text=True)
+        
+        if result.returncode != 0:
+            print(f"⚠️ Conversion warning: {result.stderr}")
+        
         print(f"✅ Saved TF.js model to {tfjs_path}")
         
         # Copy class map to tfjs folder
-        import shutil
         shutil.copy(class_map_path, tfjs_path / 'class_map.json')
         
-    except ImportError:
-        print("⚠️ tensorflowjs not installed. Run: pip install tensorflowjs")
-        print(f"Then convert manually: tensorflowjs_converter --input_format=keras {keras_path} {output_dir / 'tfjs'}")
+    except Exception as e:
+        print(f"⚠️ TF.js conversion failed: {e}")
+        print(f"Convert manually: tensorflowjs_converter --input_format=tf_saved_model --output_format=tfjs_graph_model {output_dir / 'saved_model'} {output_dir / 'tfjs'}")
     
     print("\n🎉 Training complete!")
     print(f"\nModel files in: {output_dir}")
