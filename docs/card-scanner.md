@@ -53,7 +53,7 @@ npm run scanner:prepare
 
 - `--output-dir <path>` - Output directory (default: `data/scanner-training`)
 - `--card-level true|false` - Group by card name (true) or variant slug (false)
-- `--set <set>` - Filter to specific set: `alpha`, `beta`, `arthurian`, `dragonlord`
+- `--set <set>` - Filter to specific set: `alpha`, `beta`, `arthurian`, `dragonlord`, `gothic`
 - `--limit <n>` - Limit number of cards (for testing)
 - `--concurrency <n>` - Download concurrency (default: 10)
 
