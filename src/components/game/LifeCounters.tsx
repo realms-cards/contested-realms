@@ -75,11 +75,8 @@ function LifeCounter({
         </div>
       )}
 
-      {/* Main counter row */}
-      <div
-        className="flex items-center gap-2"
-        onContextMenu={(e) => e.preventDefault()}
-      >
+      {/* Main counter row - group for hover effect, relative for absolute buttons */}
+      <div className="group relative" onContextMenu={(e) => e.preventDefault()}>
         {/* Life counter */}
         <div
           className={`w-16 h-16 grid place-items-center rounded-xl bg-black/70 shadow-lg ring-1 ring-white/10 ${
@@ -103,9 +100,9 @@ function LifeCounter({
           </div>
         </div>
 
-        {/* Life modification buttons */}
+        {/* Life modification buttons - absolute positioned to not affect centering */}
         <div
-          className="flex flex-col gap-1"
+          className="absolute left-full top-1/2 -translate-y-1/2 ml-2 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
           onContextMenu={(e) => e.preventDefault()}
         >
           <button

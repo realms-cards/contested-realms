@@ -1,10 +1,5 @@
 import type { StateCreator } from "zustand";
-import type {
-  AvatarState,
-  CellKey,
-  GameState,
-  ServerPatchT,
-} from "./types";
+import type { AvatarState, CellKey, GameState, ServerPatchT } from "./types";
 import { buildAvatarUpdate, createDefaultAvatars } from "./utils/avatarHelpers";
 import { moveAvatarAttachedArtifacts } from "./utils/permanentHelpers";
 
@@ -32,7 +27,10 @@ export const createAvatarSlice: StateCreator<GameState, [], [], AvatarSlice> = (
 
   setAvatarCard: (who, card) =>
     set((state) => {
-      get().log(`${who.toUpperCase()} sets Avatar to '${card.name}'`);
+      const playerNum = who === "p1" ? "1" : "2";
+      get().log(
+        `[p${playerNum}:PLAYER] sets Avatar to [p${playerNum}card:${card.name}]`
+      );
       const avatarsNext = {
         ...state.avatars,
         [who]: { ...state.avatars[who], card },
@@ -50,8 +48,9 @@ export const createAvatarSlice: StateCreator<GameState, [], [], AvatarSlice> = (
   setAvatarChampion: (who, champion) =>
     set((state) => {
       if (champion) {
+        const playerNum = who === "p1" ? "1" : "2";
         get().log(
-          `${who.toUpperCase()} sets Dragonlord Champion to '${champion.name}'`
+          `[p${playerNum}:PLAYER] sets Dragonlord Champion to [p${playerNum}card:${champion.name}]`
         );
       }
       const avatarsNext = {
@@ -75,7 +74,8 @@ export const createAvatarSlice: StateCreator<GameState, [], [], AvatarSlice> = (
       const x = Math.floor(w / 2);
       const y = who === "p1" ? h - 1 : 0;
       const cellNo = y * w + x + 1;
-      get().log(`${who.toUpperCase()} places Avatar at #${cellNo}`);
+      const playerNum = who === "p1" ? "1" : "2";
+      get().log(`[p${playerNum}:PLAYER] places Avatar at #${cellNo}`);
       const avatarsNext = {
         ...state.avatars,
         [who]: { ...state.avatars[who], pos: [x, y], offset: null },
@@ -121,10 +121,11 @@ export const createAvatarSlice: StateCreator<GameState, [], [], AvatarSlice> = (
           );
         }
       }
+      const playerNum = who === "p1" ? "1" : "2";
       if (shouldTap) {
-        get().log(`${who.toUpperCase()} moves Avatar to #${cellNo} (tapped)`);
+        get().log(`[p${playerNum}:PLAYER] moves Avatar to #${cellNo} (tapped)`);
       } else {
-        get().log(`${who.toUpperCase()} moves Avatar to #${cellNo}`);
+        get().log(`[p${playerNum}:PLAYER] moves Avatar to #${cellNo}`);
       }
       const tr = get().transport;
       if (tr) {
@@ -180,10 +181,11 @@ export const createAvatarSlice: StateCreator<GameState, [], [], AvatarSlice> = (
           );
         }
       }
+      const playerNum = who === "p1" ? "1" : "2";
       if (shouldTap) {
-        get().log(`${who.toUpperCase()} moves Avatar to #${cellNo} (tapped)`);
+        get().log(`[p${playerNum}:PLAYER] moves Avatar to #${cellNo} (tapped)`);
       } else {
-        get().log(`${who.toUpperCase()} moves Avatar to #${cellNo}`);
+        get().log(`[p${playerNum}:PLAYER] moves Avatar to #${cellNo}`);
       }
       const tr = get().transport;
       if (tr) {
@@ -324,7 +326,8 @@ export const createAvatarSlice: StateCreator<GameState, [], [], AvatarSlice> = (
           ...state.avatars,
           [who]: cleared,
         } as GameState["avatars"];
-        get().log(`${who.toUpperCase()} removes avatar counter`);
+        const playerNum = who === "p1" ? "1" : "2";
+        get().log(`[p${playerNum}:PLAYER] removes avatar counter`);
         const patch: ServerPatchT = {
           avatars: { [who]: { counters: null } } as GameState["avatars"],
         };
@@ -337,8 +340,9 @@ export const createAvatarSlice: StateCreator<GameState, [], [], AvatarSlice> = (
           ...state.avatars,
           [who]: next,
         } as GameState["avatars"];
+        const playerNum2 = who === "p1" ? "1" : "2";
         get().log(
-          `${who.toUpperCase()} decrements avatar counter (now ${nextCount})`
+          `[p${playerNum2}:PLAYER] decrements avatar counter (now ${nextCount})`
         );
         const patch: ServerPatchT = {
           avatars: { [who]: { counters: nextCount } } as GameState["avatars"],
@@ -358,7 +362,8 @@ export const createAvatarSlice: StateCreator<GameState, [], [], AvatarSlice> = (
         ...state.avatars,
         [who]: cleared,
       } as GameState["avatars"];
-      get().log(`${who.toUpperCase()} removes avatar counter`);
+      const playerNum = who === "p1" ? "1" : "2";
+      get().log(`[p${playerNum}:PLAYER] removes avatar counter`);
       const patch: ServerPatchT = {
         avatars: { [who]: { counters: null } } as GameState["avatars"],
       };

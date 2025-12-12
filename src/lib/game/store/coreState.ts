@@ -265,20 +265,22 @@ export const createCoreSlice: StateCreator<
       get().trySendPatch(patch);
 
       if (currentLife !== newLife) {
+        const playerNum = who === "p1" ? "1" : "2";
         const changeText =
           delta > 0 ? `gains ${delta}` : `loses ${Math.abs(delta)}`;
         get().log(
-          `${who.toUpperCase()} ${changeText} life (${currentLife} → ${newLife})`
+          `[p${playerNum}:PLAYER] ${changeText} life (${currentLife} → ${newLife})`
         );
       }
 
       if (currentLifeState !== newLifeState) {
+        const playerNum = who === "p1" ? "1" : "2";
         if (newLifeState === "dd") {
-          get().log(`${who.toUpperCase()} enters Death's Door!`);
+          get().log(`[p${playerNum}:PLAYER] enters Death's Door!`);
         } else if (newLifeState === "alive" && currentLifeState === "dd") {
-          get().log(`${who.toUpperCase()} recovers from Death's Door`);
+          get().log(`[p${playerNum}:PLAYER] recovers from Death's Door`);
         } else if (newLifeState === "dead") {
-          get().log(`${who.toUpperCase()} has died! Match ended.`);
+          get().log(`[p${playerNum}:PLAYER] has died! Match ended.`);
         }
       }
 
@@ -289,6 +291,14 @@ export const createCoreSlice: StateCreator<
 
   nextPhase: () => {
     const state = get();
+    // In online play, only the current player can advance the phase
+    if (state.transport && state.actorKey) {
+      const currentSeat = state.currentPlayer === 1 ? "p1" : "p2";
+      if (state.actorKey !== currentSeat) {
+        console.debug("[game] nextPhase ignored: not current player");
+        return;
+      }
+    }
     get().pushHistory();
     const idx = phases.indexOf(state.phase);
     const nextIdx = (idx + 1) % phases.length;
@@ -297,9 +307,9 @@ export const createCoreSlice: StateCreator<
 
     if (passTurn) {
       const nextPlayer = state.currentPlayer === 1 ? 2 : 1;
-      const nextTurn = state.turn + 1;
+      const nextPlayerNum = nextPlayer === 1 ? "1" : "2";
       // Log before updating state so it uses the current turn number
-      get().log(`Turn passes to P${nextPlayer}`);
+      get().log(`Turn passes to [p${nextPlayerNum}:PLAYER]`);
       const permanents: Permanents = { ...state.permanents };
       const updates: PermanentDeltaUpdate[] = [];
       for (const cellKey of Object.keys(permanents)) {
@@ -334,10 +344,10 @@ export const createCoreSlice: StateCreator<
         [nextKey]: { ...state.avatars[nextKey], tapped: false },
       } as GameState["avatars"];
 
+      // Don't send turn in patch - server increments turn when currentPlayer changes
       const base: ServerPatchT = {
         phase: nextPhase,
         currentPlayer: nextPlayer,
-        turn: nextTurn,
         hasDrawnThisTurn: false, // Reset draw tracking for new turn
       };
       const deltaPatch =
@@ -347,10 +357,10 @@ export const createCoreSlice: StateCreator<
         : base;
       get().trySendPatch(patch);
 
+      // Don't set turn locally - server will send the authoritative turn value
       set({
         phase: nextPhase,
         currentPlayer: nextPlayer,
-        turn: nextTurn,
         hasDrawnThisTurn: false, // Reset draw tracking for new turn
         permanents,
         avatars: avatarsNext,
@@ -373,13 +383,22 @@ export const createCoreSlice: StateCreator<
       console.debug("[game] endTurn ignored after match ended");
       return;
     }
+    // In online play, only the current player can end the turn
+    if (state.transport && state.actorKey) {
+      const currentSeat = state.currentPlayer === 1 ? "p1" : "p2";
+      if (state.actorKey !== currentSeat) {
+        console.debug("[game] endTurn ignored: not current player");
+        return;
+      }
+    }
     get().pushHistory();
     const cur = state.currentPlayer;
     const nextPlayer = cur === 1 ? 2 : 1;
-    const nextTurn = state.turn + 1;
+    const curPlayerNum = cur === 1 ? "1" : "2";
+    const nextPlayerNum = nextPlayer === 1 ? "1" : "2";
     // Log both messages before updating state so they use the current turn number
-    get().log(`P${cur} ends the turn`);
-    get().log(`Turn passes to P${nextPlayer}`);
+    get().log(`[p${curPlayerNum}:PLAYER] ends the turn`);
+    get().log(`Turn passes to [p${nextPlayerNum}:PLAYER]`);
 
     const permanents: Permanents = { ...state.permanents };
     const updates: PermanentDeltaUpdate[] = [];
@@ -421,10 +440,10 @@ export const createCoreSlice: StateCreator<
       [nextKey]: { ...state.players[nextKey], mana: 0 },
     };
 
+    // Don't send turn in patch - server increments turn when currentPlayer changes
     const base: ServerPatchT = {
       phase: "Start",
       currentPlayer: nextPlayer,
-      turn: nextTurn,
       hasDrawnThisTurn: false, // Reset draw tracking for new turn
       players: playersNext,
     };
@@ -433,10 +452,10 @@ export const createCoreSlice: StateCreator<
     const patch: ServerPatchT = deltaPatch ? { ...deltaPatch, ...base } : base;
     get().trySendPatch(patch);
 
+    // Don't set turn locally - server will send the authoritative turn value
     set({
       phase: "Start",
       currentPlayer: nextPlayer,
-      turn: nextTurn,
       hasDrawnThisTurn: false, // Reset draw tracking for new turn
       permanents,
       avatars: avatarsNext,

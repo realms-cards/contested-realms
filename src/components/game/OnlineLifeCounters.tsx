@@ -105,11 +105,8 @@ function LifeCounter({
         </div>
       )}
 
-      {/* Main counter row */}
-      <div
-        className="flex items-center gap-2"
-        onContextMenu={(e) => e.preventDefault()}
-      >
+      {/* Main counter row - group for hover effect, relative for absolute buttons */}
+      <div className="group relative" onContextMenu={(e) => e.preventDefault()}>
         {/* Life counter */}
         <div
           className={`w-16 h-16 grid place-items-center rounded-xl bg-black/70 shadow-lg ring-1 ring-white/10 ${
@@ -133,50 +130,53 @@ function LifeCounter({
           </div>
         </div>
 
-        {/* Life modification buttons */}
-        {canModify && (
-          <div
-            className="flex flex-col gap-1"
+        {/* Life modification buttons - absolute positioned to not affect centering */}
+        {/* Only show for own gauge (isMe) unless canModify is true for all (hotseat mode) */}
+        <div
+          className={`absolute left-full top-1/2 -translate-y-1/2 ml-2 flex flex-col gap-1 transition-opacity ${
+            canModifyThisPlayer
+              ? "opacity-0 group-hover:opacity-100"
+              : "opacity-0 pointer-events-none"
+          }`}
+          onContextMenu={(e) => e.preventDefault()}
+        >
+          <button
+            className="px-2 py-0.5 rounded bg-white/15 hover:bg-white/25 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            onClick={() => addLife(player, +1)}
+            disabled={dragFromHand || !canIncrease || !canModify}
+            title={
+              !canIncrease
+                ? isMe
+                  ? "Cannot increase life (max 20 or dead)"
+                  : "Can only modify your own life"
+                : "Increase life"
+            }
             onContextMenu={(e) => e.preventDefault()}
           >
-            <button
-              className="px-2 py-0.5 rounded bg-white/15 hover:bg-white/25 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-              onClick={() => addLife(player, +1)}
-              disabled={dragFromHand || !canIncrease}
-              title={
-                !canIncrease
-                  ? isMe
-                    ? "Cannot increase life (max 20 or dead)"
-                    : "Can only modify your own life"
-                  : "Increase life"
+            +
+          </button>
+          <button
+            className="px-2 py-0.5 rounded bg-white/15 hover:bg-white/25 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            onClick={() => {
+              if (lifeState === "dd") {
+                setShowDeathConfirm(true);
+              } else {
+                addLife(player, -1);
               }
-              onContextMenu={(e) => e.preventDefault()}
-            >
-              +
-            </button>
-            <button
-              className="px-2 py-0.5 rounded bg-white/15 hover:bg-white/25 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-              onClick={() => {
-                if (lifeState === "dd") {
-                  setShowDeathConfirm(true);
-                } else {
-                  addLife(player, -1);
-                }
-              }}
-              disabled={dragFromHand || !canDecrease}
-              title={
-                !canDecrease
-                  ? isMe
-                    ? "Cannot decrease life (dead)"
-                    : "Can only modify your own life"
-                  : "Decrease life"
-              }
-              onContextMenu={(e) => e.preventDefault()}
-            >
-              -
-            </button>
-          </div>
-        )}
+            }}
+            disabled={dragFromHand || !canDecrease || !canModify}
+            title={
+              !canDecrease
+                ? isMe
+                  ? "Cannot decrease life (dead)"
+                  : "Can only modify your own life"
+                : "Decrease life"
+            }
+            onContextMenu={(e) => e.preventDefault()}
+          >
+            -
+          </button>
+        </div>
       </div>
 
       {/* Player name below counter (for lower player) */}

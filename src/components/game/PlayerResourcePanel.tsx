@@ -47,7 +47,7 @@ function ThresholdSymbols({
 
   if (count === 2) {
     return (
-      <div className="flex flex-col items-center gap-px">
+      <div className="flex flex-col items-center -space-y-1">
         <Image src={icon} alt={alt} width={ICON_SIZE} height={ICON_SIZE} />
         <Image src={icon} alt={alt} width={ICON_SIZE} height={ICON_SIZE} />
       </div>
@@ -56,8 +56,8 @@ function ThresholdSymbols({
 
   if (count === 3) {
     return (
-      <div className="flex flex-col items-center gap-px">
-        <div className="flex gap-px">
+      <div className="flex flex-col items-center -space-y-1">
+        <div className="flex -space-x-0.5">
           <Image src={icon} alt={alt} width={ICON_SIZE} height={ICON_SIZE} />
           <Image src={icon} alt={alt} width={ICON_SIZE} height={ICON_SIZE} />
         </div>
@@ -68,12 +68,12 @@ function ThresholdSymbols({
 
   if (count === 4) {
     return (
-      <div className="flex flex-col items-center gap-px">
-        <div className="flex gap-px">
+      <div className="flex flex-col items-center -space-y-1">
+        <div className="flex -space-x-0.5">
           <Image src={icon} alt={alt} width={ICON_SIZE} height={ICON_SIZE} />
           <Image src={icon} alt={alt} width={ICON_SIZE} height={ICON_SIZE} />
         </div>
-        <div className="flex gap-px">
+        <div className="flex -space-x-0.5">
           <Image src={icon} alt={alt} width={ICON_SIZE} height={ICON_SIZE} />
           <Image src={icon} alt={alt} width={ICON_SIZE} height={ICON_SIZE} />
         </div>
@@ -90,9 +90,9 @@ function ThresholdSymbols({
   }
 
   return (
-    <div className="flex flex-col items-center gap-px">
+    <div className="flex flex-col items-center -space-y-1">
       {rows.map((rowCount, i) => (
-        <div key={i} className="flex gap-px">
+        <div key={i} className="flex -space-x-0.5">
           {Array.from({ length: rowCount }).map((_, j) => (
             <Image
               key={j}

@@ -3,22 +3,17 @@ import { MAX_EVENTS } from "../types";
 
 export function mergeEvents(prev: GameEvent[], add: GameEvent[]): GameEvent[] {
   const m = new Map<string, GameEvent>();
-  // Use turn|text as the primary dedup key to avoid duplicates from different clients
-  // logging the same action with different ids/timestamps
+  // Use event id as primary key - each event has a unique id
+  // Events are only created by the acting player, so duplicates shouldn't occur
   for (const e of Array.isArray(prev) ? prev : []) {
     if (!e) continue;
-    const key = `${e.turn}|${e.text}`;
-    // Keep the earliest version (lowest id) of duplicate events
-    if (!m.has(key) || e.id < (m.get(key)?.id ?? Infinity)) {
-      m.set(key, e);
-    }
+    m.set(`${e.id}`, e);
   }
   for (const e of Array.isArray(add) ? add : []) {
     if (!e) continue;
-    const key = `${e.turn}|${e.text}`;
-    // Keep the earliest version (lowest id) of duplicate events
-    if (!m.has(key) || e.id < (m.get(key)?.id ?? Infinity)) {
-      m.set(key, e);
+    // Only add if not already present (by id)
+    if (!m.has(`${e.id}`)) {
+      m.set(`${e.id}`, e);
     }
   }
   const merged = Array.from(m.values()).sort(
