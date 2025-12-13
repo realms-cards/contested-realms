@@ -87,10 +87,12 @@ This manual documents keyboard shortcuts and core interaction flows for the Real
 
 ## Combat Flow (HUD‑Driven)
 
+> **Opt‑In Feature:** Combat guides are disabled by default. Both players must enable "Combat Guides" in Match Info (Settings button) for the HUD to appear. If only one player has it enabled, combat guides remain inactive.
+
 - **Start Attack**
 
   - Move a unit into the target tile. A top HUD appears when an attack is possible.
-  - Choose “Moves Only” or “Moves & Attacks”.
+  - Choose "Moves Only" or "Moves & Attacks".
 
 - **Select Target**
 
@@ -104,9 +106,11 @@ This manual documents keyboard shortcuts and core interaction flows for the Real
 - **Auto‑Resolve / Cancel**
   - Use HUD buttons to auto‑resolve or cancel as appropriate.
 
-Note: Combat choices are HUD/click‑driven; no extra combat hotkeys.
+Note: Combat choices are HUD/click‑driven; no extra combat hotkeys. Without combat guides enabled, players resolve combat manually by adjusting life totals and moving cards.
 
 ## Casting Magic (HUD‑Driven)
+
+> **Opt‑In Feature:** Magic guides are disabled by default. Both players must enable "Magic Guides" in Match Info (Settings button) for the HUD to appear. If only one player has it enabled, magic guides remain inactive.
 
 - **Choose Caster**
 
@@ -118,6 +122,8 @@ Note: Combat choices are HUD/click‑driven; no extra combat hotkeys.
 
 - **Confirm**
   - Follow HUD prompts to commit or back out.
+
+Note: Without magic guides enabled, players resolve spell effects manually.
 
 ## Piles: Spellbook, Atlas, Cemetery
 
@@ -132,11 +138,54 @@ Note: Combat choices are HUD/click‑driven; no extra combat hotkeys.
 - **Search Dialog**
   - Type to filter; click to select; `Escape` closes.
 
+## Collection (Sealed/Draft)
+
+In sealed and draft matches, your **Collection** contains unplayed cards from your card pool (sideboard). An amber gem button appears in the bottom‑right corner when you have collection cards.
+
+- **Open Collection**: Click the gem button to search your collection.
+- **Draw from Collection**: Select a card to add it to your hand.
+
+Note: Per limited rules, your collection also includes cards spawned by certain effects (e.g., Molten Maar spawns Hellhounds).
+
+## Match Info & Settings
+
+Click the **Info** button (gear icon) in the top status bar to open Match Info. Here you can:
+
+- **View match details**: Match ID, player names, life totals, mana, current turn/phase.
+- **Toggle Combat Guides**: Enable/disable combat HUD assistance. Requires both players to opt in.
+- **Toggle Magic Guides**: Enable/disable magic targeting HUD. Requires both players to opt in.
+- **Toggle Action Notifications**: Show/hide toast notifications for game actions.
+- **View connection status**: See if you're connected and sync pending updates.
+
 ## Overlays and Dialogs
 
 - **Common Controls**
   - Click outside to close where allowed.
   - Press `Escape` to close (e.g., search, attachment, hand peek, placement).
+
+## Toolbox
+
+Click the **wrench icon** in the bottom‑right to open the Toolbox. It provides utility actions:
+
+- **Ask Permission**: Request to play a card out of turn (sends consent request to opponent).
+- **Draw/Peek/Scry**: Draw, peek at, or scry cards from any pile (with count and top/bottom options).
+- **Inspect Hand**: Request to view opponent's hand (requires consent).
+- **Unbanish**: Return a card from banished zone to hand or graveyard.
+- **Force Position**: Set a permanent to burrowed/submerged/surface state.
+- **D20 Roll**: Roll a D20 (synced to both players in online play).
+- **Random Spell**: Add a random spell to your hand.
+- **Snapshots**: Auto‑snapshots are created at turn start; restore realm or full game state.
+
+## Mobile / Touch Controls
+
+On touch devices, hand interaction uses a tap‑to‑select pattern:
+
+- **Reveal Hand**: Tap the bottom of the screen to fan out your hand.
+- **Select Card**: Tap a card to select it (shows preview with cyan glow).
+- **Play Card**: Tap the selected card again or drag it to a tile.
+- **Deselect**: Tap outside the hand zone to clear selection.
+
+A hint overlay appears on first use explaining the tap‑to‑select pattern.
 
 ## Tips and Edge Cases
 
