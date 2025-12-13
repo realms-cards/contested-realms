@@ -13,6 +13,7 @@ import MatchmakingPanel from "@/components/online/MatchmakingPanel";
 import OnlinePageShell from "@/components/online/OnlinePageShell";
 import PlayersInvitePanel from "@/components/online/PlayersInvitePanel";
 import ChangelogOverlay from "@/components/ui/ChangelogOverlay";
+import ManualOverlay from "@/components/ui/ManualOverlay";
 import { useRealtimeTournaments } from "@/contexts/RealtimeTournamentContext";
 import { tournamentFeatures } from "@/lib/config/features";
 import {
@@ -2057,7 +2058,7 @@ function LobbyPageContent({
 
         {/* Footer links */}
         <div className="mt-8 text-center text-xs text-slate-500 space-x-3">
-          <span>Questions?</span>
+          <span>Info & Support:</span>
           <a
             href="https://www.sorcerersatthecore.com/discord"
             target="_blank"
@@ -2084,6 +2085,8 @@ function LobbyPageContent({
           </a>
           <span>·</span>
           <ChangelogOverlay />
+          <span>·</span>
+          <ManualOverlay />
         </div>
       </div>
     </OnlinePageShell>
