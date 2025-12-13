@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { AdminAccessError, requireAdminSession } from "@/lib/admin/auth";
-import { prisma } from "@/lib/prisma";
 import type { RecentMatchInfo } from "@/lib/admin/types";
+import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

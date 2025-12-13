@@ -151,10 +151,10 @@ export async function POST(req: NextRequest) {
           session.user.id,
           finalName
         );
-        if (importResult.error) {
+        if (importResult.error || !importResult.deck) {
           return new Response(
             JSON.stringify({
-              error: importResult.error,
+              error: importResult.error ?? "Failed to create deck",
               unresolved: importResult.unresolved,
             }),
             { status: 400 }
@@ -162,9 +162,9 @@ export async function POST(req: NextRequest) {
         }
         return new Response(
           JSON.stringify({
-            id: importResult.deck!.id,
-            name: importResult.deck!.name,
-            format: importResult.deck!.format,
+            id: importResult.deck.id,
+            name: importResult.deck.name,
+            format: importResult.deck.format,
           }),
           { status: 201, headers: { "content-type": "application/json" } }
         );

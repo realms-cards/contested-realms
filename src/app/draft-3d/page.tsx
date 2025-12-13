@@ -2,7 +2,6 @@
 
 import { OrbitControls } from "@react-three/drei";
 import { useThree } from "@react-three/fiber";
-import { ClientCanvas } from "@/components/game/ClientCanvas";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -12,6 +11,7 @@ import { MOUSE, TOUCH } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import DraggableCard3D from "@/app/decks/editor-3d/DraggableCard3D";
 import CardPreviewOverlay from "@/components/game/CardPreviewOverlay";
+import { ClientCanvas } from "@/components/game/ClientCanvas";
 import { DynamicBoard as Board } from "@/components/game/dynamic-3d";
 import { NumberBadge } from "@/components/game/manacost";
 import type { Digit } from "@/components/game/manacost";
