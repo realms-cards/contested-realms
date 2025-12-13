@@ -69,7 +69,12 @@ export const createPlayActionsSlice: StateCreator<
       const consumeInstantId = allowInstant
         ? instantPermission.consumeId
         : null;
-      if (!isCurrent && !allowInstant && !typeEarly.includes("token")) {
+      if (
+        !isCurrent &&
+        !allowInstant &&
+        !typeEarly.includes("token") &&
+        !typeEarly.includes("site")
+      ) {
         get().log(
           `Cannot play '${
             card.name
@@ -344,7 +349,12 @@ export const createPlayActionsSlice: StateCreator<
       const consumeInstantId = allowInstant
         ? instantPermission.consumeId
         : null;
-      if (!isCurrent && !allowInstant && !type.includes("token")) {
+      if (
+        !isCurrent &&
+        !allowInstant &&
+        !type.includes("token") &&
+        !type.includes("site")
+      ) {
         get().log(
           `Cannot play '${
             card.name

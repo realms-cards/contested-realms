@@ -2457,6 +2457,15 @@ export default function OnlineMatchPage() {
                 closeSearchDialog();
               }}
               onClose={() => closeSearchDialog()}
+              onBanishCard={
+                searchDialog.onBanishCard
+                  ? (card) => {
+                      searchDialog.onBanishCard?.(card);
+                      closeSearchDialog();
+                    }
+                  : undefined
+              }
+              banishRequiresConsent={searchDialog.banishRequiresConsent}
             />
           )}
 

@@ -1841,7 +1841,9 @@ function AuthenticatedDeckEditor() {
   // (moved) Load deck from URL parameter after loadDeck is declared
 
   // Tab state for cards view - default to "Your Deck"
-  const [cardsTab, setCardsTab] = useState<"deck" | "all">("deck");
+  const [cardsTab, setCardsTab] = useState<
+    "deck" | "sideboard" | "collection" | "all"
+  >("deck");
 
   // Feedback message system
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
@@ -2120,6 +2122,7 @@ function AuthenticatedDeckEditor() {
   const thresholdSummary = useMemo(() => {
     const summary: Record<string, number> = {};
     const elements = new Set<string>();
+    const validElements = ["air", "water", "earth", "fire"];
     for (const p of pick3D) {
       if (p.zone !== "Deck") continue; // deck zone only
       const th = metaByCardId[p.card.cardId]?.thresholds as
@@ -2128,8 +2131,13 @@ function AuthenticatedDeckEditor() {
         | null;
       if (!th) continue;
       for (const k of Object.keys(th)) {
-        elements.add(k);
-        summary[k] = (summary[k] || 0) + (th[k] || 0);
+        const key = k.toLowerCase();
+        if (!validElements.includes(key)) continue;
+        const val = th[k] || 0;
+        if (val > 0) {
+          elements.add(key);
+          summary[key] = (summary[key] || 0) + val;
+        }
       }
     }
     return { elements: Array.from(elements), summary };

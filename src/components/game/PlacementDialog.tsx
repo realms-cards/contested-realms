@@ -40,18 +40,26 @@ export default function PlacementDialog({
   }, [onCancel]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+      onContextMenu={(e) => e.preventDefault()}
+    >
       <div
         ref={dialogRef}
         className="bg-zinc-900/95 backdrop-blur rounded-xl ring-1 ring-white/10 shadow-2xl p-6 w-80 text-white"
+        onContextMenu={(e) => e.preventDefault()}
       >
         <div className="text-center">
           <h3 className="text-lg font-semibold mb-2">Place Card</h3>
           <p className="text-sm text-zinc-300 mb-6">
-            Where should <span className="font-medium text-white">&ldquo;{cardName}&rdquo;</span> be placed in the{" "}
+            Where should{" "}
+            <span className="font-medium text-white">
+              &ldquo;{cardName}&rdquo;
+            </span>{" "}
+            be placed in the{" "}
             <span className="font-medium text-white">{pileName}</span>?
           </p>
-          
+
           <div className="flex gap-3">
             <button
               className="flex-1 bg-blue-600 hover:bg-blue-500 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
@@ -67,7 +75,7 @@ export default function PlacementDialog({
               Bottom of pile
             </button>
           </div>
-          
+
           <button
             className="w-full mt-3 text-xs text-zinc-400 hover:text-zinc-300 transition-colors"
             onClick={onCancel}

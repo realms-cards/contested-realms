@@ -645,11 +645,18 @@ export type GameState = {
     target: "hand" | "graveyard" | "banished" | "atlas",
     position?: "top" | "bottom"
   ) => void;
+  moveSiteToGraveyardWithRubble: (
+    x: number,
+    y: number,
+    placeRubble: boolean
+  ) => void;
   moveFromBanishedToZone: (
     who: PlayerKey,
     instanceId: string,
     target: "hand" | "graveyard"
   ) => void;
+  moveFromGraveyardToBanished: (who: PlayerKey, instanceId: string) => void;
+  banishEntireGraveyard: (who: PlayerKey) => void;
   // Handle peeked card action (from peek dialog)
   handlePeekedCard: (
     who: PlayerKey,
@@ -761,11 +768,17 @@ export type GameState = {
     pileName: string;
     cards: CardRef[];
     onSelectCard: (card: CardRef) => void;
+    onBanishCard?: (card: CardRef) => void;
+    banishRequiresConsent?: boolean;
   } | null;
   openSearchDialog: (
     pileName: string,
     cards: CardRef[],
-    onSelectCard: (card: CardRef) => void
+    onSelectCard: (card: CardRef) => void,
+    options?: {
+      onBanishCard?: (card: CardRef) => void;
+      banishRequiresConsent?: boolean;
+    }
   ) => void;
   closeSearchDialog: () => void;
   // Peek-only dialog used for reveals (with optional card actions)

@@ -39,6 +39,8 @@ type ZoneSlice = Pick<
   | "mulliganDrawn"
   | "finalizeMulligan"
   | "moveFromBanishedToZone"
+  | "moveFromGraveyardToBanished"
+  | "banishEntireGraveyard"
   | "handlePeekedCard"
 >;
 
@@ -542,8 +544,10 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
         get().log(`Cannot draw from opponent's ${from}`);
         return { dragFromPile: null } as Partial<GameState> as GameState;
       }
+      // Graveyard retrieval is allowed anytime (for card effects like recursion)
+      // Other piles require it to be your turn
       const isCurrent = (who === "p1" ? 1 : 2) === state.currentPlayer;
-      if (!isCurrent) {
+      if (!isCurrent && from !== "graveyard") {
         get().log(
           `Cannot draw '${
             card.name
@@ -1004,6 +1008,58 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
         `Returned [p${playerNum}card:${card.name}] from banished to ${
           target === "hand" ? "hand" : "cemetery"
         }`
+      );
+      const patch = createZonesPatchFor(zonesNext as GameState["zones"], who);
+      if (patch) get().trySendPatch(patch);
+      return {
+        zones: zonesNext as GameState["zones"],
+      } as Partial<GameState> as GameState;
+    }),
+
+  moveFromGraveyardToBanished: (who, instanceId) =>
+    set((state) => {
+      get().pushHistory();
+      if (!instanceId) return state;
+      // For own graveyard, no consent needed
+      // For opponent graveyard, consent should be handled before calling this
+      const zonesNext = { ...state.zones } as Record<PlayerKey, Zones>;
+      const seatZones = { ...zonesNext[who] } as Zones;
+      const graveyard = [...seatZones.graveyard];
+      const idx = graveyard.findIndex((c) => c && c.instanceId === instanceId);
+      if (idx < 0) return state;
+      const card = graveyard.splice(idx, 1)[0];
+      if (!card) return state;
+      seatZones.banished = [...seatZones.banished, card];
+      seatZones.graveyard = graveyard;
+      zonesNext[who] = seatZones;
+      const playerNum = who === "p1" ? "1" : "2";
+      get().log(`Banished [p${playerNum}card:${card.name}] from cemetery`);
+      // Use __replaceKeys to bypass sanitization filter for opponent zone changes
+      // This marks the patch as authoritative and sends immediately
+      const patch = createZonesPatchFor(zonesNext as GameState["zones"], who);
+      if (patch) {
+        const authPatch = { ...patch, __replaceKeys: ["zones"] };
+        get().trySendPatch(authPatch);
+      }
+      return {
+        zones: zonesNext as GameState["zones"],
+      } as Partial<GameState> as GameState;
+    }),
+
+  banishEntireGraveyard: (who) =>
+    set((state) => {
+      get().pushHistory();
+      const graveyard = state.zones[who]?.graveyard || [];
+      if (graveyard.length === 0) return state;
+      const zonesNext = { ...state.zones } as Record<PlayerKey, Zones>;
+      const seatZones = { ...zonesNext[who] } as Zones;
+      // Move all cards from graveyard to banished
+      seatZones.banished = [...seatZones.banished, ...graveyard];
+      seatZones.graveyard = [];
+      zonesNext[who] = seatZones;
+      const playerNum = who === "p1" ? "1" : "2";
+      get().log(
+        `[p${playerNum}:PLAYER] banished entire cemetery (${graveyard.length} cards)`
       );
       const patch = createZonesPatchFor(zonesNext as GameState["zones"], who);
       if (patch) get().trySendPatch(patch);

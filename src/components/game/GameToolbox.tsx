@@ -98,6 +98,7 @@ export default function GameToolbox({
   const closePeekDialog = useGameStore((s) => s.closePeekDialog);
   const openSearchDialog = useGameStore((s) => s.openSearchDialog);
   const moveFromBanishedToZone = useGameStore((s) => s.moveFromBanishedToZone);
+  const banishEntireGraveyard = useGameStore((s) => s.banishEntireGraveyard);
   const applyPatch = useGameStore((s) => s.applyPatch);
   const trySendPatch = useGameStore((s) => s.trySendPatch);
   const snapshots = useGameStore((s) => s.snapshots);
@@ -1090,6 +1091,23 @@ export default function GameToolbox({
                     </button>
                   </div>
 
+                  {/* Banish Entire Cemetery */}
+                  <div className="rounded-lg bg-white/5 ring-1 ring-white/10 p-2">
+                    <button
+                      className="w-full rounded bg-red-600/90 hover:bg-red-500 py-1 disabled:opacity-40"
+                      onClick={() => {
+                        if (mySeat) banishEntireGraveyard(mySeat);
+                      }}
+                      disabled={
+                        !mySeat || (zones[mySeat]?.graveyard?.length ?? 0) === 0
+                      }
+                      title="Banish all cards in your cemetery"
+                    >
+                      Banish Entire Cemetery (
+                      {zones[mySeat ?? "p1"]?.graveyard?.length ?? 0})
+                    </button>
+                  </div>
+
                   {/* Snapshots */}
                   <div className="rounded-lg bg-white/5 ring-1 ring-white/10 p-2">
                     {autoSnapshots.length > 0 && (
@@ -1160,8 +1178,14 @@ export default function GameToolbox({
         />
       ) : null}
       {d20Open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-          <div className="relative w-[92vw] sm:w-full max-w-md bg-zinc-900/90 rounded-2xl ring-1 ring-white/10 shadow-2xl p-4 sm:p-6 text-white">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+          onContextMenu={(e) => e.preventDefault()}
+        >
+          <div
+            className="relative w-[92vw] sm:w-full max-w-md bg-zinc-900/90 rounded-2xl ring-1 ring-white/10 shadow-2xl p-4 sm:p-6 text-white"
+            onContextMenu={(e) => e.preventDefault()}
+          >
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-base sm:text-lg font-semibold">
                 Toolbox D20 Roll

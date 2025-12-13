@@ -26,7 +26,7 @@ export const createResourceSlice: StateCreator<
     const state = get();
     const owner = who === "p1" ? 1 : 2;
     return Object.entries(state.board.sites).filter(
-      ([, site]) => site.owner === owner
+      ([, site]) => site && site.owner === owner
     ) as Array<[CellKey, SiteTile]>;
   },
 
@@ -35,6 +35,7 @@ export const createResourceSlice: StateCreator<
     const owner = who === "p1" ? 1 : 2;
     let count = 0;
     for (const site of Object.values(state.board.sites)) {
+      if (!site) continue;
       if (site.owner === owner && !site.tapped) count++;
     }
     return count;
@@ -46,6 +47,7 @@ export const createResourceSlice: StateCreator<
     const owner = who === "p1" ? 1 : 2;
     let total = 0;
     for (const site of Object.values(state.board.sites)) {
+      if (!site) continue;
       if (site.owner === owner && siteProvidesMana(site.card ?? null)) {
         total++;
       }
@@ -59,6 +61,7 @@ export const createResourceSlice: StateCreator<
     const owner = who === "p1" ? 1 : 2;
     let base = 0;
     for (const site of Object.values(state.board.sites)) {
+      if (!site) continue;
       if (site.owner === owner && siteProvidesMana(site.card ?? null)) {
         base++;
       }

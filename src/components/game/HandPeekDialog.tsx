@@ -89,10 +89,14 @@ export default function HandPeekDialog({
   const canAct = !!source;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+      onContextMenu={(e) => e.preventDefault()}
+    >
       <div
         ref={dialogRef}
         className="bg-zinc-900/95 backdrop-blur rounded-2xl ring-1 ring-white/10 shadow-2xl p-3 w-fit max-w-[90vw] max-h-[80vh] text-white flex flex-col gap-3"
+        onContextMenu={(e) => e.preventDefault()}
       >
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-semibold">{title}</h3>

@@ -397,7 +397,7 @@ export function useTileDropHandler({
               z: number;
             }> = [];
 
-            // Add minions as potential targets
+            // Add minions as potential targets (any minion - friendly or enemy)
             toItems.forEach((perm, realIdx) => {
               const itemType = (perm.card.type || "").toLowerCase();
               if (
@@ -425,7 +425,7 @@ export function useTileDropHandler({
               });
             });
 
-            // Add avatar as a potential target if present on tile
+            // Add avatar as a potential target if present on tile (any avatar - friendly or enemy)
             if (avatarEntry) {
               const [avatarKey, avatar] = avatarEntry;
               const avatarOffset = avatar.offset || [0, 0];

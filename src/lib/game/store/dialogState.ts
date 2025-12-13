@@ -44,8 +44,16 @@ export const createDialogSlice: StateCreator<GameState, [], [], DialogSlice> = (
   closePlacementDialog: () => set({ placementDialog: null }),
 
   searchDialog: null,
-  openSearchDialog: (pileName, cards, onSelectCard) => {
-    set({ searchDialog: { pileName, cards, onSelectCard } });
+  openSearchDialog: (pileName, cards, onSelectCard, options) => {
+    set({
+      searchDialog: {
+        pileName,
+        cards,
+        onSelectCard,
+        onBanishCard: options?.onBanishCard,
+        banishRequiresConsent: options?.banishRequiresConsent,
+      },
+    });
     get().log(`Viewing ${pileName} (${cards.length} cards)`);
   },
   closeSearchDialog: () => set({ searchDialog: null }),

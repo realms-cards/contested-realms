@@ -15,6 +15,8 @@ interface PileSearchDialogProps {
   cards: CardRef[];
   onSelectCard: (card: CardRef) => void;
   onClose: () => void;
+  onBanishCard?: (card: CardRef) => void;
+  banishRequiresConsent?: boolean;
 }
 
 export default function PileSearchDialog({
@@ -22,6 +24,8 @@ export default function PileSearchDialog({
   cards,
   onSelectCard,
   onClose,
+  onBanishCard,
+  banishRequiresConsent,
 }: PileSearchDialogProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const [searchTerm, setSearchTerm] = useState("");
@@ -74,10 +78,14 @@ export default function PileSearchDialog({
   }, [onClose, clearHoverTimers]);
 
   const content = (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+    <div
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm"
+      onContextMenu={(e) => e.preventDefault()}
+    >
       <div
         ref={dialogRef}
         className="bg-zinc-900/95 backdrop-blur rounded-xl ring-1 ring-white/10 shadow-2xl p-6 w-96 max-h-[80vh] text-white flex flex-col"
+        onContextMenu={(e) => e.preventDefault()}
       >
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold">Search {pileName}</h3>
@@ -140,14 +148,9 @@ export default function PileSearchDialog({
           ) : (
             <div className="space-y-2">
               {filteredCards.map((card, index) => (
-                <button
+                <div
                   key={`${card.slug}-${index}`}
-                  onClick={() => {
-                    try {
-                      playCardSelect();
-                    } catch {}
-                    onSelectCard(card);
-                  }}
+                  className="bg-zinc-800/50 hover:bg-zinc-700/50 rounded-lg p-3 transition-colors"
                   onMouseEnter={() => {
                     if (card.slug) {
                       showCardPreview({
@@ -160,17 +163,47 @@ export default function PileSearchDialog({
                   onMouseLeave={() => {
                     hideCardPreview();
                   }}
-                  className="w-full text-left bg-zinc-800/50 hover:bg-zinc-700/50 rounded-lg p-3 transition-colors"
                 >
                   <div className="font-medium text-white mb-1">
                     {card.name || "Unknown Card"}
                   </div>
                   {card.type && (
-                    <div className="text-xs text-zinc-400 mb-1">
+                    <div className="text-xs text-zinc-400 mb-2">
                       {card.type}
                     </div>
                   )}
-                </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        try {
+                          playCardSelect();
+                        } catch {}
+                        onSelectCard(card);
+                      }}
+                      className="flex-1 text-xs bg-blue-600/80 hover:bg-blue-500 rounded px-2 py-1 transition-colors"
+                    >
+                      To Hand
+                    </button>
+                    {onBanishCard && (
+                      <button
+                        onClick={() => {
+                          try {
+                            playCardSelect();
+                          } catch {}
+                          onBanishCard(card);
+                        }}
+                        className="flex-1 text-xs bg-red-600/80 hover:bg-red-500 rounded px-2 py-1 transition-colors"
+                        title={
+                          banishRequiresConsent
+                            ? "Requires opponent consent"
+                            : undefined
+                        }
+                      >
+                        Banish{banishRequiresConsent ? " ⚠" : ""}
+                      </button>
+                    )}
+                  </div>
+                </div>
               ))}
             </div>
           )}

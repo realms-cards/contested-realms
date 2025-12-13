@@ -29,6 +29,11 @@ export default function TokenPile3D({
   const openContextMenu = useGameStore((s) => s.openContextMenu);
   const setDragFromPile = useGameStore((s) => s.setDragFromPile);
   const setDragFromHand = useGameStore((s) => s.setDragFromHand);
+  const actorKey = useGameStore((s) => s.actorKey);
+  const transport = useGameStore((s) => s.transport);
+
+  // Only allow interaction with own token pile in online play
+  const isMine = !actorKey || actorKey === owner;
 
   // Compute position: align with card piles column (Piles3D) at top third of the column
   const { x, z, rotZ } = useMemo(() => {
@@ -92,6 +97,7 @@ export default function TokenPile3D({
             : (e: ThreeEvent<PointerEvent>) => {
                 e.nativeEvent.preventDefault();
                 e.stopPropagation();
+                if (transport && !isMine) return;
                 openContextMenu(
                   { kind: "tokenpile", who: owner },
                   { x: e.clientX, y: e.clientY }
@@ -103,6 +109,7 @@ export default function TokenPile3D({
             ? undefined
             : (e: ThreeEvent<MouseEvent>) => {
                 e.stopPropagation();
+                if (transport && !isMine) return;
                 setExpanded((v) => !v);
                 bumpInteractClock();
               }
@@ -172,6 +179,8 @@ export default function TokenPile3D({
                     onPointerDown={(e: ThreeEvent<PointerEvent>) => {
                       if (e.button !== 0) return;
                       e.stopPropagation();
+                      const store = useGameStore.getState();
+                      if (store.transport && !isMine) return;
                       dragStartRef.current = {
                         tokenKey: def.key,
                         x: e.clientX,
@@ -188,11 +197,8 @@ export default function TokenPile3D({
                         thresholds: null,
                       };
                       // Clear any selected hand card and preview to prevent accidental plays
-                      try {
-                        const store = useGameStore.getState();
-                        store.clearSelection?.();
-                        store.setPreviewCard?.(null);
-                      } catch {}
+                      store.clearSelection?.();
+                      store.setPreviewCard?.(null);
                       setDragFromPile({ who: owner, from: "tokens", card });
                       setDragFromHand(true);
                       bumpInteractClock();
@@ -255,6 +261,8 @@ export default function TokenPile3D({
                     onPointerDown={(e: ThreeEvent<PointerEvent>) => {
                       if (e.button !== 0) return;
                       e.stopPropagation();
+                      const store = useGameStore.getState();
+                      if (store.transport && !isMine) return;
                       const card = {
                         cardId: newTokenInstanceId(def),
                         variantId: null,
@@ -264,11 +272,8 @@ export default function TokenPile3D({
                         thresholds: null,
                       };
                       // Clear any selected hand card and preview to prevent accidental plays
-                      try {
-                        const store = useGameStore.getState();
-                        store.clearSelection?.();
-                        store.setPreviewCard?.(null);
-                      } catch {}
+                      store.clearSelection?.();
+                      store.setPreviewCard?.(null);
                       setDragFromPile({ who: owner, from: "tokens", card });
                       setDragFromHand(true);
                       bumpInteractClock();

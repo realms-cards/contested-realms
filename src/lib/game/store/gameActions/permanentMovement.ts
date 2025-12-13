@@ -54,9 +54,11 @@ export const createPermanentMovementSlice: StateCreator<
       const toKey: CellKey = toCellKey(x, y);
       const exists = (state.permanents[fromKey] || [])[sel.index];
       if (!exists) return state;
-      if (state.transport && state.localPlayerId) {
+      // Only enforce ownership checks in online mode when actorKey is set
+      // In hotseat mode (actorKey is null), allow all actions
+      if (state.transport && state.localPlayerId && state.actorKey) {
         const ownerSeat = seatFromOwner(exists.owner);
-        if (!state.actorKey || state.actorKey !== ownerSeat) {
+        if (state.actorKey !== ownerSeat) {
           return state;
         }
       }
@@ -150,9 +152,11 @@ export const createPermanentMovementSlice: StateCreator<
       const toKey: CellKey = toCellKey(x, y);
       const exists = (state.permanents[fromKey] || [])[sel.index];
       if (!exists) return state;
-      if (state.transport && state.localPlayerId) {
+      // Only enforce ownership checks in online mode when actorKey is set
+      // In hotseat mode (actorKey is null), allow all actions
+      if (state.transport && state.localPlayerId && state.actorKey) {
         const ownerSeat = seatFromOwner(exists.owner);
-        if (!state.actorKey || state.actorKey !== ownerSeat) {
+        if (state.actorKey !== ownerSeat) {
           return state;
         }
       }
@@ -219,13 +223,9 @@ export const createPermanentMovementSlice: StateCreator<
       const item = arr[index];
       if (!item) return state;
       const ownerKey = seatFromOwner(item.owner);
-      if (state.transport && state.localPlayerId) {
-        if (!state.actorKey) {
-          get().log(
-            "Cannot move permanents until seat ownership is established"
-          );
-          return state as GameState;
-        }
+      // Only enforce ownership checks in online mode when actorKey is set
+      // In hotseat mode (actorKey is null), allow all actions
+      if (state.transport && state.localPlayerId && state.actorKey) {
         const isOwner = state.actorKey === ownerKey;
         // Acting player can send opponent's permanents to graveyard/banished (destroy effects)
         const isActingPlayer =
@@ -251,19 +251,38 @@ export const createPermanentMovementSlice: StateCreator<
         }
       });
 
-      // Collect attached items (in reverse order for safe splicing)
-      const attachedItems = attachedIndices
-        .sort((a, b) => b - a)
-        .map((idx) => arr[idx]);
+      // Separate attachments into carryable artifacts (stay on tile) and others (go to zones)
+      const attachmentsToKeep: Array<{ idx: number; item: (typeof arr)[0] }> =
+        [];
+      const attachmentsToRemove: Array<{ idx: number; item: (typeof arr)[0] }> =
+        [];
 
-      // Remove attachments first (in reverse order to preserve indices)
-      attachedIndices
-        .sort((a, b) => b - a)
-        .forEach((idx) => {
+      for (const idx of attachedIndices) {
+        const attached = arr[idx];
+        const attachType = (attached.card.type || "").toLowerCase();
+        const attachSubTypes = (attached.card.subTypes || "").toLowerCase();
+        const isArtifact = attachType.includes("artifact");
+        const isMonument = attachSubTypes.includes("monument");
+        const isAutomaton = attachSubTypes.includes("automaton");
+        const isCarryableArtifact = isArtifact && !isMonument && !isAutomaton;
+
+        if (isCarryableArtifact) {
+          // Carryable artifacts stay on the tile, detached
+          attachmentsToKeep.push({ idx, item: attached });
+        } else {
+          // Tokens and other attachments go to zones
+          attachmentsToRemove.push({ idx, item: attached });
+        }
+      }
+
+      // Remove attachments that go to zones (in reverse order to preserve indices)
+      attachmentsToRemove
+        .sort((a, b) => b.idx - a.idx)
+        .forEach(({ idx }) => {
           arr.splice(idx, 1);
         });
 
-      // Now find the new index of the main item after attachments were removed
+      // Now find the new index of the main item after some attachments were removed
       const newMainIndex = arr.findIndex(
         (p) => ensurePermanentInstanceId(p) === ensurePermanentInstanceId(item)
       );
@@ -272,18 +291,32 @@ export const createPermanentMovementSlice: StateCreator<
       // Remove the main item
       arr.splice(newMainIndex, 1);
 
-      // Update attachedTo indices for remaining permanents
+      // Detach carryable artifacts that stay on the tile
+      // They need their attachedTo cleared and indices updated
+      const removedIndices = attachmentsToRemove.map((a) => a.idx);
       arr.forEach((perm, idx) => {
-        if (perm.attachedTo && perm.attachedTo.at === at) {
+        const permId = ensurePermanentInstanceId(perm);
+        const isKeptArtifact = attachmentsToKeep.some(
+          (a) => ensurePermanentInstanceId(a.item) === permId
+        );
+
+        if (isKeptArtifact) {
+          // Clear attachedTo for artifacts that stay on tile
+          arr[idx] = bumpPermanentVersion({
+            ...perm,
+            attachedTo: null,
+          });
+        } else if (perm.attachedTo && perm.attachedTo.at === at) {
+          // Update attachedTo indices for other remaining permanents
           let newAttachIndex = perm.attachedTo.index;
           // Adjust for removed attachments
-          for (const removedIdx of attachedIndices) {
+          for (const removedIdx of removedIndices) {
             if (removedIdx < perm.attachedTo.index) {
               newAttachIndex--;
             }
           }
           // Adjust for removed main item
-          if (index < perm.attachedTo.index) {
+          if (newMainIndex < perm.attachedTo.index) {
             newAttachIndex--;
           }
           if (newAttachIndex !== perm.attachedTo.index) {
@@ -326,13 +359,12 @@ export const createPermanentMovementSlice: StateCreator<
       // Store the main item's zones first
       zonesNext[owner] = seatZones;
 
-      // Send attachments to graveyard (tokens go to banished)
-      // Each attachment goes to its owner's graveyard
+      // Send token attachments to banished (carryable artifacts stay on tile)
       const removedIds: string[] = [];
       const removedId = ensurePermanentInstanceId(item);
       if (removedId) removedIds.push(removedId);
 
-      for (const attached of attachedItems) {
+      for (const { item: attached } of attachmentsToRemove) {
         const attachOwner = seatFromOwner(attached.owner);
         const attachedCard = prepareCardForSeat(attached.card, attachOwner);
         const attachedIsToken = String(attached.card?.type || "")
@@ -345,7 +377,7 @@ export const createPermanentMovementSlice: StateCreator<
         if (attachedIsToken) {
           attachZones.banished = [...attachZones.banished, attachedCard];
         } else {
-          // Non-token attachments (artifacts) go to graveyard
+          // Non-token, non-carryable-artifact attachments go to graveyard
           attachZones.graveyard = [attachedCard, ...attachZones.graveyard];
         }
         zonesNext[attachOwner] = attachZones;
@@ -360,6 +392,15 @@ export const createPermanentMovementSlice: StateCreator<
           }] sent to [p${attachPlayerNum}:PLAYER] ${
             attachedIsToken ? "banished" : "cemetery"
           }`
+        );
+      }
+
+      // Log carryable artifacts that stay on tile
+      for (const { item: attached } of attachmentsToKeep) {
+        const attachOwner = seatFromOwner(attached.owner);
+        const attachPlayerNum = attachOwner === "p1" ? "1" : "2";
+        get().log(
+          `Artifact [p${attachPlayerNum}card:${attached.card.name}] dropped at tile`
         );
       }
       const { x, y } = parseCellKey(at);
@@ -402,21 +443,47 @@ export const createPermanentMovementSlice: StateCreator<
         } catch {}
       }
 
-      // Build delta patch for all removed permanents (main + attachments)
+      // Build delta patch for removed permanents and updated artifacts
+      const deltaEntries: Array<{
+        at: string;
+        entry: { instanceId?: string; attachedTo?: null; version?: number };
+        remove?: boolean;
+      }> = [];
+
+      // Add removed permanents (main + token attachments)
+      for (const id of removedIds) {
+        deltaEntries.push({ at, entry: { instanceId: id }, remove: true });
+      }
+
+      // Add updated artifacts (detached, staying on tile)
+      for (const { item: attached } of attachmentsToKeep) {
+        const updatedArtifact = arr.find(
+          (p) =>
+            ensurePermanentInstanceId(p) === ensurePermanentInstanceId(attached)
+        );
+        if (updatedArtifact?.instanceId) {
+          deltaEntries.push({
+            at,
+            entry: {
+              instanceId: updatedArtifact.instanceId,
+              attachedTo: null,
+              version: updatedArtifact.version,
+            },
+          });
+        }
+      }
+
       const deltaPatch =
-        removedIds.length > 0
-          ? createPermanentDeltaPatch(
-              removedIds.map((id) => ({
-                at,
-                entry: { instanceId: id },
-                remove: true,
-              }))
-            )
+        deltaEntries.length > 0
+          ? createPermanentDeltaPatch(deltaEntries)
           : null;
       const fallbackPatch = deltaPatch ? null : createPermanentsPatch(per, at);
       // Include all affected seats in the zone patch (owner + any attachment owners)
       const affectedSeats = new Set<PlayerKey>([owner]);
-      for (const attached of attachedItems) {
+      for (const { item: attached } of attachmentsToRemove) {
+        affectedSeats.add(seatFromOwner(attached.owner));
+      }
+      for (const { item: attached } of attachmentsToKeep) {
         affectedSeats.add(seatFromOwner(attached.owner));
       }
       const zonePatch = createZonesPatchFor(
@@ -437,14 +504,12 @@ export const createPermanentMovementSlice: StateCreator<
   transferPermanentControl: (at, index, to) =>
     set((state) => {
       get().pushHistory();
-      if (state.transport && !state.actorKey) {
-        get().log("Cannot transfer control until seat is established");
-        return state as GameState;
-      }
       const per: Permanents = { ...state.permanents };
       const arr = [...(per[at] || [])];
       const item = arr[index];
       if (!item) return state;
+      // Only enforce ownership checks in online mode when actorKey is set
+      // In hotseat mode (actorKey is null), allow all actions
       if (state.transport && state.actorKey) {
         const ownerSeat = seatFromOwner(item.owner);
         if (state.actorKey !== ownerSeat) {
@@ -455,14 +520,24 @@ export const createPermanentMovementSlice: StateCreator<
       const fromOwner = item.owner;
       const newOwner: 1 | 2 = to ?? (fromOwner === 1 ? 2 : 1);
       const newOwnerSeat = seatFromOwner(newOwner);
+      // Adjust offset to keep permanent at same absolute position
+      // Rendering uses: worldZ = zBase + offZ
+      // zBase for owner 1: -TILE_SIZE * 0.5 + marginZ (roughly -0.8)
+      // zBase for owner 2: +TILE_SIZE * 0.5 - marginZ (roughly +0.8)
+      // To keep same worldZ: newOffZ = oldZBase + oldOffZ - newZBase
       const TILE_SIZE = 2.0;
-      const STACK_MARGIN_Z = TILE_SIZE * 0.1;
-      const oldOffsetZ = Number(item.offset?.[1] ?? 0);
-      const oldZBase = fromOwner === 1 ? STACK_MARGIN_Z : -STACK_MARGIN_Z;
-      const newZBase = newOwner === 1 ? STACK_MARGIN_Z : -STACK_MARGIN_Z;
-      const adjustedOffset: [number, number] | null = item.offset
-        ? [item.offset[0], oldOffsetZ + (oldZBase - newZBase)]
-        : [0, oldOffsetZ + (oldZBase - newZBase)];
+      const MARGIN_Z = TILE_SIZE * 0.1;
+      const oldZBase =
+        fromOwner === 1
+          ? -TILE_SIZE * 0.5 + MARGIN_Z
+          : TILE_SIZE * 0.5 - MARGIN_Z;
+      const newZBase =
+        newOwner === 1
+          ? -TILE_SIZE * 0.5 + MARGIN_Z
+          : TILE_SIZE * 0.5 - MARGIN_Z;
+      const oldOffZ = item.offset?.[1] ?? 0;
+      const newOffZ = oldZBase + oldOffZ - newZBase;
+      const adjustedOffset: [number, number] = [item.offset?.[0] ?? 0, newOffZ];
       const updated = bumpPermanentVersion({
         ...item,
         owner: newOwner,

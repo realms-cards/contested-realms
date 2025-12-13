@@ -7,7 +7,7 @@ import type { Digit } from "@/components/game/manacost";
 import type { Pick3D, CardMeta } from "@/lib/game/cardSorting";
 
 export type YourDeckListProps = {
-  cardsTab: "deck" | "all";
+  cardsTab: "deck" | "sideboard" | "collection" | "all";
   yourCounts: Array<{ cardId: number; count: number; name: string }>;
   pick3D: Pick3D[];
   metaByCardId: Record<number, CardMeta>;
@@ -69,6 +69,26 @@ export default function YourDeckList(props: YourDeckListProps) {
   // Prepare groups: avatar, spellbook, atlas
   const filtered = yourCounts.filter((it) => {
     if (cardsTab === "all") return true;
+    if (cardsTab === "deck") {
+      // Only cards in the Deck zone
+      return pick3D.some(
+        (p) => p.card.cardId === it.cardId && p.zone === "Deck"
+      );
+    }
+    if (cardsTab === "sideboard") {
+      // Cards in Sideboard zone only
+      return pick3D.some(
+        (p) => p.card.cardId === it.cardId && p.zone === "Sideboard"
+      );
+    }
+    if (cardsTab === "collection") {
+      // Cards in Collection zone only
+      return (
+        pick3D.some(
+          (p) => p.card.cardId === it.cardId && p.zone === "Collection"
+        ) || (collectionCountsByCardId[it.cardId] ?? 0) > 0
+      );
+    }
     return pick3D.some((p) => p.card.cardId === it.cardId);
   });
 
