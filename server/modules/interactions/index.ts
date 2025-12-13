@@ -665,7 +665,10 @@ export function createInteractionModule({
         match.game = deepMergeReplaceArrays(match.game || {}, patch);
         match.lastTs = now;
         const room = `match:${match.id}`;
-        const enrichedPatch = await enrichPatchWithCosts(patch, prisma);
+        // Add __replaceKeys to make this patch authoritative
+        // This ensures client patches don't overwrite the server's graveyard action
+        const authPatch = { ...patch, __replaceKeys: ["zones"] };
+        const enrichedPatch = await enrichPatchWithCosts(authPatch, prisma);
         io.to(room).emit("statePatch", { patch: enrichedPatch, t: now });
         return {
           ...resultBase,

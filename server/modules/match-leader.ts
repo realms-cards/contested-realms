@@ -721,6 +721,21 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
               ? replaceLog
               : [];
           try {
+            const zonesData = patchToApply.zones as
+              | Record<string, unknown>
+              | undefined;
+            const p1Hand = zonesData?.p1
+              ? (zonesData.p1 as Record<string, unknown>)?.hand
+              : undefined;
+            const p2Hand = zonesData?.p2
+              ? (zonesData.p2 as Record<string, unknown>)?.hand
+              : undefined;
+            const p1Graveyard = zonesData?.p1
+              ? (zonesData.p1 as Record<string, unknown>)?.graveyard
+              : undefined;
+            const p2Graveyard = zonesData?.p2
+              ? (zonesData.p2 as Record<string, unknown>)?.graveyard
+              : undefined;
             console.debug("[match] apply snapshot", {
               matchId,
               playerId,
@@ -729,6 +744,15 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
               phase: patchToApply.phase,
               eventSeq: (patchToApply as Record<string, unknown>).eventSeq,
               t: now,
+              zonesSeats: zonesData ? Object.keys(zonesData) : [],
+              p1HandCount: Array.isArray(p1Hand) ? p1Hand.length : undefined,
+              p2HandCount: Array.isArray(p2Hand) ? p2Hand.length : undefined,
+              p1GraveyardCount: Array.isArray(p1Graveyard)
+                ? p1Graveyard.length
+                : undefined,
+              p2GraveyardCount: Array.isArray(p2Graveyard)
+                ? p2Graveyard.length
+                : undefined,
             });
           } catch {
             // ignore
