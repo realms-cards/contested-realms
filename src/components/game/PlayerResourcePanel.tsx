@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { useMemo } from "react";
 import { useGameStore } from "@/lib/game/store";
 import type { PlayerKey } from "@/lib/game/store";
@@ -38,10 +37,15 @@ function ThresholdSymbols({
   if (count === 0) return null;
 
   // For counts 1-4, use specific layouts. For 5+, use rows of 2.
+  const Img = ({ src, alt: imgAlt }: { src: string; alt: string }) => (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={src} alt={imgAlt} width={ICON_SIZE} height={ICON_SIZE} />
+  );
+
   if (count === 1) {
     return (
       <div className="flex justify-center">
-        <Image src={icon} alt={alt} width={ICON_SIZE} height={ICON_SIZE} />
+        <Img src={icon} alt={alt} />
       </div>
     );
   }
@@ -49,8 +53,8 @@ function ThresholdSymbols({
   if (count === 2) {
     return (
       <div className="flex flex-col items-center -space-y-1">
-        <Image src={icon} alt={alt} width={ICON_SIZE} height={ICON_SIZE} />
-        <Image src={icon} alt={alt} width={ICON_SIZE} height={ICON_SIZE} />
+        <Img src={icon} alt={alt} />
+        <Img src={icon} alt={alt} />
       </div>
     );
   }
@@ -59,10 +63,10 @@ function ThresholdSymbols({
     return (
       <div className="flex flex-col items-center -space-y-1">
         <div className="flex -space-x-0.5">
-          <Image src={icon} alt={alt} width={ICON_SIZE} height={ICON_SIZE} />
-          <Image src={icon} alt={alt} width={ICON_SIZE} height={ICON_SIZE} />
+          <Img src={icon} alt={alt} />
+          <Img src={icon} alt={alt} />
         </div>
-        <Image src={icon} alt={alt} width={ICON_SIZE} height={ICON_SIZE} />
+        <Img src={icon} alt={alt} />
       </div>
     );
   }
@@ -71,12 +75,12 @@ function ThresholdSymbols({
     return (
       <div className="flex flex-col items-center -space-y-1">
         <div className="flex -space-x-0.5">
-          <Image src={icon} alt={alt} width={ICON_SIZE} height={ICON_SIZE} />
-          <Image src={icon} alt={alt} width={ICON_SIZE} height={ICON_SIZE} />
+          <Img src={icon} alt={alt} />
+          <Img src={icon} alt={alt} />
         </div>
         <div className="flex -space-x-0.5">
-          <Image src={icon} alt={alt} width={ICON_SIZE} height={ICON_SIZE} />
-          <Image src={icon} alt={alt} width={ICON_SIZE} height={ICON_SIZE} />
+          <Img src={icon} alt={alt} />
+          <Img src={icon} alt={alt} />
         </div>
       </div>
     );
@@ -95,13 +99,7 @@ function ThresholdSymbols({
       {rows.map((rowCount, i) => (
         <div key={i} className="flex -space-x-0.5">
           {Array.from({ length: rowCount }).map((_, j) => (
-            <Image
-              key={j}
-              src={icon}
-              alt={alt}
-              width={ICON_SIZE}
-              height={ICON_SIZE}
-            />
+            <Img key={j} src={icon} alt={alt} />
           ))}
         </div>
       ))}
