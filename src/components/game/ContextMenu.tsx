@@ -19,6 +19,14 @@ import {
   toCellKey,
   opponentOwner,
 } from "@/lib/game/store/utils/boardHelpers";
+import { prepareCardForSeat } from "@/lib/game/store/utils/cardHelpers";
+import { newPermanentInstanceId } from "@/lib/game/store/utils/idHelpers";
+import { randomTilt } from "@/lib/game/store/utils/permanentHelpers";
+import {
+  TOKEN_BY_NAME,
+  tokenSlug,
+  newTokenInstanceId,
+} from "@/lib/game/tokens";
 import type { ContextMenuAction } from "@/lib/game/types";
 
 interface ContextMenuProps {
@@ -83,6 +91,14 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     artifactAt: string;
     artifactIndex: number;
     targets: AttachmentTarget[];
+  } | null>(null);
+
+  // Rubble confirmation dialog state (when sending site to cemetery)
+  const [rubbleDialog, setRubbleDialog] = useState<{
+    siteX: number;
+    siteY: number;
+    siteName: string;
+    siteOwner: 1 | 2;
   } | null>(null);
 
   useLayoutEffect(() => {
@@ -293,6 +309,11 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
 
     const ownerKey = site ? seatFromOwner(site.owner) : null;
     const isMine = !actorKey || (ownerKey && actorKey === ownerKey);
+    // Acting player can send opponent's sites to graveyard/banished
+    const isActingPlayer =
+      (actorKey === "p1" && currentPlayer === 1) ||
+      (actorKey === "p2" && currentPlayer === 2) ||
+      !actorKey;
 
     if (site && isMine) {
       transferTo = opponentOwner(site.owner);
@@ -310,12 +331,25 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         } catch {}
         onClose();
       };
+    }
+    // Acting player can send any site to graveyard/banished (destroy effects)
+    if (isMine || isActingPlayer) {
       doToGY = () => {
-        moveSiteToZone(t.x, t.y, "graveyard");
-        try {
-          playCardFlip();
-        } catch {}
-        onClose();
+        // Show Rubble confirmation dialog instead of immediately moving
+        if (site) {
+          setRubbleDialog({
+            siteX: t.x,
+            siteY: t.y,
+            siteName: site.card?.name || "Site",
+            siteOwner: site.owner,
+          });
+        } else {
+          moveSiteToZone(t.x, t.y, "graveyard");
+          try {
+            playCardFlip();
+          } catch {}
+          onClose();
+        }
       };
       doBanish = () => {
         moveSiteToZone(t.x, t.y, "banished");
@@ -616,13 +650,6 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         } catch {}
         onClose();
       };
-      doToGY = () => {
-        movePermanentToZone(t.at, t.index, "graveyard");
-        try {
-          playCardFlip();
-        } catch {}
-        onClose();
-      };
       if (item?.card?.name) {
         doToSpellbook = () => {
           const cardName = item.card?.name || "Card";
@@ -635,6 +662,21 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
           onClose();
         };
       }
+    }
+
+    // Acting player can send any permanent to graveyard/banished (destroy effects)
+    const isActingPlayer =
+      (actorKey === "p1" && currentPlayer === 1) ||
+      (actorKey === "p2" && currentPlayer === 2) ||
+      !actorKey;
+    if (isMine || isActingPlayer) {
+      doToGY = () => {
+        movePermanentToZone(t.at, t.index, "graveyard");
+        try {
+          playCardFlip();
+        } catch {}
+        onClose();
+      };
       doBanish = () => {
         movePermanentToZone(t.at, t.index, "banished");
         try {
@@ -892,6 +934,75 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     onClose(); // Close context menu on cancel
   };
 
+  // Handle Rubble confirmation
+  const handleRubbleConfirm = (placeRubble: boolean) => {
+    if (!rubbleDialog) return;
+    const { siteX, siteY, siteOwner } = rubbleDialog;
+
+    // Move site to graveyard
+    moveSiteToZone(siteX, siteY, "graveyard");
+    try {
+      playCardFlip();
+    } catch {}
+
+    // If user wants Rubble, place it at the same location under original owner's control
+    if (placeRubble) {
+      const rubbleDef = TOKEN_BY_NAME["rubble"];
+      if (rubbleDef) {
+        const ownerKey = seatFromOwner(siteOwner);
+        const rubbleCard = prepareCardForSeat(
+          {
+            cardId: newTokenInstanceId(rubbleDef),
+            variantId: null,
+            name: rubbleDef.name,
+            type: "Token",
+            slug: tokenSlug(rubbleDef),
+            thresholds: null,
+          },
+          ownerKey
+        );
+        // Place Rubble token on the board at the site location
+        const key = toCellKey(siteX, siteY);
+        const state = useGameStore.getState();
+        const per = { ...state.permanents };
+        const arr = [...(per[key] || [])];
+        arr.push({
+          owner: siteOwner,
+          card: rubbleCard,
+          offset: null,
+          tilt: randomTilt(),
+          tapVersion: 0,
+          tapped: false,
+          version: 0,
+          instanceId: rubbleCard.instanceId ?? newPermanentInstanceId(),
+        });
+        per[key] = arr;
+        const playerNum = ownerKey === "p1" ? "1" : "2";
+        log(
+          `[p${playerNum}:PLAYER] places [p${playerNum}card:Rubble] at #${getCellNumber(
+            siteX,
+            siteY,
+            state.board.size.w
+          )}`
+        );
+        // Update state and sync
+        useGameStore.setState({ permanents: per });
+        const tr = state.transport;
+        if (tr) {
+          state.trySendPatch({ permanents: per });
+        }
+      }
+    }
+
+    setRubbleDialog(null);
+    onClose();
+  };
+
+  const handleRubbleCancel = () => {
+    setRubbleDialog(null);
+    // Don't close context menu - let user choose another action
+  };
+
   console.log(
     "[ContextMenu] Rendering, attachmentDialog:",
     attachmentDialog ? "SET" : "null"
@@ -907,6 +1018,47 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
           onCancel={handleAttachmentCancel}
         />
       )}
+      {rubbleDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div
+            className="bg-zinc-900 rounded-xl ring-1 ring-white/20 shadow-2xl p-5 w-80 text-white"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="text-lg font-semibold mb-3">
+              Replace with Rubble?
+            </div>
+            <div className="text-sm text-white/80 mb-4">
+              <span className="font-medium">{rubbleDialog.siteName}</span> is
+              being sent to the cemetery. Would you like to place a Rubble token
+              at this location under{" "}
+              <span className="font-medium">
+                P{rubbleDialog.siteOwner}&apos;s
+              </span>{" "}
+              control?
+            </div>
+            <div className="flex gap-3">
+              <button
+                className="flex-1 rounded bg-amber-600 hover:bg-amber-500 px-4 py-2 font-medium"
+                onClick={() => handleRubbleConfirm(true)}
+              >
+                Yes, place Rubble
+              </button>
+              <button
+                className="flex-1 rounded bg-zinc-700 hover:bg-zinc-600 px-4 py-2"
+                onClick={() => handleRubbleConfirm(false)}
+              >
+                No Rubble
+              </button>
+            </div>
+            <button
+              className="w-full mt-2 text-sm text-white/60 hover:text-white/80 py-1"
+              onClick={handleRubbleCancel}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
       <div
         className="absolute inset-0 z-30"
         onClick={onClose}
@@ -914,7 +1066,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
           e.preventDefault();
           onClose();
         }}
-        style={{ display: attachmentDialog ? "none" : "block" }}
+        style={{ display: attachmentDialog || rubbleDialog ? "none" : "block" }}
       >
         <div
           ref={menuRef}

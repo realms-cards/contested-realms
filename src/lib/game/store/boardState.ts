@@ -43,7 +43,14 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
           return state as GameState;
         }
         const ownerKey = seatFromOwner(site.owner);
-        if (state.actorKey !== ownerKey) {
+        const isOwner = state.actorKey === ownerKey;
+        // Acting player can send opponent's sites to graveyard/banished (destroy effects)
+        const isActingPlayer =
+          (state.actorKey === "p1" && state.currentPlayer === 1) ||
+          (state.actorKey === "p2" && state.currentPlayer === 2);
+        const canMoveToDestructiveZone =
+          target === "graveyard" || target === "banished";
+        if (!isOwner && !(isActingPlayer && canMoveToDestructiveZone)) {
           get().log("Cannot move opponent's site to a zone");
           return state as GameState;
         }
