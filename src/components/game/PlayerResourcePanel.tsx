@@ -7,11 +7,12 @@ import type { PlayerKey } from "@/lib/game/store";
 import { siteProvidesMana } from "@/lib/game/store/utils/resourceHelpers";
 
 // Element config matching Threshold3D exactly
+// Use static paths from public/ folder for production compatibility
 const ELEMENTS = [
-  { key: "air" as const, icon: "/api/assets/air.png", color: "#93c5fd" },
-  { key: "water" as const, icon: "/api/assets/water.png", color: "#67e8f9" },
-  { key: "earth" as const, icon: "/api/assets/earth.png", color: "#f59e0b" },
-  { key: "fire" as const, icon: "/api/assets/fire.png", color: "#f87171" },
+  { key: "air" as const, icon: "/air.png", color: "#93c5fd" },
+  { key: "water" as const, icon: "/water.png", color: "#67e8f9" },
+  { key: "earth" as const, icon: "/earth.png", color: "#f59e0b" },
+  { key: "fire" as const, icon: "/fire.png", color: "#f87171" },
 ];
 
 // Icon size for threshold symbols
