@@ -36,6 +36,7 @@ import {
   MAT_PIXEL_H,
   BASE_TILE_SIZE,
   MAT_RATIO,
+  PLAYER_COLORS,
 } from "@/lib/game/constants";
 import { Physics } from "@/lib/game/physics";
 import { useGameStore } from "@/lib/game/store";
@@ -284,17 +285,57 @@ export default function PlayPage() {
   // Camera controls ref for reset functionality
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const controlsRef = useRef<any>(null);
-  function formatEventText(text: string): string {
+  function formatEventText(text: string): React.ReactNode {
     // Redact opponent (P2) drawn card names while preserving the rest
-    let t = text || "";
+    let processedText = text || "";
     // Case 1: P2 draws 'Card Name' ...
-    t = t.replace(/^(P2 draws )'[^']+'/i, "$1a card");
+    processedText = processedText.replace(/^(P2 draws )'[^']+'/i, "$1a card");
     // Case 2: Cannot draw 'Card Name' ...: P2 is not the current player
-    t = t.replace(
+    processedText = processedText.replace(
       /^Cannot draw '.*?'( from .+: P2 is not the current player)$/i,
       "Cannot draw a card$1"
     );
-    return t;
+
+    // Parse and render [pX:PLAYER] and [pXcard:CardName] placeholders with colors
+    const parts: React.ReactNode[] = [];
+    const regex = /\[(p[12])(card)?:([^\]]+)\]/g;
+    let lastIndex = 0;
+    let match;
+    let key = 0;
+
+    while ((match = regex.exec(processedText)) !== null) {
+      // Add text before the match
+      if (match.index > lastIndex) {
+        parts.push(processedText.slice(lastIndex, match.index));
+      }
+      // Add the colored name/card
+      const playerKey = match[1] as "p1" | "p2";
+      const isCard = match[2] === "card";
+      let displayText = match[3];
+
+      // Replace PLAYER placeholder with P1/P2 for hotseat
+      if (displayText === "PLAYER") {
+        displayText = playerKey.toUpperCase();
+      }
+
+      parts.push(
+        <span
+          key={key++}
+          style={{ color: PLAYER_COLORS[playerKey], fontWeight: 500 }}
+          className={isCard ? "font-fantaisie" : undefined}
+        >
+          {displayText}
+        </span>
+      );
+      lastIndex = match.index + match[0].length;
+    }
+
+    // Add remaining text
+    if (lastIndex < processedText.length) {
+      parts.push(processedText.slice(lastIndex));
+    }
+
+    return parts.length > 0 ? parts : processedText;
   }
 
   // Autoscroll to latest event when events change or console opens
