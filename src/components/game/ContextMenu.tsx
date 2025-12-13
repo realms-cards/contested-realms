@@ -19,14 +19,6 @@ import {
   toCellKey,
   opponentOwner,
 } from "@/lib/game/store/utils/boardHelpers";
-import { prepareCardForSeat } from "@/lib/game/store/utils/cardHelpers";
-import { newPermanentInstanceId } from "@/lib/game/store/utils/idHelpers";
-import { randomTilt } from "@/lib/game/store/utils/permanentHelpers";
-import {
-  TOKEN_BY_NAME,
-  tokenSlug,
-  newTokenInstanceId,
-} from "@/lib/game/tokens";
 import type { ContextMenuAction } from "@/lib/game/types";
 
 interface ContextMenuProps {
@@ -50,12 +42,18 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   const clearAvatarCounter = useGameStore((s) => s.clearAvatarCounter);
   const toggleTapAvatar = useGameStore((s) => s.toggleTapAvatar);
   const moveSiteToZone = useGameStore((s) => s.moveSiteToZone);
+  const moveSiteToGraveyardWithRubble = useGameStore(
+    (s) => s.moveSiteToGraveyardWithRubble
+  );
   const movePermanentToZone = useGameStore((s) => s.movePermanentToZone);
   const transferSiteControl = useGameStore((s) => s.transferSiteControl);
   const transferPermanentControl = useGameStore(
     (s) => s.transferPermanentControl
   );
   const drawFromPileToHand = useGameStore((s) => s.drawFromPileToHand);
+  const moveFromGraveyardToBanished = useGameStore(
+    (s) => s.moveFromGraveyardToBanished
+  );
   const setDragFromPile = useGameStore((s) => s.setDragFromPile);
   const shuffleSpellbook = useGameStore((s) => s.shuffleSpellbook);
   const shuffleAtlas = useGameStore((s) => s.shuffleAtlas);
@@ -69,6 +67,11 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   const detachToken = useGameStore((s) => s.detachToken);
   const log = useGameStore((s) => s.log);
   const setSwitchSiteSource = useGameStore((s) => s.setSwitchSiteSource);
+  const sendInteractionRequest = useGameStore((s) => s.sendInteractionRequest);
+  const transport = useGameStore((s) => s.transport);
+  const matchId = useGameStore((s) => s.matchId);
+  const localPlayerId = useGameStore((s) => s.localPlayerId);
+  const opponentPlayerId = useGameStore((s) => s.opponentPlayerId);
 
   // Permanent position management (burrow/submerge)
   const getAvailableActions = useGameStore((s) => s.getAvailableActions);
@@ -266,9 +269,74 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     }
   }, [contextMenu, permanents, setPermanentAbility, getAvailableActions]);
 
-  if (!contextMenu) return null;
+  // Handle Rubble confirmation - defined early so it can be used in early return
+  const handleRubbleConfirm = (placeRubble: boolean) => {
+    if (!rubbleDialog) return;
+    const { siteX, siteY } = rubbleDialog;
 
-  const t = contextMenu.target;
+    // Use atomic action that combines site removal and Rubble placement
+    // This ensures both operations are sent in a single patch for proper sync
+    moveSiteToGraveyardWithRubble(siteX, siteY, placeRubble);
+    try {
+      playCardFlip();
+    } catch {}
+
+    setRubbleDialog(null);
+    onClose();
+  };
+
+  const handleRubbleCancel = () => {
+    setRubbleDialog(null);
+    // Don't close context menu - let user choose another action
+  };
+
+  // Keep component mounted if rubble dialog is open, even if contextMenu is closed
+  if (!contextMenu && !rubbleDialog) return null;
+
+  // If only rubble dialog is open (contextMenu closed), just render the dialog
+  if (!contextMenu && rubbleDialog) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+        <div
+          className="bg-zinc-900 rounded-xl ring-1 ring-white/20 shadow-2xl p-5 w-80 text-white"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="text-lg font-semibold mb-3">Replace with Rubble?</div>
+          <div className="text-sm text-white/80 mb-4">
+            <span className="font-medium">{rubbleDialog.siteName}</span> is
+            being sent to the cemetery. Would you like to place a Rubble token
+            at this location under{" "}
+            <span className="font-medium">
+              P{rubbleDialog.siteOwner}&apos;s
+            </span>{" "}
+            control?
+          </div>
+          <div className="flex gap-3">
+            <button
+              className="flex-1 rounded bg-amber-600 hover:bg-amber-500 px-4 py-2 font-medium"
+              onClick={() => handleRubbleConfirm(true)}
+            >
+              Yes, place Rubble
+            </button>
+            <button
+              className="flex-1 rounded bg-zinc-700 hover:bg-zinc-600 px-4 py-2"
+              onClick={() => handleRubbleConfirm(false)}
+            >
+              No Rubble
+            </button>
+          </div>
+          <button
+            className="w-full mt-2 text-sm text-white/60 hover:text-white/80 py-1"
+            onClick={handleRubbleCancel}
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const t = contextMenu!.target;
   let header = "";
   let tapped = false;
   let hasToggle = false;
@@ -859,12 +927,53 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
             ? "Cemetery"
             : "Collection";
         if (t.from === "graveyard") {
-          // Graveyard search is read-only for both players
-          openSearchDialog(displayName, pile, (selectedCard) => {
-            if (!isMine) return;
-            setDragFromPile({ who: t.who, from: t.from, card: selectedCard });
-            drawFromPileToHand();
-          });
+          // Cemetery search with draw and banish options
+          // Own cemetery: can draw and banish freely
+          // Opponent cemetery: requires consent for draw, banish is allowed
+          const isOpponentGraveyard = !isMine;
+          const isOnline = !!transport && !!actorKey;
+          openSearchDialog(
+            displayName,
+            pile,
+            (selectedCard) => {
+              // Draw to hand
+              if (!isMine) {
+                // Request consent to draw from opponent's cemetery
+                if (isOnline && localPlayerId && opponentPlayerId && matchId) {
+                  sendInteractionRequest({
+                    from: localPlayerId,
+                    to: opponentPlayerId,
+                    kind: "graveyardAction",
+                    matchId,
+                    note: `Request to draw ${selectedCard.name} from your cemetery`,
+                    payload: {
+                      action: "drawToHand",
+                      seat: t.who,
+                      cardName: selectedCard.name,
+                      instanceId: selectedCard.instanceId,
+                    },
+                  });
+                  log(
+                    `Requested consent to draw ${selectedCard.name} from opponent's cemetery`
+                  );
+                  return;
+                }
+                log("Cannot draw from opponent's cemetery to your hand");
+                return;
+              }
+              setDragFromPile({ who: t.who, from: t.from, card: selectedCard });
+              drawFromPileToHand();
+            },
+            {
+              onBanishCard: (selectedCard) => {
+                if (!selectedCard.instanceId) return;
+                // Banishing from either cemetery is allowed
+                moveFromGraveyardToBanished(t.who, selectedCard.instanceId);
+              },
+              // Show warning indicator on opponent's cemetery banish button
+              banishRequiresConsent: isOpponentGraveyard,
+            }
+          );
         } else {
           openSearchDialog(displayName, pile, (selectedCard) => {
             // Draw the selected card to hand (only own piles)
@@ -932,75 +1041,6 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   const handleAttachmentCancel = () => {
     setAttachmentDialog(null);
     onClose(); // Close context menu on cancel
-  };
-
-  // Handle Rubble confirmation
-  const handleRubbleConfirm = (placeRubble: boolean) => {
-    if (!rubbleDialog) return;
-    const { siteX, siteY, siteOwner } = rubbleDialog;
-
-    // Move site to graveyard
-    moveSiteToZone(siteX, siteY, "graveyard");
-    try {
-      playCardFlip();
-    } catch {}
-
-    // If user wants Rubble, place it at the same location under original owner's control
-    if (placeRubble) {
-      const rubbleDef = TOKEN_BY_NAME["rubble"];
-      if (rubbleDef) {
-        const ownerKey = seatFromOwner(siteOwner);
-        const rubbleCard = prepareCardForSeat(
-          {
-            cardId: newTokenInstanceId(rubbleDef),
-            variantId: null,
-            name: rubbleDef.name,
-            type: "Token",
-            slug: tokenSlug(rubbleDef),
-            thresholds: null,
-          },
-          ownerKey
-        );
-        // Place Rubble token on the board at the site location
-        const key = toCellKey(siteX, siteY);
-        const state = useGameStore.getState();
-        const per = { ...state.permanents };
-        const arr = [...(per[key] || [])];
-        arr.push({
-          owner: siteOwner,
-          card: rubbleCard,
-          offset: null,
-          tilt: randomTilt(),
-          tapVersion: 0,
-          tapped: false,
-          version: 0,
-          instanceId: rubbleCard.instanceId ?? newPermanentInstanceId(),
-        });
-        per[key] = arr;
-        const playerNum = ownerKey === "p1" ? "1" : "2";
-        log(
-          `[p${playerNum}:PLAYER] places [p${playerNum}card:Rubble] at #${getCellNumber(
-            siteX,
-            siteY,
-            state.board.size.w
-          )}`
-        );
-        // Update state and sync
-        useGameStore.setState({ permanents: per });
-        const tr = state.transport;
-        if (tr) {
-          state.trySendPatch({ permanents: per });
-        }
-      }
-    }
-
-    setRubbleDialog(null);
-    onClose();
-  };
-
-  const handleRubbleCancel = () => {
-    setRubbleDialog(null);
-    // Don't close context menu - let user choose another action
   };
 
   console.log(
@@ -1072,8 +1112,8 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
           ref={menuRef}
           className="absolute bg-zinc-900/90 backdrop-blur rounded-xl ring-1 ring-white/10 shadow-lg p-3 w-56 text-white pointer-events-auto"
           style={{
-            left: (menuPos?.left ?? contextMenu.screen?.x ?? 16) + "px",
-            top: (menuPos?.top ?? contextMenu.screen?.y ?? 16) + "px",
+            left: (menuPos?.left ?? contextMenu?.screen?.x ?? 16) + "px",
+            top: (menuPos?.top ?? contextMenu?.screen?.y ?? 16) + "px",
           }}
           onClick={(e) => e.stopPropagation()}
         >
