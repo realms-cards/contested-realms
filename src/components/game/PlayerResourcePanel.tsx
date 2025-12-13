@@ -192,6 +192,12 @@ function ManaRow({
   );
 }
 
+// Player colors for visual distinction
+const PLAYER_COLORS = {
+  p1: "rgba(59, 130, 246, 0.35)", // blue
+  p2: "rgba(239, 68, 68, 0.35)", // red
+} as const;
+
 interface PlayerResourceColumnProps {
   player: PlayerKey;
   isMe: boolean;
@@ -222,6 +228,8 @@ export function PlayerResourceColumn({
   const baseMana = useMemo(() => {
     let count = 0;
     for (const site of Object.values(sites)) {
+      // Skip null entries (deleted sites)
+      if (!site) continue;
       if (site.owner === ownerNum && siteProvidesMana(site.card ?? null)) {
         count++;
       }
@@ -239,7 +247,10 @@ export function PlayerResourceColumn({
     isMe;
 
   return (
-    <div className="flex flex-col items-center gap-1 p-1 rounded-lg bg-black/40">
+    <div
+      className="flex flex-col items-center gap-1 p-1.5 rounded-lg bg-black/40"
+      style={{ border: `1px solid ${PLAYER_COLORS[player]}` }}
+    >
       {/* Thresholds (vertical) */}
       <ThresholdRow thresholds={thresholds} />
       {/* Mana */}
@@ -264,7 +275,7 @@ interface PlayerResourcePanelsProps {
 
 /**
  * Displays mana and threshold resources for both players.
- * Positioned at the right side of the screen, with P1 above and P2 below.
+ * Own player at bottom, opponent at top. Each has a subtle player-color border.
  */
 export default function PlayerResourcePanels({
   myPlayerKey,
@@ -277,24 +288,29 @@ export default function PlayerResourcePanels({
   void playerNames;
   void showYouLabels;
 
+  // Determine which player is "me" and which is opponent
+  // Default to p1 as "me" if myPlayerKey is null (hotseat/spectator)
+  const meKey = myPlayerKey ?? "p1";
+  const opponentKey = meKey === "p1" ? "p2" : "p1";
+
   return (
     <div
       className={`absolute right-3 top-1/2 -translate-y-1/2 z-10 flex flex-col gap-6 ${
         dragFromHand ? "pointer-events-none" : "pointer-events-auto"
       } text-white select-none`}
     >
-      {/* P1 resources */}
+      {/* Opponent resources (top) */}
       <PlayerResourceColumn
-        player="p1"
-        isMe={myPlayerKey === "p1"}
+        player={opponentKey}
+        isMe={false}
         readOnly={readOnly}
         dragFromHand={dragFromHand}
       />
 
-      {/* P2 resources */}
+      {/* Own resources (bottom) */}
       <PlayerResourceColumn
-        player="p2"
-        isMe={myPlayerKey === "p2"}
+        player={meKey}
+        isMe={true}
         readOnly={readOnly}
         dragFromHand={dragFromHand}
       />

@@ -1,9 +1,18 @@
 import type { StateCreator } from "zustand";
 import type { GameState, PlayerKey, ServerPatchT, Zones } from "./types";
+import {
+  TOKEN_BY_NAME,
+  tokenSlug,
+  newTokenInstanceId,
+} from "@/lib/game/tokens";
 import { getCellNumber, seatFromOwner, toCellKey } from "./utils/boardHelpers";
 import { prepareCardForSeat } from "./utils/cardHelpers";
-import { createZonesPatchFor } from "./utils/zoneHelpers";
-import { removeCardInstanceFromAllZones } from "./utils/zoneHelpers";
+import { newPermanentInstanceId } from "./utils/idHelpers";
+import { randomTilt } from "./utils/permanentHelpers";
+import {
+  createZonesPatchFor,
+  removeCardInstanceFromAllZones,
+} from "./utils/zoneHelpers";
 
 export const createInitialBoard = (): GameState["board"] => ({
   size: { w: 5, h: 4 },
@@ -15,6 +24,7 @@ type BoardSlice = Pick<
   | "board"
   | "toggleTapSite"
   | "moveSiteToZone"
+  | "moveSiteToGraveyardWithRubble"
   | "transferSiteControl"
   | "switchSitePosition"
 >;
@@ -37,11 +47,9 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
       const key = toCellKey(x, y);
       const site = state.board.sites[key];
       if (!site || !site.card) return state;
-      if (state.transport) {
-        if (!state.actorKey) {
-          get().log("Cannot move sites until seat ownership is established");
-          return state as GameState;
-        }
+      // Only enforce ownership checks in online mode when actorKey is set
+      // In hotseat mode (actorKey is null), allow all actions
+      if (state.transport && state.actorKey) {
         const ownerKey = seatFromOwner(site.owner);
         const isOwner = state.actorKey === ownerKey;
         // Acting player can send opponent's sites to graveyard/banished (destroy effects)
@@ -102,8 +110,12 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
       const boardNext = { ...state.board, sites } as GameState["board"];
       const tr = get().transport;
       if (tr) {
+        // Build a sites patch that explicitly sets deleted site to null
+        // This is necessary because deepMergeReplaceArrays won't remove keys
+        // that are missing from the patch - it only updates present keys
+        const sitesPatch: Record<string, unknown> = { [key]: null };
         const patch: ServerPatchT = {
-          board: boardNext,
+          board: { ...boardNext, sites: sitesPatch as typeof boardNext.sites },
           zones: zones as GameState["zones"],
         };
         get().trySendPatch(patch);
@@ -132,16 +144,150 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
       } as Partial<GameState> as GameState;
     }),
 
+  // Atomic operation: move site to graveyard and optionally place Rubble token
+  // This ensures both operations are sent in a single patch for proper sync
+  moveSiteToGraveyardWithRubble: (x, y, placeRubble) =>
+    set((state) => {
+      get().pushHistory();
+      const key = toCellKey(x, y);
+      const site = state.board.sites[key];
+      if (!site || !site.card) return state;
+
+      // Ownership checks (same as moveSiteToZone)
+      if (state.transport && state.actorKey) {
+        const ownerKey = seatFromOwner(site.owner);
+        const isOwner = state.actorKey === ownerKey;
+        const isActingPlayer =
+          (state.actorKey === "p1" && state.currentPlayer === 1) ||
+          (state.actorKey === "p2" && state.currentPlayer === 2);
+        if (!isOwner && !isActingPlayer) {
+          get().log("Cannot move opponent's site to graveyard");
+          return state as GameState;
+        }
+      }
+
+      const siteOwner = site.owner;
+      const owner = seatFromOwner(siteOwner);
+
+      // Remove site from board
+      const sites = { ...state.board.sites };
+      delete sites[key];
+
+      // Add site card to graveyard
+      const zones = { ...state.zones } as Record<PlayerKey, Zones>;
+      const z = { ...zones[owner] };
+      const movedSiteCard = site.card
+        ? prepareCardForSeat(site.card, owner)
+        : site.card;
+      if (movedSiteCard) {
+        z.graveyard = [movedSiteCard, ...z.graveyard];
+      }
+      zones[owner] = z;
+
+      // Optionally place Rubble token
+      let permanentsNext = state.permanents;
+      if (placeRubble) {
+        const rubbleDef = TOKEN_BY_NAME["rubble"];
+        if (rubbleDef) {
+          const rubbleCard = prepareCardForSeat(
+            {
+              cardId: newTokenInstanceId(rubbleDef),
+              variantId: null,
+              name: rubbleDef.name,
+              type: "Token",
+              slug: tokenSlug(rubbleDef),
+              thresholds: null,
+            },
+            owner
+          );
+          permanentsNext = { ...state.permanents };
+          const arr = [...(permanentsNext[key] || [])];
+          arr.push({
+            owner: siteOwner,
+            card: rubbleCard,
+            offset: null,
+            tilt: randomTilt(),
+            tapVersion: 0,
+            tapped: false,
+            version: 0,
+            instanceId: rubbleCard.instanceId ?? newPermanentInstanceId(),
+          });
+          permanentsNext[key] = arr;
+          const playerNum = owner === "p1" ? "1" : "2";
+          get().log(
+            `[p${playerNum}:PLAYER] places [p${playerNum}card:Rubble] at #${getCellNumber(
+              x,
+              y,
+              state.board.size.w
+            )}`
+          );
+        }
+      }
+
+      const cellNo = getCellNumber(x, y, state.board.size.w);
+      const playerNum = owner === "p1" ? "1" : "2";
+      get().log(
+        `[p${playerNum}:PLAYER] moved site [p${playerNum}card:${site.card.name}] from #${cellNo} to cemetery`
+      );
+
+      const boardNext = { ...state.board, sites } as GameState["board"];
+
+      // Send combined patch with board, zones, and permanents
+      const tr = get().transport;
+      if (tr) {
+        // Build a sites patch that explicitly sets deleted site to null
+        // This is necessary because deepMergeReplaceArrays won't remove keys
+        // that are missing from the patch - it only updates present keys
+        const sitesPatch: Record<string, unknown> = { [key]: null };
+        const patch: ServerPatchT = {
+          board: { ...boardNext, sites: sitesPatch as typeof boardNext.sites },
+          zones: zones as GameState["zones"],
+          ...(placeRubble ? { permanents: permanentsNext } : {}),
+        };
+        get().trySendPatch(patch);
+
+        // Send toast
+        const toastMessage = `[p${playerNum}:PLAYER] moved [p${playerNum}card:${
+          site.card.name
+        }] to cemetery${placeRubble ? " (Rubble placed)" : ""}`;
+        try {
+          tr.sendMessage?.({
+            type: "toast",
+            text: toastMessage,
+            seat: owner,
+          } as never);
+        } catch {}
+      } else {
+        // Offline: show local toast
+        const toastMessage = `[p${playerNum}:PLAYER] moved [p${playerNum}card:${
+          site.card.name
+        }] to cemetery${placeRubble ? " (Rubble placed)" : ""}`;
+        try {
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(
+              new CustomEvent("app:toast", {
+                detail: { message: toastMessage },
+              })
+            );
+          }
+        } catch {}
+      }
+
+      return {
+        board: boardNext,
+        zones,
+        ...(placeRubble ? { permanents: permanentsNext } : {}),
+      } as Partial<GameState> as GameState;
+    }),
+
   transferSiteControl: (x, y, to) =>
     set((state) => {
       get().pushHistory();
-      if (state.transport && !state.actorKey) {
-        get().log("Cannot transfer control until seat is established");
-        return state as GameState;
-      }
       const key = toCellKey(x, y);
       const site = state.board.sites[key];
       if (!site) return state;
+      // Only enforce ownership checks in online mode when actorKey is set
+      // In hotseat mode (actorKey is null), allow all actions
       if (state.transport && state.actorKey) {
         const ownerSeat = seatFromOwner(site.owner);
         if (state.actorKey !== ownerSeat) {

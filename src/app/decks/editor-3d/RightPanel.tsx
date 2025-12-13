@@ -5,8 +5,8 @@ import YourDeckList from "@/app/decks/editor-3d/YourDeckList";
 import type { Pick3D, CardMeta } from "@/lib/game/cardSorting";
 
 type RightPanelProps = {
-  cardsTab: "deck" | "all";
-  setCardsTab: (v: "deck" | "all") => void;
+  cardsTab: "deck" | "sideboard" | "collection" | "all";
+  setCardsTab: (v: "deck" | "sideboard" | "collection" | "all") => void;
   picksOpen: boolean;
   setPicksOpen: (v: boolean) => void;
   picksByType: {
@@ -98,17 +98,43 @@ export default function RightPanel(props: RightPanelProps) {
                       : "text-white/80 hover:bg-white/10"
                   }`}
                 >
-                  Your Deck ({picksByType.deck + picksByType.sideboard})
+                  Deck ({picksByType.deck})
                 </button>
                 <button
-                  onClick={() => setCardsTab("all")}
-                  className={`px-3 py-1 text-sm rounded-r transition-colors ${
-                    cardsTab === "all"
+                  onClick={() => setCardsTab("sideboard")}
+                  className={`px-3 py-1 text-sm transition-colors ${
+                    cardsTab === "sideboard"
                       ? "bg-blue-600 text-white"
                       : "text-white/80 hover:bg-white/10"
                   }`}
                 >
-                  All Cards ({yourCounts.reduce((s, c) => s + c.count, 0)})
+                  Sideboard ({picksByType.sideboard})
+                </button>
+                {(picksByType.collection > 0 ||
+                  (showCollectionZone && collectionCount > 0)) && (
+                  <button
+                    onClick={() => setCardsTab("collection")}
+                    className={`px-3 py-1 text-sm transition-colors ${
+                      cardsTab === "collection"
+                        ? "bg-purple-600 text-white"
+                        : "text-white/80 hover:bg-white/10"
+                    }`}
+                  >
+                    Collection (
+                    {picksByType.collection +
+                      (showCollectionZone ? collectionCount : 0)}
+                    )
+                  </button>
+                )}
+                <button
+                  onClick={() => setCardsTab("all")}
+                  className={`px-3 py-1 text-sm rounded-r transition-colors ${
+                    cardsTab === "all"
+                      ? "bg-amber-600 text-white"
+                      : "text-white/80 hover:bg-white/10"
+                  }`}
+                >
+                  All ({yourCounts.reduce((s, c) => s + c.count, 0)})
                 </button>
               </div>
             </div>
@@ -122,7 +148,7 @@ export default function RightPanel(props: RightPanelProps) {
             </div>
           </div>
 
-          {cardsTab === "deck" && picksOpen && (
+          {picksOpen && (
             <div className="mb-3 pointer-events-auto">
               <div className="flex items-center gap-4 text-sm">
                 <div className="flex items-center gap-2">

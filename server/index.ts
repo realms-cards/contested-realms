@@ -4133,12 +4133,32 @@ io.on("connection", async (socket: SocketClient) => {
 
   // Submit sealed deck during deck construction phase (with validation)
   socket.on("submitDeck", (payload) => {
-    if (!authed) return;
+    if (!authed) {
+      console.log("[Sealed] submitDeck rejected: not authenticated");
+      return;
+    }
     const player = getPlayerBySocket(socket);
-    if (!player || !player.matchId) return;
+    if (!player || !player.matchId) {
+      console.log("[Sealed] submitDeck rejected: no player or matchId", {
+        hasPlayer: !!player,
+        matchId: player?.matchId,
+      });
+      return;
+    }
     const match = matches.get(player.matchId);
-    if (!match || match.status !== "deck_construction") return;
-    if (match.matchType !== "sealed") return;
+    if (!match) {
+      console.log(
+        `[Sealed] submitDeck rejected: match not found for ${player.matchId}`
+      );
+      return;
+    }
+    if (match.status !== "deck_construction") {
+      console.log(
+        `[Sealed] submitDeck rejected: wrong status ${match.status} (expected deck_construction)`
+      );
+      return;
+    }
+    if (match.matchType !== "sealed") return; // Silently skip - draft handler will process
     if (!(match.playerDecks instanceof Map)) {
       match.playerDecks = new Map<string, unknown>();
     }
@@ -4146,14 +4166,36 @@ io.on("connection", async (socket: SocketClient) => {
 
     // Idempotency: if this player already submitted, ignore duplicates
     if (playerDecks.has(player.id)) {
+      console.log(
+        `[Sealed] submitDeck ignored: ${player.displayName} already submitted for match ${match.id}`
+      );
+      // Still send ack in case client missed it
+      try {
+        socket.emit("deckAccepted", {
+          matchId: match.id,
+          playerId: player.id,
+          mode: "sealed",
+          counts: null,
+          ts: Date.now(),
+        });
+      } catch {}
       return;
     }
 
     const deckRaw = payload && payload.deck;
-    if (!deckRaw) return;
+    if (!deckRaw) {
+      console.log(
+        `[Sealed] submitDeck rejected: no deck payload from ${player.displayName}`
+      );
+      return;
+    }
     const cards = normalizeDeckPayload(deckRaw);
     const val = validateDeckCards(cards);
     if (!val.isValid) {
+      console.log(
+        `[Sealed] submitDeck rejected: invalid deck from ${player.displayName}:`,
+        val.errors
+      );
       socket.emit("error", {
         message: `Deck invalid: ${val.errors.join(", ")}`,
       });
@@ -4162,6 +4204,9 @@ io.on("connection", async (socket: SocketClient) => {
 
     // Store the player's deck
     playerDecks.set(player.id, cards);
+    console.log(
+      `[Sealed] Deck submitted by ${player.displayName} for match ${match.id}`
+    );
 
     // Lightweight ack so client UI can flip instantly
     try {
@@ -4172,21 +4217,46 @@ io.on("connection", async (socket: SocketClient) => {
         counts: val.counts || null,
         ts: Date.now(),
       });
-    } catch {}
+    } catch (err) {
+      console.warn("[Sealed] Failed to emit deckAccepted:", err);
+    }
 
     // Persist updated playerDecks
     try {
       persistMatchUpdate(match, null, player.id, Date.now());
-    } catch {}
+    } catch (err) {
+      console.warn("[Sealed] Failed to persist match update:", err);
+    }
 
     // Check if all players have submitted decks
     const allSubmitted = match.playerIds.every((pid) => playerDecks.has(pid));
+    const submittedCount = match.playerIds.filter((pid) =>
+      playerDecks.has(pid)
+    ).length;
+    console.log(
+      `[Sealed] Deck submission progress: ${submittedCount}/${match.playerIds.length} for match ${match.id}`
+    );
 
-    // Broadcast deck submission update
+    // Broadcast deck submission update to match room
     const room = `match:${match.id}`;
-    io.to(room).emit("matchStarted", { match: getMatchInfo(match) });
+    const matchInfo = getMatchInfo(match);
+    try {
+      io.to(room).emit("matchStarted", { match: matchInfo });
+    } catch (err) {
+      console.warn("[Sealed] Failed to broadcast to room:", err);
+    }
+
+    // Also emit directly to each player's personal room for cross-instance reliability
+    for (const pid of match.playerIds) {
+      try {
+        io.to(`player:${pid}`).emit("matchStarted", { match: matchInfo });
+      } catch {}
+    }
 
     if (allSubmitted) {
+      console.log(
+        `[Sealed] All decks submitted for match ${match.id}, transitioning to waiting phase`
+      );
       // All decks submitted, transition to waiting phase for game start
       match.status = "waiting";
 
@@ -4202,10 +4272,28 @@ io.on("connection", async (socket: SocketClient) => {
         broadcastLobbies();
       }
 
-      io.to(room).emit("matchStarted", { match: getMatchInfo(match) });
+      // Broadcast updated match info with new status
+      const updatedMatchInfo = getMatchInfo(match);
+      try {
+        io.to(room).emit("matchStarted", { match: updatedMatchInfo });
+      } catch (err) {
+        console.warn("[Sealed] Failed to broadcast transition to room:", err);
+      }
+
+      // Direct emit to each player for reliability
+      for (const pid of match.playerIds) {
+        try {
+          io.to(`player:${pid}`).emit("matchStarted", {
+            match: updatedMatchInfo,
+          });
+        } catch {}
+      }
+
       try {
         persistMatchUpdate(match, null, player.id, Date.now());
-      } catch {}
+      } catch (err) {
+        console.warn("[Sealed] Failed to persist transition:", err);
+      }
     }
   });
 
@@ -4403,26 +4491,65 @@ io.on("connection", async (socket: SocketClient) => {
 
   // Submit draft deck during deck construction phase (with validation)
   socket.on("submitDeck", (payload) => {
-    if (!authed) return;
+    if (!authed) {
+      console.log("[Draft] submitDeck rejected: not authenticated");
+      return;
+    }
     const player = getPlayerBySocket(socket);
-    if (!player || !player.matchId) return;
+    if (!player || !player.matchId) {
+      console.log("[Draft] submitDeck rejected: no player or matchId", {
+        hasPlayer: !!player,
+        matchId: player?.matchId,
+      });
+      return;
+    }
 
     const match = matches.get(player.matchId);
-    if (!match) return;
+    if (!match) {
+      console.log(
+        `[Draft] submitDeck rejected: match not found for ${player.matchId}`
+      );
+      return;
+    }
     if (!(match.playerDecks instanceof Map)) {
       match.playerDecks = new Map<string, unknown>();
     }
     const playerDecks = match.playerDecks;
-    if (match.matchType !== "draft") return;
+    if (match.matchType !== "draft") return; // Silently skip - sealed handler will process
 
     // Idempotency: ignore duplicate submissions by the same player
-    if (playerDecks.has(player.id)) return;
+    if (playerDecks.has(player.id)) {
+      console.log(
+        `[Draft] submitDeck ignored: ${player.displayName} already submitted for match ${match.id}`
+      );
+      // Still send ack in case client missed it
+      try {
+        socket.emit("deckAccepted", {
+          matchId: match.id,
+          playerId: player.id,
+          mode: "draft",
+          counts: null,
+          ts: Date.now(),
+        });
+      } catch {}
+      return;
+    }
 
     // Validate and store the submitted deck cards
     const deckRaw = payload && payload.deck ? payload.deck : payload;
+    if (!deckRaw) {
+      console.log(
+        `[Draft] submitDeck rejected: no deck payload from ${player.displayName}`
+      );
+      return;
+    }
     const cards = normalizeDeckPayload(deckRaw);
     const val = validateDeckCards(cards);
     if (!val.isValid) {
+      console.log(
+        `[Draft] submitDeck rejected: invalid deck from ${player.displayName}:`,
+        val.errors
+      );
       socket.emit("error", {
         message: `Deck invalid: ${val.errors.join(", ")}`,
       });
@@ -4430,10 +4557,16 @@ io.on("connection", async (socket: SocketClient) => {
     }
     playerDecks.set(player.id, cards);
 
+    console.log(
+      `[Draft] Deck submitted by ${player.displayName} for match ${match.id}`
+    );
+
     // Persist updated playerDecks for recovery and cross-instance consistency
     try {
       persistMatchUpdate(match, null, player.id, Date.now());
-    } catch {}
+    } catch (err) {
+      console.warn("[Draft] Failed to persist match update:", err);
+    }
 
     // Lightweight ack so client UI can flip instantly
     try {
@@ -4444,25 +4577,58 @@ io.on("connection", async (socket: SocketClient) => {
         counts: val.counts || null,
         ts: Date.now(),
       });
-    } catch {}
-
-    console.log(
-      `[Match] Deck submitted by ${player.displayName} for match ${match.id}`
-    );
+    } catch (err) {
+      console.warn("[Draft] Failed to emit deckAccepted:", err);
+    }
 
     // Check if all players have submitted decks
     const allSubmitted = match.playerIds.every((pid) => playerDecks.has(pid));
+    const submittedCount = match.playerIds.filter((pid) =>
+      playerDecks.has(pid)
+    ).length;
+    console.log(
+      `[Draft] Deck submission progress: ${submittedCount}/${match.playerIds.length} for match ${match.id}`
+    );
+
+    // Broadcast updated match info to match room
+    const room = `match:${match.id}`;
+    const matchInfo = getMatchInfo(match);
+    try {
+      io.to(room).emit("matchStarted", { match: matchInfo });
+    } catch (err) {
+      console.warn("[Draft] Failed to broadcast to room:", err);
+    }
+
+    // Also emit directly to each player's personal room for cross-instance reliability
+    for (const pid of match.playerIds) {
+      try {
+        io.to(`player:${pid}`).emit("matchStarted", { match: matchInfo });
+      } catch {}
+    }
+
     if (allSubmitted && match.status === "deck_construction") {
       console.log(
-        `[Match] All draft decks submitted for match ${match.id}, transitioning to waiting (setup)`
+        `[Draft] All decks submitted for match ${match.id}, transitioning to waiting phase`
       );
       // Do NOT skip setup for draft; mirror sealed flow: move to waiting and keep lobby visible
       match.status = "waiting";
+
+      // Broadcast updated match info with new status
+      const updatedMatchInfo = getMatchInfo(match);
       try {
-        io.to(`match:${match.id}`).emit("matchStarted", {
-          match: getMatchInfo(match),
-        });
-      } catch {}
+        io.to(room).emit("matchStarted", { match: updatedMatchInfo });
+      } catch (err) {
+        console.warn("[Draft] Failed to broadcast transition to room:", err);
+      }
+
+      // Direct emit to each player for reliability
+      for (const pid of match.playerIds) {
+        try {
+          io.to(`player:${pid}`).emit("matchStarted", {
+            match: updatedMatchInfo,
+          });
+        } catch {}
+      }
 
       // Keep lobby visible (mark as started) for in-progress match
       if (match.lobbyId) {
@@ -4477,17 +4643,13 @@ io.on("connection", async (socket: SocketClient) => {
           broadcastLobbies();
         }
       }
+
+      try {
+        persistMatchUpdate(match, null, player.id, Date.now());
+      } catch (err) {
+        console.warn("[Draft] Failed to persist transition:", err);
+      }
     }
-
-    // Broadcast updated match info
-    io.to(`match:${match.id}`).emit("matchStarted", {
-      match: getMatchInfo(match),
-    });
-
-    // Ensure persistence after broadcast as well
-    try {
-      persistMatchUpdate(match, null, player.id, Date.now());
-    } catch {}
   });
 
   // Explicit end match (optional). Allows cleanup and status update.

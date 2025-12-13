@@ -49,6 +49,8 @@ export const INTERACTION_REQUEST_KINDS = new Set([
   "restoreSnapshot",
   // Site manipulation (Earthquake, Rift Valley)
   "switchSite",
+  // Cemetery manipulation (recursion effects)
+  "graveyardAction",
 ]);
 
 export const INTERACTION_DECISIONS = new Set([
@@ -560,6 +562,127 @@ export function createInteractionModule({
         };
       } catch (_e) {
         return { ...resultBase, success: false, message: "Failed to unbanish" };
+      }
+    }
+    if (kind === "graveyardAction") {
+      const seat =
+        pendingAction.seat === "p1" || pendingAction.seat === "p2"
+          ? pendingAction.seat
+          : null;
+      const action = pendingAction.action;
+      const instanceId =
+        typeof pendingAction.instanceId === "string"
+          ? pendingAction.instanceId
+          : null;
+      if (!seat || !instanceId) {
+        return {
+          ...resultBase,
+          success: false,
+          message: "Invalid graveyard action parameters",
+        };
+      }
+      try {
+        const zones = (match.game && match.game.zones) || {};
+        const seatZonesRaw =
+          zones && typeof zones === "object" ? (zones as any)[seat] : null;
+        const graveyard = Array.isArray(seatZonesRaw?.graveyard)
+          ? [...seatZonesRaw.graveyard]
+          : [];
+        const idx = graveyard.findIndex(
+          (c: any) => c && typeof c === "object" && c.instanceId === instanceId
+        );
+        if (idx < 0) {
+          return {
+            ...resultBase,
+            success: false,
+            message: "Card not found in graveyard",
+          };
+        }
+        const card = graveyard.splice(idx, 1)[0];
+        const moved = { ...(card || {}) } as Record<string, unknown>;
+
+        // Determine target based on action
+        let patch: Record<string, unknown>;
+        let message: string;
+        const name =
+          typeof (card as any)?.name === "string" ? (card as any).name : "Card";
+
+        if (action === "drawToHand") {
+          // Move to requester's hand (the one who requested the action)
+          // playerIds[0] = p1, playerIds[1] = p2
+          const playerIds = Array.isArray(match.playerIds)
+            ? match.playerIds
+            : [];
+          const requesterSeat =
+            playerIds[0] === pendingAction.requestedBy ? "p1" : "p2";
+          moved.owner = requesterSeat;
+          const requesterZonesRaw =
+            zones && typeof zones === "object"
+              ? (zones as any)[requesterSeat]
+              : null;
+          const hand = Array.isArray(requesterZonesRaw?.hand)
+            ? [...requesterZonesRaw.hand]
+            : [];
+          hand.push(moved);
+
+          console.log("[graveyardAction] drawToHand debug:", {
+            requestedBy: pendingAction.requestedBy,
+            playerIds,
+            requesterSeat,
+            opponentSeat: seat,
+            graveyardLengthAfterSplice: graveyard.length,
+            handLengthAfterPush: hand.length,
+            cardName: name,
+          });
+
+          patch = {
+            zones: {
+              [seat]: { graveyard },
+              [requesterSeat]: { hand },
+            },
+          };
+          message = `Drew '${name}' from opponent's cemetery to hand.`;
+        } else if (action === "banish") {
+          // Move to banished
+          const banished = Array.isArray(seatZonesRaw?.banished)
+            ? [...seatZonesRaw.banished]
+            : [];
+          banished.push(moved);
+          patch = {
+            zones: {
+              [seat]: { graveyard, banished },
+            },
+          };
+          message = `Banished '${name}' from cemetery.`;
+        } else {
+          return {
+            ...resultBase,
+            success: false,
+            message: "Unknown graveyard action",
+          };
+        }
+
+        match.game = deepMergeReplaceArrays(match.game || {}, patch);
+        match.lastTs = now;
+        const room = `match:${match.id}`;
+        const enrichedPatch = await enrichPatchWithCosts(patch, prisma);
+        io.to(room).emit("statePatch", { patch: enrichedPatch, t: now });
+        return {
+          ...resultBase,
+          success: true,
+          payload: {
+            seat,
+            action,
+            requestedBy: pendingAction.requestedBy || null,
+          },
+          message,
+        };
+      } catch (_e2) {
+        return {
+          ...resultBase,
+          success: false,
+          message: "Failed graveyard action",
+        };
       }
     }
     if (kind === "restoreSnapshot") {

@@ -14,6 +14,8 @@ export const InteractionRequestKinds = [
   "restoreSnapshot",
   // Site manipulation (Earthquake, Rift Valley, etc.)
   "switchSite",
+  // Cemetery manipulation (recursion effects, etc.)
+  "graveyardAction",
 ] as const;
 
 export type InteractionRequestKind = (typeof InteractionRequestKinds)[number];
