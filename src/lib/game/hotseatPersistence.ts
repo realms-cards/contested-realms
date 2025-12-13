@@ -12,7 +12,7 @@ const DB_NAME = "sorcery-hotseat";
 const DB_VERSION = 1;
 const STORE_NAME = "games";
 const GAME_KEY = "current";
-const STORAGE_VERSION = 5; // Bumped for permanent owner preservation
+const STORAGE_VERSION = 6; // Bumped for site thresholds preservation
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
@@ -95,6 +95,7 @@ type CompactSite = {
   name?: string;
   cardId?: number;
   owner: 1 | 2;
+  thresholds?: { air?: number; water?: number; earth?: number; fire?: number };
 };
 
 type CompactPortalPlayerState = {
@@ -237,6 +238,7 @@ function serializeCompact(
         name: site.card.name,
         cardId: site.card.cardId,
         owner: site.owner,
+        thresholds: site.card.thresholds ?? undefined,
       };
     }
   }
@@ -529,6 +531,7 @@ export function applyLoadedGame(
         name: site.name || "",
         cardId: site.cardId || 0,
         type: "Site",
+        thresholds: site.thresholds ?? null,
       },
       owner: site.owner,
     };

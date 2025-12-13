@@ -7,20 +7,20 @@ import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import CardPreview from "@/components/game/CardPreview";
 import { ClientCanvas } from "@/components/game/ClientCanvas";
+import CollectionButton from "@/components/game/CollectionButton";
 import ContextMenu from "@/components/game/ContextMenu";
 import DeckSelector from "@/components/game/DeckSelector";
-import CollectionButton from "@/components/game/CollectionButton";
 import GameToolbox from "@/components/game/GameToolbox";
 import HarbingerPortalScreen from "@/components/game/HarbingerPortalScreen";
 import { InteractionConsentDialog } from "@/components/game/InteractionConsentDialog";
 import LifeCounters from "@/components/game/LifeCounters";
-import PlayerResourcePanels from "@/components/game/PlayerResourcePanel";
+import MobileHandHint from "@/components/game/MobileHandHint";
 import OfflineMulliganScreen from "@/components/game/OfflineMulliganScreen";
 import PileSearchDialog from "@/components/game/PileSearchDialog";
 import PlacementDialog from "@/components/game/PlacementDialog";
+import PlayerResourcePanels from "@/components/game/PlayerResourcePanel";
 import StatusBar from "@/components/game/StatusBar";
 import SwitchSiteHudOverlay from "@/components/game/SwitchSiteHudOverlay";
-import MobileHandHint from "@/components/game/MobileHandHint";
 import {
   DynamicBoard as Board,
   DynamicHand3D as Hand3D,
@@ -29,6 +29,10 @@ import {
   DynamicTokenPile3D as TokenPile3D,
 } from "@/components/game/dynamic-3d";
 import TrackpadOrbitAdapter from "@/lib/controls/TrackpadOrbitAdapter";
+import {
+  hasAnyHarbinger,
+  detectHarbingerSeats,
+} from "@/lib/game/avatarAbilities";
 import { createCardPreviewData } from "@/lib/game/card-preview.types";
 import TextureCache from "@/lib/game/components/TextureCache";
 import {
@@ -38,12 +42,6 @@ import {
   MAT_RATIO,
   PLAYER_COLORS,
 } from "@/lib/game/constants";
-import { Physics } from "@/lib/game/physics";
-import { useGameStore } from "@/lib/game/store";
-import {
-  hasAnyHarbinger,
-  detectHarbingerSeats,
-} from "@/lib/game/avatarAbilities";
 import {
   saveHotseatGame,
   loadHotseatGame,
@@ -51,7 +49,8 @@ import {
   hasSavedHotseatGame,
   applyLoadedGame,
 } from "@/lib/game/hotseatPersistence";
-// Note: avatarAbilities import is after store due to type dependency
+import { Physics } from "@/lib/game/physics";
+import { useGameStore } from "@/lib/game/store";
 import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
 import { LocalTransport } from "@/lib/net/localTransport";
 
@@ -116,7 +115,7 @@ export default function PlayPage() {
 
   // Saved game restoration prompt
   const [showRestorePrompt, setShowRestorePrompt] = useState<boolean>(false);
-  const [restoredGame, setRestoredGame] = useState<boolean>(false);
+  const [, setRestoredGame] = useState<boolean>(false);
 
   // LocalTransport wiring for offline play
   const transportRef = useRef<LocalTransport | null>(null);

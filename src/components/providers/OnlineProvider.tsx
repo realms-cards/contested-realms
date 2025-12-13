@@ -1,7 +1,7 @@
 "use client";
 
-import { useSession } from "next-auth/react";
 import { usePathname } from "next/navigation";
+import { useSession } from "next-auth/react";
 import React, {
   useCallback,
   useEffect,
@@ -811,27 +811,30 @@ export default function OnlineProvider({
   // Batch incoming server patches to a single RAF to avoid rapid re-entrancy during reconnects
   const patchQueueRef = useRef<Array<{ patch: unknown; t?: number }>>([]);
   const patchFlushScheduledRef = useRef<boolean>(false);
-  const queueServerPatch = (patch: unknown, t?: number) => {
-    // Skip applying server patches on hotseat page to avoid overwriting local game state
-    if (isHotseatPage) {
-      return;
-    }
-    patchQueueRef.current.push({ patch, t });
-    if (patchFlushScheduledRef.current) return;
-    patchFlushScheduledRef.current = true;
-    requestAnimationFrame(() => {
-      patchFlushScheduledRef.current = false;
-      const items = patchQueueRef.current;
-      patchQueueRef.current = [];
-      for (const it of items) {
-        try {
-          useGameStore.getState().applyServerPatch(it.patch, it.t);
-        } catch (e) {
-          console.warn("applyServerPatch failed", e);
-        }
+  const queueServerPatch = useCallback(
+    (patch: unknown, t?: number) => {
+      // Skip applying server patches on hotseat page to avoid overwriting local game state
+      if (isHotseatPage) {
+        return;
       }
-    });
-  };
+      patchQueueRef.current.push({ patch, t });
+      if (patchFlushScheduledRef.current) return;
+      patchFlushScheduledRef.current = true;
+      requestAnimationFrame(() => {
+        patchFlushScheduledRef.current = false;
+        const items = patchQueueRef.current;
+        patchQueueRef.current = [];
+        for (const it of items) {
+          try {
+            useGameStore.getState().applyServerPatch(it.patch, it.t);
+          } catch (e) {
+            console.warn("applyServerPatch failed", e);
+          }
+        }
+      });
+    },
+    [isHotseatPage]
+  );
 
   // Inject transport into store once; remove on unmount
   useEffect(() => {
@@ -1417,7 +1420,7 @@ export default function OnlineProvider({
       setMatchmakingIsHost(null);
       setMatchmakingQueueSize(null);
     };
-  }, [transport, session, sessionStatus]);
+  }, [transport, session, sessionStatus, queueServerPatch]);
 
   // HTTP available players fetcher
   const requestAvailablePlayers = useCallback(

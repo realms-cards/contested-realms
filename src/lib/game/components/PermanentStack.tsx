@@ -261,7 +261,7 @@ export function PermanentStack({
   } = highlightColors;
 
   const {
-    spacing,
+    spacing: _spacing,
     marginZ: baseMarginZ,
     layerLift,
     baseElevation,
@@ -269,6 +269,7 @@ export function PermanentStack({
     rubbleElevation,
     avatarAvoidZ,
   } = stackConfig;
+  void _spacing; // Spacing is part of the config but not used in this component
 
   const key = tileKey;
   const boardHalfW = (boardSize.w * TILE_SIZE) / 2;
