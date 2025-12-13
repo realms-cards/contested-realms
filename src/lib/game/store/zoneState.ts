@@ -1020,8 +1020,8 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
     set((state) => {
       get().pushHistory();
       if (!instanceId) return state;
-      // For own graveyard, no consent needed
-      // For opponent graveyard, consent should be handled before calling this
+      // Apply locally and send patch for both own and opponent's cemetery
+      // The server will apply and broadcast the authoritative state
       const zonesNext = { ...state.zones } as Record<PlayerKey, Zones>;
       const seatZones = { ...zonesNext[who] } as Zones;
       const graveyard = [...seatZones.graveyard];
@@ -1034,13 +1034,8 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
       zonesNext[who] = seatZones;
       const playerNum = who === "p1" ? "1" : "2";
       get().log(`Banished [p${playerNum}card:${card.name}] from cemetery`);
-      // Use __replaceKeys to bypass sanitization filter for opponent zone changes
-      // This marks the patch as authoritative and sends immediately
       const patch = createZonesPatchFor(zonesNext as GameState["zones"], who);
-      if (patch) {
-        const authPatch = { ...patch, __replaceKeys: ["zones"] };
-        get().trySendPatch(authPatch);
-      }
+      if (patch) get().trySendPatch(patch);
       return {
         zones: zonesNext as GameState["zones"],
       } as Partial<GameState> as GameState;
