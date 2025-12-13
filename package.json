@@ -30,6 +30,7 @@
     "docker:test:logs": "docker-compose -f docker-compose.test.yml logs -f",
     "validate:cards": "node scripts/validate-cards.js",
     "ingest:cards": "node scripts/ingest-cards.js",
+    "generate:search-index": "node scripts/generate-search-index.js",
     "ingest:codex": "node scripts/ingest-codex.js",
     "seed:packs": "node scripts/seed-pack-config.js",
     "seed:precons": "node scripts/seed-precon-decks.js",
