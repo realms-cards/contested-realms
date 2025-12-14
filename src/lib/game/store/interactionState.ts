@@ -347,17 +347,22 @@ export const createInteractionSlice: StateCreator<
     const entry = state.interactionLog[requestId];
     if (!entry) return;
     const request = entry.request;
-    const payload =
-      options?.payload && typeof options.payload === "object"
-        ? options.payload
-        : undefined;
     const grantOverride = normalizeGrantRequest(options?.grant);
+    // Build payload with grant inside (Zod schema strips top-level grant)
+    const basePayload =
+      options?.payload && typeof options.payload === "object"
+        ? { ...options.payload }
+        : {};
+    if (grantOverride) {
+      basePayload.grant = grantOverride;
+    }
+    const payload =
+      Object.keys(basePayload).length > 0 ? basePayload : undefined;
     const response = createInteractionResponse({
       requestId,
       decision,
       actorId,
       reason: options?.reason,
-      grant: grantOverride ?? undefined,
       payload,
       matchId: request.matchId,
       from: request.to,

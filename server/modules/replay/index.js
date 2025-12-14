@@ -137,13 +137,23 @@ async function listRecordings(prisma, opts = {}) {
   // Filter out recordings with no actions (no replay data to show)
   const withActions = combined.filter((r) => r.actionCount > 0);
 
-  withActions.sort((a, b) => {
+  // Filter to only show matches with 2+ distinct human players (exclude CPU/solo matches from public listing)
+  const CPU_PREFIX = "cpu:";
+  const multiplayerOnly = withActions.filter((r) => {
+    const humanPlayers = (r.playerIds || []).filter(
+      (pid) => pid && !pid.startsWith(CPU_PREFIX)
+    );
+    const uniqueHumans = new Set(humanPlayers);
+    return uniqueHumans.size >= 2;
+  });
+
+  multiplayerOnly.sort((a, b) => {
     const at = a.endTime || a.startTime || 0;
     const bt = b.endTime || b.startTime || 0;
     return bt - at;
   });
 
-  return withActions;
+  return multiplayerOnly;
 }
 
 /**

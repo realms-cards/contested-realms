@@ -1,18 +1,15 @@
 // Lowercase names of cards that explicitly state they "provide ①" in rulesText.
 // Generated from a scan of data/cards_raw.json; keep small and curated.
+// Note: Arthurian Families (Blacksmith, Castle Servants, etc.) provide THRESHOLD only, not mana.
 export const MANA_PROVIDER_BY_NAME = new Set<string>([
   "abundance",
   "amethyst core",
   "aquamarine core",
   "atlantean fate",
   "avalon",
-  "blacksmith family",
   "caerleon-upon-usk",
-  "castle servants",
-  "common cottagers",
   "drought",
   "finwife",
-  "fisherman's family",
   "glastonbury tor",
   "joyous garde",
   "onyx core",
@@ -26,15 +23,23 @@ export const MANA_PROVIDER_BY_NAME = new Set<string>([
   "älvalinne dryads",
 ]);
 
-// Subset of permanents that also grant element thresholds (e.g., Cores provide (A/W/E/F)).
+// Permanents that grant element thresholds.
+// Cores provide both threshold AND mana (via MANA_PROVIDER_BY_NAME).
+// Arthurian Families provide threshold ONLY (no mana).
 export const THRESHOLD_GRANT_BY_NAME: Record<
   string,
   Partial<{ air: number; water: number; earth: number; fire: number }>
 > = {
+  // Cores (Artifact) - provide threshold + mana
   "amethyst core": { air: 1 },
   "aquamarine core": { water: 1 },
   "onyx core": { earth: 1 },
   "ruby core": { fire: 1 },
+  // Arthurian Families (Minion) - provide threshold only
+  "blacksmith family": { fire: 1 },
+  "castle servants": { air: 1 },
+  "common cottagers": { earth: 1 },
+  "fisherman's family": { water: 1 },
 };
 
 // Sites that should NOT provide 1 mana per turn (rare exceptions).

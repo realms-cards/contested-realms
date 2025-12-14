@@ -253,6 +253,54 @@ export function hasNoDuplicateRolls(rolls: number[]): boolean {
 }
 
 /**
+ * Helper: Check if portal setup is truly complete for all Harbinger players.
+ * Returns true only if:
+ * - portalState.setupComplete is true, AND
+ * - All harbinger players have exactly 3 unique tile numbers assigned
+ */
+export function arePortalsFullyAssigned(
+  portalState: PortalState | null
+): boolean {
+  if (!portalState) return false;
+  if (!portalState.setupComplete) return false;
+
+  const { harbingerSeats, p1, p2 } = portalState;
+
+  // Check each Harbinger player has 3 unique tiles assigned
+  for (const seat of harbingerSeats) {
+    const playerState = seat === "p1" ? p1 : p2;
+    if (!playerState) return false;
+    if (playerState.tileNumbers.length !== 3) return false;
+    if (new Set(playerState.tileNumbers).size !== 3) return false;
+  }
+
+  return true;
+}
+
+/**
+ * Helper: Check if a Harbinger game needs portal phase to run.
+ * Returns true if any Harbinger player is missing their portal tiles.
+ */
+export function needsPortalPhaseForHarbinger(
+  portalState: PortalState | null,
+  harbingerSeats: PlayerKey[]
+): boolean {
+  // No Harbinger players, no portal phase needed
+  if (harbingerSeats.length === 0) return false;
+
+  // No portal state initialized yet - need to run portal phase
+  if (!portalState) return true;
+
+  // Portal state exists but not complete
+  if (!portalState.setupComplete) return true;
+
+  // Portal state complete but tiles not properly assigned
+  if (!arePortalsFullyAssigned(portalState)) return true;
+
+  return false;
+}
+
+/**
  * Helper: Find indices of duplicate rolls
  */
 export function findDuplicateIndices(rolls: number[]): number[] {
