@@ -276,9 +276,12 @@ export async function GET(
         dataOnlyAssets.has(segment.replace(/\.[^.]+$/, ".png"))
     );
 
+    // For data-only assets (element icons, boosters), skip webp preference to avoid content-type mismatch
     const roots =
       wantKtx2 && !shouldForceDataOnly
         ? [ROOT_KTX2, ROOT_WEBP, ROOT_DATA]
+        : shouldForceDataOnly
+        ? [ROOT_DATA]
         : [ROOT_WEBP, ROOT_DATA];
 
     // Build candidate paths.
@@ -301,7 +304,7 @@ export async function GET(
           const ktx2Path = path.join(root, ...variant.slice(0, -1), ktx2Name);
           candidates.push(ktx2Path);
         }
-        if (requestedExt !== "ktx2") {
+        if (requestedExt !== "ktx2" && !shouldForceDataOnly) {
           const ext = requestedExt;
           if (["png", "jpg", "jpeg"].includes(ext)) {
             const webpName = variantLast.replace(/\.[^.]+$/, ".webp");
