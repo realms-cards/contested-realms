@@ -291,8 +291,11 @@ export default function Piles3D({
                       const isDragging = !!dragFromHand || !!dragFromPile;
                       if (isDragging) return;
                       if (isCemetery) return;
-                      // Start tracking for potential drag from atlas
-                      if (isAtlas && cards.length > 0) {
+                      // Start tracking for potential drag from atlas or spellbook
+                      if (
+                        (isAtlas || key === "spellbook") &&
+                        cards.length > 0
+                      ) {
                         const store = useGameStore.getState();
                         const actorKey = store.actorKey;
                         const isMine = !actorKey || actorKey === owner;
@@ -328,25 +331,27 @@ export default function Piles3D({
                       } catch {}
                     }}
                     onPointerMove={(e: ThreeEvent<PointerEvent>) => {
-                      // Check if we should initiate a drag from atlas
+                      // Check if we should initiate a drag from atlas or spellbook
+                      const dragStart = pileDragStartRef.current;
                       if (
-                        isAtlas &&
-                        pileDragStartRef.current &&
-                        pileDragStartRef.current.key === "atlas" &&
-                        pileDragStartRef.current.who === owner
+                        (isAtlas || key === "spellbook") &&
+                        dragStart &&
+                        dragStart.key === key &&
+                        dragStart.who === owner
                       ) {
-                        const [startX, startY] = pileDragStartRef.current.start;
+                        const [startX, startY] = dragStart.start;
                         const dx = e.clientX - startX;
                         const dy = e.clientY - startY;
                         const distance = Math.sqrt(dx * dx + dy * dy);
                         // Threshold to distinguish drag from click
                         if (distance > 8) {
-                          // Initiate drag from atlas with top card
+                          // Initiate drag from pile with top card
                           const topCard = cards[0];
                           if (topCard) {
+                            const pileFrom = isAtlas ? "atlas" : "spellbook";
                             setDragFromPile({
                               who: owner,
-                              from: "atlas",
+                              from: pileFrom,
                               card: topCard,
                             });
                             setDragFromHand(true);

@@ -1,0 +1,25 @@
+{
+  "matchId": "cm4abc123def456ghi789",
+  "leagueId": "soatc-2025-01",
+  "player1": {
+    "discordId": "760593198501330964",
+    "displayName": "KingArthur",
+    "odentifier": "clxyz789abc123"
+  },
+  "player2": {
+    "discordId": "123456789012345678",
+    "displayName": "Merlin",
+    "odentifier": "clxyz790def456"
+  },
+  "winnerId": "760593198501330964",
+  "loserId": "123456789012345678",
+  "isDraw": false,
+  "format": "constructed",
+  "startedAt": "2025-01-15T14:30:00.000Z",
+  "completedAt": "2025-01-15T15:05:32.000Z",
+  "durationSeconds": 2132,
+  "replayId": "cm4replay789xyz",
+  "replayUrl": "https://realms.cards/replay/cm4replay789xyz",
+  "timestamp": "2025-01-15T15:05:35.000Z",
+  "signature": "a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef12345678"
+}

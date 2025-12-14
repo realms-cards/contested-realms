@@ -579,22 +579,8 @@ export default function PlayPage() {
       t.y = 0;
       changed = true;
     }
-    // In topdown mode, enforce polar angle to prevent tilt during zoom
-    if (cameraMode === "topdown") {
-      const cam = c.object as THREE.Camera;
-      const pos = cam.position;
-      // If camera has any horizontal offset (x or z relative to target), reset to pure top-down
-      const dist = pos.distanceTo(t);
-      if (Math.abs(pos.x - t.x) > 0.01 || Math.abs(pos.z - t.z) > 0.01) {
-        // Keep distance but reset to directly above target with slight tilt
-        const tilt = naturalTiltAngle;
-        const sign = currentPlayer === 2 ? -1 : 1;
-        pos.set(t.x, Math.cos(tilt) * dist, t.z + sign * Math.sin(tilt) * dist);
-        changed = true;
-      }
-    }
     if (changed) c.update();
-  }, [matW, matH, cameraMode, currentPlayer, naturalTiltAngle]);
+  }, [matW, matH]);
 
   return (
     <div className="relative h-screen [height:100dvh] w-full select-none">
@@ -929,8 +915,8 @@ export default function PlayPage() {
           onChange={clampControls}
           minDistance={minDist}
           maxDistance={maxDist}
-          minPolarAngle={cameraMode === "topdown" ? 0 : 0}
-          maxPolarAngle={cameraMode === "topdown" ? 0 : Math.PI / 2.4}
+          minPolarAngle={0}
+          maxPolarAngle={Math.PI / 2.4}
         />
         <KeyboardPanControls enabled={canPanCamera} />
         <TrackpadOrbitAdapter />

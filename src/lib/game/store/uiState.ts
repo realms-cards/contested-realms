@@ -3,14 +3,27 @@ import type { CardRef, GameState, PlayerKey } from "./types";
 
 const CAMERA_MODE_KEY = "sorcery:cameraMode";
 
-/** Load persisted camera mode preference from localStorage */
+/**
+ * Load persisted camera mode preference from localStorage.
+ * IMPORTANT: Always returns "topdown" during SSR to avoid hydration mismatch.
+ * The actual localStorage value is applied via useEffect on mount.
+ */
 function loadCameraMode(): GameState["cameraMode"] {
+  // Always return default during SSR to ensure consistent hydration
+  return "topdown";
+}
+
+/**
+ * Get camera mode from localStorage (client-side only).
+ * Call this in useEffect to restore user preference after hydration.
+ */
+export function getStoredCameraMode(): GameState["cameraMode"] {
   if (typeof window === "undefined") return "topdown";
   try {
     const stored = localStorage.getItem(CAMERA_MODE_KEY);
     if (stored === "orbit" || stored === "topdown") return stored;
   } catch {}
-  return "topdown"; // Default to 2D view
+  return "topdown";
 }
 
 /** Persist camera mode preference to localStorage */

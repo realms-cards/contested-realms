@@ -58,6 +58,10 @@ import {
 import { useCardHover } from "@/lib/game/hooks/useCardHover";
 import { Physics } from "@/lib/game/physics";
 import { useGameStore, type PlayerKey } from "@/lib/game/store";
+import {
+  arePortalsFullyAssigned,
+  needsPortalPhaseForHarbinger,
+} from "@/lib/game/store/portalState";
 import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
 import { LegacySeatVideo3D } from "@/lib/rtc/SeatVideo3D";
 import {
@@ -538,25 +542,75 @@ export default function OnlineMatchPage() {
   // Both players ready when match is in_progress (server confirmed both done with mulligan)
   const bothPlayersReady = match?.status === "in_progress";
 
+  // Detect Harbinger seats for portal phase logic
+  const harbingerSeats = useMemo(
+    () => detectHarbingerSeats(avatars),
+    [avatars]
+  );
+
   // Detect if Harbinger portal phase is needed (after BOTH players finish mulligan, before game starts)
+  // Portal phase should show for BOTH players when:
+  // 1. Portal state exists (initialized by harbinger player) and is not complete, OR
+  // 2. Both players ready and any player has Harbinger avatar, OR
+  // 3. Harbinger detected but portals not fully assigned (catch edge cases)
   const needsPortalPhase = useMemo(() => {
-    // Only check after BOTH players are mulligan-ready
+    // If portal setup already done locally AND portals are fully assigned, skip
+    if (portalSetupComplete && arePortalsFullyAssigned(portalState)) {
+      return false;
+    }
+
+    // If portal state exists and is truly complete with all tiles assigned, skip
+    if (arePortalsFullyAssigned(portalState)) {
+      return false;
+    }
+
+    // If portal state exists but not complete, show portal phase for BOTH players
+    // This handles the case where one player receives portal state via patch
+    if (portalState && !portalState.setupComplete) {
+      return true;
+    }
+
+    // Check if Harbinger avatars exist but portals aren't assigned
+    // This catches the case where game progressed without portal phase
+    if (
+      harbingerSeats.length > 0 &&
+      needsPortalPhaseForHarbinger(portalState, harbingerSeats)
+    ) {
+      return true;
+    }
+
+    // Only check for new Harbinger detection after BOTH players are mulligan-ready
     if (!bothPlayersReady) return false;
-    // If portal setup already done, skip
-    if (portalSetupComplete) return false;
-    // If portal state already exists and is complete, skip
-    if (portalState?.setupComplete) return false;
-    // Check if any player has Harbinger avatar
+
+    // Final check: any Harbinger avatar present
     return hasAnyHarbinger(avatars);
   }, [
     bothPlayersReady,
     portalSetupComplete,
-    portalState?.setupComplete,
+    portalState,
     avatars,
+    harbingerSeats,
   ]);
 
   // Initialize portal state when BOTH players ready and Harbinger is detected
+  // Also handle case where portal state already exists from server (reload/resync)
   useEffect(() => {
+    // If portal state already exists from server (e.g., after reload), mark as initialized
+    // but DON'T mark as complete unless it actually is complete
+    if (portalState && !portalPhaseInitialized) {
+      console.log("[Portal] Found existing portal state from server", {
+        setupComplete: portalState.setupComplete,
+        harbingerSeats: portalState.harbingerSeats,
+        currentRoller: portalState.currentRoller,
+      });
+      setPortalPhaseInitialized(true);
+      // If it's already complete, mark portal setup as done
+      if (portalState.setupComplete) {
+        setPortalSetupComplete(true);
+      }
+      return;
+    }
+
     if (!bothPlayersReady) return;
     if (portalPhaseInitialized) return;
 
@@ -582,22 +636,49 @@ export default function OnlineMatchPage() {
       // No Harbinger, mark portal phase as complete and proceed
       setPortalSetupComplete(true);
     }
-  }, [bothPlayersReady, portalPhaseInitialized, avatars, initPortalState]);
+  }, [
+    bothPlayersReady,
+    portalPhaseInitialized,
+    portalState,
+    avatars,
+    initPortalState,
+  ]);
 
-  // Watch for portal setup completion
+  // Watch for portal setup completion - only mark complete if portals are actually assigned
   useEffect(() => {
     if (portalState?.setupComplete && !portalSetupComplete) {
-      setPortalSetupComplete(true);
+      // Verify portals are actually assigned before marking complete
+      if (arePortalsFullyAssigned(portalState)) {
+        setPortalSetupComplete(true);
+      } else {
+        console.warn(
+          "[Portal] setupComplete flag set but portals not fully assigned",
+          portalState
+        );
+      }
     }
-  }, [portalState?.setupComplete, portalSetupComplete]);
+  }, [portalState, portalSetupComplete]);
 
   // After portal phase completes, call finishSetup to finalize game start
+  // IMPORTANT: Only proceed if no Harbinger OR if portals are fully assigned
   useEffect(() => {
-    if (bothPlayersReady && portalSetupComplete) {
-      finishSetup();
+    if (!bothPlayersReady) return;
+    if (!portalSetupComplete) return;
+
+    // If Harbinger is present, verify portals are actually assigned
+    if (harbingerSeats.length > 0) {
+      if (!arePortalsFullyAssigned(portalState)) {
+        console.warn(
+          "[Portal] Blocking game start - Harbinger detected but portals not assigned",
+          { harbingerSeats, portalState }
+        );
+        return;
+      }
     }
+
+    finishSetup();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bothPlayersReady, portalSetupComplete]); // finishSetup intentionally excluded - not memoized
+  }, [bothPlayersReady, portalSetupComplete, harbingerSeats, portalState]); // finishSetup intentionally excluded - not memoized
 
   // Track sealed submission flag for this match (used to decide when to load decks)
   const hasSubmittedSealedDeck = useMemo(() => {
@@ -1554,7 +1635,12 @@ export default function OnlineMatchPage() {
     } else if (shouldShowDraft) {
       desired = false;
     } else if (gameActuallyStarted) {
-      desired = false;
+      // Keep overlay open during Harbinger portal phase (between mulligan and game start)
+      if (needsPortalPhase && !portalSetupComplete) {
+        desired = true;
+      } else {
+        desired = false;
+      }
       // Only mark as prepared if we've actually loaded a deck for this match
       // Otherwise we'll skip the deck loading step on constructed matches
       if (!prepared && deckLoadedForMatchRef.current === matchId) {
@@ -1604,6 +1690,8 @@ export default function OnlineMatchPage() {
     setD20RollingComplete,
     storeSetupWinner,
     storeD20Rolls,
+    needsPortalPhase,
+    portalSetupComplete,
   ]);
 
   useEffect(() => {
@@ -1626,6 +1714,9 @@ export default function OnlineMatchPage() {
 
     setPrepared(false);
     setD20RollingComplete(false);
+    setMulliganReady(false);
+    setPortalSetupComplete(false);
+    setPortalPhaseInitialized(false);
 
     // Clear deck loaded flag when entering a new match
     deckLoadedForMatchRef.current = null;
@@ -1768,6 +1859,22 @@ export default function OnlineMatchPage() {
   const controlsRef = useRef<any>(null);
   const cameraMode = useGameStore((s) => s.cameraMode);
   const setCameraMode = useGameStore((s) => s.setCameraMode);
+
+  // Restore camera mode from localStorage after hydration to avoid mismatch
+  const cameraModeRestoredRef = useRef(false);
+  useEffect(() => {
+    if (cameraModeRestoredRef.current) return;
+    cameraModeRestoredRef.current = true;
+    // Defer to next tick to ensure hydration is complete
+    requestAnimationFrame(() => {
+      try {
+        const stored = localStorage.getItem("sorcery:cameraMode");
+        if (stored === "orbit" && cameraMode !== "orbit") {
+          setCameraMode("orbit");
+        }
+      } catch {}
+    });
+  }, [cameraMode, setCameraMode]);
 
   // Compute natural tilt angle for 2D mode and reuse across handlers
   // Use a tiny epsilon (not exactly 0) to avoid gimbal lock in Chrome's OrbitControls

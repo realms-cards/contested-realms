@@ -242,6 +242,22 @@ export function createLeaderboardService({
         return;
       }
 
+      // Filter to only human players (exclude CPU bots)
+      const humanPlayerIds = playerIds.filter(
+        (pid) => !pid.startsWith(CPU_PREFIX)
+      );
+
+      // Require at least 2 distinct human players for leaderboard recording
+      // This prevents solo/hotseat matches from counting towards global stats
+      const uniqueHumanPlayers = new Set(humanPlayerIds);
+      if (uniqueHumanPlayers.size < 2) {
+        console.log(
+          `[leaderboard] recordMatchResult: skipping match ${match.id} - requires 2 distinct human players, found ${uniqueHumanPlayers.size}`
+        );
+        match._leaderboardRecorded = true;
+        return;
+      }
+
       const playerInfos: PlayerInfo[] = await Promise.all(
         playerIds.map(async (pid) => ({
           id: pid,
