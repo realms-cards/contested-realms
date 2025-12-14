@@ -5071,6 +5071,7 @@ function AuthenticatedDeckEditor() {
                             alt={element}
                             width={12}
                             height={12}
+                            unoptimized
                           />
                           <span className="text-[10px]">
                             {
@@ -5143,6 +5144,7 @@ function AuthenticatedDeckEditor() {
                             alt={element}
                             width={14}
                             height={14}
+                            unoptimized
                           />
                           <span className="text-xs">
                             {

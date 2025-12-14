@@ -308,6 +308,7 @@ export default function YourDeckList(props: YourDeckListProps) {
                         alt={k}
                         width={12}
                         height={12}
+                        unoptimized
                       />
                       {thresholds[k]}
                     </span>
