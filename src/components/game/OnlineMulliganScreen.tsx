@@ -6,6 +6,7 @@ import { useSound } from "@/lib/contexts/SoundContext";
 import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
 import { useGameStore } from "@/lib/game/store";
 import type { PlayerKey } from "@/lib/game/store";
+import { buildCardSlug } from "@/lib/utils/cardSlug";
 
 interface OnlineMulliganScreenProps {
   myPlayerKey: PlayerKey;
@@ -193,6 +194,8 @@ export default function OnlineMulliganScreen({
             {myHand.map((card, i) => {
               const isSite = (card.type || "").toLowerCase().includes("site");
               const isSelected = selected.includes(i);
+              // Use card slug if available, otherwise build a fallback
+              const cardSlug = card.slug || buildCardSlug(card.name, null);
 
               return (
                 <button
@@ -220,7 +223,7 @@ export default function OnlineMulliganScreen({
                     } ${done || myMulligans === 0 ? "opacity-60" : ""}`}
                   >
                     <Image
-                      src={`/api/images/${card.slug}`}
+                      src={`/api/images/${cardSlug}`}
                       alt={card.name}
                       fill
                       sizes="(max-width: 640px) 96px, 120px"

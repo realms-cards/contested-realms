@@ -85,7 +85,29 @@ export async function GET(
       variantId: number | null;
       variant: { typeText: string | null; slug: string | null } | null;
       card: { name: string; subTypes: string | null };
+      set: { name: string } | null;
     };
+
+    // Helper to build a fallback slug from card name and set
+    function buildFallbackSlug(
+      cardName: string,
+      setName: string | null | undefined
+    ): string {
+      const lower = (setName || "").toLowerCase();
+      let prefix = "bet"; // default to beta
+      if (lower.startsWith("alpha")) prefix = "alp";
+      else if (lower.startsWith("beta")) prefix = "bet";
+      else if (lower.startsWith("arthurian")) prefix = "art";
+      else if (lower.startsWith("dragon")) prefix = "dra";
+      else if (lower.startsWith("gothic")) prefix = "got";
+      else if (lower.startsWith("promo") || lower.includes("organized"))
+        prefix = "pro";
+      const cardPart = cardName
+        .toLowerCase()
+        .replace(/\s+/g, "_")
+        .replace(/[^a-z0-9_]/g, "");
+      return `${prefix}-${cardPart}-b-s`;
+    }
     const cards = deck.cards as DeckCardRow[];
 
     const pairs = cards
@@ -119,13 +141,16 @@ export async function GET(
       // Prefer metadata.type (authoritative) over variant.typeText (flavor text)
       const type = meta?.type || dc.variant?.typeText || null;
       const thresholds = meta?.thresholds ?? null;
+      // Use variant slug if available, otherwise build a fallback from card name and set
+      const slug =
+        dc.variant?.slug ?? buildFallbackSlug(dc.card.name, dc.set?.name);
       const ref: ApiCardRef = {
         cardId: dc.cardId,
         variantId: dc.variantId ?? null,
         name: dc.card.name,
         type,
         subTypes: dc.card.subTypes || null,
-        slug: dc.variant?.slug ?? null,
+        slug,
         thresholds,
       };
       const pushMany = <T>(arr: T[], count: number, value: T) => {

@@ -2,6 +2,19 @@
 
 ## December 2025
 
+### Dec 14 — Gameplay & UI Updates
+
+- **Simulator Manual**: Read the in-app manual from the lobby
+- **Rubble Replacement**: When a site is sent to the cemetery, you can optionally replace it with a Rubble token
+- **Cemetery Actions**: Banish cards from the cemetery; view opponent cemetery and request consent to draw from it in online play
+- **Token Pile Permissions**: In online play, you can only interact with your own token pile
+- **Leaderboard Accuracy**: Solo/hotseat matches no longer affect the global leaderboard
+- **Harbinger Fixes**: Finally fix Harbinger in online play
+- **Element/D20 Assets**: Updated element icons (including editor) and refreshed D20 visuals
+- **Card Scanner**: Updated scanner to support Gothic
+- **Admin**: New recent matches endpoint and improved health/threshold display
+- **Search Index**: Updated local card search index to support Gothic
+
 ### Dec 11
 
 - **Placement jank is gone** Cards and tokens place precise now when dropped
