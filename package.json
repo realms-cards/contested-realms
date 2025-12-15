@@ -80,7 +80,8 @@
     "scanner:prepare:test": "node scripts/scanner/prepare-training-data.js --limit 100",
     "scanner:prepare:alpha": "node scripts/scanner/prepare-training-data.js --set alpha",
     "scanner:prepare:beta": "node scripts/scanner/prepare-training-data.js --set beta",
-    "scanner:merge-feedback": "node scripts/scanner/merge-feedback.js"
+    "scanner:merge-feedback": "node scripts/scanner/merge-feedback.js",
+    "proxies:generate": "node scripts/generate-proxies.js"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.10.0",
@@ -138,6 +139,7 @@
     "eslint": "^9",
     "eslint-config-next": "15.5.7",
     "jsdom": "^26.1.0",
+    "pdfkit": "^0.17.2",
     "sharp": "^0.33.5",
     "tailwindcss": "^4",
     "tsx": "^4.19.2",
