@@ -497,6 +497,15 @@ export default function Board({
   const setMagicCasterChoice = useScopedStore((s) => s.setMagicCasterChoice);
   const setMagicTargetChoice = useScopedStore((s) => s.setMagicTargetChoice);
 
+  // Chaos Twister minigame flow
+  const pendingChaosTwister = useScopedStore((s) => s.pendingChaosTwister);
+  const selectChaosTwisterMinion = useScopedStore(
+    (s) => s.selectChaosTwisterMinion
+  );
+  const selectChaosTwisterSite = useScopedStore(
+    (s) => s.selectChaosTwisterSite
+  );
+
   // Helper to check if a token can be attached
   const isAttachableToken = (tokenName: string): boolean => {
     const name = tokenName.toLowerCase();
@@ -759,6 +768,20 @@ export default function Board({
       magicGuidesActive,
     ]
   );
+  const chaosTwisterContext = useMemo(
+    () => ({
+      pendingChaosTwister,
+      selectChaosTwisterMinion,
+      selectChaosTwisterSite,
+      metaByCardId,
+    }),
+    [
+      pendingChaosTwister,
+      selectChaosTwisterMinion,
+      selectChaosTwisterSite,
+      metaByCardId,
+    ]
+  );
   const counterHandlers = useMemo(
     () => ({
       increment: incrementPermanentCounter,
@@ -954,6 +977,7 @@ export default function Board({
               selectionContext={selectionContext}
               combatContext={combatContext}
               magicContext={magicContext}
+              chaosTwisterContext={chaosTwisterContext}
               counterHandlers={counterHandlers}
               movementHandlers={movementHandlers}
               handlePointerMove={handlePointerMove}

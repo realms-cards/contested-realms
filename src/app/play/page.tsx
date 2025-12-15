@@ -21,6 +21,7 @@ import PlacementDialog from "@/components/game/PlacementDialog";
 import PlayerResourcePanels from "@/components/game/PlayerResourcePanel";
 import StatusBar from "@/components/game/StatusBar";
 import SwitchSiteHudOverlay from "@/components/game/SwitchSiteHudOverlay";
+import ChaosTwisterOverlay from "@/components/game/ChaosTwisterOverlay";
 import {
   DynamicBoard as Board,
   DynamicHand3D as Hand3D,
@@ -703,6 +704,9 @@ export default function PlayPage() {
 
       {/* Switch Site HUD Overlay */}
       <SwitchSiteHudOverlay />
+
+      {/* Chaos Twister Overlay (dexterity minigame) */}
+      <ChaosTwisterOverlay />
 
       {/* Toolbox and Collection buttons (bottom-right) */}
       {showToolbox && (

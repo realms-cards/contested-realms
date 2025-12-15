@@ -22,7 +22,10 @@ type SessionLike = { id?: string | null } | null | undefined;
 
 type MessageTransport = GameTransport | null;
 
-export function usePlayerIdentity(match: MatchLike | null, session: SessionLike) {
+export function usePlayerIdentity(
+  match: MatchLike | null,
+  session: SessionLike
+) {
   const myPlayerId = (session?.id as string | undefined) || null;
 
   const fallbackOrder = useMemo(() => {
@@ -168,7 +171,9 @@ function parseDragging(raw: unknown): RemoteCursorDragMeta | null {
   return null;
 }
 
-function parseHighlight(raw: unknown): { slug: string | null; cardId: number | null } | null {
+function parseHighlight(
+  raw: unknown
+): { slug: string | null; cardId: number | null } | null {
   if (!raw || typeof raw !== "object") return null;
   const src = raw as Record<string, unknown>;
   const slug = typeof src.slug === "string" ? src.slug : null;
@@ -190,13 +195,16 @@ export function useRemoteCursorTelemetry(transport: MessageTransport | null) {
     const handler = (raw: unknown) => {
       if (!raw || typeof raw !== "object") return;
       const payload = raw as RemoteCursorState;
-      const pid = typeof payload.playerId === "string" ? payload.playerId : null;
+      const pid =
+        typeof payload.playerId === "string" ? payload.playerId : null;
       if (!pid || pid === localPlayerId) return;
       const px = payload.position?.x;
       const pz = payload.position?.z;
       const position =
-        typeof px === "number" && Number.isFinite(px) &&
-        typeof pz === "number" && Number.isFinite(pz)
+        typeof px === "number" &&
+        Number.isFinite(px) &&
+        typeof pz === "number" &&
+        Number.isFinite(pz)
           ? { x: px, z: pz }
           : null;
       const dragging = parseDragging(payload.dragging);
@@ -228,6 +236,42 @@ export function useRemoteCursorTelemetry(transport: MessageTransport | null) {
       } catch {}
     };
   }, [transport, localPlayerId, setRemoteCursor]);
+}
+
+export function useChaosTwisterListener(transport: MessageTransport | null) {
+  const receiveCustomMessage = useGameStore((s) => s.receiveCustomMessage);
+
+  useEffect(() => {
+    if (!transport?.on) return;
+    const off = transport.on("message", (m) => {
+      const type =
+        m && typeof m === "object" && (m as Record<string, unknown>).type;
+      // Route Chaos Twister messages to the custom message handler
+      if (
+        type === "chaosTwisterBegin" ||
+        type === "chaosTwisterSelectMinion" ||
+        type === "chaosTwisterSelectSite" ||
+        type === "chaosTwisterMinigameResult" ||
+        type === "chaosTwisterResolve" ||
+        type === "chaosTwisterCancel" ||
+        type === "chaosTwisterSliderPosition"
+      ) {
+        // Log non-position messages for debugging
+        if (type !== "chaosTwisterSliderPosition") {
+          console.log(`[ChaosTwister] Received: ${type}`, m);
+        }
+        batchSocketUpdate(() => {
+          receiveCustomMessage(m);
+        });
+        return;
+      }
+    });
+    return () => {
+      try {
+        off?.();
+      } catch {}
+    };
+  }, [transport, receiveCustomMessage]);
 }
 
 export function useBoardPingListener(transport: MessageTransport | null) {

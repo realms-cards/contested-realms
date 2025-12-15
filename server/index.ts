@@ -3784,6 +3784,31 @@ io.on("connection", async (socket: SocketClient) => {
           io.to(`spectate:${matchId}`).emit("message", out);
         } catch {}
       } catch {}
+    } else if (
+      type === "chaosTwisterBegin" ||
+      type === "chaosTwisterSelectMinion" ||
+      type === "chaosTwisterSelectSite" ||
+      type === "chaosTwisterMinigameResult" ||
+      type === "chaosTwisterResolve" ||
+      type === "chaosTwisterCancel" ||
+      type === "chaosTwisterSliderPosition"
+    ) {
+      // Chaos Twister minigame messages - broadcast to match room
+      try {
+        const match = await getOrLoadMatch(matchId);
+        const room = `match:${matchId}`;
+        const playerKey = getSeatForPlayer(match, player.id) || "p1";
+        const out = {
+          ...payload,
+          type,
+          playerKey,
+          ts: Date.now(),
+        };
+        io.to(room).emit("message", out);
+        try {
+          io.to(`spectate:${matchId}`).emit("message", out);
+        } catch {}
+      } catch {}
     } else if (type === "boardCursor") {
       try {
         // Increment receive metric

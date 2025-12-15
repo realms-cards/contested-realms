@@ -1,9 +1,12 @@
 import { isElementalist } from "@/lib/game/avatarAbilities";
 import {
+  BACK_ROW_ONLY_SITES,
   MANA_PROVIDER_BY_NAME,
   NON_MANA_SITE_IDENTIFIERS,
   THRESHOLD_GRANT_BY_NAME,
+  VOID_MANA_PROVIDERS,
 } from "@/lib/game/mana-providers";
+import { parseCellKey } from "./boardHelpers";
 import type {
   AvatarState,
   BoardState,
@@ -72,6 +75,7 @@ export const computeThresholdTotals = (
   avatar?: AvatarState | null
 ): Thresholds => {
   const owner = playerKeyToOwner(who);
+  const boardHeight = board?.size?.h ?? 4;
   const totals = emptyThresholds();
 
   // Elementalist avatar grants +1 to each threshold
@@ -82,8 +86,13 @@ export const computeThresholdTotals = (
     totals.fire += 1;
   }
 
-  for (const tile of Object.values(board?.sites ?? {})) {
+  for (const [cellKey, tile] of Object.entries(board?.sites ?? {})) {
     if (!tile || tile.owner !== owner) continue;
+    // Check back-row-only sites - they only provide threshold in back row
+    if (
+      !backRowSiteProvidesMana(tile.card ?? null, cellKey, owner, boardHeight)
+    )
+      continue;
     accumulateThresholds(totals, tile.card?.thresholds ?? null);
   }
 
@@ -141,27 +150,65 @@ export const siteProvidesMana = (card: CardRef | null | undefined): boolean => {
   return true;
 };
 
+// Check if a site is in the owner's back row.
+// P1's back row is y=0, P2's back row is y=boardHeight-1 (typically y=3).
+export const isInBackRow = (
+  cellKey: string,
+  owner: 1 | 2,
+  boardHeight: number
+): boolean => {
+  const { y } = parseCellKey(cellKey);
+  if (owner === 1) return y === 0;
+  return y === boardHeight - 1;
+};
+
+// Check if a back-row-only site provides mana based on its position.
+export const backRowSiteProvidesMana = (
+  card: CardRef | null | undefined,
+  cellKey: string,
+  owner: 1 | 2,
+  boardHeight: number
+): boolean => {
+  if (!card) return false;
+  const name = typeof card.name === "string" ? card.name.toLowerCase() : null;
+  if (!name || !BACK_ROW_ONLY_SITES.has(name)) return true; // Not a back-row-only site
+  return isInBackRow(cellKey, owner, boardHeight);
+};
+
 export const computeAvailableMana = (
   board: BoardState,
   permanents: Permanents,
   who: PlayerKey
 ): number => {
   const owner = playerKeyToOwner(who);
+  const boardHeight = board?.size?.h ?? 4;
   let mana = 0;
 
-  for (const tile of Object.values(board?.sites ?? {})) {
+  for (const [cellKey, tile] of Object.entries(board?.sites ?? {})) {
     if (!tile || tile.owner !== owner) continue;
     if (tile.tapped) continue;
     if (!siteProvidesMana(tile.card ?? null)) continue;
+    // Check back-row-only sites
+    if (
+      !backRowSiteProvidesMana(tile.card ?? null, cellKey, owner, boardHeight)
+    )
+      continue;
     mana += 1;
   }
 
-  for (const arr of Object.values(permanents ?? {})) {
+  for (const [cellKey, arr] of Object.entries(permanents ?? {})) {
     const list = Array.isArray(arr) ? arr : [];
+    const isVoidCell = !board?.sites?.[cellKey]; // No site at this cell = void
     for (const p of list) {
       try {
         if (!p || p.owner !== owner) continue;
         const nm = String(p.card?.name || "").toLowerCase();
+        // Check for void mana providers (e.g., Ether Core)
+        if (isVoidCell && VOID_MANA_PROVIDERS[nm]) {
+          mana += VOID_MANA_PROVIDERS[nm];
+          continue;
+        }
+        // Regular mana providers
         if (MANA_PROVIDER_BY_NAME.has(nm)) mana += 1;
       } catch {}
     }

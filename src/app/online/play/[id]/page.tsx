@@ -17,6 +17,7 @@ import EnhancedOnlineDraft3DScreen from "@/components/game/EnhancedOnlineDraft3D
 import GameToolbox from "@/components/game/GameToolbox";
 import HarbingerPortalScreen from "@/components/game/HarbingerPortalScreen";
 import { InteractionConsentDialog } from "@/components/game/InteractionConsentDialog";
+import ChaosTwisterOverlay from "@/components/game/ChaosTwisterOverlay";
 import MagicHudOverlay from "@/components/game/MagicHudOverlay";
 import MatchEndOverlay from "@/components/game/MatchEndOverlay";
 import MatchInfoPopup from "@/components/game/MatchInfoPopup";
@@ -66,6 +67,7 @@ import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
 import { LegacySeatVideo3D } from "@/lib/rtc/SeatVideo3D";
 import {
   useBoardPingListener,
+  useChaosTwisterListener,
   useMatchPlayerNames,
   usePlayerIdentity,
   usePlayerNameMap,
@@ -207,6 +209,7 @@ export default function OnlineMatchPage() {
 
   useRemoteCursorTelemetry(transport);
   useBoardPingListener(transport);
+  useChaosTwisterListener(transport);
 
   // Spectator presence
   const [spectatorCount, setSpectatorCount] = useState<number | null>(null);
@@ -2646,6 +2649,8 @@ export default function OnlineMatchPage() {
           <CombatHudOverlay />
           {/* Magic HUD Overlay (layout-level, not inside Canvas) */}
           <MagicHudOverlay />
+          {/* Chaos Twister Overlay (dexterity minigame) */}
+          <ChaosTwisterOverlay transport={transport} />
           {/* Switch Site HUD Overlay (layout-level, not inside Canvas) */}
           <SwitchSiteHudOverlay />
 

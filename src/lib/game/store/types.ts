@@ -226,6 +226,60 @@ export type PendingMagic = {
   guidesSuppressed?: boolean | null;
 };
 
+// --- Chaos Twister Minigame State ------------------------------------------------
+export type ChaosTwisterPhase =
+  | "selectingMinion"
+  | "selectingSite"
+  | "minigame"
+  | "resolving"
+  | "complete";
+
+export type ChaosTwisterAccuracy = "green" | "yellow" | "red";
+
+export type PendingChaosTwister = {
+  id: string;
+  // The spell card on the board
+  spell: {
+    at: CellKey;
+    index: number;
+    instanceId?: string | null;
+    owner: 1 | 2;
+    card: CardRef;
+  };
+  // The caster (player who played the spell)
+  casterSeat: PlayerKey;
+  // Phase of the minigame
+  phase: ChaosTwisterPhase;
+  // Selected target minion
+  targetMinion: {
+    at: CellKey;
+    index: number;
+    card: CardRef;
+    power: number; // The minion's attack power for damage calculation
+  } | null;
+  // Selected destination site
+  targetSite: {
+    x: number;
+    y: number;
+    cellKey: CellKey;
+  } | null;
+  // Minigame result
+  minigameResult: {
+    accuracy: ChaosTwisterAccuracy;
+    hitPosition: number; // 0-100 where the slider stopped
+    landingOffset: number; // 0 = exact, 1 = one tile off, 2 = two tiles off
+  } | null;
+  // Final landing site after offset calculation
+  landingSite: {
+    x: number;
+    y: number;
+    cellKey: CellKey;
+  } | null;
+  // Synced slider position for opponent to see (0-100)
+  sliderPosition?: number;
+  createdAt: number;
+};
+
 // Context menu targeting for click-driven actions
 export type ContextMenuTarget =
   | { kind: "site"; x: number; y: number }
@@ -507,6 +561,31 @@ export type GameState = {
   setTapPermanent: (at: CellKey, index: number, tapped: boolean) => void;
   // Magic casting flow (MVP)
   pendingMagic: PendingMagic | null;
+  // Chaos Twister minigame flow
+  pendingChaosTwister: PendingChaosTwister | null;
+  beginChaosTwister: (input: {
+    spell: {
+      at: CellKey;
+      index: number;
+      instanceId?: string | null;
+      owner: 1 | 2;
+      card: CardRef;
+    };
+    casterSeat: PlayerKey;
+  }) => void;
+  selectChaosTwisterMinion: (minion: {
+    at: CellKey;
+    index: number;
+    card: CardRef;
+    power: number;
+  }) => void;
+  selectChaosTwisterSite: (site: { x: number; y: number }) => void;
+  completeChaosTwisterMinigame: (result: {
+    accuracy: ChaosTwisterAccuracy;
+    hitPosition: number;
+  }) => void;
+  resolveChaosTwister: () => void;
+  cancelChaosTwister: () => void;
   beginMagicCast: (input: {
     tile: { x: number; y: number };
     spell: {

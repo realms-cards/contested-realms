@@ -27,6 +27,11 @@ export type TileInteractionPlaneProps = {
   // Switch site position support
   switchSiteSource: GameState["switchSiteSource"];
   onCompleteSwitchSite?: (targetX: number, targetY: number) => void;
+  // Chaos Twister site selection support
+  pendingChaosTwister: GameState["pendingChaosTwister"];
+  actorKey: GameState["actorKey"];
+  selectChaosTwisterSite?: GameState["selectChaosTwisterSite"];
+  hasSiteAtTile: boolean;
 };
 
 export function TileInteractionPlane({
@@ -46,6 +51,10 @@ export function TileInteractionPlane({
   lastDropAt,
   switchSiteSource,
   onCompleteSwitchSite,
+  pendingChaosTwister,
+  actorKey,
+  selectChaosTwisterSite,
+  hasSiteAtTile,
 }: TileInteractionPlaneProps) {
   const { dragAvatar, dragging, setGhost, draggedBody, moveDraggedBody } =
     dragContext;
@@ -81,6 +90,18 @@ export function TileInteractionPlane({
         if (switchSiteSource && onCompleteSwitchSite) {
           e.stopPropagation();
           onCompleteSwitchSite(tileX, tileY);
+          return;
+        }
+        // Chaos Twister site selection - click on any site tile
+        if (
+          pendingChaosTwister &&
+          pendingChaosTwister.phase === "selectingSite" &&
+          pendingChaosTwister.casterSeat === actorKey &&
+          selectChaosTwisterSite &&
+          hasSiteAtTile
+        ) {
+          e.stopPropagation();
+          selectChaosTwisterSite({ x: tileX, y: tileY });
           return;
         }
         handleTilePointerUp({
