@@ -139,24 +139,12 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
       )
         return state;
 
-      // Drawing from atlas requires tapping the avatar UNLESS it's the free draw
-      // (Avatar ability: "Tap → Play or draw a site")
-      // The free draw happens during Start/Draw phase when hasDrawnThisTurn is false
+      // Drawing from atlas is always allowed - card effects can grant draws from atlas
+      // Avatar tapping is only required when PLAYING a site from atlas, not drawing
+      // Track if this is the free draw at start of turn
       const isFreeDraw =
         (state.phase === "Start" || state.phase === "Draw") &&
         !state.hasDrawnThisTurn;
-      const shouldTapAvatar = from === "atlas" && !isFreeDraw;
-
-      // Check if avatar is already tapped when we need to tap it
-      if (shouldTapAvatar) {
-        const avatar = state.avatars[who];
-        if (avatar?.tapped) {
-          get().log(
-            `Cannot draw from Atlas: ${who.toUpperCase()}'s Avatar is already tapped`
-          );
-          return state;
-        }
-      }
 
       get().pushHistory();
 
@@ -177,21 +165,9 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
       const updated =
         from === "spellbook" ? { spellbook: pile } : { atlas: pile };
 
-      // Build avatar update if we need to tap
-      let avatarsNext = state.avatars;
       const playerNum = who === "p1" ? "1" : "2";
       const pileLabel = from === "spellbook" ? "Spellbook" : "Atlas";
-      if (shouldTapAvatar) {
-        avatarsNext = {
-          ...state.avatars,
-          [who]: { ...state.avatars[who], tapped: true },
-        } as GameState["avatars"];
-        get().log(
-          `[p${playerNum}:PLAYER] taps Avatar to draw ${count} from ${pileLabel}`
-        );
-      } else {
-        get().log(`[p${playerNum}:PLAYER] draws ${count} from ${pileLabel}`);
-      }
+      get().log(`[p${playerNum}:PLAYER] draws ${count} from ${pileLabel}`);
 
       // Broadcast toast for draw action to both players
       const toastMessage = `[p${playerNum}:PLAYER] drew from ${pileLabel}`;
@@ -231,11 +207,6 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
         if (zonePatch) {
           patch.zones = zonePatch.zones;
         }
-        if (shouldTapAvatar) {
-          patch.avatars = {
-            [who]: { tapped: true },
-          } as GameState["avatars"];
-        }
         if (shouldMarkDrawn) {
           patch.hasDrawnThisTurn = true;
           patch.phase = "Main"; // Transition to Main phase after free draw
@@ -247,7 +218,6 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
 
       return {
         zones: zonesNext,
-        avatars: avatarsNext,
         ...(shouldMarkDrawn
           ? { hasDrawnThisTurn: true, phase: "Main" as const }
           : {}),
@@ -265,24 +235,12 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
       )
         return state;
 
-      // Drawing from atlas requires tapping the avatar UNLESS it's the free draw
-      // (Avatar ability: "Tap → Play or draw a site")
-      // The free draw happens during Start/Draw phase when hasDrawnThisTurn is false
+      // Drawing from atlas is always allowed - card effects can grant draws from atlas
+      // Avatar tapping is only required when PLAYING a site from atlas, not drawing
+      // Track if this is the free draw at start of turn
       const isFreeDraw =
         (state.phase === "Start" || state.phase === "Draw") &&
         !state.hasDrawnThisTurn;
-      const shouldTapAvatar = from === "atlas" && !isFreeDraw;
-
-      // Check if avatar is already tapped when we need to tap it
-      if (shouldTapAvatar) {
-        const avatar = state.avatars[who];
-        if (avatar?.tapped) {
-          get().log(
-            `Cannot draw from Atlas: ${who.toUpperCase()}'s Avatar is already tapped`
-          );
-          return state;
-        }
-      }
 
       get().pushHistory();
 
@@ -305,23 +263,11 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
       const updated =
         from === "spellbook" ? { spellbook: pile } : { atlas: pile };
 
-      // Build avatar update if we need to tap
-      let avatarsNext = state.avatars;
       const playerNum = who === "p1" ? "1" : "2";
       const pileLabel = from === "spellbook" ? "Spellbook" : "Atlas";
-      if (shouldTapAvatar) {
-        avatarsNext = {
-          ...state.avatars,
-          [who]: { ...state.avatars[who], tapped: true },
-        } as GameState["avatars"];
-        get().log(
-          `[p${playerNum}:PLAYER] taps Avatar to draw ${count} from bottom of ${pileLabel}`
-        );
-      } else {
-        get().log(
-          `[p${playerNum}:PLAYER] draws ${count} from bottom of ${pileLabel}`
-        );
-      }
+      get().log(
+        `[p${playerNum}:PLAYER] draws ${count} from bottom of ${pileLabel}`
+      );
 
       // Broadcast toast for draw action to both players
       const toastMessage = `[p${playerNum}:PLAYER] drew from ${pileLabel}`;
@@ -361,11 +307,6 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
         if (zonePatch) {
           patch.zones = zonePatch.zones;
         }
-        if (shouldTapAvatar) {
-          patch.avatars = {
-            [who]: { tapped: true },
-          } as GameState["avatars"];
-        }
         if (shouldMarkDrawn) {
           patch.hasDrawnThisTurn = true;
           patch.phase = "Main"; // Transition to Main phase after free draw
@@ -377,7 +318,6 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
 
       return {
         zones: zonesNext,
-        avatars: avatarsNext,
         ...(shouldMarkDrawn
           ? { hasDrawnThisTurn: true, phase: "Main" as const }
           : {}),
@@ -556,23 +496,8 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
         return { dragFromPile: null } as Partial<GameState> as GameState;
       }
 
-      // Drawing from atlas outside of Draw phase requires tapping the avatar
-      // (Avatar ability: "Tap → Play or draw a site")
-      // Draw phase is the free draw at start of turn - no tap required
-      const isDrawPhase = state.phase === "Draw";
-      const shouldTapAvatar = from === "atlas" && !isDrawPhase;
-
-      // Check if avatar is already tapped when we need to tap it
-      if (shouldTapAvatar) {
-        const avatar = state.avatars[who];
-        if (avatar?.tapped) {
-          get().log(
-            `Cannot draw from Atlas: ${who.toUpperCase()}'s Avatar is already tapped`
-          );
-          return { dragFromPile: null } as Partial<GameState> as GameState;
-        }
-      }
-
+      // Drawing from atlas is always allowed - card effects can grant draws from atlas
+      // Avatar tapping is only required when PLAYING a site from atlas, not drawing
       get().pushHistory();
 
       const z = { ...state.zones[who] };
@@ -602,23 +527,10 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
       const ensured = prepareCardForSeat(removed, who);
       const hand = [...z.hand, ensured];
 
-      // Build avatar update if we need to tap
-      let avatarsNext = state.avatars;
-      if (shouldTapAvatar) {
-        avatarsNext = {
-          ...state.avatars,
-          [who]: { ...state.avatars[who], tapped: true },
-        } as GameState["avatars"];
-        const playerNum = who === "p1" ? "1" : "2";
-        get().log(
-          `[p${playerNum}:PLAYER] taps Avatar to draw [p${playerNum}card:${card.name}] from ${from}`
-        );
-      } else {
-        const playerNum = who === "p1" ? "1" : "2";
-        get().log(
-          `[p${playerNum}:PLAYER] draws [p${playerNum}card:${card.name}] from ${from} to hand`
-        );
-      }
+      const playerNum = who === "p1" ? "1" : "2";
+      get().log(
+        `[p${playerNum}:PLAYER] draws [p${playerNum}card:${card.name}] from ${from} to hand`
+      );
 
       const zonesNext = {
         ...state.zones,
@@ -632,11 +544,6 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
         if (zonePatch) {
           patch.zones = zonePatch.zones;
         }
-        if (shouldTapAvatar) {
-          patch.avatars = {
-            [who]: { tapped: true },
-          } as GameState["avatars"];
-        }
         if (Object.keys(patch).length > 0) {
           get().trySendPatch(patch);
         }
@@ -644,7 +551,6 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
 
       return {
         zones: zonesNext,
-        avatars: avatarsNext,
         dragFromPile: null,
       } as Partial<GameState> as GameState;
     }),

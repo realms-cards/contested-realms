@@ -1186,4 +1186,183 @@ export function handleCustomMessage(
     } catch {}
     return;
   }
+  // --- Chaos Twister message handlers ---
+  if (t === "chaosTwisterBegin") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const spellAny = (msg as { spell?: unknown }).spell as unknown;
+    const casterSeat = (msg as { casterSeat?: unknown }).casterSeat as
+      | PlayerKey
+      | undefined;
+    if (!id || !spellAny || !casterSeat) return;
+    const rec = spellAny as Record<string, unknown>;
+    set({
+      pendingChaosTwister: {
+        id,
+        spell: {
+          at: rec.at as CellKey,
+          index: Number(rec.index),
+          instanceId: (rec.instanceId as string | null) ?? null,
+          owner: Number(rec.owner) as 1 | 2,
+          card: rec.card as CardRef,
+        },
+        casterSeat,
+        phase: "selectingMinion",
+        targetMinion: null,
+        targetSite: null,
+        minigameResult: null,
+        landingSite: null,
+        createdAt: Date.now(),
+      },
+    } as Partial<GameState> as GameState);
+    return;
+  }
+  if (t === "chaosTwisterSelectMinion") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const minionAny = (msg as { minion?: unknown }).minion as unknown;
+    if (!id || !minionAny) return;
+    const rec = minionAny as Record<string, unknown>;
+    set((s) => {
+      if (!s.pendingChaosTwister || s.pendingChaosTwister.id !== id)
+        return s as GameState;
+      return {
+        pendingChaosTwister: {
+          ...s.pendingChaosTwister,
+          targetMinion: {
+            at: rec.at as CellKey,
+            index: Number(rec.index),
+            card: rec.card as CardRef,
+            power: Number(rec.power),
+          },
+          phase: "selectingSite",
+        },
+      } as Partial<GameState> as GameState;
+    });
+    return;
+  }
+  if (t === "chaosTwisterSelectSite") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const siteAny = (msg as { site?: unknown }).site as unknown;
+    if (!id || !siteAny) return;
+    const rec = siteAny as Record<string, unknown>;
+    set((s) => {
+      if (!s.pendingChaosTwister || s.pendingChaosTwister.id !== id)
+        return s as GameState;
+      return {
+        pendingChaosTwister: {
+          ...s.pendingChaosTwister,
+          targetSite: {
+            x: Number(rec.x),
+            y: Number(rec.y),
+            cellKey: rec.cellKey as CellKey,
+          },
+          phase: "minigame",
+        },
+      } as Partial<GameState> as GameState;
+    });
+    return;
+  }
+  if (t === "chaosTwisterMinigameResult") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const resultAny = (msg as { result?: unknown }).result as unknown;
+    const landingSiteAny = (msg as { landingSite?: unknown })
+      .landingSite as unknown;
+    if (!id || !resultAny || !landingSiteAny) return;
+    const resultRec = resultAny as Record<string, unknown>;
+    const landingRec = landingSiteAny as Record<string, unknown>;
+    set((s) => {
+      if (!s.pendingChaosTwister || s.pendingChaosTwister.id !== id)
+        return s as GameState;
+      return {
+        pendingChaosTwister: {
+          ...s.pendingChaosTwister,
+          minigameResult: {
+            accuracy: resultRec.accuracy as "green" | "yellow" | "red",
+            hitPosition: Number(resultRec.hitPosition),
+            landingOffset: Number(resultRec.landingOffset),
+          },
+          landingSite: {
+            x: Number(landingRec.x),
+            y: Number(landingRec.y),
+            cellKey: landingRec.cellKey as CellKey,
+          },
+          phase: "resolving",
+        },
+      } as Partial<GameState> as GameState;
+    });
+    return;
+  }
+  if (t === "chaosTwisterResolve") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const power = (msg as { power?: unknown }).power as number | undefined;
+    const landingSiteAny = (msg as { landingSite?: unknown })
+      .landingSite as unknown;
+    const damageRecordsAny = (msg as { damageRecords?: unknown })
+      .damageRecords as unknown;
+
+    const pending = get().pendingChaosTwister;
+    if (!pending || (id && pending.id !== id)) return;
+
+    // Apply damage to units at landing site (same logic as local resolve)
+    if (power != null && landingSiteAny) {
+      // Apply damage to all minions at landing site
+      if (Array.isArray(damageRecordsAny)) {
+        for (const rec of damageRecordsAny) {
+          const r = rec as { at: CellKey; index: number };
+          get().applyDamageToPermanent(r.at, r.index, power);
+        }
+      }
+
+      // Apply damage to the blown minion itself
+      if (pending.targetMinion) {
+        get().applyDamageToPermanent(
+          pending.targetMinion.at,
+          pending.targetMinion.index,
+          power
+        );
+      }
+
+      // Move spell to graveyard
+      try {
+        get().movePermanentToZone(
+          pending.spell.at,
+          pending.spell.index,
+          "graveyard"
+        );
+      } catch {}
+    }
+
+    set({ pendingChaosTwister: null } as Partial<GameState> as GameState);
+    return;
+  }
+  if (t === "chaosTwisterCancel") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    set((s) => {
+      if (!s.pendingChaosTwister || (id && s.pendingChaosTwister.id !== id))
+        return s as GameState;
+      return { pendingChaosTwister: null } as Partial<GameState> as GameState;
+    });
+    return;
+  }
+  if (t === "chaosTwisterSliderPosition") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const position = (msg as { position?: unknown }).position as
+      | number
+      | undefined;
+    if (position == null || !Number.isFinite(position)) return;
+    set((s) => {
+      if (!s.pendingChaosTwister || (id && s.pendingChaosTwister.id !== id))
+        return s as GameState;
+      return {
+        pendingChaosTwister: {
+          ...s.pendingChaosTwister,
+          sliderPosition: position,
+        },
+      } as Partial<GameState> as GameState;
+    });
+    return;
+  }
+  // Log unhandled Chaos Twister messages for debugging
+  if (typeof t === "string" && t.startsWith("chaosTwister")) {
+    console.log(`[ChaosTwister] Unhandled message type: ${t}`, msg);
+  }
 }

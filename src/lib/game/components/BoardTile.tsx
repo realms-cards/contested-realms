@@ -1,5 +1,6 @@
 import { Text } from "@react-three/drei";
 import type { MutableRefObject } from "react";
+import { ChaosTwisterLandingOverlay } from "@/lib/game/components/ChaosTwisterLandingOverlay";
 import { MagicTargetOverlay } from "@/lib/game/components/MagicTargetOverlay";
 import {
   PermanentStack,
@@ -41,6 +42,7 @@ type BoardTileProps = {
   selectionContext: PermanentStackProps["selectionContext"];
   combatContext: PermanentStackProps["combatContext"];
   magicContext: PermanentStackProps["magicContext"];
+  chaosTwisterContext: PermanentStackProps["chaosTwisterContext"];
   counterHandlers: PermanentStackProps["counterHandlers"];
   movementHandlers: PermanentStackProps["movementHandlers"];
   handlePointerMove: (x: number, z: number) => void;
@@ -96,6 +98,7 @@ export function BoardTile({
   selectionContext,
   combatContext,
   magicContext,
+  chaosTwisterContext,
   counterHandlers,
   movementHandlers,
   handlePointerMove,
@@ -151,10 +154,21 @@ export function BoardTile({
         lastDropAt={lastDropAt}
         switchSiteSource={switchSiteSource}
         onCompleteSwitchSite={onCompleteSwitchSite}
+        pendingChaosTwister={chaosTwisterContext.pendingChaosTwister}
+        actorKey={actorKey}
+        selectChaosTwisterSite={chaosTwisterContext.selectChaosTwisterSite}
+        hasSiteAtTile={Boolean(site)}
       />
 
       {/* Portal overlay (Harbinger ability) - rendered under cards */}
       <PortalOverlay tileX={tileX} tileY={tileY} portalState={portalState} />
+
+      {/* Chaos Twister landing site overlay - rendered under cards */}
+      <ChaosTwisterLandingOverlay
+        tileX={tileX}
+        tileY={tileY}
+        pendingChaosTwister={chaosTwisterContext.pendingChaosTwister}
+      />
 
       {magicGuidesActive && (
         <MagicTargetOverlay
@@ -226,6 +240,7 @@ export function BoardTile({
         selectionContext={selectionContext}
         combatContext={combatContext}
         magicContext={magicContext}
+        chaosTwisterContext={chaosTwisterContext}
         counterHandlers={counterHandlers}
         movementHandlers={movementHandlers}
         emitBoardPing={emitBoardPing}

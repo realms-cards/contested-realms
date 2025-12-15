@@ -2,6 +2,10 @@
 
 ## December 2025
 
+### Dec 14 — Specific card support
+
+- **Chaos Twister**: Dexterity based play for Chaos Twister
+
 ### Dec 14 — Gameplay & UI Updates
 
 - **Simulator Manual**: Read the in-app manual from the lobby

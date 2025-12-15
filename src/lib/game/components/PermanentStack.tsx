@@ -108,6 +108,13 @@ type MagicContext = {
   magicGuidesActive: GameState["magicGuidesActive"];
 };
 
+type ChaosTwisterContext = {
+  pendingChaosTwister: GameState["pendingChaosTwister"];
+  selectChaosTwisterMinion: GameState["selectChaosTwisterMinion"];
+  selectChaosTwisterSite: GameState["selectChaosTwisterSite"];
+  metaByCardId: GameState["metaByCardId"];
+};
+
 type CounterHandlers = {
   increment: GameState["incrementPermanentCounter"];
   decrement: GameState["decrementPermanentCounter"];
@@ -157,6 +164,7 @@ export type PermanentStackProps = {
   selectionContext: SelectionContext;
   combatContext: CombatContext;
   magicContext: MagicContext;
+  chaosTwisterContext: ChaosTwisterContext;
   counterHandlers: CounterHandlers;
   movementHandlers: MovementHandlers;
   emitBoardPing: (pos: { x: number; z: number }) => void;
@@ -189,6 +197,7 @@ export function PermanentStack({
   selectionContext,
   combatContext,
   magicContext,
+  chaosTwisterContext,
   counterHandlers,
   movementHandlers,
   emitBoardPing,
@@ -251,6 +260,8 @@ export function PermanentStack({
   } = magicContext;
   // These are kept for future re-enablement of magic targeting hints
   void computeProjectileFirstHits;
+  const { pendingChaosTwister, selectChaosTwisterMinion, metaByCardId } =
+    chaosTwisterContext;
   const { increment, decrement } = counterHandlers;
   const { setOffset, moveToWithOffset, moveToZone } = movementHandlers;
 
@@ -519,6 +530,34 @@ export function PermanentStack({
                       });
                       return;
                     }
+                  }
+                }
+                // Chaos Twister minion selection - click on any minion
+                if (
+                  pendingChaosTwister &&
+                  pendingChaosTwister.phase === "selectingMinion" &&
+                  pendingChaosTwister.casterSeat === actorKey
+                ) {
+                  const type = (p.card?.type || "").toLowerCase();
+                  const isMinion =
+                    type.includes("minion") || type.includes("creature");
+                  // Attachments cannot be selected
+                  const isAttachment = Boolean(p.attachedTo);
+                  if (isMinion && !isAttachment) {
+                    e.stopPropagation();
+                    // Get power from metaByCardId
+                    let power = 0;
+                    const cardId = p.card?.cardId;
+                    if (cardId && metaByCardId[cardId]?.attack != null) {
+                      power = metaByCardId[cardId].attack ?? 0;
+                    }
+                    selectChaosTwisterMinion({
+                      at: key as CellKey,
+                      index: idx,
+                      card: p.card,
+                      power,
+                    });
+                    return;
                   }
                 }
                 if (attackTargetChoice) {
