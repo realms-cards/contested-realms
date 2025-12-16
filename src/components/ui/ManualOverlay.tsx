@@ -214,9 +214,24 @@ export default function ManualOverlay({
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={overlayId}
-        className={`underline hover:text-slate-300 ${triggerClassName}`}
+        className={`group relative inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md 
+          bg-gradient-to-r from-amber-500/20 via-yellow-400/30 to-amber-500/20 
+          border border-amber-400/50 hover:border-amber-300/80
+          text-amber-200 hover:text-amber-100 font-medium
+          shadow-[0_0_12px_rgba(251,191,36,0.3)] hover:shadow-[0_0_20px_rgba(251,191,36,0.5)]
+          transition-all duration-300 ${triggerClassName}`}
       >
-        {triggerLabel}
+        {/* Sparkle shimmer overlay */}
+        <span
+          className="absolute inset-0 rounded-md overflow-hidden pointer-events-none"
+          aria-hidden="true"
+        >
+          <span
+            className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent 
+              -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-in-out"
+          />
+        </span>
+        <span className="relative">{triggerLabel}</span>
       </button>
 
       {open &&
