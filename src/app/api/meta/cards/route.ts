@@ -70,39 +70,36 @@ export async function GET(request: Request): Promise<NextResponse> {
     // Filter out cardId 0 (invalid/placeholder)
     const validRows = rows.filter((r) => r.cardId > 0);
     const ids = validRows.map((r) => r.cardId);
-    const cards = ids.length
-      ? await prisma.card.findMany({
-          where: { id: { in: ids } },
-          select: { id: true, name: true },
-        })
-      : [];
+
+    // Fetch card names, slugs, and types in parallel
+    const [cards, variants, cardMeta] = ids.length
+      ? await Promise.all([
+          prisma.card.findMany({
+            where: { id: { in: ids } },
+            select: { id: true, name: true },
+          }),
+          prisma.variant.findMany({
+            where: { cardId: { in: ids } },
+            select: { cardId: true, slug: true },
+            distinct: ["cardId"],
+          }),
+          prisma.cardSetMetadata.findMany({
+            where: { cardId: { in: ids } },
+            select: { cardId: true, type: true },
+            distinct: ["cardId"],
+          }),
+        ])
+      : [[], [], []];
+
     const nameMap = new Map(
       cards.map((c: { id: number; name: string }) => [c.id, c.name] as const)
     );
-
-    // Fetch slugs for card previews (get first variant for each card)
-    const variants = ids.length
-      ? await prisma.variant.findMany({
-          where: { cardId: { in: ids } },
-          select: { cardId: true, slug: true },
-          distinct: ["cardId"],
-        })
-      : [];
     const slugMap = new Map<number, string>();
     for (const v of variants) {
       if (!slugMap.has(v.cardId)) {
         slugMap.set(v.cardId, v.slug);
       }
     }
-
-    // Fetch card types for site detection
-    const cardMeta = ids.length
-      ? await prisma.cardSetMetadata.findMany({
-          where: { cardId: { in: ids } },
-          select: { cardId: true, type: true },
-          distinct: ["cardId"],
-        })
-      : [];
     const typeMap = new Map<number, string>();
     for (const m of cardMeta) {
       if (!typeMap.has(m.cardId) && m.type) {
