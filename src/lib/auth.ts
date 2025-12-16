@@ -1,4 +1,4 @@
-import { PrismaAdapter } from "@auth/prisma-adapter";
+import { ReusableTokenPrismaAdapter } from "@/lib/prisma-adapter-reusable-token";
 import {
   verifyAuthenticationResponse,
   type VerifyAuthenticationResponseOpts,
@@ -359,7 +359,7 @@ const providers = [
 ];
 
 export const authOptions: NextAuthOptions = {
-  adapter: PrismaAdapter(prisma),
+  adapter: ReusableTokenPrismaAdapter(prisma),
   providers,
   session: {
     strategy: "jwt",
@@ -507,7 +507,7 @@ export const authOptions: NextAuthOptions = {
     signIn: "/auth/signin",
     error: "/auth/error",
   },
-  debug: process.env.NODE_ENV === "development",
+  debug: true, // Temporarily enable debug to diagnose token issues
 };
 
 // Minimal shape we rely on across API routes
