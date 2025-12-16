@@ -455,7 +455,29 @@ export const authOptions: NextAuthOptions = {
       if (account) {
         token.provider = account.provider;
       }
-      return token;
+
+      // Safety: ensure token doesn't grow too large (max ~4KB for cookie safety)
+      // Remove any unexpected large properties
+      const safeToken: typeof token = {
+        id: token.id,
+        sub: token.sub,
+        name: token.name,
+        email: token.email,
+        picture: (token as Record<string, unknown>).picture as
+          | string
+          | undefined,
+        image: (token as Record<string, unknown>).image as string | undefined,
+        emailVerified: (token as Record<string, unknown>).emailVerified as
+          | string
+          | null
+          | undefined,
+        provider: token.provider,
+        iat: token.iat,
+        exp: token.exp,
+        jti: token.jti,
+      };
+
+      return safeToken;
     },
     async session({ session, token }): Promise<Session> {
       if (session?.user && token) {
