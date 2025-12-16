@@ -456,6 +456,18 @@ export const createInteractionSlice: StateCreator<
         payload.actorSeat === "p1" || payload.actorSeat === "p2"
           ? (payload.actorSeat as PlayerKey)
           : null;
+      // Build source info if available (for pile peeks with follow-up actions)
+      const source =
+        (payload.seat === "p1" || payload.seat === "p2") &&
+        (payload.pile === "spellbook" || payload.pile === "atlas") &&
+        (payload.from === "top" || payload.from === "bottom")
+          ? {
+              seat: payload.seat as PlayerKey,
+              pile: payload.pile as "spellbook" | "atlas",
+              from: payload.from as "top" | "bottom",
+            }
+          : undefined;
+
       if (
         requestedBy &&
         get().localPlayerId &&
@@ -465,7 +477,8 @@ export const createInteractionSlice: StateCreator<
         try {
           get().openPeekDialog(
             typeof payload.title === "string" ? payload.title : "Peek",
-            payload.cards as CardRef[]
+            payload.cards as CardRef[],
+            source
           );
         } catch {}
       } else if (!get().transport && actorSeat === get().actorKey) {
@@ -473,7 +486,8 @@ export const createInteractionSlice: StateCreator<
           try {
             get().openPeekDialog(
               typeof payload.title === "string" ? payload.title : "Peek",
-              payload.cards as CardRef[]
+              payload.cards as CardRef[],
+              source
             );
           } catch {}
         }
