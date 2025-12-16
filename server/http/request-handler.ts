@@ -724,8 +724,10 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
 
         req.on("error", (err: Error) => {
           console.error("[Tournament] Request error:", safeErrorMessage(err));
-          res.writeHead(500, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: "Server error" }));
+          if (!res.writableEnded) {
+            res.writeHead(500, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Server error" }));
+          }
         });
 
         return;
@@ -903,16 +905,24 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
       res.statusCode = 404;
       res.end("Not Found");
     } catch (e) {
-      try {
-        res.statusCode = 500;
-        res.setHeader("Content-Type", "application/json");
-        res.end(
-          JSON.stringify({
-            error: "internal_error",
-            message: String(safeErrorMessage(e)),
-          })
+      // Guard against writing to already-ended response
+      if (!res.writableEnded) {
+        try {
+          res.statusCode = 500;
+          res.setHeader("Content-Type", "application/json");
+          res.end(
+            JSON.stringify({
+              error: "internal_error",
+              message: String(safeErrorMessage(e)),
+            })
+          );
+        } catch {}
+      } else {
+        console.error(
+          "[http] Error after response ended:",
+          safeErrorMessage(e)
         );
-      } catch {}
+      }
     }
   };
 }
