@@ -4,6 +4,7 @@ import clsx from "clsx";
 import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 type CardStat = {
   cardId: number;
@@ -514,22 +515,25 @@ export default function PublicMetaDashboard() {
         </section>
       </div>
 
-      {/* Card Preview Overlay */}
-      {hoveredSlug && (
-        <div className="fixed top-1/4 right-8 z-[9999] pointer-events-none">
-          <div className="relative w-56 aspect-[3/4] rounded-xl overflow-hidden bg-black/60 backdrop-blur-md shadow-2xl ring-2 ring-white/20">
-            <Image
-              src={`/api/images/${hoveredSlug}`}
-              alt="Card preview"
-              fill
-              className="object-cover"
-              sizes="224px"
-              unoptimized
-              priority
-            />
-          </div>
-        </div>
-      )}
+      {/* Card Preview Overlay - rendered via portal to ensure viewport-fixed positioning */}
+      {hoveredSlug &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div className="fixed top-1/4 right-8 z-[9999] pointer-events-none">
+            <div className="relative w-56 aspect-[3/4] rounded-xl overflow-hidden bg-black/60 backdrop-blur-md shadow-2xl ring-2 ring-white/20">
+              <Image
+                src={`/api/images/${hoveredSlug}`}
+                alt="Card preview"
+                fill
+                className="object-cover"
+                sizes="224px"
+                unoptimized
+                priority
+              />
+            </div>
+          </div>,
+          document.body
+        )}
     </div>
   );
 }
