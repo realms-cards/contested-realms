@@ -41,6 +41,11 @@ const DEFAULT_LINKS: OtherRealmsLink[] = [
     subtitle: "Community-driven content and discussion",
   },
   {
+    label: "The Ruby Core-ier",
+    href: "https://www.patreon.com/c/therubycoreier",
+    subtitle: "Community content on Patreon",
+  },
+  {
     label: "Trolls of the Realm",
     href: "https://trollsoftherealm.com/",
     subtitle: "Buy and sell single cards (Europe)",

@@ -161,6 +161,7 @@ export async function middleware(req: NextRequest) {
   if (
     pathname.startsWith("/lock") ||
     pathname.startsWith("/_lockdown") ||
+    pathname.startsWith("/api/auth") ||
     pathname.startsWith("/api/lock") ||
     pathname.startsWith("/api/assets") ||
     pathname.startsWith("/api/images") ||
