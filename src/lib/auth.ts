@@ -1,4 +1,4 @@
-import { ReusableTokenPrismaAdapter } from "@/lib/prisma-adapter-reusable-token";
+import { PrismaAdapter } from "@auth/prisma-adapter";
 import {
   verifyAuthenticationResponse,
   type VerifyAuthenticationResponseOpts,
@@ -107,7 +107,7 @@ async function sendMagicLinkEmail({
   const subject = "Realms.cards — Your secure sign-in link";
   const text = `Welcome to Realms.cards - your fan simulator for Sorcery: Contested Realm!
 
-Your one-time sign-in link is ready (copy and paste into your browser):
+Your one-time sign-in link is ready:
 ${url}
 
 This link expires in 24 hours. If you did not request it, you can safely ignore this email.
@@ -140,7 +140,7 @@ King Arthur
             </tr>
             <tr>
               <td style="padding-top:24px;padding-bottom:32px;">
-                <a clicktracking=off href="${escapedUrl}" style="display:inline-block;padding:14px 28px;background:${brandColor};color:${buttonTextColor};text-decoration:none;border-radius:12px;font-weight:600;">Complete sign-in</a>
+                <a href="${escapedUrl}" style="display:inline-block;padding:14px 28px;background:${brandColor};color:${buttonTextColor};text-decoration:none;border-radius:12px;font-weight:600;">Complete sign-in</a>
               </td>
             </tr>
             <tr>
@@ -157,26 +157,13 @@ King Arthur
 </html>`;
 
   try {
-    // SendGrid X-SMTPAPI header to disable all link/content processing
-    // This prevents SendGrid from prefetching/validating links which consumes one-time tokens
-    const smtpApiHeader = JSON.stringify({
-      filters: {
-        clicktrack: { settings: { enable: 0 } },
-        opentrack: { settings: { enable: 0 } },
-        subscriptiontrack: { settings: { enable: 0 } },
-      },
-    });
-
     await transport.sendMail({
       to: identifier,
       from: provider.from,
       subject,
       text,
       html,
-      headers: {
-        "X-SMTPAPI": smtpApiHeader,
-      },
-    } as Parameters<typeof transport.sendMail>[0]);
+    });
   } catch (error) {
     console.error("Failed to send magic link email:", error);
     throw error;
@@ -359,7 +346,7 @@ const providers = [
 ];
 
 export const authOptions: NextAuthOptions = {
-  adapter: ReusableTokenPrismaAdapter(prisma),
+  adapter: PrismaAdapter(prisma),
   providers,
   session: {
     strategy: "jwt",
@@ -455,29 +442,7 @@ export const authOptions: NextAuthOptions = {
       if (account) {
         token.provider = account.provider;
       }
-
-      // Safety: ensure token doesn't grow too large (max ~4KB for cookie safety)
-      // Remove any unexpected large properties
-      const safeToken: typeof token = {
-        id: token.id,
-        sub: token.sub,
-        name: token.name,
-        email: token.email,
-        picture: (token as Record<string, unknown>).picture as
-          | string
-          | undefined,
-        image: (token as Record<string, unknown>).image as string | undefined,
-        emailVerified: (token as Record<string, unknown>).emailVerified as
-          | string
-          | null
-          | undefined,
-        provider: token.provider,
-        iat: token.iat,
-        exp: token.exp,
-        jti: token.jti,
-      };
-
-      return safeToken;
+      return token;
     },
     async session({ session, token }): Promise<Session> {
       if (session?.user && token) {
@@ -529,7 +494,7 @@ export const authOptions: NextAuthOptions = {
     signIn: "/auth/signin",
     error: "/auth/error",
   },
-  debug: true, // Temporarily enable debug to diagnose token issues
+  debug: process.env.NODE_ENV === "development",
 };
 
 // Minimal shape we rely on across API routes
