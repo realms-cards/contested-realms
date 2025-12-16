@@ -17,6 +17,7 @@ const NAV_LINKS = [
   { href: "/tournaments", label: "Tournaments" },
   { href: "/replay", label: "Replays" },
   { href: "/leaderboard", label: "Leaderboard" },
+  { href: "/meta", label: "Meta" },
 ];
 
 export default function OnlinePageShell({
@@ -41,8 +42,12 @@ export default function OnlinePageShell({
   };
 
   // Filter out the current page from navigation links
-  const visibleNavLinks = NAV_LINKS.filter(link =>
-    !((pathname || "") === link.href || (pathname || "").startsWith(`${link.href}/`))
+  const visibleNavLinks = NAV_LINKS.filter(
+    (link) =>
+      !(
+        (pathname || "") === link.href ||
+        (pathname || "").startsWith(`${link.href}/`)
+      )
   );
 
   return (
@@ -51,9 +56,14 @@ export default function OnlinePageShell({
         {showNav && (
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-xl font-semibold font-fantaisie">{getRouteTitle(pathname || "")}</h1>
+              <h1 className="text-xl font-semibold font-fantaisie">
+                {getRouteTitle(pathname || "")}
+              </h1>
               {visibleNavLinks.map((link, index) => {
-                const active = pathname ? pathname === link.href || pathname.startsWith(`${link.href}/`) : false;
+                const active = pathname
+                  ? pathname === link.href ||
+                    pathname.startsWith(`${link.href}/`)
+                  : false;
                 return (
                   <Link
                     key={link.href}
@@ -61,7 +71,9 @@ export default function OnlinePageShell({
                     className={`${
                       index === 0 ? "ml-2" : ""
                     } text-xs underline transition-colors ${
-                      active ? "text-slate-100" : "text-slate-300/80 hover:text-slate-200"
+                      active
+                        ? "text-slate-100"
+                        : "text-slate-300/80 hover:text-slate-200"
                     }`}
                     aria-current={active ? "page" : undefined}
                   >

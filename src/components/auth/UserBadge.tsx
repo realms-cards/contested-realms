@@ -480,8 +480,6 @@ export default function UserBadge({
   const emailDirty = normalizedEmailInput !== normalizedServerEmail;
   const canSendVerification =
     Boolean(normalizedServerEmail) && !emailDirty && !emailVerified;
-  const avatarIsDataUrl =
-    typeof avatarImageSrc === "string" && avatarImageSrc.startsWith("data:");
   const avatar = avatarImageSrc ? (
     <Image
       src={avatarImageSrc}
@@ -490,7 +488,7 @@ export default function UserBadge({
       height={32}
       className="rounded-full w-8 h-8"
       priority={false}
-      unoptimized={avatarIsDataUrl}
+      unoptimized
     />
   ) : (
     <div className="w-8 h-8 rounded-full bg-slate-700 text-white grid place-items-center text-[12px]">
