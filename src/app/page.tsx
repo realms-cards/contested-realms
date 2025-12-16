@@ -192,6 +192,22 @@ export default function Home() {
             </AsciiPanel>
           </div>
         )}
+        {/* Meta Statistics - visible to all */}
+        <div className="grid grid-cols-1 gap-3 md:gap-4 max-w-4xl mx-auto">
+          <AsciiPanel className="p-5 md:p-6">
+            <Link
+              href="/meta"
+              className="group block hover:scale-[1.02] transition-transform duration-200"
+            >
+              <div className="flex items-center justify-center py-3 md:py-4">
+                <h4 className="text-lg font-semibold tracking-wide">
+                  Meta Statistics
+                </h4>
+              </div>
+            </Link>
+          </AsciiPanel>
+        </div>
+
         {/* Other Realms (wide bottom element) */}
         {session && (
           <div className="max-w-4xl mx-auto cursor-pointer">

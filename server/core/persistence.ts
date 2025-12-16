@@ -95,7 +95,11 @@ const createPersistenceLayerInternal = ({
       seed: match.seed,
       turn: match.turn || null,
       winnerId: match.winnerId || null,
-      matchType: match.matchType || "constructed",
+      // Map "precon" to "constructed" for DB (GameFormat enum only has constructed/sealed/draft)
+      matchType:
+        match.matchType === "precon"
+          ? "constructed"
+          : match.matchType || "constructed",
       sealedConfig: match.sealedConfig || null,
       draftConfig: match.draftConfig || null,
       draftState: match.draftState || null,
