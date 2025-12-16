@@ -48,8 +48,8 @@ export default function Home() {
           <div className="max-w-5xl mx-auto relative z-30">
             <div className="bg-orange-900/50 border border-orange-500/50 text-orange-100 rounded-md px-4 py-3 flex items-center justify-between shadow">
               <p className="text-sm md:text-base font-medium">
-                Currently in Open Alpha - Data might be lost in the future -
-                back up your decks!
+                Currently in Open Beta - Data might be lost in the future - back
+                up your decks!
               </p>
               <button
                 type="button"
