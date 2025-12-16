@@ -46,10 +46,10 @@ export default function MatchmakingPanel() {
     players,
   } = useOnline();
   const [selectedTypes, setSelectedTypes] = useState<Set<MatchType>>(
-    () => new Set<MatchType>(["precon"])
+    () => new Set<MatchType>(["constructed"])
   );
-  // Start collapsed by default
-  const [expanded, setExpanded] = useState(false);
+  // Start expanded by default
+  const [expanded, setExpanded] = useState(true);
 
   const isSearching = matchmaking.status === "searching";
   const matchFound = matchmaking.status === "found";
@@ -137,6 +137,7 @@ export default function MatchmakingPanel() {
       >
         <div className="flex items-center gap-2">
           <Users className="w-5 h-5 text-violet-400" />
+          we
           <h2 className="text-lg font-semibold text-white">Quick Play</h2>
           {/* Online player count badge */}
           <span className="ml-2 px-2 py-0.5 rounded-full bg-emerald-600/30 text-emerald-400 text-xs font-medium">
