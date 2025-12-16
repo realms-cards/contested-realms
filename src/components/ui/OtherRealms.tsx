@@ -43,7 +43,7 @@ const DEFAULT_LINKS: OtherRealmsLink[] = [
   {
     label: "The Ruby Core-ier",
     href: "https://www.patreon.com/c/therubycoreier",
-    subtitle: "Community content on Patreon",
+    subtitle: "A Uniquely retro magazine for every Avatar in the realm",
   },
   {
     label: "Trolls of the Realm",
