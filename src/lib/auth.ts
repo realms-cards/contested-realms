@@ -163,6 +163,18 @@ King Arthur
       subject,
       text,
       html,
+      headers: {
+        "X-SMTPAPI": JSON.stringify({
+          filters: {
+            clicktrack: {
+              settings: {
+                enable: 0,
+                enable_text: 0,
+              },
+            },
+          },
+        }),
+      },
     });
   } catch (error) {
     console.error("Failed to send magic link email:", error);
