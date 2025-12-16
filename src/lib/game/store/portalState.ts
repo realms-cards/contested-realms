@@ -327,26 +327,35 @@ export function findDuplicateIndices(rolls: number[]): number[] {
 
 /**
  * Helper: Convert tile number (1-20) to cell coordinates.
- * Tile 1 is top-left, tile 20 is bottom-right.
- * Row-major order: tiles 1-5 are top row, 6-10 next row, etc.
+ *
+ * Sorcery TCG tile numbering (from player's perspective):
+ * - Tile 1 is at player's bottom-left corner
+ * - Tile 5 is at player's bottom-right corner
+ * - Tile 16 is at opponent's top-left corner
+ * - Tile 20 is at opponent's top-right corner
+ *
+ * Row-major order from player's view:
+ * - Tiles 1-5: bottom row (y=0)
+ * - Tiles 6-10: second row (y=1)
+ * - Tiles 11-15: third row (y=2)
+ * - Tiles 16-20: top row (y=3)
+ *
  * Board is 5x4 (w=5, h=4), y=0 is bottom, y=3 is top.
  */
 export function tileNumberToCoords(
   tileNumber: number,
-  boardWidth: number = 5,
-  boardHeight: number = 4
+  boardWidth: number = 5
 ): [number, number] {
-  // tileNumber 1-20 maps to rows 0-3 from top
-  // Row 0 (top, y=h-1): tiles 1-5
-  // Row 1 (y=h-2): tiles 6-10
-  // Row 2 (y=h-3): tiles 11-15
-  // Row 3 (y=h-4=0, bottom): tiles 16-20
+  // tileNumber 1-20 maps to rows 0-3 from bottom
+  // Row 0 (bottom, y=0): tiles 1-5
+  // Row 1 (y=1): tiles 6-10
+  // Row 2 (y=2): tiles 11-15
+  // Row 3 (top, y=3): tiles 16-20
   const zeroIndexed = tileNumber - 1;
   const row = Math.floor(zeroIndexed / boardWidth);
   const col = zeroIndexed % boardWidth;
-  // Convert row (from top) to y coordinate
-  const y = boardHeight - 1 - row;
-  return [col, y];
+  // Row directly maps to y coordinate (no inversion needed)
+  return [col, row];
 }
 
 /**
