@@ -107,7 +107,7 @@ async function sendMagicLinkEmail({
   const subject = "Realms.cards — Your secure sign-in link";
   const text = `Welcome to Realms.cards - your fan simulator for Sorcery: Contested Realm!
 
-Your one-time sign-in link is ready:
+Your one-time sign-in link is ready (copy and paste into your browser):
 ${url}
 
 This link expires in 24 hours. If you did not request it, you can safely ignore this email.
@@ -157,13 +157,26 @@ King Arthur
 </html>`;
 
   try {
+    // SendGrid X-SMTPAPI header to disable all link/content processing
+    // This prevents SendGrid from prefetching/validating links which consumes one-time tokens
+    const smtpApiHeader = JSON.stringify({
+      filters: {
+        clicktrack: { settings: { enable: 0 } },
+        opentrack: { settings: { enable: 0 } },
+        subscriptiontrack: { settings: { enable: 0 } },
+      },
+    });
+
     await transport.sendMail({
       to: identifier,
       from: provider.from,
       subject,
       text,
       html,
-    });
+      headers: {
+        "X-SMTPAPI": smtpApiHeader,
+      },
+    } as Parameters<typeof transport.sendMail>[0]);
   } catch (error) {
     console.error("Failed to send magic link email:", error);
     throw error;
