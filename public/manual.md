@@ -1,5 +1,8 @@
 # Realms.cards Simulator Manual
 
+Video tutorials:
+["Play a match"](https://youtu.be/fAOK3DupT0Y)
+
 This manual documents keyboard shortcuts and core interaction flows for the Realms.cards simulator. All shortcuts are ignored while typing in inputs (chat/search/etc.) and when blocking overlays are open.
 
 - _Spectator note: gameplay‑changing shortcuts (T, Enter, Space) are disabled for spectators._
