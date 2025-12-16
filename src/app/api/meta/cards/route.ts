@@ -27,6 +27,7 @@ type HumanCardStatOut = HumanCardStatRow & {
   name: string;
   winRate: number;
   slug: string | null;
+  type: string | null;
 };
 
 export async function GET(request: Request): Promise<NextResponse> {
@@ -94,6 +95,21 @@ export async function GET(request: Request): Promise<NextResponse> {
       }
     }
 
+    // Fetch card types for site detection
+    const cardMeta = ids.length
+      ? await prisma.cardSetMetadata.findMany({
+          where: { cardId: { in: ids } },
+          select: { cardId: true, type: true },
+          distinct: ["cardId"],
+        })
+      : [];
+    const typeMap = new Map<number, string>();
+    for (const m of cardMeta) {
+      if (!typeMap.has(m.cardId) && m.type) {
+        typeMap.set(m.cardId, m.type);
+      }
+    }
+
     const stats: HumanCardStatOut[] = validRows
       .map((r: HumanCardStatRow): HumanCardStatOut => {
         const denom = r.wins + r.losses;
@@ -107,6 +123,7 @@ export async function GET(request: Request): Promise<NextResponse> {
           draws: r.draws,
           winRate,
           slug: slugMap.get(r.cardId) || null,
+          type: typeMap.get(r.cardId) || null,
         };
       })
       .sort((a: HumanCardStatOut, b: HumanCardStatOut) => {

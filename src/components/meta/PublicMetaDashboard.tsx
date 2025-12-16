@@ -15,6 +15,7 @@ type CardStat = {
   draws: number;
   winRate: number;
   slug: string | null;
+  type: string | null;
 };
 
 type ElementStat = {
@@ -81,7 +82,10 @@ export default function PublicMetaDashboard() {
     "plays" | "wins" | "winRate"
   >("plays");
   const [cardStatsLimit, setCardStatsLimit] = useState(50);
-  const [hoveredSlug, setHoveredSlug] = useState<string | null>(null);
+  const [hoveredCard, setHoveredCard] = useState<{
+    slug: string;
+    type: string | null;
+  } | null>(null);
 
   // Element stats
   const [elementStats, setElementStats] = useState<ElementStat[]>([]);
@@ -491,8 +495,11 @@ export default function PublicMetaDashboard() {
                     <tr
                       key={row.cardId}
                       className="border-t border-slate-800/60 hover:bg-slate-800/40 cursor-pointer"
-                      onMouseEnter={() => setHoveredSlug(row.slug)}
-                      onMouseLeave={() => setHoveredSlug(null)}
+                      onMouseEnter={() =>
+                        row.slug &&
+                        setHoveredCard({ slug: row.slug, type: row.type })
+                      }
+                      onMouseLeave={() => setHoveredCard(null)}
                     >
                       <td className="px-3 py-2">
                         <span className="font-medium text-white">
@@ -516,17 +523,27 @@ export default function PublicMetaDashboard() {
       </div>
 
       {/* Card Preview Overlay - rendered via portal to ensure viewport-fixed positioning */}
-      {hoveredSlug &&
+      {hoveredCard &&
         typeof document !== "undefined" &&
         createPortal(
           <div className="fixed top-1/4 right-8 z-[9999] pointer-events-none">
-            <div className="relative w-56 aspect-[3/4] rounded-xl overflow-hidden bg-black/60 backdrop-blur-md shadow-2xl ring-2 ring-white/20">
+            <div
+              className={`relative rounded-xl overflow-hidden bg-black/60 backdrop-blur-md shadow-2xl ring-2 ring-white/20 ${
+                (hoveredCard.type || "").toLowerCase().includes("site")
+                  ? "w-72 aspect-[4/3]"
+                  : "w-56 aspect-[3/4]"
+              }`}
+            >
               <Image
-                src={`/api/images/${hoveredSlug}`}
+                src={`/api/images/${hoveredCard.slug}`}
                 alt="Card preview"
                 fill
-                className="object-cover"
-                sizes="224px"
+                className={`${
+                  (hoveredCard.type || "").toLowerCase().includes("site")
+                    ? "object-contain scale-150 rotate-90 origin-center"
+                    : "object-cover"
+                } object-center`}
+                sizes="288px"
                 unoptimized
                 priority
               />
