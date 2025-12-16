@@ -504,6 +504,7 @@ model HumanCardStats {
 
   @@unique([cardId, format])
   @@index([cardId])
+  @@index([format, plays]) // For meta stats queries ordering by plays
 }
 
 // Online match persistence for real-time games (non-tournament quick play)
