@@ -1,9 +1,8 @@
 "use client";
 
 import { OrbitControls } from "@react-three/drei";
-import { useParams, useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
-import { useState, useEffect, useCallback } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useState, useEffect, useCallback, Suspense } from "react";
 import CardPreview from "@/components/game/CardPreview";
 import { ClientCanvas } from "@/components/game/ClientCanvas";
 import OnlineConsole from "@/components/game/OnlineConsole";
@@ -17,7 +16,6 @@ import {
 import TextureCache from "@/lib/game/components/TextureCache";
 import { Physics } from "@/lib/game/physics";
 import { useGameStore } from "@/lib/game/store";
-import { SocketTransport } from "@/lib/net/socketTransport";
 
 interface MatchRecording {
   matchId: string;
@@ -37,14 +35,11 @@ interface MatchRecording {
   }>;
 }
 
-export default function ReplayViewerPage() {
-  const params = useParams();
-  const router = useRouter();
-  const matchId = params?.id as string;
+const LOCAL_REPLAY_STORAGE_KEY = "sorcery:localReplay";
 
-  const [transport, setTransport] = useState<SocketTransport | null>(null);
-  const [connected, setConnected] = useState(false);
-  const { data: session } = useSession();
+function LocalReplayContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [recording, setRecording] = useState<MatchRecording | null>(null);
   const [loading, setLoading] = useState(true);
@@ -58,85 +53,23 @@ export default function ReplayViewerPage() {
   const previewCard = useGameStore((s) => s.previewCard);
   const contextMenu = useGameStore((s) => s.contextMenu);
 
-  // Setup socket connection
+  // Load the recording from sessionStorage
   useEffect(() => {
-    let isMounted = true;
-
-    const socketTransport = new SocketTransport();
-    setTransport(socketTransport);
-
-    const handleConnect = () => {
-      // Do not mark as connected here to avoid race with server auth (hello/welcome).
-      // We'll flip `connected` to true once connect() resolves after 'welcome'.
-    };
-    const handleDisconnect = () => {
-      if (!isMounted) return;
-      setConnected(false);
-    };
-
-    socketTransport.onGeneric("connect", handleConnect);
-    socketTransport.onGeneric("disconnect", handleDisconnect);
-
-    const displayName =
-      (session?.user?.name && String(session.user.name).trim()) ||
-      `Replay_${Date.now()}`;
-    const playerId =
-      (session?.user && (session.user as { id?: string }).id) ||
-      `replay_viewer_${Date.now()}`;
-
-    socketTransport
-      .connect({
-        displayName,
-        playerId,
-      })
-      .then(() => {
-        if (!isMounted) return;
-        setConnected(true);
-      })
-      .catch((error) => {
-        if (!isMounted) return;
-        console.error("Failed to connect to replay server:", error);
-        setLoading(false);
-        setError("Failed to connect to server");
-      });
-
-    return () => {
-      isMounted = false;
-      try {
-        socketTransport.offGeneric("connect", handleConnect);
-        socketTransport.offGeneric("disconnect", handleDisconnect);
-        socketTransport.disconnect();
-      } catch {
-        // Ignore cleanup errors
-      }
-    };
-  }, [session]);
-
-  // Load the recording
-  useEffect(() => {
-    if (!connected || !transport || !matchId) return;
-
-    const handleRecording = (payload: unknown) => {
-      const data = payload as { recording?: MatchRecording; error?: string };
-      if (data.error) {
-        setError(data.error);
-      } else if (data.recording) {
-        setRecording(data.recording);
-        // Initialize game state
+    try {
+      const stored = sessionStorage.getItem(LOCAL_REPLAY_STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored) as MatchRecording;
+        setRecording(parsed);
         useGameStore.getState().resetGameState();
+      } else {
+        setError("No replay data found. Please upload a replay file.");
       }
-      setLoading(false);
-    };
-
-    transport.onGeneric("matchRecordingResponse", handleRecording);
-    transport.emit("getMatchRecording", { matchId });
-
-    return () => {
-      if (transport) {
-        transport.offGeneric("matchRecordingResponse", handleRecording);
-      }
-    };
-  }, [connected, transport, matchId]);
+    } catch (err) {
+      setError("Failed to load replay data");
+      console.error("Failed to parse local replay:", err);
+    }
+    setLoading(false);
+  }, [searchParams]);
 
   // Playback engine
   const applyAction = useCallback(
@@ -233,14 +166,6 @@ export default function ReplayViewerPage() {
     return `${minutes}:${seconds.toString().padStart(2, "0")}`;
   };
 
-  if (!connected) {
-    return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-        <div className="text-white">Connecting...</div>
-      </div>
-    );
-  }
-
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
@@ -276,6 +201,11 @@ export default function ReplayViewerPage() {
 
   return (
     <div className="fixed inset-0 w-screen h-screen bg-slate-900">
+      {/* Local replay indicator */}
+      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 px-3 py-1 bg-amber-600/80 rounded-full text-xs font-semibold text-white">
+        Local Replay
+      </div>
+
       {/* 3D Game View */}
       <div className="absolute inset-0 w-full h-full">
         <ClientCanvas
@@ -422,7 +352,10 @@ export default function ReplayViewerPage() {
                 </svg>
               </button>
               <button
-                onClick={() => router.push("/replay")}
+                onClick={() => {
+                  sessionStorage.removeItem(LOCAL_REPLAY_STORAGE_KEY);
+                  router.push("/replay");
+                }}
                 className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-white transition-colors"
               >
                 Back to Replays
@@ -574,7 +507,10 @@ export default function ReplayViewerPage() {
         chatInput={chatInput}
         setChatInput={setChatInput}
         onSendChat={() => {}}
-        onLeaveMatch={() => router.push("/replay")}
+        onLeaveMatch={() => {
+          sessionStorage.removeItem(LOCAL_REPLAY_STORAGE_KEY);
+          router.push("/replay");
+        }}
         connected={true}
         myPlayerId={undefined}
         hideLeaveButton={true}
@@ -583,5 +519,19 @@ export default function ReplayViewerPage() {
         position="top-left"
       />
     </div>
+  );
+}
+
+export default function LocalReplayPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+          <div className="text-white">Loading...</div>
+        </div>
+      }
+    >
+      <LocalReplayContent />
+    </Suspense>
   );
 }

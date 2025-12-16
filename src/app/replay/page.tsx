@@ -2,9 +2,11 @@
 
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import OnlinePageShell from "@/components/online/OnlinePageShell";
 import { SocketTransport } from "@/lib/net/socketTransport";
+
+const LOCAL_REPLAY_STORAGE_KEY = "sorcery:localReplay";
 
 interface MatchRecordingSummary {
   matchId: string;
@@ -25,14 +27,62 @@ export default function ReplayListPage() {
   const [connected, setConnected] = useState(false);
   const [socketReady, setSocketReady] = useState(false);
   const [currentPlayerId, setCurrentPlayerId] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { data: session } = useSession();
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setUploadError(null);
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const content = e.target?.result as string;
+        const parsed = JSON.parse(content);
+
+        // Validate the replay structure
+        if (
+          !parsed.matchId ||
+          !parsed.playerNames ||
+          !Array.isArray(parsed.actions) ||
+          !parsed.initialState
+        ) {
+          setUploadError(
+            "Invalid replay file format. Missing required fields."
+          );
+          return;
+        }
+
+        // Store in sessionStorage and navigate to local viewer
+        sessionStorage.setItem(LOCAL_REPLAY_STORAGE_KEY, content);
+        router.push("/replay/local");
+      } catch {
+        setUploadError(
+          "Failed to parse replay file. Please ensure it's a valid JSON file."
+        );
+      }
+    };
+    reader.onerror = () => {
+      setUploadError("Failed to read file.");
+    };
+    reader.readAsText(file);
+
+    // Reset the input so the same file can be selected again
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
 
   useEffect(() => {
     let isMounted = true;
 
     // Get current player ID from session or localStorage if available
     try {
-      const fromSession = (session?.user && (session.user as { id?: string }).id) as string | undefined;
+      const fromSession = (session?.user &&
+        (session.user as { id?: string }).id) as string | undefined;
       const storedPlayerId = localStorage.getItem("sorcery:playerId");
       setCurrentPlayerId(fromSession || storedPlayerId);
     } catch {
@@ -55,8 +105,12 @@ export default function ReplayListPage() {
     socketTransport.onGeneric("connect", handleConnect);
     socketTransport.onGeneric("disconnect", handleDisconnect);
 
-    const displayName = (session?.user?.name && String(session.user.name).trim()) || `Replay_${Date.now()}`;
-    const playerId = (session?.user && (session.user as { id?: string }).id) || `replay_viewer_${Date.now()}`;
+    const displayName =
+      (session?.user?.name && String(session.user.name).trim()) ||
+      `Replay_${Date.now()}`;
+    const playerId =
+      (session?.user && (session.user as { id?: string }).id) ||
+      `replay_viewer_${Date.now()}`;
     socketTransport
       .connect({
         displayName,
@@ -133,7 +187,9 @@ export default function ReplayListPage() {
     return (
       <OnlinePageShell>
         <div className="flex items-center justify-center py-32">
-          <div className="text-sm text-slate-300">Connecting to replay service…</div>
+          <div className="text-sm text-slate-300">
+            Connecting to replay service…
+          </div>
         </div>
       </OnlinePageShell>
     );
@@ -142,6 +198,49 @@ export default function ReplayListPage() {
   return (
     <OnlinePageShell>
       <div className="space-y-6 pt-2">
+        {/* Upload Replay Section */}
+        <div className="rounded-xl bg-slate-950/60 ring-1 ring-slate-900/70 p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold uppercase tracking-wide text-slate-200">
+                Load Local Replay
+              </h2>
+              <p className="text-xs text-slate-400 mt-1">
+                Upload a previously downloaded replay file to watch it locally
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".json"
+                onChange={handleFileUpload}
+                className="hidden"
+                id="replay-upload"
+              />
+              <label
+                htmlFor="replay-upload"
+                className="h-9 w-9 grid place-items-center bg-emerald-600 hover:bg-emerald-700 rounded-lg text-white transition-colors cursor-pointer"
+                title="Upload Replay"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  className="w-5 h-5"
+                >
+                  <path d="M12 8l6 6h-4v6h-4v-6H6l6-6zM4 4h16v2H4V4z" />
+                </svg>
+              </label>
+            </div>
+          </div>
+          {uploadError && (
+            <div className="mt-3 px-3 py-2 bg-red-500/20 border border-red-500/40 rounded-lg text-sm text-red-300">
+              {uploadError}
+            </div>
+          )}
+        </div>
+
         {loading ? (
           <div className="rounded-xl bg-slate-950/60 ring-1 ring-slate-900/70 p-5 text-center text-sm text-slate-300">
             Loading recordings…
@@ -172,7 +271,9 @@ export default function ReplayListPage() {
                     <div
                       key={recording.matchId}
                       className="bg-slate-900/60 border border-slate-800/70 rounded-xl px-4 py-4 hover:bg-slate-900/80 transition-colors cursor-pointer"
-                      onClick={() => router.push(`/replay/${recording.matchId}`)}
+                      onClick={() =>
+                        router.push(`/replay/${recording.matchId}`)
+                      }
                     >
                       <div className="flex items-start justify-between gap-4">
                         <div className="space-y-2">
@@ -196,13 +297,17 @@ export default function ReplayListPage() {
                         </div>
                         <div className="text-right text-xs text-slate-400 space-y-1">
                           <div>
-                            <span className="uppercase tracking-wide text-slate-500">Duration:</span>{" "}
+                            <span className="uppercase tracking-wide text-slate-500">
+                              Duration:
+                            </span>{" "}
                             {recording.duration
                               ? formatDuration(recording.duration)
                               : "In Progress"}
                           </div>
                           <div>
-                            <span className="uppercase tracking-wide text-slate-500">Actions:</span>{" "}
+                            <span className="uppercase tracking-wide text-slate-500">
+                              Actions:
+                            </span>{" "}
                             {recording.actionCount}
                           </div>
                         </div>
@@ -228,7 +333,9 @@ export default function ReplayListPage() {
                     <div
                       key={recording.matchId}
                       className="bg-slate-900/60 border border-slate-800/70 rounded-xl px-4 py-4 hover:bg-slate-900/80 transition-colors cursor-pointer"
-                      onClick={() => router.push(`/replay/${recording.matchId}`)}
+                      onClick={() =>
+                        router.push(`/replay/${recording.matchId}`)
+                      }
                     >
                       <div className="flex items-start justify-between gap-4">
                         <div className="space-y-2">
@@ -252,13 +359,17 @@ export default function ReplayListPage() {
                         </div>
                         <div className="text-right text-xs text-slate-400 space-y-1">
                           <div>
-                            <span className="uppercase tracking-wide text-slate-500">Duration:</span>{" "}
+                            <span className="uppercase tracking-wide text-slate-500">
+                              Duration:
+                            </span>{" "}
                             {recording.duration
                               ? formatDuration(recording.duration)
                               : "In Progress"}
                           </div>
                           <div>
-                            <span className="uppercase tracking-wide text-slate-500">Actions:</span>{" "}
+                            <span className="uppercase tracking-wide text-slate-500">
+                              Actions:
+                            </span>{" "}
                             {recording.actionCount}
                           </div>
                         </div>
