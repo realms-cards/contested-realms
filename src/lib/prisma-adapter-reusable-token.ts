@@ -23,6 +23,11 @@ export function ReusableTokenPrismaAdapter(prisma: PrismaClient): Adapter {
     // This allows the token to be used multiple times until it expires
     async useVerificationToken({ identifier, token }) {
       try {
+        console.log("[ReusableTokenAdapter] Looking up token:", {
+          identifier,
+          tokenPrefix: token.substring(0, 10) + "...",
+        });
+
         // Find the token without deleting it
         const verificationToken = await prisma.verificationToken.findUnique({
           where: {
@@ -33,7 +38,24 @@ export function ReusableTokenPrismaAdapter(prisma: PrismaClient): Adapter {
           },
         });
 
+        console.log(
+          "[ReusableTokenAdapter] Token found:",
+          verificationToken ? "yes" : "no"
+        );
+
         if (!verificationToken) {
+          // Debug: list all tokens for this identifier
+          const allTokens = await prisma.verificationToken.findMany({
+            where: { identifier },
+            select: { token: true, expires: true },
+          });
+          console.log(
+            "[ReusableTokenAdapter] All tokens for identifier:",
+            allTokens.map((t) => ({
+              tokenPrefix: t.token.substring(0, 10),
+              expires: t.expires,
+            }))
+          );
           return null;
         }
 
