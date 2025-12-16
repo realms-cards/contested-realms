@@ -140,7 +140,7 @@ King Arthur
             </tr>
             <tr>
               <td style="padding-top:24px;padding-bottom:32px;">
-                <a href="${escapedUrl}" style="display:inline-block;padding:14px 28px;background:${brandColor};color:${buttonTextColor};text-decoration:none;border-radius:12px;font-weight:600;">Complete sign-in</a>
+                <a clicktracking="off" href="${escapedUrl}" style="display:inline-block;padding:14px 28px;background:${brandColor};color:${buttonTextColor};text-decoration:none;border-radius:12px;font-weight:600;">Complete sign-in</a>
               </td>
             </tr>
             <tr>
@@ -163,18 +163,6 @@ King Arthur
       subject,
       text,
       html,
-      headers: {
-        "X-SMTPAPI": JSON.stringify({
-          filters: {
-            clicktrack: {
-              settings: {
-                enable: 0,
-                enable_text: 0,
-              },
-            },
-          },
-        }),
-      },
     });
   } catch (error) {
     console.error("Failed to send magic link email:", error);
