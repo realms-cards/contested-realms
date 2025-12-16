@@ -166,6 +166,46 @@ export default function HarbingerPortalScreen({
     return undefined;
   }, [setupComplete, onSetupComplete]);
 
+  // Auto-reroll duplicate dice after all dice have settled
+  useEffect(() => {
+    // Only auto-reroll if it's my turn
+    if (!isMyTurn || !currentRoller) return;
+    // Wait until all dice are rolled
+    if (!allRolled) return;
+    // Wait until all dice animations are complete
+    if (!diceComplete.every(Boolean)) return;
+    // Only proceed if there are duplicates to reroll
+    if (!hasDuplicates) return;
+    // Don't reroll if phase is already complete
+    if (rollPhase === "complete") return;
+
+    // Auto-reroll all duplicate dice with a short delay for visual feedback
+    const timer = setTimeout(() => {
+      for (const index of duplicateIndices) {
+        rerollPortalDie(currentRoller, index);
+      }
+      // Reset dice completion state for rerolled dice
+      setDiceComplete((prev) => {
+        const next = [...prev];
+        for (const index of duplicateIndices) {
+          next[index] = false;
+        }
+        return next;
+      });
+    }, 800); // Short delay to show the duplicate highlight
+
+    return () => clearTimeout(timer);
+  }, [
+    isMyTurn,
+    currentRoller,
+    allRolled,
+    diceComplete,
+    hasDuplicates,
+    duplicateIndices,
+    rollPhase,
+    rerollPortalDie,
+  ]);
+
   // Don't render if no portal state
   if (!portalState) {
     return null;
@@ -204,7 +244,7 @@ export default function HarbingerPortalScreen({
             "Click each die to roll for portal tile locations."}
           {isMyTurn &&
             hasDuplicates &&
-            "Duplicate rolls! Click the highlighted dice to reroll."}
+            "Duplicate rolls detected! Rerolling automatically..."}
           {isMyTurn &&
             allUnique &&
             rollPhase !== "complete" &&
