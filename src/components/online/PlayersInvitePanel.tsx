@@ -375,7 +375,9 @@ export default function PlayersInvitePanel({
             {filteredLegacy.map((p) => {
               const isSelf = !!me && p.id === me.id;
               const patronTier = patrons
-                ? patrons.grandmaster.some((pt) => pt.id === p.id)
+                ? patrons.kingofthe?.some((pt) => pt.id === p.id)
+                  ? "kingofthe"
+                  : patrons.grandmaster.some((pt) => pt.id === p.id)
                   ? "grandmaster"
                   : patrons.apprentice.some((pt) => pt.id === p.id)
                   ? "apprentice"
@@ -438,7 +440,9 @@ export default function PlayersInvitePanel({
                 const isFriend = p.isFriend || optimisticFriends.has(p.userId);
                 const isPending = pendingFriendUserId === p.userId;
                 const patronTier = patrons
-                  ? patrons.grandmaster.some((pt) => pt.id === p.userId)
+                  ? patrons.kingofthe?.some((pt) => pt.id === p.userId)
+                    ? "kingofthe"
+                    : patrons.grandmaster.some((pt) => pt.id === p.userId)
                     ? "grandmaster"
                     : patrons.apprentice.some((pt) => pt.id === p.userId)
                     ? "apprentice"
