@@ -1381,7 +1381,9 @@ export default function AdminDashboard({
                           disabled={updatingPatronTier === user.id}
                           className={clsx(
                             "rounded border px-2 py-1 text-[11px] bg-slate-800 border-slate-700",
-                            user.patronTier === "grandmaster"
+                            user.patronTier === "kingofthe"
+                              ? "text-emerald-400"
+                              : user.patronTier === "grandmaster"
                               ? "text-amber-400"
                               : user.patronTier === "apprentice"
                               ? "text-blue-400"
@@ -1392,6 +1394,7 @@ export default function AdminDashboard({
                           <option value="">None</option>
                           <option value="apprentice">Apprentice</option>
                           <option value="grandmaster">Grandmaster</option>
+                          <option value="kingofthe">KingOfThe</option>
                         </select>
                       </td>
                     </tr>

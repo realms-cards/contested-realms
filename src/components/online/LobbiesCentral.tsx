@@ -3,9 +3,9 @@
 */
 "use client";
 
-import { RefreshCw, Eye, EyeOff, Phone, Loader2, Check, X } from "lucide-react";
+import { RefreshCw, Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState } from "react";
 import type { VoiceOutgoingRequest } from "@/app/online/online-context";
 import type { TournamentInfo, LobbyInfo } from "@/lib/net/protocol";
 import { generateLobbyName } from "@/lib/random-name-generator";
@@ -457,11 +457,8 @@ export default function LobbiesCentral({
   );
   const isInTournament = joinedTournament !== undefined;
   const isEngaged = isInLobby || isInTournament;
-  const activeVoiceSupport =
-    voiceSupport && voiceSupport.enabled ? voiceSupport : null;
-  const hasPendingVoiceRequest = activeVoiceSupport?.outgoingRequest
-    ? ["sending", "pending"].includes(activeVoiceSupport.outgoingRequest.status)
-    : false;
+  // Voice support is available but not used in condensed lobby list view
+  void voiceSupport;
   const [cfgName, setCfgName] = useState<string>("");
   const [cfgVisibility, setCfgVisibility] = useState<"open" | "private">(
     "open"
@@ -827,7 +824,7 @@ export default function LobbiesCentral({
         </label>
       </div>
 
-      <div className="divide-y divide-white/5 rounded-lg overflow-hidden ring-1 ring-white/10">
+      <div className="divide-y divide-white/5 rounded-lg overflow-hidden ring-1 ring-white/10 max-h-[400px] overflow-y-auto">
         {showLobbies &&
           filtered.map((l) => {
             const isMine = joinedLobbyId === l.id; // Source of truth: joinedLobbyId
@@ -838,15 +835,12 @@ export default function LobbiesCentral({
             return (
               <div
                 key={`lobby-${l.id}`}
-                className={`flex items-center gap-3 px-3 py-2 bg-black/20 border-l-4 border-blue-500/50 ${
+                className={`flex items-center gap-2 px-2 py-1.5 bg-black/20 border-l-2 border-blue-500/50 ${
                   isMine ? "ring-1 ring-emerald-500/40 bg-emerald-500/5" : ""
                 }`}
               >
-                <div className="flex items-center justify-center w-8 h-8 rounded-full bg-blue-600/20 text-blue-300">
-                  <span className="text-xs font-bold">L</span>
-                </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-base font-bold text-white mb-1 truncate flex items-center gap-2">
+                  <div className="text-sm font-medium text-white truncate flex items-center gap-2">
                     <span className="truncate">
                       {l.name || "Unnamed Lobby"}
                     </span>
@@ -865,203 +859,38 @@ export default function LobbiesCentral({
                       </span>
                     )}
                   </div>
-                  <div className="flex items-center gap-2 text-sm">
-                    <span className="font-mono opacity-50 text-xs truncate">
-                      {l.id}
-                    </span>
+                  <div className="flex items-center gap-1.5 text-xs opacity-70">
                     {l.status !== "open" && (
                       <span
-                        className={`text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded ${
+                        className={`text-[9px] uppercase tracking-wide px-1 py-0.5 rounded ${
                           l.status === "started"
-                            ? "bg-amber-500/10 text-amber-300 ring-1 ring-amber-500/30"
-                            : "bg-white/10 text-white/70 ring-1 ring-white/20"
+                            ? "bg-amber-500/10 text-amber-300"
+                            : "bg-white/10 text-white/70"
                         }`}
                       >
                         {l.status}
                       </span>
                     )}
-                    {l.visibility && (
-                      <span
-                        className={`inline-flex items-center justify-center w-5 h-5 rounded ring-1 ${
-                          l.visibility === "open"
-                            ? "bg-emerald-500/10 text-emerald-300 ring-emerald-500/30"
-                            : "bg-amber-500/10 text-amber-300 ring-amber-500/30"
-                        }`}
-                        title={
-                          l.visibility === "open"
-                            ? "Open lobby"
-                            : "Private lobby"
-                        }
-                      >
-                        {l.visibility === "open" ? (
-                          <Eye className="w-3 h-3" />
-                        ) : (
-                          <EyeOff className="w-3 h-3" />
-                        )}
-                      </span>
+                    {l.visibility === "private" && (
+                      <EyeOff
+                        className="w-3 h-3 text-amber-300"
+                        title="Private"
+                      />
                     )}
-                    <span className="opacity-70">•</span>
-                    <span className="opacity-90">Host: {host}</span>
-                    <span className="opacity-70">•</span>
-                    <span className="opacity-90">
-                      Players: {l.players.length}/{l.maxPlayers}
+                    <span>{host}</span>
+                    <span>•</span>
+                    <span>
+                      {l.players.length}/{l.maxPlayers}
                     </span>
-                  </div>
-                  <div className="mt-1 flex flex-wrap gap-1 items-center">
-                    {l.players.length === 0 && (
-                      <span className="text-xs opacity-70">No players yet</span>
-                    )}
                     {isMine &&
                       myId &&
                       l.hostId === myId &&
                       l.status === "open" &&
                       l.players.length < l.maxPlayers && (
-                        <span className="text-[11px] text-amber-300 animate-pulse">
-                          ⏳ Invite a friend or share lobby ID
+                        <span className="text-amber-300 animate-pulse ml-1">
+                          ⏳ Invite friend
                         </span>
                       )}
-                    {l.players.map((p) => {
-                      const isReady = (l.readyPlayerIds || []).includes(p.id);
-                      const isHostP = p.id === l.hostId;
-                      const isYou = !!myId && p.id === myId;
-                      const voiceActive = !!activeVoiceSupport && isMine;
-                      const outgoingForPlayer =
-                        voiceActive &&
-                        activeVoiceSupport?.outgoingRequest?.targetId === p.id
-                          ? activeVoiceSupport.outgoingRequest
-                          : null;
-                      const incomingFromThisPlayer =
-                        voiceActive &&
-                        activeVoiceSupport?.incomingFrom === p.id;
-                      const isAlreadyConnected =
-                        voiceActive &&
-                        (activeVoiceSupport?.connectedPeerIds ?? []).includes(
-                          p.id
-                        );
-                      const buttonDisabled =
-                        !voiceActive ||
-                        isYou ||
-                        isAlreadyConnected ||
-                        (outgoingForPlayer
-                          ? ["sending", "pending"].includes(
-                              outgoingForPlayer.status
-                            )
-                          : hasPendingVoiceRequest);
-
-                      let statusLabel: ReactNode = null;
-                      if (isAlreadyConnected) {
-                        statusLabel = (
-                          <span className="inline-flex items-center gap-1 text-[10px] text-emerald-300">
-                            <Phone className="h-3 w-3" />
-                            Connected
-                          </span>
-                        );
-                      } else if (outgoingForPlayer) {
-                        switch (outgoingForPlayer.status) {
-                          case "sending":
-                            statusLabel = (
-                              <span className="inline-flex items-center gap-1 text-[10px] text-sky-300">
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                                Sending
-                              </span>
-                            );
-                            break;
-                          case "pending":
-                            statusLabel = (
-                              <span className="inline-flex items-center gap-1 text-[10px] text-sky-300">
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                                Pending
-                              </span>
-                            );
-                            break;
-                          case "accepted":
-                            statusLabel = (
-                              <span className="inline-flex items-center gap-1 text-[10px] text-emerald-300">
-                                <Check className="h-3 w-3" />
-                                Accepted
-                              </span>
-                            );
-                            break;
-                          case "declined":
-                            statusLabel = (
-                              <span className="inline-flex items-center gap-1 text-[10px] text-amber-300">
-                                <X className="h-3 w-3" />
-                                Declined
-                              </span>
-                            );
-                            break;
-                          case "cancelled":
-                            statusLabel = (
-                              <span className="inline-flex items-center gap-1 text-[10px] text-slate-400">
-                                <X className="h-3 w-3" />
-                                Cancelled
-                              </span>
-                            );
-                            break;
-                          default:
-                            break;
-                        }
-                      } else if (incomingFromThisPlayer) {
-                        statusLabel = (
-                          <span className="inline-flex items-center gap-1 text-[10px] text-amber-200">
-                            <Phone className="h-3 w-3" />
-                            Incoming
-                          </span>
-                        );
-                      }
-
-                      return (
-                        <div
-                          key={p.id}
-                          className={`flex items-center gap-2 text-[11px] px-1.5 py-0.5 rounded ring-1 ${
-                            isReady
-                              ? "bg-emerald-500/10 text-emerald-300 ring-emerald-500/30"
-                              : "bg-slate-800/60 text-slate-300 ring-slate-700/60"
-                          }`}
-                          title={`${p.displayName}${isYou ? " • You" : ""}${
-                            isHostP ? " • Host" : ""
-                          }${isReady ? " • Ready" : " • Not ready"}`}
-                        >
-                          <span>{p.displayName}</span>
-                          {isYou && (
-                            <span className="text-[10px] uppercase tracking-wide text-slate-300">
-                              You
-                            </span>
-                          )}
-                          {isHostP && (
-                            <span className="text-[10px] uppercase tracking-wide text-indigo-300">
-                              Host
-                            </span>
-                          )}
-                          {voiceActive && !isYou && (
-                            <button
-                              type="button"
-                              className={`inline-flex items-center justify-center rounded bg-blue-600/70 px-1.5 py-0.5 text-[10px] text-white transition ${
-                                buttonDisabled
-                                  ? "opacity-40 cursor-not-allowed"
-                                  : "hover:bg-blue-600"
-                              }`}
-                              onClick={() =>
-                                activeVoiceSupport?.onRequest(p.id)
-                              }
-                              disabled={buttonDisabled}
-                              title={
-                                buttonDisabled
-                                  ? outgoingForPlayer
-                                    ? "Voice request pending"
-                                    : isAlreadyConnected
-                                    ? `${p.displayName} is already connected`
-                                    : "Complete or cancel your current voice request first"
-                                  : `Request voice chat with ${p.displayName}`
-                              }
-                            >
-                              <Phone className="h-3 w-3" />
-                            </button>
-                          )}
-                          {statusLabel}
-                        </div>
-                      );
-                    })}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">

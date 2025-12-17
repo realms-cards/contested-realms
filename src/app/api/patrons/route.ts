@@ -23,11 +23,15 @@ export async function GET(): Promise<NextResponse> {
     const grandmaster = patrons
       .filter((p) => p.patronTier === "grandmaster")
       .map((p) => ({ id: p.id, name: p.name ?? p.id }));
+    const kingofthe = patrons
+      .filter((p) => p.patronTier === "kingofthe")
+      .map((p) => ({ id: p.id, name: p.name ?? p.id }));
 
     return NextResponse.json({
       apprentice,
       grandmaster,
-      all: [...grandmaster, ...apprentice],
+      kingofthe,
+      all: [...kingofthe, ...grandmaster, ...apprentice],
     });
   } catch (error) {
     console.error("[patrons] Failed to fetch patrons:", error);

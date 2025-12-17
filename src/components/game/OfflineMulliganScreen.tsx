@@ -394,6 +394,8 @@ export default function OfflineMulliganScreen({
                 className={`rounded px-4 py-2 text-sm font-medium transition-colors ${
                   submitted
                     ? "bg-green-700/60 cursor-not-allowed"
+                    : isSecondSeat && !seerCompleted
+                    ? "bg-amber-600 hover:bg-amber-700"
                     : "bg-green-600 hover:bg-green-700"
                 }`}
                 onClick={handleFinalize}
@@ -401,10 +403,16 @@ export default function OfflineMulliganScreen({
                 title={
                   submitted
                     ? "Waiting for other players to finish mulligans"
+                    : isSecondSeat && !seerCompleted
+                    ? "Complete Second Player Seer first"
                     : undefined
                 }
               >
-                {submitted ? "Ready — Waiting for others…" : finalizeLabel}
+                {submitted
+                  ? "Ready — Waiting for others…"
+                  : isSecondSeat && !seerCompleted
+                  ? "Complete Seer to Start"
+                  : finalizeLabel}
               </button>
             )}
           </div>
