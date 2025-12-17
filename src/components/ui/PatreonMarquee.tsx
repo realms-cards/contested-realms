@@ -36,6 +36,7 @@ export default function PatreonMarquee() {
   if (!hasApprentice && !hasGrandmaster) return null;
 
   // Build patron elements with tier-specific colors
+  // Note: kingofthe tier is excluded from marquee (special tier for site owner)
   const patronElements: React.ReactNode[] = [];
 
   patrons.grandmaster.forEach((patron, i) => {

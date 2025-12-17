@@ -4,7 +4,7 @@ import { AdminAccessError, requireAdminSession } from "@/lib/admin/auth";
 import type { AdminUserSummary } from "@/lib/admin/types";
 import { prisma } from "@/lib/prisma";
 
-const VALID_PATRON_TIERS = ["apprentice", "grandmaster"] as const;
+const VALID_PATRON_TIERS = ["apprentice", "grandmaster", "kingofthe"] as const;
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

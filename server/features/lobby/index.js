@@ -669,10 +669,28 @@ function createLobbyFeature(deps) {
     return { ok: true, matchId: match.id };
   }
 
+  // Hide started matches that have been inactive for more than 1 hour
+  const STALE_MATCH_DISPLAY_MS = 60 * 60 * 1000; // 1 hour
+
   function lobbiesArray() {
     const arr = [];
+    const now = Date.now();
     for (const lobby of lobbies.values()) {
-      if (lobby.status !== "closed") arr.push(getLobbyInfo(lobby));
+      if (lobby.status === "closed") continue;
+      // Hide stale started matches from the lobby list (but don't delete them)
+      if (lobby.status === "started") {
+        // Check both lobby.lastActive and match.lastTs for activity
+        let lastActivity = lobby.lastActive || 0;
+        if (lobby.matchId) {
+          const match = matches.get(lobby.matchId);
+          if (match && typeof match.lastTs === "number") {
+            lastActivity = Math.max(lastActivity, match.lastTs);
+          }
+        }
+        const inactiveMs = now - lastActivity;
+        if (inactiveMs > STALE_MATCH_DISPLAY_MS) continue;
+      }
+      arr.push(getLobbyInfo(lobby));
     }
     return arr;
   }

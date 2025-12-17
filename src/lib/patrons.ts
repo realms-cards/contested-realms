@@ -1,5 +1,5 @@
 // Patron tier types
-export type PatronTier = "apprentice" | "grandmaster";
+export type PatronTier = "apprentice" | "grandmaster" | "kingofthe";
 
 // Color styles for patron tiers
 // Full glow for marquee, minimal glow for chat/player lists
@@ -26,6 +26,17 @@ export const PATRON_COLORS = {
     bg: "bg-amber-500/10",
     glow: "shadow-[0_0_10px_rgba(245,158,11,0.5)]",
   },
+  kingofthe: {
+    text: "text-emerald-400",
+    // Full glow for marquee
+    textShadow:
+      "0 0 10px #34d399, 0 0 20px #34d399, 0 0 30px #10b981, 0 0 40px #059669",
+    // Minimal glow for chat/player lists
+    textShadowMinimal: "0 0 6px rgba(52,211,153,0.6)",
+    border: "border-emerald-500/30",
+    bg: "bg-emerald-500/10",
+    glow: "shadow-[0_0_10px_rgba(52,211,153,0.5)]",
+  },
 } as const;
 
 // Patron info from API
@@ -38,6 +49,7 @@ export type PatronInfo = {
 export type PatronData = {
   apprentice: PatronInfo[];
   grandmaster: PatronInfo[];
+  kingofthe?: PatronInfo[];
   all: PatronInfo[];
 };
 
@@ -75,6 +87,7 @@ export function clearPatronCache(): void {
 // Synchronous helpers that use cached data (return null if not loaded)
 export function getPatronTier(userId: string): PatronTier | null {
   if (!patronCache) return null;
+  if (patronCache.kingofthe?.some((p) => p.id === userId)) return "kingofthe";
   if (patronCache.grandmaster.some((p) => p.id === userId))
     return "grandmaster";
   if (patronCache.apprentice.some((p) => p.id === userId)) return "apprentice";
