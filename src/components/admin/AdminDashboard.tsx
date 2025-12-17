@@ -287,10 +287,10 @@ export default function AdminDashboard({
     async (matchId: string) => {
       if (
         !confirm(
-          `Are you sure you want to cleanup stale match ${matchId.slice(
+          `Are you sure you want to end match ${matchId.slice(
             0,
             8
-          )}...?`
+          )}...? Players will be notified.`
         )
       ) {
         return;
@@ -725,25 +725,21 @@ export default function AdminDashboard({
                           >
                             Spectate
                           </Link>
-                          {match.startedAt &&
-                            Date.now() - match.startedAt >
-                              2 * 24 * 60 * 60 * 1000 && (
-                              <button
-                                onClick={() => cleanupMatch(match.matchId)}
-                                disabled={cleaningUpMatch === match.matchId}
-                                className={clsx(
-                                  "rounded px-2 py-1 text-[10px]",
-                                  cleaningUpMatch === match.matchId
-                                    ? "bg-slate-700/50 text-slate-400 cursor-wait"
-                                    : "bg-amber-600/20 text-amber-200 hover:bg-amber-600/30"
-                                )}
-                                title="Remove stale match (older than 2 days)"
-                              >
-                                {cleaningUpMatch === match.matchId
-                                  ? "Cleaning…"
-                                  : "Cleanup"}
-                              </button>
+                          <button
+                            onClick={() => cleanupMatch(match.matchId)}
+                            disabled={cleaningUpMatch === match.matchId}
+                            className={clsx(
+                              "rounded px-2 py-1 text-[10px]",
+                              cleaningUpMatch === match.matchId
+                                ? "bg-slate-700/50 text-slate-400 cursor-wait"
+                                : "bg-rose-600/20 text-rose-200 hover:bg-rose-600/30"
                             )}
+                            title="End this match (players will be notified)"
+                          >
+                            {cleaningUpMatch === match.matchId
+                              ? "Ending…"
+                              : "End Match"}
+                          </button>
                         </td>
                       </tr>
                     );

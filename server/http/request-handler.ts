@@ -862,10 +862,57 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
               return;
             }
 
-            // Clear player matchId references
+            // Check if one player is on Death's Door - auto-determine winner
+            let winnerId: string | null = null;
+            let winnerSeat: "p1" | "p2" | null = null;
+            let reason = "admin_cleanup";
+            let message = "Match was ended by an administrator";
+
+            const game = match.game as {
+              players?: {
+                p1?: { lifeState?: string };
+                p2?: { lifeState?: string };
+              };
+              winner?: "p1" | "p2" | null;
+              matchEnded?: boolean;
+            } | null;
+            const gamePlayers = game?.players;
+            const p1LifeState = gamePlayers?.p1?.lifeState;
+            const p2LifeState = gamePlayers?.p2?.lifeState;
+
             const playerIds = Array.isArray(match.playerIds)
               ? match.playerIds.map((id: unknown) => String(id))
               : [];
+
+            // If exactly one player is on Death's Door, the other wins
+            if (p1LifeState === "dd" && p2LifeState !== "dd") {
+              // P1 is on Death's Door, P2 wins
+              winnerSeat = "p2";
+              winnerId = playerIds[1] || null;
+              reason = "deaths_door_timeout";
+              message = "Match ended: Player 1 was on Death's Door";
+              console.log(
+                `[Admin] Match ${matchId}: P1 on Death's Door, P2 wins`
+              );
+            } else if (p2LifeState === "dd" && p1LifeState !== "dd") {
+              // P2 is on Death's Door, P1 wins
+              winnerSeat = "p1";
+              winnerId = playerIds[0] || null;
+              reason = "deaths_door_timeout";
+              message = "Match ended: Player 2 was on Death's Door";
+              console.log(
+                `[Admin] Match ${matchId}: P2 on Death's Door, P1 wins`
+              );
+            } else if (p1LifeState === "dd" && p2LifeState === "dd") {
+              // Both on Death's Door - it's a draw
+              reason = "deaths_door_draw";
+              message = "Match ended: Both players were on Death's Door (draw)";
+              console.log(
+                `[Admin] Match ${matchId}: Both on Death's Door, draw`
+              );
+            }
+
+            // Clear player matchId references
             for (const pid of playerIds) {
               const player = players.get(pid);
               if (player && player.matchId === matchId) {
@@ -873,18 +920,31 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
               }
             }
 
-            // Notify clients
+            // Notify clients with winner info if determined
             deps.io.to(`match:${matchId}`).emit("matchEnded", {
               matchId,
-              reason: "admin_cleanup",
-              message: "Stale match was cleaned up by an administrator",
+              reason,
+              message,
+              winnerId,
+              winnerSeat,
             });
 
-            // Mark match as ended
+            // Mark match as ended with winner
             match.status = "ended";
             match._finalized = true;
+            if (winnerId) {
+              match.winnerId = winnerId;
+            }
+            if (winnerSeat && game) {
+              game.winner = winnerSeat;
+              game.matchEnded = true;
+            }
 
-            console.log(`[Admin] Cleaned up stale match ${matchId}`);
+            console.log(
+              `[Admin] Cleaned up match ${matchId}${
+                winnerId ? ` (winner: ${winnerId})` : ""
+              }`
+            );
 
             res.statusCode = 200;
             res.setHeader("Content-Type", "application/json");
