@@ -1,9 +1,115 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { CardPreviewData } from "@/lib/game/card-preview.types";
 import { TOKEN_BY_KEY, tokenTextureUrl } from "@/lib/game/tokens";
+
+const SITE_SIZE_MULTIPLIER = 1.15;
+
+type LayoutState = {
+  width: number;
+  isShort: boolean;
+  preferBottom: boolean;
+};
+
+const parsePx = (value: string | null | undefined) => {
+  const parsed = Number.parseFloat((value ?? "").trim());
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+function computeLayout(isSite: boolean): LayoutState {
+  if (typeof window === "undefined") {
+    return {
+      width: isSite ? 320 * SITE_SIZE_MULTIPLIER : 240,
+      isShort: false,
+      preferBottom: false,
+    };
+  }
+
+  const { innerWidth, innerHeight } = window;
+  const docStyle = window.getComputedStyle(document.documentElement);
+  const uiTop = parsePx(docStyle.getPropertyValue("--ui-top"));
+  const uiBottom = parsePx(docStyle.getPropertyValue("--ui-bottom"));
+  const availableHeight = Math.max(innerHeight - uiTop - uiBottom, 0);
+  const isShortHeight = innerHeight < 720;
+  const preferBottomNext = innerHeight < 520;
+
+  let heightCapFactor = 0.8;
+  if (innerHeight < 720) heightCapFactor = 0.68;
+  if (innerHeight < 640) heightCapFactor = 0.6;
+  if (innerHeight < 580) heightCapFactor = 0.54;
+  if (innerHeight < 520) heightCapFactor = 0.5;
+  if (innerHeight < 460) heightCapFactor = 0.46;
+  const cappedHeight = Math.max(
+    (availableHeight > 0 ? availableHeight : innerHeight) * heightCapFactor,
+    0
+  );
+
+  const aspectWidthOverHeight = 3 / 4;
+  const widthFromHeight = cappedHeight * aspectWidthOverHeight;
+
+  const baseVwFraction = 0.21;
+  const heightShortness = Math.max(0, Math.min(1, (780 - innerHeight) / 360));
+  const widthShortness = Math.max(0, Math.min(1, (1400 - innerWidth) / 600));
+  const heightReduction = 0.5 * heightShortness;
+  const widthReduction = 0.65 * widthShortness;
+  let vwFraction =
+    baseVwFraction * (1 - heightReduction) * (1 - widthReduction);
+  if (preferBottomNext) {
+    vwFraction *= 0.82;
+  }
+  vwFraction = Math.max(vwFraction, 0.12);
+  const preferredWidth = innerWidth * vwFraction;
+  const minWidth = 200;
+  const absoluteMaxWidth = isSite ? 345 * SITE_SIZE_MULTIPLIER : 345;
+
+  let maxWidth = Number.isFinite(widthFromHeight)
+    ? Math.min(widthFromHeight, absoluteMaxWidth)
+    : absoluteMaxWidth;
+  if (!Number.isFinite(maxWidth) || maxWidth <= 0) {
+    maxWidth = absoluteMaxWidth;
+  }
+
+  const wideViewportRatio = Math.max(0, innerWidth - 1280) / 720;
+  const widthRatioBase = preferBottomNext ? 0.29 : 0.38;
+  const widthRatioDynamic = widthRatioBase * (1 - widthShortness * 0.45);
+  const widthRatio = Math.max(
+    widthRatioDynamic * (1 - wideViewportRatio * 0.45),
+    0.18
+  );
+  const horizontalCap = Math.min(
+    Math.max(innerWidth - 72, 220),
+    innerWidth * widthRatio,
+    absoluteMaxWidth
+  );
+  maxWidth = Math.min(maxWidth, horizontalCap);
+
+  let width = Math.max(minWidth, preferredWidth);
+  if (Number.isFinite(maxWidth) && maxWidth > 0) {
+    width = Math.min(width, maxWidth);
+  }
+  if (maxWidth > 0 && maxWidth < minWidth) {
+    width = maxWidth;
+  }
+
+  const baseEnlarge = preferBottomNext ? 1.18 : 1.5;
+  const enlargeReduction = wideViewportRatio * 0.45;
+  const enlargeFloor = preferBottomNext ? 1.05 : 1.25;
+  const enlargeFactor = Math.max(enlargeFloor, baseEnlarge - enlargeReduction);
+  width = Math.min(maxWidth, Math.max(minWidth, width * enlargeFactor));
+
+  // Apply site multiplier
+  if (isSite) {
+    width = Math.min(width * SITE_SIZE_MULTIPLIER, absoluteMaxWidth);
+  }
+
+  return {
+    width,
+    isShort: isShortHeight,
+    preferBottom: preferBottomNext,
+  };
+}
 
 type Anchor = "top-right" | "bottom-right" | "top-left" | "bottom-left";
 
@@ -35,124 +141,23 @@ export default function CardPreview({
 
   const isSite = isRegularSite || isSiteReplacementToken;
 
-  type LayoutState = {
-    width: number;
-    isShort: boolean;
-    preferBottom: boolean;
-  };
-
-  const [layout, setLayout] = useState<LayoutState>(() => ({
-    width: isSite ? 320 : 240,
-    isShort: false,
-    preferBottom: false,
-  }));
+  // Compute layout synchronously on first render to avoid "blow up" effect
+  const initialLayout = useMemo(() => computeLayout(isSite), [isSite]);
+  const [layout, setLayout] = useState<LayoutState>(initialLayout);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const parsePx = (value: string | null | undefined) => {
-      const parsed = Number.parseFloat((value ?? "").trim());
-      return Number.isFinite(parsed) ? parsed : 0;
-    };
+    const handleResize = () => setLayout(computeLayout(isSite));
 
-    const compute = () => {
-      const { innerWidth, innerHeight } = window;
-      const docStyle = window.getComputedStyle(document.documentElement);
-      const uiTop = parsePx(docStyle.getPropertyValue("--ui-top"));
-      const uiBottom = parsePx(docStyle.getPropertyValue("--ui-bottom"));
-      const availableHeight = Math.max(innerHeight - uiTop - uiBottom, 0);
-      const isShortHeight = innerHeight < 720;
-      const preferBottomNext = innerHeight < 520;
+    // Sync layout on mount (in case useMemo ran during SSR)
+    handleResize();
 
-      let heightCapFactor = 0.8;
-      if (innerHeight < 720) heightCapFactor = 0.68;
-      if (innerHeight < 640) heightCapFactor = 0.6;
-      if (innerHeight < 580) heightCapFactor = 0.54;
-      if (innerHeight < 520) heightCapFactor = 0.5;
-      if (innerHeight < 460) heightCapFactor = 0.46;
-      const cappedHeight = Math.max(
-        (availableHeight > 0 ? availableHeight : innerHeight) * heightCapFactor,
-        0
-      );
-
-      const aspectWidthOverHeight = 3 / 4;
-      const widthFromHeight = cappedHeight * aspectWidthOverHeight;
-
-      const baseVwFraction = 0.21; // unify across types for consistent scale
-      const heightShortness = Math.max(
-        0,
-        Math.min(1, (780 - innerHeight) / 360)
-      );
-      const widthShortness = Math.max(
-        0,
-        Math.min(1, (1400 - innerWidth) / 600)
-      );
-      const heightReduction = 0.5 * heightShortness;
-      const widthReduction = 0.65 * widthShortness;
-      let vwFraction =
-        baseVwFraction * (1 - heightReduction) * (1 - widthReduction);
-      if (preferBottomNext) {
-        vwFraction *= 0.82;
-      }
-      vwFraction = Math.max(vwFraction, 0.12);
-      const preferredWidth = innerWidth * vwFraction;
-      const minWidth = 200; // same bounds for sites and non-sites
-      const absoluteMaxWidth = 345;
-
-      let maxWidth = Number.isFinite(widthFromHeight)
-        ? Math.min(widthFromHeight, absoluteMaxWidth)
-        : absoluteMaxWidth;
-      if (!Number.isFinite(maxWidth) || maxWidth <= 0) {
-        maxWidth = absoluteMaxWidth;
-      }
-
-      // Ensure the preview does not overflow horizontal space
-      const wideViewportRatio = Math.max(0, innerWidth - 1280) / 720;
-      const widthRatioBase = preferBottomNext ? 0.29 : 0.38; // same across types
-      const widthRatioDynamic = widthRatioBase * (1 - widthShortness * 0.45);
-      const widthRatio = Math.max(
-        widthRatioDynamic * (1 - wideViewportRatio * 0.45),
-        0.18
-      );
-      const horizontalCap = Math.min(
-        Math.max(innerWidth - 72, 220),
-        innerWidth * widthRatio,
-        absoluteMaxWidth
-      );
-      maxWidth = Math.min(maxWidth, horizontalCap);
-
-      let width = Math.max(minWidth, preferredWidth);
-      if (Number.isFinite(maxWidth) && maxWidth > 0) {
-        width = Math.min(width, maxWidth);
-      }
-      if (maxWidth > 0 && maxWidth < minWidth) {
-        width = maxWidth;
-      }
-
-      const baseEnlarge = preferBottomNext ? 1.18 : 1.5;
-      const enlargeReduction = wideViewportRatio * 0.45;
-      const enlargeFloor = preferBottomNext ? 1.05 : 1.25;
-      const enlargeFactor = Math.max(
-        enlargeFloor,
-        baseEnlarge - enlargeReduction
-      );
-      width = Math.min(maxWidth, Math.max(minWidth, width * enlargeFactor));
-
-      const finalCssWidth = width;
-
-      setLayout({
-        width: finalCssWidth,
-        isShort: isShortHeight,
-        preferBottom: preferBottomNext,
-      });
-    };
-
-    compute();
-    window.addEventListener("resize", compute, { passive: true });
-    window.addEventListener("orientationchange", compute);
+    window.addEventListener("resize", handleResize, { passive: true });
+    window.addEventListener("orientationchange", handleResize);
     return () => {
-      window.removeEventListener("resize", compute);
-      window.removeEventListener("orientationchange", compute);
+      window.removeEventListener("resize", handleResize);
+      window.removeEventListener("orientationchange", handleResize);
     };
   }, [isSite]);
 
