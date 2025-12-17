@@ -236,6 +236,12 @@ export const createCoreSlice: StateCreator<
       let newLife = currentLife + delta;
       let newLifeState: LifeState = currentLifeState;
 
+      // Break Imposter mask when taking damage (delta < 0)
+      if (delta < 0 && state.imposterMasks[who]) {
+        // Schedule mask break after this state update completes
+        setTimeout(() => get().breakMask(who), 0);
+      }
+
       if (newLife > 20) {
         newLife = 20;
       } else if (newLife <= 0) {

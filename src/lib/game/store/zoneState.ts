@@ -976,10 +976,13 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
         get().log("Cannot modify opponent pile without consent");
         return state;
       }
+      // Get source array based on pile type
       const sourcePile =
         pile === "spellbook"
           ? [...state.zones[who].spellbook]
-          : [...state.zones[who].atlas];
+          : pile === "atlas"
+          ? [...state.zones[who].atlas]
+          : [...state.zones[who].hand];
       if (cardIndex < 0 || cardIndex >= sourcePile.length) return state;
       const card = sourcePile[cardIndex];
       if (!card) return state;
@@ -992,28 +995,37 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
       const zonesNext = { ...state.zones } as Record<PlayerKey, Zones>;
       const seatZones = { ...zonesNext[who] } as Zones;
 
+      // Update source pile
       if (pile === "spellbook") {
         seatZones.spellbook = sourcePile;
-      } else {
+      } else if (pile === "atlas") {
         seatZones.atlas = sourcePile;
+      } else {
+        seatZones.hand = sourcePile;
       }
 
       let actionDesc = "";
+      const pileName =
+        pile === "spellbook"
+          ? "Spellbook"
+          : pile === "atlas"
+          ? "Atlas"
+          : "Hand";
       switch (action) {
         case "top":
-          // Put back on top (re-insert at same position or front)
+          // Put back on top (re-insert at same position or front) - only for piles
           if (pile === "spellbook") {
             seatZones.spellbook = [preparedCard, ...sourcePile];
-          } else {
+          } else if (pile === "atlas") {
             seatZones.atlas = [preparedCard, ...sourcePile];
           }
           actionDesc = "kept on top";
           break;
         case "bottom":
-          // Put on bottom
+          // Put on bottom - only for piles
           if (pile === "spellbook") {
             seatZones.spellbook = [...sourcePile, preparedCard];
-          } else {
+          } else if (pile === "atlas") {
             seatZones.atlas = [...sourcePile, preparedCard];
           }
           actionDesc = "put on bottom";
@@ -1026,10 +1038,13 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
           seatZones.graveyard = [preparedCard, ...seatZones.graveyard];
           actionDesc = "sent to cemetery";
           break;
+        case "banish":
+          seatZones.banished = [preparedCard, ...(seatZones.banished || [])];
+          actionDesc = "banished";
+          break;
       }
 
       zonesNext[who] = seatZones;
-      const pileName = pile === "spellbook" ? "Spellbook" : "Atlas";
       get().log(
         `${who.toUpperCase()} peeked '${
           card.name

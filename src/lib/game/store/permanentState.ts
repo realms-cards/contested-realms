@@ -10,6 +10,7 @@ type PermanentSlice = Pick<
   | "permanents"
   | "setTapPermanent"
   | "toggleTapPermanent"
+  | "toggleFaceDown"
   | "setPermanentOffset"
   | "applyDamageToPermanent"
   | "clearAllDamageForSeat"

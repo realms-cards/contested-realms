@@ -158,10 +158,12 @@ export async function middleware(req: NextRequest) {
 
   // Allow the custom lockdown page(s), API, and diagnostics without auth to avoid loops
   // Also allow public routes like /random-spell
+  // IMPORTANT: /api/auth must be allowed for NextAuth magic link callbacks to work
   if (
     pathname.startsWith("/lock") ||
     pathname.startsWith("/_lockdown") ||
     pathname.startsWith("/api/lock") ||
+    pathname.startsWith("/api/auth") ||
     pathname.startsWith("/api/assets") ||
     pathname.startsWith("/api/images") ||
     pathname.startsWith("/_diag") ||

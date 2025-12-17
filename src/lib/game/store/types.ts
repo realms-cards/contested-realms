@@ -144,6 +144,21 @@ export type AvatarState = EntityBase<CardRef | null> & {
   champion?: ChampionRef | null; // Dragonlord champion dragon
 };
 
+// --- Imposter Mask State (Gothic expansion) --------------------------------
+// Imposter can "mask" by banishing an Avatar from collection to gain their abilities.
+// The mask breaks when damaged or when putting on a new mask.
+export type ImposterMaskState = {
+  // The original Imposter avatar card (preserved to restore when unmasked)
+  originalAvatar: CardRef;
+  // The mask avatar card (from collection, now displayed as the avatar)
+  maskAvatar: CardRef;
+  // Timestamp when mask was applied (for syncing)
+  maskedAt: number;
+};
+
+// --- Imposter Mana Cost --------------------------------
+export const IMPOSTER_MASK_COST = 3; // Mana cost to mask yourself
+
 // --- Harbinger Portal State (Gothic expansion) --------------------------------
 export type PortalRollPhase = "pending" | "rolling" | "complete";
 
@@ -176,6 +191,7 @@ export type PermanentItem = EntityBase<CardRef> & {
   // Generic numeric counter displayed on the card (e.g., +1 counters)
   counters?: number | null; // absent/0 => no counter badge
   damage?: number | null;
+  faceDown?: boolean; // Card is flipped face-down (hidden from opponent)
 };
 export type Permanents = Record<CellKey, PermanentItem[]>;
 
@@ -706,6 +722,7 @@ export type GameState = {
     offset: [number, number]
   ) => void;
   toggleTapPermanent: (at: CellKey, index: number) => void;
+  toggleFaceDown: (at: CellKey, index: number) => void;
   // Generic counters on permanents
   addCounterOnPermanent: (at: CellKey, index: number) => void; // creates or increments (1 if missing)
   incrementPermanentCounter: (at: CellKey, index: number) => void;
@@ -739,9 +756,9 @@ export type GameState = {
   // Handle peeked card action (from peek dialog)
   handlePeekedCard: (
     who: PlayerKey,
-    pile: "spellbook" | "atlas",
+    pile: "spellbook" | "atlas" | "hand",
     cardIndex: number,
-    action: "top" | "bottom" | "hand" | "graveyard"
+    action: "top" | "bottom" | "hand" | "graveyard" | "banish"
   ) => void;
   // Transfer control
   transferPermanentControl: (at: CellKey, index: number, to?: 1 | 2) => void;
@@ -779,6 +796,15 @@ export type GameState = {
   rerollPortalDie: (seat: PlayerKey, dieIndex: number) => void;
   finalizePortalRolls: (seat: PlayerKey) => void;
   completePortalSetup: () => void;
+  // Imposter Mask State (Gothic expansion)
+  // Tracks when an Imposter avatar is wearing a mask (another avatar from collection)
+  imposterMasks: Record<PlayerKey, ImposterMaskState | null>;
+  // Mask yourself: banish avatar from collection to become that avatar (costs 3 mana)
+  maskWith: (who: PlayerKey, maskAvatar: CardRef) => boolean;
+  // Unmask: banish the mask avatar and restore original Imposter
+  unmask: (who: PlayerKey) => void;
+  // Break mask due to damage (automatic unmask)
+  breakMask: (who: PlayerKey) => void;
   // Mulligans
   mulligans: Record<PlayerKey, number>;
   mulligan: (who: PlayerKey) => void;
@@ -866,7 +892,7 @@ export type GameState = {
     cards: CardRef[];
     source?: {
       seat: PlayerKey;
-      pile: "spellbook" | "atlas";
+      pile: "spellbook" | "atlas" | "hand";
       from: "top" | "bottom";
     };
   } | null;
@@ -875,7 +901,7 @@ export type GameState = {
     cards: CardRef[],
     source?: {
       seat: PlayerKey;
-      pile: "spellbook" | "atlas";
+      pile: "spellbook" | "atlas" | "hand";
       from: "top" | "bottom";
     }
   ) => void;
@@ -990,5 +1016,6 @@ export type ServerPatchT = Partial<{
   events: GameState["events"];
   eventSeq: GameState["eventSeq"];
   portalState: GameState["portalState"];
+  imposterMasks: GameState["imposterMasks"];
   __replaceKeys: string[];
 }>;

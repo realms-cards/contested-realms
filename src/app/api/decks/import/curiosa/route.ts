@@ -745,7 +745,7 @@ async function fetchCuriosatrpc(
     const deckList = listData?.result?.data?.json;
     if (!Array.isArray(deckList)) return null;
 
-    // Parse sideboard (Collection zone) - avatar is also stored here
+    // Parse sideboard (Collection zone) - may contain avatars for Imposter ability
     let sideboardList: CuriosatrpcDeck[] = [];
     if (sideboardRes.ok) {
       const sideboardData = await sideboardRes.json();
@@ -755,28 +755,29 @@ async function fetchCuriosatrpc(
       }
     }
 
-    // Extract avatar from sideboard (first Avatar type card)
+    // Get main avatar from deck metadata first (this is the authoritative source)
+    // The sideboard may contain additional avatars for Imposter ability
     let avatarName: string | null = null;
-    for (const entry of sideboardList) {
-      if (entry.card?.type?.toLowerCase() === "avatar") {
-        avatarName = entry.card.name;
-        break;
-      }
-    }
-
-    // Fallback: try metadata avatars array
     let deckName: string | null = null;
     if (metaRes.ok) {
       const metaData = await metaRes.json();
       const meta = metaData?.result?.data?.json;
       if (meta) {
         deckName = meta.name || null;
-        // Avatar fallback from avatars array
-        if (!avatarName) {
-          const avatars = meta.avatars;
-          if (Array.isArray(avatars) && avatars.length > 0) {
-            avatarName = avatars[0]?.card?.name || null;
-          }
+        // Primary source: avatars array from deck metadata
+        const avatars = meta.avatars;
+        if (Array.isArray(avatars) && avatars.length > 0) {
+          avatarName = avatars[0]?.card?.name || null;
+        }
+      }
+    }
+
+    // Fallback: if no avatar in metadata, try first avatar in sideboard
+    if (!avatarName) {
+      for (const entry of sideboardList) {
+        if (entry.card?.type?.toLowerCase() === "avatar") {
+          avatarName = entry.card.name;
+          break;
         }
       }
     }
@@ -832,54 +833,35 @@ async function importFromTrpcData(
     zone: "main" | "sideboard";
   }[] = [];
 
-  // Build a map of collection card quantities by variantId to subtract from main deck
-  // (Curiosa's getDecklistById may include collection cards, so we need to dedupe)
-  const collectionByVariantId = new Map<string, number>();
-  for (const entry of sideboardList) {
-    const { card, variantId, quantity } = entry;
-    // Skip avatars - they're handled separately
-    if (card.type?.toLowerCase() === "avatar") continue;
-    const key = variantId || card.id;
-    collectionByVariantId.set(
-      String(key),
-      (collectionByVariantId.get(String(key)) || 0) + quantity
-    );
-  }
-
-  // Process main deck, subtracting any collection quantities
+  // Process main deck cards
+  // Note: Sideboard/collection cards are treated as ADDITIONAL cards, not duplicates
+  // (Important for Imposter decks where collection contains avatars to mask as)
   for (const entry of deckList) {
     const { card, variantId, quantity } = entry;
     const variant =
       card.variants.find((v) => v.id === variantId) || card.variants[0];
     const slug = variant?.slug || `${card.slug}`;
 
-    // Subtract collection quantity if this card also appears in collection
-    const key = variantId || card.id;
-    const collectionQty = collectionByVariantId.get(String(key)) || 0;
-    const mainDeckQty = Math.max(0, quantity - collectionQty);
-
-    // Clear the collection entry so we don't double-subtract
-    if (collectionQty > 0) {
-      collectionByVariantId.delete(String(key));
-    }
-
-    if (mainDeckQty > 0) {
-      entries.push({
-        name: card.name,
-        slug,
-        quantity: mainDeckQty,
-        category: card.category,
-        type: card.type,
-        zone: "main",
-      });
-    }
+    entries.push({
+      name: card.name,
+      slug,
+      quantity,
+      category: card.category,
+      type: card.type,
+      zone: "main",
+    });
   }
 
-  // Process sideboard (Collection zone) - skip avatars as they're handled separately
+  // Process sideboard (Collection zone)
+  // The main avatar is handled separately (added to Spellbook later)
+  // But additional avatars (for Imposter ability) should go to Collection
   for (const entry of sideboardList) {
     const { card, variantId, quantity } = entry;
-    // Skip avatars - they go in Spellbook, not Sideboard
-    if (card.type?.toLowerCase() === "avatar") continue;
+    const isAvatar = card.type?.toLowerCase() === "avatar";
+
+    // Skip the main avatar (it's added to Spellbook separately)
+    // But keep additional avatars for Collection (Imposter ability)
+    if (isAvatar && card.name === avatarName) continue;
 
     const variant =
       card.variants.find((v) => v.id === variantId) || card.variants[0];
@@ -891,7 +873,7 @@ async function importFromTrpcData(
       quantity,
       category: card.category,
       type: card.type,
-      zone: "sideboard",
+      zone: "sideboard", // Will become Collection zone
     });
   }
 

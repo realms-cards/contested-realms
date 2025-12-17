@@ -12,13 +12,13 @@ export interface HandPeekDialogProps {
   cards: CardRef[];
   source?: {
     seat: PlayerKey;
-    pile: "spellbook" | "atlas";
+    pile: "spellbook" | "atlas" | "hand";
     from: "top" | "bottom";
   };
   onClose: () => void;
 }
 
-type PeekAction = "top" | "bottom" | "hand" | "graveyard";
+type PeekAction = "top" | "bottom" | "hand" | "graveyard" | "banish";
 
 const GRID_CARD_WIDTH = CARD_SHORT * 0.55;
 const GRID_CARD_HEIGHT = CARD_LONG * 0.55;
@@ -111,7 +111,10 @@ export default function HandPeekDialog({
         {/* Hint for right-click actions */}
         {canAct && (
           <div className="text-xs text-zinc-400 -mt-1">
-            Right-click a card for actions (draw, bottom, cemetery)
+            Right-click a card for actions
+            {source?.pile === "hand"
+              ? " (discard, banish)"
+              : " (draw, bottom, cemetery)"}
           </div>
         )}
 
@@ -207,29 +210,41 @@ export default function HandPeekDialog({
           <div className="px-3 py-1.5 text-xs text-zinc-400 border-b border-zinc-700 truncate max-w-[180px]">
             {contextMenu.card.name}
           </div>
-          <button
-            className="w-full px-3 py-1.5 text-sm text-left hover:bg-white/10 transition-colors"
-            onClick={() => handleAction("top")}
-          >
-            ✓ Keep on top
-          </button>
-          <button
-            className="w-full px-3 py-1.5 text-sm text-left hover:bg-white/10 transition-colors text-emerald-400"
-            onClick={() => handleAction("hand")}
-          >
-            ✋ Draw to hand
-          </button>
-          <button
-            className="w-full px-3 py-1.5 text-sm text-left hover:bg-white/10 transition-colors text-amber-400"
-            onClick={() => handleAction("bottom")}
-          >
-            ↓ Put on bottom
-          </button>
+          {/* Pile peek actions (spellbook/atlas) */}
+          {source?.pile !== "hand" && (
+            <>
+              <button
+                className="w-full px-3 py-1.5 text-sm text-left hover:bg-white/10 transition-colors"
+                onClick={() => handleAction("top")}
+              >
+                ✓ Keep on top
+              </button>
+              <button
+                className="w-full px-3 py-1.5 text-sm text-left hover:bg-white/10 transition-colors text-emerald-400"
+                onClick={() => handleAction("hand")}
+              >
+                ✋ Draw to hand
+              </button>
+              <button
+                className="w-full px-3 py-1.5 text-sm text-left hover:bg-white/10 transition-colors text-amber-400"
+                onClick={() => handleAction("bottom")}
+              >
+                ↓ Put on bottom
+              </button>
+            </>
+          )}
+          {/* Common actions for both pile and hand peeks */}
           <button
             className="w-full px-3 py-1.5 text-sm text-left hover:bg-white/10 transition-colors text-red-400"
             onClick={() => handleAction("graveyard")}
           >
             ☠ Send to cemetery
+          </button>
+          <button
+            className="w-full px-3 py-1.5 text-sm text-left hover:bg-white/10 transition-colors text-purple-400"
+            onClick={() => handleAction("banish")}
+          >
+            ⛔ Banish
           </button>
         </div>
       )}
