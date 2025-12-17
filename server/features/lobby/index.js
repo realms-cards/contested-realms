@@ -1467,6 +1467,52 @@ function createLobbyFeature(deps) {
     });
   }
 
+  /**
+   * Reconstruct lobbies from recovered matches after server restart.
+   * This ensures "Active Games" shows ongoing matches even after a deploy.
+   * @param {Map<string, any>} recoveredMatches - Map of matchId -> match objects
+   */
+  function reconstructLobbiesFromMatches(recoveredMatches) {
+    if (!recoveredMatches || recoveredMatches.size === 0) return;
+    let count = 0;
+    for (const match of recoveredMatches.values()) {
+      if (!match || !match.id) continue;
+      // Skip ended matches
+      if (match.status === "ended" || match.status === "completed") continue;
+      // Use lobbyId if available, otherwise use matchId as lobby identifier
+      const lobbyId = match.lobbyId || match.id;
+      // Skip if lobby already exists
+      if (lobbies.has(lobbyId)) continue;
+
+      const now = Date.now();
+      const lobby = {
+        id: lobbyId,
+        name: match.lobbyName || null,
+        hostId: match.playerIds?.[0] || null,
+        playerIds: new Set(match.playerIds || []),
+        status: "started",
+        maxPlayers: match.maxPlayers || 2,
+        ready: new Set(match.playerIds || []),
+        visibility: "private", // Recovered lobbies are private by default
+        plannedMatchType: match.matchType || "constructed",
+        matchId: match.id,
+        createdAt: now,
+        lastActive: now,
+      };
+      lobbies.set(lobbyId, lobby);
+      count++;
+    }
+    if (count > 0) {
+      try {
+        console.log(
+          `[lobby] reconstructed ${count} lobby(ies) from recovered matches`
+        );
+      } catch {}
+      // Broadcast updated lobbies list
+      broadcastLobbies();
+    }
+  }
+
   return {
     lobbies,
     lobbyInvites,
@@ -1488,6 +1534,7 @@ function createLobbyFeature(deps) {
     upsertLobbyFromSerialized,
     createLobby,
     findOpenLobby,
+    reconstructLobbiesFromMatches,
   };
 }
 

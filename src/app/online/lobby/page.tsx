@@ -6,9 +6,7 @@ import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { useOnline } from "@/app/online/online-context";
 import LobbyChatConsole from "@/components/chat/LobbyChatConsole";
 import InviteOverlay from "@/components/online/InviteOverlay";
-import LobbiesCentral, {
-  CreateTournamentConfig,
-} from "@/components/online/LobbiesCentral";
+import LobbiesCentral from "@/components/online/LobbiesCentral";
 import MatchmakingPanel from "@/components/online/MatchmakingPanel";
 import OnlinePageShell from "@/components/online/OnlinePageShell";
 import PlayersInvitePanel from "@/components/online/PlayersInvitePanel";
@@ -226,7 +224,7 @@ function LobbyPageContent({
   // Tournaments API is provided by parent when the feature is enabled; otherwise undefined
   const tournamentsEnabled = !!tournamentsApi;
   const {
-    createTournament,
+    // createTournament - hidden, use /tournaments page
     joinTournament,
     leaveTournament,
     updateTournamentSettings,
@@ -1088,56 +1086,7 @@ function LobbyPageContent({
                 }
               : null
           }
-          onCreateTournament={
-            tournamentsEnabled
-              ? async (cfg: CreateTournamentConfig) => {
-                  console.log(`Creating tournament: "${cfg.name}"`);
-                  try {
-                    // DB "format" is the match type (constructed | sealed | draft)
-                    // Store pairing system separately in settings.pairingFormat
-                    const settings: Record<string, unknown> = {
-                      pairingFormat: cfg.format,
-                    };
-                    // Apply provided pack settings or sensible defaults
-                    if (cfg.matchType === "sealed") {
-                      settings.sealedConfig = cfg.sealedConfig ?? {
-                        packCounts: buildDefaultPackCounts(
-                          draftableSets,
-                          DEFAULT_SET,
-                          6
-                        ),
-                        timeLimit: 40,
-                        replaceAvatars: false,
-                      };
-                    } else if (cfg.matchType === "draft") {
-                      settings.draftConfig = cfg.draftConfig ?? {
-                        setMix: [DEFAULT_SET],
-                        packCount: 3,
-                        packSize: 15,
-                        packCounts: buildDefaultPackCounts(
-                          draftableSets,
-                          DEFAULT_SET,
-                          3
-                        ),
-                      };
-                    }
-
-                    await createTournament({
-                      name: cfg.name,
-                      format: cfg.matchType,
-                      maxPlayers: cfg.maxPlayers,
-                      settings: {
-                        ...settings,
-                        isPrivate: cfg.isPrivate,
-                      },
-                    });
-                    // Stay on lobby page - tournaments are now shown here
-                  } catch (error) {
-                    console.error("Failed to create tournament:", error);
-                  }
-                }
-              : undefined
-          }
+          onCreateTournament={undefined /* hidden - use /tournaments page */}
           onJoinTournament={
             tournamentsEnabled
               ? async (tournamentId: string) => {

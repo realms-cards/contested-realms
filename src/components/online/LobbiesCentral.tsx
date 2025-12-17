@@ -907,10 +907,19 @@ export default function LobbiesCentral({
                       Players: {l.players.length}/{l.maxPlayers}
                     </span>
                   </div>
-                  <div className="mt-1 flex flex-wrap gap-1">
+                  <div className="mt-1 flex flex-wrap gap-1 items-center">
                     {l.players.length === 0 && (
                       <span className="text-xs opacity-70">No players yet</span>
                     )}
+                    {isMine &&
+                      myId &&
+                      l.hostId === myId &&
+                      l.status === "open" &&
+                      l.players.length < l.maxPlayers && (
+                        <span className="text-[11px] text-amber-300 animate-pulse">
+                          ⏳ Invite a friend or share lobby ID
+                        </span>
+                      )}
                     {l.players.map((p) => {
                       const isReady = (l.readyPlayerIds || []).includes(p.id);
                       const isHostP = p.id === l.hostId;
@@ -1064,7 +1073,7 @@ export default function LobbiesCentral({
                         </span>
                         {myId && l.hostId !== myId && l.status === "open" && (
                           <span className="rounded-full px-3 py-1 text-[10px] bg-slate-700/80 text-slate-100">
-                            Waiting for host to start match
+                            Waiting for host to start
                           </span>
                         )}
                       </div>
@@ -1156,7 +1165,11 @@ export default function LobbiesCentral({
                           </Link>
                         )}
                       <button
-                        className="rounded bg-slate-700 hover:bg-slate-600 px-3 py-1 text-xs disabled:opacity-40"
+                        className={`rounded px-4 py-1.5 text-sm font-medium disabled:opacity-40 ${
+                          full
+                            ? "bg-slate-700 hover:bg-slate-600"
+                            : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-500/20"
+                        }`}
                         onClick={() => onJoin(l.id)}
                         disabled={
                           !open || full || (isEngaged && l.id !== joinedLobbyId)
@@ -1170,10 +1183,10 @@ export default function LobbiesCentral({
                             ? `Already in ${
                                 isInLobby ? "another lobby" : "tournament"
                               }`
-                            : "Join lobby"
+                            : "Join this lobby"
                         }
                       >
-                        {full ? "Full" : "Join"}
+                        {full ? "Full" : "Join Game"}
                       </button>
                     </div>
                   )}

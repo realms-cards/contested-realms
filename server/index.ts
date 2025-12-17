@@ -895,6 +895,7 @@ const {
   handleLobbyControlAsLeader,
   setBotManager,
   upsertLobbyFromSerialized,
+  reconstructLobbiesFromMatches,
 } = lobbyFeature;
 
 registerPubSubListeners({
@@ -4905,6 +4906,8 @@ server.listen(PORT, () => {
   }
   try {
     await recoverActiveMatches();
+    // Reconstruct lobbies from recovered matches so "Active Games" shows ongoing matches
+    reconstructLobbiesFromMatches(matches);
   } catch {}
   // Enable cluster pub/sub processing now that maps are initialized
   try {
