@@ -1,8 +1,10 @@
 import { Prisma } from "@prisma/client";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { AdminAccessError, requireAdminSession } from "@/lib/admin/auth";
 import type { AdminUserSummary } from "@/lib/admin/types";
 import { prisma } from "@/lib/prisma";
+
+const VALID_PATRON_TIERS = ["apprentice", "grandmaster"] as const;
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -51,6 +53,7 @@ export async function GET(request: Request): Promise<NextResponse> {
         id: true,
         name: true,
         emailVerified: true,
+        patronTier: true,
       },
     });
 
@@ -172,6 +175,7 @@ export async function GET(request: Request): Promise<NextResponse> {
         lastSeenAt,
         matchCount: matchCountMap.get(user.id) || 0,
         tournamentRegistrations: registrationCountMap.get(user.id) || 0,
+        patronTier: user.patronTier,
       };
     });
 
@@ -187,6 +191,59 @@ export async function GET(request: Request): Promise<NextResponse> {
     console.error("[admin] users endpoint failed:", error);
     return NextResponse.json(
       { error: "Failed to load users" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PATCH(request: NextRequest): Promise<NextResponse> {
+  try {
+    await requireAdminSession();
+    const body = await request.json();
+    const { userId, patronTier } = body as {
+      userId?: string;
+      patronTier?: string | null;
+    };
+
+    if (!userId || typeof userId !== "string") {
+      return NextResponse.json(
+        { error: "userId is required" },
+        { status: 400 }
+      );
+    }
+
+    // Validate patronTier
+    if (
+      patronTier !== null &&
+      patronTier !== undefined &&
+      !VALID_PATRON_TIERS.includes(
+        patronTier as (typeof VALID_PATRON_TIERS)[number]
+      )
+    ) {
+      return NextResponse.json(
+        {
+          error: `Invalid patronTier. Must be one of: ${VALID_PATRON_TIERS.join(
+            ", "
+          )} or null`,
+        },
+        { status: 400 }
+      );
+    }
+
+    const updated = await prisma.user.update({
+      where: { id: userId },
+      data: { patronTier: patronTier ?? null },
+      select: { id: true, name: true, patronTier: true },
+    });
+
+    return NextResponse.json({ user: updated });
+  } catch (error) {
+    if (error instanceof AdminAccessError) {
+      return new NextResponse("Forbidden", { status: 403 });
+    }
+    console.error("[admin] users PATCH failed:", error);
+    return NextResponse.json(
+      { error: "Failed to update user" },
       { status: 500 }
     );
   }

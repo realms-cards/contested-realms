@@ -183,11 +183,17 @@ function createMatchmakingFeature(deps) {
     return null;
   }
 
+  // Grace period (ms) before a new lobby can be matched via quickplay
+  // This gives the host time to configure settings before players are matched
+  const LOBBY_SETTINGS_GRACE_PERIOD = 15000; // 15 seconds
+
   /**
    * Find a matching public lobby for a queued player
    */
   function findMatchingLobby(playerEntry) {
     if (!lobbies) return null;
+
+    const now = Date.now();
 
     for (const lobby of lobbies.values()) {
       // Skip non-public, full, or matchmaking-created lobbies
@@ -195,6 +201,11 @@ function createMatchmakingFeature(deps) {
       if (lobby.playerIds.size >= lobby.maxPlayers) continue;
       if (lobby.isMatchmakingLobby) continue;
       if (lobby.status !== "open") continue;
+
+      // Skip lobbies that were just created (give host time to configure settings)
+      // This prevents matching to a lobby before the host has finished setting up
+      const lobbyAge = now - (lobby.createdAt || lobby.lastActive || 0);
+      if (lobbyAge < LOBBY_SETTINGS_GRACE_PERIOD) continue;
 
       // Check if lobby's planned match type matches player preferences
       const lobbyType = lobby.plannedMatchType || "constructed";

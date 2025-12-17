@@ -2,7 +2,7 @@
 
 import clsx from "clsx";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   ActiveMatchInfo,
   AdminActionResult,
@@ -98,6 +98,11 @@ export default function AdminDashboard({
   const [recentMatchesError, setRecentMatchesError] = useState<string | null>(
     null
   );
+  const [updatingPatronTier, setUpdatingPatronTier] = useState<string | null>(
+    null
+  );
+  const [userSearchQuery, setUserSearchQuery] = useState("");
+  const userSearchRef = useRef<string>("");
 
   const refreshHealthHistory = useCallback(async () => {
     setLoadingHealthHistory(true);
@@ -322,14 +327,52 @@ export default function AdminDashboard({
     });
   }, []);
 
+  const updatePatronTier = useCallback(
+    async (userId: string, patronTier: string | null) => {
+      setUpdatingPatronTier(userId);
+      try {
+        const response = await fetch("/api/admin/users", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId, patronTier }),
+        });
+        if (!response.ok) {
+          const body = (await response.json().catch(() => null)) as {
+            error?: string;
+          } | null;
+          throw new Error(body?.error || `HTTP ${response.status}`);
+        }
+        // Update local state
+        setUsers(
+          (prev) =>
+            prev?.map((u) => (u.id === userId ? { ...u, patronTier } : u)) ??
+            null
+        );
+      } catch (error) {
+        setUsersError(
+          error instanceof Error
+            ? error.message
+            : "Failed to update patron tier"
+        );
+      } finally {
+        setUpdatingPatronTier(null);
+      }
+    },
+    []
+  );
+
   const loadUsers = useCallback(
-    async (mode: "initial" | "more" = "initial") => {
+    async (mode: "initial" | "more" = "initial", searchQuery?: string) => {
       if (mode === "more" && !usersNextCursor) return;
       setUsersLoading(true);
       setUsersError(null);
+      const query = searchQuery ?? userSearchRef.current;
       try {
         const params = new URLSearchParams();
         params.set("limit", "50");
+        if (query && query.length > 1) {
+          params.set("q", query);
+        }
         if (mode === "more" && usersNextCursor) {
           params.set("cursor", usersNextCursor);
         }
@@ -968,11 +1011,11 @@ export default function AdminDashboard({
         </section>
 
         <section className="flex flex-col gap-3">
-          <button
-            onClick={() => setErrorsExpanded((prev) => !prev)}
-            className="flex items-center justify-between gap-2 text-left"
-          >
-            <div className="flex items-center gap-2">
+          <div className="flex items-center justify-between gap-2">
+            <button
+              onClick={() => setErrorsExpanded((prev) => !prev)}
+              className="flex items-center gap-2 text-left"
+            >
               <span
                 className={clsx(
                   "inline-block transition-transform",
@@ -989,17 +1032,16 @@ export default function AdminDashboard({
                   {errorsData.length}
                 </span>
               )}
-            </div>
+            </button>
             <button
-              onClick={(e) => {
-                e.stopPropagation();
+              onClick={() => {
                 void refreshErrors();
               }}
               className="inline-flex items-center justify-center rounded border border-slate-600 px-3 py-1 text-xs font-medium text-slate-200 hover:bg-slate-800"
             >
               Refresh
             </button>
-          </button>
+          </div>
           {errorsExpanded && (
             <>
               {errorsError && (
@@ -1239,14 +1281,29 @@ export default function AdminDashboard({
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <h2 className="text-lg font-semibold text-white">User directory</h2>
             <div className="flex items-center gap-2">
+              <input
+                type="text"
+                placeholder="Search by name or email..."
+                value={userSearchQuery}
+                onChange={(e) => {
+                  setUserSearchQuery(e.target.value);
+                  userSearchRef.current = e.target.value;
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    void loadUsers("initial", userSearchQuery);
+                  }
+                }}
+                className="rounded border border-slate-600 bg-slate-800 px-3 py-1 text-xs text-slate-200 placeholder:text-slate-500 focus:border-slate-500 focus:outline-none w-48"
+              />
               <button
                 onClick={() => {
-                  void loadUsers("initial");
+                  void loadUsers("initial", userSearchQuery);
                 }}
                 disabled={usersLoading}
                 className="inline-flex items-center justify-center rounded border border-slate-600 px-3 py-1 text-xs font-medium text-slate-200 hover:bg-slate-800 disabled:opacity-60"
               >
-                {users ? "Reload" : "Load users"}
+                {users ? "Search" : "Load users"}
               </button>
               <button
                 onClick={() => {
@@ -1285,6 +1342,7 @@ export default function AdminDashboard({
                     <th className="px-3 py-2">Last seen</th>
                     <th className="px-3 py-2">Matches</th>
                     <th className="px-3 py-2">Tournaments</th>
+                    <th className="px-3 py-2">Patron Tier</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1312,6 +1370,29 @@ export default function AdminDashboard({
                       </td>
                       <td className="px-3 py-2 text-slate-200">
                         {formatNumber(user.tournamentRegistrations)}
+                      </td>
+                      <td className="px-3 py-2">
+                        <select
+                          value={user.patronTier ?? ""}
+                          onChange={(e) => {
+                            const value = e.target.value || null;
+                            updatePatronTier(user.id, value);
+                          }}
+                          disabled={updatingPatronTier === user.id}
+                          className={clsx(
+                            "rounded border px-2 py-1 text-[11px] bg-slate-800 border-slate-700",
+                            user.patronTier === "grandmaster"
+                              ? "text-amber-400"
+                              : user.patronTier === "apprentice"
+                              ? "text-blue-400"
+                              : "text-slate-400",
+                            updatingPatronTier === user.id && "opacity-50"
+                          )}
+                        >
+                          <option value="">None</option>
+                          <option value="apprentice">Apprentice</option>
+                          <option value="grandmaster">Grandmaster</option>
+                        </select>
                       </td>
                     </tr>
                   ))}

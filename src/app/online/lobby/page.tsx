@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { useOnline } from "@/app/online/online-context";
 import LobbyChatConsole from "@/components/chat/LobbyChatConsole";
-import InvitesPanel from "@/components/online/InvitesPanel";
+import InviteOverlay from "@/components/online/InviteOverlay";
 import LobbiesCentral, {
   CreateTournamentConfig,
 } from "@/components/online/LobbiesCentral";
@@ -14,6 +14,7 @@ import OnlinePageShell from "@/components/online/OnlinePageShell";
 import PlayersInvitePanel from "@/components/online/PlayersInvitePanel";
 import ChangelogOverlay from "@/components/ui/ChangelogOverlay";
 import ManualOverlay from "@/components/ui/ManualOverlay";
+import PatreonMarquee from "@/components/ui/PatreonMarquee";
 import { useRealtimeTournaments } from "@/contexts/RealtimeTournamentContext";
 import { tournamentFeatures } from "@/lib/config/features";
 import {
@@ -1276,16 +1277,11 @@ function LobbyPageContent({
           <div
             className={`rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 space-y-3`}
           >
-            {/* Inline invites (if any) */}
+            {/* Invites count indicator */}
             {invites && invites.length > 0 && (
-              <InvitesPanel
-                invites={invites}
-                onAccept={async (inv) => {
-                  await joinLobby(inv.lobbyId);
-                  dismissInvite(inv.lobbyId, inv.from.id);
-                }}
-                onDecline={(inv) => dismissInvite(inv.lobbyId, inv.from.id)}
-              />
+              <div className="text-xs text-indigo-300">
+                {invites.length} pending invite{invites.length > 1 ? "s" : ""}
+              </div>
             )}
 
             {/* Friends browser */}
@@ -2102,7 +2098,24 @@ function LobbyPageContent({
             Patreon
           </a>
         </div>
+        <PatreonMarquee />
       </div>
+
+      {/* Invite Overlay - shows first pending invite */}
+      {invites && invites.length > 0 && (
+        <InviteOverlay
+          invite={invites[0]}
+          onAccept={async () => {
+            const inv = invites[0];
+            await joinLobby(inv.lobbyId);
+            dismissInvite(inv.lobbyId, inv.from.id);
+          }}
+          onDecline={() => {
+            const inv = invites[0];
+            dismissInvite(inv.lobbyId, inv.from.id);
+          }}
+        />
+      )}
     </OnlinePageShell>
   );
 }

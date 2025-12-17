@@ -3,6 +3,7 @@
 import { ChevronDown, ChevronUp, MessageCircle } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChatScope, ServerChatPayloadT } from "@/lib/net/protocol";
+import { fetchPatrons, PATRON_COLORS, type PatronData } from "@/lib/patrons";
 
 interface LobbyChatConsoleProps {
   connected: boolean;
@@ -36,6 +37,12 @@ export default function LobbyChatConsole({
   inline = false,
 }: LobbyChatConsoleProps) {
   const [consoleOpen, setConsoleOpen] = useState<boolean>(true);
+  const [patrons, setPatrons] = useState<PatronData | null>(null);
+
+  // Fetch patrons on mount
+  useEffect(() => {
+    fetchPatrons().then(setPatrons);
+  }, []);
 
   const lobbyMessages = useMemo(
     () => chatLog.filter((m) => m.scope === "lobby"),
@@ -211,6 +218,17 @@ export default function LobbyChatConsole({
               {activeMessages.map((m, i) => {
                 const fromName = m.from?.displayName ?? "System";
                 const isMine = myPlayerId && m.from?.id === myPlayerId;
+                const patronTier =
+                  m.from?.id && patrons
+                    ? patrons.grandmaster.some((p) => p.id === m.from?.id)
+                      ? "grandmaster"
+                      : patrons.apprentice.some((p) => p.id === m.from?.id)
+                      ? "apprentice"
+                      : null
+                    : null;
+                const patronStyle = patronTier
+                  ? PATRON_COLORS[patronTier]
+                  : null;
                 return (
                   <div
                     key={`${m.scope}-${i}-${m.from?.id ?? "system"}`}
@@ -218,7 +236,17 @@ export default function LobbyChatConsole({
                       isMine ? "text-slate-50" : "text-slate-100"
                     }`}
                   >
-                    <span className="font-medium">{fromName}</span>: {m.content}
+                    <span
+                      className={`font-medium ${patronStyle?.text ?? ""}`}
+                      style={
+                        patronStyle
+                          ? { textShadow: patronStyle.textShadowMinimal }
+                          : undefined
+                      }
+                    >
+                      {fromName}
+                    </span>
+                    : {m.content}
                   </div>
                 );
               })}

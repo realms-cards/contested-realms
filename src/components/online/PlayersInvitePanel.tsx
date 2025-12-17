@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { AvailablePlayer } from "@/app/online/online-context";
 import type { LobbyInfo, PlayerInfo } from "@/lib/net/protocol";
+import { fetchPatrons, PATRON_COLORS, type PatronData } from "@/lib/patrons";
 
 export type PlayersInvitePanelProps = {
   // Legacy socket-driven list (fallback)
@@ -51,6 +52,11 @@ export default function PlayersInvitePanel({
   const [optimisticFriends, setOptimisticFriends] = useState<Set<string>>(
     () => new Set()
   );
+  const [patrons, setPatrons] = useState<PatronData | null>(null);
+
+  useEffect(() => {
+    fetchPatrons().then(setPatrons);
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -368,12 +374,29 @@ export default function PlayersInvitePanel({
           <div className="max-h-60 overflow-y-auto space-y-1 pr-1">
             {filteredLegacy.map((p) => {
               const isSelf = !!me && p.id === me.id;
+              const patronTier = patrons
+                ? patrons.grandmaster.some((pt) => pt.id === p.id)
+                  ? "grandmaster"
+                  : patrons.apprentice.some((pt) => pt.id === p.id)
+                  ? "apprentice"
+                  : null
+                : null;
+              const patronStyle = patronTier ? PATRON_COLORS[patronTier] : null;
               return (
                 <div
                   key={p.id}
                   className="flex items-center justify-between text-sm"
                 >
-                  <div className="truncate">{p.displayName}</div>
+                  <div
+                    className={`truncate ${patronStyle?.text ?? ""}`}
+                    style={
+                      patronStyle
+                        ? { textShadow: patronStyle.textShadowMinimal }
+                        : undefined
+                    }
+                  >
+                    {p.displayName}
+                  </div>
                   {!isSelf && (
                     <button
                       className="rounded bg-indigo-600/80 hover:bg-indigo-600 px-2 py-0.5 text-xs disabled:opacity-40"
@@ -414,6 +437,16 @@ export default function PlayersInvitePanel({
                 const isSelf = !!me && p.userId === me.id;
                 const isFriend = p.isFriend || optimisticFriends.has(p.userId);
                 const isPending = pendingFriendUserId === p.userId;
+                const patronTier = patrons
+                  ? patrons.grandmaster.some((pt) => pt.id === p.userId)
+                    ? "grandmaster"
+                    : patrons.apprentice.some((pt) => pt.id === p.userId)
+                    ? "apprentice"
+                    : null
+                  : null;
+                const patronStyle = patronTier
+                  ? PATRON_COLORS[patronTier]
+                  : null;
                 return (
                   <div
                     key={p.userId}
@@ -434,7 +467,16 @@ export default function PlayersInvitePanel({
                       )}
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5">
-                          <span className="truncate font-medium">
+                          <span
+                            className={`truncate font-medium ${
+                              patronStyle?.text ?? ""
+                            }`}
+                            style={
+                              patronStyle
+                                ? { textShadow: patronStyle.textShadowMinimal }
+                                : undefined
+                            }
+                          >
                             {p.displayName}
                           </span>
                           {/* Location badge */}

@@ -279,3 +279,43 @@ body[data-colorblind="true"] *[class*="ring-rose-"] {
 .animate-marquee {
   animation: marquee 12s linear infinite;
 }
+
+/* Seamless looping marquee for patron credits */
+@keyframes marquee-seamless {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-marquee-seamless {
+  animation: marquee-seamless 20s linear infinite;
+}
+
+/* Thank you flash animation for patron marquee */
+@keyframes thank-you-flash {
+  0% {
+    opacity: 0;
+    text-shadow: 0 0 0 transparent;
+  }
+  20% {
+    opacity: 1;
+    text-shadow: 0 0 20px #3b82f6, 0 0 40px #3b82f6, 0 0 60px #1d4ed8,
+      0 0 80px #1e3a8a;
+  }
+  80% {
+    opacity: 1;
+    text-shadow: 0 0 10px #3b82f6, 0 0 20px #3b82f6, 0 0 30px #1d4ed8,
+      0 0 40px #1e3a8a;
+  }
+  100% {
+    opacity: 0;
+    text-shadow: 0 0 0 transparent;
+  }
+}
+
+.animate-thank-you-flash {
+  animation: thank-you-flash 3s ease-in-out forwards;
+}
