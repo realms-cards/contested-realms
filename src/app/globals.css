@@ -69,6 +69,13 @@ select,
     Monaco, Consolas, "Liberation Mono", "Courier New", sans-serif;
 }
 
+/* Readable prose font for overlays, modals, and long-form text */
+.prose-font {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+    Arial, "Noto Sans", sans-serif;
+  letter-spacing: 0.01em;
+}
+
 /* Use previous UI sans font stack for all game views (applied via ThemeScope) */
 .game-font {
   font-family: var(

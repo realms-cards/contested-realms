@@ -265,7 +265,7 @@ export default function ManualOverlay({
               </div>
 
               {/* Body */}
-              <div className="px-5 py-4 max-h-[70svh] overflow-auto text-sm text-slate-200">
+              <div className="px-5 py-4 max-h-[70svh] overflow-auto text-sm text-slate-200 prose-font">
                 {loading && <p className="text-slate-400">Loading...</p>}
                 {!loading && content && renderMarkdown(content)}
               </div>
