@@ -44,18 +44,47 @@ export async function GET(request: Request): Promise<NextResponse> {
           }
         : undefined;
 
-    const usersRaw = await prisma.user.findMany({
-      take: limit + 1,
-      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-      where,
-      orderBy: { id: "desc" },
-      select: {
-        id: true,
-        name: true,
-        emailVerified: true,
-        patronTier: true,
-      },
-    });
+    // Note: patronTier may not exist in older database schemas
+    // We select it separately to handle migration gracefully
+    let usersRaw: Array<{
+      id: string;
+      name: string | null;
+      emailVerified: Date | null;
+      patronTier?: string | null;
+    }>;
+
+    try {
+      usersRaw = await prisma.user.findMany({
+        take: limit + 1,
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+        where,
+        orderBy: { id: "desc" },
+        select: {
+          id: true,
+          name: true,
+          emailVerified: true,
+          patronTier: true,
+        },
+      });
+    } catch (selectError) {
+      // Fallback if patronTier column doesn't exist yet
+      console.warn(
+        "[admin] patronTier select failed, falling back:",
+        selectError
+      );
+      const fallbackUsers = await prisma.user.findMany({
+        take: limit + 1,
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+        where,
+        orderBy: { id: "desc" },
+        select: {
+          id: true,
+          name: true,
+          emailVerified: true,
+        },
+      });
+      usersRaw = fallbackUsers.map((u) => ({ ...u, patronTier: null }));
+    }
 
     let nextCursor: string | null = null;
     let users = usersRaw;
