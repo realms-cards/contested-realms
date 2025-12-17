@@ -481,7 +481,11 @@ export default function GameToolbox({
       const cards = zones[seat]?.hand || [];
       useGameStore
         .getState()
-        .openPeekDialog(`${seat.toUpperCase()} Hand`, [...cards]);
+        .openPeekDialog(`${seat.toUpperCase()} Hand`, [...cards], {
+          seat,
+          pile: "hand",
+          from: "top",
+        });
       return;
     }
     if (isOnline) {
@@ -498,7 +502,11 @@ export default function GameToolbox({
       const cards = zones[opponentSeat]?.hand || [];
       useGameStore
         .getState()
-        .openPeekDialog(`${opponentSeat.toUpperCase()} Hand`, [...cards]);
+        .openPeekDialog(`${opponentSeat.toUpperCase()} Hand`, [...cards], {
+          seat: opponentSeat,
+          pile: "hand",
+          from: "top",
+        });
     }
   };
 

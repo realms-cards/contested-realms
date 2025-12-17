@@ -2087,6 +2087,20 @@ function LobbyPageContent({
           <ChangelogOverlay />
           <span>·</span>
           <ManualOverlay />
+          <span>·</span>
+          <a
+            href="https://www.patreon.com/realmscards"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md 
+              bg-gradient-to-r from-blue-500/20 via-sky-400/30 to-blue-500/20 
+              border border-blue-400/50 hover:border-blue-300/80
+              text-blue-200 hover:text-blue-100 font-medium
+              shadow-[0_0_12px_rgba(59,130,246,0.3)] hover:shadow-[0_0_20px_rgba(59,130,246,0.5)]
+              transition-all duration-300"
+          >
+            Patreon
+          </a>
         </div>
       </div>
     </OnlinePageShell>
