@@ -268,6 +268,7 @@ model User {
   shortId       String?   @unique
   presenceHidden Boolean  @default(false)
   colorBlindMode Boolean  @default(false)
+  patronTier    String?   // "apprentice" | "grandmaster" | null
 
   accounts              Account[]
   sessions              Session[]

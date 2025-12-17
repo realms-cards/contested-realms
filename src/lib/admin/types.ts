@@ -41,6 +41,7 @@ export interface AdminUserSummary {
   lastSeenAt: string | null;
   matchCount: number;
   tournamentRegistrations: number;
+  patronTier: string | null;
 }
 
 export interface AdminErrorRecord {

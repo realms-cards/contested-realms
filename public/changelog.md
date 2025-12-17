@@ -2,6 +2,25 @@
 
 ## December 2025
 
+### Dec 17 — UI & Gameplay Fixes
+
+- **Imposter**: Fixed Imposter behavior and deck import
+- **Site Preview**: Increased card preview size for sites
+- **Hand Inspect**: Added Patreon button and follow-up actions when inspecting the hand
+- **Flip cards**: Added flip cards to cards on the board
+- **Patron Shoutout**: Display all Patrons and make them stand out in Chat and the Players tab
+- **Better invites** Invites from lobby now are now overlays
+
+### Dec 16 — Replays & Auth Reliability
+
+- **Replays**: Save and load replays
+- **Email Auth**: Reliability fixes (verification token reuse; disable clicktracking/link processing)
+- **Auth Cookies**: Sanitized JWT token to prevent cookie bloat
+- **Meta Stats**: Added meta statistics page and fixed previews/orientation in dashboard
+- **Quick Play**: Expanded quick play and made Constructed the default selection
+- **Manual**: Added video tutorial to manual
+- **Performance**: Optimized queries and fixed backend error on player fetch
+
 ### Dec 14 — Specific card support
 
 - **Chaos Twister**: Dexterity based play for Chaos Twister

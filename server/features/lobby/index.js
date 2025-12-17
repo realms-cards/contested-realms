@@ -321,6 +321,7 @@ function createLobbyFeature(deps) {
       opts.name && typeof opts.name === "string"
         ? opts.name.trim().slice(0, 50)
         : null;
+    const now = Date.now();
     const lobby = {
       id: rid("lobby"),
       name,
@@ -331,7 +332,8 @@ function createLobbyFeature(deps) {
       ready: new Set(),
       visibility: vis,
       plannedMatchType: "constructed",
-      lastActive: Date.now(),
+      createdAt: now,
+      lastActive: now,
     };
     lobbies.set(lobby.id, lobby);
     return lobby;
@@ -714,6 +716,7 @@ function createLobbyFeature(deps) {
         options && options.name
           ? String(options.name).trim().slice(0, 50)
           : null;
+      const now = Date.now();
       const lobby = {
         id: rid("lobby"),
         name,
@@ -724,7 +727,8 @@ function createLobbyFeature(deps) {
         ready: new Set(),
         visibility: vis,
         plannedMatchType: "constructed",
-        lastActive: Date.now(),
+        createdAt: now,
+        lastActive: now,
       };
       lobbies.set(lobby.id, lobby);
       if (socketId) {
