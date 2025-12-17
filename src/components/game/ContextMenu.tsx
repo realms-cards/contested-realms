@@ -12,6 +12,7 @@ import AttachmentTargetSelectionDialog, {
 } from "@/lib/game/components/AttachmentTargetSelectionDialog";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef } from "@/lib/game/store";
+import { isMasked } from "@/lib/game/store/imposterMaskState";
 import {
   getCellNumber,
   parseCellKey,
@@ -35,6 +36,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   const currentPlayer = useGameStore((s) => s.currentPlayer);
   const actorKey = useGameStore((s) => s.actorKey);
   const toggleTapPermanent = useGameStore((s) => s.toggleTapPermanent);
+  const toggleFaceDown = useGameStore((s) => s.toggleFaceDown);
   const setAttackTargetChoice = useGameStore((s) => s.setAttackTargetChoice);
   const addCounterOnPermanent = useGameStore((s) => s.addCounterOnPermanent);
   const clearPermanentCounter = useGameStore((s) => s.clearPermanentCounter);
@@ -72,6 +74,8 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   const matchId = useGameStore((s) => s.matchId);
   const localPlayerId = useGameStore((s) => s.localPlayerId);
   const opponentPlayerId = useGameStore((s) => s.opponentPlayerId);
+  const imposterMasks = useGameStore((s) => s.imposterMasks);
+  const unmask = useGameStore((s) => s.unmask);
 
   // Permanent position management (burrow/submerge)
   const getAvailableActions = useGameStore((s) => s.getAvailableActions);
@@ -341,6 +345,8 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   let tapped = false;
   let hasToggle = false;
   let doToggle: (() => void) | null = null;
+  let doFlip: (() => void) | null = null;
+  let isFaceDown = false;
   let doToHand: (() => void) | null = null;
   let doToGY: (() => void) | null = null;
   let doToSpellbook: (() => void) | null = null;
@@ -468,6 +474,18 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     if (canToggle) {
       doToggle = () => {
         toggleTapPermanent(t.at, t.index);
+        try {
+          playCardFlip();
+        } catch {}
+        onClose();
+      };
+    }
+
+    // Flip (face-down/face-up) for permanents owned by the player
+    isFaceDown = !!item?.faceDown;
+    if (canToggle) {
+      doFlip = () => {
+        toggleFaceDown(t.at, t.index);
         try {
           playCardFlip();
         } catch {}
@@ -848,6 +866,19 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
       };
     }
 
+    // Imposter unmask action (if player is masked)
+    if (isMine && isMasked(imposterMasks, t.who)) {
+      const maskState = imposterMasks[t.who];
+      extraActions.push({
+        actionId: "__unmask__",
+        displayText: `Unmask (was ${maskState?.maskAvatar?.name || "masked"})`,
+        isEnabled: true,
+        targetPermanentId: 0,
+        description:
+          "Remove mask and reveal original Imposter avatar. The mask is banished.",
+      });
+    }
+
     // Find artifacts attached to this avatar (attachedTo.index === -1)
     const avatarPos =
       Array.isArray(a?.pos) && a.pos.length === 2 ? a.pos : null;
@@ -1128,6 +1159,15 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                   onClick={doToggle}
                 >
                   {label}
+                </button>
+              )}
+
+              {doFlip && (
+                <button
+                  className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
+                  onClick={doFlip}
+                >
+                  {isFaceDown ? "Flip face-up" : "Flip face-down"}
                 </button>
               )}
 
@@ -1441,6 +1481,24 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                               log(
                                 "Site selected for switch. Click another tile to complete the move."
                               );
+                            }
+                            onClose();
+                          }}
+                        >
+                          {action.displayText}
+                        </button>
+                      );
+                    }
+                    // Imposter unmask action
+                    if (action.actionId === "__unmask__") {
+                      return (
+                        <button
+                          key={action.actionId}
+                          className="w-full text-left rounded bg-purple-600/20 hover:bg-purple-600/30 px-3 py-1"
+                          title={action.description}
+                          onClick={() => {
+                            if (t.kind === "avatar") {
+                              unmask(t.who);
                             }
                             onClose();
                           }}

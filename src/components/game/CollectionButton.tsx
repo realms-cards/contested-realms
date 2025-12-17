@@ -4,6 +4,8 @@ import { Gem } from "lucide-react";
 import { useState } from "react";
 import PileSearchDialog from "@/components/game/PileSearchDialog";
 import { useGameStore, type PlayerKey, type CardRef } from "@/lib/game/store";
+import { isImposter } from "@/lib/game/avatarAbilities";
+import { isAvatarCard } from "@/lib/game/store/imposterMaskState";
 
 export type CollectionButtonProps = {
   mySeat: PlayerKey | null;
@@ -11,8 +13,11 @@ export type CollectionButtonProps = {
 
 export default function CollectionButton({ mySeat }: CollectionButtonProps) {
   const zones = useGameStore((s) => s.zones);
+  const avatars = useGameStore((s) => s.avatars);
+  const imposterMasks = useGameStore((s) => s.imposterMasks);
   const setDragFromPile = useGameStore((s) => s.setDragFromPile);
   const drawFromPileToHand = useGameStore((s) => s.drawFromPileToHand);
+  const maskWith = useGameStore((s) => s.maskWith);
   const actorKey = useGameStore((s) => s.actorKey);
 
   const [searchOpen, setSearchOpen] = useState(false);
@@ -22,6 +27,12 @@ export default function CollectionButton({ mySeat }: CollectionButtonProps) {
   const myKey = actorKey || mySeat || "p1";
   const collection = zones[myKey]?.collection || [];
   const count = collection.length;
+
+  // Check if player has Imposter avatar (either currently displayed or original if masked)
+  const myAvatar = avatars[myKey]?.card;
+  const myMaskState = imposterMasks[myKey];
+  const originalAvatar = myMaskState?.originalAvatar ?? myAvatar;
+  const hasImposter = isImposter(originalAvatar?.name);
 
   // Don't render if no collection
   if (count === 0) return null;
@@ -34,6 +45,13 @@ export default function CollectionButton({ mySeat }: CollectionButtonProps) {
     setDragFromPile({ who: myKey, from: "collection", card });
     drawFromPileToHand();
     setSearchOpen(false);
+  };
+
+  // Handle masking with an avatar from collection (Imposter ability)
+  const handleMask = (card: CardRef) => {
+    if (maskWith(myKey, card)) {
+      setSearchOpen(false);
+    }
   };
 
   return (
@@ -67,6 +85,8 @@ export default function CollectionButton({ mySeat }: CollectionButtonProps) {
           cards={collection}
           onSelectCard={handleSelect}
           onClose={() => setSearchOpen(false)}
+          onMaskCard={hasImposter ? handleMask : undefined}
+          canMask={hasImposter ? isAvatarCard : undefined}
         />
       )}
     </>

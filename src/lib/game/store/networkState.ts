@@ -347,6 +347,12 @@ export const createNetworkSlice: StateCreator<
       } else if (replaceKeys.has("portalState")) {
         next.portalState = null;
       }
+      // Imposter mask state (Gothic expansion)
+      if (p.imposterMasks !== undefined) {
+        next.imposterMasks = p.imposterMasks; // Mask state is always replaced, not merged
+      } else if (replaceKeys.has("imposterMasks")) {
+        next.imposterMasks = { p1: null, p2: null };
+      }
 
       // Snapshot creation is handled by GameToolbox.tsx useEffect
 
@@ -592,6 +598,10 @@ export const createNetworkSlice: StateCreator<
         next.eventSeq = replaceKeys.has("eventSeq")
           ? Math.max(Number(p.eventSeq) || 0, 0)
           : Math.max(state.eventSeq, Number(p.eventSeq) || 0);
+      }
+      // Imposter mask state (Gothic expansion) - applyPatch version
+      if (p.imposterMasks !== undefined) {
+        next.imposterMasks = p.imposterMasks;
       }
 
       return next as Partial<GameState> as GameState;

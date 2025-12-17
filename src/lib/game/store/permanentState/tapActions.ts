@@ -11,6 +11,7 @@ export type TapActionsSlice = Pick<
   GameState,
   | "setTapPermanent"
   | "toggleTapPermanent"
+  | "toggleFaceDown"
   | "setPermanentOffset"
 >;
 
@@ -20,7 +21,6 @@ export const createTapActionsSlice: StateCreator<
   [],
   TapActionsSlice
 > = (set, get) => ({
-
   setTapPermanent: (at, index, tapped) =>
     set((state) => {
       get().pushHistory();
@@ -59,6 +59,39 @@ export const createTapActionsSlice: StateCreator<
 
   toggleTapPermanent: (at, index) =>
     get().setTapPermanent(at, index, !get().permanents[at]?.[index]?.tapped),
+
+  toggleFaceDown: (at, index) =>
+    set((state) => {
+      get().pushHistory();
+      const per: Permanents = { ...state.permanents };
+      const arr = [...(per[at] || [])];
+      if (!arr[index]) return state as GameState;
+      const cur = arr[index];
+      if (state.transport && state.actorKey) {
+        const ownerKey = seatFromOwner(cur.owner);
+        if (state.actorKey !== ownerKey) return state as GameState;
+      }
+      const newFaceDown = !cur.faceDown;
+      const next = bumpPermanentVersion({
+        ...cur,
+        faceDown: newFaceDown,
+      });
+      arr[index] = next;
+      per[at] = arr;
+      const deltaPatch = createPermanentDeltaPatch([
+        {
+          at,
+          entry: {
+            instanceId: next.instanceId ?? undefined,
+            faceDown: next.faceDown,
+            version: next.version,
+          },
+        },
+      ]);
+      if (deltaPatch) get().trySendPatch(deltaPatch);
+      else get().trySendPatch(createPermanentsPatch(per, at));
+      return { permanents: per } as Partial<GameState> as GameState;
+    }),
 
   setPermanentOffset: (at, index, offset) =>
     set((state) => {

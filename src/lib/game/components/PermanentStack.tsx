@@ -1034,7 +1034,7 @@ export function PermanentStack({
                   />
                 ) : (
                   <CardPlane
-                    slug={p.card?.slug || ""}
+                    slug={p.faceDown ? "" : p.card?.slug || ""}
                     width={CARD_SHORT}
                     height={CARD_LONG}
                     rotationZ={rotZ}
@@ -1048,7 +1048,11 @@ export function PermanentStack({
                     depthWrite={!isBurrowed}
                     depthTest={true}
                     textureUrl={
-                      !p.card?.slug ? "/api/assets/air.png" : undefined
+                      p.faceDown
+                        ? "/api/assets/cardback_spellbook.png"
+                        : !p.card?.slug
+                        ? "/api/assets/air.png"
+                        : undefined
                     }
                   />
                 )}

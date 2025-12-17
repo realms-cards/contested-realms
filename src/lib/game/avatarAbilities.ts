@@ -16,6 +16,7 @@ export type AvatarAbility =
   | "elementalist"
   | "magician"
   | "duplicator"
+  | "imposter"
   | null;
 
 /**
@@ -68,6 +69,17 @@ export function isDuplicator(avatarName: string | null | undefined): boolean {
 }
 
 /**
+ * Check if an avatar name indicates Imposter
+ * Uses case-insensitive matching
+ * Imposter: Can "mask" by banishing an Avatar from collection to gain their abilities.
+ * Collection may contain extra avatars for masking.
+ */
+export function isImposter(avatarName: string | null | undefined): boolean {
+  if (!avatarName) return false;
+  return avatarName.toLowerCase().includes("imposter");
+}
+
+/**
  * Get the primary ability type for an avatar by name
  * Returns null if no special ability detected
  */
@@ -82,6 +94,7 @@ export function getAvatarAbility(
   if (name.includes("elementalist")) return "elementalist";
   if (name.includes("magician")) return "magician";
   if (name.includes("duplicator")) return "duplicator";
+  if (name.includes("imposter")) return "imposter";
 
   return null;
 }
@@ -152,6 +165,7 @@ export function getAvatarAbilityInfo(
     hasSpecialSetup:
       ability === "harbinger" ||
       ability === "magician" ||
-      ability === "duplicator",
+      ability === "duplicator" ||
+      ability === "imposter",
   };
 }

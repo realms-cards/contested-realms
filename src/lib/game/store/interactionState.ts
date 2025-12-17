@@ -456,14 +456,16 @@ export const createInteractionSlice: StateCreator<
         payload.actorSeat === "p1" || payload.actorSeat === "p2"
           ? (payload.actorSeat as PlayerKey)
           : null;
-      // Build source info if available (for pile peeks with follow-up actions)
+      // Build source info if available (for pile/hand peeks with follow-up actions)
       const source =
         (payload.seat === "p1" || payload.seat === "p2") &&
-        (payload.pile === "spellbook" || payload.pile === "atlas") &&
+        (payload.pile === "spellbook" ||
+          payload.pile === "atlas" ||
+          payload.pile === "hand") &&
         (payload.from === "top" || payload.from === "bottom")
           ? {
               seat: payload.seat as PlayerKey,
-              pile: payload.pile as "spellbook" | "atlas",
+              pile: payload.pile as "spellbook" | "atlas" | "hand",
               from: payload.from as "top" | "bottom",
             }
           : undefined;

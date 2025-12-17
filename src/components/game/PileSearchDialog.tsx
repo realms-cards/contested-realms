@@ -17,6 +17,9 @@ interface PileSearchDialogProps {
   onClose: () => void;
   onBanishCard?: (card: CardRef) => void;
   banishRequiresConsent?: boolean;
+  // Imposter mask support
+  onMaskCard?: (card: CardRef) => void;
+  canMask?: (card: CardRef | null | undefined) => boolean;
 }
 
 export default function PileSearchDialog({
@@ -26,6 +29,8 @@ export default function PileSearchDialog({
   onClose,
   onBanishCard,
   banishRequiresConsent,
+  onMaskCard,
+  canMask,
 }: PileSearchDialogProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const [searchTerm, setSearchTerm] = useState("");
@@ -184,6 +189,20 @@ export default function PileSearchDialog({
                     >
                       To Hand
                     </button>
+                    {onMaskCard && canMask?.(card) && (
+                      <button
+                        onClick={() => {
+                          try {
+                            playCardSelect();
+                          } catch {}
+                          onMaskCard(card);
+                        }}
+                        className="flex-1 text-xs bg-purple-600/80 hover:bg-purple-500 rounded px-2 py-1 transition-colors"
+                        title="Imposter: Mask yourself as this avatar (3 mana)"
+                      >
+                        Mask (3💧)
+                      </button>
+                    )}
                     {onBanishCard && (
                       <button
                         onClick={() => {
