@@ -204,7 +204,7 @@ export async function GET(request: Request): Promise<NextResponse> {
         lastSeenAt,
         matchCount: matchCountMap.get(user.id) || 0,
         tournamentRegistrations: registrationCountMap.get(user.id) || 0,
-        patronTier: user.patronTier,
+        patronTier: user.patronTier ?? null,
       };
     });
 

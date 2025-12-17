@@ -60,6 +60,7 @@ export default function OfflineMulliganScreen({
   const [scryOpen, setScryOpen] = useState<boolean>(false);
   const [scryPile, setScryPile] = useState<"spellbook" | "atlas">("spellbook");
   const [scryReveal, setScryReveal] = useState<boolean>(false);
+  const [seerCompleted, setSeerCompleted] = useState<boolean>(false);
   const topCard = (zones[myPlayerKey]?.[scryPile] || [])[0];
 
   const handleCardClick = (index: number) => {
@@ -88,9 +89,12 @@ export default function OfflineMulliganScreen({
 
   const handleFinalize = () => {
     if (submitted) return;
-    if (isSecondSeat && !scryOpen) {
-      setScryReveal(false);
-      setScryOpen(true);
+    // Second seat must complete seer before readying
+    if (isSecondSeat && !seerCompleted) {
+      if (!scryOpen) {
+        setScryReveal(false);
+        setScryOpen(true);
+      }
       return;
     }
     setSubmitted(true);
@@ -253,6 +257,7 @@ export default function OfflineMulliganScreen({
                         playCardSelect();
                       } catch {}
                       scryTop(myPlayerKey, scryPile, "top");
+                      setSeerCompleted(true);
                       setScryOpen(false);
                       handleFinalize();
                     }}
@@ -267,6 +272,7 @@ export default function OfflineMulliganScreen({
                         playCardSelect();
                       } catch {}
                       scryTop(myPlayerKey, scryPile, "bottom");
+                      setSeerCompleted(true);
                       setScryOpen(false);
                       handleFinalize();
                     }}
@@ -276,6 +282,7 @@ export default function OfflineMulliganScreen({
                   <button
                     className="rounded bg-white/10 hover:bg-white/20 px-3 py-1 text-sm"
                     onClick={() => {
+                      setSeerCompleted(true);
                       setScryOpen(false);
                       handleFinalize();
                     }}

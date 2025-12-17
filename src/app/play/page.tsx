@@ -6,6 +6,7 @@ import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import CardPreview from "@/components/game/CardPreview";
+import ChaosTwisterOverlay from "@/components/game/ChaosTwisterOverlay";
 import { ClientCanvas } from "@/components/game/ClientCanvas";
 import CollectionButton from "@/components/game/CollectionButton";
 import ContextMenu from "@/components/game/ContextMenu";
@@ -21,7 +22,6 @@ import PlacementDialog from "@/components/game/PlacementDialog";
 import PlayerResourcePanels from "@/components/game/PlayerResourcePanel";
 import StatusBar from "@/components/game/StatusBar";
 import SwitchSiteHudOverlay from "@/components/game/SwitchSiteHudOverlay";
-import ChaosTwisterOverlay from "@/components/game/ChaosTwisterOverlay";
 import {
   DynamicBoard as Board,
   DynamicHand3D as Hand3D,
@@ -29,6 +29,9 @@ import {
   DynamicPiles3D as Piles3D,
   DynamicTokenPile3D as TokenPile3D,
 } from "@/components/game/dynamic-3d";
+import KeyboardShortcutsHelp, {
+  useHelpShortcut,
+} from "@/components/ui/KeyboardShortcutsHelp";
 import TrackpadOrbitAdapter from "@/lib/controls/TrackpadOrbitAdapter";
 import {
   hasAnyHarbinger,
@@ -53,6 +56,7 @@ import {
 import { Physics } from "@/lib/game/physics";
 import { useGameStore } from "@/lib/game/store";
 import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
+import { useZoomKeyboardShortcuts } from "@/lib/hooks/useZoomKeyboardShortcuts";
 import { LocalTransport } from "@/lib/net/localTransport";
 
 export default function PlayPage() {
@@ -117,6 +121,9 @@ export default function PlayPage() {
   // Saved game restoration prompt
   const [showRestorePrompt, setShowRestorePrompt] = useState<boolean>(false);
   const [, setRestoredGame] = useState<boolean>(false);
+
+  // Keyboard shortcuts help overlay
+  const [helpOpen, setHelpOpen] = useHelpShortcut();
 
   // LocalTransport wiring for offline play
   const transportRef = useRef<LocalTransport | null>(null);
@@ -928,6 +935,13 @@ export default function PlayPage() {
 
       {/* Mobile hand interaction hint */}
       <MobileHandHint />
+
+      {/* Keyboard shortcuts help overlay */}
+      <KeyboardShortcutsHelp
+        open={helpOpen}
+        onClose={() => setHelpOpen(false)}
+        context="game"
+      />
     </div>
   );
 }
@@ -943,5 +957,6 @@ function KeyboardPanControls({
     controls: state.controls as OrbitControlsImpl | undefined,
   }));
   useOrbitKeyboardPan(controls, { enabled, panStep: step });
+  useZoomKeyboardShortcuts(controls, { enabled });
   return null;
 }

@@ -24,15 +24,15 @@ import {
   createHistorySlice,
   createInitialHistoryState,
 } from "./store/historyState";
+import {
+  createImposterMaskSlice,
+  createInitialImposterMasks,
+} from "./store/imposterMaskState";
 import { createInteractionSlice } from "./store/interactionState";
 import { createMagicSlice } from "./store/magicState";
 import { createNetworkSlice } from "./store/networkState";
 import { createPermanentSlice } from "./store/permanentState";
 import { createPortalSlice } from "./store/portalState";
-import {
-  createImposterMaskSlice,
-  createInitialImposterMasks,
-} from "./store/imposterMaskState";
 import { createPositionSlice } from "./store/positionState";
 import { createPreferenceSlice } from "./store/preferenceState";
 import { createRemoteCursorSlice } from "./store/remoteCursorState";

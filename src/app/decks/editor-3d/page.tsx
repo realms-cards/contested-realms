@@ -24,6 +24,9 @@ import {
   DragonlordChampionModal,
 } from "@/components/deck-editor";
 import CardPreview from "@/components/game/CardPreview";
+import KeyboardShortcutsHelp, {
+  useHelpShortcut,
+} from "@/components/ui/KeyboardShortcutsHelp";
 import { useCardSearch } from "@/lib/collection/useCardSearch";
 import { SearchResult, SearchType, searchCards } from "@/lib/deckEditor/search";
 import type { CardPreviewData } from "@/lib/game/card-preview.types";
@@ -178,6 +181,9 @@ function AuthenticatedDeckEditor() {
       `Picks changed: ${pickCount} unique cards, ${totalCards} total cards`
     );
   }, [picks]);
+
+  // Keyboard shortcuts help overlay
+  const [helpOpen, setHelpOpen] = useHelpShortcut();
 
   // Search state
   const [q, setQ] = useState("");
@@ -5610,6 +5616,13 @@ function AuthenticatedDeckEditor() {
           setShowChampionModal(false);
         }}
         onClose={() => setShowChampionModal(false)}
+      />
+
+      {/* Keyboard shortcuts help overlay */}
+      <KeyboardShortcutsHelp
+        open={helpOpen}
+        onClose={() => setHelpOpen(false)}
+        context="editor"
       />
     </div>
   );

@@ -3,8 +3,8 @@
 import { Gem } from "lucide-react";
 import { useState } from "react";
 import PileSearchDialog from "@/components/game/PileSearchDialog";
-import { useGameStore, type PlayerKey, type CardRef } from "@/lib/game/store";
 import { isImposter } from "@/lib/game/avatarAbilities";
+import { useGameStore, type PlayerKey, type CardRef } from "@/lib/game/store";
 import { isAvatarCard } from "@/lib/game/store/imposterMaskState";
 
 export type CollectionButtonProps = {

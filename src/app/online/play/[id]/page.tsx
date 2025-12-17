@@ -9,6 +9,7 @@ import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { useOnline } from "@/app/online/online-context";
 import UserBadge from "@/components/auth/UserBadge";
 import CardPreview from "@/components/game/CardPreview";
+import ChaosTwisterOverlay from "@/components/game/ChaosTwisterOverlay";
 import { ClientCanvas } from "@/components/game/ClientCanvas";
 import CollectionButton from "@/components/game/CollectionButton";
 import CombatHudOverlay from "@/components/game/CombatHudOverlay";
@@ -17,7 +18,6 @@ import EnhancedOnlineDraft3DScreen from "@/components/game/EnhancedOnlineDraft3D
 import GameToolbox from "@/components/game/GameToolbox";
 import HarbingerPortalScreen from "@/components/game/HarbingerPortalScreen";
 import { InteractionConsentDialog } from "@/components/game/InteractionConsentDialog";
-import ChaosTwisterOverlay from "@/components/game/ChaosTwisterOverlay";
 import MagicHudOverlay from "@/components/game/MagicHudOverlay";
 import MatchEndOverlay from "@/components/game/MatchEndOverlay";
 import MatchInfoPopup from "@/components/game/MatchInfoPopup";
@@ -42,6 +42,9 @@ import {
   DynamicTokenPile3D as TokenPile3D,
 } from "@/components/game/dynamic-3d";
 import { GlobalVideoOverlay } from "@/components/ui/GlobalVideoOverlay";
+import KeyboardShortcutsHelp, {
+  useHelpShortcut,
+} from "@/components/ui/KeyboardShortcutsHelp";
 import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
 import TrackpadOrbitAdapter from "@/lib/controls/TrackpadOrbitAdapter";
 import {
@@ -64,6 +67,7 @@ import {
   needsPortalPhaseForHarbinger,
 } from "@/lib/game/store/portalState";
 import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
+import { useZoomKeyboardShortcuts } from "@/lib/hooks/useZoomKeyboardShortcuts";
 import { LegacySeatVideo3D } from "@/lib/rtc/SeatVideo3D";
 import {
   useBoardPingListener,
@@ -213,10 +217,9 @@ export default function OnlineMatchPage() {
 
   // Spectator presence
   const [spectatorCount, setSpectatorCount] = useState<number | null>(null);
-  // Reserved for future commentator mode where hands may be hidden
+  // Commentator mode: only users in COMMENTATOR_IDS can view hands face-up
   const [spectatorCanViewHands, setSpectatorCanViewHands] =
     useState<boolean>(false);
-  void spectatorCanViewHands; // Suppress unused warning - reserved for commentator mode
   useEffect(() => {
     if (!transport?.on) return;
     const off = transport.on("message", (m) => {
@@ -269,6 +272,9 @@ export default function OnlineMatchPage() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [isSpectatorView]);
+
+  // Keyboard shortcuts help overlay
+  const [helpOpen, setHelpOpen] = useHelpShortcut();
 
   const rtc = voice?.rtc ?? null;
   const matchOverlayTargetId = useMemo(() => {
@@ -2734,8 +2740,10 @@ export default function OnlineMatchPage() {
                     matW={MAT_PIXEL_W}
                     matH={MAT_PIXEL_H}
                     viewerPlayerNumber={viewPlayerNumber}
-                    // Spectators always see both hands face-up (like replay mode)
-                    showCardBacks={false}
+                    // Players see their own hand face-up; spectators only see face-up if they have commentator permissions
+                    showCardBacks={
+                      isSpectatorView ? !spectatorCanViewHands : false
+                    }
                     // Commentator: bottom edge for oriented seat; Spectator (non-commentator): also use bottom edge for oriented seat
                     placement={isSpectatorView ? "edgeBottom" : undefined}
                     flatCards={isSpectatorView}
@@ -2743,7 +2751,7 @@ export default function OnlineMatchPage() {
                     hideCardPreview={hideCardPreview}
                   />
                 )}
-                {/* Opponent hand with card backs (players) or face-up (spectators like replay) */}
+                {/* Opponent hand with card backs (players) or face-up (commentator spectators only) */}
                 {viewPlayerKey &&
                   (() => {
                     const opponentKey = viewPlayerKey === "p1" ? "p2" : "p1";
@@ -2752,8 +2760,10 @@ export default function OnlineMatchPage() {
                         owner={opponentKey}
                         matW={MAT_PIXEL_W}
                         matH={MAT_PIXEL_H}
-                        // Spectators always see both hands face-up (like replay mode)
-                        showCardBacks={isSpectatorView ? false : true}
+                        // Players see opponent backs; spectators only see face-up if they have commentator permissions
+                        showCardBacks={
+                          isSpectatorView ? !spectatorCanViewHands : true
+                        }
                         viewerPlayerNumber={viewPlayerNumber}
                         // Commentator and non-commentator spectators: top edge for the opponent seat
                         placement={isSpectatorView ? "edgeTop" : undefined}
@@ -2896,6 +2906,13 @@ export default function OnlineMatchPage() {
           targetPlayerId={matchOverlayTargetId}
         />
       )}
+
+      {/* Keyboard shortcuts help overlay */}
+      <KeyboardShortcutsHelp
+        open={helpOpen}
+        onClose={() => setHelpOpen(false)}
+        context="game"
+      />
     </div>
   );
 }
@@ -2911,6 +2928,7 @@ function KeyboardPanControls({
     controls: state.controls as OrbitControlsImpl | undefined,
   }));
   useOrbitKeyboardPan(controls, { enabled, panStep: step });
+  useZoomKeyboardShortcuts(controls, { enabled });
   return null;
 }
 
