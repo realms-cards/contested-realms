@@ -155,6 +155,7 @@ function createLobbyFeature(deps) {
       readyPlayerIds: Array.from(lobby.ready),
       plannedMatchType: lobby.plannedMatchType,
       matchId: lobby.matchId || null,
+      startedAt: lobby.createdAt || lobby.lastActive || null,
     };
   }
 
@@ -690,8 +691,14 @@ function createLobbyFeature(deps) {
         const inactiveMs = now - lastActivity;
         if (inactiveMs > STALE_MATCH_DISPLAY_MS) continue;
       }
-      arr.push(getLobbyInfo(lobby));
+      const info = getLobbyInfo(lobby);
+      info._sortTs = lobby.lastActive || lobby.createdAt || 0;
+      arr.push(info);
     }
+    // Sort by newest first (most recent activity)
+    arr.sort((a, b) => (b._sortTs || 0) - (a._sortTs || 0));
+    // Remove internal sort field before returning
+    for (const item of arr) delete item._sortTs;
     return arr;
   }
 
@@ -1488,21 +1495,32 @@ function createLobbyFeature(deps) {
   /**
    * Reconstruct lobbies from recovered matches after server restart.
    * This ensures "Active Games" shows ongoing matches even after a deploy.
+   * Only reconstructs matches that have been active within STALE_MATCH_DISPLAY_MS.
    * @param {Map<string, any>} recoveredMatches - Map of matchId -> match objects
    */
   function reconstructLobbiesFromMatches(recoveredMatches) {
     if (!recoveredMatches || recoveredMatches.size === 0) return;
+    const now = Date.now();
     let count = 0;
+    let skippedStale = 0;
     for (const match of recoveredMatches.values()) {
       if (!match || !match.id) continue;
       // Skip ended matches
       if (match.status === "ended" || match.status === "completed") continue;
+
+      // Use actual match timestamp to determine if it's stale
+      const matchLastActivity = match.lastTs || match.updatedAt || 0;
+      const inactiveMs = now - matchLastActivity;
+      if (inactiveMs > STALE_MATCH_DISPLAY_MS) {
+        skippedStale++;
+        continue; // Don't reconstruct stale matches
+      }
+
       // Use lobbyId if available, otherwise use matchId as lobby identifier
       const lobbyId = match.lobbyId || match.id;
       // Skip if lobby already exists
       if (lobbies.has(lobbyId)) continue;
 
-      const now = Date.now();
       const lobby = {
         id: lobbyId,
         name: match.lobbyName || null,
@@ -1514,18 +1532,18 @@ function createLobbyFeature(deps) {
         visibility: "private", // Recovered lobbies are private by default
         plannedMatchType: match.matchType || "constructed",
         matchId: match.id,
-        createdAt: now,
-        lastActive: now,
+        createdAt: matchLastActivity || now,
+        lastActive: matchLastActivity || now, // Use actual match timestamp
       };
       lobbies.set(lobbyId, lobby);
       count++;
     }
+    try {
+      console.log(
+        `[lobby] reconstructed ${count} lobby(ies) from recovered matches (skipped ${skippedStale} stale)`
+      );
+    } catch {}
     if (count > 0) {
-      try {
-        console.log(
-          `[lobby] reconstructed ${count} lobby(ies) from recovered matches`
-        );
-      } catch {}
       // Broadcast updated lobbies list
       broadcastLobbies();
     }

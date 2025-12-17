@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useState, useEffect, useCallback } from "react";
 import OnlinePageShell from "@/components/online/OnlinePageShell";
+import { PATRON_COLORS, type PatronData } from "@/lib/patrons";
 
 interface LeaderboardEntry {
   rank: number;
@@ -44,6 +45,25 @@ export default function LeaderboardPage() {
   const [timeFrame, setTimeFrame] = useState<"all_time" | "monthly" | "weekly">(
     "all_time"
   );
+  const [patrons, setPatrons] = useState<PatronData | null>(null);
+
+  // Fetch patron data on mount
+  useEffect(() => {
+    fetch("/api/patrons")
+      .then((res) => res.json())
+      .then((data) => setPatrons(data))
+      .catch(() => {});
+  }, []);
+
+  // Helper to get patron tier for a player
+  const getPatronTier = (playerId: string) => {
+    if (!patrons) return null;
+    if (patrons.kingofthe?.some((p) => p.id === playerId)) return "kingofthe";
+    if (patrons.grandmaster.some((p) => p.id === playerId))
+      return "grandmaster";
+    if (patrons.apprentice.some((p) => p.id === playerId)) return "apprentice";
+    return null;
+  };
 
   const fetchLeaderboard = useCallback(async () => {
     setLoading(true);
@@ -229,9 +249,28 @@ export default function LeaderboardPage() {
                         </div>
                       )}
                       <div>
-                        <div className="text-sm font-semibold text-slate-50">
-                          {entry.displayName}
-                        </div>
+                        {(() => {
+                          const patronTier = getPatronTier(entry.playerId);
+                          const patronStyle = patronTier
+                            ? PATRON_COLORS[patronTier]
+                            : null;
+                          return (
+                            <div
+                              className={`text-sm font-semibold ${
+                                patronStyle?.text ?? "text-slate-50"
+                              }`}
+                              style={
+                                patronStyle
+                                  ? {
+                                      textShadow: patronStyle.textShadowMinimal,
+                                    }
+                                  : undefined
+                              }
+                            >
+                              {entry.displayName}
+                            </div>
+                          );
+                        })()}
                         <div className="text-xs text-slate-400 flex items-center gap-2">
                           {entry.tournamentWins > 0 && (
                             <span className="text-amber-300 flex items-center gap-1">
@@ -240,7 +279,7 @@ export default function LeaderboardPage() {
                             </span>
                           )}
                           <span>
-                            Last active: {" "}
+                            Last active:{" "}
                             {new Date(entry.lastActive).toLocaleDateString()}
                           </span>
                         </div>

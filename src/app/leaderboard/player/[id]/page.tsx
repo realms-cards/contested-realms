@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
+import { PATRON_COLORS, type PatronData } from "@/lib/patrons";
 
 interface PlayerStats {
   player: {
@@ -61,12 +62,34 @@ interface PlayerStats {
   }>;
 }
 
-export default function PlayerDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default function PlayerDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
   const router = useRouter();
   const [data, setData] = useState<PlayerStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [playerId, setPlayerId] = useState<string | null>(null);
+  const [patrons, setPatrons] = useState<PatronData | null>(null);
+
+  // Fetch patron data on mount
+  useEffect(() => {
+    fetch("/api/patrons")
+      .then((res) => res.json())
+      .then((data) => setPatrons(data))
+      .catch(() => {});
+  }, []);
+
+  // Helper to get patron tier for a player
+  const getPatronTier = (id: string) => {
+    if (!patrons) return null;
+    if (patrons.kingofthe?.some((p) => p.id === id)) return "kingofthe";
+    if (patrons.grandmaster.some((p) => p.id === id)) return "grandmaster";
+    if (patrons.apprentice.some((p) => p.id === id)) return "apprentice";
+    return null;
+  };
 
   useEffect(() => {
     const getParams = async () => {
@@ -85,12 +108,12 @@ export default function PlayerDetailPage({ params }: { params: Promise<{ id: str
       try {
         const response = await fetch(`/api/leaderboard/player/${playerId}`);
         if (!response.ok) {
-          throw new Error('Failed to fetch player stats');
+          throw new Error("Failed to fetch player stats");
         }
         const result = await response.json();
         setData(result);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Unknown error');
+        setError(err instanceof Error ? err.message : "Unknown error");
       } finally {
         setLoading(false);
       }
@@ -107,21 +130,25 @@ export default function PlayerDetailPage({ params }: { params: Promise<{ id: str
 
   const getTimeFrameDisplay = (timeFrame: string) => {
     switch (timeFrame) {
-      case 'all_time': return 'All Time';
-      case 'monthly': return 'This Month';
-      case 'weekly': return 'This Week';
-      default: return timeFrame;
+      case "all_time":
+        return "All Time";
+      case "monthly":
+        return "This Month";
+      case "weekly":
+        return "This Week";
+      default:
+        return timeFrame;
     }
   };
 
   const getMatchResultColor = (isWin: boolean, isDraw: boolean) => {
-    if (isDraw) return 'text-yellow-400';
-    return isWin ? 'text-green-400' : 'text-red-400';
+    if (isDraw) return "text-yellow-400";
+    return isWin ? "text-green-400" : "text-red-400";
   };
 
   const getMatchResultText = (isWin: boolean, isDraw: boolean) => {
-    if (isDraw) return 'Draw';
-    return isWin ? 'Win' : 'Loss';
+    if (isDraw) return "Draw";
+    return isWin ? "Win" : "Loss";
   };
 
   if (loading) {
@@ -138,7 +165,9 @@ export default function PlayerDetailPage({ params }: { params: Promise<{ id: str
     return (
       <div className="space-y-6">
         <div className="rounded-xl bg-red-900/20 ring-1 ring-red-600/30 p-4">
-          <div className="text-red-200 text-sm">{error || 'Player not found'}</div>
+          <div className="text-red-200 text-sm">
+            {error || "Player not found"}
+          </div>
         </div>
         <button
           className="rounded bg-slate-700 hover:bg-slate-600 px-4 py-2 text-sm"
@@ -173,13 +202,33 @@ export default function PlayerDetailPage({ params }: { params: Promise<{ id: str
               />
             ) : (
               <div className="w-16 h-16 rounded-full bg-slate-600 flex items-center justify-center text-white text-xl font-bold">
-                {data.player.name?.charAt(0).toUpperCase() || '?'}
+                {data.player.name?.charAt(0).toUpperCase() || "?"}
               </div>
             )}
             <div>
-              <h1 className="text-2xl font-bold text-white">{data.player.name}</h1>
+              {(() => {
+                const patronTier = playerId ? getPatronTier(playerId) : null;
+                const patronStyle = patronTier
+                  ? PATRON_COLORS[patronTier]
+                  : null;
+                return (
+                  <h1
+                    className={`text-2xl font-bold ${
+                      patronStyle?.text ?? "text-white"
+                    }`}
+                    style={
+                      patronStyle
+                        ? { textShadow: patronStyle.textShadow }
+                        : undefined
+                    }
+                  >
+                    {data.player.name}
+                  </h1>
+                );
+              })()}
               <p className="text-sm text-slate-300">
-                Member since {new Date(data.player.memberSince).toLocaleDateString()}
+                Member since{" "}
+                {new Date(data.player.memberSince).toLocaleDateString()}
               </p>
             </div>
           </div>
@@ -188,25 +237,36 @@ export default function PlayerDetailPage({ params }: { params: Promise<{ id: str
 
       {/* Overall Stats */}
       <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4">
-        <h2 className="text-lg font-semibold text-white mb-4">Overall Statistics</h2>
+        <h2 className="text-lg font-semibold text-white mb-4">
+          Overall Statistics
+        </h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="text-center">
-            <div className="text-2xl font-bold text-white">{data.overallStats.totalGames}</div>
+            <div className="text-2xl font-bold text-white">
+              {data.overallStats.totalGames}
+            </div>
             <div className="text-sm text-slate-400">Total Games</div>
           </div>
           <div className="text-center">
-            <div className="text-2xl font-bold text-green-400">{formatWinRate(data.overallStats.overallWinRate)}</div>
+            <div className="text-2xl font-bold text-green-400">
+              {formatWinRate(data.overallStats.overallWinRate)}
+            </div>
             <div className="text-sm text-slate-400">Overall Win Rate</div>
           </div>
           <div className="text-center">
             <div className="text-2xl font-bold text-white">
               {data.overallStats.totalWins}-{data.overallStats.totalLosses}
-              {data.overallStats.totalDraws > 0 && `-${data.overallStats.totalDraws}`}
+              {data.overallStats.totalDraws > 0 &&
+                `-${data.overallStats.totalDraws}`}
             </div>
-            <div className="text-sm text-slate-400">W-L{data.overallStats.totalDraws > 0 && '-D'}</div>
+            <div className="text-sm text-slate-400">
+              W-L{data.overallStats.totalDraws > 0 && "-D"}
+            </div>
           </div>
           <div className="text-center">
-            <div className="text-2xl font-bold text-yellow-400">{data.overallStats.tournamentWins}</div>
+            <div className="text-2xl font-bold text-yellow-400">
+              {data.overallStats.tournamentWins}
+            </div>
             <div className="text-sm text-slate-400">Tournament Wins</div>
           </div>
         </div>
@@ -214,7 +274,9 @@ export default function PlayerDetailPage({ params }: { params: Promise<{ id: str
 
       {/* Format Rankings */}
       <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4">
-        <h2 className="text-lg font-semibold text-white mb-4">Format Rankings</h2>
+        <h2 className="text-lg font-semibold text-white mb-4">
+          Format Rankings
+        </h2>
         <div className="space-y-3">
           {data.leaderboardRankings.map((ranking) => (
             <div
@@ -224,7 +286,8 @@ export default function PlayerDetailPage({ params }: { params: Promise<{ id: str
               <div className="flex items-center gap-3">
                 <div className="text-sm">
                   <div className="font-semibold text-white">
-                    {getFormatDisplay(ranking.format)} - {getTimeFrameDisplay(ranking.timeFrame)}
+                    {getFormatDisplay(ranking.format)} -{" "}
+                    {getTimeFrameDisplay(ranking.timeFrame)}
                   </div>
                   <div className="text-xs text-slate-400">
                     Rank #{ranking.rank}
@@ -237,7 +300,9 @@ export default function PlayerDetailPage({ params }: { params: Promise<{ id: str
                   <div className="text-xs text-slate-400">Rating</div>
                 </div>
                 <div className="text-center">
-                  <div className="font-bold text-white">{formatWinRate(ranking.winRate)}</div>
+                  <div className="font-bold text-white">
+                    {formatWinRate(ranking.winRate)}
+                  </div>
                   <div className="text-xs text-slate-400">Win Rate</div>
                 </div>
                 <div className="text-center">
@@ -245,7 +310,9 @@ export default function PlayerDetailPage({ params }: { params: Promise<{ id: str
                     {ranking.wins}-{ranking.losses}
                     {ranking.draws > 0 && `-${ranking.draws}`}
                   </div>
-                  <div className="text-xs text-slate-400">W-L{ranking.draws > 0 && '-D'}</div>
+                  <div className="text-xs text-slate-400">
+                    W-L{ranking.draws > 0 && "-D"}
+                  </div>
                 </div>
               </div>
             </div>
@@ -255,7 +322,9 @@ export default function PlayerDetailPage({ params }: { params: Promise<{ id: str
 
       {/* Recent Matches */}
       <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4">
-        <h2 className="text-lg font-semibold text-white mb-4">Recent Matches</h2>
+        <h2 className="text-lg font-semibold text-white mb-4">
+          Recent Matches
+        </h2>
         <div className="space-y-2">
           {data.recentMatches.length > 0 ? (
             data.recentMatches.map((match) => (
@@ -264,19 +333,30 @@ export default function PlayerDetailPage({ params }: { params: Promise<{ id: str
                 className="flex items-center justify-between bg-black/20 rounded-lg p-3"
               >
                 <div className="flex items-center gap-3">
-                  <div className={`w-3 h-3 rounded-full ${getMatchResultColor(match.isWin, match.isDraw).replace('text-', 'bg-')}`} />
+                  <div
+                    className={`w-3 h-3 rounded-full ${getMatchResultColor(
+                      match.isWin,
+                      match.isDraw
+                    ).replace("text-", "bg-")}`}
+                  />
                   <div>
                     <div className="text-sm font-semibold text-white">
                       {match.lobbyName || `Match ${match.matchId.slice(-6)}`}
                     </div>
                     <div className="text-xs text-slate-400">
-                      {getFormatDisplay(match.format)} • {new Date(match.completedAt).toLocaleDateString()}
+                      {getFormatDisplay(match.format)} •{" "}
+                      {new Date(match.completedAt).toLocaleDateString()}
                       {match.opponent && ` • vs ${match.opponent.name}`}
                     </div>
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className={`text-sm font-bold ${getMatchResultColor(match.isWin, match.isDraw)}`}>
+                  <div
+                    className={`text-sm font-bold ${getMatchResultColor(
+                      match.isWin,
+                      match.isDraw
+                    )}`}
+                  >
                     {getMatchResultText(match.isWin, match.isDraw)}
                   </div>
                   {match.tournamentId && (
@@ -296,7 +376,9 @@ export default function PlayerDetailPage({ params }: { params: Promise<{ id: str
       {/* Tournament History */}
       {data.tournamentHistory.length > 0 && (
         <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4">
-          <h2 className="text-lg font-semibold text-white mb-4">Tournament History</h2>
+          <h2 className="text-lg font-semibold text-white mb-4">
+            Tournament History
+          </h2>
           <div className="space-y-2">
             {data.tournamentHistory.map((tournament, index) => (
               <div
@@ -304,16 +386,22 @@ export default function PlayerDetailPage({ params }: { params: Promise<{ id: str
                 className="flex items-center justify-between bg-black/20 rounded-lg p-3"
               >
                 <div>
-                  <div className="font-semibold text-white">{tournament.tournament.name}</div>
+                  <div className="font-semibold text-white">
+                    {tournament.tournament.name}
+                  </div>
                   <div className="text-xs text-slate-400">
-                    {getFormatDisplay(tournament.tournament.format)} • {tournament.tournament.status}
+                    {getFormatDisplay(tournament.tournament.format)} •{" "}
+                    {tournament.tournament.status}
                   </div>
                 </div>
                 <div className="text-right text-sm">
-                  <div className="font-bold text-white">Rank #{tournament.finalRank}</div>
+                  <div className="font-bold text-white">
+                    Rank #{tournament.finalRank}
+                  </div>
                   <div className="text-xs text-slate-400">
                     {tournament.wins}-{tournament.losses}
-                    {tournament.draws > 0 && `-${tournament.draws}`} • {tournament.matchPoints} pts
+                    {tournament.draws > 0 && `-${tournament.draws}`} •{" "}
+                    {tournament.matchPoints} pts
                   </div>
                 </div>
               </div>

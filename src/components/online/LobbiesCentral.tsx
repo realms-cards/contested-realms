@@ -16,6 +16,26 @@ function isCpuBotsEnabled(): boolean {
   return enabled === "1" || enabled === "true";
 }
 
+// Format duration from timestamp to human-readable string
+function formatDuration(startedAt: number | null | undefined): string {
+  if (!startedAt) return "";
+  const now = Date.now();
+  const diffMs = now - startedAt;
+  if (diffMs < 0) return "";
+
+  const minutes = Math.floor(diffMs / 60000);
+  const hours = Math.floor(minutes / 60);
+
+  if (hours > 0) {
+    const remainingMinutes = minutes % 60;
+    return `${hours}h ${remainingMinutes}m`;
+  }
+  if (minutes > 0) {
+    return `${minutes}m`;
+  }
+  return "<1m";
+}
+
 export type CreateLobbyConfig = {
   name: string;
   visibility: "open" | "private";
@@ -871,6 +891,14 @@ export default function LobbiesCentral({
                         }`}
                       >
                         {l.status}
+                      </span>
+                    )}
+                    {l.status === "started" && l.startedAt && (
+                      <span
+                        className="text-[10px] text-slate-400"
+                        title={new Date(l.startedAt).toLocaleString()}
+                      >
+                        {formatDuration(l.startedAt)}
                       </span>
                     )}
                     {l.visibility === "private" && (
