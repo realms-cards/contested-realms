@@ -5,7 +5,7 @@
 
 import { RefreshCw, Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef } from "react";
 import type { VoiceOutgoingRequest } from "@/app/online/online-context";
 import type { TournamentInfo, LobbyInfo } from "@/lib/net/protocol";
 import { generateLobbyName } from "@/lib/random-name-generator";
@@ -373,6 +373,8 @@ export default function LobbiesCentral({
   onRefresh,
   tournamentsEnabled = true,
   voiceSupport,
+  externalOverlayOpen,
+  onExternalOverlayChange,
 }: {
   lobbies: LobbyInfo[];
   tournaments: TournamentInfo[];
@@ -409,6 +411,8 @@ export default function LobbiesCentral({
     onRequest: (playerId: string) => void;
     connectedPeerIds?: string[];
   } | null;
+  externalOverlayOpen?: boolean;
+  onExternalOverlayChange?: (open: boolean) => void;
 }) {
   const [query, setQuery] = useState("");
   const [hideFull, setHideFull] = useState(false);
@@ -418,7 +422,17 @@ export default function LobbiesCentral({
   >("status");
   const [showTournaments, setShowTournaments] = useState(tournamentsEnabled);
   const [showLobbies, setShowLobbies] = useState(true);
-  const [overlayOpen, setOverlayOpen] = useState(false);
+  const [internalOverlayOpen, setInternalOverlayOpen] = useState(false);
+
+  // Use external overlay state if provided, otherwise use internal state
+  const overlayOpen = externalOverlayOpen ?? internalOverlayOpen;
+  const setOverlayOpen = (open: boolean) => {
+    if (onExternalOverlayChange) {
+      onExternalOverlayChange(open);
+    } else {
+      setInternalOverlayOpen(open);
+    }
+  };
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [editingTournament, setEditingTournament] =
     useState<TournamentInfo | null>(null);
@@ -514,11 +528,15 @@ export default function LobbiesCentral({
   >([]);
   const [loadingCubes, setLoadingCubes] = useState(false);
 
-  // Generate a random name when overlay opens
-  const handleOverlayOpen = () => {
-    setCfgName(generateLobbyName());
-    setOverlayOpen(true);
-  };
+  // Generate a random name when overlay is opened externally
+  const prevOverlayOpenRef = useRef(overlayOpen);
+  if (overlayOpen && !prevOverlayOpenRef.current) {
+    // Overlay just opened - generate a name if empty
+    if (!cfgName) {
+      setCfgName(generateLobbyName());
+    }
+  }
+  prevOverlayOpenRef.current = overlayOpen;
 
   const handleTournamentOverlayOpen = () => {
     setTournamentName(generateLobbyName());
@@ -693,22 +711,6 @@ export default function LobbiesCentral({
           </button>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            className={`rounded px-3 py-1 text-xs ${
-              isEngaged
-                ? "bg-slate-600/50 text-slate-400 cursor-not-allowed"
-                : "bg-green-600/80 hover:bg-green-600"
-            }`}
-            onClick={isEngaged ? undefined : handleOverlayOpen}
-            disabled={isEngaged}
-            title={
-              isEngaged
-                ? `Already in ${isInLobby ? "lobby" : "tournament"}`
-                : "Create a new match"
-            }
-          >
-            Create Match
-          </button>
           {onLeaveLobby && !!joinedLobbyId && (
             <button
               className="rounded px-3 py-1 text-xs bg-red-600/80 hover:bg-red-600 text-white"
@@ -872,34 +874,55 @@ export default function LobbiesCentral({
                       </span>
                     )}
                     {l.visibility === "private" && (
-                      <EyeOff
-                        className="w-3 h-3 text-amber-300"
-                        title="Private"
-                      />
+                      <span title="Private">
+                        <EyeOff className="w-3 h-3 text-amber-300" />
+                      </span>
                     )}
                     <span>{host}</span>
                     <span>•</span>
                     <span>
                       {l.players.length}/{l.maxPlayers}
                     </span>
-                    {isMine &&
-                      myId &&
-                      l.hostId === myId &&
-                      l.status === "open" &&
-                      l.players.length < l.maxPlayers && (
-                        <span className="text-amber-300 animate-pulse ml-1">
-                          ⏳ Invite friend
-                        </span>
-                      )}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
                   {isMine ? (
                     <>
                       <div className="flex items-center gap-2">
-                        <span className="rounded px-3 py-1 text-xs bg-green-600/70 text-green-100">
-                          Ready!
-                        </span>
+                        {myId &&
+                        l.hostId === myId &&
+                        l.players.length < l.maxPlayers ? (
+                          <button
+                            type="button"
+                            className="rounded px-3 py-1 text-xs bg-amber-600/70 text-amber-100 animate-pulse hover:bg-amber-600"
+                            onClick={() => {
+                              const panel = document.getElementById(
+                                "players-invite-panel"
+                              );
+                              if (panel) {
+                                panel.scrollIntoView({
+                                  behavior: "smooth",
+                                  block: "center",
+                                });
+                                panel.classList.add("ring-2", "ring-amber-400");
+                                setTimeout(
+                                  () =>
+                                    panel.classList.remove(
+                                      "ring-2",
+                                      "ring-amber-400"
+                                    ),
+                                  2000
+                                );
+                              }
+                            }}
+                          >
+                            Invite friend!
+                          </button>
+                        ) : (
+                          <span className="rounded px-3 py-1 text-xs bg-green-600/70 text-green-100">
+                            Ready!
+                          </span>
+                        )}
                         {myId && l.hostId !== myId && l.status === "open" && (
                           <span className="rounded-full px-3 py-1 text-[10px] bg-slate-700/80 text-slate-100">
                             Waiting for host to start

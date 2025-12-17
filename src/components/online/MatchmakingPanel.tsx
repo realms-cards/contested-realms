@@ -1,10 +1,16 @@
 "use client";
 
-import { Loader2, Search, X, Users } from "lucide-react";
+import { Loader2, X, Users } from "lucide-react";
 import { useMemo } from "react";
 import { useOnline } from "@/app/online/online-context";
 
-export default function MatchmakingPanel() {
+interface MatchmakingPanelProps {
+  onCreateMatch?: () => void;
+}
+
+export default function MatchmakingPanel({
+  onCreateMatch,
+}: MatchmakingPanelProps) {
   const {
     matchmaking,
     joinMatchmaking,
@@ -13,6 +19,7 @@ export default function MatchmakingPanel() {
     lobby,
     match,
     players,
+    lobbies,
   } = useOnline();
 
   const isSearching = matchmaking.status === "searching";
@@ -21,115 +28,94 @@ export default function MatchmakingPanel() {
   // Disable matchmaking when in a lobby or match
   const disabled = !!lobby || !!match;
 
-  // Count online players (excluding self)
+  // Count online players
   const onlineCount = players.length;
   const queueSize = matchmaking.queueSize ?? 0;
+
+  // Count precon matches (lobbies with precon type that are open or started)
+  const preconStats = useMemo(() => {
+    let waiting = 0;
+    let playing = 0;
+    for (const l of lobbies) {
+      // Check if it's a precon/matchmaking lobby (no planned match type or constructed with precon name pattern)
+      const isPrecon =
+        l.isMatchmakingLobby || l.name?.toLowerCase().includes("precon");
+      if (isPrecon) {
+        if (l.status === "open") waiting += l.players.length;
+        else if (l.status === "started") playing += l.players.length;
+      }
+    }
+    return { waiting: waiting + queueSize, playing };
+  }, [lobbies, queueSize]);
 
   const handleSearchClick = () => {
     if (disabled) return;
     if (isSearching || matchFound) {
       leaveMatchmaking();
-      // Also leave any lobby created by matchmaking
       if (lobby) {
         leaveLobby();
       }
     } else {
-      // Only precon mode for now
       joinMatchmaking(["precon"]);
     }
   };
 
-  const statusText = useMemo(() => {
-    if (matchFound) {
-      if (matchmaking.isHost) {
-        return "Match found! You are the host - configure the game settings.";
-      }
-      return "Match found! Waiting for host to start the game...";
-    }
-    if (isSearching) {
-      // Don't show wait time if no other players online
-      if (onlineCount <= 1) {
-        return "Waiting for other players to come online...";
-      }
-      const posText =
-        matchmaking.queuePosition != null
-          ? `Position: ${matchmaking.queuePosition + 1}`
-          : "";
-      return posText || "Looking for opponent...";
-    }
-    return null;
-  }, [
-    matchFound,
-    isSearching,
-    matchmaking.queuePosition,
-    matchmaking.isHost,
-    onlineCount,
-  ]);
-
   if (disabled) {
-    return null; // Hide matchmaking when already in a lobby or match
+    return null;
   }
 
   return (
-    <div className="rounded-xl bg-gradient-to-br from-violet-950/40 to-slate-900/60 ring-1 ring-violet-500/20 overflow-hidden">
-      {/* Main Quick Play Button */}
+    <div className="flex gap-3">
+      {/* Card 1: Online Count (smaller, non-interactive) */}
+      <div className="rounded-lg bg-gradient-to-br from-emerald-950/40 to-slate-900/60 ring-1 ring-emerald-500/20 flex flex-col items-center justify-center px-4 py-2">
+        <div className="text-2xl font-bold text-white leading-none">
+          {onlineCount}
+        </div>
+        <div className="flex items-center gap-1 mt-1">
+          <Users className="w-3 h-3 text-emerald-400" />
+          <div className="text-[10px] text-emerald-300/80">online</div>
+        </div>
+      </div>
+
+      {/* Card 2: Quick Play with Precons */}
       <button
         onClick={handleSearchClick}
-        className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors"
+        className="flex-1 rounded-xl bg-gradient-to-br from-violet-950/40 to-slate-900/60 ring-1 ring-violet-500/20 flex flex-col items-center justify-center p-3 hover:bg-white/5 transition-colors group"
       >
-        <div className="flex items-center gap-2">
-          <Users className="w-5 h-5 text-violet-400" />
-          {matchFound ? (
-            <>
-              <span className="text-lg font-semibold text-white">
-                Match Found!
-              </span>
-              <span className="ml-2 px-2 py-0.5 rounded-full bg-emerald-600/30 text-emerald-400 text-xs font-medium">
-                {matchmaking.isHost ? "You are host" : "Waiting for host"}
-              </span>
-            </>
-          ) : isSearching ? (
-            <>
-              <span className="text-lg font-semibold text-white">
-                Searching...
-              </span>
-              <Loader2 className="w-4 h-4 text-violet-400 animate-spin ml-1" />
-            </>
-          ) : (
-            <>
-              <span className="text-lg font-semibold text-white">
-                Quick Matchmaking with Precons
-              </span>
-              <span className="ml-2 px-2 py-0.5 rounded-full bg-emerald-600/30 text-emerald-400 text-xs font-medium">
-                {onlineCount} online
-              </span>
-              {queueSize > 0 && (
-                <span className="px-2 py-0.5 rounded-full bg-violet-600/30 text-violet-300 text-xs font-medium">
-                  {queueSize} in queue
-                </span>
-              )}
-            </>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          {isSearching || matchFound ? (
-            <X className="w-5 h-5 text-red-400 hover:text-red-300" />
-          ) : (
-            <Search className="w-5 h-5 text-slate-400" />
-          )}
-        </div>
+        {isSearching || matchFound ? (
+          <div className="flex items-center gap-2">
+            <div className="text-sm font-semibold text-white">
+              {matchFound ? "Match Found!" : "Searching..."}
+            </div>
+            {isSearching && (
+              <Loader2 className="w-4 h-4 text-violet-300 animate-spin" />
+            )}
+            <X className="w-4 h-4 text-red-400 opacity-60 group-hover:opacity-100" />
+          </div>
+        ) : (
+          <div>
+            <div className="text-sm font-semibold text-white">
+              Quick Play Precons
+            </div>
+            <div className="text-[10px] text-violet-300/80">
+              {preconStats.waiting > 0
+                ? `${preconStats.waiting} waiting`
+                : "Click to find match"}
+            </div>
+          </div>
+        )}
       </button>
 
-      {/* Status Text */}
-      {statusText && (
-        <div
-          className={`px-4 pb-3 text-center text-sm ${
-            matchFound ? "text-emerald-400" : "text-slate-400"
-          }`}
-        >
-          {statusText}
+      {/* Card 3: Create Match */}
+      <button
+        onClick={onCreateMatch}
+        className="flex-1 rounded-xl bg-gradient-to-br from-green-600/80 to-green-700/60 ring-1 ring-green-500/40 flex flex-col items-center justify-center p-3 hover:from-green-600 hover:to-green-700 transition-colors"
+      >
+        <div className="text-sm font-semibold text-white">Create Match</div>
+        <div className="text-[10px] text-green-100/80">
+          Constructed • Sealed • Draft
         </div>
-      )}
+      </button>
     </div>
   );
 }

@@ -220,7 +220,9 @@ export default function LobbyChatConsole({
                 const isMine = myPlayerId && m.from?.id === myPlayerId;
                 const patronTier =
                   m.from?.id && patrons
-                    ? patrons.grandmaster.some((p) => p.id === m.from?.id)
+                    ? patrons.kingofthe?.some((p) => p.id === m.from?.id)
+                      ? "kingofthe"
+                      : patrons.grandmaster.some((p) => p.id === m.from?.id)
                       ? "grandmaster"
                       : patrons.apprentice.some((p) => p.id === m.from?.id)
                       ? "apprentice"

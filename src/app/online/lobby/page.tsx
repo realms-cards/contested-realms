@@ -605,6 +605,8 @@ function LobbyPageContent({
   // Overlay for configuring and confirming match start (host)
   const [configOpen, setConfigOpen] = useState(false);
   const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
+  // Create match overlay state (shared between MatchmakingPanel and LobbiesCentral)
+  const [createMatchOverlayOpen, setCreateMatchOverlayOpen] = useState(false);
 
   // Track whether the host has confirmed setup at least once for this lobby.
   // Once confirmed, we can auto-start the match as soon as a second player
@@ -919,7 +921,11 @@ function LobbyPageContent({
     <OnlinePageShell>
       <div className="space-y-6">
         {/* Quick Play / Matchmaking - show when not in a lobby or match */}
-        {!lobby && !match && <MatchmakingPanel />}
+        {!lobby && !match && (
+          <MatchmakingPanel
+            onCreateMatch={() => setCreateMatchOverlayOpen(true)}
+          />
+        )}
 
         {/* Match Controls - show when a match exists in context */}
         {match && (
@@ -1169,6 +1175,8 @@ function LobbyPageContent({
               : undefined
           }
           tournamentsEnabled={tournamentsEnabled}
+          externalOverlayOpen={createMatchOverlayOpen}
+          onExternalOverlayChange={setCreateMatchOverlayOpen}
           onRefresh={async () => {
             try {
               await requestLobbies();
@@ -1234,17 +1242,19 @@ function LobbyPageContent({
             )}
 
             {/* Friends browser */}
-            <PlayersInvitePanel
-              players={players}
-              available={availablePlayers}
-              loading={availablePlayersLoading}
-              nextCursor={availablePlayersNextCursor}
-              requestPlayers={requestPlayers}
-              error={playersError}
-              me={me}
-              lobby={lobby}
-              onInvite={(pid, lid) => inviteToLobby(pid, lid)}
-            />
+            <div id="players-invite-panel">
+              <PlayersInvitePanel
+                players={players}
+                available={availablePlayers}
+                loading={availablePlayersLoading}
+                nextCursor={availablePlayersNextCursor}
+                requestPlayers={requestPlayers}
+                error={playersError}
+                me={me}
+                lobby={lobby}
+                onInvite={(pid, lid) => inviteToLobby(pid, lid)}
+              />
+            </div>
           </div>
 
           {/* Inline lobby chat console (global + lobby scopes) */}
