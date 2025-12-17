@@ -154,6 +154,7 @@ function createLobbyFeature(deps) {
       visibility: lobby.visibility,
       readyPlayerIds: Array.from(lobby.ready),
       plannedMatchType: lobby.plannedMatchType,
+      matchId: lobby.matchId || null,
     };
   }
 
@@ -578,6 +579,7 @@ function createLobbyFeature(deps) {
     } catch {}
     try {
       lobby.status = "started";
+      lobby.matchId = match.id;
     } catch {}
     io.to(`lobby:${lobby.id}`).emit("lobbyUpdated", {
       lobby: getLobbyInfo(lobby),

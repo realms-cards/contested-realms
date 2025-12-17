@@ -12,6 +12,7 @@ import TrackpadOrbitAdapter from "@/lib/controls/TrackpadOrbitAdapter";
 import { Physics } from "@/lib/game/physics";
 import { createGameStore } from "@/lib/game/store";
 import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
+import { useZoomKeyboardShortcuts } from "@/lib/hooks/useZoomKeyboardShortcuts";
 
 interface EditorCanvasProps {
   children?: React.ReactNode;
@@ -145,5 +146,6 @@ function KeyboardPanControls({
     controls: s.controls as OrbitControlsImpl | undefined,
   }));
   useOrbitKeyboardPan(controls, { enabled, panStep: step });
+  useZoomKeyboardShortcuts(controls, { enabled });
   return null;
 }

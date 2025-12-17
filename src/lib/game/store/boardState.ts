@@ -1,10 +1,10 @@
 import type { StateCreator } from "zustand";
-import type { GameState, PlayerKey, ServerPatchT, Zones } from "./types";
 import {
   TOKEN_BY_NAME,
   tokenSlug,
   newTokenInstanceId,
 } from "@/lib/game/tokens";
+import type { GameState, PlayerKey, ServerPatchT, Zones } from "./types";
 import { getCellNumber, seatFromOwner, toCellKey } from "./utils/boardHelpers";
 import { prepareCardForSeat } from "./utils/cardHelpers";
 import { newPermanentInstanceId } from "./utils/idHelpers";

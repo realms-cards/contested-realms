@@ -92,6 +92,8 @@ export const LobbyInfoSchema = z.object({
     .optional(),
   // Quick Play lobby: game mode is locked, host configures and starts
   isMatchmakingLobby: z.boolean().optional(),
+  // Match ID when lobby status is "started" - allows spectating
+  matchId: z.string().nullable().optional(),
 });
 export type LobbyInfo = z.infer<typeof LobbyInfoSchema>;
 

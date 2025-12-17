@@ -412,7 +412,7 @@ export default function LobbiesCentral({
 }) {
   const [query, setQuery] = useState("");
   const [hideFull, setHideFull] = useState(false);
-  const [hideStarted, setHideStarted] = useState(true);
+  const [hideStarted, setHideStarted] = useState(false);
   const [sortKey, setSortKey] = useState<
     "invited" | "playersAsc" | "playersDesc" | "status"
   >("status");
@@ -1141,26 +1141,41 @@ export default function LobbiesCentral({
                       </button>
                     </>
                   ) : (
-                    <button
-                      className="rounded bg-slate-700 hover:bg-slate-600 px-3 py-1 text-xs disabled:opacity-40"
-                      onClick={() => onJoin(l.id)}
-                      disabled={
-                        !open || full || (isEngaged && l.id !== joinedLobbyId)
-                      }
-                      title={
-                        !open
-                          ? "Lobby not open"
-                          : full
-                          ? "Lobby is full"
-                          : isEngaged
-                          ? `Already in ${
-                              isInLobby ? "another lobby" : "tournament"
-                            }`
-                          : "Join lobby"
-                      }
-                    >
-                      {full ? "Full" : "Join"}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      {l.status === "started" &&
+                        l.matchId &&
+                        l.visibility === "open" && (
+                          <Link
+                            href={`/online/play/${encodeURIComponent(
+                              l.matchId
+                            )}?watch=true`}
+                            className="rounded bg-blue-600/80 hover:bg-blue-600 px-3 py-1 text-xs text-blue-100"
+                            title="Watch this match as a spectator"
+                          >
+                            Spectate
+                          </Link>
+                        )}
+                      <button
+                        className="rounded bg-slate-700 hover:bg-slate-600 px-3 py-1 text-xs disabled:opacity-40"
+                        onClick={() => onJoin(l.id)}
+                        disabled={
+                          !open || full || (isEngaged && l.id !== joinedLobbyId)
+                        }
+                        title={
+                          !open
+                            ? "Lobby not open"
+                            : full
+                            ? "Lobby is full"
+                            : isEngaged
+                            ? `Already in ${
+                                isInLobby ? "another lobby" : "tournament"
+                              }`
+                            : "Join lobby"
+                        }
+                      >
+                        {full ? "Full" : "Join"}
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>

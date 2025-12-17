@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useGameStore } from "@/lib/game/store";
-import { getCellNumber } from "@/lib/game/store/utils/boardHelpers";
 import type { ChaosTwisterAccuracy } from "@/lib/game/store/types";
+import { getCellNumber } from "@/lib/game/store/utils/boardHelpers";
 import type { GameTransport } from "@/lib/net/transport";
 
 // Minigame constants
@@ -157,7 +157,7 @@ export default function ChaosTwisterOverlay({
     console.log("[ChaosTwister] Starting slider position broadcast");
     const intervalId = setInterval(() => {
       // Use ref to get current position (avoids stale closure)
-      transport.sendMessage!({
+      transport.sendMessage?.({
         type: "chaosTwisterSliderPosition",
         id: pending.id,
         position: sliderPositionRef.current,

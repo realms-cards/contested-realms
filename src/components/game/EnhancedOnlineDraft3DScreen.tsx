@@ -37,6 +37,7 @@ import { Physics } from "@/lib/game/physics";
 import { useGameStore } from "@/lib/game/store";
 import { useDraft3DTransport } from "@/lib/hooks/useDraft3DTransport";
 import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
+import { useZoomKeyboardShortcuts } from "@/lib/hooks/useZoomKeyboardShortcuts";
 import type { DraftState, CustomMessage } from "@/lib/net/transport";
 import { LegacySeatVideo3D } from "@/lib/rtc/SeatVideo3D";
 import { useDraft3DSession } from "@/lib/stores/draft-3d-online";
@@ -149,6 +150,29 @@ export default function EnhancedOnlineDraft3DScreen({
   const [picksOpen, setPicksOpen] = useState(true);
   const [compactPicks, setCompactPicks] = useState(true);
   const [helpOpen, setHelpOpen] = useState(false);
+
+  // Keyboard shortcut for help overlay (?)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.isContentEditable ||
+          target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT")
+      ) {
+        return;
+      }
+      if (e.key === "?" || e.key === "h" || e.key === "H") {
+        e.preventDefault();
+        setHelpOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
   // Once we've seen any non-waiting draft phase, never allow a later 'waiting' snapshot to regress UI
   const everOutOfWaitingRef = useRef(false);
   // Keep a ref of the current draftState to avoid stale captures and effect loops
@@ -2327,5 +2351,6 @@ function KeyboardPanControls({
     controls: state.controls as OrbitControlsImpl | undefined,
   }));
   useOrbitKeyboardPan(controls, { enabled, panStep: step });
+  useZoomKeyboardShortcuts(controls, { enabled });
   return null;
 }

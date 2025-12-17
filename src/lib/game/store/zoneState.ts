@@ -782,10 +782,11 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
       if (!indices || indices.length === 0) return state;
       const idxSet = new Set(indices);
       const kept: CardRef[] = [];
-      const toReturn: CardRef[] = [];
+      // Build toReturn in the order indices were provided (click order)
+      // so cards go to bottom of deck in the order they were selected
+      const toReturn: CardRef[] = indices.map((i) => hand[i]);
       hand.forEach((c, i) => {
-        if (idxSet.has(i)) toReturn.push(c);
-        else kept.push(c);
+        if (!idxSet.has(i)) kept.push(c);
       });
 
       const avatarName = (state.avatars[who]?.card?.name || "").toLowerCase();

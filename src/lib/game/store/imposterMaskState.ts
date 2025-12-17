@@ -1,4 +1,5 @@
 import type { StateCreator } from "zustand";
+import { isImposter } from "@/lib/game/avatarAbilities";
 import type {
   CardRef,
   GameState,
@@ -6,7 +7,6 @@ import type {
   PlayerKey,
   ServerPatchT,
 } from "./types";
-import { isImposter } from "@/lib/game/avatarAbilities";
 import { IMPOSTER_MASK_COST } from "./types";
 
 // Re-export the mask cost constant

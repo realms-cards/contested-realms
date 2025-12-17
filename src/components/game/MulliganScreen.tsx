@@ -118,10 +118,8 @@ export default function MulliganScreen({ onStartGame }: MulliganScreenProps) {
               disabled={selP1.length === 0 || mulligans.p1 <= 0 || doneP1}
               onClick={() => {
                 if (selP1.length) {
-                  mulliganWithSelection(
-                    "p1",
-                    selP1.slice().sort((a, b) => a - b)
-                  );
+                  // Pass indices in click order (not sorted) so cards go to bottom in selection order
+                  mulliganWithSelection("p1", selP1);
                   setSelP1([]);
                   setDoneP1(true);
                 }
@@ -271,10 +269,8 @@ export default function MulliganScreen({ onStartGame }: MulliganScreenProps) {
               disabled={selP2.length === 0 || mulligans.p2 <= 0 || doneP2}
               onClick={() => {
                 if (selP2.length) {
-                  mulliganWithSelection(
-                    "p2",
-                    selP2.slice().sort((a, b) => a - b)
-                  );
+                  // Pass indices in click order (not sorted) so cards go to bottom in selection order
+                  mulliganWithSelection("p2", selP2);
                   setSelP2([]);
                   setDoneP2(true);
                 }

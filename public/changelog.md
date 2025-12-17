@@ -4,13 +4,16 @@
 
 ### Dec 17 — UI & Gameplay Fixes
 
-- **Imposter**: Fixed Imposter behavior and deck import
-- **Site Preview**: Increased card preview size for sites
+- **Spectator mode** Ongoing matches can be spectated (if they are not private), spectators do not see hands
+- **Add Shortcuts** Zoom is now also "+" and "-", quick help is "h" and "?"
+- **Second Player Seer** is now guarded against early game start
 - **Hand Inspect**: Added Patreon button and follow-up actions when inspecting the hand
 - **Flip cards**: Added flip cards to cards on the board
 - **Patron Shoutout**: Display all Patrons and make them stand out in Chat and the Players tab
 - **Better invites** Invites from lobby now are now overlays
 - **Online Players indicator** fixed to display only connected players
+- **Imposter**: Fixed Imposter behavior and deck import
+- **Site Preview**: Increased card preview size for sites
 
 ### Dec 16 — Replays & Auth Reliability
 

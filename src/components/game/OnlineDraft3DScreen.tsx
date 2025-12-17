@@ -19,6 +19,9 @@ import {
   DynamicPiles3D as Piles3D,
 } from "@/components/game/dynamic-3d";
 import { GlobalVideoOverlay } from "@/components/ui/GlobalVideoOverlay";
+import KeyboardShortcutsHelp, {
+  useHelpShortcut,
+} from "@/components/ui/KeyboardShortcutsHelp";
 import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
 import TrackpadOrbitAdapter from "@/lib/controls/TrackpadOrbitAdapter";
 import {
@@ -44,6 +47,7 @@ import {
 import { Physics } from "@/lib/game/physics";
 import { useGameStore } from "@/lib/game/store";
 import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
+import { useZoomKeyboardShortcuts } from "@/lib/hooks/useZoomKeyboardShortcuts";
 import type { DraftState, CustomMessage } from "@/lib/net/transport";
 import { getBoosterAssetName } from "@/lib/utils/booster-assets";
 
@@ -308,6 +312,9 @@ export default function OnlineDraft3DScreen({
   useEffect(() => {
     useGameStore.getState().resetGameState();
   }, []);
+
+  // Keyboard shortcuts help overlay
+  const [helpOpen, setHelpOpen] = useHelpShortcut();
 
   // Local UI state
   const [error, setError] = useState<string | null>(null);
@@ -1618,6 +1625,13 @@ export default function OnlineDraft3DScreen({
 
       {/* Video Overlay */}
       <GlobalVideoOverlay position="top-right" showUserAvatar={true} />
+
+      {/* Keyboard shortcuts help overlay */}
+      <KeyboardShortcutsHelp
+        open={helpOpen}
+        onClose={() => setHelpOpen(false)}
+        context="draft"
+      />
     </div>
   );
 }
@@ -1683,5 +1697,6 @@ function KeyboardPanControls({
     controls: state.controls as OrbitControlsImpl | undefined,
   }));
   useOrbitKeyboardPan(controls, { enabled, panStep: step });
+  useZoomKeyboardShortcuts(controls, { enabled });
   return null;
 }
