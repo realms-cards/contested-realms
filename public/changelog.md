@@ -10,6 +10,7 @@
 - **Flip cards**: Added flip cards to cards on the board
 - **Patron Shoutout**: Display all Patrons and make them stand out in Chat and the Players tab
 - **Better invites** Invites from lobby now are now overlays
+- **Online Players indicator** fixed to display only connected players
 
 ### Dec 16 — Replays & Auth Reliability
 

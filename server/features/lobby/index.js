@@ -678,7 +678,8 @@ function createLobbyFeature(deps) {
   function playersArray() {
     const arr = [];
     for (const p of players.values()) {
-      if (!p.displayName.startsWith("Replay_")) {
+      // Only include players with an active socket connection (not disconnected)
+      if (p.socketId && !p.displayName.startsWith("Replay_")) {
         arr.push(getPlayerInfo(p.id));
       }
     }
