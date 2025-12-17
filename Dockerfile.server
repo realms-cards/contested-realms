@@ -11,7 +11,10 @@ COPY tsconfig.json ./tsconfig.json
 COPY prisma ./prisma
 COPY server ./server
 COPY bots ./bots
-COPY data ./data
+# Only copy data files needed by the server (not card art/textures)
+COPY data/cards_raw.json ./data/cards_raw.json
+COPY data/bots ./data/bots
+COPY data/cards ./data/cards
 COPY scripts ./scripts
 COPY reference ./reference
 
