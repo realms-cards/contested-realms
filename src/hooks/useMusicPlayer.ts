@@ -96,6 +96,9 @@ function saveSetting<T>(key: string, value: T): void {
 export function useMusicPlayer(): [MusicPlayerState, MusicPlayerControls] {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [autoplayBlocked, setAutoplayBlocked] = useState(false);
+  // Track playback intent separately from audio.paused state
+  // This ensures we continue playing after track ends
+  const shouldBePlayingRef = useRef(false);
 
   // Load initial settings from localStorage
   const [isEnabled, setIsEnabled] = useState<boolean>(() =>
@@ -145,7 +148,10 @@ export function useMusicPlayer(): [MusicPlayerState, MusicPlayerControls] {
     return () => {
       if (audioRef.current) {
         audioRef.current.removeEventListener("ended", handleEnded);
-        audioRef.current.removeEventListener("error", handleError as EventListener);
+        audioRef.current.removeEventListener(
+          "error",
+          handleError as EventListener
+        );
       }
     };
   }, [currentTrackIndex]);
@@ -164,17 +170,24 @@ export function useMusicPlayer(): [MusicPlayerState, MusicPlayerControls] {
   useEffect(() => {
     if (!audioRef.current) return;
 
-    const wasPlaying = !audioRef.current.paused;
+    // Use shouldBePlayingRef instead of audio.paused because when a track ends,
+    // paused becomes true even though we want to continue playing the next track
+    const wasPlaying = shouldBePlayingRef.current;
     audioRef.current.src = currentTrack.path;
 
     if (wasPlaying && isEnabled) {
       const playPromise = audioRef.current.play();
       if (playPromise) {
-        playPromise.catch((error) => {
-          console.warn("Autoplay blocked or playback failed:", error);
-          setAutoplayBlocked(true);
-          setIsPlaying(false);
-        });
+        playPromise
+          .then(() => {
+            setIsPlaying(true);
+          })
+          .catch((error) => {
+            console.warn("Autoplay blocked or playback failed:", error);
+            setAutoplayBlocked(true);
+            setIsPlaying(false);
+            shouldBePlayingRef.current = false;
+          });
       }
     }
   }, [currentTrack, isEnabled]);
@@ -183,6 +196,7 @@ export function useMusicPlayer(): [MusicPlayerState, MusicPlayerControls] {
   useEffect(() => {
     if (!audioRef.current || !isEnabled) return;
 
+    shouldBePlayingRef.current = true;
     const playPromise = audioRef.current.play();
     if (playPromise) {
       playPromise
@@ -194,6 +208,7 @@ export function useMusicPlayer(): [MusicPlayerState, MusicPlayerControls] {
           console.warn("Autoplay blocked:", error);
           setAutoplayBlocked(true);
           setIsPlaying(false);
+          shouldBePlayingRef.current = false;
         });
     }
   }, [isEnabled]);
@@ -210,6 +225,7 @@ export function useMusicPlayer(): [MusicPlayerState, MusicPlayerControls] {
     if (!audioRef.current) return;
 
     if (audioRef.current.paused) {
+      shouldBePlayingRef.current = true;
       const playPromise = audioRef.current.play();
       if (playPromise) {
         playPromise
@@ -220,9 +236,11 @@ export function useMusicPlayer(): [MusicPlayerState, MusicPlayerControls] {
           .catch((error) => {
             console.warn("Play failed:", error);
             setAutoplayBlocked(true);
+            shouldBePlayingRef.current = false;
           });
       }
     } else {
+      shouldBePlayingRef.current = false;
       audioRef.current.pause();
       setIsPlaying(false);
     }
@@ -261,6 +279,7 @@ export function useMusicPlayer(): [MusicPlayerState, MusicPlayerControls] {
     saveSetting(MUSIC_STORAGE_KEYS.enabled, newEnabled);
 
     if (!newEnabled && audioRef.current) {
+      shouldBePlayingRef.current = false;
       audioRef.current.pause();
       setIsPlaying(false);
     }
