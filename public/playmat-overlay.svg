@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2556 1663" width="2556" height="1663">
+  <defs>
+    <style>
+      @font-face {
+        font-family: 'Fantaisie Artistique';
+        src: url('/FantaisieArtistique.ttf') format('truetype');
+      }
+      .tile-number {
+        font-family: 'Fantaisie Artistique', 'Palatino Linotype', 'Book Antiqua', Palatino, serif;
+        font-size: 32px;
+        fill: rgba(255, 255, 255, 0.3);
+      }
+      .grid-line {
+        stroke: rgba(255, 255, 255, 0.3);
+        stroke-width: 2;
+        fill: none;
+      }
+    </style>
+  </defs>
+
+  <!-- 
+    Calculated from game constants:
+    - tilePx: 388.73
+    - cardLongPx: 213.8, cardShortPx: 160.35
+    - Grid bounds: left=306.2, right=2249.8, top=54.0, bottom=1609.0
+    - Tile centers are at intervals of 388.73px
+    
+    Pile layout (from actual game screenshots):
+    - P1 (top player): piles on LEFT side - Cemetery, Spellbook, Atlas (top to bottom)
+    - P2 (bottom player): piles on RIGHT side - Cemetery, Spellbook, Atlas (bottom to top)
+  -->
+
+  <!-- Grid lines - 5 columns x 4 rows -->
+  <!-- Vertical lines (6 lines for 5 columns) -->
+  <line class="grid-line" x1="306.2" y1="54" x2="306.2" y2="1609"/>
+  <line class="grid-line" x1="694.9" y1="54" x2="694.9" y2="1609"/>
+  <line class="grid-line" x1="1083.6" y1="54" x2="1083.6" y2="1609"/>
+  <line class="grid-line" x1="1472.4" y1="54" x2="1472.4" y2="1609"/>
+  <line class="grid-line" x1="1861.1" y1="54" x2="1861.1" y2="1609"/>
+  <line class="grid-line" x1="2249.8" y1="54" x2="2249.8" y2="1609"/>
+
+  <!-- Horizontal lines (5 lines for 4 rows) -->
+  <line class="grid-line" x1="306.2" y1="54" x2="2249.8" y2="54"/>
+  <line class="grid-line" x1="306.2" y1="442.8" x2="2249.8" y2="442.8"/>
+  <line class="grid-line" x1="306.2" y1="831.5" x2="2249.8" y2="831.5"/>
+  <line class="grid-line" x1="306.2" y1="1220.2" x2="2249.8" y2="1220.2"/>
+  <line class="grid-line" x1="306.2" y1="1609" x2="2249.8" y2="1609"/>
+
+  <!-- Tile numbers (1-20, numbered from top-left, row by row) -->
+  <!-- Row 1 (top): tiles 1-5 - positioned in upper-left of each tile -->
+  <text class="tile-number" x="318" y="90">1</text>
+  <text class="tile-number" x="707" y="90">2</text>
+  <text class="tile-number" x="1096" y="90">3</text>
+  <text class="tile-number" x="1484" y="90">4</text>
+  <text class="tile-number" x="1873" y="90">5</text>
+
+  <!-- Row 2: tiles 6-10 -->
+  <text class="tile-number" x="318" y="479">6</text>
+  <text class="tile-number" x="707" y="479">7</text>
+  <text class="tile-number" x="1096" y="479">8</text>
+  <text class="tile-number" x="1484" y="479">9</text>
+  <text class="tile-number" x="1873" y="479">10</text>
+
+  <!-- Row 3: tiles 11-15 -->
+  <text class="tile-number" x="318" y="867">11</text>
+  <text class="tile-number" x="707" y="867">12</text>
+  <text class="tile-number" x="1096" y="867">13</text>
+  <text class="tile-number" x="1484" y="867">14</text>
+  <text class="tile-number" x="1873" y="867">15</text>
+
+  <!-- Row 4 (bottom): tiles 16-20 -->
+  <text class="tile-number" x="318" y="1256">16</text>
+  <text class="tile-number" x="707" y="1256">17</text>
+  <text class="tile-number" x="1096" y="1256">18</text>
+  <text class="tile-number" x="1484" y="1256">19</text>
+  <text class="tile-number" x="1873" y="1256">20</text>
+
+
+</svg>
