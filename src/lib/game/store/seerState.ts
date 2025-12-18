@@ -33,7 +33,7 @@ export const createSeerSlice: StateCreator<
     const newState: SeerState = {
       secondSeat,
       status: "pending",
-      chosenPile: null,
+      chosenPile: "spellbook", // Default to spellbook
       decision: null,
       setupComplete: false,
     };

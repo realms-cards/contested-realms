@@ -1365,4 +1365,113 @@ export function handleCustomMessage(
   if (typeof t === "string" && t.startsWith("chaosTwister")) {
     console.log(`[ChaosTwister] Unhandled message type: ${t}`, msg);
   }
+  // --- Browse spell message handlers ---
+  if (t === "browseBegin") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const spellAny = (msg as { spell?: unknown }).spell as unknown;
+    const casterSeat = (msg as { casterSeat?: unknown }).casterSeat as
+      | PlayerKey
+      | undefined;
+    const revealedCount = (msg as { revealedCount?: unknown }).revealedCount as
+      | number
+      | undefined;
+    if (!id || !spellAny || !casterSeat) return;
+    const rec = spellAny as Record<string, unknown>;
+    // Opponent sees Browse begin but doesn't see the actual cards
+    set({
+      pendingBrowse: {
+        id,
+        spell: {
+          at: rec.at as CellKey,
+          index: Number(rec.index),
+          instanceId: (rec.instanceId as string | null) ?? null,
+          owner: Number(rec.owner) as 1 | 2,
+          card: rec.card as CardRef,
+        },
+        casterSeat,
+        phase: "viewing",
+        revealedCards: [], // Opponent doesn't see the cards
+        selectedCardIndex: null,
+        bottomOrder: [],
+        createdAt: Date.now(),
+      },
+    } as Partial<GameState> as GameState);
+    try {
+      get().log(
+        `[${casterSeat.toUpperCase()}] is browsing ${
+          revealedCount ?? "?"
+        } spells...`
+      );
+    } catch {}
+    return;
+  }
+  if (t === "browseSelectCard") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const cardIndex = (msg as { cardIndex?: unknown }).cardIndex as
+      | number
+      | undefined;
+    if (!id || cardIndex == null) return;
+    set((s) => {
+      if (!s.pendingBrowse || s.pendingBrowse.id !== id) return s as GameState;
+      return {
+        pendingBrowse: {
+          ...s.pendingBrowse,
+          selectedCardIndex: cardIndex,
+          phase: "ordering",
+        },
+      } as Partial<GameState> as GameState;
+    });
+    return;
+  }
+  if (t === "browseSetOrder") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const order = (msg as { order?: unknown }).order as number[] | undefined;
+    if (!id || !Array.isArray(order)) return;
+    set((s) => {
+      if (!s.pendingBrowse || s.pendingBrowse.id !== id) return s as GameState;
+      return {
+        pendingBrowse: {
+          ...s.pendingBrowse,
+          bottomOrder: order,
+        },
+      } as Partial<GameState> as GameState;
+    });
+    return;
+  }
+  if (t === "browseResolve") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const pending = get().pendingBrowse;
+    if (!pending || (id && pending.id !== id)) return;
+
+    // Move spell to graveyard (opponent side)
+    try {
+      get().movePermanentToZone(
+        pending.spell.at,
+        pending.spell.index,
+        "graveyard"
+      );
+    } catch {}
+
+    set({ pendingBrowse: null } as Partial<GameState> as GameState);
+    try {
+      get().log(`[${pending.casterSeat.toUpperCase()}] Browse resolved`);
+    } catch {}
+    return;
+  }
+  if (t === "browseCancel") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    set((s) => {
+      if (!s.pendingBrowse || (id && s.pendingBrowse.id !== id))
+        return s as GameState;
+      return { pendingBrowse: null } as Partial<GameState> as GameState;
+    });
+    try {
+      get().log("Browse cancelled");
+    } catch {}
+    return;
+  }
+  // Log unhandled Browse messages for debugging
+  if (typeof t === "string" && t.startsWith("browse")) {
+    console.log(`[Browse] Unhandled message type: ${t}`, msg);
+  }
 }

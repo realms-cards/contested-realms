@@ -145,6 +145,7 @@ export default function Board({
   const showPlaymat = useScopedStore((s) => s.showPlaymat);
   const showPlaymatOverlay = useScopedStore((s) => s.showPlaymatOverlay);
   const playmatUrl = useScopedStore((s) => s.playmatUrl);
+  const allowSiteDrag = useScopedStore((s) => s.allowSiteDrag);
   const playSelectedTo = useScopedStore((s) => s.playSelectedTo);
   const moveSelectedPermanentToWithOffset = useScopedStore(
     (s) => s.moveSelectedPermanentToWithOffset
@@ -885,6 +886,7 @@ export default function Board({
     dragContext: boardDragControls,
     useGhostOnlyBoardDrag: USE_GHOST_ONLY_BOARD_DRAG,
     lastPointerRef,
+    allowSiteDrag,
   });
 
   // removed global pointerup fallback; drops are handled by tiles/cards precisely

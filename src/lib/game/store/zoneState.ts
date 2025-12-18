@@ -326,20 +326,49 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
 
   scryTop: (who, from, decision) =>
     set((state) => {
-      const secondSeat: PlayerKey = state.currentPlayer === 1 ? "p2" : "p1";
-      if (who !== secondSeat) return state;
-      if (state.phase !== "Start") return state;
+      // Validate the player can scry (must be second seat based on currentPlayer)
+      const expectedSecondSeat: PlayerKey =
+        state.currentPlayer === 1 ? "p2" : "p1";
+      if (who !== expectedSecondSeat) {
+        console.warn(
+          `[scryTop] Rejected: who=${who} but expectedSecondSeat=${expectedSecondSeat} (currentPlayer=${state.currentPlayer})`
+        );
+        return state;
+      }
+      // Allow scry during Setup (mulligan/seer phase) or Start phase
+      if (state.phase !== "Start" && state.phase !== "Setup") {
+        console.warn(
+          `[scryTop] Rejected: phase=${state.phase} (expected Setup or Start)`
+        );
+        return state;
+      }
+
       const pile =
         from === "spellbook"
           ? [...state.zones[who].spellbook]
           : [...state.zones[who].atlas];
-      if (pile.length === 0) return state;
+
+      console.log(
+        `[scryTop] Processing: who=${who}, from=${from}, decision=${decision}, pile.length=${pile.length}`
+      );
+
+      if (pile.length === 0) {
+        console.warn(`[scryTop] Pile ${from} is empty for ${who}`);
+        return state;
+      }
+
       const top = pile[0];
       let nextPile = pile;
+
+      // Only modify pile if putting card on bottom
       if (decision === "bottom" && top) {
         nextPile = pile.slice(1);
         nextPile.push(prepareCardForSeat(top, who));
+        console.log(`[scryTop] Moving ${top.name} to bottom of ${from}`);
+      } else {
+        console.log(`[scryTop] Keeping ${top?.name} on top of ${from}`);
       }
+
       const zonesNext = {
         ...state.zones,
         [who]: {
@@ -349,11 +378,13 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
             : { atlas: nextPile }),
         },
       } as GameState["zones"];
+
       get().log(
         `${who.toUpperCase()} scries ${from} (${
           decision === "bottom" ? "bottom" : "top"
         }${top?.name ? ": " + top.name : ""})`
       );
+
       const tr = get().transport;
       if (tr) {
         const zonePatch = createZonesPatchFor(zonesNext, who);

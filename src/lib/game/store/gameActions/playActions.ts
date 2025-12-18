@@ -296,6 +296,7 @@ export const createPlayActionsSlice: StateCreator<
       // Check for special card abilities that need custom flows
       const cardNameLower = (card.name || "").toLowerCase();
       const isChaosTwister = cardNameLower.includes("chaos twister");
+      const isBrowse = cardNameLower === "browse";
 
       // If this is Chaos Twister, begin the dexterity minigame flow
       if (isChaosTwister && newest) {
@@ -312,7 +313,22 @@ export const createPlayActionsSlice: StateCreator<
           });
         } catch {}
       }
-      // If this is a Magic card (but not Chaos Twister), begin the magic casting flow after placing it
+      // If this is Browse, begin the browse spell flow
+      else if (isBrowse && newest) {
+        try {
+          get().beginBrowse({
+            spell: {
+              at: key,
+              index: arr.length - 1,
+              instanceId: newest.instanceId ?? null,
+              owner: newest.owner,
+              card: newest.card as CardRef,
+            },
+            casterSeat: who,
+          });
+        } catch {}
+      }
+      // If this is a Magic card (but not Chaos Twister or Browse), begin the magic casting flow after placing it
       else if (type.includes("magic") && newest) {
         try {
           get().beginMagicCast({

@@ -8,6 +8,7 @@ type BoardUiDefaults = Pick<
   | "showPlaymat"
   | "showPlaymatOverlay"
   | "playmatUrl"
+  | "allowSiteDrag"
   | "boardPings"
   | "lastPointerWorldPos"
 >;
@@ -17,6 +18,7 @@ export const createInitialBoardUiState = (): BoardUiDefaults => ({
   showPlaymat: true,
   showPlaymatOverlay: false, // Default: show playmat, hide grid overlay
   playmatUrl: "/playmat.jpg",
+  allowSiteDrag: false, // Default: sites cannot be dragged back to hand
   boardPings: [],
   lastPointerWorldPos: null,
 });
@@ -27,9 +29,11 @@ export type BoardUiSlice = Pick<
   | "showPlaymat"
   | "showPlaymatOverlay"
   | "playmatUrl"
+  | "allowSiteDrag"
   | "toggleGridOverlay"
   | "togglePlaymat"
   | "togglePlaymatOverlay"
+  | "toggleAllowSiteDrag"
   | "setPlaymatUrl"
   | "boardPings"
   | "pushBoardPing"
@@ -51,6 +55,8 @@ export const createBoardUiSlice: StateCreator<
   togglePlaymat: () => set((state) => ({ showPlaymat: !state.showPlaymat })),
   togglePlaymatOverlay: () =>
     set((state) => ({ showPlaymatOverlay: !state.showPlaymatOverlay })),
+  toggleAllowSiteDrag: () =>
+    set((state) => ({ allowSiteDrag: !state.allowSiteDrag })),
   setPlaymatUrl: (url: string) => set({ playmatUrl: url }),
 
   pushBoardPing: (ping) => {

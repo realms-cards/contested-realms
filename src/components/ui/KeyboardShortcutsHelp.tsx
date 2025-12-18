@@ -133,7 +133,7 @@ export default function KeyboardShortcutsHelp({
         </div>
 
         {/* Body */}
-        <div className="px-5 py-4 max-h-[70svh] overflow-auto space-y-4">
+        <div className="px-5 py-4 max-h-[70svh] overflow-auto space-y-4 prose-font">
           {/* Context-specific shortcuts */}
           <div>
             <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-2">

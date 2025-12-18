@@ -38,6 +38,7 @@ type UseBoardDropManagerOptions = {
   dragContext: BoardDragControls;
   useGhostOnlyBoardDrag: boolean;
   lastPointerRef: MutableRefObject<{ x: number; z: number } | null>;
+  allowSiteDrag: boolean;
 };
 
 export function useBoardDropManager({
@@ -63,6 +64,7 @@ export function useBoardDropManager({
   dragContext,
   useGhostOnlyBoardDrag,
   lastPointerRef,
+  allowSiteDrag,
 }: UseBoardDropManagerOptions) {
   const {
     draggingRef,
@@ -159,10 +161,12 @@ export function useBoardDropManager({
           const draggedCard = permanents[d.from]?.[d.index]?.card;
           const cardType = (draggedCard?.type || "").toLowerCase();
           // Only allow returning spellbook cards (not sites, avatars, or tokens)
+          // Sites can be returned if allowSiteDrag is enabled
           const isSite = cardType.includes("site");
           const isAvatar = cardType.includes("avatar");
           const isToken = cardType.includes("token");
-          const canReturnToHand = !isSite && !isAvatar && !isToken;
+          const canReturnToHand =
+            !isAvatar && !isToken && (!isSite || allowSiteDrag);
 
           if (canReturnToHand) {
             try {
@@ -326,5 +330,6 @@ export function useBoardDropManager({
     useGhostOnlyBoardDrag,
     offsetX,
     offsetY,
+    allowSiteDrag,
   ]);
 }
