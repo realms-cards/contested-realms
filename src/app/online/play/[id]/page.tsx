@@ -2493,6 +2493,20 @@ export default function OnlineMatchPage() {
               <div className="animate-pulse">Starting game...</div>
             </div>
           )}
+
+          {/* Chat console available during setup phase */}
+          <OnlineConsole
+            dragFromHand={false}
+            chatLog={chatLog}
+            chatInput={chatInput}
+            setChatInput={setChatInput}
+            onSendChat={sendChat}
+            onLeaveMatch={leaveMatch}
+            onLeaveLobby={leaveLobby}
+            connected={connected}
+            myPlayerId={myPlayerId}
+            playerNames={playerNames}
+          />
         </div>
       )}
 
@@ -2537,20 +2551,22 @@ export default function OnlineMatchPage() {
             dragFromHand={dragFromHand}
           />
 
-          {/* Online Console with Events and Chat tabs */}
-          <OnlineConsole
-            dragFromHand={dragFromHand}
-            chatLog={chatLog}
-            chatInput={chatInput}
-            setChatInput={setChatInput}
-            onSendChat={sendChat}
-            onLeaveMatch={leaveMatch}
-            onLeaveLobby={leaveLobby}
-            connected={connected}
-            myPlayerId={myPlayerId}
-            hideChat={isSpectatorView}
-            playerNames={playerNames}
-          />
+          {/* Online Console with Events and Chat tabs - only show when setup overlay is not visible */}
+          {!setupOpen && (
+            <OnlineConsole
+              dragFromHand={dragFromHand}
+              chatLog={chatLog}
+              chatInput={chatInput}
+              setChatInput={setChatInput}
+              onSendChat={sendChat}
+              onLeaveMatch={leaveMatch}
+              onLeaveLobby={leaveLobby}
+              connected={connected}
+              myPlayerId={myPlayerId}
+              hideChat={isSpectatorView}
+              playerNames={playerNames}
+            />
+          )}
 
           {/* Enhanced Hover Preview Overlay - uses new CardPreview component */}
           {hoverPreview && !contextMenu && (

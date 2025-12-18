@@ -204,6 +204,26 @@ export const createNetworkSlice: StateCreator<
             ) as GameState["board"]);
       }
       if (p.zones !== undefined) {
+        // DEBUG: Log zone patch details
+        try {
+          const pZones = p.zones as Record<string, unknown>;
+          console.log("[net] zones patch received", {
+            patchKeys: Object.keys(pZones || {}),
+            hasP1: !!pZones?.p1,
+            hasP2: !!pZones?.p2,
+            replaceZones: replaceKeys.has("zones"),
+            stateP1Hand: state.zones?.p1?.hand?.length,
+            stateP2Hand: state.zones?.p2?.hand?.length,
+            stateP1Graveyard: state.zones?.p1?.graveyard?.length,
+            stateP2Graveyard: state.zones?.p2?.graveyard?.length,
+            stateAvatarsP1: !!state.avatars?.p1?.card,
+            stateAvatarsP2: !!state.avatars?.p2?.card,
+            statePermanentsCount: Object.values(state.permanents || {}).reduce(
+              (a, v) => a + (Array.isArray(v) ? v.length : 0),
+              0
+            ),
+          });
+        } catch {}
         next.zones = normalizeZones(
           replaceKeys.has("zones")
             ? (p.zones as GameState["zones"])
@@ -441,6 +461,41 @@ export const createNetworkSlice: StateCreator<
         ...extra,
         lastServerTs: lastTs,
       } as Partial<GameState> as GameState;
+
+      // DEBUG: Log if avatars or permanents are being lost
+      try {
+        const prevAvatarP1 = !!state.avatars?.p1?.card;
+        const prevAvatarP2 = !!state.avatars?.p2?.card;
+        const nextAvatarP1 = !!result.avatars?.p1?.card;
+        const nextAvatarP2 = !!result.avatars?.p2?.card;
+        const prevPermCount = Object.values(state.permanents || {}).reduce(
+          (a, v) => a + (Array.isArray(v) ? v.length : 0),
+          0
+        );
+        const nextPermCount = Object.values(result.permanents || {}).reduce(
+          (a, v) => a + (Array.isArray(v) ? v.length : 0),
+          0
+        );
+        if (
+          (prevAvatarP1 && !nextAvatarP1) ||
+          (prevAvatarP2 && !nextAvatarP2) ||
+          (prevPermCount > 0 && nextPermCount === 0)
+        ) {
+          console.error("[net] CRITICAL: State loss detected!", {
+            prevAvatarP1,
+            prevAvatarP2,
+            nextAvatarP1,
+            nextAvatarP2,
+            prevPermCount,
+            nextPermCount,
+            patchKeys: Object.keys(p),
+            nextKeys: Object.keys(next),
+            hasAvatarsInPatch: p.avatars !== undefined,
+            hasPermInPatch: p.permanents !== undefined,
+            replaceKeys: Array.from(replaceKeys),
+          });
+        }
+      } catch {}
       if (shouldClearSnapshots) {
         try {
           clearSnapshotsStorageFor(get().matchId ?? null);
@@ -618,6 +673,10 @@ export const createNetworkSlice: StateCreator<
         next.imposterMasks = p.imposterMasks;
       }
 
-      return next as Partial<GameState> as GameState;
+      // CRITICAL: Spread state first, then next - otherwise we lose all state not in the patch
+      return {
+        ...state,
+        ...next,
+      } as Partial<GameState> as GameState;
     }),
 });

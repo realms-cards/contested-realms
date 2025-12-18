@@ -1218,13 +1218,35 @@ export default function OnlineProvider({
         // Apply full game snapshot if provided and allowed
         if (allowApplyGame && snap?.game) {
           try {
-            // Apply server snapshot as a full replacement using __replaceKeys
-            // This avoids race conditions where patches arrive between reset and apply
+            // Apply server snapshot - use __replaceKeys only for keys that are safe to fully replace
+            // Do NOT use __replaceKeys for zones/avatars/permanents as they may be partial
+            // and would wipe out the other player's data
             console.log(
-              "[game] Applying server snapshot with full replacement"
+              "[game] Applying server snapshot with selective replacement"
             );
             const gameSnapshot = snap.game as Record<string, unknown>;
-            const replaceKeys = Object.keys(gameSnapshot);
+
+            // Keys that are safe to fully replace (scalar values or complete objects)
+            const safeToReplaceKeys = [
+              "phase",
+              "currentPlayer",
+              "turn",
+              "d20Rolls",
+              "setupWinner",
+              "matchEnded",
+              "winner",
+              "hasDrawnThisTurn",
+              "players",
+              "playerPositions",
+              "events",
+              "eventSeq",
+            ];
+
+            // Only include keys that exist in the snapshot AND are safe to replace
+            const replaceKeys = safeToReplaceKeys.filter(
+              (key) => key in gameSnapshot
+            );
+
             const snapshotWithReplace = {
               ...gameSnapshot,
               __replaceKeys: replaceKeys,
