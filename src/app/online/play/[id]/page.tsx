@@ -606,20 +606,31 @@ export default function OnlineMatchPage() {
   // Initialize portal state when BOTH players ready and Harbinger is detected
   // Also handle case where portal state already exists from server (reload/resync)
   useEffect(() => {
-    // If portal state already exists from server (e.g., after reload), mark as initialized
-    // but DON'T mark as complete unless it actually is complete
+    // Skip if match status is not in_progress yet (still waiting for both players)
+    // This prevents stale portal state from previous matches from being used
+    if (match?.status !== "in_progress" && match?.status !== "ended") {
+      return;
+    }
+
+    // If portal state already exists from server (e.g., after reload) AND is fully complete,
+    // mark as initialized and complete. Otherwise, let the normal flow handle it.
     if (portalState && !portalPhaseInitialized) {
+      const portalsAssigned = arePortalsFullyAssigned(portalState);
       console.log("[Portal] Found existing portal state from server", {
         setupComplete: portalState.setupComplete,
         harbingerSeats: portalState.harbingerSeats,
         currentRoller: portalState.currentRoller,
+        portalsAssigned,
       });
-      setPortalPhaseInitialized(true);
-      // If it's already complete, mark portal setup as done
-      if (portalState.setupComplete) {
+      // Only mark as initialized AND complete if portals are actually assigned
+      // Otherwise, let the normal flow below handle initialization
+      if (portalState.setupComplete && portalsAssigned) {
+        setPortalPhaseInitialized(true);
         setPortalSetupComplete(true);
+        return;
       }
-      return;
+      // If portal state exists but isn't complete, don't set portalPhaseInitialized
+      // so the normal flow below can run initPortalState() or show the portal UI
     }
 
     if (!bothPlayersReady) return;
@@ -648,6 +659,7 @@ export default function OnlineMatchPage() {
       setPortalSetupComplete(true);
     }
   }, [
+    match?.status,
     bothPlayersReady,
     portalPhaseInitialized,
     portalState,

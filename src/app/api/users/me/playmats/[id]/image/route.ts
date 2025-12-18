@@ -30,16 +30,27 @@ export async function GET(
 
     const found = await prisma.customPlaymat.findFirst({
       where: { id, userId: me.id },
-      select: { data: true, mimeType: true },
+      select: { data: true, mimeType: true, updatedAt: true },
     });
 
     if (!found) return json({ error: "Not found" }, 404);
+
+    // Generate ETag from id + updatedAt for cache validation
+    const etag = `"${id}-${found.updatedAt.getTime()}"`;
+
+    // Check If-None-Match header for conditional request
+    const ifNoneMatch = _req.headers.get("if-none-match");
+    if (ifNoneMatch === etag) {
+      return new Response(null, { status: 304 });
+    }
 
     return new Response(new Uint8Array(found.data), {
       status: 200,
       headers: {
         "content-type": found.mimeType || "image/png",
-        "cache-control": "private, max-age=0, no-store",
+        // Cache for 1 day, revalidate in background after 1 hour
+        "cache-control": "private, max-age=3600, stale-while-revalidate=86400",
+        etag,
       },
     });
   } catch (e: unknown) {

@@ -711,7 +711,7 @@ export type GameState = {
   showGridOverlay: boolean;
   showPlaymat: boolean;
   showPlaymatOverlay: boolean;
-  playmatUrl: string;
+  playmatUrl: string | null;
   gridColor: "white" | "black";
   gridBlend: "normal" | "subtract";
   allowSiteDrag: boolean;
