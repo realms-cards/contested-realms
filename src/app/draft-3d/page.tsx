@@ -30,6 +30,7 @@ import TextureCache from "@/lib/game/components/TextureCache";
 import { CARD_LONG } from "@/lib/game/constants";
 import { Physics } from "@/lib/game/physics";
 import { createStackHoverState } from "@/lib/game/stackHover";
+import { useGameStore } from "@/lib/game/store";
 import {
   DEFAULT_DRAFTABLE_SETS,
   DEFAULT_SET,
@@ -43,6 +44,13 @@ import { getBoosterAssetName } from "@/lib/utils/booster-assets";
 export default function Draft3DPage() {
   const router = useRouter();
   const { status } = useSession();
+  const resetGameState = useGameStore((s) => s.resetGameState);
+
+  // Reset game state on mount to clear any previous board state
+  useEffect(() => {
+    resetGameState();
+  }, [resetGameState]);
+
   // --- Draft state (mirrors /draft 2D page) ---
   // Multi-set support: choose a set per pack column
   // Default to Gothic (newest set) for all 3 packs
