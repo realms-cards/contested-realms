@@ -107,12 +107,30 @@ export default function PlaymatSettingsPage() {
     void refresh();
   }, [refresh]);
 
+  const [fontLoaded, setFontLoaded] = useState(false);
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (canvas) {
       canvas.width = PREVIEW_WIDTH;
       canvas.height = PREVIEW_HEIGHT;
     }
+
+    // Load Fantaisie Artistique font for grid tile numbers
+    const font = new FontFace(
+      "Fantaisie Artistique",
+      "url(/fantaisie_artistiqu.ttf)"
+    );
+    font
+      .load()
+      .then((loadedFont) => {
+        document.fonts.add(loadedFont);
+        setFontLoaded(true);
+      })
+      .catch((err) => {
+        console.warn("Failed to load Fantaisie Artistique font:", err);
+        setFontLoaded(true); // Continue with fallback
+      });
   }, []);
 
   const drawGridAtScale = useCallback(
@@ -158,7 +176,7 @@ export default function PlaymatSettingsPage() {
       // Tile numbers
       ctx.fillStyle =
         color === "black" ? "rgba(0, 0, 0, 0.7)" : "rgba(255, 255, 255, 0.3)";
-      ctx.font = `${Math.round(32 * scaleX)}px serif`;
+      ctx.font = `${Math.round(32 * scaleX)}px "Fantaisie Artistique", serif`;
 
       const tiles = [
         { num: 1, x: 318, y: 90 },
@@ -225,7 +243,16 @@ export default function PlaymatSettingsPage() {
     if (showGrid) {
       drawGrid(ctx, gridColor);
     }
-  }, [img, offset.x, offset.y, scale, showGrid, gridColor, drawGrid]);
+  }, [
+    img,
+    offset.x,
+    offset.y,
+    scale,
+    showGrid,
+    gridColor,
+    drawGrid,
+    fontLoaded,
+  ]);
 
   useEffect(() => {
     renderPreview();
