@@ -1,6 +1,6 @@
 import { useTexture } from "@react-three/drei";
 import { RigidBody, CuboidCollider } from "@react-three/rapier";
-import { Suspense } from "react";
+import { Suspense, useMemo } from "react";
 import {
   SRGBColorSpace,
   type Intersection,
@@ -18,6 +18,8 @@ type BoardEnvironmentProps = {
   matW: number;
   matH: number;
   showPlaymat: boolean;
+  playmatUrl?: string;
+  showOverlay?: boolean;
 };
 
 function noopRaycast(
@@ -29,8 +31,16 @@ function noopRaycast(
   void _intersects;
 }
 
-function Playmat({ matW, matH }: { matW: number; matH: number }) {
-  const tex = useTexture("/playmat.jpg");
+function Playmat({
+  matW,
+  matH,
+  url,
+}: {
+  matW: number;
+  matH: number;
+  url: string;
+}) {
+  const tex = useTexture(url);
   tex.colorSpace = SRGBColorSpace;
   return (
     <mesh
@@ -45,16 +55,47 @@ function Playmat({ matW, matH }: { matW: number; matH: number }) {
   );
 }
 
+function PlaymatOverlay({ matW, matH }: { matW: number; matH: number }) {
+  const tex = useTexture("/playmat-overlay.png");
+  tex.colorSpace = SRGBColorSpace;
+  return (
+    <mesh
+      rotation-x={-Math.PI / 2}
+      position={[0, -0.01, 0]}
+      raycast={noopRaycast}
+      renderOrder={-1}
+    >
+      <planeGeometry args={[matW, matH]} />
+      <meshBasicMaterial
+        map={tex}
+        transparent
+        toneMapped={false}
+        depthWrite={false}
+      />
+    </mesh>
+  );
+}
+
 export function BoardEnvironment({
   matW,
   matH,
   showPlaymat,
+  playmatUrl = "/playmat.jpg",
+  showOverlay = true,
 }: BoardEnvironmentProps) {
+  // Memoize the URL to prevent unnecessary texture reloads
+  const stableUrl = useMemo(() => playmatUrl, [playmatUrl]);
+
   return (
     <>
       {showPlaymat && (
         <Suspense fallback={null}>
-          <Playmat matW={matW} matH={matH} />
+          <Playmat matW={matW} matH={matH} url={stableUrl} />
+        </Suspense>
+      )}
+      {showOverlay && (
+        <Suspense fallback={null}>
+          <PlaymatOverlay matW={matW} matH={matH} />
         </Suspense>
       )}
       <RigidBody type="fixed" colliders={false} position={[0, 0, 0]}>

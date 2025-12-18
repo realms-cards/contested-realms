@@ -180,7 +180,7 @@ export default function VirtualizedCollectionGrid({
   const rowVirtualizer = useVirtualizer({
     count: rowCount,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 280, // Approximate row height (card height + gap)
+    estimateSize: () => 400, // Approximate row height (card aspect 2.5/3.5 + info section + gap)
     overscan: 2, // Render 2 extra rows above/below viewport for smooth scrolling
   });
 

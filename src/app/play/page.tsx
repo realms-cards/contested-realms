@@ -20,6 +20,7 @@ import OfflineMulliganScreen from "@/components/game/OfflineMulliganScreen";
 import PileSearchDialog from "@/components/game/PileSearchDialog";
 import PlacementDialog from "@/components/game/PlacementDialog";
 import PlayerResourcePanels from "@/components/game/PlayerResourcePanel";
+import SeerScreen from "@/components/game/SeerScreen";
 import StatusBar from "@/components/game/StatusBar";
 import SwitchSiteHudOverlay from "@/components/game/SwitchSiteHudOverlay";
 import {
@@ -112,6 +113,10 @@ export default function PlayPage() {
   // Harbinger portal phase state (Gothic expansion)
   // Portal phase happens AFTER mulligan, before game starts
   const [mulliganComplete, setMulliganComplete] = useState<boolean>(false);
+  // Seer state from game store (synced)
+  const seerState = useGameStore((s) => s.seerState);
+  // Second player seer phase - derived from synced seerState
+  const seerComplete = seerState?.setupComplete ?? false;
   const [needsPortalPhase, setNeedsPortalPhase] = useState<boolean>(false);
   const [portalSetupComplete, setPortalSetupComplete] =
     useState<boolean>(false);
@@ -666,14 +671,13 @@ export default function PlayPage() {
               }}
             />
           ) : !mulliganComplete ? (
-            /* Mulligan phase - sequential: P1 first, then P2 (P2 is second seat, gets scry) */
+            /* Mulligan phase - sequential: P1 first, then P2 */
             !p1Ready ? (
               <OfflineMulliganScreen
                 key="mulligan-p1"
                 myPlayerKey="p1"
                 playerNames={{ p1: "Player 1", p2: "Player 2" }}
                 finalizeLabel="Confirm Mulligan"
-                isSecondSeat={false}
                 onStartGame={() => setP1Ready(true)}
               />
             ) : (
@@ -682,10 +686,19 @@ export default function PlayPage() {
                 myPlayerKey="p2"
                 playerNames={{ p1: "Player 1", p2: "Player 2" }}
                 finalizeLabel="Confirm Mulligan"
-                isSecondSeat={true}
                 onStartGame={() => setP2Ready(true)}
               />
             )
+          ) : !seerComplete ? (
+            /* Second Player Seer phase - P2 gets to scry after mulligan */
+            <SeerScreen
+              myPlayerKey="p2"
+              playerNames={{ p1: "Player 1", p2: "Player 2" }}
+              onSeerComplete={() => {
+                // seerComplete is derived from synced seerState.setupComplete
+                // The SeerScreen handles the state update via completeSeer()
+              }}
+            />
           ) : needsPortalPhase && !portalSetupComplete ? (
             /* Harbinger portal phase - after mulligan, before game starts */
             <HarbingerPortalScreen

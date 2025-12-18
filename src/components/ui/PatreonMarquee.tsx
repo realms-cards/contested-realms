@@ -27,13 +27,14 @@ export default function PatreonMarquee() {
     return () => clearTimeout(timer);
   }, [phase]);
 
-  // Don't render until patrons are loaded
-  if (!patrons) return null;
+  const hasApprentice = patrons ? patrons.apprentice.length > 0 : false;
+  const hasGrandmaster = patrons ? patrons.grandmaster.length > 0 : false;
+  const hasPatrons = hasApprentice || hasGrandmaster;
 
-  const hasApprentice = patrons.apprentice.length > 0;
-  const hasGrandmaster = patrons.grandmaster.length > 0;
-
-  if (!hasApprentice && !hasGrandmaster) return null;
+  // Always render a fixed-height container to prevent layout shifts
+  if (!patrons || !hasPatrons) {
+    return <div className="h-7" aria-hidden="true" />;
+  }
 
   // Build patron elements with tier-specific colors
   // Note: kingofthe tier is excluded from marquee (special tier for site owner)
@@ -81,13 +82,13 @@ export default function PatreonMarquee() {
 
   return (
     <div
-      className="overflow-hidden border-t border-blue-500/30"
+      className="h-7 overflow-hidden border-t border-blue-500/30"
       style={{ width: "100vw", marginLeft: "calc(-50vw + 50%)" }}
     >
       {phase === "thank-you" ? (
         <div
           key="thank-you"
-          className="flex justify-center py-1 animate-thank-you-flash"
+          className="h-7 flex items-center justify-center animate-thank-you-flash"
         >
           <span
             className="text-sm font-medium text-blue-400"
@@ -99,7 +100,7 @@ export default function PatreonMarquee() {
       ) : (
         <div
           key="marquee"
-          className="inline-block whitespace-nowrap animate-marquee py-1"
+          className="h-7 flex items-center whitespace-nowrap animate-marquee"
           style={{ animationDuration: "15s" }}
         >
           <span className="text-sm font-medium">{patronElements}</span>

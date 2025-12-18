@@ -33,8 +33,6 @@ export default function OnlineMulliganScreen({
   const [done, setDone] = useState<boolean>(false);
   const [submitted, setSubmitted] = useState<boolean>(false);
   const { playCardSelect } = useSound();
-  const currentPlayer = useGameStore((s) => s.currentPlayer);
-  const scryTop = useGameStore((s) => s.scryTop);
 
   // Set screen type for video overlay
   useEffect(() => {
@@ -49,15 +47,6 @@ export default function OnlineMulliganScreen({
   const opponentKey: PlayerKey = myPlayerKey === "p1" ? "p2" : "p1";
   const opponentAvatar = avatars[opponentKey]?.card || null;
   const opponentChampion = avatars[opponentKey]?.champion || null;
-  const isSecondSeat = (() => {
-    const first = currentPlayer === 1 ? "p1" : "p2";
-    return myPlayerKey === (first === "p1" ? "p2" : "p1");
-  })();
-  const [scryOpen, setScryOpen] = useState<boolean>(false);
-  const [scryPile, setScryPile] = useState<"spellbook" | "atlas">("spellbook");
-  const [scryReveal, setScryReveal] = useState<boolean>(false);
-  const [seerCompleted, setSeerCompleted] = useState<boolean>(false);
-  const topCard = (zones[myPlayerKey]?.[scryPile] || [])[0];
 
   const handleCardClick = (index: number) => {
     if (done || myMulligans === 0) return;
@@ -85,20 +74,10 @@ export default function OnlineMulliganScreen({
 
   const handleFinalize = () => {
     if (submitted) return;
-    // Second seat must complete seer before readying
-    if (isSecondSeat && !seerCompleted) {
-      if (!scryOpen) {
-        setScryReveal(false);
-        setScryOpen(true);
-      }
-      return;
-    }
-    if (!submitted) {
-      setSubmitted(true);
-      setDone(true);
-      finalizeMulligan();
-      onStartGame();
-    }
+    setSubmitted(true);
+    setDone(true);
+    finalizeMulligan();
+    onStartGame();
   };
 
   return (
@@ -273,8 +252,6 @@ export default function OnlineMulliganScreen({
                 className={`rounded px-3 py-2 sm:px-4 text-sm font-medium transition-colors ${
                   submitted
                     ? "bg-green-700/60 cursor-not-allowed"
-                    : isSecondSeat && !seerCompleted
-                    ? "bg-amber-600 hover:bg-amber-700"
                     : "bg-green-600 hover:bg-green-700"
                 }`}
                 onClick={handleFinalize}
@@ -282,155 +259,15 @@ export default function OnlineMulliganScreen({
                 title={
                   submitted
                     ? "Waiting for other players to finish mulligans"
-                    : isSecondSeat && !seerCompleted
-                    ? "Complete Second Player Seer first"
                     : undefined
                 }
               >
-                {submitted
-                  ? "Ready — Waiting for others…"
-                  : isSecondSeat && !seerCompleted
-                  ? "Complete Seer to Start"
-                  : finalizeLabel}
+                {submitted ? "Ready — Waiting for others…" : finalizeLabel}
               </button>
             )}
           </div>
         </div>
       </div>
-      {scryOpen && isSecondSeat && (
-        <div className="mt-4 bg-black/30 rounded-xl p-4 ring-1 ring-white/10">
-          <div className="flex items-center justify-between mb-3">
-            <div className="font-semibold">Second Player Seer</div>
-            <div className="text-xs opacity-80">
-              Choose a pile and keep on top or put on bottom
-            </div>
-          </div>
-          <div className="flex items-center gap-2 mb-3">
-            <button
-              className={`rounded px-3 py-1 text-sm ${
-                scryPile === "spellbook"
-                  ? "bg-white/20"
-                  : "bg-white/10 hover:bg-white/20"
-              } ${scryReveal ? "opacity-60 cursor-not-allowed" : ""}`}
-              onClick={() => {
-                if (!scryReveal) setScryPile("spellbook");
-              }}
-              disabled={scryReveal}
-            >
-              Spellbook
-            </button>
-            <button
-              className={`rounded px-3 py-1 text-sm ${
-                scryPile === "atlas"
-                  ? "bg-white/20"
-                  : "bg-white/10 hover:bg-white/20"
-              } ${scryReveal ? "opacity-60 cursor-not-allowed" : ""}`}
-              onClick={() => {
-                if (!scryReveal) setScryPile("atlas");
-              }}
-              disabled={scryReveal}
-            >
-              Atlas
-            </button>
-          </div>
-          {!scryReveal ? (
-            <div className="flex items-center justify-between mt-1">
-              <div className="text-xs opacity-70">
-                Confirm the pile to reveal its top card
-              </div>
-              <button
-                className="rounded bg-white/15 hover:bg-white/25 px-3 py-1 text-sm"
-                onClick={() => setScryReveal(true)}
-              >
-                Confirm Pile
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-3">
-              <div className="flex-1">
-                {topCard ? (
-                  <div className="relative w-24 h-36 sm:w-28 sm:h-40 rounded overflow-hidden ring-1 ring-white/20 mx-auto">
-                    <Image
-                      src={`/api/images/${topCard.slug}`}
-                      alt={topCard.name}
-                      fill
-                      sizes="112px"
-                      className={`object-contain ${
-                        (topCard.type || "").toLowerCase().includes("site")
-                          ? "rotate-90"
-                          : ""
-                      }`}
-                      unoptimized
-                    />
-                  </div>
-                ) : (
-                  <div className="text-xs opacity-70">
-                    Selected pile is empty
-                  </div>
-                )}
-              </div>
-              <div className="flex flex-col gap-2">
-                <button
-                  className="rounded bg-white/15 hover:bg-white/25 px-3 py-1 text-sm disabled:opacity-40"
-                  disabled={!topCard}
-                  onClick={() => {
-                    try {
-                      playCardSelect();
-                    } catch {}
-                    scryTop(myPlayerKey, scryPile, "top");
-                    setSeerCompleted(true);
-                    setScryOpen(false);
-                    if (!submitted) {
-                      setSubmitted(true);
-                      setDone(true);
-                      finalizeMulligan();
-                      onStartGame();
-                    }
-                  }}
-                >
-                  Keep on Top
-                </button>
-                <button
-                  className="rounded bg-white/15 hover:bg-white/25 px-3 py-1 text-sm disabled:opacity-40"
-                  disabled={!topCard}
-                  onClick={() => {
-                    try {
-                      playCardSelect();
-                    } catch {}
-                    scryTop(myPlayerKey, scryPile, "bottom");
-                    setSeerCompleted(true);
-                    setScryOpen(false);
-                    if (!submitted) {
-                      setSubmitted(true);
-                      setDone(true);
-                      finalizeMulligan();
-                      onStartGame();
-                    }
-                  }}
-                >
-                  Put on Bottom
-                </button>
-                <button
-                  className="rounded bg-white/10 hover:bg-white/20 px-3 py-1 text-sm"
-                  onClick={() => {
-                    setSeerCompleted(true);
-                    setScryOpen(false);
-                    if (!submitted) {
-                      setSubmitted(true);
-                      setDone(true);
-                      finalizeMulligan();
-                      onStartGame();
-                    }
-                  }}
-                >
-                  Skip
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
       <div className="mt-4 text-xs opacity-60 text-center">
         {submitted
           ? "You are ready. Waiting for other players to finish mulligans…"
