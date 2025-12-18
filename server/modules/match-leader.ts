@@ -1583,6 +1583,24 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
 
         const sender = players.get(playerId);
         const senderSocketId = sender?.socketId;
+
+        // DEBUG: Log what patch is being broadcast
+        if (enrichedPatchToApply.zones) {
+          const patchZones = enrichedPatchToApply.zones as any;
+          console.log("[match-leader] Broadcasting zones patch:", {
+            patchZoneKeys: Object.keys(patchZones || {}),
+            hasP1: !!patchZones?.p1,
+            hasP2: !!patchZones?.p2,
+            p1HandCount: patchZones?.p1?.hand?.length,
+            p2HandCount: patchZones?.p2?.hand?.length,
+            hasAvatars: !!enrichedPatchToApply.avatars,
+            hasPermanents: !!enrichedPatchToApply.permanents,
+            hasReplaceKeys: !!(enrichedPatchToApply as any).__replaceKeys,
+            replaceKeys: (enrichedPatchToApply as any).__replaceKeys,
+            allPatchKeys: Object.keys(enrichedPatchToApply),
+          });
+        }
+
         if (senderSocketId) {
           if (d20OnlyPatch) {
             io.to(matchRoom).emit("statePatch", {

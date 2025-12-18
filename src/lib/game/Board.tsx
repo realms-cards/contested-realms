@@ -314,7 +314,11 @@ export default function Board({
           cache: "no-store",
           signal: controller.signal,
         });
-        if (!res.ok) return;
+        if (!res.ok) {
+          // Not authenticated or error - use default playmat
+          setPlaymatUrl("/playmat.jpg");
+          return;
+        }
 
         const data = (await res.json()) as { selectedPlaymatRef?: unknown };
         const ref =
@@ -331,7 +335,10 @@ export default function Board({
         }
 
         setPlaymatUrl("/playmat.jpg");
-      } catch {}
+      } catch {
+        // Fetch failed (e.g., solo/hotseat mode) - use default playmat
+        setPlaymatUrl("/playmat.jpg");
+      }
     };
 
     void apply();
