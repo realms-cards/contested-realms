@@ -90,6 +90,12 @@ export const createCoreSlice: StateCreator<
     const state = get();
     const newRolls = { ...state.d20Rolls, [who]: roll };
 
+    // Log the roll for debugging
+    console.log(`[D20] Rolling for ${who}: ${roll}`, {
+      prevRolls: state.d20Rolls,
+      newRolls,
+    });
+
     // Track this roll as pending for retry logic
     set({ d20PendingRoll: { seat: who, roll, ts: Date.now() } });
 

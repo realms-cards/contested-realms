@@ -65,6 +65,9 @@ type TileDropHandlerOptions = {
   useGhostOnlyBoardDrag: boolean;
   selectAvatar: GameState["selectAvatar"];
   selectPermanent: GameState["selectPermanent"];
+  // Site dragging
+  draggingSite: GameState["draggingSite"];
+  dropDraggingSite: GameState["dropDraggingSite"];
 };
 
 type HandleTilePointerUpArgs = {
@@ -105,6 +108,8 @@ export function useTileDropHandler({
   useGhostOnlyBoardDrag,
   selectAvatar,
   selectPermanent,
+  draggingSite,
+  dropDraggingSite,
 }: TileDropHandlerOptions) {
   const {
     dragAvatar,
@@ -126,6 +131,12 @@ export function useTileDropHandler({
       if (e.button !== 0) return;
       if (isSpectator) return;
       e.stopPropagation();
+
+      // Handle site drag drop
+      if (draggingSite) {
+        dropDraggingSite(tileX, tileY);
+        return;
+      }
 
       const dropKey = `${tileX},${tileY}`;
       const pos = tileWorldPosition;
@@ -586,6 +597,8 @@ export function useTileDropHandler({
       isSpectator,
       isAttachableToken,
       isCarryableArtifact,
+      draggingSite,
+      dropDraggingSite,
     ]
   );
 }

@@ -6,6 +6,7 @@ import Image from "next/image";
 import { useEffect, useRef, useState, useMemo } from "react";
 import HandPeekDialog from "@/components/game/HandPeekDialog";
 import D20Dice from "@/lib/game/components/D20Dice";
+import D6Dice from "@/lib/game/components/D6Dice";
 import {
   useGameStore,
   type PlayerKey,
@@ -102,6 +103,10 @@ export default function GameToolbox({
   const allowSiteDrag = useGameStore((s) => s.allowSiteDrag);
   const toggleAllowSiteDrag = useGameStore((s) => s.toggleAllowSiteDrag);
 
+  // Ownership overlay toggle
+  const showOwnershipOverlay = useGameStore((s) => s.showOwnershipOverlay);
+  const toggleOwnershipOverlay = useGameStore((s) => s.toggleOwnershipOverlay);
+
   // Peek dialog from central store (populated by interaction:result)
   const peekDialog = useGameStore((s) => s.peekDialog);
   const closePeekDialog = useGameStore((s) => s.closePeekDialog);
@@ -133,22 +138,20 @@ export default function GameToolbox({
         const valRaw = (m as { value?: unknown }).value as number | undefined;
         const value = Number(valRaw);
         if (!Number.isFinite(value)) return;
+        console.log(`[Toolbox] D20 roll received: ${value}`);
+        // Set all state in one batch - React will batch these
         setD20Value(Math.max(1, Math.min(20, Math.floor(value))));
         setD20Open(true);
         setD20Rolling(true);
-        try {
-          console.log(`[Toolbox] D20 roll <= ${value}`);
-        } catch {}
       } else if (t === "d6Roll") {
         const valRaw = (m as { value?: unknown }).value as number | undefined;
         const value = Number(valRaw);
         if (!Number.isFinite(value)) return;
+        console.log(`[Toolbox] D6 roll received: ${value}`);
+        // Set all state in one batch - React will batch these
         setD6Value(Math.max(1, Math.min(6, Math.floor(value))));
         setD6Open(true);
         setD6Rolling(true);
-        try {
-          console.log(`[Toolbox] D6 roll <= ${value}`);
-        } catch {}
       }
     });
     return () => {
@@ -654,27 +657,6 @@ export default function GameToolbox({
     }
   }, [d6Open, d6Pending]);
 
-  // Handle D6 roll animation timing
-  useEffect(() => {
-    if (!d6Open || !d6Rolling) return;
-    // Stop rolling animation after 800ms
-    const rollTimer = setTimeout(() => {
-      setD6Rolling(false);
-    }, 800);
-    return () => clearTimeout(rollTimer);
-  }, [d6Open, d6Rolling]);
-
-  // Auto-close D6 overlay after roll completes
-  useEffect(() => {
-    if (!d6Open || d6Rolling) return;
-    // Close after 3.2s of showing result
-    const closeTimer = setTimeout(() => {
-      setD6Open(false);
-      setD6Value(null);
-    }, 3200);
-    return () => clearTimeout(closeTimer);
-  }, [d6Open, d6Rolling]);
-
   const startToolboxRoll = () => {
     const value = Math.floor(Math.random() * 20) + 1;
     if (isOnline && transport?.sendMessage) {
@@ -732,11 +714,11 @@ export default function GameToolbox({
       return;
     }
     // Offline/hotseat fallback: local popup
+    log(`Toolbox D20 roll: ${value}`);
+    console.log(`[Toolbox] D20 roll (offline): ${value}`);
     setD20Value(value);
     setD20Open(true);
     setD20Rolling(true);
-    log(`Toolbox D20 roll: ${value}`);
-    console.log(`[Toolbox] D20 roll: ${value}`);
   };
 
   const startD6Roll = () => {
@@ -773,6 +755,7 @@ export default function GameToolbox({
           console.warn(
             `[Toolbox] D6 roll failed after ${maxRetries} retries, showing locally`
           );
+          // Fallback: show locally if server never responded
           setD6Value(value);
           setD6Open(true);
           setD6Rolling(true);
@@ -790,11 +773,11 @@ export default function GameToolbox({
       return;
     }
     // Offline/hotseat fallback: local popup
+    log(`Toolbox D6 roll: ${value}`);
+    console.log(`[Toolbox] D6 roll (offline): ${value}`);
     setD6Value(value);
     setD6Open(true);
     setD6Rolling(true);
-    log(`Toolbox D6 roll: ${value}`);
-    console.log(`[Toolbox] D6 roll: ${value}`);
   };
 
   const handleDrawRandomSpell = async () => {
@@ -1100,43 +1083,44 @@ export default function GameToolbox({
               )}
             </div>
 
-            {/* Inspect Hand + D20 row */}
-            <div className="rounded-lg bg-white/5 ring-1 ring-white/10 p-2">
-              <div className="flex gap-2">
-                <button
-                  className="flex-1 rounded bg-blue-600/90 hover:bg-blue-500 py-1 inline-flex items-center justify-center gap-2"
-                  onClick={handleInspectOpponentHand}
-                  title={
-                    isOnline
-                      ? "Requests opponent consent"
-                      : "Hotseat: opens the other hand"
-                  }
-                >
-                  <Eye className="w-4 h-4" />
-                  <span>Inspect Hand</span>
-                </button>
-                <button
-                  className="flex-1 rounded bg-blue-600/90 hover:bg-blue-500 py-1"
-                  onClick={startToolboxRoll}
-                  aria-label="Roll D20"
-                  title="Roll D20"
-                >
-                  <div className="flex items-center justify-center">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src="/d20.svg" alt="D20" width={16} height={16} />
-                  </div>
-                </button>
-                <button
-                  className="flex-1 rounded bg-blue-600/90 hover:bg-blue-500 py-1"
-                  onClick={startD6Roll}
-                  aria-label="Roll D6"
-                  title="Roll D6"
-                >
-                  <div className="flex items-center justify-center text-sm font-bold">
-                    D6
-                  </div>
-                </button>
-              </div>
+            {/* Inspect Hand + D20 + D6 row */}
+            <div className="flex gap-1.5">
+              <button
+                className="flex-1 rounded bg-blue-600/90 hover:bg-blue-500 px-2 py-1.5 inline-flex items-center justify-center gap-1.5"
+                onClick={handleInspectOpponentHand}
+                title={
+                  isOnline
+                    ? "Requests opponent consent"
+                    : "Hotseat: opens the other hand"
+                }
+              >
+                <Eye className="w-4 h-4 flex-shrink-0" />
+                <span className="text-xs whitespace-nowrap">Inspect Hand</span>
+              </button>
+              <button
+                className="rounded bg-blue-600/90 hover:bg-blue-500 px-3 py-1.5 flex items-center justify-center"
+                onClick={startToolboxRoll}
+                aria-label="Roll D20"
+                title="Roll D20"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/d20.svg" alt="D20" width={18} height={18} />
+              </button>
+              <button
+                className="rounded bg-blue-600/90 hover:bg-blue-500 px-3 py-1.5 flex items-center justify-center"
+                onClick={startD6Roll}
+                aria-label="Roll D6"
+                title="Roll D6"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="/d6.svg"
+                  alt="D6"
+                  width={18}
+                  height={18}
+                  className="invert"
+                />
+              </button>
             </div>
 
             {/* Force Burrow/Submerge (moved under Inspect/D20) */}
@@ -1171,8 +1155,8 @@ export default function GameToolbox({
               )}
             </div>
 
-            {/* Site Drag Toggle */}
-            <div className="rounded-lg bg-white/5 ring-1 ring-white/10 p-2">
+            {/* Board Toggles */}
+            <div className="rounded-lg bg-white/5 ring-1 ring-white/10 p-2 space-y-2">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
@@ -1180,7 +1164,16 @@ export default function GameToolbox({
                   onChange={toggleAllowSiteDrag}
                   className="w-4 h-4 rounded bg-white/10 border-white/20 text-amber-500 focus:ring-amber-500/50"
                 />
-                <span className="text-xs">Allow dragging sites to hand</span>
+                <span className="text-xs">Allow dragging sites on board</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showOwnershipOverlay}
+                  onChange={toggleOwnershipOverlay}
+                  className="w-4 h-4 rounded bg-white/10 border-white/20 text-sky-500 focus:ring-sky-500/50"
+                />
+                <span className="text-xs">Show ownership highlight</span>
               </label>
             </div>
 
@@ -1352,11 +1345,11 @@ export default function GameToolbox({
               </button>
             </div>
             <div className="bg-black/40 rounded-xl ring-1 ring-white/10 h-[42vh] min-h-[240px] sm:h-[260px]">
-              <Canvas camera={{ position: [0, 0, 4], fov: 60 }}>
-                <ambientLight intensity={0.5} />
-                <directionalLight position={[5, 5, 5]} intensity={0.7} />
+              <Canvas camera={{ position: [0, 5, 0], fov: 50, up: [0, 0, -1] }}>
+                <ambientLight intensity={0.6} />
+                <directionalLight position={[2, 5, 2]} intensity={0.8} />
                 <D20Dice
-                  playerName="Toolbox"
+                  playerName=""
                   player={mySeat ?? "p1"}
                   position={[0, 0, 0]}
                   roll={d20Value}
@@ -1399,14 +1392,26 @@ export default function GameToolbox({
                 ✕
               </button>
             </div>
-            <div className="flex items-center justify-center h-[42vh] min-h-[240px] sm:h-[260px] bg-black/40 rounded-xl ring-1 ring-white/10">
-              <div
-                className={`text-8xl sm:text-9xl font-bold transition-all duration-300 ${
-                  d6Rolling ? "animate-pulse scale-110" : "scale-100"
-                }`}
-              >
-                {d6Value !== null ? d6Value : "?"}
-              </div>
+            <div className="bg-black/40 rounded-xl ring-1 ring-white/10 h-[42vh] min-h-[240px] sm:h-[260px]">
+              <Canvas camera={{ position: [0, 5, 0], fov: 50, up: [0, 0, -1] }}>
+                <ambientLight intensity={0.6} />
+                <directionalLight position={[2, 5, 2]} intensity={0.8} />
+                <D6Dice
+                  playerName=""
+                  player={mySeat ?? "p1"}
+                  position={[0, 0, 0]}
+                  roll={d6Value}
+                  isRolling={d6Rolling}
+                  onRollComplete={() => {
+                    setD6Rolling(false);
+                    // Leave the result visible briefly before auto-closing
+                    setTimeout(() => {
+                      setD6Open(false);
+                      setD6Value(null);
+                    }, 3200);
+                  }}
+                />
+              </Canvas>
             </div>
           </div>
         </div>

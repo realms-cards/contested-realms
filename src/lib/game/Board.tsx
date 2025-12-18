@@ -21,6 +21,7 @@ import { BoardDragGhost } from "@/lib/game/components/BoardDragGhost";
 import { BoardEnvironment } from "@/lib/game/components/BoardEnvironment";
 import BoardPingLayer from "@/lib/game/components/BoardPingLayer";
 import { BoardTile } from "@/lib/game/components/BoardTile";
+import { DraggingSiteGhost } from "@/lib/game/components/DraggingSiteGhost";
 import { HandDragGhost } from "@/lib/game/components/HandDragGhost";
 import { MagicConnectionLines } from "@/lib/game/components/MagicConnectionLines";
 import { RemoteDragOverlays } from "@/lib/game/components/RemoteDragOverlays";
@@ -145,7 +146,9 @@ export default function Board({
   const showPlaymat = useScopedStore((s) => s.showPlaymat);
   const showPlaymatOverlay = useScopedStore((s) => s.showPlaymatOverlay);
   const playmatUrl = useScopedStore((s) => s.playmatUrl);
+  const setPlaymatUrl = useScopedStore((s) => s.setPlaymatUrl);
   const allowSiteDrag = useScopedStore((s) => s.allowSiteDrag);
+  const showOwnershipOverlay = useScopedStore((s) => s.showOwnershipOverlay);
   const playSelectedTo = useScopedStore((s) => s.playSelectedTo);
   const moveSelectedPermanentToWithOffset = useScopedStore(
     (s) => s.moveSelectedPermanentToWithOffset
@@ -161,6 +164,10 @@ export default function Board({
   const selectedPermanent = useScopedStore((s) => s.selectedPermanent);
   const permanents = useScopedStore((s) => s.permanents);
   const permanentPositions = useScopedStore((s) => s.permanentPositions);
+  const draggingSite = useScopedStore((s) => s.draggingSite);
+  const setDraggingSite = useScopedStore((s) => s.setDraggingSite);
+  const updateDraggingSitePos = useScopedStore((s) => s.updateDraggingSitePos);
+  const dropDraggingSite = useScopedStore((s) => s.dropDraggingSite);
   const { playCardPlay, playTurnGong, playCardFlip } = useSound();
   const dragFromHand = useScopedStore((s) => s.dragFromHand);
   const previewCard = useScopedStore((s) => s.previewCard);
@@ -297,6 +304,39 @@ export default function Board({
       clearTouchTimers();
     };
   }, [clearTouchTimers]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    const apply = async () => {
+      try {
+        const res = await fetch("/api/users/me/playmats/selected", {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        if (!res.ok) return;
+
+        const data = (await res.json()) as { selectedPlaymatRef?: unknown };
+        const ref =
+          typeof data.selectedPlaymatRef === "string"
+            ? data.selectedPlaymatRef
+            : null;
+
+        if (ref && ref.startsWith("custom:")) {
+          const id = ref.slice("custom:".length);
+          if (id) {
+            setPlaymatUrl(`/api/users/me/playmats/${id}/image`);
+            return;
+          }
+        }
+
+        setPlaymatUrl("/playmat.jpg");
+      } catch {}
+    };
+
+    void apply();
+    return () => controller.abort();
+  }, [setPlaymatUrl]);
 
   const boardDragControls = useBoardDragControls({
     currentPlayer,
@@ -832,6 +872,8 @@ export default function Board({
     useGhostOnlyBoardDrag: USE_GHOST_ONLY_BOARD_DRAG,
     selectAvatar,
     selectPermanent,
+    draggingSite,
+    dropDraggingSite,
   });
 
   const {
@@ -841,7 +883,7 @@ export default function Board({
     remotePileDrags,
     remoteAvatarDrags,
     remoteAvatarDragSet,
-    handlePointerMove,
+    handlePointerMove: baseHandlePointerMove,
     emitBoardPing,
     lastPointerRef,
   } = useRemoteCursorSystem({
@@ -863,6 +905,17 @@ export default function Board({
     handlePointerMoveRef,
     setLastPointerWorldPos,
   });
+  // Wrap handlePointerMove to also update dragging site position
+  const handlePointerMove = useCallback(
+    (x: number, z: number) => {
+      baseHandlePointerMove(x, z);
+      if (draggingSite) {
+        updateDraggingSitePos(x, z);
+      }
+    },
+    [baseHandlePointerMove, draggingSite, updateDraggingSitePos]
+  );
+
   useBoardDropManager({
     board,
     boardOffset: { x: offsetX, y: offsetY },
@@ -886,7 +939,8 @@ export default function Board({
     dragContext: boardDragControls,
     useGhostOnlyBoardDrag: USE_GHOST_ONLY_BOARD_DRAG,
     lastPointerRef,
-    allowSiteDrag,
+    draggingSite,
+    setDraggingSite,
   });
 
   // removed global pointerup fallback; drops are handled by tiles/cards precisely
@@ -973,6 +1027,9 @@ export default function Board({
               tileKey={key as CellKey}
               position={position}
               site={board.sites[key]}
+              allowSiteDrag={allowSiteDrag}
+              draggingSite={draggingSite}
+              setDraggingSite={setDraggingSite}
               boardSize={board.size}
               boardOffset={{ x: offsetX, y: offsetY }}
               showGrid={showGrid}
@@ -1020,6 +1077,7 @@ export default function Board({
               portalState={portalState}
               switchSiteSource={switchSiteSource}
               onCompleteSwitchSite={onCompleteSwitchSite}
+              showOwnershipOverlay={showOwnershipOverlay}
             />
           );
         })}
@@ -1135,6 +1193,8 @@ export default function Board({
         lastBoardGhostPosRef={lastBoardGhostPosRef}
         enableGhostOnlyMode={USE_GHOST_ONLY_BOARD_DRAG}
       />
+
+      <DraggingSiteGhost draggingSite={draggingSite} />
 
       {attachmentDialogNode}
 

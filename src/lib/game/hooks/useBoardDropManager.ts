@@ -38,7 +38,9 @@ type UseBoardDropManagerOptions = {
   dragContext: BoardDragControls;
   useGhostOnlyBoardDrag: boolean;
   lastPointerRef: MutableRefObject<{ x: number; z: number } | null>;
-  allowSiteDrag: boolean;
+  // Site dragging
+  draggingSite: GameState["draggingSite"];
+  setDraggingSite: GameState["setDraggingSite"];
 };
 
 export function useBoardDropManager({
@@ -64,7 +66,8 @@ export function useBoardDropManager({
   dragContext,
   useGhostOnlyBoardDrag,
   lastPointerRef,
-  allowSiteDrag,
+  draggingSite,
+  setDraggingSite,
 }: UseBoardDropManagerOptions) {
   const {
     draggingRef,
@@ -80,6 +83,11 @@ export function useBoardDropManager({
   useEffect(() => {
     const onGlobalPointerUp = () => {
       if (Date.now() - lastDropAt.current < 32) return;
+      // Cancel site drag if released outside a tile
+      if (draggingSite) {
+        setDraggingSite(null);
+        return;
+      }
       if (dragAvatar) return;
       if (dragFromHand || dragFromPile) return;
       if (isSpectator) return;
@@ -161,12 +169,10 @@ export function useBoardDropManager({
           const draggedCard = permanents[d.from]?.[d.index]?.card;
           const cardType = (draggedCard?.type || "").toLowerCase();
           // Only allow returning spellbook cards (not sites, avatars, or tokens)
-          // Sites can be returned if allowSiteDrag is enabled
           const isSite = cardType.includes("site");
           const isAvatar = cardType.includes("avatar");
           const isToken = cardType.includes("token");
-          const canReturnToHand =
-            !isAvatar && !isToken && (!isSite || allowSiteDrag);
+          const canReturnToHand = !isAvatar && !isToken && !isSite;
 
           if (canReturnToHand) {
             try {
@@ -330,6 +336,7 @@ export function useBoardDropManager({
     useGhostOnlyBoardDrag,
     offsetX,
     offsetY,
-    allowSiteDrag,
+    draggingSite,
+    setDraggingSite,
   ]);
 }

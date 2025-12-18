@@ -8,7 +8,7 @@ export const PATRON_COLORS = {
     text: "text-blue-400",
     // Full glow for marquee
     textShadow:
-      "0 0 10px #3b82f6, 0 0 20px #3b82f6, 0 0 30px #1d4ed8, 0 0 40px #1e3a8a",
+      "0 0 6px rgba(59,130,246,0.9), 0 0 14px rgba(59,130,246,0.55), 0 0 20px rgba(29,78,216,0.35)",
     // Minimal glow for chat/player lists
     textShadowMinimal: "0 0 6px rgba(59,130,246,0.6)",
     border: "border-blue-500/30",
@@ -19,7 +19,7 @@ export const PATRON_COLORS = {
     text: "text-amber-400",
     // Full glow for marquee
     textShadow:
-      "0 0 10px #f59e0b, 0 0 20px #f59e0b, 0 0 30px #d97706, 0 0 40px #b45309",
+      "0 0 6px rgba(245,158,11,0.9), 0 0 14px rgba(245,158,11,0.55), 0 0 20px rgba(217,119,6,0.35)",
     // Minimal glow for chat/player lists
     textShadowMinimal: "0 0 6px rgba(245,158,11,0.6)",
     border: "border-amber-500/30",
@@ -30,7 +30,7 @@ export const PATRON_COLORS = {
     text: "text-emerald-400",
     // Full glow for marquee
     textShadow:
-      "0 0 10px #34d399, 0 0 20px #34d399, 0 0 30px #10b981, 0 0 40px #059669",
+      "0 0 6px rgba(52,211,153,0.9), 0 0 14px rgba(52,211,153,0.55), 0 0 20px rgba(16,185,129,0.35)",
     // Minimal glow for chat/player lists
     textShadowMinimal: "0 0 6px rgba(52,211,153,0.6)",
     border: "border-emerald-500/30",

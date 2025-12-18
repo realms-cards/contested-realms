@@ -33,6 +33,9 @@ export type SiteCardProps = {
   site: SiteTile | undefined;
   contextMenu: GameState["contextMenu"];
   openContextMenu: GameState["openContextMenu"];
+  allowSiteDrag: boolean;
+  draggingSite: GameState["draggingSite"];
+  setDraggingSite: GameState["setDraggingSite"];
   playerPositions: GameState["playerPositions"];
   calculateEdgePosition: GameState["calculateEdgePosition"];
   getRemoteHighlightColor: GameState["getRemoteHighlightColor"];
@@ -74,6 +77,9 @@ export function SiteCard({
   site: maybeSite,
   contextMenu,
   openContextMenu,
+  allowSiteDrag,
+  draggingSite,
+  setDraggingSite,
   playerPositions,
   calculateEdgePosition,
   getRemoteHighlightColor,
@@ -110,6 +116,10 @@ export function SiteCard({
   if (!maybeSite) return null;
   const site = maybeSite;
 
+  // Hide site if it's currently being dragged
+  const isBeingDragged = draggingSite?.sourceKey === tileKey;
+  if (isBeingDragged) return null;
+
   const rotZ =
     -Math.PI / 2 +
     (site.owner === 1 ? 0 : Math.PI) +
@@ -129,6 +139,23 @@ export function SiteCard({
 
   const canInteract =
     !dragFromHand && !dragFromPile && !dragAvatar && !dragging && !isSpectator;
+
+  const canDragSite =
+    canInteract && allowSiteDrag && !switchSiteSource && !draggingSite;
+
+  function handleBeginSiteDrag(e: ThreeEvent<PointerEvent>) {
+    if (!canDragSite) return;
+    e.stopPropagation();
+    const pe = e.nativeEvent as PointerEvent | undefined;
+    if (pe && pe.button !== 0) return;
+    clearTouchTimers();
+    // Start board-wide drag with world coordinates
+    setDraggingSite({
+      sourceKey: tileKey,
+      site,
+      worldPos: { x: e.point.x, z: e.point.z },
+    });
+  }
 
   function isSelected(): boolean {
     if (!contextMenu) return false;
@@ -289,8 +316,15 @@ export function SiteCard({
             elevation={0.001}
             renderOrder={10}
             textureUrl={!site.card.slug ? "/api/assets/earth.png" : undefined}
-            onPointerDown={handlePointerDown}
+            onPointerDown={(e) => {
+              handlePointerDown(e);
+              handleBeginSiteDrag(e);
+            }}
             onPointerUp={handlePointerUp}
+            onPointerMove={(e) => {
+              const pe = e.nativeEvent as PointerEvent | undefined;
+              if (pe && pe.pointerType === "touch") clearTouchTimers();
+            }}
             onPointerOver={(e) => {
               if (dragFromHand || dragFromPile) return;
               e.stopPropagation();
@@ -301,10 +335,6 @@ export function SiteCard({
               e.stopPropagation();
               clearTouchTimers();
               clearHoverPreviewDebounced(tileKey);
-            }}
-            onPointerMove={(e) => {
-              const pe = e.nativeEvent as PointerEvent | undefined;
-              if (pe && pe.pointerType === "touch") clearTouchTimers();
             }}
             onDoubleClick={(e) => {
               if (!canInteract) return;
@@ -328,7 +358,10 @@ export function SiteCard({
           rotation-z={rotZ}
           position={[edgeOffset.x, 0.001, edgeOffset.z]}
           castShadow
-          onPointerDown={handlePointerDown}
+          onPointerDown={(e) => {
+            handlePointerDown(e);
+            handleBeginSiteDrag(e);
+          }}
           onPointerUp={handlePointerUp}
         >
           <planeGeometry args={[CARD_SHORT, CARD_LONG]} />

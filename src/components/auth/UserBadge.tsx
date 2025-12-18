@@ -807,6 +807,30 @@ export default function UserBadge({
               </div>
               {/* Card Image Cache section */}
               <CacheSettingsSection />
+              {/* Patron Perks section */}
+              <div className="mt-2 pt-3 border-t border-slate-700/50">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xs font-medium text-amber-400">
+                    Patron Perks
+                  </span>
+                  <span className="text-[10px] text-slate-400">
+                    Thank you for your support!
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleCloseSettings();
+                    router.push("/settings/playmat");
+                  }}
+                  className="w-full flex items-center justify-between gap-2 h-10 px-4 rounded-lg bg-gradient-to-r from-amber-500/20 to-orange-500/20 ring-1 ring-amber-500/30 text-sm font-medium text-amber-100 hover:from-amber-500/30 hover:to-orange-500/30 transition-all"
+                >
+                  <span>Custom Playmat</span>
+                  <span className="text-[10px] text-amber-300/70">
+                    Upload your own
+                  </span>
+                </button>
+              </div>
               <div className="flex items-center gap-3">
                 <div className="w-14 h-14 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center overflow-hidden">
                   {previewAvatar ? (

@@ -1,21 +1,63 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { fetchPatrons, PATRON_COLORS, type PatronData } from "@/lib/patrons";
+import React, { useState, useEffect, useRef } from "react";
+import {
+  fetchPatrons,
+  PATRON_COLORS,
+  type PatronData,
+  type PatronInfo,
+} from "@/lib/patrons";
 
 const THANK_YOU_DURATION = 3000;
-const MARQUEE_DURATION = 15000;
+const MARQUEE_DURATION = 60000;
 
 type Phase = "thank-you" | "marquee";
+
+function shuffleInPlace<T>(arr: T[]): void {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const tmp = arr[i];
+    arr[i] = arr[j];
+    arr[j] = tmp;
+  }
+}
 
 export default function PatreonMarquee() {
   const [phase, setPhase] = useState<Phase>("thank-you");
   const [patrons, setPatrons] = useState<PatronData | null>(null);
+  const [ordered, setOrdered] = useState<{
+    grandmaster: PatronInfo[];
+    apprentice: PatronInfo[];
+  } | null>(null);
+  const marqueeCycleRef = useRef(0);
 
   // Fetch patrons on mount
   useEffect(() => {
     fetchPatrons().then(setPatrons);
   }, []);
+
+  useEffect(() => {
+    if (!patrons) return;
+    setOrdered({
+      grandmaster: patrons.grandmaster,
+      apprentice: patrons.apprentice,
+    });
+  }, [patrons]);
+
+  useEffect(() => {
+    if (!patrons) return;
+    if (phase !== "marquee") return;
+
+    marqueeCycleRef.current += 1;
+    const shouldShuffle = marqueeCycleRef.current % 3 === 0;
+    if (!shouldShuffle) return;
+
+    const grandmaster = [...patrons.grandmaster];
+    const apprentice = [...patrons.apprentice];
+    shuffleInPlace(grandmaster);
+    shuffleInPlace(apprentice);
+    setOrdered({ grandmaster, apprentice });
+  }, [phase, patrons]);
 
   // Phase alternation
   useEffect(() => {
@@ -40,7 +82,10 @@ export default function PatreonMarquee() {
   // Note: kingofthe tier is excluded from marquee (special tier for site owner)
   const patronElements: React.ReactNode[] = [];
 
-  patrons.grandmaster.forEach((patron, i) => {
+  const grandmasters = ordered?.grandmaster ?? patrons.grandmaster;
+  const apprentices = ordered?.apprentice ?? patrons.apprentice;
+
+  grandmasters.forEach((patron, i) => {
     if (patronElements.length > 0) {
       patronElements.push(
         <span key={`sep-gm-${i}`} className="text-slate-500">
@@ -60,7 +105,7 @@ export default function PatreonMarquee() {
     );
   });
 
-  patrons.apprentice.forEach((patron, i) => {
+  apprentices.forEach((patron, i) => {
     if (patronElements.length > 0) {
       patronElements.push(
         <span key={`sep-ap-${i}`} className="text-slate-500">
@@ -82,7 +127,7 @@ export default function PatreonMarquee() {
 
   return (
     <div
-      className="h-7 overflow-hidden border-t border-blue-500/30"
+      className="h-7 overflow-x-hidden overflow-y-visible border-t border-blue-500/30"
       style={{ width: "100vw", marginLeft: "calc(-50vw + 50%)" }}
     >
       {phase === "thank-you" ? (
@@ -101,7 +146,7 @@ export default function PatreonMarquee() {
         <div
           key="marquee"
           className="h-7 flex items-center whitespace-nowrap animate-marquee"
-          style={{ animationDuration: "15s" }}
+          style={{ animationDuration: `${MARQUEE_DURATION / 1000}s` }}
         >
           <span className="text-sm font-medium">{patronElements}</span>
         </div>

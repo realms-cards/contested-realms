@@ -474,13 +474,23 @@ function ensureAvatar(value: unknown, fallback: AvatarState): AvatarState {
   if (!isRecord(value)) {
     return { ...fallback };
   }
-  const posCandidate = isRecord(value.position) ? value.position : null;
-  const pos: [number, number] | null =
-    posCandidate &&
-    typeof posCandidate.x === "number" &&
-    typeof posCandidate.z === "number"
-      ? [posCandidate.x, posCandidate.z]
-      : fallback.pos;
+  // Support both pos array format (from client) and position object format (legacy)
+  let pos: [number, number] | null = fallback.pos;
+  if (Array.isArray(value.pos) && value.pos.length === 2) {
+    const [x, y] = value.pos;
+    if (typeof x === "number" && typeof y === "number") {
+      pos = [x, y];
+    }
+  } else {
+    const posCandidate = isRecord(value.position) ? value.position : null;
+    if (
+      posCandidate &&
+      typeof posCandidate.x === "number" &&
+      typeof posCandidate.z === "number"
+    ) {
+      pos = [posCandidate.x, posCandidate.z];
+    }
+  }
   const tapped =
     typeof value.tapped === "boolean" ? value.tapped : fallback.tapped ?? false;
   const avatar: AvatarState = {
