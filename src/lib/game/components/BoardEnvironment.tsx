@@ -18,7 +18,7 @@ type BoardEnvironmentProps = {
   matW: number;
   matH: number;
   showPlaymat: boolean;
-  playmatUrl?: string;
+  playmatUrl?: string | null;
   showOverlay?: boolean;
 };
 
@@ -80,15 +80,16 @@ export function BoardEnvironment({
   matW,
   matH,
   showPlaymat,
-  playmatUrl = "/playmat.jpg",
+  playmatUrl,
   showOverlay = true,
 }: BoardEnvironmentProps) {
   // Memoize the URL to prevent unnecessary texture reloads
-  const stableUrl = useMemo(() => playmatUrl, [playmatUrl]);
+  // Use null while loading to avoid showing default then switching
+  const stableUrl = useMemo(() => playmatUrl ?? null, [playmatUrl]);
 
   return (
     <>
-      {showPlaymat && (
+      {showPlaymat && stableUrl && (
         <Suspense fallback={null}>
           <Playmat matW={matW} matH={matH} url={stableUrl} />
         </Suspense>

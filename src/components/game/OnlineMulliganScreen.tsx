@@ -177,13 +177,48 @@ export default function OnlineMulliganScreen({
       try {
         playTurnGong();
       } catch {}
+      // Auto-start the game after seer is complete
+      if (!submitted) {
+        setSubmitted(true);
+        setDone(true);
+        finalizeMulligan();
+        onStartGame();
+      }
     },
-    [seerCompleted, completeSeer, playTurnGong]
+    [
+      seerCompleted,
+      completeSeer,
+      playTurnGong,
+      submitted,
+      finalizeMulligan,
+      onStartGame,
+    ]
   );
 
   // Determine if we should show seer UI (after mulligan done, before finalize)
   const showSeerUI =
     showSeerPhase && (done || myMulligans === 0) && !seerComplete;
+
+  // Auto-start for player 1 when seer phase completes (player 2 already auto-starts in handleSeerComplete)
+  useEffect(() => {
+    if (!showSeerPhase) return;
+    if (isSecondSeat) return; // Second seat auto-starts in handleSeerComplete
+    if (!seerComplete) return; // Seer not done yet
+    if (submitted) return; // Already submitted
+
+    // Player 1: auto-start when seer is complete
+    setSubmitted(true);
+    setDone(true);
+    finalizeMulligan();
+    onStartGame();
+  }, [
+    showSeerPhase,
+    isSecondSeat,
+    seerComplete,
+    submitted,
+    finalizeMulligan,
+    onStartGame,
+  ]);
 
   return (
     <div className="w-full max-w-[92vw] sm:max-w-4xl bg-zinc-900/80 text-white rounded-2xl ring-1 ring-white/10 p-4 sm:p-6">

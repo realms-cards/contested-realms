@@ -30,7 +30,7 @@ export const createInitialBoardUiState = (): BoardUiDefaults => ({
   showGridOverlay: false,
   showPlaymat: true,
   showPlaymatOverlay: false, // Default: show playmat, hide grid overlay
-  playmatUrl: "/playmat.jpg",
+  playmatUrl: null, // null until user's preference is loaded
   gridColor: "white",
   gridBlend: "normal",
   allowSiteDrag: false, // Default: sites cannot be freely dragged on board
