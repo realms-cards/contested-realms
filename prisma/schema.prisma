@@ -270,6 +270,8 @@ model User {
   colorBlindMode Boolean  @default(false)
   patronTier    String?   // "apprentice" | "grandmaster" | null
 
+  selectedPlaymatRef String?
+
   accounts              Account[]
   sessions              Session[]
   decks                 Deck[]
@@ -288,6 +290,26 @@ model User {
   tournamentInvitations TournamentInvitation[]
   collectionCards       CollectionCard[]
   cardLists             CardList[]
+
+  customPlaymats         CustomPlaymat[]
+}
+
+model CustomPlaymat {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  mimeType  String
+  width     Int
+  height    Int
+  sizeBytes Int
+  data      Bytes
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
 }
 
 model VerificationToken {

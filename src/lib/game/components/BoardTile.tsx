@@ -28,6 +28,9 @@ type BoardTileProps = {
   tileKey: CellKey;
   position: [number, number, number];
   site: GameState["board"]["sites"][CellKey];
+  allowSiteDrag: boolean;
+  draggingSite: GameState["draggingSite"];
+  setDraggingSite: GameState["setDraggingSite"];
   boardSize: BoardState["size"];
   boardOffset: { x: number; y: number };
   showGrid: boolean;
@@ -76,6 +79,8 @@ type BoardTileProps = {
   // Switch site position support
   switchSiteSource: GameState["switchSiteSource"];
   onCompleteSwitchSite?: (targetX: number, targetY: number) => void;
+  // Ownership overlay
+  showOwnershipOverlay: boolean;
 };
 
 export function BoardTile({
@@ -84,6 +89,9 @@ export function BoardTile({
   tileKey,
   position,
   site,
+  allowSiteDrag,
+  draggingSite,
+  setDraggingSite,
   boardSize,
   boardOffset,
   showGrid,
@@ -131,6 +139,7 @@ export function BoardTile({
   portalState,
   switchSiteSource,
   onCompleteSwitchSite,
+  showOwnershipOverlay,
 }: BoardTileProps) {
   const items = permanents[tileKey] || [];
   const cellNumber = (boardSize.h - 1 - tileY) * boardSize.w + tileX + 1;
@@ -188,6 +197,9 @@ export function BoardTile({
         site={site}
         contextMenu={contextMenu}
         openContextMenu={openContextMenu}
+        allowSiteDrag={allowSiteDrag}
+        draggingSite={draggingSite}
+        setDraggingSite={setDraggingSite}
         playerPositions={playerPositions}
         calculateEdgePosition={calculateEdgePosition}
         getRemoteHighlightColor={getRemoteHighlightColor}
@@ -249,6 +261,7 @@ export function BoardTile({
         stackConfig={stackConfig}
         playCardFlip={playCardFlip}
         isPrimaryCardHit={isPrimaryCardHit}
+        showOwnershipOverlay={showOwnershipOverlay}
       />
 
       {showGrid && (

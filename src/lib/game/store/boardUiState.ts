@@ -1,6 +1,15 @@
 import type { StateCreator } from "zustand";
-import type { BoardPingEvent, GameState } from "./types";
+import type { BoardPingEvent, CellKey, GameState, SiteTile } from "./types";
 import { BOARD_PING_LIFETIME_MS, BOARD_PING_MAX_HISTORY } from "./types";
+
+export type DraggingSite = {
+  sourceKey: CellKey;
+  site: SiteTile;
+  worldPos: { x: number; z: number };
+} | null;
+
+export type GridColor = "white" | "black";
+export type GridBlend = "normal" | "subtract";
 
 type BoardUiDefaults = Pick<
   GameState,
@@ -8,9 +17,13 @@ type BoardUiDefaults = Pick<
   | "showPlaymat"
   | "showPlaymatOverlay"
   | "playmatUrl"
+  | "gridColor"
+  | "gridBlend"
   | "allowSiteDrag"
+  | "showOwnershipOverlay"
   | "boardPings"
   | "lastPointerWorldPos"
+  | "draggingSite"
 >;
 
 export const createInitialBoardUiState = (): BoardUiDefaults => ({
@@ -18,9 +31,13 @@ export const createInitialBoardUiState = (): BoardUiDefaults => ({
   showPlaymat: true,
   showPlaymatOverlay: false, // Default: show playmat, hide grid overlay
   playmatUrl: "/playmat.jpg",
-  allowSiteDrag: false, // Default: sites cannot be dragged back to hand
+  gridColor: "white",
+  gridBlend: "normal",
+  allowSiteDrag: false, // Default: sites cannot be freely dragged on board
+  showOwnershipOverlay: false, // Default: no ownership highlight on cards
   boardPings: [],
   lastPointerWorldPos: null,
+  draggingSite: null,
 });
 
 export type BoardUiSlice = Pick<
@@ -29,17 +46,27 @@ export type BoardUiSlice = Pick<
   | "showPlaymat"
   | "showPlaymatOverlay"
   | "playmatUrl"
+  | "gridColor"
+  | "gridBlend"
   | "allowSiteDrag"
+  | "showOwnershipOverlay"
   | "toggleGridOverlay"
   | "togglePlaymat"
   | "togglePlaymatOverlay"
   | "toggleAllowSiteDrag"
+  | "toggleOwnershipOverlay"
   | "setPlaymatUrl"
+  | "setGridColor"
+  | "setGridBlend"
   | "boardPings"
   | "pushBoardPing"
   | "removeBoardPing"
   | "lastPointerWorldPos"
   | "setLastPointerWorldPos"
+  | "draggingSite"
+  | "setDraggingSite"
+  | "updateDraggingSitePos"
+  | "dropDraggingSite"
 >;
 
 export const createBoardUiSlice: StateCreator<
@@ -57,7 +84,11 @@ export const createBoardUiSlice: StateCreator<
     set((state) => ({ showPlaymatOverlay: !state.showPlaymatOverlay })),
   toggleAllowSiteDrag: () =>
     set((state) => ({ allowSiteDrag: !state.allowSiteDrag })),
+  toggleOwnershipOverlay: () =>
+    set((state) => ({ showOwnershipOverlay: !state.showOwnershipOverlay })),
   setPlaymatUrl: (url: string) => set({ playmatUrl: url }),
+  setGridColor: (color: "white" | "black") => set({ gridColor: color }),
+  setGridBlend: (blend: "normal" | "subtract") => set({ gridBlend: blend }),
 
   pushBoardPing: (ping) => {
     const id = String(ping.id || "").trim();
@@ -119,4 +150,39 @@ export const createBoardUiSlice: StateCreator<
     }),
 
   setLastPointerWorldPos: (pos) => set({ lastPointerWorldPos: pos }),
+
+  draggingSite: null,
+
+  setDraggingSite: (dragging) => set({ draggingSite: dragging }),
+
+  updateDraggingSitePos: (x, z) =>
+    set((state) => {
+      if (!state.draggingSite) return state;
+      return {
+        draggingSite: {
+          ...state.draggingSite,
+          worldPos: { x, z },
+        },
+      } as Partial<GameState> as GameState;
+    }),
+
+  dropDraggingSite: (targetX, targetY) => {
+    const state = get();
+    const dragging = state.draggingSite;
+    if (!dragging) return;
+
+    // Parse source coordinates from sourceKey
+    const [srcXStr, srcYStr] = dragging.sourceKey.split(",");
+    const srcX = parseInt(srcXStr, 10);
+    const srcY = parseInt(srcYStr, 10);
+
+    // Clear dragging state first
+    set({ draggingSite: null });
+
+    // If dropped on same tile, do nothing
+    if (srcX === targetX && srcY === targetY) return;
+
+    // Use switchSitePosition to move the site
+    get().switchSitePosition(srcX, srcY, targetX, targetY);
+  },
 });

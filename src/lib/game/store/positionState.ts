@@ -86,12 +86,22 @@ export const createPositionSlice: StateCreator<
     })),
 
   setSitePosition: (siteId, positionData) =>
-    set((state) => ({
-      sitePositions: {
+    set((state) => {
+      const nextSitePositions = {
         ...state.sitePositions,
         [siteId]: positionData,
-      },
-    })),
+      } as GameState["sitePositions"];
+      try {
+        const tr = get().transport;
+        if (tr) {
+          const patch: ServerPatchT = { sitePositions: nextSitePositions };
+          get().trySendPatch(patch);
+        }
+      } catch {}
+      return {
+        sitePositions: nextSitePositions,
+      } as Partial<GameState> as GameState;
+    }),
 
   setPlayerPosition: (playerId, position) =>
     set((state) => ({

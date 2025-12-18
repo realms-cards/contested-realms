@@ -173,6 +173,7 @@ export type PermanentStackProps = {
   stackConfig: StackConfig;
   playCardFlip: () => void;
   isPrimaryCardHit: (e: ThreeEvent<PointerEvent | MouseEvent>) => boolean;
+  showOwnershipOverlay: boolean;
 };
 
 export function PermanentStack({
@@ -206,6 +207,7 @@ export function PermanentStack({
   stackConfig,
   playCardFlip,
   isPrimaryCardHit,
+  showOwnershipOverlay,
 }: PermanentStackProps) {
   if (items.length === 0) {
     return null;
@@ -434,6 +436,27 @@ export function PermanentStack({
           (renderPermanentGlow && !isLocalDragGhost) || !!roleGlow;
         const isDraggingPermanent =
           dragging && dragging.from === key && dragging.index === idx;
+
+        // Ownership overlay: show faint glow on cards owned by the local player
+        // In online play, use actorKey; in offline play, default to P1
+        const localSeat = actorKey ?? "p1";
+        const isOwnedByLocalPlayer =
+          (localSeat === "p1" && owner === 1) ||
+          (localSeat === "p2" && owner === 2);
+        const showOwnershipGlow =
+          showOwnershipOverlay && isOwnedByLocalPlayer && !isLocalDragGhost;
+
+        // Debug log (remove after testing)
+        if (idx === 0 && showOwnershipOverlay) {
+          console.log("[ownership]", {
+            showOwnershipOverlay,
+            localSeat,
+            owner,
+            isOwnedByLocalPlayer,
+            showPermanentGlow,
+            showOwnershipGlow,
+          });
+        }
 
         const bodyType = tokenSiteReplace
           ? "fixed" // Rubble tokens are truly fixed (site replacements)
@@ -974,6 +997,25 @@ export function PermanentStack({
                   pulseSpeed={1.6}
                   pulseMin={0.35}
                   pulseMax={0.95}
+                />
+              )}
+              {showOwnershipGlow && (
+                <CardOutline
+                  width={
+                    tokenDef && tokenDef.size === "small"
+                      ? CARD_SHORT * 0.5
+                      : CARD_SHORT
+                  }
+                  height={
+                    tokenDef && tokenDef.size === "small"
+                      ? CARD_LONG * 0.5
+                      : CARD_LONG
+                  }
+                  rotationZ={rotZ}
+                  elevation={0.006}
+                  color={PLAYER_COLORS[localSeat]}
+                  renderOrder={1600}
+                  opacity={0.5}
                 />
               )}
               <group

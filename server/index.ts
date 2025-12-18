@@ -2876,6 +2876,36 @@ io.on("connection", async (socket: SocketClient) => {
           from: player.id,
           ts: Date.now(),
         } as const;
+        console.log(
+          `[Server] D20 roll: ${value} by ${playerKey} in match ${matchId}`
+        );
+        io.to(room).emit("message", out);
+        try {
+          io.to(`spectate:${matchId}`).emit("message", out);
+        } catch {}
+      } catch {}
+    } else if (type === "d6Roll") {
+      try {
+        const match = await getOrLoadMatch(matchId);
+        const room = `match:${matchId}`;
+        const playerKey = getSeatForPlayer(match, player.id) || "p1";
+        // Sanitize and clamp roll value or generate one server-side
+        let value = Number((payload as { value?: unknown })?.value);
+        if (!Number.isFinite(value) || value < 1 || value > 6) {
+          value = Math.floor(Math.random() * 6) + 1;
+        } else {
+          value = Math.max(1, Math.min(6, Math.floor(value)));
+        }
+        const out = {
+          type: "d6Roll",
+          value,
+          playerKey,
+          from: player.id,
+          ts: Date.now(),
+        } as const;
+        console.log(
+          `[Server] D6 roll: ${value} by ${playerKey} in match ${matchId}`
+        );
         io.to(room).emit("message", out);
         try {
           io.to(`spectate:${matchId}`).emit("message", out);

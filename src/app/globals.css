@@ -309,13 +309,13 @@ body[data-colorblind="true"] *[class*="ring-rose-"] {
   }
   20% {
     opacity: 1;
-    text-shadow: 0 0 20px #3b82f6, 0 0 40px #3b82f6, 0 0 60px #1d4ed8,
-      0 0 80px #1e3a8a;
+    text-shadow: 0 0 10px #3b82f6, 0 0 18px #3b82f6, 0 0 26px #1d4ed8,
+      0 0 34px #1e3a8a;
   }
   80% {
     opacity: 1;
-    text-shadow: 0 0 10px #3b82f6, 0 0 20px #3b82f6, 0 0 30px #1d4ed8,
-      0 0 40px #1e3a8a;
+    text-shadow: 0 0 6px #3b82f6, 0 0 12px #3b82f6, 0 0 18px #1d4ed8,
+      0 0 24px #1e3a8a;
   }
   100% {
     opacity: 0;

@@ -7,7 +7,7 @@ import * as THREE from "three";
 import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
 import type { PlayerKey } from "../store";
 
-interface D20DiceProps {
+interface D6DiceProps {
   playerName: string;
   player: PlayerKey;
   position: [number, number, number];
@@ -17,11 +17,9 @@ interface D20DiceProps {
   onRoll?: () => void;
   /** Custom dice color override (default: player-based blue/red) */
   customColor?: string;
-  /** Whether this die is highlighted as a duplicate needing reroll */
-  isDuplicate?: boolean;
 }
 
-export default function D20Dice({
+export default function D6Dice({
   player,
   position,
   roll,
@@ -30,9 +28,7 @@ export default function D20Dice({
   onRoll,
   playerName,
   customColor,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  isDuplicate = false,
-}: D20DiceProps) {
+}: D6DiceProps) {
   const groupRef = useRef<THREE.Group>(null);
   // Initialize rollStartTime to Date.now() if already rolling on mount
   const [rollStartTime, setRollStartTime] = useState<number>(() =>
@@ -42,7 +38,7 @@ export default function D20Dice({
   const onRollCompleteCalledRef = useRef(false);
 
   // Load the OBJ model
-  const obj = useLoader(OBJLoader, "/3dmodels/rpg-dice/sm_K20_DiceSet_01.obj");
+  const obj = useLoader(OBJLoader, "/3dmodels/rpg-dice/sm_K6_DiceSet_01.obj");
 
   // Load WebP textures (1024x1024, ~545KB total)
   const [diffuseMap, normalMap, roughnessMap, metalnessMap] = useTexture([
@@ -72,10 +68,19 @@ export default function D20Dice({
   const textColor = "#ffffff";
 
   // Clone the OBJ and apply textured material with player color tint
-  const d20Clone = useMemo(() => {
+  // Also center the geometry so it rotates around its center, not a corner
+  const d6Clone = useMemo(() => {
     const clone = obj.clone();
     clone.traverse((child) => {
       if (child instanceof THREE.Mesh) {
+        // Center the geometry
+        child.geometry.computeBoundingBox();
+        const box = child.geometry.boundingBox;
+        if (box) {
+          const center = new THREE.Vector3();
+          box.getCenter(center);
+          child.geometry.translate(-center.x, -center.y, -center.z);
+        }
         // Clone diffuse map and tint it with player color
         const tintedDiffuse = diffuseMap.clone();
         child.material = new THREE.MeshStandardMaterial({
@@ -92,44 +97,20 @@ export default function D20Dice({
     return clone;
   }, [obj, diffuseMap, normalMap, roughnessMap, metalnessMap, diceColor]);
 
-  // D20 face rotations - derived from known position where [0.5535, 0, 0] shows 13
-  // Icosahedron has 20 triangular faces arranged in bands around Y axis
-  // - Top cap: 5 faces (rotating Y by 72° = 2π/5 cycles through them)
-  // - Upper band: 5 faces (inverted, offset by 36° = π/5)
-  // - Lower band: 5 faces (inverted from upper)
-  // - Bottom cap: 5 faces (inverted from top)
-  // X rotation ~0.5535 rad (~31.7°) tilts a face horizontal
-  // X rotation ~-0.5535 + π flips to opposite hemisphere
-  const baseX = 0.5535; // Angle to make a face horizontal
-  const yStep = (2 * Math.PI) / 5; // 72° between faces in same band
-  const yOffset = Math.PI / 5; // 36° offset for alternating bands
-
-  const d20FaceRotations: Record<number, [number, number, number]> = useMemo(
+  // D6 face rotations - empirically calibrated from screenshots
+  // From testing: roll 3→showed 1, roll 1→showed 5, roll 5→showed 4
+  // Corrected mapping: assign each number the rotation that actually shows it
+  const d6FaceRotations: Record<number, [number, number, number]> = useMemo(
     () => ({
-      // These need empirical calibration based on how numbers are painted on the model
-      // Starting with 13 at [0.5535, 0, 0] and deriving others
-      1: [baseX + Math.PI, yStep * 2, 0], // opposite of 20
-      2: [baseX + Math.PI, yStep * 4 + yOffset, 0],
-      3: [baseX + Math.PI, yStep * 1, 0],
-      4: [baseX + Math.PI, yStep * 3 + yOffset, 0],
-      5: [baseX + Math.PI, yStep * 0, 0],
-      6: [baseX + Math.PI, yStep * 2 + yOffset, 0],
-      7: [baseX + Math.PI, yStep * 4, 0],
-      8: [baseX, yStep * 1 + yOffset, 0], // upper hemisphere
-      9: [baseX, yStep * 3, 0],
-      10: [baseX, yStep * 0 + yOffset, 0],
-      11: [baseX, yStep * 2, 0],
-      12: [baseX, yStep * 4 + yOffset, 0],
-      13: [baseX, 0, 0], // known position
-      14: [baseX, yStep * 1, 0],
-      15: [baseX, yStep * 3 + yOffset, 0],
-      16: [baseX, yStep * 0, 0],
-      17: [baseX, yStep * 2 + yOffset, 0],
-      18: [baseX, yStep * 4, 0],
-      19: [baseX + Math.PI, yStep * 1 + yOffset, 0],
-      20: [baseX + Math.PI, yStep * 3, 0], // opposite of 1
+      // Swapped based on screenshot observations
+      1: [0, Math.PI, 0], // was assigned to 3, showed 1
+      2: [-Math.PI / 2, Math.PI, 0], // was assigned to 6, shows 2 (opposite of 5)
+      3: [0, Math.PI, -Math.PI / 2], // was assigned to 2, shows 3 (opposite of 4)
+      4: [0, Math.PI, Math.PI / 2], // was assigned to 5, showed 4
+      5: [Math.PI / 2, Math.PI, 0], // was assigned to 1, showed 5
+      6: [Math.PI, Math.PI, 0], // was assigned to 4, shows 6 (opposite of 1)
     }),
-    [baseX, yStep, yOffset]
+    []
   );
 
   // Simple rotation animation
@@ -154,8 +135,8 @@ export default function D20Dice({
     } else if (!onRollCompleteCalledRef.current) {
       // Stop spinning and set final rotation to show rolled number
       onRollCompleteCalledRef.current = true;
-      if (roll != null && d20FaceRotations[roll]) {
-        const [rx, ry, rz] = d20FaceRotations[roll];
+      if (roll != null && d6FaceRotations[roll]) {
+        const [rx, ry, rz] = d6FaceRotations[roll];
         groupRef.current.rotation.set(rx, ry, rz);
       }
       setHasCompletedRoll(true);
@@ -165,7 +146,7 @@ export default function D20Dice({
 
   return (
     <group position={position}>
-      {/* D20 Model from OBJ */}
+      {/* D6 Model from OBJ */}
       <group
         ref={groupRef}
         scale={[0.8, 0.8, 0.8]}
@@ -184,7 +165,7 @@ export default function D20Dice({
           document.body.style.cursor = "default";
         }}
       >
-        <primitive object={d20Clone} />
+        <primitive object={d6Clone} />
       </group>
 
       {/* Show the result number above dice - uses Billboard to face any camera */}

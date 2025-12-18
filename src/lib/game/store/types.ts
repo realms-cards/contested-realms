@@ -712,10 +712,30 @@ export type GameState = {
   showPlaymat: boolean;
   showPlaymatOverlay: boolean;
   playmatUrl: string;
+  gridColor: "white" | "black";
+  gridBlend: "normal" | "subtract";
   allowSiteDrag: boolean;
+  showOwnershipOverlay: boolean;
+  draggingSite: {
+    sourceKey: CellKey;
+    site: SiteTile;
+    worldPos: { x: number; z: number };
+  } | null;
   setPlaymatUrl: (url: string) => void;
+  setGridColor: (color: "white" | "black") => void;
+  setGridBlend: (blend: "normal" | "subtract") => void;
   togglePlaymatOverlay: () => void;
   toggleAllowSiteDrag: () => void;
+  toggleOwnershipOverlay: () => void;
+  setDraggingSite: (
+    dragging: {
+      sourceKey: CellKey;
+      site: SiteTile;
+      worldPos: { x: number; z: number };
+    } | null
+  ) => void;
+  updateDraggingSitePos: (x: number, z: number) => void;
+  dropDraggingSite: (targetX: number, targetY: number) => void;
   // Camera / view mode
   cameraMode: "orbit" | "topdown";
   setCameraMode: (mode: "orbit" | "topdown") => void;

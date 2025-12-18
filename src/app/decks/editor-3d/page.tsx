@@ -4048,7 +4048,7 @@ function AuthenticatedDeckEditor() {
     for (const item of Object.values(picks)) {
       const current = totalByCard.get(item.cardId) || 0;
       totalByCard.set(item.cardId, current + item.count);
-      if (item.zone !== "Sideboard") {
+      if (item.zone === "Deck") {
         const curDeck = initialDeckByCard.get(item.cardId) || 0;
         initialDeckByCard.set(item.cardId, curDeck + item.count);
       }

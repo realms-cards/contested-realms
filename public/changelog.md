@@ -2,6 +2,16 @@
 
 ## December 2025
 
+### Dec 18 — Scry & Visual Polish
+
+- **Proper dice models!** Damn they look great!
+- **Custom Playmats for Patrons** Supporters of the [Realms.cards Patreon](https://www.patreon.com/realmscards) can now upload custom playmats
+- **Add D6 to toolbox**
+- **Add "free drag mode" for sites to toolbox** to resolve Rift Valley and other cards that need easy site manipulation
+- **Second player seer improved**
+- **Easy token deletion** Press "del", "backspace" to delete a highlighted token from the board
+- **Switch Playmat for Grid**: Change to a simple Grid for playing
+
 ### Dec 17 — UI & Gameplay Fixes
 
 - **Spectator mode** Ongoing matches can be spectated (if they are not private), spectators do not see hands
@@ -11,6 +21,8 @@
 - **Flip cards**: Added flip cards to cards on the board
 - **Patron Shoutout**: Display all Patrons and make them stand out in Chat and the Players tab
 - **Better invites** Invites from lobby now are now overlays
+- **Lobby polish**: Cleaner lobby layout and less confusing game creation
+- **Quick Play**: Revised quick play flow
 - **Online Players indicator** fixed to display only connected players
 - **Imposter**: Fixed Imposter behavior and deck import
 - **Site Preview**: Increased card preview size for sites
