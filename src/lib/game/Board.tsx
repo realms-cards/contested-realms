@@ -143,6 +143,8 @@ export default function Board({
   const board = boardState ?? fallbackBoard;
   const showGrid = useScopedStore((s) => s.showGridOverlay);
   const showPlaymat = useScopedStore((s) => s.showPlaymat);
+  const showPlaymatOverlay = useScopedStore((s) => s.showPlaymatOverlay);
+  const playmatUrl = useScopedStore((s) => s.playmatUrl);
   const playSelectedTo = useScopedStore((s) => s.playSelectedTo);
   const moveSelectedPermanentToWithOffset = useScopedStore(
     (s) => s.moveSelectedPermanentToWithOffset
@@ -945,7 +947,13 @@ export default function Board({
 
   return (
     <group>
-      <BoardEnvironment matW={matW} matH={matH} showPlaymat={showPlaymat} />
+      <BoardEnvironment
+        matW={matW}
+        matH={matH}
+        showPlaymat={showPlaymat}
+        playmatUrl={playmatUrl}
+        showOverlay={showPlaymatOverlay}
+      />
 
       {/* Interactive tiles */}
       <group position={[0, 0, 0]}>

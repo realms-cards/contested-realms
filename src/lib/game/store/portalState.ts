@@ -301,7 +301,7 @@ export function needsPortalPhaseForHarbinger(
 }
 
 /**
- * Helper: Find indices of duplicate rolls
+ * Helper: Find indices of duplicate rolls (returns ALL duplicate indices)
  */
 export function findDuplicateIndices(rolls: number[]): number[] {
   const seen = new Map<number, number[]>();
@@ -323,6 +323,37 @@ export function findDuplicateIndices(rolls: number[]): number[] {
   }
 
   return duplicateIndices;
+}
+
+/**
+ * Helper: Find the index of the last die that caused a duplicate.
+ * Only returns the highest index that has a duplicate value (the most recently rolled duplicate).
+ * Returns -1 if no duplicates exist.
+ */
+export function findLastDuplicateIndex(rolls: number[]): number {
+  const seen = new Map<number, number[]>();
+  rolls.forEach((roll, index) => {
+    const existing = seen.get(roll);
+    if (existing) {
+      existing.push(index);
+    } else {
+      seen.set(roll, [index]);
+    }
+  });
+
+  // Find the highest index among all duplicate groups
+  let lastDuplicateIndex = -1;
+  for (const indices of seen.values()) {
+    if (indices.length > 1) {
+      // Get the last (highest) index in this duplicate group
+      const maxIndex = Math.max(...indices);
+      if (maxIndex > lastDuplicateIndex) {
+        lastDuplicateIndex = maxIndex;
+      }
+    }
+  }
+
+  return lastDuplicateIndex;
 }
 
 /**

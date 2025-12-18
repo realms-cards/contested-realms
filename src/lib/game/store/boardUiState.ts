@@ -1,18 +1,22 @@
 import type { StateCreator } from "zustand";
 import type { BoardPingEvent, GameState } from "./types";
-import {
-  BOARD_PING_LIFETIME_MS,
-  BOARD_PING_MAX_HISTORY,
-} from "./types";
+import { BOARD_PING_LIFETIME_MS, BOARD_PING_MAX_HISTORY } from "./types";
 
 type BoardUiDefaults = Pick<
   GameState,
-  "showGridOverlay" | "showPlaymat" | "boardPings" | "lastPointerWorldPos"
+  | "showGridOverlay"
+  | "showPlaymat"
+  | "showPlaymatOverlay"
+  | "playmatUrl"
+  | "boardPings"
+  | "lastPointerWorldPos"
 >;
 
 export const createInitialBoardUiState = (): BoardUiDefaults => ({
   showGridOverlay: false,
   showPlaymat: true,
+  showPlaymatOverlay: false, // Default: show playmat, hide grid overlay
+  playmatUrl: "/playmat.jpg",
   boardPings: [],
   lastPointerWorldPos: null,
 });
@@ -21,8 +25,12 @@ export type BoardUiSlice = Pick<
   GameState,
   | "showGridOverlay"
   | "showPlaymat"
+  | "showPlaymatOverlay"
+  | "playmatUrl"
   | "toggleGridOverlay"
   | "togglePlaymat"
+  | "togglePlaymatOverlay"
+  | "setPlaymatUrl"
   | "boardPings"
   | "pushBoardPing"
   | "removeBoardPing"
@@ -40,8 +48,10 @@ export const createBoardUiSlice: StateCreator<
 
   toggleGridOverlay: () =>
     set((state) => ({ showGridOverlay: !state.showGridOverlay })),
-  togglePlaymat: () =>
-    set((state) => ({ showPlaymat: !state.showPlaymat })),
+  togglePlaymat: () => set((state) => ({ showPlaymat: !state.showPlaymat })),
+  togglePlaymatOverlay: () =>
+    set((state) => ({ showPlaymatOverlay: !state.showPlaymatOverlay })),
+  setPlaymatUrl: (url: string) => set({ playmatUrl: url }),
 
   pushBoardPing: (ping) => {
     const id = String(ping.id || "").trim();

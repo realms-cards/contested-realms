@@ -2494,6 +2494,17 @@ io.on("connection", async (socket: SocketClient) => {
         return;
       }
 
+      // Disallow spectating until match is truly in progress (prevents early spectators from interfering)
+      if (match.status !== "in_progress") {
+        try {
+          socket.emit("watch:error", {
+            matchId,
+            message: "match_not_started",
+          });
+        } catch {}
+        return;
+      }
+
       // Join spectate room and tag socket as spectator for sanitization
       try {
         await socket.join(`spectate:${matchId}`);

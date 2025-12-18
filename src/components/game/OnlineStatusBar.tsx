@@ -1,6 +1,6 @@
 "use client";
 
-import { Star, Settings, Users } from "lucide-react";
+import { Grid3X3, Settings, Star, Users } from "lucide-react";
 import AudioControls from "@/components/game/AudioControls";
 import { FEATURE_UNDO } from "@/lib/config/features";
 import { useColorBlind } from "@/lib/contexts/ColorBlindContext";
@@ -36,6 +36,9 @@ export default function OnlineStatusBar({
   const undo = useGameStore((s) => s.undo);
   const history = useGameStore((s) => s.history);
   const matchEnded = useGameStore((s) => s.matchEnded);
+  const showPlaymatOverlay = useGameStore((s) => s.showPlaymatOverlay);
+  const togglePlaymatOverlay = useGameStore((s) => s.togglePlaymatOverlay);
+  const togglePlaymat = useGameStore((s) => s.togglePlaymat);
   const { enabled: colorBlindEnabled } = useColorBlind();
 
   // Check if this player can control the current turn
@@ -65,6 +68,22 @@ export default function OnlineStatusBar({
       onContextMenu={(e) => e.preventDefault()}
     >
       <div className="flex items-center gap-3 rounded-full bg-black/60 backdrop-blur px-4 py-1.5 text-sm text-white shadow-lg ring-1 ring-white/10">
+        {/* Playmat/Grid toggle - toggles between playmat (no grid) and grid (no playmat) */}
+        <button
+          className={`rounded-full p-1.5 transition-colors ${
+            showPlaymatOverlay
+              ? "bg-blue-600/80 hover:bg-blue-500"
+              : "bg-white/10 hover:bg-white/20"
+          }`}
+          onClick={() => {
+            togglePlaymatOverlay();
+            togglePlaymat();
+          }}
+          title={showPlaymatOverlay ? "Show playmat" : "Show grid"}
+        >
+          <Grid3X3 className="w-4 h-4" />
+        </button>
+
         {/* Playing as indicator */}
         {myPlayerKey && !readOnly && (
           <>

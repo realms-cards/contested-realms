@@ -180,6 +180,22 @@ export type PortalState = {
   setupComplete: boolean;
 };
 
+// --- Second Player Seer State ------------------------------------------------
+export type SeerPlayerStatus = "pending" | "revealed" | "completed" | "skipped";
+
+export type SeerState = {
+  // Which player is the second seat (gets the seer ability)
+  secondSeat: PlayerKey;
+  // Status of the seer phase
+  status: SeerPlayerStatus;
+  // Which pile was chosen (null if not yet chosen)
+  chosenPile: "spellbook" | "atlas" | null;
+  // The decision made (null if not yet decided)
+  decision: "top" | "bottom" | "skip" | null;
+  // Overall setup complete flag
+  setupComplete: boolean;
+};
+
 export type PermanentItem = EntityBase<CardRef> & {
   owner: 1 | 2;
   tilt?: number;
@@ -647,6 +663,10 @@ export type GameState = {
   board: BoardState;
   showGridOverlay: boolean;
   showPlaymat: boolean;
+  showPlaymatOverlay: boolean;
+  playmatUrl: string;
+  setPlaymatUrl: (url: string) => void;
+  togglePlaymatOverlay: () => void;
   // Camera / view mode
   cameraMode: "orbit" | "topdown";
   setCameraMode: (mode: "orbit" | "topdown") => void;
@@ -796,6 +816,12 @@ export type GameState = {
   rerollPortalDie: (seat: PlayerKey, dieIndex: number) => void;
   finalizePortalRolls: (seat: PlayerKey) => void;
   completePortalSetup: () => void;
+  // Second Player Seer State
+  seerState: SeerState | null;
+  initSeerState: (secondSeat: PlayerKey) => void;
+  setSeerPile: (pile: "spellbook" | "atlas") => void;
+  revealSeerCard: () => void;
+  completeSeer: (decision: "top" | "bottom" | "skip") => void;
   // Imposter Mask State (Gothic expansion)
   // Tracks when an Imposter avatar is wearing a mask (another avatar from collection)
   imposterMasks: Record<PlayerKey, ImposterMaskState | null>;
@@ -1016,6 +1042,7 @@ export type ServerPatchT = Partial<{
   events: GameState["events"];
   eventSeq: GameState["eventSeq"];
   portalState: GameState["portalState"];
+  seerState: GameState["seerState"];
   imposterMasks: GameState["imposterMasks"];
   __replaceKeys: string[];
 }>;

@@ -1804,7 +1804,17 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
     if (!Array.isArray(match.playerIds)) {
       match.playerIds = [];
     }
+    // Only allow joining if player is already in the roster OR there's room (max 2 players)
+    // This prevents spectators or extra players from being added to playerIds
     if (!match.playerIds.includes(playerId)) {
+      if (match.playerIds.length >= 2) {
+        console.warn("[joinMatch] Rejected: match already has 2 players", {
+          matchId,
+          playerId,
+          existingPlayers: match.playerIds,
+        });
+        return;
+      }
       match.playerIds.push(playerId);
     }
     playerState.matchId = matchId;

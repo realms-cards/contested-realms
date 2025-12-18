@@ -347,6 +347,12 @@ export const createNetworkSlice: StateCreator<
       } else if (replaceKeys.has("portalState")) {
         next.portalState = null;
       }
+      // Second player seer state
+      if (p.seerState !== undefined) {
+        next.seerState = p.seerState; // Seer state is always replaced, not merged
+      } else if (replaceKeys.has("seerState")) {
+        next.seerState = null;
+      }
       // Imposter mask state (Gothic expansion)
       if (p.imposterMasks !== undefined) {
         next.imposterMasks = p.imposterMasks; // Mask state is always replaced, not merged
@@ -598,6 +604,14 @@ export const createNetworkSlice: StateCreator<
         next.eventSeq = replaceKeys.has("eventSeq")
           ? Math.max(Number(p.eventSeq) || 0, 0)
           : Math.max(state.eventSeq, Number(p.eventSeq) || 0);
+      }
+      // Portal state (Gothic expansion) - applyPatch version
+      if (p.portalState !== undefined) {
+        next.portalState = p.portalState;
+      }
+      // Seer state - applyPatch version
+      if (p.seerState !== undefined) {
+        next.seerState = p.seerState;
       }
       // Imposter mask state (Gothic expansion) - applyPatch version
       if (p.imposterMasks !== undefined) {

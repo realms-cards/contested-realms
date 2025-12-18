@@ -7,6 +7,7 @@ import { useGameStore } from "@/lib/game/store";
 import type { PlayerKey } from "@/lib/game/store";
 import {
   findDuplicateIndices,
+  findLastDuplicateIndex,
   hasNoDuplicateRolls,
 } from "@/lib/game/store/portalState";
 
@@ -166,7 +167,7 @@ export default function HarbingerPortalScreen({
     return undefined;
   }, [setupComplete, onSetupComplete]);
 
-  // Auto-reroll duplicate dice after all dice have settled
+  // Auto-reroll the last duplicate die after all dice have settled
   useEffect(() => {
     // Only auto-reroll if it's my turn
     if (!isMyTurn || !currentRoller) return;
@@ -179,17 +180,17 @@ export default function HarbingerPortalScreen({
     // Don't reroll if phase is already complete
     if (rollPhase === "complete") return;
 
-    // Auto-reroll all duplicate dice with a short delay for visual feedback
+    // Find only the last die that caused a duplicate (the most recently rolled one)
+    const lastDupIndex = findLastDuplicateIndex(rolls);
+    if (lastDupIndex < 0) return;
+
+    // Auto-reroll only the last duplicate die with a short delay for visual feedback
     const timer = setTimeout(() => {
-      for (const index of duplicateIndices) {
-        rerollPortalDie(currentRoller, index);
-      }
-      // Reset dice completion state for rerolled dice
+      rerollPortalDie(currentRoller, lastDupIndex);
+      // Reset dice completion state for the rerolled die
       setDiceComplete((prev) => {
         const next = [...prev];
-        for (const index of duplicateIndices) {
-          next[index] = false;
-        }
+        next[lastDupIndex] = false;
         return next;
       });
     }, 800); // Short delay to show the duplicate highlight
@@ -201,7 +202,7 @@ export default function HarbingerPortalScreen({
     allRolled,
     diceComplete,
     hasDuplicates,
-    duplicateIndices,
+    rolls,
     rollPhase,
     rerollPortalDie,
   ]);

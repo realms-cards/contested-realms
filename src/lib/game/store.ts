@@ -37,6 +37,7 @@ import { createPositionSlice } from "./store/positionState";
 import { createPreferenceSlice } from "./store/preferenceState";
 import { createRemoteCursorSlice } from "./store/remoteCursorState";
 import { createResourceSlice } from "./store/resourceState";
+import { createSeerSlice } from "./store/seerState";
 import { createSessionSlice } from "./store/sessionState";
 import {
   createSnapshotSlice,
@@ -122,6 +123,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   ...createTransportSlice(set, get, storeApi),
   ...createNetworkSlice(set, get, storeApi),
   ...createPortalSlice(set, get, storeApi),
+  ...createSeerSlice(set, get, storeApi),
   ...createImposterMaskSlice(set, get, storeApi),
 
   // Multiplayer transport (injected by online play UI)
@@ -179,6 +181,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         pendingMagic: null,
         pendingChaosTwister: null,
         portalState: null,
+        seerState: null,
         imposterMasks: createInitialImposterMasks(),
       };
       return reset as GameState;
