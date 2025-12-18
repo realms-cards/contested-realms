@@ -312,6 +312,37 @@ export type PendingChaosTwister = {
   createdAt: number;
 };
 
+// --- Browse Spell State ------------------------------------------------
+// "Look at your next seven spells. Put one in your hand and the rest on the bottom of your spellbook in any order."
+export type BrowsePhase =
+  | "viewing" // Player is viewing the 7 cards
+  | "ordering" // Player is ordering the remaining cards for bottom of spellbook
+  | "resolving"
+  | "complete";
+
+export type PendingBrowse = {
+  id: string;
+  // The spell card on the board
+  spell: {
+    at: CellKey;
+    index: number;
+    instanceId?: string | null;
+    owner: 1 | 2;
+    card: CardRef;
+  };
+  // The caster (player who played the spell)
+  casterSeat: PlayerKey;
+  // Phase of the Browse flow
+  phase: BrowsePhase;
+  // The 7 cards revealed from spellbook (or fewer if spellbook has less)
+  revealedCards: CardRef[];
+  // The card selected to put in hand (index into revealedCards)
+  selectedCardIndex: number | null;
+  // The order for remaining cards to go to bottom (indices into revealedCards, excluding selectedCardIndex)
+  bottomOrder: number[];
+  createdAt: number;
+};
+
 // Context menu targeting for click-driven actions
 export type ContextMenuTarget =
   | { kind: "site"; x: number; y: number }
@@ -618,6 +649,22 @@ export type GameState = {
   }) => void;
   resolveChaosTwister: () => void;
   cancelChaosTwister: () => void;
+  // Browse spell flow
+  pendingBrowse: PendingBrowse | null;
+  beginBrowse: (input: {
+    spell: {
+      at: CellKey;
+      index: number;
+      instanceId?: string | null;
+      owner: 1 | 2;
+      card: CardRef;
+    };
+    casterSeat: PlayerKey;
+  }) => void;
+  selectBrowseCard: (cardIndex: number) => void;
+  setBrowseBottomOrder: (order: number[]) => void;
+  resolveBrowse: () => void;
+  cancelBrowse: () => void;
   beginMagicCast: (input: {
     tile: { x: number; y: number };
     spell: {
@@ -665,8 +712,10 @@ export type GameState = {
   showPlaymat: boolean;
   showPlaymatOverlay: boolean;
   playmatUrl: string;
+  allowSiteDrag: boolean;
   setPlaymatUrl: (url: string) => void;
   togglePlaymatOverlay: () => void;
+  toggleAllowSiteDrag: () => void;
   // Camera / view mode
   cameraMode: "orbit" | "topdown";
   setCameraMode: (mode: "orbit" | "topdown") => void;

@@ -5,6 +5,7 @@ import {
   createBoardUiSlice,
   createInitialBoardUiState,
 } from "./store/boardUiState";
+import { createBrowseSlice } from "./store/browseState";
 import { createCardMetaSlice } from "./store/cardMetaState";
 import { createChaosTwisterSlice } from "./store/chaosTwisterState";
 import { createCombatSlice } from "./store/combatState";
@@ -114,6 +115,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   ...createCombatSlice(set, get, storeApi),
   ...createMagicSlice(set, get, storeApi),
   ...createChaosTwisterSlice(set, get, storeApi),
+  ...createBrowseSlice(set, get, storeApi),
   ...createPreferenceSlice(set, get, storeApi),
   ...createCardMetaSlice(set, get, storeApi),
   ...createSessionSlice(set, get, storeApi),
@@ -180,6 +182,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         snapshots: createEmptySnapshots(),
         pendingMagic: null,
         pendingChaosTwister: null,
+        pendingBrowse: null,
         portalState: null,
         seerState: null,
         imposterMasks: createInitialImposterMasks(),

@@ -33,7 +33,7 @@ import OnlineStatusBar from "@/components/game/OnlineStatusBar";
 import PileSearchDialog from "@/components/game/PileSearchDialog";
 import PlacementDialog from "@/components/game/PlacementDialog";
 import PlayerResourcePanels from "@/components/game/PlayerResourcePanel";
-import SeerScreen from "@/components/game/SeerScreen";
+// SeerScreen is now integrated into OnlineMulliganScreen
 import SwitchSiteHudOverlay from "@/components/game/SwitchSiteHudOverlay";
 import {
   DynamicBoard as Board,
@@ -544,13 +544,9 @@ export default function OnlineMatchPage() {
   const initPortalState = useGameStore((s) => s.initPortalState);
   const avatars = useGameStore((s) => s.avatars);
 
-  // Seer state from game store (synced across network)
-  const seerState = useGameStore((s) => s.seerState);
-
   // Track when THIS player confirms mulligan (before portal phase)
   const [mulliganReady, setMulliganReady] = useState<boolean>(false);
-  // Track when second player seer phase is complete (derived from synced seerState)
-  const seerComplete = seerState?.setupComplete ?? false;
+  // Note: Seer phase is now handled within OnlineMulliganScreen
   const [portalPhaseInitialized, setPortalPhaseInitialized] =
     useState<boolean>(false);
 
@@ -675,16 +671,27 @@ export default function OnlineMatchPage() {
   }, [portalState, portalSetupComplete]);
 
   // Determine if seer phase is needed for this match type
+  // Seer is for constructed and precon matches only (not sealed/draft)
   const needsSeerPhase =
-    match?.matchType === "constructed" || !match?.matchType;
+    match?.matchType === "constructed" ||
+    match?.matchType === "precon" ||
+    !match?.matchType;
 
-  // After portal phase AND seer phase complete, call finishSetup to finalize game start
+  // Debug logging for seer phase
+  useEffect(() => {
+    console.log("[Seer] Online play page:", {
+      matchType: match?.matchType,
+      needsSeerPhase,
+      mulliganReady,
+    });
+  }, [match?.matchType, needsSeerPhase, mulliganReady]);
+
+  // After portal phase completes, call finishSetup to finalize game start
+  // Note: Seer phase is now handled within OnlineMulliganScreen (before mulliganReady is set)
   // IMPORTANT: Only proceed if no Harbinger OR if portals are fully assigned
   useEffect(() => {
     if (!bothPlayersReady) return;
     if (!portalSetupComplete) return;
-    // Wait for seer phase to complete (only for constructed matches)
-    if (needsSeerPhase && !seerComplete) return;
 
     // If Harbinger is present, verify portals are actually assigned
     if (harbingerSeats.length > 0) {
@@ -699,14 +706,7 @@ export default function OnlineMatchPage() {
 
     finishSetup();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    bothPlayersReady,
-    portalSetupComplete,
-    needsSeerPhase,
-    seerComplete,
-    harbingerSeats,
-    portalState,
-  ]); // finishSetup intentionally excluded - not memoized
+  }, [bothPlayersReady, portalSetupComplete, harbingerSeats, portalState]); // finishSetup intentionally excluded - not memoized
 
   // Track sealed submission flag for this match (used to decide when to load decks)
   const hasSubmittedSealedDeck = useMemo(() => {
@@ -1664,10 +1664,8 @@ export default function OnlineMatchPage() {
       desired = false;
     } else if (gameActuallyStarted) {
       // Keep overlay open during Harbinger portal phase (between mulligan and game start)
+      // Note: Seer phase is now handled within OnlineMulliganScreen
       if (needsPortalPhase && !portalSetupComplete) {
-        desired = true;
-      } else if (needsSeerPhase && !seerComplete) {
-        // Keep overlay open during Second Player Seer phase (after portal, before game starts)
         desired = true;
       } else {
         desired = false;
@@ -1723,8 +1721,6 @@ export default function OnlineMatchPage() {
     storeD20Rolls,
     needsPortalPhase,
     portalSetupComplete,
-    needsSeerPhase,
-    seerComplete,
   ]);
 
   useEffect(() => {
@@ -2461,6 +2457,7 @@ export default function OnlineMatchPage() {
               myPlayerKey={myPlayerKey}
               playerNames={playerNames}
               onStartGame={() => setMulliganReady(true)}
+              showSeerPhase={needsSeerPhase}
             />
           ) : mulliganReady && !bothPlayersReady ? (
             /* Waiting for opponent to finish mulligan */
@@ -2478,16 +2475,6 @@ export default function OnlineMatchPage() {
               myPlayerKey={myPlayerKey}
               playerNames={playerNames}
               onSetupComplete={() => setPortalSetupComplete(true)}
-            />
-          ) : needsSeerPhase && !seerComplete ? (
-            /* Second Player Seer phase - only for constructed matches, shown after mulligan/portal, before game starts */
-            <SeerScreen
-              myPlayerKey={myPlayerKey}
-              playerNames={playerNames}
-              onSeerComplete={() => {
-                // seerComplete is derived from synced seerState.setupComplete
-                // The SeerScreen handles the state update via completeSeer()
-              }}
             />
           ) : (
             <div className="text-center text-white">

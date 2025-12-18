@@ -2504,10 +2504,6 @@ function AuthenticatedDeckEditor() {
         { cardId: number; zone: ApiZone; count: number; variantId?: number }
       >();
       for (const item of Object.values(picks)) {
-        // In free mode, do not persist Collection-zone cards (cube extras / helper pool)
-        if (isFreeMode && item.zone === "Collection") {
-          continue;
-        }
         // Use item.type, fall back to metaByCardId type (for cards added via live search)
         const meta = metaByCardId[item.cardId];
         const t = (item.type || meta?.type || "").toLowerCase();

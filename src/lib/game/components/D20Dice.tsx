@@ -38,13 +38,18 @@ export default function D20Dice({
   // D20 geometry - icosahedron (bigger size for visibility)
   const d20Geometry = new THREE.IcosahedronGeometry(0.8, 0);
 
-  // Start rolling when isRolling becomes true; reset completion state for new rolls
+  // Track the previous roll value to detect actual new rolls vs syncs
+  const prevRollRef = useRef<number | null>(null);
+
+  // Start rolling when isRolling becomes true with a NEW roll value
+  // Don't reset if the roll value is the same (server sync of existing roll)
   useEffect(() => {
-    if (isRolling) {
+    if (isRolling && roll !== prevRollRef.current) {
       setHasCompletedRoll(false);
       setRollStartTime(Date.now());
+      prevRollRef.current = roll;
     }
-  }, [isRolling]);
+  }, [isRolling, roll]);
 
   // Simple rotation animation
   useFrame(() => {
@@ -73,6 +78,17 @@ export default function D20Dice({
   // Highlight duplicate dice with pulsing yellow outline
   const duplicateHighlight = isDuplicate ? "#fbbf24" : undefined;
 
+  // Subtle pulsing glow for clickable dice
+  const materialRef = useRef<THREE.MeshStandardMaterial>(null);
+  const isClickable = !isRolling && roll == null && onRoll;
+
+  useFrame(({ clock }) => {
+    if (!materialRef.current || !isClickable) return;
+    // Subtle pulse between 0.1 and 0.3 intensity
+    const pulse = 0.2 + Math.sin(clock.elapsedTime * 2.5) * 0.1;
+    materialRef.current.emissiveIntensity = pulse;
+  });
+
   return (
     <group position={position}>
       {/* D20 Mesh */}
@@ -95,17 +111,16 @@ export default function D20Dice({
         }}
       >
         <meshStandardMaterial
+          ref={materialRef}
           color={diceColor}
           emissive={
             isDuplicate
               ? duplicateHighlight
-              : !isRolling && roll == null && onRoll
+              : isClickable
               ? diceColor
               : "#000000"
           }
-          emissiveIntensity={
-            isDuplicate ? 0.4 : !isRolling && roll == null && onRoll ? 0.1 : 0
-          }
+          emissiveIntensity={isDuplicate ? 0.4 : isClickable ? 0.2 : 0}
         />
       </mesh>
 

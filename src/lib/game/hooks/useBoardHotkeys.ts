@@ -13,9 +13,7 @@ const isTextInput = (element: HTMLElement | null): boolean => {
   if (!element) return false;
   const tag = element.tagName;
   return (
-    tag === "INPUT" ||
-    tag === "TEXTAREA" ||
-    element.isContentEditable === true
+    tag === "INPUT" || tag === "TEXTAREA" || element.isContentEditable === true
   );
 };
 
@@ -66,6 +64,61 @@ export function useBoardHotkeys({
         } catch {}
         closeContextMenu();
       }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [store, isSpectator, overlayBlocking, playCardFlip]);
+
+  // Delete/Backspace shortcut to banish selected token
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.repeat) return;
+      const isDelete =
+        event.key === "Delete" ||
+        event.key === "Backspace" ||
+        event.code === "Delete" ||
+        event.code === "Backspace";
+      if (!isDelete) return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (isTextInput(document.activeElement as HTMLElement | null)) {
+        return;
+      }
+      if (isSpectator || overlayBlocking) return;
+
+      const {
+        selectedPermanent,
+        permanents,
+        movePermanentToZone,
+        closeContextMenu,
+        clearSelection,
+      } = store.getState();
+
+      if (!selectedPermanent) return;
+
+      const { at, index } = selectedPermanent;
+      const items = permanents[at];
+      const item = items?.[index];
+      if (!item) return;
+
+      const isToken = String(item.card?.type || "")
+        .toLowerCase()
+        .includes("token");
+      if (!isToken) return;
+
+      event.preventDefault();
+      try {
+        movePermanentToZone(at, index, "banished");
+        try {
+          playCardFlip();
+        } catch {}
+      } catch (err) {
+        if (process.env.NODE_ENV !== "production") {
+          console.warn("[board] Failed to banish token via keyboard:", err);
+        }
+      }
+      closeContextMenu();
+      clearSelection();
     };
 
     window.addEventListener("keydown", onKeyDown);

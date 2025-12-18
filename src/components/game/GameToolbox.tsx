@@ -82,6 +82,11 @@ export default function GameToolbox({
   const [d20Rolling, setD20Rolling] = useState(false);
   const [d20Value, setD20Value] = useState<number | null>(null);
 
+  // Toolbox D6 overlay state
+  const [d6Open, setD6Open] = useState(false);
+  const [d6Rolling, setD6Rolling] = useState(false);
+  const [d6Value, setD6Value] = useState<number | null>(null);
+
   // Random spell state
   const [randomSpellLoading, setRandomSpellLoading] = useState(false);
   const addCardToHand = useGameStore((s) => s.addCardToHand);
@@ -92,6 +97,10 @@ export default function GameToolbox({
   const setPermanentAbility = useGameStore((s) => s.setPermanentAbility);
   const setPermanentPosition = useGameStore((s) => s.setPermanentPosition);
   const updatePermanentState = useGameStore((s) => s.updatePermanentState);
+
+  // Site drag toggle
+  const allowSiteDrag = useGameStore((s) => s.allowSiteDrag);
+  const toggleAllowSiteDrag = useGameStore((s) => s.toggleAllowSiteDrag);
 
   // Peek dialog from central store (populated by interaction:result)
   const peekDialog = useGameStore((s) => s.peekDialog);
@@ -114,22 +123,33 @@ export default function GameToolbox({
     return () => clearInterval(id as unknown as number);
   }, []);
 
-  // Subscribe to shared d20Roll messages from the server.
-  // When received, open the D20 overlay locally for both players.
+  // Subscribe to shared d20Roll and d6Roll messages from the server.
+  // When received, open the dice overlay locally for both players.
   useEffect(() => {
     if (!transport?.on) return undefined;
     const off = transport.on("message", (m) => {
       const t = m && typeof m === "object" && (m as { type?: unknown }).type;
-      if (t !== "d20Roll") return;
-      const valRaw = (m as { value?: unknown }).value as number | undefined;
-      const value = Number(valRaw);
-      if (!Number.isFinite(value)) return;
-      setD20Value(Math.max(1, Math.min(20, Math.floor(value))));
-      setD20Open(true);
-      setD20Rolling(true);
-      try {
-        console.log(`[Toolbox] D20 roll <= ${value}`);
-      } catch {}
+      if (t === "d20Roll") {
+        const valRaw = (m as { value?: unknown }).value as number | undefined;
+        const value = Number(valRaw);
+        if (!Number.isFinite(value)) return;
+        setD20Value(Math.max(1, Math.min(20, Math.floor(value))));
+        setD20Open(true);
+        setD20Rolling(true);
+        try {
+          console.log(`[Toolbox] D20 roll <= ${value}`);
+        } catch {}
+      } else if (t === "d6Roll") {
+        const valRaw = (m as { value?: unknown }).value as number | undefined;
+        const value = Number(valRaw);
+        if (!Number.isFinite(value)) return;
+        setD6Value(Math.max(1, Math.min(6, Math.floor(value))));
+        setD6Open(true);
+        setD6Rolling(true);
+        try {
+          console.log(`[Toolbox] D6 roll <= ${value}`);
+        } catch {}
+      }
     });
     return () => {
       try {
@@ -595,10 +615,18 @@ export default function GameToolbox({
   } | null>(null);
   const d20RetryRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Clear retry interval on unmount
+  // Retry state for toolbox D6 roll
+  const [d6Pending, setD6Pending] = useState<{
+    value: number;
+    ts: number;
+  } | null>(null);
+  const d6RetryRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Clear retry intervals on unmount
   useEffect(() => {
     return () => {
       if (d20RetryRef.current) clearInterval(d20RetryRef.current);
+      if (d6RetryRef.current) clearInterval(d6RetryRef.current);
     };
   }, []);
 
@@ -613,6 +641,39 @@ export default function GameToolbox({
       }
     }
   }, [d20Open, d20Pending]);
+
+  // Clear pending when we receive the d6Roll message back (means server got it)
+  useEffect(() => {
+    if (d6Open && d6Pending) {
+      // D6 overlay opened means message was received
+      setD6Pending(null);
+      if (d6RetryRef.current) {
+        clearInterval(d6RetryRef.current);
+        d6RetryRef.current = null;
+      }
+    }
+  }, [d6Open, d6Pending]);
+
+  // Handle D6 roll animation timing
+  useEffect(() => {
+    if (!d6Open || !d6Rolling) return;
+    // Stop rolling animation after 800ms
+    const rollTimer = setTimeout(() => {
+      setD6Rolling(false);
+    }, 800);
+    return () => clearTimeout(rollTimer);
+  }, [d6Open, d6Rolling]);
+
+  // Auto-close D6 overlay after roll completes
+  useEffect(() => {
+    if (!d6Open || d6Rolling) return;
+    // Close after 3.2s of showing result
+    const closeTimer = setTimeout(() => {
+      setD6Open(false);
+      setD6Value(null);
+    }, 3200);
+    return () => clearTimeout(closeTimer);
+  }, [d6Open, d6Rolling]);
 
   const startToolboxRoll = () => {
     const value = Math.floor(Math.random() * 20) + 1;
@@ -676,6 +737,64 @@ export default function GameToolbox({
     setD20Rolling(true);
     log(`Toolbox D20 roll: ${value}`);
     console.log(`[Toolbox] D20 roll: ${value}`);
+  };
+
+  const startD6Roll = () => {
+    const value = Math.floor(Math.random() * 6) + 1;
+    if (isOnline && transport?.sendMessage) {
+      const sendMsg = transport.sendMessage.bind(transport);
+      const sendD6Message = () => {
+        try {
+          sendMsg({ type: "d6Roll", value });
+          console.log(`[Toolbox] D6 roll sent: ${value}`);
+        } catch (err) {
+          console.warn(`[Toolbox] D6 send failed:`, err);
+        }
+      };
+
+      sendD6Message();
+      log(`Toolbox D6 roll: ${value}`);
+
+      const startTs = Date.now();
+      setD6Pending({ value, ts: startTs });
+      if (d6RetryRef.current) clearInterval(d6RetryRef.current);
+
+      let retryCount = 0;
+      const maxRetries = 5;
+      d6RetryRef.current = setInterval(() => {
+        retryCount++;
+        if (d6Open) {
+          setD6Pending(null);
+          if (d6RetryRef.current) clearInterval(d6RetryRef.current);
+          d6RetryRef.current = null;
+          return;
+        }
+        if (retryCount >= maxRetries) {
+          console.warn(
+            `[Toolbox] D6 roll failed after ${maxRetries} retries, showing locally`
+          );
+          setD6Value(value);
+          setD6Open(true);
+          setD6Rolling(true);
+          setD6Pending(null);
+          if (d6RetryRef.current) clearInterval(d6RetryRef.current);
+          d6RetryRef.current = null;
+          return;
+        }
+        console.log(
+          `[Toolbox] Retrying D6 roll send (${retryCount}/${maxRetries})...`
+        );
+        sendD6Message();
+      }, 3000);
+
+      return;
+    }
+    // Offline/hotseat fallback: local popup
+    setD6Value(value);
+    setD6Open(true);
+    setD6Rolling(true);
+    log(`Toolbox D6 roll: ${value}`);
+    console.log(`[Toolbox] D6 roll: ${value}`);
   };
 
   const handleDrawRandomSpell = async () => {
@@ -1007,6 +1126,16 @@ export default function GameToolbox({
                     <img src="/d20.svg" alt="D20" width={16} height={16} />
                   </div>
                 </button>
+                <button
+                  className="flex-1 rounded bg-blue-600/90 hover:bg-blue-500 py-1"
+                  onClick={startD6Roll}
+                  aria-label="Roll D6"
+                  title="Roll D6"
+                >
+                  <div className="flex items-center justify-center text-sm font-bold">
+                    D6
+                  </div>
+                </button>
               </div>
             </div>
 
@@ -1040,6 +1169,19 @@ export default function GameToolbox({
                   Tip: select a permanent on the board first
                 </div>
               )}
+            </div>
+
+            {/* Site Drag Toggle */}
+            <div className="rounded-lg bg-white/5 ring-1 ring-white/10 p-2">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={allowSiteDrag}
+                  onChange={toggleAllowSiteDrag}
+                  className="w-4 h-4 rounded bg-white/10 border-white/20 text-amber-500 focus:ring-amber-500/50"
+                />
+                <span className="text-xs">Allow dragging sites to hand</span>
+              </label>
             </div>
 
             {/* Fix Game State subview */}
@@ -1229,6 +1371,42 @@ export default function GameToolbox({
                   }}
                 />
               </Canvas>
+            </div>
+          </div>
+        </div>
+      )}
+      {d6Open && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+          onContextMenu={(e) => e.preventDefault()}
+        >
+          <div
+            className="relative w-[92vw] sm:w-full max-w-md bg-zinc-900/90 rounded-2xl ring-1 ring-white/10 shadow-2xl p-4 sm:p-6 text-white"
+            onContextMenu={(e) => e.preventDefault()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base sm:text-lg font-semibold">
+                Toolbox D6 Roll
+              </h3>
+              <button
+                className="text-sm text-zinc-400 hover:text-white"
+                onClick={() => {
+                  setD6Open(false);
+                  setD6Rolling(false);
+                  setD6Value(null);
+                }}
+              >
+                ✕
+              </button>
+            </div>
+            <div className="flex items-center justify-center h-[42vh] min-h-[240px] sm:h-[260px] bg-black/40 rounded-xl ring-1 ring-white/10">
+              <div
+                className={`text-8xl sm:text-9xl font-bold transition-all duration-300 ${
+                  d6Rolling ? "animate-pulse scale-110" : "scale-100"
+                }`}
+              >
+                {d6Value !== null ? d6Value : "?"}
+              </div>
             </div>
           </div>
         </div>
