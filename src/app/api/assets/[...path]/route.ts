@@ -259,6 +259,9 @@ export async function GET(
       "air.png",
       "water.png",
       "earth.png",
+      // Card back images
+      "cardback_spellbook.png",
+      "cardback_atlas.png",
       // Booster pack images
       "beta-booster.png",
       "alpha-booster.png",

@@ -46,6 +46,7 @@ import { GlobalVideoOverlay } from "@/components/ui/GlobalVideoOverlay";
 import KeyboardShortcutsHelp, {
   useHelpShortcut,
 } from "@/components/ui/KeyboardShortcutsHelp";
+import MusicPlayer from "@/components/game/MusicPlayer";
 import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
 import TrackpadOrbitAdapter from "@/lib/controls/TrackpadOrbitAdapter";
 import {
@@ -2963,6 +2964,9 @@ export default function OnlineMatchPage() {
         onClose={() => setHelpOpen(false)}
         context="game"
       />
+
+      {/* Music Player */}
+      <MusicPlayer />
     </div>
   );
 }
