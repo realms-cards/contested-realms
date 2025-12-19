@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { useGameStore } from "@/lib/game/store";
 import type { PlayerKey } from "@/lib/game/store";
 import { siteProvidesMana } from "@/lib/game/store/utils/resourceHelpers";
+import { useTouchDevice } from "@/lib/hooks/useTouchDevice";
 
 // Element config matching Threshold3D exactly
 // Use static paths from public/ folder for production compatibility
@@ -150,6 +151,7 @@ function ManaRow({
   onIncrement,
   onDecrement,
 }: ManaRowProps) {
+  const isTouchDevice = useTouchDevice();
   const manaColor =
     mana === 0 ? "#ef4444" : mana < baseMana ? "#fbbf24" : "#ffffff";
 
@@ -167,9 +169,13 @@ function ManaRow({
           {mana}/{baseMana}
         </span>
       </div>
-      {/* +/- buttons - only visible on hover */}
+      {/* +/- buttons - only visible on hover (always visible on touch devices) */}
       {canAdjust && (
-        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div
+          className={`flex gap-1 transition-opacity ${
+            isTouchDevice ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+          }`}
+        >
           <button
             type="button"
             onClick={onDecrement}

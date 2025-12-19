@@ -1,4 +1,5 @@
 import React from "react";
+import { useTouchDevice } from "@/lib/hooks/useTouchDevice";
 
 /**
  * NumberBadge — crisp SVG badge for digits 0–9
@@ -203,6 +204,7 @@ export function ManaCounterHUD({
   size = 56,
   className,
 }: ManaCounterProps) {
+  const isTouchDevice = useTouchDevice();
   // Font size scales with badge size
   const fontSize = Math.round(size * 0.7);
   const slashSize = Math.round(size * 0.5);
@@ -226,6 +228,8 @@ export function ManaCounterHUD({
         className={`flex items-center justify-center rounded-full font-bold leading-none transition-all ${
           disableDec
             ? "opacity-20 cursor-not-allowed bg-black/20 text-white/30"
+            : isTouchDevice
+            ? "opacity-100 bg-rose-600/80 hover:bg-rose-500 text-white cursor-pointer"
             : "opacity-0 group-hover:opacity-100 bg-rose-600/80 hover:bg-rose-500 text-white cursor-pointer"
         }`}
       >
@@ -294,6 +298,8 @@ export function ManaCounterHUD({
         className={`flex items-center justify-center rounded-full font-bold leading-none transition-all ${
           disableInc
             ? "opacity-20 cursor-not-allowed bg-black/20 text-white/30"
+            : isTouchDevice
+            ? "opacity-100 bg-emerald-600/80 hover:bg-emerald-500 text-white cursor-pointer"
             : "opacity-0 group-hover:opacity-100 bg-emerald-600/80 hover:bg-emerald-500 text-white cursor-pointer"
         }`}
       >

@@ -5,6 +5,7 @@ import { useState } from "react";
 import { createPortal } from "react-dom";
 import { useGameStore } from "@/lib/game/store";
 import type { LifeState, PlayerKey } from "@/lib/game/store";
+import { useTouchDevice } from "@/lib/hooks/useTouchDevice";
 
 interface LifeCountersProps {
   dragFromHand: boolean;
@@ -53,6 +54,7 @@ function LifeCounter({
   const playerState = useGameStore((s) => s.players[player]);
   const addLife = useGameStore((s) => s.addLife);
   const [showDeathConfirm, setShowDeathConfirm] = useState(false);
+  const isTouchDevice = useTouchDevice();
 
   const { life, lifeState } = playerState;
   const lifeDisplay = formatLifeDisplay(life, lifeState);
@@ -101,8 +103,11 @@ function LifeCounter({
         </div>
 
         {/* Life modification buttons - absolute positioned to not affect centering */}
+        {/* On touch devices, always show buttons since hover doesn't work */}
         <div
-          className="absolute left-full top-1/2 -translate-y-1/2 ml-2 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
+          className={`absolute left-full top-1/2 -translate-y-1/2 ml-2 flex flex-col gap-1 transition-opacity ${
+            isTouchDevice ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+          }`}
           onContextMenu={(e) => e.preventDefault()}
         >
           <button
