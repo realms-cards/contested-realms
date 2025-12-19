@@ -97,7 +97,7 @@ export async function GET() {
               format: true,
               imported: true,
               updatedAt: true,
-              user: { select: { name: true } },
+              user: { select: { name: true, email: true } },
             },
           }),
         ]);
@@ -218,19 +218,29 @@ export async function GET() {
               avatarCard: avatarSummary.avatarCard ?? null,
             };
           }),
-          publicDecks: publicDecks.map((deck) => ({
-            id: deck.id,
-            name: deck.name,
-            format: deck.format,
-            imported: deck.imported,
-            isPublic: true,
-            updatedAt: deck.updatedAt.toISOString(),
-            userName: deck.user.name || "Unknown Player",
-            avatarState: (
-              avatarSummaryByDeckId.get(deck.id) ?? { state: "none" as const }
-            ).state,
-            avatarCard: avatarSummaryByDeckId.get(deck.id)?.avatarCard ?? null,
-          })),
+          // Sort public decks: precons (system user) first, then by createdAt desc
+          publicDecks: [...publicDecks]
+            .sort((a, b) => {
+              const aIsPrecon = a.user.email === "public-decks@system.local";
+              const bIsPrecon = b.user.email === "public-decks@system.local";
+              if (aIsPrecon && !bIsPrecon) return -1;
+              if (!aIsPrecon && bIsPrecon) return 1;
+              return 0; // preserve existing createdAt desc order within groups
+            })
+            .map((deck) => ({
+              id: deck.id,
+              name: deck.name,
+              format: deck.format,
+              imported: deck.imported,
+              isPublic: true,
+              updatedAt: deck.updatedAt.toISOString(),
+              userName: deck.user.name || "Unknown Player",
+              avatarState: (
+                avatarSummaryByDeckId.get(deck.id) ?? { state: "none" as const }
+              ).state,
+              avatarCard:
+                avatarSummaryByDeckId.get(deck.id)?.avatarCard ?? null,
+            })),
         };
       },
       { ttl: 120 } // 2 minute cache for deck lists

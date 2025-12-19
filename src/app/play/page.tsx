@@ -33,7 +33,6 @@ import {
 import KeyboardShortcutsHelp, {
   useHelpShortcut,
 } from "@/components/ui/KeyboardShortcutsHelp";
-import MusicPlayer from "@/components/game/MusicPlayer";
 import TrackpadOrbitAdapter from "@/lib/controls/TrackpadOrbitAdapter";
 import {
   hasAnyHarbinger,
@@ -956,9 +955,6 @@ export default function PlayPage() {
         onClose={() => setHelpOpen(false)}
         context="game"
       />
-
-      {/* Music Player */}
-      <MusicPlayer />
     </div>
   );
 }

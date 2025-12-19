@@ -1,6 +1,7 @@
 "use client";
 
 import { Grid3X3, Star } from "lucide-react";
+import AudioControls from "@/components/game/AudioControls";
 import { FEATURE_UNDO } from "@/lib/config/features";
 import { useColorBlind } from "@/lib/contexts/ColorBlindContext";
 import { useGameStore } from "@/lib/game/store";
@@ -124,6 +125,10 @@ export default function StatusBar({ dragFromHand }: StatusBarProps) {
             )}
           </>
         )}
+
+        {/* Audio Controls (Music + Sound) */}
+        <div className="w-px h-4 bg-white/20" />
+        <AudioControls enableMusic />
       </div>
     </div>
   );
