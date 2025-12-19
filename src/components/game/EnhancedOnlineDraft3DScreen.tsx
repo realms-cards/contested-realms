@@ -581,40 +581,46 @@ export default function EnhancedOnlineDraft3DScreen({
         try {
           if (matchId) {
             // Store only slugs to avoid localStorage quota issues (full DraftCard objects are too large)
-            const slugsOnly = mine.map((c) => c.slug).filter(Boolean);
+            // Keep ALL slugs (even empty ones as placeholders) to preserve count for resolved array matching
+            const slugsOnly = mine.map((c) => c.slug || "");
             localStorage.setItem(
               `draftedCards_${matchId}`,
               JSON.stringify(slugsOnly)
             );
             // Also persist a resolved SearchResult[] so the editor can avoid network resolution
-            const resolved: SearchResult[] = mine.map((c) => ({
-              variantId: 0,
-              slug: c.slug,
-              finish: "Standard",
-              product: "Draft",
-              cardId:
-                typeof c.slug === "string" && slugToCardId[c.slug]
-                  ? slugToCardId[c.slug]
-                  : Number(c.id) || 0,
-              cardName: c.cardName || c.name,
-              set: c.setName || "Beta",
-              type: c.type || null,
-              rarity: (c.rarity as SearchResult["rarity"]) || null,
-            }));
+            // Filter out cards without slugs here (they can't be resolved anyway)
+            const resolved: SearchResult[] = mine
+              .filter((c) => c.slug)
+              .map((c) => ({
+                variantId: 0,
+                slug: c.slug,
+                finish: "Standard",
+                product: "Draft",
+                cardId:
+                  typeof c.slug === "string" && slugToCardId[c.slug]
+                    ? slugToCardId[c.slug]
+                    : Number(c.id) || 0,
+                cardName: c.cardName || c.name,
+                set: c.setName || "Beta",
+                type: c.type || null,
+                rarity: (c.rarity as SearchResult["rarity"]) || null,
+              }));
             localStorage.setItem(
               `draftedCardsResolved_${matchId}`,
               JSON.stringify(resolved)
             );
 
             // Persist 3D layout and stack preferences for deck editor
+            // Always save layout (even with sorting enabled) so positions can be restored
             try {
               const latestPick3D = Array.isArray(pick3DRef.current)
                 ? pick3DRef.current
                 : [];
               const layout =
-                !isSortingEnabledRef.current && latestPick3D.length > 0
+                latestPick3D.length > 0
                   ? latestPick3D.map((p) => ({
                       cardId: p.card.cardId,
+                      slug: p.card.slug, // Include slug for more reliable matching
                       zone: p.zone,
                       x: p.x,
                       z: p.z,

@@ -464,16 +464,38 @@ export default function PlayPage() {
   // Natural tilt angle for 2D mode (matches online play)
   const naturalTiltAngle = useMemo(() => 0.14, []);
 
+  // Preserve camera zoom/tilt across turn switches in hotseat mode
+  const savedCameraRef = useRef<{
+    distance: number;
+    polarAngle: number;
+  } | null>(null);
+
+  // Save current camera distance and polar angle
+  const saveCameraState = useCallback(() => {
+    const c = controlsRef.current;
+    if (!c) return;
+    const cam = c.object as THREE.Camera;
+    const offset = cam.position.clone().sub(c.target);
+    const distance = offset.length();
+    const spherical = new THREE.Spherical().setFromVector3(offset);
+    savedCameraRef.current = { distance, polarAngle: spherical.phi };
+  }, []);
+
   const gotoBaseline = useCallback(
-    (mode: "topdown" | "orbit") => {
+    (mode: "topdown" | "orbit", preserveZoomTilt = false) => {
       const c = controlsRef.current;
       if (!c) return;
       c.target.set(0, 0, 0);
       const cam = c.object as THREE.Camera;
+
+      // Use saved camera state if preserving, otherwise use defaults
+      const saved = preserveZoomTilt ? savedCameraRef.current : null;
+
       if (mode === "topdown") {
         // Natural 2D view: almost top-down from the current player's side, slightly tilted
-        const dist = Math.max(matW, matH) * 1.1;
-        const tilt = naturalTiltAngle;
+        const defaultDist = Math.max(matW, matH) * 1.1;
+        const dist = saved?.distance ?? defaultDist;
+        const tilt = saved?.polarAngle ?? naturalTiltAngle;
         // Player 2 views from opposite side (negative Z)
         const sign = currentPlayer === 2 ? -1 : 1;
         cam.position.set(
@@ -483,9 +505,16 @@ export default function PlayPage() {
         );
         cam.up.set(0, 1, 0);
       } else {
-        // Reasonable default orbit position based on seat (slightly offset)
-        const orbitZ = currentPlayer === 2 ? -5 : 5;
-        cam.position.set(0, 10, orbitZ);
+        // 3D orbit mode - preserve distance and polar angle if available
+        const defaultDist = Math.hypot(10, 5); // ~11.18
+        const defaultPhi = Math.atan2(10, 5); // ~1.107 radians
+        const dist = saved?.distance ?? defaultDist;
+        const phi = saved?.polarAngle ?? defaultPhi;
+        // Azimuth: P1 looks from +Z, P2 from -Z
+        const theta = currentPlayer === 2 ? Math.PI : 0;
+        const spherical = new THREE.Spherical(dist, phi, theta);
+        const offset = new THREE.Vector3().setFromSpherical(spherical);
+        cam.position.copy(c.target).add(offset);
         cam.up.set(0, 1, 0);
       }
       cam.lookAt(0, 0, 0);
@@ -498,17 +527,29 @@ export default function PlayPage() {
     gotoBaseline(cameraMode);
   }, [gotoBaseline, cameraMode]);
 
+  // Track previous player to detect turn switches
+  const prevPlayerRef = useRef<number>(currentPlayer);
+
   // When switching seats (currentPlayer changes), rotate camera to the new player's perspective
+  // but preserve zoom/tilt so users don't have to re-adjust every turn
   useEffect(() => {
+    const isTurnSwitch = prevPlayerRef.current !== currentPlayer;
+    prevPlayerRef.current = currentPlayer;
+
+    // Save camera state before switching if this is a turn switch
+    if (isTurnSwitch && controlsRef.current) {
+      saveCameraState();
+    }
+
     const id = requestAnimationFrame(() => {
       if (!controlsRef.current) {
-        setTimeout(() => gotoBaseline(cameraMode), 0);
+        setTimeout(() => gotoBaseline(cameraMode, isTurnSwitch), 0);
       } else {
-        gotoBaseline(cameraMode);
+        gotoBaseline(cameraMode, isTurnSwitch);
       }
     });
     return () => cancelAnimationFrame(id);
-  }, [cameraMode, gotoBaseline, currentPlayer]);
+  }, [cameraMode, gotoBaseline, currentPlayer, saveCameraState]);
 
   // Tab key to reset camera (matches online play behavior)
   useEffect(() => {

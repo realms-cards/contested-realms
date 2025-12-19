@@ -3989,18 +3989,31 @@ function AuthenticatedDeckEditor() {
       try {
         const parsed = JSON.parse(rawLayout) as Array<{
           cardId: number;
+          slug?: string;
           zone?: Zone;
           x: number;
           z: number;
         }>;
         const map = new Map<string, { x: number; z: number }>();
         for (const entry of parsed) {
-          if (!entry || typeof entry.cardId !== "number") continue;
+          if (!entry) continue;
+          // Skip entries without valid cardId or slug
+          if (typeof entry.cardId !== "number" && !entry.slug) continue;
           const layoutZone: "Deck" | "Sideboard" =
             entry.zone === "Deck" ? "Deck" : "Sideboard";
-          const key = `${entry.cardId}:${layoutZone}`;
-          if (!map.has(key)) {
-            map.set(key, { x: entry.x, z: entry.z });
+          // Use cardId as primary key
+          if (typeof entry.cardId === "number" && entry.cardId > 0) {
+            const key = `${entry.cardId}:${layoutZone}`;
+            if (!map.has(key)) {
+              map.set(key, { x: entry.x, z: entry.z });
+            }
+          }
+          // Also store by slug for cases where cardId isn't resolved yet
+          if (entry.slug) {
+            const slugKey = `slug:${entry.slug}:${layoutZone}`;
+            if (!map.has(slugKey)) {
+              map.set(slugKey, { x: entry.x, z: entry.z });
+            }
           }
         }
         if (map.size > 0) {
@@ -4090,10 +4103,16 @@ function AuthenticatedDeckEditor() {
         const existingPos = positionsRef.current.get(posKey);
         let layoutPos: { x: number; z: number } | undefined;
         if (!existingPos && draftLayoutRef.current) {
+          // Try cardId-based keys first, then fall back to slug-based keys
           layoutPos =
             draftLayoutRef.current.get(posKey) ??
             draftLayoutRef.current.get(`${item.cardId}:Deck`) ??
-            draftLayoutRef.current.get(`${item.cardId}:Sideboard`);
+            draftLayoutRef.current.get(`${item.cardId}:Sideboard`) ??
+            (item.slug
+              ? draftLayoutRef.current.get(`slug:${item.slug}:${layoutZone}`) ??
+                draftLayoutRef.current.get(`slug:${item.slug}:Deck`) ??
+                draftLayoutRef.current.get(`slug:${item.slug}:Sideboard`)
+              : undefined);
         }
         const useExisting = !!existingPos && (isSealed || isDraftMode);
         const useLayout = !useExisting && !!layoutPos;
