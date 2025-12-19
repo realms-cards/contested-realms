@@ -830,6 +830,19 @@ export default function UserBadge({
                     Upload your own
                   </span>
                 </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleCloseSettings();
+                    router.push("/settings/cardbacks");
+                  }}
+                  className="w-full flex items-center justify-between gap-2 h-10 px-4 rounded-lg bg-gradient-to-r from-amber-500/20 to-orange-500/20 ring-1 ring-amber-500/30 text-sm font-medium text-amber-100 hover:from-amber-500/30 hover:to-orange-500/30 transition-all"
+                >
+                  <span>Custom Card Sleeves</span>
+                  <span className="text-[10px] text-amber-300/70">
+                    Visible to opponents
+                  </span>
+                </button>
               </div>
               <div className="flex items-center gap-3">
                 <div className="w-14 h-14 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center overflow-hidden">

@@ -271,6 +271,7 @@ model User {
   patronTier    String?   // "apprentice" | "grandmaster" | null
 
   selectedPlaymatRef String?
+  selectedCardbackRef String?
 
   accounts              Account[]
   sessions              Session[]
@@ -292,6 +293,7 @@ model User {
   cardLists             CardList[]
 
   customPlaymats         CustomPlaymat[]
+  customCardbacks        CustomCardback[]
 }
 
 model CustomPlaymat {
@@ -305,6 +307,29 @@ model CustomPlaymat {
   data      Bytes
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model CustomCardback {
+  id              String   @id @default(cuid())
+  userId          String
+  name            String
+  spellbookMime   String
+  spellbookWidth  Int
+  spellbookHeight Int
+  spellbookSize   Int
+  spellbookData   Bytes
+  atlasMime       String
+  atlasWidth      Int
+  atlasHeight     Int
+  atlasSize       Int
+  atlasData       Bytes
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

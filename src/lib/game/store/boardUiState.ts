@@ -17,6 +17,7 @@ type BoardUiDefaults = Pick<
   | "showPlaymat"
   | "showPlaymatOverlay"
   | "playmatUrl"
+  | "cardbackUrls"
   | "gridColor"
   | "gridBlend"
   | "allowSiteDrag"
@@ -31,6 +32,10 @@ export const createInitialBoardUiState = (): BoardUiDefaults => ({
   showPlaymat: true,
   showPlaymatOverlay: false, // Default: show playmat, hide grid overlay
   playmatUrl: null, // null until user's preference is loaded
+  cardbackUrls: {
+    p1: { spellbook: null, atlas: null },
+    p2: { spellbook: null, atlas: null },
+  },
   gridColor: "white",
   gridBlend: "normal",
   allowSiteDrag: false, // Default: sites cannot be freely dragged on board
@@ -46,6 +51,7 @@ export type BoardUiSlice = Pick<
   | "showPlaymat"
   | "showPlaymatOverlay"
   | "playmatUrl"
+  | "cardbackUrls"
   | "gridColor"
   | "gridBlend"
   | "allowSiteDrag"
@@ -56,6 +62,7 @@ export type BoardUiSlice = Pick<
   | "toggleAllowSiteDrag"
   | "toggleOwnershipOverlay"
   | "setPlaymatUrl"
+  | "setCardbackUrls"
   | "setGridColor"
   | "setGridBlend"
   | "boardPings"
@@ -87,6 +94,13 @@ export const createBoardUiSlice: StateCreator<
   toggleOwnershipOverlay: () =>
     set((state) => ({ showOwnershipOverlay: !state.showOwnershipOverlay })),
   setPlaymatUrl: (url: string) => set({ playmatUrl: url }),
+  setCardbackUrls: (who, spellbook, atlas) =>
+    set((state) => ({
+      cardbackUrls: {
+        ...state.cardbackUrls,
+        [who]: { spellbook, atlas },
+      },
+    })),
   setGridColor: (color: "white" | "black") => set({ gridColor: color }),
   setGridBlend: (blend: "normal" | "subtract") => set({ gridBlend: blend }),
 
