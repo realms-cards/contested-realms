@@ -234,9 +234,13 @@ export default function OnlineMatchPage() {
                 setCardbackUrls(
                   resolvedSeat,
                   `/api/users/me/cardbacks/${id}/spellbook`,
-                  `/api/users/me/cardbacks/${id}/atlas`
+                  `/api/users/me/cardbacks/${id}/atlas`,
+                  null
                 );
               }
+            } else if (ref && ref.startsWith("preset:")) {
+              // Material preset selected
+              setCardbackUrls(resolvedSeat, null, null, ref);
             }
           }
         } catch {
@@ -260,9 +264,13 @@ export default function OnlineMatchPage() {
                 setCardbackUrls(
                   opponentSeat,
                   `/api/users/${opponentPlayerId}/cardbacks/${id}/spellbook`,
-                  `/api/users/${opponentPlayerId}/cardbacks/${id}/atlas`
+                  `/api/users/${opponentPlayerId}/cardbacks/${id}/atlas`,
+                  null
                 );
               }
+            } else if (ref && ref.startsWith("preset:")) {
+              // Material preset selected
+              setCardbackUrls(opponentSeat, null, null, ref);
             }
           }
         } catch {

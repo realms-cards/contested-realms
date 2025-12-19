@@ -8,8 +8,9 @@ import {
   PresenceProvider,
   usePresence,
 } from "@/components/providers/PresenceProvider";
-import ChangelogOverlay from "@/components/ui/ChangelogOverlay";
-import PatreonMarquee from "@/components/ui/PatreonMarquee";
+// TODO: These components are available for future use
+// import ChangelogOverlay from "@/components/ui/ChangelogOverlay";
+// import PatreonMarquee from "@/components/ui/PatreonMarquee";
 import { CodexProvider, useCodex } from "@/contexts/CodexContext";
 import CollectionImportExport from "./CollectionImportExport";
 import CreateCubeFromCollection from "./CreateCubeFromCollection";

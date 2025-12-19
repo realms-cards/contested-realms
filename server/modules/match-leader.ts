@@ -1310,17 +1310,30 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
 
         // DEBUG: Log patch before deep merge
         if (patchToApply.zones) {
-          const patchP1Hand = (patchToApply.zones as any)?.p1?.hand || [];
-          const patchP2Hand = (patchToApply.zones as any)?.p2?.hand || [];
-          const baseP1Hand = (baseForMerge as any)?.zones?.p1?.hand || [];
-          const baseP2Hand = (baseForMerge as any)?.zones?.p2?.hand || [];
+          type ZoneLike = Record<
+            string,
+            { hand?: Array<{ name?: string; cardId?: string }> }
+          >;
+          type CardLike = { name?: string; cardId?: string };
+          const patchZones = patchToApply.zones as ZoneLike;
+          const baseZones = (baseForMerge as Record<string, unknown>)?.zones as
+            | ZoneLike
+            | undefined;
+          const patchP1Hand = patchZones?.p1?.hand || [];
+          const patchP2Hand = patchZones?.p2?.hand || [];
+          const baseP1Hand = baseZones?.p1?.hand || [];
+          const baseP2Hand = baseZones?.p2?.hand || [];
           console.log("[match-leader] Before deep merge:", {
             patchP1HandCount: patchP1Hand.length,
             patchP2HandCount: patchP2Hand.length,
             baseP1HandCount: baseP1Hand.length,
             baseP2HandCount: baseP2Hand.length,
-            patchP1HandCards: patchP1Hand.map((c: any) => c.name || c.cardId),
-            patchP2HandCards: patchP2Hand.map((c: any) => c.name || c.cardId),
+            patchP1HandCards: patchP1Hand.map(
+              (c: CardLike) => c.name || c.cardId
+            ),
+            patchP2HandCards: patchP2Hand.map(
+              (c: CardLike) => c.name || c.cardId
+            ),
             patchHasPermanents: !!patchToApply.permanents,
           });
         }
@@ -1333,14 +1346,15 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
 
         // DEBUG: Log zones state after merge
         if (patchToApply.zones) {
-          const p1Hand = match.game.zones?.p1?.hand || [];
-          const p2Hand = match.game.zones?.p2?.hand || [];
+          type CardLike = { name?: string; cardId?: string };
+          const p1Hand = (match.game.zones?.p1?.hand || []) as CardLike[];
+          const p2Hand = (match.game.zones?.p2?.hand || []) as CardLike[];
           console.log("[match-leader] Zones after merge:", {
             patchHadZones: !!patchToApply.zones,
             p1HandCount: p1Hand.length,
             p2HandCount: p2Hand.length,
-            p1HandCards: p1Hand.map((c: any) => c.name || c.cardId),
-            p2HandCards: p2Hand.map((c: any) => c.name || c.cardId),
+            p1HandCards: p1Hand.map((c) => c.name || c.cardId),
+            p2HandCards: p2Hand.map((c) => c.name || c.cardId),
             patchKeys: Object.keys(patchToApply.zones),
           });
         }
@@ -1586,7 +1600,9 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
 
         // DEBUG: Log what patch is being broadcast
         if (enrichedPatchToApply.zones) {
-          const patchZones = enrichedPatchToApply.zones as any;
+          type ZoneLike = Record<string, { hand?: unknown[] }>;
+          const patchZones = enrichedPatchToApply.zones as ZoneLike;
+          const patchRecord = enrichedPatchToApply as Record<string, unknown>;
           console.log("[match-leader] Broadcasting zones patch:", {
             patchZoneKeys: Object.keys(patchZones || {}),
             hasP1: !!patchZones?.p1,
@@ -1595,8 +1611,8 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
             p2HandCount: patchZones?.p2?.hand?.length,
             hasAvatars: !!enrichedPatchToApply.avatars,
             hasPermanents: !!enrichedPatchToApply.permanents,
-            hasReplaceKeys: !!(enrichedPatchToApply as any).__replaceKeys,
-            replaceKeys: (enrichedPatchToApply as any).__replaceKeys,
+            hasReplaceKeys: !!patchRecord.__replaceKeys,
+            replaceKeys: patchRecord.__replaceKeys,
             allPatchKeys: Object.keys(enrichedPatchToApply),
           });
         }

@@ -16,8 +16,8 @@ export interface PlayerState {
   id: string;
   displayName: string;
   socketId: string | null;
-  lobbyId?: string | null;
-  matchId?: string | null;
+  lobbyId: string | null;
+  matchId: string | null;
   location?: PlayerLocation;
 }
 
@@ -50,6 +50,10 @@ export interface ServerMatchState extends AnyRecord {
   loserId?: string | null;
   _finalized?: boolean;
   _cleanupTimer?: NodeJS.Timeout | null;
+  interactionGrants?: Map<string, AnyRecord[]>;
+  interactionRequests?: Map<string, AnyRecord>;
+  mulliganDone?: Set<string>;
+  playerReady?: { p1?: boolean; p2?: boolean };
 }
 
 export interface LobbyState extends AnyRecord {

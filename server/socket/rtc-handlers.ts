@@ -85,7 +85,7 @@ export function registerRtcHandlers(deps: RtcHandlersDeps): RtcHandlers {
     return serialized;
   };
 
-  const emitParticipantsToRoom = (roomId: string) => {
+  const _emitParticipantsToRoom = (roomId: string) => {
     const participants = rtcParticipants.get(roomId);
     if (!participants) return;
     const serialized = serializeParticipants(participants);

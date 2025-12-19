@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { getServerAuthSession } from "@/lib/auth";
+import { isSleevePreset } from "@/lib/game/sleevePresets";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -49,7 +50,7 @@ export async function PATCH(req: NextRequest): Promise<Response> {
     const body = await req.json().catch(() => ({}));
     const ref = body?.selectedCardbackRef;
 
-    // Allow null/undefined to clear selection, or "standard:default", or "custom:<id>"
+    // Allow null/undefined to clear selection, or "standard:default", "custom:<id>", or "preset:<id>"
     let newRef: string | null = null;
 
     if (ref === null || ref === undefined || ref === "standard:default") {
@@ -62,6 +63,9 @@ export async function PATCH(req: NextRequest): Promise<Response> {
         select: { id: true },
       });
       if (!found) return json({ error: "Custom cardback not found" }, 404);
+      newRef = ref;
+    } else if (typeof ref === "string" && isSleevePreset(ref)) {
+      // Valid preset reference
       newRef = ref;
     } else {
       return json({ error: "Invalid selectedCardbackRef" }, 400);

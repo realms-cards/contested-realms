@@ -1229,10 +1229,10 @@ function LobbyPageContent({
         )}
 
         {/* Social and Chat row */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:items-stretch">
           {/* Friends + Invites Panel */}
           <div
-            className={`rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 space-y-3`}
+            className={`rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 space-y-3 h-full`}
           >
             {/* Invites count indicator */}
             {invites && invites.length > 0 && (
@@ -1258,7 +1258,7 @@ function LobbyPageContent({
           </div>
 
           {/* Inline lobby chat console (global + lobby scopes) */}
-          <div className="h-80 lg:h-96">
+          <div className="h-full min-h-[20rem]">
             <LobbyChatConsole
               connected={connected}
               chatLog={chatLog}

@@ -162,7 +162,7 @@ function clearPickAutoTimer(sessionId) {
   }
 }
 
-function schedulePickAutoTimer(sessionId) {
+function _schedulePickAutoTimer(sessionId) {
   const entry = sessions.get(sessionId);
   if (!entry) return;
   const state = entry.state || {};

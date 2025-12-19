@@ -39,7 +39,7 @@ function createLobbyFeature(deps) {
   const generateBoosterDeterministic = deps.generateBoosterDeterministic;
   const startMatchRecording = deps.startMatchRecording;
   const persistMatchCreated = deps.persistMatchCreated;
-  const hydrateMatchFromDatabase = deps.hydrateMatchFromDatabase;
+  const _hydrateMatchFromDatabase = deps.hydrateMatchFromDatabase;
   const LOBBY_CONTROL_CHANNEL = deps.lobbyControlChannel;
   const LOBBY_STATE_CHANNEL = deps.lobbyStateChannel;
   const CPU_BOTS_ENABLED = !!deps.cpuBotsEnabled;
@@ -345,7 +345,7 @@ function createLobbyFeature(deps) {
     lobby.lastActive = Date.now();
   }
 
-  function joinLobby(socket, player, suppliedLobbyId) {
+  function _joinLobby(socket, player, suppliedLobbyId) {
     if (player.lobbyId) leaveLobby(socket, player);
 
     let lobby = null;
@@ -593,8 +593,8 @@ function createLobbyFeature(deps) {
         for (const pid of match.playerIds) {
           const rng = createRngFromString(`${match.seed}|${pid}|sealed`);
           const sc = match.sealedConfig || {};
-          const packCount = Math.max(1, Number(sc.packCount) || 6);
-          const setMix =
+          const _packCount = Math.max(1, Number(sc.packCount) || 6);
+          const _setMix =
             Array.isArray(sc.setMix) && sc.setMix.length > 0
               ? sc.setMix
               : ["Alpha"];

@@ -714,7 +714,7 @@ export type GameState = {
   playmatUrl: string | null;
   cardbackUrls: Record<
     PlayerKey,
-    { spellbook: string | null; atlas: string | null }
+    { spellbook: string | null; atlas: string | null; preset: string | null }
   >;
   gridColor: "white" | "black";
   gridBlend: "normal" | "subtract";
@@ -729,7 +729,8 @@ export type GameState = {
   setCardbackUrls: (
     who: PlayerKey,
     spellbook: string | null,
-    atlas: string | null
+    atlas: string | null,
+    preset?: string | null
   ) => void;
   setGridColor: (color: "white" | "black") => void;
   setGridBlend: (blend: "normal" | "subtract") => void;

@@ -69,7 +69,7 @@ function applyGenesis(game, action, playerId, context) {
 module.exports = { applyGenesis };
  
 // Attach keyword metadata events for UI (no-op validations like Airborne, etc.)
-function applyKeywordAnnotations(game, action, playerId, context) {
+function applyKeywordAnnotations(game, action, playerId, _context) {
   try {
     const placements = collectNewPermanents(action);
     if (!placements.length) return null;

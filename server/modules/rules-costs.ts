@@ -1,5 +1,6 @@
 "use strict";
 
+import * as fs from "fs";
 import * as path from "path";
 import type { AnyRecord, MatchPatch } from "../types";
 import { markAndCountNewPlacements } from "./rules-validation";
@@ -19,14 +20,9 @@ let CARDS_DB: CardLike[] | null = null;
 function loadCardsDb(): CardLike[] {
   if (CARDS_DB) return CARDS_DB;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    CARDS_DB = require(path.join(
-      __dirname,
-      "..",
-      "..",
-      "data",
-      "cards_raw.json"
-    )) as CardLike[];
+    const jsonPath = path.join(__dirname, "..", "..", "data", "cards_raw.json");
+    const jsonContent = fs.readFileSync(jsonPath, "utf-8");
+    CARDS_DB = JSON.parse(jsonContent) as CardLike[];
   } catch {
     CARDS_DB = [];
   }

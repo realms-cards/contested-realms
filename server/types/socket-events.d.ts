@@ -1,7 +1,7 @@
 import type {
-  InteractionEnvelope,
-  InteractionRequestMessage,
-  InteractionResponseMessage,
+  InteractionEnvelope as _InteractionEnvelope,
+  InteractionRequestMessage as _InteractionRequestMessage,
+  InteractionResponseMessage as _InteractionResponseMessage,
 } from "../src/lib/net/interactions";
 import type {
   ClientEventMap,

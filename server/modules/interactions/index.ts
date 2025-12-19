@@ -5,10 +5,10 @@
 // type guards to replace 'any' with 'unknown' + type narrowing.
 
 import {
-  getSeatForPlayer,
-  getPlayerIdForSeat,
+  getSeatForPlayer as _getSeatForPlayer,
+  getPlayerIdForSeat as _getPlayerIdForSeat,
   getOpponentSeat,
-  inferLoserId,
+  inferLoserId as _inferLoserId,
 } from "../match-utils";
 
 export const INTERACTION_VERSION = 1;
@@ -89,7 +89,7 @@ export function createInteractionModule({
   enrichPatchWithCosts,
   deepMergeReplaceArrays,
   finalizeMatch,
-  persistMatchUpdate,
+  persistMatchUpdate: _persistMatchUpdate,
   prisma,
   truncateRecordingAfter,
   truncateActionsAfter,
@@ -360,7 +360,7 @@ export function createInteractionModule({
     const { pendingAction, request } = entry;
     if (!pendingAction || typeof pendingAction !== "object") return null;
     const kind = pendingAction.kind;
-    const actorSeat = pendingAction.actorSeat;
+    const _actorSeat = pendingAction.actorSeat;
     const resultBase = {
       requestId: request.requestId,
       matchId: match.id,
@@ -843,7 +843,7 @@ export function createInteractionModule({
           payload: { requestedBy: pendingAction.requestedBy || null },
           message: "Tie declared: both players died simultaneously.",
         };
-      } catch (e) {
+      } catch (_e) {
         return {
           ...resultBase,
           success: false,

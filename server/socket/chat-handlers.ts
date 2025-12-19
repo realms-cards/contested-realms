@@ -115,6 +115,9 @@ export async function getGlobalChatHistory(
   }
 }
 
+const chatHandlersModule = { registerChatHandlers, getGlobalChatHistory };
+export default chatHandlersModule;
+
 export function registerChatHandlers({
   io,
   socket,

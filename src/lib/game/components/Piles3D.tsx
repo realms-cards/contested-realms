@@ -6,6 +6,7 @@ import { useSound } from "@/lib/contexts/SoundContext";
 import { cardRefToPreview } from "@/lib/game/card-preview.types";
 import type { CardPreviewData } from "@/lib/game/card-preview.types";
 import CardPlane from "@/lib/game/components/CardPlane";
+import MaterialCardBack from "@/lib/game/components/MaterialCardBack";
 import { CARD_LONG, CARD_SHORT, TILE_SIZE } from "@/lib/game/constants";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef, PlayerKey } from "@/lib/game/store";
@@ -203,7 +204,10 @@ export default function Piles3D({
             : Math.PI
           : ownerRot + Math.PI;
         const ownerCardbacks = cardbackUrls[owner];
+        const usePreset = !isCemetery && ownerCardbacks?.preset;
         const cardbackUrl = isCemetery
+          ? undefined
+          : usePreset
           ? undefined
           : key === "atlas"
           ? ownerCardbacks?.atlas ?? "/api/assets/cardback_atlas.png"
@@ -219,20 +223,33 @@ export default function Piles3D({
                 {cards
                   .slice(1, Math.min(cards.length, 4))
                   .filter((card) => card.slug) // Only render cards with valid slugs
-                  .map((card, stackIndex) => (
-                    <CardPlane
-                      key={`stack-${card.slug}-${stackIndex}`}
-                      slug={card.slug || ""}
-                      textureUrl={cardbackUrl}
-                      forceTextureUrl={!isCemetery}
-                      width={w}
-                      height={h}
-                      rotationZ={rotZ}
-                      depthWrite={false}
-                      interactive={false}
-                      elevation={stackIndex * 0.01}
-                    />
-                  ))}
+                  .map((card, stackIndex) =>
+                    usePreset ? (
+                      <MaterialCardBack
+                        key={`stack-${card.slug}-${stackIndex}`}
+                        presetId={ownerCardbacks.preset!}
+                        width={w}
+                        height={h}
+                        rotationZ={rotZ}
+                        depthWrite={false}
+                        interactive={false}
+                        elevation={stackIndex * 0.01}
+                      />
+                    ) : (
+                      <CardPlane
+                        key={`stack-${card.slug}-${stackIndex}`}
+                        slug={card.slug || ""}
+                        textureUrl={cardbackUrl}
+                        forceTextureUrl={!isCemetery}
+                        width={w}
+                        height={h}
+                        rotationZ={rotZ}
+                        depthWrite={false}
+                        interactive={false}
+                        elevation={stackIndex * 0.01}
+                      />
+                    )
+                  )}
 
                 {/* Top card (interactive) - add invisible mesh for reliable clicking */}
                 <group>
@@ -438,17 +455,29 @@ export default function Piles3D({
                   </mesh>
 
                   {/* Visual card */}
-                  <CardPlane
-                    slug={cards[0].slug || ""}
-                    textureUrl={cardbackUrl}
-                    forceTextureUrl={!isCemetery}
-                    width={w}
-                    height={h}
-                    rotationZ={rotZ}
-                    depthWrite={true}
-                    interactive={false}
-                    elevation={Math.min(cards.length - 1, 3) * 0.01 + 0.01}
-                  />
+                  {usePreset ? (
+                    <MaterialCardBack
+                      presetId={ownerCardbacks.preset!}
+                      width={w}
+                      height={h}
+                      rotationZ={rotZ}
+                      depthWrite={true}
+                      interactive={false}
+                      elevation={Math.min(cards.length - 1, 3) * 0.01 + 0.01}
+                    />
+                  ) : (
+                    <CardPlane
+                      slug={cards[0].slug || ""}
+                      textureUrl={cardbackUrl}
+                      forceTextureUrl={!isCemetery}
+                      width={w}
+                      height={h}
+                      rotationZ={rotZ}
+                      depthWrite={true}
+                      interactive={false}
+                      elevation={Math.min(cards.length - 1, 3) * 0.01 + 0.01}
+                    />
+                  )}
                 </group>
               </group>
             ) : (
