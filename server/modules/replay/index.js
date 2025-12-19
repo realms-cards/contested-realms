@@ -35,7 +35,7 @@ async function listRecordings(prisma, opts = {}) {
     );
   }
 
-  const finishedSummaries = results.map((mr, i) => {
+  const finishedSummaries = results.map((mr, _i) => {
     const session = sessionById.get(mr.matchId);
     const playerNames = Array.isArray(mr.players)
       ? mr.players.map((p) =>
@@ -112,7 +112,7 @@ async function listRecordings(prisma, opts = {}) {
     );
   }
 
-  const fallbackSummaries = fallbackSessions.map((s, i) => {
+  const fallbackSummaries = fallbackSessions.map((s, _i) => {
     const playerIds = Array.isArray(s.playerIds) ? s.playerIds : [];
     const playerNames = playerIds.map((pid) => nameById.get(pid) || pid);
     const endTime = s.updatedAt ? new Date(s.updatedAt).getTime() : undefined;

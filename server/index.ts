@@ -1,118 +1,7 @@
 // Simple Socket.IO server for Sorcery online MVP
 // Run with: npm run server:dev (development) or npm run server:start (production)
 
-// T019: Import extracted modules
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { createBootstrap } = require("./core/bootstrap");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { createPersistenceLayer } = require("./core/persistence");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { createContainer } = require("./core/container");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { registerFeatures } = require("./features");
-const {
-  createInteractionModule,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  INTERACTION_VERSION,
-  INTERACTION_ENFORCEMENT_ENABLED,
-  INTERACTION_REQUEST_KINDS,
-  INTERACTION_DECISIONS,
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-} = require("./modules/interactions");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const modules = require("./modules");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { createMatchLeaderService } = require("./modules/match-leader");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { enrichPatchWithCosts } = require("./modules/card-costs");
-const {
-  getSeatForPlayer,
-  getPlayerIdForSeat,
-  getOpponentSeat: getOpponentSeatRaw,
-  inferLoserId,
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-} = require("./modules/match-utils");
-const {
-  normalizeDeckPayload,
-  validateDeckCards,
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-} = require("./modules/deck-utils");
-const seatFromOwner = (owner: 1 | 2): "p1" | "p2" =>
-  owner === 1 ? "p1" : "p2";
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { createLeaderboardService } = require("./modules/leaderboard");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { createMatchRecordingService } = require("./modules/match-recording");
-const {
-  deepMergeReplaceArrays,
-  dedupePermanents,
-  mergeEvents,
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-} = require("./modules/shared/match-helpers");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { createRequestHandler } = require("./http/request-handler");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { registerRtcHandlers } = require("./socket/rtc-handlers");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { registerPubSubListeners } = require("./socket/pubsub-listeners");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { createRedisStateManager } = require("./core/redis-state");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { createPlayerRegistry } = require("./modules/player-registry");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { LEADER_HEARTBEAT_INTERVAL_MS } = require("./core/redis-keys");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { startMaintenanceTimers } = require("./maintenance/timers");
-
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const jwt = require("jsonwebtoken");
-const {
-  createRngFromString,
-  generateBoosterDeterministic,
-  generateCubeBoosterDeterministic,
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-} = require("./booster");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { BotManager } = require("./botManager");
-// Rules modules (TypeScript)
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { applyTurnStart } = require("./modules/rules-turn-start");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { applyMovementAndCombat } = require("./modules/rules-movement");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const {
-  validateAction: validateActionTs,
-} = require("./modules/rules-validation");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { ensureCosts: ensureCostsTs } = require("./modules/rules-costs");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { applyGenesis, applyKeywordAnnotations } = require("./rules/triggers");
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-require-imports
-const { buildMatchInfo } = require("./matchInfo");
-
-const tournamentModules = modules.tournament;
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const draftModules = modules.draft;
-const { replay } = modules;
-const tournamentBroadcast = tournamentModules.broadcast;
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const {
-  registerChatHandlers,
-  getGlobalChatHistory,
-} = require("./socket/chat-handlers");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const {
-  sanitizeMatchInfoForSpectator,
-  sanitizeGameForSpectator,
-  broadcastSpectatorsUpdated,
-} = require("./modules/spectator");
-// T021: Import draft config service
-const draftConfig = modules.draft.config;
-const { createMatchDraftService } = modules.draft;
-// T023: Import standings service
-const standingsService = modules.tournament.standings;
-
+import jwt from "jsonwebtoken";
 import type {
   AnyRecord,
   DraftPresenceEntry,
@@ -124,14 +13,91 @@ import type {
   VoiceParticipant,
   LobbyState,
 } from "./types";
+
+// T019: Import extracted modules
 import {
   getRateLimitsForSocket,
   tryConsume,
   cleanupRateLimits,
 } from "./rateLimiter";
-import { incrementMetric, incrementRateLimitHit, debugLog } from "./metrics";
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+// JS modules (CommonJS) - use default import pattern
+import boosterModule from "./booster";
+import botManagerModule from "./botManager";
+import { createBootstrap } from "./core/bootstrap";
+import { createContainer } from "./core/container";
+import { createPersistenceLayer } from "./core/persistence";
+import { LEADER_HEARTBEAT_INTERVAL_MS } from "./core/redis-keys";
+import { createRedisStateManager } from "./core/redis-state";
+import { registerFeatures } from "./features";
+import { createRequestHandler } from "./http/request-handler";
+import { startMaintenanceTimers } from "./maintenance/timers";
+import matchInfoModule from "./matchInfo";
+import { incrementMetric, incrementRateLimitHit, debugLog } from "./metrics";
+import modulesIndex from "./modules";
+import triggersModule from "./rules/triggers";
+import chatHandlersModule from "./socket/chat-handlers";
+
+const {
+  createRngFromString,
+  generateBoosterDeterministic,
+  generateCubeBoosterDeterministic,
+} = boosterModule;
+const { BotManager } = botManagerModule;
+const { buildMatchInfo: _buildMatchInfo } = matchInfoModule;
+const modules = modulesIndex;
+const { applyGenesis, applyKeywordAnnotations } = triggersModule;
+const { registerChatHandlers, getGlobalChatHistory } = chatHandlersModule;
+
+// TypeScript modules
+import { enrichPatchWithCosts } from "./modules/card-costs";
+import { normalizeDeckPayload, validateDeckCards } from "./modules/deck-utils";
+import {
+  createInteractionModule,
+  INTERACTION_ENFORCEMENT_ENABLED,
+  INTERACTION_REQUEST_KINDS,
+  INTERACTION_DECISIONS,
+} from "./modules/interactions";
+import { createLeaderboardService } from "./modules/leaderboard";
+import { createMatchLeaderService } from "./modules/match-leader";
+import { createMatchRecordingService } from "./modules/match-recording";
+import {
+  getSeatForPlayer,
+  getPlayerIdForSeat,
+  getOpponentSeat as getOpponentSeatRaw,
+  inferLoserId,
+} from "./modules/match-utils";
+import { createPlayerRegistry } from "./modules/player-registry";
+import { ensureCosts as ensureCostsTs } from "./modules/rules-costs";
+import { applyMovementAndCombat } from "./modules/rules-movement";
+import { applyTurnStart } from "./modules/rules-turn-start";
+import { validateAction as validateActionTs } from "./modules/rules-validation";
+import {
+  deepMergeReplaceArrays,
+  dedupePermanents,
+  mergeEvents,
+} from "./modules/shared/match-helpers";
+import {
+  sanitizeMatchInfoForSpectator,
+  sanitizeGameForSpectator,
+  broadcastSpectatorsUpdated,
+} from "./modules/spectator";
+import { registerPubSubListeners } from "./socket/pubsub-listeners";
+import { registerRtcHandlers } from "./socket/rtc-handlers";
+
+const _seatFromOwner = (owner: 1 | 2): "p1" | "p2" =>
+  owner === 1 ? "p1" : "p2";
+
+const tournamentModules = modules.tournament;
+const { replay } = modules;
+const tournamentBroadcast = tournamentModules.broadcast;
+
+// T021: Import draft config service
+const draftConfig = modules.draft.config;
+const { createMatchDraftService } = modules.draft;
+// T023: Import standings service
+const standingsService = modules.tournament.standings;
+
 type SocketServer = import("socket.io").Server;
 type SocketClient = import("socket.io").Socket;
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -385,7 +351,7 @@ let isShuttingDown = false;
 const RULES_ENFORCE_MODE = (
   process.env.RULES_ENFORCE_MODE || "off"
 ).toLowerCase();
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+
 const RULES_HELPERS_ENABLED = !(
   process.env.RULES_HELPERS_ENABLED === "0" ||
   (process.env.RULES_HELPERS_ENABLED || "").toLowerCase() === "false"
@@ -687,8 +653,11 @@ const persistence = createPersistenceLayer({
   pubClient,
   metricsInc,
   metricsObserveMs,
-  matches,
-  hydrateMatchFromDatabase,
+  matches: matches as unknown as Map<string, Record<string, unknown>>,
+  hydrateMatchFromDatabase: hydrateMatchFromDatabase as unknown as (
+    matchId: string,
+    match: Record<string, unknown>
+  ) => Promise<void>,
   config: {
     isWriteBehind: PERSIST_IS_WRITE_BEHIND,
     flushIntervalMs: PERSIST_FLUSH_INTERVAL_MS,
@@ -726,7 +695,7 @@ const matchDraftService = createMatchDraftService({
   createRngFromString,
   generateBoosterDeterministic,
   generateCubeBoosterDeterministic,
-}) as MatchDraftService;
+} as Parameters<typeof createMatchDraftService>[0]) as MatchDraftService;
 
 const {
   leaderDraftPlayerReady,
@@ -767,13 +736,9 @@ const matchLeaderService: MatchLeaderService = createMatchLeaderService({
   storeRedis,
   prisma,
   players,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  getOrLoadMatch: getOrLoadMatch as unknown as (
-    matchId: string
-  ) => Promise<any>,
+  getOrLoadMatch,
   ensurePlayerCached,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  getMatchInfo: getMatchInfo as unknown as (match: any) => unknown,
+  getMatchInfo,
   rid,
   getSeatForPlayer,
   getOpponentSeat: getOpponentSeatStrict,
@@ -803,17 +768,14 @@ const matchLeaderService: MatchLeaderService = createMatchLeaderService({
   enrichPatchWithCosts: enrichPatchWithCostsSafe,
   recordMatchAction,
   persistMatchUpdate,
-  finalizeMatch: finalizeMatch as unknown as (
-    match: unknown,
-    options: Record<string, unknown>
-  ) => Promise<void>,
+  finalizeMatch,
   rulesEnforceMode: RULES_ENFORCE_MODE,
   rulesHelpersEnabled: RULES_HELPERS_ENABLED,
   interactionEnforcementEnabled: INTERACTION_ENFORCEMENT_ENABLED,
   interactionKinds: INTERACTION_REQUEST_KINDS,
   interactionDecisions: INTERACTION_DECISIONS,
   isCpuPlayerId,
-});
+} as unknown as Parameters<typeof createMatchLeaderService>[0]);
 
 const {
   applyAction: leaderApplyAction,
@@ -976,7 +938,7 @@ const handleHttpRequest = createRequestHandler({
     emitPlayerJoined: (
       _io: SocketServer,
       tournamentId: string,
-      playerId: string,
+      playerId: string | undefined,
       playerName: string | undefined,
       currentPlayerCount: number | undefined
     ) =>
@@ -989,7 +951,7 @@ const handleHttpRequest = createRequestHandler({
     emitPlayerLeft: (
       _io: SocketServer,
       tournamentId: string,
-      playerId: string,
+      playerId: string | undefined,
       playerName: string | undefined,
       currentPlayerCount: number | undefined
     ) =>
@@ -1007,7 +969,7 @@ const handleHttpRequest = createRequestHandler({
     emitPreparationUpdate: (
       _io: SocketServer,
       tournamentId: string,
-      playerId: string,
+      playerId: string | undefined,
       preparationStatus: string | undefined,
       readyPlayerCount: number | undefined,
       totalPlayerCount: number | undefined,
@@ -1324,12 +1286,18 @@ async function finalizeMatch(
       });
       if (tMatch) {
         const res = (match.game as AnyRecord | null | undefined)?.results;
-        const gameResults = Array.isArray(res) ? (res as unknown[]) : [];
+        const gameResults = Array.isArray(res) ? res : [];
         const matchResults = {
           winnerId: winnerId || null,
           loserId: loserId || null,
           isDraw,
-          gameResults,
+          gameResults: gameResults as (
+            | string
+            | number
+            | boolean
+            | null
+            | Record<string, unknown>
+          )[],
           completedAt: nowIso,
         };
 
@@ -1338,7 +1306,8 @@ async function finalizeMatch(
           where: { id: match.id, status: { not: "completed" } },
           data: {
             status: "completed",
-            results: matchResults,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            results: matchResults as any,
             completedAt: new Date(),
           },
         });
@@ -1349,7 +1318,10 @@ async function finalizeMatch(
             id?: string;
             playerId?: string;
             userId?: string;
-          } | null> = Array.isArray(tMatch.players) ? tMatch.players : [];
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          } | null> = Array.isArray(tMatch.players)
+            ? (tMatch.players as any)
+            : [];
           const playerIds = playersVal
             .map(
               (
@@ -1715,9 +1687,9 @@ async function getOrLoadMatch(
           await storeRedis.set(
             `match:leader:${match.id}`,
             INSTANCE_ID,
-            "NX",
             "EX",
-            60
+            60,
+            "NX"
           );
       } catch {}
       try {
@@ -2130,7 +2102,7 @@ io.on("connection", async (socket: SocketClient) => {
     getPlayerInfo,
     getRateLimitsForSocket,
     tryConsume,
-    incrementMetric,
+    incrementMetric: incrementMetric as (name: string) => void,
     incrementRateLimitHit,
     debugLog,
   });
@@ -2260,7 +2232,9 @@ io.on("connection", async (socket: SocketClient) => {
         if (recovered) {
           player.matchId = recovered.id;
           socket.join(`match:${recovered.id}`);
-          socket.emit("matchStarted", { match: getMatchInfo(recovered) });
+          socket.emit("matchStarted", {
+            match: getMatchInfo(recovered as ServerMatchState),
+          });
           if (
             recovered.matchType === "draft" &&
             recovered.draftState &&
@@ -3151,7 +3125,7 @@ io.on("connection", async (socket: SocketClient) => {
       } catch {}
     } else if (type === "combatCancel") {
       try {
-        const match = await getOrLoadMatch(matchId);
+        const _match = await getOrLoadMatch(matchId);
         const room = `match:${matchId}`;
         const out = {
           type: "combatCancel",

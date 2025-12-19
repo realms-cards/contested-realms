@@ -45,7 +45,11 @@ const eslintConfig = [
     rules: {
       // Enforce stronger TypeScript practices to prevent regressions
       "@typescript-eslint/no-explicit-any": "error", // Prevent explicit 'any' usage
-      "@typescript-eslint/no-unused-vars": "warn", // Keep as warning (already enabled)
+      "@typescript-eslint/no-unused-vars": ["warn", {
+        argsIgnorePattern: "^_",
+        varsIgnorePattern: "^_",
+        caughtErrorsIgnorePattern: "^_"
+      }], // Ignore underscore-prefixed variables
       "@typescript-eslint/prefer-as-const": "error", // Encourage 'as const' over literal types
       "@typescript-eslint/no-non-null-assertion": "warn", // Discourage ! operator
       "@typescript-eslint/explicit-function-return-type": "off", // Allow inference for better DX

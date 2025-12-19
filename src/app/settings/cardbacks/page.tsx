@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { SLEEVE_PRESETS } from "@/lib/game/sleevePresets";
 
 type CardbackSummary = {
   id: string;
@@ -411,6 +412,40 @@ export default function CardbackSettingsPage() {
                       Delete
                     </button>
                   </div>
+                ))}
+              </div>
+
+              {/* Material Presets */}
+              <h2 className="mt-6 text-base font-semibold">Material Presets</h2>
+              <p className="mt-1 text-xs text-slate-400">
+                Choose a solid material finish instead of an image.
+              </p>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                {SLEEVE_PRESETS.map((preset) => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    disabled={selecting}
+                    onClick={() => void setSelected(preset.id)}
+                    className={`text-left px-3 py-2 rounded ring-1 transition-colors ${
+                      selectedCardbackRef === preset.id
+                        ? "bg-emerald-500/10 ring-emerald-500/30"
+                        : "bg-white/5 ring-white/10 hover:bg-white/10"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="w-4 h-4 rounded-sm ring-1 ring-white/20"
+                        style={{ backgroundColor: preset.color }}
+                      />
+                      <span className="text-sm font-medium">
+                        {preset.label}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-slate-400 mt-0.5">
+                      {preset.description}
+                    </div>
+                  </button>
                 ))}
               </div>
 

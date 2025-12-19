@@ -741,4 +741,4 @@ const createPersistenceLayerInternal = ({
   };
 };
 
-module.exports = { createPersistenceLayer: createPersistenceLayerInternal };
+export const createPersistenceLayer = createPersistenceLayerInternal;

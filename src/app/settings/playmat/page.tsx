@@ -243,6 +243,7 @@ export default function PlaymatSettingsPage() {
     if (showGrid) {
       drawGrid(ctx, gridColor);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     img,
     offset.x,
@@ -251,7 +252,7 @@ export default function PlaymatSettingsPage() {
     showGrid,
     gridColor,
     drawGrid,
-    fontLoaded,
+    fontLoaded, // Needed to re-render when font loads
   ]);
 
   useEffect(() => {

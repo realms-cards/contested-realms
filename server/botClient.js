@@ -102,7 +102,7 @@ class BotClient {
       }
     });
 
-    socket.on("joinedLobby", (payload) => {
+    socket.on("joinedLobby", (_payload) => {
       this._joinedLobby = true;
       // Ready up immediately
       setTimeout(() => {
@@ -371,7 +371,7 @@ class BotClient {
     } catch {}
   }
 
-  _mergeGamePatch(patch, t) {
+  _mergeGamePatch(patch, _t) {
     try {
       if (!patch || typeof patch !== 'object') return;
       if (!this._game || typeof this._game !== 'object') this._game = {};
@@ -508,8 +508,8 @@ class BotClient {
       try {
         const playedSite = siteIdx !== -1;
         const playedCard = nonSiteIdx !== -1;
-        const drew = !isFirstTurnForMe && Array.isArray(zones.spellbook) && zones.spellbook.length > (myZones.spellbook?.length || 0);
-        console.log(`[Bot] Act turn=${this._turnIndex} P${myNum}: draw=${!isFirstTurnForMe} site=${playedSite} card=${playedCard}`);
+        const _drew = !isFirstTurnForMe && Array.isArray(zones.spellbook) && zones.spellbook.length > (myZones.spellbook?.length || 0);
+        console.log(`[Bot] Act turn=${this._turnIndex} P${myNum}: draw=${!isFirstTurnForMe} site=${playedSite} card=${playedCard} drew=${_drew}`);
       } catch {}
 
       // Send action

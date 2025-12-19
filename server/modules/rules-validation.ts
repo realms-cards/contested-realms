@@ -1,5 +1,6 @@
 "use strict";
 
+import * as fs from "fs";
 import * as path from "path";
 import type { AnyRecord, MatchPatch } from "../types";
 
@@ -19,14 +20,9 @@ let CARDS_DB: CardLike[] | null = null;
 function loadCardsDb(): CardLike[] {
   if (CARDS_DB) return CARDS_DB;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    CARDS_DB = require(path.join(
-      __dirname,
-      "..",
-      "..",
-      "data",
-      "cards_raw.json"
-    )) as CardLike[];
+    const jsonPath = path.join(__dirname, "..", "..", "data", "cards_raw.json");
+    const jsonContent = fs.readFileSync(jsonPath, "utf-8");
+    CARDS_DB = JSON.parse(jsonContent) as CardLike[];
   } catch {
     CARDS_DB = [];
   }
@@ -160,7 +156,7 @@ function getCellNumber(key: string, boardWidth: number): number | null {
   return pos.y * boardWidth + pos.x + 1;
 }
 
-function inBounds(
+function _inBounds(
   pos: { x: number; y: number },
   w: number,
   h: number
@@ -172,7 +168,7 @@ function inBounds(
   }
 }
 
-function manhattan(a: { x: number; y: number }, b: { x: number; y: number }) {
+function _manhattan(a: { x: number; y: number }, b: { x: number; y: number }) {
   try {
     return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
   } catch {
@@ -357,7 +353,7 @@ export function validateAction(
       typeof (action as AnyRecord).currentPlayer === "number"
         ? (action as AnyRecord).currentPlayer
         : (game.currentPlayer as number | undefined);
-    const effectivePhase =
+    const _effectivePhase =
       typeof (action as AnyRecord).phase === "string"
         ? ((action as AnyRecord).phase as string)
         : (game.phase as string | undefined) ?? undefined;

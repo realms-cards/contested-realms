@@ -33,8 +33,8 @@ export const createInitialBoardUiState = (): BoardUiDefaults => ({
   showPlaymatOverlay: false, // Default: show playmat, hide grid overlay
   playmatUrl: null, // null until user's preference is loaded
   cardbackUrls: {
-    p1: { spellbook: null, atlas: null },
-    p2: { spellbook: null, atlas: null },
+    p1: { spellbook: null, atlas: null, preset: null },
+    p2: { spellbook: null, atlas: null, preset: null },
   },
   gridColor: "white",
   gridBlend: "normal",
@@ -94,11 +94,11 @@ export const createBoardUiSlice: StateCreator<
   toggleOwnershipOverlay: () =>
     set((state) => ({ showOwnershipOverlay: !state.showOwnershipOverlay })),
   setPlaymatUrl: (url: string) => set({ playmatUrl: url }),
-  setCardbackUrls: (who, spellbook, atlas) =>
+  setCardbackUrls: (who, spellbook, atlas, preset) =>
     set((state) => ({
       cardbackUrls: {
         ...state.cardbackUrls,
-        [who]: { spellbook, atlas },
+        [who]: { spellbook, atlas, preset: preset ?? null },
       },
     })),
   setGridColor: (color: "white" | "black") => set({ gridColor: color }),
