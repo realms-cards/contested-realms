@@ -1350,7 +1350,12 @@ function AuthenticatedDeckEditor() {
     let drafted: DraftCardLike[] = [];
     try {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) drafted = parsed as DraftCardLike[];
+      if (Array.isArray(parsed)) {
+        // Handle both formats: array of slug strings OR array of DraftCardLike objects
+        drafted = parsed.map((item) =>
+          typeof item === "string" ? { slug: item } : (item as DraftCardLike)
+        );
+      }
     } catch (e) {
       console.error("Failed to parse drafted cards: ", e);
       setError("Failed to parse drafted cards.");

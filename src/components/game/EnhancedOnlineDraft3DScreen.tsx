@@ -247,7 +247,9 @@ export default function EnhancedOnlineDraft3DScreen({
     if (pickCount === lastSavedPickCountRef.current) return;
 
     try {
-      localStorage.setItem(key, JSON.stringify(picksArray));
+      // Store only slugs to avoid localStorage quota issues (full DraftCard objects are too large)
+      const slugsOnly = picksArray.map((c) => c.slug).filter(Boolean);
+      localStorage.setItem(key, JSON.stringify(slugsOnly));
       lastSavedPickCountRef.current = pickCount;
     } catch (err) {
       console.error(
@@ -578,9 +580,11 @@ export default function EnhancedOnlineDraft3DScreen({
 
         try {
           if (matchId) {
+            // Store only slugs to avoid localStorage quota issues (full DraftCard objects are too large)
+            const slugsOnly = mine.map((c) => c.slug).filter(Boolean);
             localStorage.setItem(
               `draftedCards_${matchId}`,
-              JSON.stringify(mine)
+              JSON.stringify(slugsOnly)
             );
             // Also persist a resolved SearchResult[] so the editor can avoid network resolution
             const resolved: SearchResult[] = mine.map((c) => ({
