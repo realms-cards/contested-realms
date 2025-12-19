@@ -47,6 +47,7 @@ export default function Piles3D({
 }: Piles3DProps) {
   const zones = useGameStore((s) => s.zones);
   const boardSize = useGameStore((s) => s.board.size);
+  const cardbackUrls = useGameStore((s) => s.cardbackUrls);
   const setPreviewCard = useGameStore((s) => s.setPreviewCard);
   const dragFromHand = useGameStore((s) => s.dragFromHand);
   const setDragFromHand = useGameStore((s) => s.setDragFromHand);
@@ -201,11 +202,12 @@ export default function Piles3D({
             ? 0
             : Math.PI
           : ownerRot + Math.PI;
+        const ownerCardbacks = cardbackUrls[owner];
         const cardbackUrl = isCemetery
           ? undefined
           : key === "atlas"
-          ? "/api/assets/cardback_atlas.png"
-          : "/api/assets/cardback_spellbook.png";
+          ? ownerCardbacks?.atlas ?? "/api/assets/cardback_atlas.png"
+          : ownerCardbacks?.spellbook ?? "/api/assets/cardback_spellbook.png";
         const w = isAtlas ? CARD_LONG : CARD_SHORT;
         const h = isAtlas ? CARD_SHORT : CARD_LONG;
         return (

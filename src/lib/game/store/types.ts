@@ -712,6 +712,10 @@ export type GameState = {
   showPlaymat: boolean;
   showPlaymatOverlay: boolean;
   playmatUrl: string | null;
+  cardbackUrls: Record<
+    PlayerKey,
+    { spellbook: string | null; atlas: string | null }
+  >;
   gridColor: "white" | "black";
   gridBlend: "normal" | "subtract";
   allowSiteDrag: boolean;
@@ -722,6 +726,11 @@ export type GameState = {
     worldPos: { x: number; z: number };
   } | null;
   setPlaymatUrl: (url: string) => void;
+  setCardbackUrls: (
+    who: PlayerKey,
+    spellbook: string | null,
+    atlas: string | null
+  ) => void;
   setGridColor: (color: "white" | "black") => void;
   setGridBlend: (blend: "normal" | "subtract") => void;
   togglePlaymatOverlay: () => void;

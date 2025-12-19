@@ -212,6 +212,75 @@ export default function OnlineMatchPage() {
     opponentPlayerId,
   ]);
 
+  // Fetch cardback URLs for both players
+  const setCardbackUrls = useGameStore((s) => s.setCardbackUrls);
+  useEffect(() => {
+    const controller = new AbortController();
+
+    const fetchCardbacks = async () => {
+      // Fetch my cardbacks (for my seat)
+      if (resolvedSeat && myPlayerId) {
+        try {
+          const res = await fetch("/api/users/me/cardbacks/selected", {
+            cache: "no-store",
+            signal: controller.signal,
+          });
+          if (res.ok) {
+            const data = (await res.json()) as { selectedCardbackRef?: string };
+            const ref = data.selectedCardbackRef;
+            if (ref && ref.startsWith("custom:")) {
+              const id = ref.slice("custom:".length);
+              if (id) {
+                setCardbackUrls(
+                  resolvedSeat,
+                  `/api/users/me/cardbacks/${id}/spellbook`,
+                  `/api/users/me/cardbacks/${id}/atlas`
+                );
+              }
+            }
+          }
+        } catch {
+          // Ignore fetch errors
+        }
+      }
+
+      // Fetch opponent's cardbacks (for opponent seat)
+      if (opponentSeat && opponentPlayerId) {
+        try {
+          const res = await fetch(`/api/users/${opponentPlayerId}/cardbacks`, {
+            cache: "no-store",
+            signal: controller.signal,
+          });
+          if (res.ok) {
+            const data = (await res.json()) as { selectedCardbackRef?: string };
+            const ref = data.selectedCardbackRef;
+            if (ref && ref.startsWith("custom:")) {
+              const id = ref.slice("custom:".length);
+              if (id) {
+                setCardbackUrls(
+                  opponentSeat,
+                  `/api/users/${opponentPlayerId}/cardbacks/${id}/spellbook`,
+                  `/api/users/${opponentPlayerId}/cardbacks/${id}/atlas`
+                );
+              }
+            }
+          }
+        } catch {
+          // Ignore fetch errors
+        }
+      }
+    };
+
+    void fetchCardbacks();
+    return () => controller.abort();
+  }, [
+    resolvedSeat,
+    opponentSeat,
+    myPlayerId,
+    opponentPlayerId,
+    setCardbackUrls,
+  ]);
+
   useRemoteCursorTelemetry(transport);
   useBoardPingListener(transport);
   useChaosTwisterListener(transport);
