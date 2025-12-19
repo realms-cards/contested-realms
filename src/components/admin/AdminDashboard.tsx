@@ -15,6 +15,7 @@ import type {
   AdminSessionInfo,
   UsageSnapshot,
   RecentMatchInfo,
+  AdminTournamentInfo,
 } from "@/lib/admin/types";
 
 type ActionDescriptor = {
@@ -103,6 +104,12 @@ export default function AdminDashboard({
   );
   const [userSearchQuery, setUserSearchQuery] = useState("");
   const userSearchRef = useRef<string>("");
+  const [tournaments, setTournaments] = useState<AdminTournamentInfo[]>([]);
+  const [tournamentsLoading, setTournamentsLoading] = useState(false);
+  const [tournamentsError, setTournamentsError] = useState<string | null>(null);
+  const [closingTournament, setClosingTournament] = useState<string | null>(
+    null
+  );
 
   const refreshHealthHistory = useCallback(async () => {
     setLoadingHealthHistory(true);
@@ -320,6 +327,68 @@ export default function AdminDashboard({
     [refreshActiveMatches]
   );
 
+  const refreshTournaments = useCallback(async () => {
+    setTournamentsLoading(true);
+    setTournamentsError(null);
+    try {
+      const response = await fetch("/api/admin/tournaments", {
+        method: "GET",
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as {
+          error?: string;
+        } | null;
+        throw new Error(body?.error || `HTTP ${response.status}`);
+      }
+      const payload = (await response.json()) as {
+        tournaments: AdminTournamentInfo[];
+        total: number;
+      };
+      setTournaments(payload.tournaments ?? []);
+    } catch (error) {
+      setTournamentsError(
+        error instanceof Error ? error.message : "Failed to load tournaments"
+      );
+    } finally {
+      setTournamentsLoading(false);
+    }
+  }, []);
+
+  const closeTournament = useCallback(
+    async (tournamentId: string, tournamentName: string) => {
+      if (
+        !confirm(
+          `Are you sure you want to close tournament "${tournamentName}"? All active matches will be ended and players will be notified.`
+        )
+      ) {
+        return;
+      }
+      setClosingTournament(tournamentId);
+      try {
+        const response = await fetch("/api/admin/tournaments/close", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tournamentId }),
+        });
+        if (!response.ok) {
+          const body = (await response.json().catch(() => null)) as {
+            error?: string;
+          } | null;
+          throw new Error(body?.error || `HTTP ${response.status}`);
+        }
+        await refreshTournaments();
+      } catch (error) {
+        setTournamentsError(
+          error instanceof Error ? error.message : "Failed to close tournament"
+        );
+      } finally {
+        setClosingTournament(null);
+      }
+    },
+    [refreshTournaments]
+  );
+
   const copyMatchId = useCallback((matchId: string) => {
     navigator.clipboard.writeText(matchId).then(() => {
       setCopiedMatchId(matchId);
@@ -444,6 +513,7 @@ export default function AdminDashboard({
         refreshUsage(),
         refreshActiveMatches(),
         refreshRecentMatches(),
+        refreshTournaments(),
       ]);
     } catch (error) {
       setStatusError(
@@ -459,6 +529,7 @@ export default function AdminDashboard({
     refreshJobs,
     refreshRecentMatches,
     refreshSessions,
+    refreshTournaments,
     refreshUsage,
   ]);
 
@@ -470,6 +541,7 @@ export default function AdminDashboard({
     void refreshUsage();
     void refreshActiveMatches();
     void refreshRecentMatches();
+    void refreshTournaments();
   }, [
     refreshActiveMatches,
     refreshErrors,
@@ -477,6 +549,7 @@ export default function AdminDashboard({
     refreshJobs,
     refreshRecentMatches,
     refreshSessions,
+    refreshTournaments,
     refreshUsage,
   ]);
 
@@ -855,6 +928,145 @@ export default function AdminDashboard({
                         >
                           View Replay
                         </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        <section className="flex flex-col gap-3">
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-white">
+                Active Tournaments
+              </h2>
+              <p className="text-xs text-slate-400">
+                Tournaments that are currently running. Close to end them
+                immediately.
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                void refreshTournaments();
+              }}
+              className="inline-flex items-center justify-center rounded border border-slate-600 px-3 py-1 text-xs font-medium text-slate-200 hover:bg-slate-800"
+              disabled={tournamentsLoading}
+            >
+              {tournamentsLoading ? "Refreshing…" : "Refresh"}
+            </button>
+          </div>
+          {tournamentsError && (
+            <div className="rounded border border-rose-500/50 bg-rose-500/10 px-3 py-2 text-xs text-rose-100">
+              {tournamentsError}
+            </div>
+          )}
+          {tournamentsLoading && tournaments.length === 0 && (
+            <div className="rounded border border-slate-800 bg-slate-900/50 px-3 py-4 text-center text-xs text-slate-300">
+              Loading tournaments…
+            </div>
+          )}
+          {!tournamentsLoading && tournaments.length === 0 && (
+            <div className="rounded border border-slate-800 bg-slate-900/50 px-3 py-2 text-xs text-slate-300">
+              No active tournaments at the moment.
+            </div>
+          )}
+          {tournaments.length > 0 && (
+            <div className="overflow-auto rounded border border-slate-800 bg-slate-900/40">
+              <table className="min-w-full text-left text-xs text-slate-200">
+                <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400">
+                  <tr>
+                    <th className="px-3 py-2">Name</th>
+                    <th className="px-3 py-2">Format</th>
+                    <th className="px-3 py-2">Status</th>
+                    <th className="px-3 py-2">Round</th>
+                    <th className="px-3 py-2">Players</th>
+                    <th className="px-3 py-2">Creator</th>
+                    <th className="px-3 py-2">Started</th>
+                    <th className="px-3 py-2">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tournaments.map((tournament) => (
+                    <tr
+                      key={tournament.id}
+                      className="border-t border-slate-800/60 hover:bg-slate-800/30"
+                    >
+                      <td className="px-3 py-2">
+                        <div
+                          className="max-w-xs truncate font-medium"
+                          title={tournament.name}
+                        >
+                          {tournament.name}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2">
+                        <span className="rounded bg-slate-700/50 px-1.5 py-0.5 text-[10px] uppercase">
+                          {tournament.format}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2">
+                        <span
+                          className={clsx(
+                            "rounded px-1.5 py-0.5 text-[10px]",
+                            tournament.status === "active" ||
+                              tournament.status === "in_progress"
+                              ? "bg-emerald-500/20 text-emerald-200"
+                              : tournament.status === "registering"
+                              ? "bg-blue-500/20 text-blue-200"
+                              : tournament.status === "drafting"
+                              ? "bg-purple-500/20 text-purple-200"
+                              : "bg-amber-500/20 text-amber-200"
+                          )}
+                        >
+                          {tournament.status}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        {tournament.currentRound}/{tournament.maxRounds}
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        {tournament.playerCount}
+                      </td>
+                      <td className="px-3 py-2">
+                        <div
+                          className="max-w-[100px] truncate text-[10px] text-slate-400"
+                          title={tournament.creatorName ?? "Unknown"}
+                        >
+                          {tournament.creatorName ?? "Unknown"}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2 text-[10px] text-slate-400">
+                        {tournament.startedAt
+                          ? formatTimestamp(tournament.startedAt)
+                          : "Not started"}
+                      </td>
+                      <td className="px-3 py-2 flex gap-1">
+                        <Link
+                          href={`/tournaments/${tournament.id}`}
+                          className="rounded bg-blue-600/20 px-2 py-1 text-[10px] text-blue-200 hover:bg-blue-600/30"
+                        >
+                          View
+                        </Link>
+                        <button
+                          onClick={() =>
+                            closeTournament(tournament.id, tournament.name)
+                          }
+                          disabled={closingTournament === tournament.id}
+                          className={clsx(
+                            "rounded px-2 py-1 text-[10px]",
+                            closingTournament === tournament.id
+                              ? "bg-slate-700/50 text-slate-400 cursor-wait"
+                              : "bg-rose-600/20 text-rose-200 hover:bg-rose-600/30"
+                          )}
+                          title="Close this tournament (all matches will be ended)"
+                        >
+                          {closingTournament === tournament.id
+                            ? "Closing…"
+                            : "Close"}
+                        </button>
                       </td>
                     </tr>
                   ))}

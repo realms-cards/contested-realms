@@ -106,3 +106,18 @@ export interface RecentMatchInfo {
   duration: number | null;
   tournamentId: string | null;
 }
+
+export interface AdminTournamentInfo {
+  id: string;
+  name: string;
+  status: string;
+  format: string;
+  createdAt: string | null;
+  startedAt: string | null;
+  currentRound: number;
+  maxRounds: number;
+  creatorId: string | null;
+  creatorName: string | null;
+  playerCount: number;
+  matchCount: number;
+}
