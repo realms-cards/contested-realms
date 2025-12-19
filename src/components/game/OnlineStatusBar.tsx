@@ -1,10 +1,18 @@
 "use client";
 
-import { Grid3X3, Settings, Star, Users } from "lucide-react";
+import {
+  Grid3X3,
+  Mouse,
+  Settings,
+  Smartphone,
+  Star,
+  Users,
+} from "lucide-react";
 import AudioControls from "@/components/game/AudioControls";
 import { FEATURE_UNDO } from "@/lib/config/features";
 import { useColorBlind } from "@/lib/contexts/ColorBlindContext";
 import { useGameStore } from "@/lib/game/store";
+import { useTouchOverride } from "@/lib/hooks/useTouchDevice";
 
 interface OnlineStatusBarProps {
   dragFromHand: boolean;
@@ -40,6 +48,7 @@ export default function OnlineStatusBar({
   const togglePlaymatOverlay = useGameStore((s) => s.togglePlaymatOverlay);
   const togglePlaymat = useGameStore((s) => s.togglePlaymat);
   const { enabled: colorBlindEnabled } = useColorBlind();
+  const { isNativeTouch, effectiveMode, toggleOverride } = useTouchOverride();
 
   // Check if this player can control the current turn
   const canControlTurn =
@@ -162,6 +171,32 @@ export default function OnlineStatusBar({
               <Users className="w-3.5 h-3.5" />
               <span>{spectatorCount}</span>
             </div>
+          </>
+        )}
+
+        {/* Touch/Mouse Mode Toggle - Only show on native touch devices */}
+        {isNativeTouch && (
+          <>
+            <div className="w-px h-4 bg-white/20" />
+            <button
+              className={`rounded-full p-1.5 transition-colors ${
+                effectiveMode === "touch"
+                  ? "bg-cyan-600/80 hover:bg-cyan-500"
+                  : "bg-white/10 hover:bg-white/20"
+              }`}
+              onClick={toggleOverride}
+              title={
+                effectiveMode === "touch"
+                  ? "Switch to mouse controls"
+                  : "Switch to touch controls"
+              }
+            >
+              {effectiveMode === "touch" ? (
+                <Smartphone className="w-4 h-4" />
+              ) : (
+                <Mouse className="w-4 h-4" />
+              )}
+            </button>
           </>
         )}
 
