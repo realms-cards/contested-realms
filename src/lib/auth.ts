@@ -160,7 +160,27 @@ const authAdapter = {
       token: maskToken(data.token),
       found: Boolean(result),
     });
-    return result ?? null;
+    if (result) return result;
+    try {
+      const fallback = await prisma.verificationToken.delete({
+        where: { token: data.token },
+      });
+      logTokenDebug("consume-fallback", {
+        identifier: maskEmail(fallback.identifier),
+        token: maskToken(data.token),
+      });
+      return fallback ?? null;
+    } catch (error: unknown) {
+      if (
+        error &&
+        typeof error === "object" &&
+        "code" in error &&
+        error.code === "P2025"
+      ) {
+        return null;
+      }
+      throw error;
+    }
   },
 };
 
