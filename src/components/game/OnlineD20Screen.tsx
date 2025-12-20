@@ -87,6 +87,10 @@ export default function OnlineD20Screen({
   // Track when choice was made and add delay to show the selection
   const [choiceMade, setChoiceMade] = useState(false);
 
+  // Track if we've initiated a roll to prevent double-clicking
+  // This is a local guard that persists even if store state resets
+  const hasInitiatedRollRef = useRef(false);
+
   // Track retry state for UI feedback
   const [retryCount, setRetryCount] = useState(0);
   const [waitingForOpponent, setWaitingForOpponent] = useState(false);
@@ -225,7 +229,10 @@ export default function OnlineD20Screen({
   }, [transport, d20PendingRoll, myPlayerKey, clearD20Pending]);
 
   const handleRoll = useCallback(() => {
-    if (myRoll == null) {
+    // Guard against double-clicking: check both local ref AND store roll value
+    // The ref persists even if game state resets mid-flow
+    if (myRoll == null && !hasInitiatedRollRef.current) {
+      hasInitiatedRollRef.current = true;
       rollD20(myPlayerKey);
     }
   }, [myRoll, rollD20, myPlayerKey]);
