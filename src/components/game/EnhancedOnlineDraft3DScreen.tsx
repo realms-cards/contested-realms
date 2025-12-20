@@ -127,6 +127,11 @@ export default function EnhancedOnlineDraft3DScreen({
     Record<number, CardMeta>
   >({});
   const [slugToCardId, setSlugToCardId] = useState<Record<string, number>>({});
+  // Keep a ref to access the latest slugToCardId in callbacks without stale captures
+  const slugToCardIdRef = useRef<Record<string, number>>({});
+  useEffect(() => {
+    slugToCardIdRef.current = slugToCardId;
+  }, [slugToCardId]);
 
   // Extend DraftState with optional server-provided packs shape for precise set derivation
   type DraftStateWithGenerated = DraftState & {
@@ -217,6 +222,8 @@ export default function EnhancedOnlineDraft3DScreen({
   }, [matchId]);
 
   useEffect(() => {
+    // Guard against SSR - localStorage is not available on the server
+    if (typeof window === "undefined") return;
     if (!matchId) return;
     const key = `draftedCards_${matchId}`;
     const picksArray = (draftState.picks?.[myPlayerIndex] || []) as DraftCard[];
@@ -248,7 +255,10 @@ export default function EnhancedOnlineDraft3DScreen({
 
     try {
       // Store only slugs to avoid localStorage quota issues (full DraftCard objects are too large)
-      const slugsOnly = picksArray.map((c) => c.slug).filter(Boolean);
+      const slugsOnly = picksArray
+        .filter((c): c is DraftCard => c != null && typeof c === "object")
+        .map((c) => c.slug)
+        .filter(Boolean);
       localStorage.setItem(key, JSON.stringify(slugsOnly));
       lastSavedPickCountRef.current = pickCount;
     } catch (err) {
@@ -579,32 +589,37 @@ export default function EnhancedOnlineDraft3DScreen({
         );
 
         try {
-          if (matchId) {
+          if (matchId && typeof window !== "undefined") {
             // Store only slugs to avoid localStorage quota issues (full DraftCard objects are too large)
             // Keep ALL slugs (even empty ones as placeholders) to preserve count for resolved array matching
-            const slugsOnly = mine.map((c) => c.slug || "");
+            const slugsOnly = mine.map((c) => c?.slug || "");
             localStorage.setItem(
               `draftedCards_${matchId}`,
               JSON.stringify(slugsOnly)
             );
             // Also persist a resolved SearchResult[] so the editor can avoid network resolution
             // Filter out cards without slugs here (they can't be resolved anyway)
+            const currentSlugMap = slugToCardIdRef.current || {};
             const resolved: SearchResult[] = mine
-              .filter((c) => c.slug)
+              .filter((c): c is DraftCard => c != null && !!c.slug)
               .map((c) => ({
                 variantId: 0,
                 slug: c.slug,
                 finish: "Standard",
                 product: "Draft",
                 cardId:
-                  typeof c.slug === "string" && slugToCardId[c.slug]
-                    ? slugToCardId[c.slug]
+                  typeof c.slug === "string" && currentSlugMap[c.slug]
+                    ? currentSlugMap[c.slug]
                     : Number(c.id) || 0,
                 cardName: c.cardName || c.name,
                 set: c.setName || "Beta",
                 type: c.type || null,
                 rarity: (c.rarity as SearchResult["rarity"]) || null,
               }));
+            console.log(
+              `[EnhancedOnlineDraft3D] Saving ${resolved.length} resolved cards`,
+              resolved.slice(0, 3) // Log first 3 for debugging
+            );
             localStorage.setItem(
               `draftedCardsResolved_${matchId}`,
               JSON.stringify(resolved)
@@ -616,18 +631,30 @@ export default function EnhancedOnlineDraft3DScreen({
               const latestPick3D = Array.isArray(pick3DRef.current)
                 ? pick3DRef.current
                 : [];
+              const currentSlugMap = slugToCardIdRef.current || {};
               const layout =
                 latestPick3D.length > 0
-                  ? latestPick3D.map((p) => ({
-                      cardId: p.card.cardId,
-                      slug: p.card.slug, // Include slug for more reliable matching
-                      zone: p.zone,
-                      x: p.x,
-                      z: p.z,
-                    }))
+                  ? latestPick3D.map((p) => {
+                      // Use the latest slugToCardId mapping to resolve cardId if current is 0
+                      let resolvedCardId = p.card.cardId;
+                      if ((!resolvedCardId || resolvedCardId === 0) && p.card.slug) {
+                        resolvedCardId = currentSlugMap[p.card.slug] || 0;
+                      }
+                      return {
+                        cardId: resolvedCardId,
+                        slug: p.card.slug, // Include slug for more reliable matching
+                        zone: p.zone,
+                        x: p.x,
+                        z: p.z,
+                      };
+                    })
                   : [];
               const layoutKey = `draftLayout_draft_${String(matchId)}`;
               const prefsKey = `draftStackPrefs_draft_${String(matchId)}`;
+              console.log(
+                `[EnhancedOnlineDraft3D] Saving layout for ${layout.length} cards to ${layoutKey}`,
+                layout.slice(0, 3) // Log first 3 for debugging
+              );
               localStorage.setItem(layoutKey, JSON.stringify(layout));
               localStorage.setItem(
                 prefsKey,
@@ -2321,10 +2348,46 @@ function ClampOrbitTarget({
 
     const clampTarget = () => {
       const target = controls.target;
+      let changed = false;
+
+      // Clamp target position
       const clampedX = Math.max(bounds.minX, Math.min(bounds.maxX, target.x));
       const clampedZ = Math.max(bounds.minZ, Math.min(bounds.maxZ, target.z));
       if (clampedX !== target.x || clampedZ !== target.z) {
         target.set(clampedX, target.y, clampedZ);
+        changed = true;
+      }
+
+      // Prevent camera from getting into extreme positions that cause rotation flips.
+      // Use maxDistance from controls (default 28) to compute camera bounds.
+      const maxDist = controls.maxDistance ?? 28;
+      const camBoundX = Math.abs(bounds.maxX) + maxDist * 1.5;
+      const camBoundZ = Math.abs(bounds.maxZ) + maxDist * 1.5;
+      if (camera.position.x < -camBoundX) {
+        camera.position.x = -camBoundX;
+        target.x = camera.position.x - offset.x;
+        changed = true;
+      } else if (camera.position.x > camBoundX) {
+        camera.position.x = camBoundX;
+        target.x = camera.position.x - offset.x;
+        changed = true;
+      }
+      if (camera.position.z < -camBoundZ) {
+        camera.position.z = -camBoundZ;
+        target.z = camera.position.z - offset.z;
+        changed = true;
+      } else if (camera.position.z > camBoundZ) {
+        camera.position.z = camBoundZ;
+        target.z = camera.position.z - offset.z;
+        changed = true;
+      }
+      // Ensure camera Y stays positive (above the board) to prevent flip
+      if (camera.position.y < 0.5) {
+        camera.position.y = 0.5;
+        changed = true;
+      }
+
+      if (changed) {
         camera.position.copy(target.clone().add(offset));
         controls.update();
         invalidate();

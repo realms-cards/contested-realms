@@ -481,3 +481,33 @@ export function useCardTexture({
 
   return tex;
 }
+
+// --- Preload utility for cardback/sleeve textures ---
+// Call this early in game initialization to warm the cache before rendering.
+// Returns a promise that resolves when all preloads complete (or fail gracefully).
+export async function preloadCardbackTextures(
+  gl: WebGLRenderer,
+  urls: string[]
+): Promise<void> {
+  const loader = new TextureLoader();
+  loader.setCrossOrigin("anonymous");
+
+  const promises = urls.map(async (url) => {
+    // Skip if already cached
+    if (textureCache.has(url)) return;
+
+    try {
+      const tex = await loader.loadAsync(url);
+      normalizeTexture(tex, "raster", gl);
+      // Add to cache with 0 refs (will be acquired when components mount)
+      textureCache.set(url, { texture: tex, refs: 0, lastUsed: Date.now() });
+    } catch (err) {
+      // Graceful failure - texture will load on-demand when needed
+      if (process.env.NODE_ENV !== "production") {
+        console.warn("[preload] Failed to preload cardback texture:", url, err);
+      }
+    }
+  });
+
+  await Promise.all(promises);
+}

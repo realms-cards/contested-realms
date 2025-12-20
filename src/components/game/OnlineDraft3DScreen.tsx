@@ -1657,10 +1657,46 @@ function ClampOrbitTarget({
 
     const clampTarget = () => {
       const target = controls.target;
+      let changed = false;
+
+      // Clamp target position
       const clampedX = Math.max(bounds.minX, Math.min(bounds.maxX, target.x));
       const clampedZ = Math.max(bounds.minZ, Math.min(bounds.maxZ, target.z));
       if (clampedX !== target.x || clampedZ !== target.z) {
         target.set(clampedX, target.y, clampedZ);
+        changed = true;
+      }
+
+      // Prevent camera from getting into extreme positions that cause rotation flips.
+      // Use maxDistance from controls (default 28) to compute camera bounds.
+      const maxDist = controls.maxDistance ?? 28;
+      const camBoundX = Math.abs(bounds.maxX) + maxDist * 1.5;
+      const camBoundZ = Math.abs(bounds.maxZ) + maxDist * 1.5;
+      if (camera.position.x < -camBoundX) {
+        camera.position.x = -camBoundX;
+        target.x = camera.position.x - offset.x;
+        changed = true;
+      } else if (camera.position.x > camBoundX) {
+        camera.position.x = camBoundX;
+        target.x = camera.position.x - offset.x;
+        changed = true;
+      }
+      if (camera.position.z < -camBoundZ) {
+        camera.position.z = -camBoundZ;
+        target.z = camera.position.z - offset.z;
+        changed = true;
+      } else if (camera.position.z > camBoundZ) {
+        camera.position.z = camBoundZ;
+        target.z = camera.position.z - offset.z;
+        changed = true;
+      }
+      // Ensure camera Y stays positive (above the board) to prevent flip
+      if (camera.position.y < 0.5) {
+        camera.position.y = 0.5;
+        changed = true;
+      }
+
+      if (changed) {
         camera.position.copy(target.clone().add(offset));
         controls.update();
         invalidate();

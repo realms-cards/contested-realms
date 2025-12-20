@@ -9,6 +9,7 @@ import { cardRefToPreview } from "@/lib/game/card-preview.types";
 import type { CardPreviewData } from "@/lib/game/card-preview.types";
 import CardGlow from "@/lib/game/components/CardGlow";
 import CardPlane from "@/lib/game/components/CardPlane";
+import MaterialCardBack from "@/lib/game/components/MaterialCardBack";
 import {
   CARD_LONG,
   CARD_SHORT,
@@ -70,9 +71,14 @@ export default function Hand3D({
     (s) => s.getRemoteHighlightColor
   );
   const avatars = useGameStore((s) => s.avatars);
+  const cardbackUrls = useGameStore((s) => s.cardbackUrls);
   const { playCardSelect } = useSound();
 
   const hand = useMemo(() => zones?.[owner]?.hand ?? [], [zones, owner]);
+
+  // Get cardback config for this hand's owner (hand cards always use preset)
+  const ownerCardbacks = cardbackUrls[owner];
+  const usePreset = showCardBacks && ownerCardbacks?.preset;
 
   // Detect if the hand's owner is a Magician (hide card type distinction from opponents)
   const ownerIsMagician = useMemo(
@@ -1148,29 +1154,43 @@ export default function Hand3D({
             )}
 
             <group>
-              <CardPlane
-                slug={showCardBacks ? "" : c.slug || ""}
-                width={CARD_SHORT}
-                height={CARD_LONG}
-                rotationZ={cardRotationZ}
-                upright={!flatCards}
-                depthWrite={showCardBacks ? true : false}
-                depthTest={showCardBacks ? true : false}
-                renderOrder={renderOrder}
-                interactive={!isDragging && !showCardBacks}
-                elevation={0.002 + 0.018 * (hoverWeight || 0)}
-                textureUrl={
-                  showCardBacks
-                    ? ownerIsMagician
-                      ? "/api/assets/cardback_spellbook.png" // Magician: all cards look like spellbook cards
-                      : isSite
-                      ? "/api/assets/cardback_atlas.png"
-                      : "/api/assets/cardback_spellbook.png"
-                    : undefined
-                }
-                forceTextureUrl={showCardBacks}
-                opacity={isDraggedCard ? 0.6 : 1.0} // Make dragged card semi-transparent when shown for return
-              />
+              {usePreset ? (
+                <MaterialCardBack
+                  presetId={ownerCardbacks.preset!}
+                  width={CARD_SHORT}
+                  height={CARD_LONG}
+                  rotationZ={cardRotationZ}
+                  elevation={0.002 + 0.018 * (hoverWeight || 0)}
+                  interactive={false}
+                  depthWrite={true}
+                />
+              ) : (
+                <CardPlane
+                  slug={showCardBacks ? "" : c.slug || ""}
+                  width={CARD_SHORT}
+                  height={CARD_LONG}
+                  rotationZ={cardRotationZ}
+                  upright={!flatCards}
+                  depthWrite={showCardBacks ? true : false}
+                  depthTest={showCardBacks ? true : false}
+                  renderOrder={renderOrder}
+                  interactive={!isDragging && !showCardBacks}
+                  elevation={0.002 + 0.018 * (hoverWeight || 0)}
+                  textureUrl={
+                    showCardBacks
+                      ? ownerIsMagician
+                        ? "/api/assets/cardback_spellbook.png" // Magician: all cards look like spellbook cards
+                        : isSite
+                        ? ownerCardbacks?.atlas ??
+                          "/api/assets/cardback_atlas.png"
+                        : ownerCardbacks?.spellbook ??
+                          "/api/assets/cardback_spellbook.png"
+                      : undefined
+                  }
+                  forceTextureUrl={showCardBacks}
+                  opacity={isDraggedCard ? 0.6 : 1.0} // Make dragged card semi-transparent when shown for return
+                />
+              )}
             </group>
           </group>
         );

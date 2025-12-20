@@ -1318,9 +1318,12 @@ async function finalizeMatch(
             id?: string;
             playerId?: string;
             userId?: string;
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
           } | null> = Array.isArray(tMatch.players)
-            ? (tMatch.players as any)
+            ? (tMatch.players as Array<{
+                id?: string;
+                playerId?: string;
+                userId?: string;
+              } | null>)
             : [];
           const playerIds = playersVal
             .map(

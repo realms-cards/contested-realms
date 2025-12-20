@@ -56,6 +56,7 @@ export default function PlaymatSettingsPage() {
   const [editingPlaymatId, setEditingPlaymatId] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadExpanded, setUploadExpanded] = useState(false);
 
   const [showGrid, setShowGrid] = useState(true);
   const [gridColor, setGridColor] = useState<"grey" | "black">("grey");
@@ -72,8 +73,21 @@ export default function PlaymatSettingsPage() {
   } | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const currentPlaymatCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   const defaultRef = "standard:default";
+
+  // Get current playmat preview URL
+  const currentPlaymatUrl = useMemo(() => {
+    if (!selectedPlaymatRef || selectedPlaymatRef === defaultRef) {
+      return "/playmat.jpg";
+    }
+    if (selectedPlaymatRef.startsWith("custom:")) {
+      const id = selectedPlaymatRef.slice("custom:".length);
+      return `/api/users/me/playmats/${id}/image`;
+    }
+    return "/playmat.jpg";
+  }, [selectedPlaymatRef]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -107,15 +121,38 @@ export default function PlaymatSettingsPage() {
     void refresh();
   }, [refresh]);
 
+  // Render current playmat preview
+  useEffect(() => {
+    const canvas = currentPlaymatCanvasRef.current;
+    if (!canvas) return;
+    const previewW = 360;
+    const previewH = Math.round((previewW * REQUIRED_HEIGHT) / REQUIRED_WIDTH);
+    canvas.width = previewW;
+    canvas.height = previewH;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "#1e293b";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    };
+    img.onerror = () => {
+      ctx.fillStyle = "#64748b";
+      ctx.font = "12px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("Failed to load", canvas.width / 2, canvas.height / 2);
+    };
+    img.src = currentPlaymatUrl;
+  }, [currentPlaymatUrl]);
+
   const [fontLoaded, setFontLoaded] = useState(false);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (canvas) {
-      canvas.width = PREVIEW_WIDTH;
-      canvas.height = PREVIEW_HEIGHT;
-    }
-
     // Load Fantaisie Artistique font for grid tile numbers
     const font = new FontFace(
       "Fantaisie Artistique",
@@ -225,6 +262,11 @@ export default function PlaymatSettingsPage() {
   const renderPreview = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+
+    // Enforce buffer dimensions
+    if (canvas.width !== PREVIEW_WIDTH) canvas.width = PREVIEW_WIDTH;
+    if (canvas.height !== PREVIEW_HEIGHT) canvas.height = PREVIEW_HEIGHT;
+
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
@@ -256,8 +298,10 @@ export default function PlaymatSettingsPage() {
   ]);
 
   useEffect(() => {
-    renderPreview();
-  }, [renderPreview]);
+    if (uploadExpanded) {
+      renderPreview();
+    }
+  }, [renderPreview, uploadExpanded]);
 
   const setSelected = useCallback(async (ref: string | null) => {
     setSelecting(true);
@@ -314,36 +358,40 @@ export default function PlaymatSettingsPage() {
     setUploadError(null);
     if (!file) return;
 
-    const objectUrl = URL.createObjectURL(file);
-    const image = new Image();
-    image.src = objectUrl;
+    try {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const result = e.target?.result as string;
+        const image = new Image();
+        image.onload = () => {
+          if (!image.naturalWidth || !image.naturalHeight) {
+            setUploadError("Invalid image");
+            return;
+          }
 
-    await new Promise<void>((resolve, reject) => {
-      image.onload = () => resolve();
-      image.onerror = () => reject(new Error("Failed to load image"));
-    }).catch((e: unknown) => {
+          const minScale = Math.max(
+            PREVIEW_WIDTH / image.naturalWidth,
+            PREVIEW_HEIGHT / image.naturalHeight
+          );
+
+          const initialScale = minScale;
+          const w = image.naturalWidth * initialScale;
+          const h = image.naturalHeight * initialScale;
+
+          setImg(image);
+          setScale(initialScale);
+          setOffset({
+            x: (PREVIEW_WIDTH - w) / 2,
+            y: (PREVIEW_HEIGHT - h) / 2,
+          });
+        };
+        image.onerror = () => setUploadError("Failed to load image");
+        image.src = result;
+      };
+      reader.readAsDataURL(file);
+    } catch (e: unknown) {
       setUploadError(e instanceof Error ? e.message : "Failed to load image");
-    });
-
-    URL.revokeObjectURL(objectUrl);
-
-    if (!image.naturalWidth || !image.naturalHeight) {
-      setUploadError("Invalid image");
-      return;
     }
-
-    const minScale = Math.max(
-      PREVIEW_WIDTH / image.naturalWidth,
-      PREVIEW_HEIGHT / image.naturalHeight
-    );
-
-    const initialScale = minScale;
-    const w = image.naturalWidth * initialScale;
-    const h = image.naturalHeight * initialScale;
-
-    setImg(image);
-    setScale(initialScale);
-    setOffset({ x: (PREVIEW_WIDTH - w) / 2, y: (PREVIEW_HEIGHT - h) / 2 });
   }, []);
 
   const pointerToCanvas = useCallback(
@@ -591,7 +639,25 @@ export default function PlaymatSettingsPage() {
         ) : (
           <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="rounded-lg bg-slate-900 ring-1 ring-slate-800 p-4">
-              <h2 className="text-base font-semibold">Selected</h2>
+              <h2 className="text-base font-semibold">Current Playmat</h2>
+              <p className="mt-1 text-xs text-slate-400">
+                Preview of your active playmat
+              </p>
+
+              <div className="mt-3 flex justify-center">
+                <canvas
+                  ref={currentPlaymatCanvasRef}
+                  className="rounded ring-1 ring-emerald-500/30"
+                  style={{
+                    width: 360,
+                    height: Math.round(
+                      (360 * REQUIRED_HEIGHT) / REQUIRED_WIDTH
+                    ),
+                  }}
+                />
+              </div>
+
+              <h2 className="mt-6 text-base font-semibold">Select Playmat</h2>
 
               <div className="mt-3 space-y-2">
                 <button
@@ -661,111 +727,125 @@ export default function PlaymatSettingsPage() {
             </div>
 
             <div className="rounded-lg bg-slate-900 ring-1 ring-slate-800 p-4">
-              <h2 className="text-base font-semibold">Upload / Edit</h2>
+              {/* Upload / Edit - Collapsible */}
+              <button
+                type="button"
+                onClick={() => setUploadExpanded((v) => !v)}
+                className="w-full flex items-center justify-between px-3 py-2 rounded bg-white/5 ring-1 ring-white/10 hover:bg-white/10 transition-colors"
+              >
+                <span className="text-sm font-semibold">Upload / Edit</span>
+                <span className="text-slate-400 text-lg">
+                  {uploadExpanded ? "−" : "+"}
+                </span>
+              </button>
 
-              <div className="mt-3 flex flex-col gap-3">
-                <div className="flex items-center gap-2">
-                  <input
-                    value={name}
-                    onChange={(e) => setName(e.currentTarget.value)}
-                    className="h-9 flex-1 rounded bg-slate-800 px-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/60"
-                    placeholder="Playmat name"
-                  />
-                  <label className="h-9 px-3 inline-flex items-center rounded bg-white/10 text-sm text-white hover:bg-white/20 cursor-pointer">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="sr-only"
-                      onChange={(e) => {
-                        const file = e.currentTarget.files?.[0] ?? null;
-                        void handlePickFile(file);
-                        e.currentTarget.value = "";
-                      }}
-                    />
-                    Choose Image
-                  </label>
-                </div>
-
-                <div className="flex items-center justify-between">
+              {uploadExpanded && (
+                <div className="mt-3 flex flex-col gap-3">
                   <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setShowGrid((v) => !v)}
-                      className="h-8 px-3 rounded bg-white/10 text-xs text-white hover:bg-white/20"
-                    >
-                      {showGrid ? "Hide Grid" : "Show Grid"}
-                    </button>
-                    {showGrid && (
+                    <input
+                      value={name}
+                      onChange={(e) => setName(e.currentTarget.value)}
+                      className="h-9 flex-1 rounded bg-slate-800 px-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/60"
+                      placeholder="Playmat name"
+                    />
+                    <label className="h-9 px-3 inline-flex items-center rounded bg-white/10 text-sm text-white hover:bg-white/20 cursor-pointer">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="sr-only"
+                        onChange={(e) => {
+                          const file = e.currentTarget.files?.[0] ?? null;
+                          void handlePickFile(file);
+                          e.currentTarget.value = "";
+                        }}
+                      />
+                      Choose Image
+                    </label>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={() =>
-                          setGridColor((c) => (c === "grey" ? "black" : "grey"))
-                        }
-                        className="h-8 px-3 rounded bg-white/10 text-xs text-white hover:bg-white/20 flex items-center gap-1.5"
+                        onClick={() => setShowGrid((v) => !v)}
+                        className="h-8 px-3 rounded bg-white/10 text-xs text-white hover:bg-white/20"
                       >
-                        <span
-                          className={`w-3 h-3 rounded-sm ring-1 ring-white/30 ${
-                            gridColor === "grey" ? "bg-gray-400" : "bg-black"
-                          }`}
-                        />
-                        {gridColor === "grey" ? "Grey" : "Black"}
+                        {showGrid ? "Hide Grid" : "Show Grid"}
                       </button>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={zoomOut}
-                      disabled={!img}
-                      className="h-8 w-8 rounded bg-white/10 text-white hover:bg-white/20 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center text-lg font-bold"
-                      title="Zoom out"
-                    >
-                      −
-                    </button>
-                    <button
-                      type="button"
-                      onClick={zoomIn}
-                      disabled={!img}
-                      className="h-8 w-8 rounded bg-white/10 text-white hover:bg-white/20 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center text-lg font-bold"
-                      title="Zoom in"
-                    >
-                      +
-                    </button>
-                    <div className="text-[11px] text-slate-400">
-                      Drag to pan
+                      {showGrid && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setGridColor((c) =>
+                              c === "grey" ? "black" : "grey"
+                            )
+                          }
+                          className="h-8 px-3 rounded bg-white/10 text-xs text-white hover:bg-white/20 flex items-center gap-1.5"
+                        >
+                          <span
+                            className={`w-3 h-3 rounded-sm ring-1 ring-white/30 ${
+                              gridColor === "grey" ? "bg-gray-400" : "bg-black"
+                            }`}
+                          />
+                          {gridColor === "grey" ? "Grey" : "Black"}
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={zoomOut}
+                        disabled={!img}
+                        className="h-8 w-8 rounded bg-white/10 text-white hover:bg-white/20 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center text-lg font-bold"
+                        title="Zoom out"
+                      >
+                        −
+                      </button>
+                      <button
+                        type="button"
+                        onClick={zoomIn}
+                        disabled={!img}
+                        className="h-8 w-8 rounded bg-white/10 text-white hover:bg-white/20 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center text-lg font-bold"
+                        title="Zoom in"
+                      >
+                        +
+                      </button>
+                      <div className="text-[11px] text-slate-400">
+                        Drag to pan
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div className="rounded-md overflow-hidden ring-1 ring-white/10 bg-black">
-                  <canvas
-                    ref={canvasRef}
-                    width={PREVIEW_WIDTH}
-                    height={PREVIEW_HEIGHT}
-                    className="block w-full h-auto touch-none"
-                    onPointerDown={onPointerDown}
-                    onPointerMove={onPointerMove}
-                    onPointerUp={onPointerUp}
-                    onPointerCancel={onPointerUp}
-                    onWheel={onWheel}
-                  />
-                </div>
+                  <div className="rounded-md overflow-hidden ring-1 ring-white/10 bg-black">
+                    <canvas
+                      ref={canvasRef}
+                      width={PREVIEW_WIDTH}
+                      height={PREVIEW_HEIGHT}
+                      className="block w-full h-auto touch-none"
+                      onPointerDown={onPointerDown}
+                      onPointerMove={onPointerMove}
+                      onPointerUp={onPointerUp}
+                      onPointerCancel={onPointerUp}
+                      onWheel={onWheel}
+                    />
+                  </div>
 
-                <button
-                  type="button"
-                  disabled={uploading || !img}
-                  onClick={() => void exportAndUpload()}
-                  className={`h-10 rounded bg-purple-600 text-sm font-semibold text-white hover:bg-purple-500 transition-colors ${
-                    uploading || !img ? "opacity-60 cursor-not-allowed" : ""
-                  }`}
-                >
-                  {uploading ? "Uploading…" : "Export & Upload"}
-                </button>
+                  <button
+                    type="button"
+                    disabled={uploading || !img}
+                    onClick={() => void exportAndUpload()}
+                    className={`h-10 rounded bg-purple-600 text-sm font-semibold text-white hover:bg-purple-500 transition-colors ${
+                      uploading || !img ? "opacity-60 cursor-not-allowed" : ""
+                    }`}
+                  >
+                    {uploading ? "Uploading…" : "Export & Upload"}
+                  </button>
 
-                <div className="text-[11px] text-slate-400">
-                  Upload limit: 5 playmats. Stored privately.
+                  <div className="text-[11px] text-slate-400">
+                    Upload limit: 5 playmats. Stored privately.
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         )}

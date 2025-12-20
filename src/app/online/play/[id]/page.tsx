@@ -8,6 +8,7 @@ import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { useOnline } from "@/app/online/online-context";
 import UserBadge from "@/components/auth/UserBadge";
+import BrowseOverlay from "@/components/game/BrowseOverlay";
 import CardPreview from "@/components/game/CardPreview";
 import ChaosTwisterOverlay from "@/components/game/ChaosTwisterOverlay";
 import { ClientCanvas } from "@/components/game/ClientCanvas";
@@ -217,6 +218,35 @@ export default function OnlineMatchPage() {
   useEffect(() => {
     const controller = new AbortController();
 
+    // Helper to parse sleeve refs into URLs and preset
+    const parseSleeveRefs = (
+      data: { selectedSpellbookRef?: string; selectedAtlasRef?: string },
+      baseUrl: string
+    ) => {
+      let spellbookUrl: string | null = null;
+      let preset: string | null = null;
+      const sbRef = data.selectedSpellbookRef;
+      if (sbRef?.startsWith("custom:")) {
+        const id = sbRef.slice("custom:".length);
+        if (id) spellbookUrl = `${baseUrl}/${id}/spellbook`;
+      } else if (sbRef?.startsWith("preset:")) {
+        // Use spellbook preset as the unified preset
+        preset = sbRef;
+      }
+
+      let atlasUrl: string | null = null;
+      const atRef = data.selectedAtlasRef;
+      if (atRef?.startsWith("custom:")) {
+        const id = atRef.slice("custom:".length);
+        if (id) atlasUrl = `${baseUrl}/${id}/atlas`;
+      } else if (atRef?.startsWith("preset:") && !preset) {
+        // Fall back to atlas preset if no spellbook preset
+        preset = atRef;
+      }
+
+      return { spellbookUrl, atlasUrl, preset };
+    };
+
     const fetchCardbacks = async () => {
       // Fetch my cardbacks (for my seat)
       if (resolvedSeat && myPlayerId) {
@@ -226,22 +256,15 @@ export default function OnlineMatchPage() {
             signal: controller.signal,
           });
           if (res.ok) {
-            const data = (await res.json()) as { selectedCardbackRef?: string };
-            const ref = data.selectedCardbackRef;
-            if (ref && ref.startsWith("custom:")) {
-              const id = ref.slice("custom:".length);
-              if (id) {
-                setCardbackUrls(
-                  resolvedSeat,
-                  `/api/users/me/cardbacks/${id}/spellbook`,
-                  `/api/users/me/cardbacks/${id}/atlas`,
-                  null
-                );
-              }
-            } else if (ref && ref.startsWith("preset:")) {
-              // Material preset selected
-              setCardbackUrls(resolvedSeat, null, null, ref);
-            }
+            const data = (await res.json()) as {
+              selectedSpellbookRef?: string;
+              selectedAtlasRef?: string;
+            };
+            const { spellbookUrl, atlasUrl, preset } = parseSleeveRefs(
+              data,
+              "/api/users/me/cardbacks"
+            );
+            setCardbackUrls(resolvedSeat, spellbookUrl, atlasUrl, preset);
           }
         } catch {
           // Ignore fetch errors
@@ -256,22 +279,15 @@ export default function OnlineMatchPage() {
             signal: controller.signal,
           });
           if (res.ok) {
-            const data = (await res.json()) as { selectedCardbackRef?: string };
-            const ref = data.selectedCardbackRef;
-            if (ref && ref.startsWith("custom:")) {
-              const id = ref.slice("custom:".length);
-              if (id) {
-                setCardbackUrls(
-                  opponentSeat,
-                  `/api/users/${opponentPlayerId}/cardbacks/${id}/spellbook`,
-                  `/api/users/${opponentPlayerId}/cardbacks/${id}/atlas`,
-                  null
-                );
-              }
-            } else if (ref && ref.startsWith("preset:")) {
-              // Material preset selected
-              setCardbackUrls(opponentSeat, null, null, ref);
-            }
+            const data = (await res.json()) as {
+              selectedSpellbookRef?: string;
+              selectedAtlasRef?: string;
+            };
+            const { spellbookUrl, atlasUrl, preset } = parseSleeveRefs(
+              data,
+              `/api/users/${opponentPlayerId}/cardbacks`
+            );
+            setCardbackUrls(opponentSeat, spellbookUrl, atlasUrl, preset);
           }
         } catch {
           // Ignore fetch errors
@@ -2285,11 +2301,41 @@ export default function OnlineMatchPage() {
       t.y = 0;
       changed = true;
     }
+
+    // Prevent camera from getting into extreme positions that cause rotation flips.
+    // Clamp the camera's absolute XZ position to prevent gimbal-lock-like behavior
+    // when panning far from the board while zoomed out.
+    const camBoundX = halfW + maxDist * 1.5;
+    const camBoundZ = halfH + maxDist * 1.5;
+    if (cam.position.x < -camBoundX) {
+      cam.position.x = -camBoundX;
+      t.x = cam.position.x - offset.x;
+      changed = true;
+    } else if (cam.position.x > camBoundX) {
+      cam.position.x = camBoundX;
+      t.x = cam.position.x - offset.x;
+      changed = true;
+    }
+    if (cam.position.z < -camBoundZ) {
+      cam.position.z = -camBoundZ;
+      t.z = cam.position.z - offset.z;
+      changed = true;
+    } else if (cam.position.z > camBoundZ) {
+      cam.position.z = camBoundZ;
+      t.z = cam.position.z - offset.z;
+      changed = true;
+    }
+    // Ensure camera Y stays positive (above the board) to prevent flip
+    if (cam.position.y < 0.5) {
+      cam.position.y = 0.5;
+      changed = true;
+    }
+
     if (changed) {
       cam.position.copy(t.clone().add(offset));
       c.update();
     }
-  }, [matW, matH]);
+  }, [matW, matH, maxDist]);
 
   // Handle draft completion
   const handleDraftComplete = useCallback(
@@ -2784,6 +2830,8 @@ export default function OnlineMatchPage() {
           <MagicHudOverlay />
           {/* Chaos Twister Overlay (dexterity minigame) */}
           <ChaosTwisterOverlay transport={transport} />
+          {/* Browse Overlay (spell selection) */}
+          <BrowseOverlay />
           {/* Switch Site HUD Overlay (layout-level, not inside Canvas) */}
           <SwitchSiteHudOverlay />
 
@@ -2803,11 +2851,19 @@ export default function OnlineMatchPage() {
                 }}
               >
                 <color attach="background" args={["#0b0b0c"]} />
-                <ambientLight intensity={0.6} />
+                <ambientLight intensity={0.5} />
                 <directionalLight
-                  position={[10, 12, 8]}
-                  intensity={1}
+                  position={[5, 10, 5]}
+                  intensity={1.2}
                   castShadow
+                  shadow-mapSize-width={2048}
+                  shadow-mapSize-height={2048}
+                  shadow-camera-far={50}
+                  shadow-camera-left={-15}
+                  shadow-camera-right={15}
+                  shadow-camera-top={15}
+                  shadow-camera-bottom={-15}
+                  shadow-bias={-0.0001}
                 />
 
                 {/* Interactive board (physics-enabled) */}

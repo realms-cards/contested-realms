@@ -1003,8 +1003,15 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
 
   handlePeekedCard: (who, pile, cardIndex, action) =>
     set((state) => {
+      console.log("[handlePeekedCard] ENTERED with:", {
+        who,
+        pile,
+        cardIndex,
+        action,
+      });
       get().pushHistory();
       if (state.transport && state.actorKey && state.actorKey !== who) {
+        console.log("[handlePeekedCard] BLOCKED: cannot modify opponent pile");
         get().log("Cannot modify opponent pile without consent");
         return state;
       }

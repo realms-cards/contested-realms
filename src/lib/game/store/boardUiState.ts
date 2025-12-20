@@ -33,8 +33,16 @@ export const createInitialBoardUiState = (): BoardUiDefaults => ({
   showPlaymatOverlay: false, // Default: show playmat, hide grid overlay
   playmatUrl: null, // null until user's preference is loaded
   cardbackUrls: {
-    p1: { spellbook: null, atlas: null, preset: null },
-    p2: { spellbook: null, atlas: null, preset: null },
+    p1: {
+      spellbook: null,
+      atlas: null,
+      preset: null,
+    },
+    p2: {
+      spellbook: null,
+      atlas: null,
+      preset: null,
+    },
   },
   gridColor: "white",
   gridBlend: "normal",
@@ -98,7 +106,11 @@ export const createBoardUiSlice: StateCreator<
     set((state) => ({
       cardbackUrls: {
         ...state.cardbackUrls,
-        [who]: { spellbook, atlas, preset: preset ?? null },
+        [who]: {
+          spellbook,
+          atlas,
+          preset: preset ?? null,
+        },
       },
     })),
   setGridColor: (color: "white" | "black") => set({ gridColor: color }),

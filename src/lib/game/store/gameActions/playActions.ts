@@ -104,10 +104,13 @@ export const createPlayActionsSlice: StateCreator<
       }
       // Guard: Must draw a card before playing during Start/Draw phase
       // (Start phase is where the turn begins, player must draw first)
+      // Exception: Turn 1 - the first player does NOT draw on their first turn
+      const isFirstTurn = state.turn === 1;
       if (
         (state.phase === "Start" || state.phase === "Draw") &&
         !state.hasDrawnThisTurn &&
-        isCurrent
+        isCurrent &&
+        !isFirstTurn
       ) {
         const message = `Must draw a card before playing. Draw from Spellbook or Atlas first.`;
         get().log(message);
@@ -297,6 +300,12 @@ export const createPlayActionsSlice: StateCreator<
       const cardNameLower = (card.name || "").toLowerCase();
       const isChaosTwister = cardNameLower.includes("chaos twister");
       const isBrowse = cardNameLower === "browse";
+      console.log("[playActions] Card played:", {
+        cardName: card.name,
+        cardNameLower,
+        isBrowse,
+        type,
+      });
 
       // If this is Chaos Twister, begin the dexterity minigame flow
       if (isChaosTwister && newest) {
@@ -402,12 +411,15 @@ export const createPlayActionsSlice: StateCreator<
       }
       // Guard: Must draw a card before playing during Start/Draw phase
       // Exception: Playing a site from atlas IS the draw action (counts as free draw)
+      // Exception: Turn 1 - the first player does NOT draw on their first turn
       const isPlayingSiteFromAtlas = type.includes("site") && from === "atlas";
+      const isFirstTurnPile = state.turn === 1;
       if (
         (state.phase === "Start" || state.phase === "Draw") &&
         !state.hasDrawnThisTurn &&
         isCurrent &&
-        !isPlayingSiteFromAtlas
+        !isPlayingSiteFromAtlas &&
+        !isFirstTurnPile
       ) {
         const message = `Must draw a card before playing. Draw from Spellbook or Atlas first.`;
         get().log(message);

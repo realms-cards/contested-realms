@@ -7,7 +7,7 @@ export interface FeatureFlags {
   tournaments: {
     enabled: boolean;
     maxConcurrentTournaments: number;
-    supportedFormats: readonly ['sealed', 'draft', 'constructed'];
+    supportedFormats: readonly ["sealed", "draft", "constructed"];
   };
   seatVideo: {
     enabled: boolean;
@@ -23,20 +23,29 @@ export interface FeatureFlags {
   undo: {
     enabled: boolean;
   };
+  cardSleeves: {
+    enabled: boolean;
+  };
 }
 
 /**
  * Parse boolean from environment variable
  */
-function parseBooleanFlag(envVar: string | undefined, defaultValue: boolean = false): boolean {
+function parseBooleanFlag(
+  envVar: string | undefined,
+  defaultValue: boolean = false
+): boolean {
   if (!envVar) return defaultValue;
-  return envVar.toLowerCase() === 'true';
+  return envVar.toLowerCase() === "true";
 }
 
 /**
  * Parse number from environment variable
  */
-function parseNumberFlag(envVar: string | undefined, defaultValue: number): number {
+function parseNumberFlag(
+  envVar: string | undefined,
+  defaultValue: number
+): number {
   if (!envVar) return defaultValue;
   const parsed = parseInt(envVar, 10);
   return isNaN(parsed) ? defaultValue : parsed;
@@ -47,19 +56,37 @@ function parseNumberFlag(envVar: string | undefined, defaultValue: number): numb
  */
 export const FEATURE_FLAGS: FeatureFlags = {
   tournaments: {
-    enabled: parseBooleanFlag(process.env.NEXT_PUBLIC_FEATURE_TOURNAMENTS, false),
-    maxConcurrentTournaments: parseNumberFlag(process.env.NEXT_PUBLIC_MAX_CONCURRENT_TOURNAMENTS, 10),
-    supportedFormats: ['sealed', 'draft', 'constructed'] as const
+    enabled: parseBooleanFlag(
+      process.env.NEXT_PUBLIC_FEATURE_TOURNAMENTS,
+      false
+    ),
+    maxConcurrentTournaments: parseNumberFlag(
+      process.env.NEXT_PUBLIC_MAX_CONCURRENT_TOURNAMENTS,
+      10
+    ),
+    supportedFormats: ["sealed", "draft", "constructed"] as const,
   },
   seatVideo: {
-    enabled: parseBooleanFlag(process.env.NEXT_PUBLIC_FEATURE_SEAT_VIDEO, false)
+    enabled: parseBooleanFlag(
+      process.env.NEXT_PUBLIC_FEATURE_SEAT_VIDEO,
+      false
+    ),
   },
   audioOnlyRtc: {
-    enabled: parseBooleanFlag(process.env.NEXT_PUBLIC_FEATURE_AUDIO_ONLY, false)
+    enabled: parseBooleanFlag(
+      process.env.NEXT_PUBLIC_FEATURE_AUDIO_ONLY,
+      false
+    ),
   },
   undo: {
-    enabled: parseBooleanFlag(process.env.NEXT_PUBLIC_FEATURE_UNDO, true)
-  }
+    enabled: parseBooleanFlag(process.env.NEXT_PUBLIC_FEATURE_UNDO, true),
+  },
+  cardSleeves: {
+    enabled: parseBooleanFlag(
+      process.env.NEXT_PUBLIC_FEATURE_CARD_SLEEVES,
+      true
+    ),
+  },
 };
 
 /**
@@ -72,7 +99,9 @@ export function isFeatureEnabled(feature: keyof FeatureFlags): boolean {
 /**
  * Get feature configuration
  */
-export function getFeatureConfig<T extends keyof FeatureFlags>(feature: T): FeatureFlags[T] {
+export function getFeatureConfig<T extends keyof FeatureFlags>(
+  feature: T
+): FeatureFlags[T] {
   return FEATURE_FLAGS[feature];
 }
 
@@ -81,10 +110,13 @@ export function getFeatureConfig<T extends keyof FeatureFlags>(feature: T): Feat
  */
 export const tournamentFeatures = {
   isEnabled: () => FEATURE_FLAGS.tournaments.enabled,
-  getMaxConcurrentTournaments: () => FEATURE_FLAGS.tournaments.maxConcurrentTournaments,
+  getMaxConcurrentTournaments: () =>
+    FEATURE_FLAGS.tournaments.maxConcurrentTournaments,
   getSupportedFormats: () => FEATURE_FLAGS.tournaments.supportedFormats,
-  isFormatSupported: (format: string) => 
-    FEATURE_FLAGS.tournaments.supportedFormats.includes(format as 'sealed' | 'draft' | 'constructed')
+  isFormatSupported: (format: string) =>
+    FEATURE_FLAGS.tournaments.supportedFormats.includes(
+      format as "sealed" | "draft" | "constructed"
+    ),
 } as const;
 
 /**
@@ -93,3 +125,4 @@ export const tournamentFeatures = {
 export const FEATURE_SEAT_VIDEO: boolean = FEATURE_FLAGS.seatVideo.enabled;
 export const FEATURE_AUDIO_ONLY: boolean = FEATURE_FLAGS.audioOnlyRtc.enabled;
 export const FEATURE_UNDO: boolean = FEATURE_FLAGS.undo.enabled;
+export const FEATURE_CARD_SLEEVES: boolean = FEATURE_FLAGS.cardSleeves.enabled;

@@ -19,12 +19,15 @@ export async function GET(
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { selectedCardbackRef: true },
+      select: { selectedSpellbookRef: true, selectedAtlasRef: true },
     });
 
     if (!user) return json({ error: "User not found" }, 404);
 
-    return json({ selectedCardbackRef: user.selectedCardbackRef ?? null });
+    return json({
+      selectedSpellbookRef: user.selectedSpellbookRef ?? null,
+      selectedAtlasRef: user.selectedAtlasRef ?? null,
+    });
   } catch (e: unknown) {
     const message =
       e instanceof Error

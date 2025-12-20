@@ -21,7 +21,9 @@ export default function BrowseOverlay({}: BrowseOverlayProps) {
   // Local state for drag-and-drop reordering
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
-  const isCaster = pending?.casterSeat === actorKey;
+  // In hotseat mode (actorKey is null), always show caster UI since both players share the screen
+  // In online mode, only show caster UI if we're the caster
+  const isCaster = actorKey === null || pending?.casterSeat === actorKey;
 
   // Get the remaining cards (not selected) in their current order
   const remainingCards = useMemo(() => {
@@ -79,10 +81,14 @@ export default function BrowseOverlay({}: BrowseOverlayProps) {
     (orderIndex: number) => {
       if (!pending || orderIndex === 0) return;
       const newOrder = [...pending.bottomOrder];
-      [newOrder[orderIndex - 1], newOrder[orderIndex]] = [
-        newOrder[orderIndex],
-        newOrder[orderIndex - 1],
-      ];
+      const temp = newOrder[orderIndex - 1];
+      newOrder[orderIndex - 1] = newOrder[orderIndex];
+      newOrder[orderIndex] = temp;
+      console.log("[Browse] moveUp", {
+        orderIndex,
+        newOrder,
+        bottomOrder: pending.bottomOrder,
+      });
       setBrowseBottomOrder(newOrder);
     },
     [pending, setBrowseBottomOrder]
@@ -93,10 +99,14 @@ export default function BrowseOverlay({}: BrowseOverlayProps) {
     (orderIndex: number) => {
       if (!pending || orderIndex >= pending.bottomOrder.length - 1) return;
       const newOrder = [...pending.bottomOrder];
-      [newOrder[orderIndex], newOrder[orderIndex + 1]] = [
-        newOrder[orderIndex + 1],
-        newOrder[orderIndex],
-      ];
+      const temp = newOrder[orderIndex];
+      newOrder[orderIndex] = newOrder[orderIndex + 1];
+      newOrder[orderIndex + 1] = temp;
+      console.log("[Browse] moveDown", {
+        orderIndex,
+        newOrder,
+        bottomOrder: pending.bottomOrder,
+      });
       setBrowseBottomOrder(newOrder);
     },
     [pending, setBrowseBottomOrder]
@@ -111,6 +121,16 @@ export default function BrowseOverlay({}: BrowseOverlayProps) {
   const handleCancel = useCallback(() => {
     cancelBrowse();
   }, [cancelBrowse]);
+
+  // Debug logging
+  console.log("[BrowseOverlay] render", {
+    pending: !!pending,
+    phase: pending?.phase,
+    actorKey,
+    casterSeat: pending?.casterSeat,
+    isCaster,
+    revealedCardsCount: pending?.revealedCards?.length,
+  });
 
   if (!pending) return null;
 
@@ -243,16 +263,26 @@ export default function BrowseOverlay({}: BrowseOverlayProps) {
                           </div>
                           <div className="flex gap-1">
                             <button
-                              onClick={() => moveUp(orderIndex)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                e.preventDefault();
+                                moveUp(orderIndex);
+                              }}
+                              onMouseDown={(e) => e.stopPropagation()}
                               disabled={orderIndex === 0}
-                              className="px-2 py-1 rounded bg-white/10 hover:bg-white/20 disabled:opacity-30 disabled:cursor-not-allowed text-white/70 text-xs"
+                              className="px-3 py-2 rounded bg-white/20 hover:bg-white/30 active:bg-white/40 disabled:opacity-30 disabled:cursor-not-allowed text-white text-sm font-bold select-none touch-manipulation"
                             >
                               ↑
                             </button>
                             <button
-                              onClick={() => moveDown(orderIndex)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                e.preventDefault();
+                                moveDown(orderIndex);
+                              }}
+                              onMouseDown={(e) => e.stopPropagation()}
                               disabled={orderIndex >= remainingCards.length - 1}
-                              className="px-2 py-1 rounded bg-white/10 hover:bg-white/20 disabled:opacity-30 disabled:cursor-not-allowed text-white/70 text-xs"
+                              className="px-3 py-2 rounded bg-white/20 hover:bg-white/30 active:bg-white/40 disabled:opacity-30 disabled:cursor-not-allowed text-white text-sm font-bold select-none touch-manipulation"
                             >
                               ↓
                             </button>
