@@ -75,6 +75,33 @@ function sanitizeUserImage(image: string | null | undefined): string | null {
   return image;
 }
 
+function isEnabledFlag(value: string | undefined): boolean {
+  if (!value) return false;
+  const normalized = value.toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "yes";
+}
+
+const authDebugTokens = isEnabledFlag(process.env.NEXTAUTH_DEBUG_TOKENS);
+
+function maskEmail(email: string | null | undefined): string | null {
+  if (!email) return null;
+  const [user, domain] = email.split("@");
+  if (!domain) return "***";
+  const userMasked = user ? `${user[0]}***` : "***";
+  return `${userMasked}@${domain}`;
+}
+
+function maskToken(token: string | null | undefined): string | null {
+  if (!token) return null;
+  if (token.length <= 10) return `${token.slice(0, 3)}***`;
+  return `${token.slice(0, 6)}…${token.slice(-4)}`;
+}
+
+function logTokenDebug(message: string, data: Record<string, unknown>) {
+  if (!authDebugTokens) return;
+  console.log(`[auth][token] ${message}`, data);
+}
+
 const discordClientId = process.env.DISCORD_CLIENT_ID;
 const discordClientSecret = process.env.DISCORD_CLIENT_SECRET;
 
@@ -106,6 +133,36 @@ function buildConfirmMagicLink(originalUrl: string, identifier: string): string 
     return originalUrl;
   }
 }
+
+const baseAdapter = PrismaAdapter(prisma);
+const authAdapter = {
+  ...baseAdapter,
+  async createVerificationToken(data: {
+    identifier: string;
+    token: string;
+    expires: Date;
+  }) {
+    if (!baseAdapter.createVerificationToken) return null;
+    const result = await baseAdapter.createVerificationToken(data);
+    logTokenDebug("create", {
+      identifier: maskEmail(data.identifier),
+      token: maskToken(data.token),
+      expires: data.expires?.toISOString?.() ?? null,
+      stored: Boolean(result),
+    });
+    return result ?? null;
+  },
+  async useVerificationToken(data: { identifier: string; token: string }) {
+    if (!baseAdapter.useVerificationToken) return null;
+    const result = await baseAdapter.useVerificationToken(data);
+    logTokenDebug("consume", {
+      identifier: maskEmail(data.identifier),
+      token: maskToken(data.token),
+      found: Boolean(result),
+    });
+    return result ?? null;
+  },
+};
 
 async function sendMagicLinkEmail({
   identifier,
@@ -361,7 +418,7 @@ const providers = [
 ];
 
 export const authOptions: NextAuthOptions = {
-  adapter: PrismaAdapter(prisma),
+  adapter: authAdapter,
   providers,
   session: {
     strategy: "jwt",
