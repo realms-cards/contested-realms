@@ -1474,4 +1474,298 @@ export function handleCustomMessage(
   if (typeof t === "string" && t.startsWith("browse")) {
     console.log(`[Browse] Unhandled message type: ${t}`, msg);
   }
+
+  // --- Common Sense spell message handlers ---
+  if (t === "commonSenseBegin") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const spellAny = (msg as { spell?: unknown }).spell as unknown;
+    const casterSeat = (msg as { casterSeat?: unknown }).casterSeat as
+      | PlayerKey
+      | undefined;
+    const eligibleCount = (msg as { eligibleCount?: unknown }).eligibleCount as
+      | number
+      | undefined;
+    if (!id || !spellAny || !casterSeat) return;
+    const rec = spellAny as Record<string, unknown>;
+    // Opponent sees Common Sense begin but doesn't see the actual cards
+    set({
+      pendingCommonSense: {
+        id,
+        spell: {
+          at: rec.at as CellKey,
+          index: Number(rec.index),
+          instanceId: (rec.instanceId as string | null) ?? null,
+          owner: Number(rec.owner) as 1 | 2,
+          card: rec.card as CardRef,
+        },
+        casterSeat,
+        phase: "selecting",
+        eligibleCards: [], // Opponent doesn't see the cards
+        selectedCardIndex: null,
+        createdAt: Date.now(),
+      },
+    } as Partial<GameState> as GameState);
+    try {
+      get().log(
+        `[${casterSeat.toUpperCase()}] is searching for Ordinary cards (${
+          eligibleCount ?? "?"
+        } found)...`
+      );
+    } catch {}
+    return;
+  }
+  if (t === "commonSenseSelectCard") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const cardIndex = (msg as { cardIndex?: unknown }).cardIndex as
+      | number
+      | undefined;
+    if (!id || cardIndex == null) return;
+    set((s) => {
+      if (!s.pendingCommonSense || s.pendingCommonSense.id !== id)
+        return s as GameState;
+      return {
+        pendingCommonSense: {
+          ...s.pendingCommonSense,
+          selectedCardIndex: cardIndex,
+        },
+      } as Partial<GameState> as GameState;
+    });
+    return;
+  }
+  if (t === "commonSenseResolve") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const selectedCardName = (msg as { selectedCardName?: unknown })
+      .selectedCardName as string | undefined;
+    const pending = get().pendingCommonSense;
+    if (!pending || (id && pending.id !== id)) return;
+
+    // Move spell to graveyard (opponent side)
+    try {
+      get().movePermanentToZone(
+        pending.spell.at,
+        pending.spell.index,
+        "graveyard"
+      );
+    } catch {}
+
+    set({ pendingCommonSense: null } as Partial<GameState> as GameState);
+    try {
+      get().log(
+        `[${pending.casterSeat.toUpperCase()}] Common Sense resolved: found ${
+          selectedCardName ?? "a card"
+        }`
+      );
+    } catch {}
+    return;
+  }
+  if (t === "commonSenseCancel") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    set((s) => {
+      if (!s.pendingCommonSense || (id && s.pendingCommonSense.id !== id))
+        return s as GameState;
+      return { pendingCommonSense: null } as Partial<GameState> as GameState;
+    });
+    try {
+      get().log("Common Sense cancelled");
+    } catch {}
+    return;
+  }
+
+  // --- Pith Imp message handlers ---
+  if (t === "pithImpSteal") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const minionAny = (msg as { minion?: unknown }).minion as unknown;
+    const ownerSeat = (msg as { ownerSeat?: unknown }).ownerSeat as
+      | PlayerKey
+      | undefined;
+    const stolenCardName = (msg as { stolenCardName?: unknown })
+      .stolenCardName as string | undefined;
+    const stolenCardAny = (msg as { stolenCard?: unknown })
+      .stolenCard as unknown;
+    const victimSeat = (msg as { victimSeat?: unknown }).victimSeat as
+      | PlayerKey
+      | undefined;
+    if (!id || !minionAny || !ownerSeat || !victimSeat) return;
+
+    const minionRec = minionAny as Record<string, unknown>;
+    const stolenCard = stolenCardAny as CardRef | undefined;
+
+    // Add to stolen cards tracking
+    const newStolenEntry = {
+      id,
+      minion: {
+        at: minionRec.at as CellKey,
+        index: Number(minionRec.index),
+        instanceId: (minionRec.instanceId as string | null) ?? null,
+        owner: Number(minionRec.owner) as 1 | 2,
+        card: minionRec.card as CardRef,
+      },
+      ownerSeat,
+      stolenCard: stolenCard as CardRef,
+      victimSeat,
+      createdAt: Date.now(),
+    };
+
+    set((s) => ({
+      stolenCards: [...s.stolenCards, newStolenEntry],
+    })) as unknown as void;
+
+    try {
+      get().log(
+        `[${ownerSeat.toUpperCase()}] Pith Imp steals ${
+          stolenCardName ?? "a spell"
+        } from ${victimSeat.toUpperCase()}'s hand!`
+      );
+    } catch {}
+    return;
+  }
+  if (t === "pithImpReturn") {
+    const minionAt = (msg as { minionAt?: unknown }).minionAt as
+      | CellKey
+      | undefined;
+    const minionInstanceId = (msg as { minionInstanceId?: unknown })
+      .minionInstanceId as string | null | undefined;
+    const returnedCards = (msg as { returnedCards?: unknown }).returnedCards as
+      | Array<{ cardName: string; victimSeat: PlayerKey }>
+      | undefined;
+
+    if (!minionAt) return;
+
+    // Remove from stolen cards tracking
+    set((s) => ({
+      stolenCards: s.stolenCards.filter(
+        (sc) =>
+          sc.minion.at !== minionAt &&
+          (!minionInstanceId || sc.minion.instanceId !== minionInstanceId)
+      ),
+    })) as unknown as void;
+
+    if (returnedCards && returnedCards.length > 0) {
+      for (const rc of returnedCards) {
+        try {
+          get().log(
+            `${
+              rc.cardName
+            } returns to ${rc.victimSeat.toUpperCase()}'s hand (Pith Imp left the realm)`
+          );
+        } catch {}
+      }
+    }
+    return;
+  }
+
+  // --- Morgana le Fay message handlers ---
+  if (t === "morganaGenesis") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const minionAny = (msg as { minion?: unknown }).minion as unknown;
+    const ownerSeat = (msg as { ownerSeat?: unknown }).ownerSeat as
+      | PlayerKey
+      | undefined;
+    const drawnCount = (msg as { drawnCount?: unknown }).drawnCount as
+      | number
+      | undefined;
+    const drawnCardsAny = (msg as { drawnCards?: unknown })
+      .drawnCards as unknown;
+    if (!id || !minionAny || !ownerSeat) return;
+
+    const minionRec = minionAny as Record<string, unknown>;
+    const drawnCards = Array.isArray(drawnCardsAny)
+      ? (drawnCardsAny as CardRef[])
+      : [];
+
+    // Create Morgana's private hand entry
+    const newMorganaHand = {
+      id,
+      minion: {
+        at: minionRec.at as CellKey,
+        index: Number(minionRec.index),
+        instanceId: (minionRec.instanceId as string | null) ?? null,
+        owner: Number(minionRec.owner) as 1 | 2,
+        card: minionRec.card as CardRef,
+      },
+      ownerSeat,
+      hand: drawnCards,
+      createdAt: Date.now(),
+    };
+
+    set((s) => ({
+      morganaHands: [...s.morganaHands, newMorganaHand],
+    })) as unknown as void;
+
+    try {
+      get().log(
+        `[${ownerSeat.toUpperCase()}] Morgana le Fay draws her own hand of ${
+          drawnCount ?? drawnCards.length
+        } spell${(drawnCount ?? drawnCards.length) !== 1 ? "s" : ""}`
+      );
+    } catch {}
+    return;
+  }
+  if (t === "morganaCast") {
+    const morganaId = (msg as { morganaId?: unknown }).morganaId as
+      | string
+      | undefined;
+    const cardIndex = (msg as { cardIndex?: unknown }).cardIndex as
+      | number
+      | undefined;
+    const cardName = (msg as { cardName?: unknown }).cardName as
+      | string
+      | undefined;
+    const targetTileAny = (msg as { targetTile?: unknown })
+      .targetTile as unknown;
+    if (!morganaId || cardIndex == null) return;
+
+    // Update Morgana's hand (remove the cast card)
+    set((s) => ({
+      morganaHands: s.morganaHands.map((m) => {
+        if (m.id !== morganaId) return m;
+        const newHand = [...m.hand];
+        if (cardIndex >= 0 && cardIndex < newHand.length) {
+          newHand.splice(cardIndex, 1);
+        }
+        return { ...m, hand: newHand };
+      }),
+    })) as unknown as void;
+
+    const targetTile = targetTileAny as { x: number; y: number } | undefined;
+    try {
+      get().log(
+        `Morgana le Fay casts ${cardName ?? "a spell"}${
+          targetTile ? ` at tile ${targetTile.x},${targetTile.y}` : ""
+        }`
+      );
+    } catch {}
+    return;
+  }
+  if (t === "morganaRemove") {
+    const minionAt = (msg as { minionAt?: unknown }).minionAt as
+      | CellKey
+      | undefined;
+    const minionInstanceId = (msg as { minionInstanceId?: unknown })
+      .minionInstanceId as string | null | undefined;
+    const discardedCount = (msg as { discardedCount?: unknown })
+      .discardedCount as number | undefined;
+
+    if (!minionAt) return;
+
+    // Remove from morganaHands tracking
+    set((s) => ({
+      morganaHands: s.morganaHands.filter(
+        (m) =>
+          m.minion.at !== minionAt &&
+          (!minionInstanceId || m.minion.instanceId !== minionInstanceId)
+      ),
+    })) as unknown as void;
+
+    if (discardedCount && discardedCount > 0) {
+      try {
+        get().log(
+          `Morgana le Fay's remaining ${discardedCount} spell${
+            discardedCount !== 1 ? "s" : ""
+          } go to graveyard`
+        );
+      } catch {}
+    }
+    return;
+  }
 }

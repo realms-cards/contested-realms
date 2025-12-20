@@ -343,6 +343,68 @@ export type PendingBrowse = {
   createdAt: number;
 };
 
+// --- Common Sense Spell State ------------------------------------------------
+// "Search your spellbook for an Ordinary card, reveal it, and put it into your hand. Shuffle your spellbook."
+export type CommonSensePhase = "selecting" | "resolving" | "complete";
+
+export type PendingCommonSense = {
+  id: string;
+  spell: {
+    at: CellKey;
+    index: number;
+    instanceId?: string | null;
+    owner: 1 | 2;
+    card: CardRef;
+  };
+  casterSeat: PlayerKey;
+  phase: CommonSensePhase;
+  // All Ordinary cards in spellbook that can be selected
+  eligibleCards: CardRef[];
+  // Index of selected card in eligibleCards array
+  selectedCardIndex: number | null;
+  createdAt: number;
+};
+
+// --- Pith Imp Stolen Card State ------------------------------------------------
+// "Genesis → Steals a random spell from your opponent's hand until it leaves the realm."
+export type PendingStolenCard = {
+  id: string;
+  // The Pith Imp minion that stole the card
+  minion: {
+    at: CellKey;
+    index: number;
+    instanceId?: string | null;
+    owner: 1 | 2;
+    card: CardRef;
+  };
+  // Who played the Pith Imp
+  ownerSeat: PlayerKey;
+  // The stolen card (random spell from opponent's hand)
+  stolenCard: CardRef;
+  // Original owner of the stolen card
+  victimSeat: PlayerKey;
+  createdAt: number;
+};
+
+// --- Morgana le Fay Private Hand State ------------------------------------------------
+// "Genesis → Morgana draws her own hand of three spells, which only she can cast."
+export type MorganaHandEntry = {
+  id: string;
+  // The Morgana minion that has this private hand
+  minion: {
+    at: CellKey;
+    index: number;
+    instanceId?: string | null;
+    owner: 1 | 2;
+    card: CardRef;
+  };
+  // Who played Morgana
+  ownerSeat: PlayerKey;
+  // The private hand of spells (up to 3)
+  hand: CardRef[];
+  createdAt: number;
+};
+
 // Context menu targeting for click-driven actions
 export type ContextMenuTarget =
   | { kind: "site"; x: number; y: number }
@@ -665,6 +727,66 @@ export type GameState = {
   setBrowseBottomOrder: (order: number[]) => void;
   resolveBrowse: () => void;
   cancelBrowse: () => void;
+  // Common Sense spell flow
+  pendingCommonSense: PendingCommonSense | null;
+  beginCommonSense: (input: {
+    spell: {
+      at: CellKey;
+      index: number;
+      instanceId?: string | null;
+      owner: 1 | 2;
+      card: CardRef;
+    };
+    casterSeat: PlayerKey;
+  }) => void;
+  selectCommonSenseCard: (cardIndex: number) => void;
+  resolveCommonSense: () => void;
+  cancelCommonSense: () => void;
+  // Pith Imp stolen cards tracking
+  stolenCards: PendingStolenCard[];
+  triggerPithImpGenesis: (input: {
+    minion: {
+      at: CellKey;
+      index: number;
+      instanceId?: string | null;
+      owner: 1 | 2;
+      card: CardRef;
+    };
+    ownerSeat: PlayerKey;
+  }) => void;
+  returnStolenCard: (
+    minionInstanceId: string | null,
+    minionAt: CellKey
+  ) => void;
+  getStolenCardsForMinion: (
+    minionInstanceId: string | null,
+    minionAt: CellKey
+  ) => CardRef[];
+  // Morgana le Fay private hands
+  morganaHands: MorganaHandEntry[];
+  triggerMorganaGenesis: (input: {
+    minion: {
+      at: CellKey;
+      index: number;
+      instanceId?: string | null;
+      owner: 1 | 2;
+      card: CardRef;
+    };
+    ownerSeat: PlayerKey;
+  }) => void;
+  castFromMorganaHand: (
+    morganaId: string,
+    cardIndex: number,
+    targetTile: { x: number; y: number }
+  ) => void;
+  removeMorganaHand: (
+    minionInstanceId: string | null,
+    minionAt: CellKey
+  ) => void;
+  getMorganaHandForMinion: (
+    minionInstanceId: string | null,
+    minionAt: CellKey
+  ) => CardRef[];
   beginMagicCast: (input: {
     tile: { x: number; y: number };
     spell: {
@@ -1123,5 +1245,7 @@ export type ServerPatchT = Partial<{
   portalState: GameState["portalState"];
   seerState: GameState["seerState"];
   imposterMasks: GameState["imposterMasks"];
+  stolenCards: GameState["stolenCards"];
+  morganaHands: GameState["morganaHands"];
   __replaceKeys: string[];
 }>;

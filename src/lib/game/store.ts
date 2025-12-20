@@ -9,6 +9,7 @@ import { createBrowseSlice } from "./store/browseState";
 import { createCardMetaSlice } from "./store/cardMetaState";
 import { createChaosTwisterSlice } from "./store/chaosTwisterState";
 import { createCombatSlice } from "./store/combatState";
+import { createCommonSenseSlice } from "./store/commonSenseState";
 import {
   createCoreSlice,
   createInitialPlayers,
@@ -31,8 +32,10 @@ import {
 } from "./store/imposterMaskState";
 import { createInteractionSlice } from "./store/interactionState";
 import { createMagicSlice } from "./store/magicState";
+import { createMorganaSlice } from "./store/morganaState";
 import { createNetworkSlice } from "./store/networkState";
 import { createPermanentSlice } from "./store/permanentState";
+import { createPithImpSlice } from "./store/pithImpState";
 import { createPortalSlice } from "./store/portalState";
 import { createPositionSlice } from "./store/positionState";
 import { createPreferenceSlice } from "./store/preferenceState";
@@ -116,6 +119,9 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   ...createMagicSlice(set, get, storeApi),
   ...createChaosTwisterSlice(set, get, storeApi),
   ...createBrowseSlice(set, get, storeApi),
+  ...createCommonSenseSlice(set, get, storeApi),
+  ...createPithImpSlice(set, get, storeApi),
+  ...createMorganaSlice(set, get, storeApi),
   ...createPreferenceSlice(set, get, storeApi),
   ...createCardMetaSlice(set, get, storeApi),
   ...createSessionSlice(set, get, storeApi),
@@ -183,6 +189,9 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         pendingMagic: null,
         pendingChaosTwister: null,
         pendingBrowse: null,
+        pendingCommonSense: null,
+        stolenCards: [],
+        morganaHands: [],
         portalState: null,
         seerState: null,
         imposterMasks: createInitialImposterMasks(),
