@@ -300,12 +300,13 @@ export default function EnhancedOnlineDraft3DScreen({
 
     if (pickCount === lastSavedPickCountRef.current) return;
 
+    // Store only slugs to avoid localStorage quota issues (full DraftCard objects are too large)
+    const slugsOnly = picksArray
+      .filter((c): c is DraftCard => c != null && typeof c === "object")
+      .map((c) => c.slug)
+      .filter(Boolean);
+
     try {
-      // Store only slugs to avoid localStorage quota issues (full DraftCard objects are too large)
-      const slugsOnly = picksArray
-        .filter((c): c is DraftCard => c != null && typeof c === "object")
-        .map((c) => c.slug)
-        .filter(Boolean);
       localStorage.setItem(key, JSON.stringify(slugsOnly));
       lastSavedPickCountRef.current = pickCount;
     } catch (err) {
