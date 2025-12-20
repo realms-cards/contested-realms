@@ -541,15 +541,13 @@ export default function GameToolbox({
       log("Select a permanent on the board first");
       return;
     }
-    const [xStr] = sel.at.split(",");
     const owner = permanents[sel.at]?.[sel.index]?.owner ?? 1;
     const seat: PlayerKey = seatFromOwner((owner ?? 1) as 1 | 2);
 
     const apply = () => {
-      // Ensure ability and position exist, then update
-      const permanentId =
-        permanents[sel.at]?.[sel.index]?.card?.cardId ??
-        parseInt(xStr) * 1000 + sel.index;
+      // Use cell position + index as unique ID to avoid linking multiple copies of the same card
+      const [cellX, cellY] = sel.at.split(",").map(Number);
+      const permanentId = cellX * 100000 + cellY * 1000 + sel.index;
       setPermanentAbility(permanentId, {
         permanentId,
         canBurrow: true,

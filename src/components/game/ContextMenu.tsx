@@ -146,8 +146,9 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     if (t.kind === "permanent") {
       const item = permanents[t.at]?.[t.index];
       if (item?.card) {
-        const permanentId =
-          item?.card?.cardId ?? parseInt(t.at.split(",")[0]) * 1000 + t.index;
+        // Use cell position + index as unique ID to avoid linking multiple copies of the same card
+        const [cellX, cellY] = t.at.split(",").map(Number);
+        const permanentId = cellX * 100000 + cellY * 1000 + t.index;
 
         // Fetch abilities asynchronously from API
         (async () => {

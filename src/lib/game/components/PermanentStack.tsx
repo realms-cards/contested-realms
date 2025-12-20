@@ -335,7 +335,9 @@ export function PermanentStack({
         const offX = p.offset?.[0] ?? 0;
         const offZ = p.offset?.[1] ?? 0;
 
-        const permanentId = p.card.cardId;
+        // Use cell position + index as unique ID to avoid linking multiple copies of the same card
+        const [cellX, cellY] = key.split(",").map(Number);
+        const permanentId = cellX * 100000 + cellY * 1000 + idx;
         const permanentPosition = permanentPositions[permanentId];
         const isBurrowed =
           permanentPosition?.state === "burrowed" ||
