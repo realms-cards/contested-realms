@@ -47,7 +47,11 @@ export default function HandPeekDialog({
       if (e.key === "Escape") onClose();
     };
     const handleClickOutside = (e: MouseEvent) => {
-      if (dialogRef.current && !dialogRef.current.contains(e.target as Node)) {
+      const target = e.target as HTMLElement;
+      // Don't close if clicking inside the dialog or the context menu
+      if (dialogRef.current && !dialogRef.current.contains(target)) {
+        // Check if clicking on context menu (which is outside dialogRef but should not close)
+        if (target.closest("[data-context-menu]")) return;
         onClose();
       }
     };
@@ -59,12 +63,21 @@ export default function HandPeekDialog({
     };
   }, [onClose]);
 
+  // Track cards that have been acted upon (removed from peek view)
+  const [removedIndices, setRemovedIndices] = useState<Set<number>>(new Set());
+
   // Close context menu when clicking outside
   useEffect(() => {
     if (!contextMenu) return;
-    const handleClick = () => setContextMenu(null);
-    document.addEventListener("click", handleClick);
-    return () => document.removeEventListener("click", handleClick);
+    const handleClick = (e: MouseEvent) => {
+      // Don't close if clicking inside the context menu
+      const target = e.target as HTMLElement;
+      if (target.closest("[data-context-menu]")) return;
+      setContextMenu(null);
+    };
+    // Use capture phase to handle before button clicks
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
   }, [contextMenu]);
 
   useEffect(() => {
@@ -76,13 +89,23 @@ export default function HandPeekDialog({
   // Handle context menu action
   const handleAction = useCallback(
     (action: PeekAction) => {
-      if (!contextMenu || !source) return;
+      console.log("[HandPeekDialog] handleAction called with action:", action);
+      console.log("[HandPeekDialog] contextMenu:", contextMenu);
+      console.log("[HandPeekDialog] source:", source);
+      if (!contextMenu || !source) {
+        console.log("[HandPeekDialog] ABORT: missing contextMenu or source");
+        return;
+      }
+      console.log("[HandPeekDialog] Calling handlePeekedCard...");
       handlePeekedCard(source.seat, source.pile, contextMenu.cardIndex, action);
+      console.log(
+        "[HandPeekDialog] handlePeekedCard returned, marking card as removed"
+      );
+      // Mark this card as removed from the peek view (don't close dialog)
+      setRemovedIndices((prev) => new Set([...prev, contextMenu.cardIndex]));
       setContextMenu(null);
-      // Close dialog after action (card has been moved)
-      onClose();
     },
-    [contextMenu, source, handlePeekedCard, onClose]
+    [contextMenu, source, handlePeekedCard]
   );
 
   // Whether actions are available (only for pile peeks, not hand peeks)
@@ -143,17 +166,23 @@ export default function HandPeekDialog({
                   card.type.toLowerCase().includes("site");
                 const rotationZ = isSite ? -Math.PI / 2 : 0;
                 const slug = card.slug ?? "";
+                const isRemoved = removedIndices.has(idx);
 
                 return (
                   <button
                     key={key}
                     type="button"
-                    className="relative rounded-md bg-zinc-800/50 hover:bg-zinc-700/50 transition-colors"
-                    onMouseEnter={() => setPreviewCard(card)}
-                    onFocus={() => setPreviewCard(card)}
+                    className={`relative rounded-md transition-colors ${
+                      isRemoved
+                        ? "opacity-30 cursor-not-allowed"
+                        : "bg-zinc-800/50 hover:bg-zinc-700/50"
+                    }`}
+                    disabled={isRemoved}
+                    onMouseEnter={() => !isRemoved && setPreviewCard(card)}
+                    onFocus={() => !isRemoved && setPreviewCard(card)}
                     onBlur={() => setPreviewCard(null)}
                     onContextMenu={(e) => {
-                      if (!canAct) return;
+                      if (!canAct || isRemoved) return;
                       e.preventDefault();
                       setContextMenu({
                         x: e.clientX,
@@ -203,6 +232,7 @@ export default function HandPeekDialog({
       {/* Context menu for card actions */}
       {contextMenu && (
         <div
+          data-context-menu
           className="fixed z-[60] bg-zinc-800/95 backdrop-blur rounded-lg ring-1 ring-white/20 shadow-xl py-1 min-w-[140px]"
           style={{ left: contextMenu.x, top: contextMenu.y }}
           onClick={(e) => e.stopPropagation()}

@@ -5,6 +5,7 @@ import { useThree } from "@react-three/fiber";
 import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
+import BrowseOverlay from "@/components/game/BrowseOverlay";
 import CardPreview from "@/components/game/CardPreview";
 import ChaosTwisterOverlay from "@/components/game/ChaosTwisterOverlay";
 import { ClientCanvas } from "@/components/game/ClientCanvas";
@@ -614,6 +615,8 @@ export default function PlayPage() {
     const halfW = matW / 2;
     const halfH = matH / 2;
     const t = c.target;
+    const cam = (c as unknown as { object: THREE.PerspectiveCamera }).object;
+    const offset = cam.position.clone().sub(t.clone());
     let changed = false;
     if (t.x < -halfW) {
       t.x = -halfW;
@@ -633,8 +636,41 @@ export default function PlayPage() {
       t.y = 0;
       changed = true;
     }
-    if (changed) c.update();
-  }, [matW, matH]);
+
+    // Prevent camera from getting into extreme positions that cause rotation flips.
+    // Clamp the camera's absolute XZ position to prevent gimbal-lock-like behavior
+    // when panning far from the board while zoomed out.
+    const camBoundX = halfW + maxDist * 1.5;
+    const camBoundZ = halfH + maxDist * 1.5;
+    if (cam.position.x < -camBoundX) {
+      cam.position.x = -camBoundX;
+      t.x = cam.position.x - offset.x;
+      changed = true;
+    } else if (cam.position.x > camBoundX) {
+      cam.position.x = camBoundX;
+      t.x = cam.position.x - offset.x;
+      changed = true;
+    }
+    if (cam.position.z < -camBoundZ) {
+      cam.position.z = -camBoundZ;
+      t.z = cam.position.z - offset.z;
+      changed = true;
+    } else if (cam.position.z > camBoundZ) {
+      cam.position.z = camBoundZ;
+      t.z = cam.position.z - offset.z;
+      changed = true;
+    }
+    // Ensure camera Y stays positive (above the board) to prevent flip
+    if (cam.position.y < 0.5) {
+      cam.position.y = 0.5;
+      changed = true;
+    }
+
+    if (changed) {
+      cam.position.copy(t.clone().add(offset));
+      c.update();
+    }
+  }, [matW, matH, maxDist]);
 
   return (
     <div className="relative h-screen [height:100dvh] w-full select-none">
@@ -768,6 +804,9 @@ export default function PlayPage() {
 
       {/* Chaos Twister Overlay (dexterity minigame) */}
       <ChaosTwisterOverlay />
+
+      {/* Browse Overlay (spell selection) */}
+      <BrowseOverlay />
 
       {/* Toolbox and Collection buttons (bottom-right) */}
       {showToolbox && (
@@ -934,8 +973,20 @@ export default function PlayPage() {
         }}
       >
         <color attach="background" args={["#0b0b0c"]} />
-        <ambientLight intensity={0.6} />
-        <directionalLight position={[10, 12, 8]} intensity={1} castShadow />
+        <ambientLight intensity={0.5} />
+        <directionalLight
+          position={[5, 10, 5]}
+          intensity={1.2}
+          castShadow
+          shadow-mapSize-width={2048}
+          shadow-mapSize-height={2048}
+          shadow-camera-far={50}
+          shadow-camera-left={-15}
+          shadow-camera-right={15}
+          shadow-camera-top={15}
+          shadow-camera-bottom={-15}
+          shadow-bias={-0.0001}
+        />
 
         {/* Interactive board (physics-enabled) */}
         <Physics gravity={[0, -9.81, 0]}>

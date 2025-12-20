@@ -50,7 +50,12 @@ function Playmat({
       raycast={noopRaycast}
     >
       <planeGeometry args={[matW, matH]} />
-      <meshBasicMaterial map={tex} toneMapped={false} />
+      <meshStandardMaterial
+        map={tex}
+        toneMapped={false}
+        roughness={0.8}
+        metalness={0}
+      />
     </mesh>
   );
 }

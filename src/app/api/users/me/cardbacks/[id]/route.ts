@@ -45,16 +45,24 @@ export async function DELETE(
 
     await prisma.customCardback.delete({ where: { id } });
 
-    // If this was the selected cardback, clear the selection
+    // If this was selected for spellbook or atlas, clear those selections
     const me = await prisma.user.findUnique({
       where: { id: userId },
-      select: { selectedCardbackRef: true },
+      select: { selectedSpellbookRef: true, selectedAtlasRef: true },
     });
 
-    if (me?.selectedCardbackRef === `custom:${id}`) {
+    const updateData: { selectedSpellbookRef?: null; selectedAtlasRef?: null } =
+      {};
+    if (me?.selectedSpellbookRef === `custom:${id}`) {
+      updateData.selectedSpellbookRef = null;
+    }
+    if (me?.selectedAtlasRef === `custom:${id}`) {
+      updateData.selectedAtlasRef = null;
+    }
+    if (Object.keys(updateData).length > 0) {
       await prisma.user.update({
         where: { id: userId },
-        data: { selectedCardbackRef: null },
+        data: updateData,
       });
     }
 

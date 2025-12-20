@@ -3984,7 +3984,10 @@ function AuthenticatedDeckEditor() {
       }
 
       const rawLayout = window.localStorage.getItem(layoutKey);
-      if (!rawLayout) return;
+      if (!rawLayout) {
+        console.log(`[Draft Init] No layout found at ${layoutKey}`);
+        return;
+      }
 
       try {
         const parsed = JSON.parse(rawLayout) as Array<{
@@ -3994,11 +3997,21 @@ function AuthenticatedDeckEditor() {
           x: number;
           z: number;
         }>;
+        console.log(
+          `[Draft Init] Loaded ${parsed.length} layout entries from ${layoutKey}`,
+          parsed.slice(0, 3) // Log first 3 for debugging
+        );
         const map = new Map<string, { x: number; z: number }>();
+        let skippedNoId = 0;
+        let addedById = 0;
+        let addedBySlug = 0;
         for (const entry of parsed) {
           if (!entry) continue;
           // Skip entries without valid cardId or slug
-          if (typeof entry.cardId !== "number" && !entry.slug) continue;
+          if (typeof entry.cardId !== "number" && !entry.slug) {
+            skippedNoId++;
+            continue;
+          }
           const layoutZone: "Deck" | "Sideboard" =
             entry.zone === "Deck" ? "Deck" : "Sideboard";
           // Use cardId as primary key
@@ -4006,6 +4019,7 @@ function AuthenticatedDeckEditor() {
             const key = `${entry.cardId}:${layoutZone}`;
             if (!map.has(key)) {
               map.set(key, { x: entry.x, z: entry.z });
+              addedById++;
             }
           }
           // Also store by slug for cases where cardId isn't resolved yet
@@ -4013,9 +4027,13 @@ function AuthenticatedDeckEditor() {
             const slugKey = `slug:${entry.slug}:${layoutZone}`;
             if (!map.has(slugKey)) {
               map.set(slugKey, { x: entry.x, z: entry.z });
+              addedBySlug++;
             }
           }
         }
+        console.log(
+          `[Draft Init] Layout map: ${map.size} entries (${addedById} by cardId, ${addedBySlug} by slug, ${skippedNoId} skipped)`
+        );
         if (map.size > 0) {
           draftLayoutRef.current = map;
         }

@@ -104,7 +104,7 @@ export async function GET(): Promise<Response> {
     const [me, cardbacks] = await Promise.all([
       prisma.user.findUnique({
         where: { id: userId },
-        select: { selectedCardbackRef: true },
+        select: { selectedSpellbookRef: true, selectedAtlasRef: true },
       }),
       prisma.customCardback.findMany({
         where: { userId },
@@ -126,7 +126,8 @@ export async function GET(): Promise<Response> {
 
     return json({
       cardbacks,
-      selectedCardbackRef: me?.selectedCardbackRef ?? null,
+      selectedSpellbookRef: me?.selectedSpellbookRef ?? null,
+      selectedAtlasRef: me?.selectedAtlasRef ?? null,
     });
   } catch (e: unknown) {
     const message =

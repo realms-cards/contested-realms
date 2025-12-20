@@ -271,7 +271,8 @@ model User {
   patronTier    String?   // "apprentice" | "grandmaster" | null
 
   selectedPlaymatRef String?
-  selectedCardbackRef String?
+  selectedSpellbookRef String?  // "custom:<id>" or "preset:<id>" or null
+  selectedAtlasRef String?      // "custom:<id>" or "preset:<id>" or null
 
   accounts              Account[]
   sessions              Session[]

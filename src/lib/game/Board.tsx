@@ -1,6 +1,6 @@
 "use client";
 
-import { type ThreeEvent } from "@react-three/fiber";
+import { type ThreeEvent, useThree } from "@react-three/fiber";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type Object3D } from "three";
 import { type StoreApi, type UseBoundStore } from "zustand";
@@ -41,6 +41,7 @@ import {
   type PlayerKey,
 } from "@/lib/game/store";
 import { seatFromOwner } from "@/lib/game/store/utils/boardHelpers";
+import { preloadCardbackTextures } from "@/lib/game/textures/useCardTexture";
 import { generateInteractionRequestId } from "@/lib/net/interactions";
 
 // Feature flag to isolate snap effects while debugging rapier aliasing
@@ -60,6 +61,34 @@ const STACK_CONFIG = {
   rubbleElevation: RUBBLE_ELEVATION,
   avatarAvoidZ: AVATAR_AVOID_Z,
 } as const;
+
+// Component to preload cardback textures inside R3F context
+function CardbackPreloader() {
+  const { gl } = useThree();
+  const cardbackUrls = useGameStore((s) => s.cardbackUrls);
+
+  useEffect(() => {
+    // Collect all custom cardback URLs that need preloading
+    const urlsToPreload: string[] = [
+      // Always preload default cardbacks
+      "/api/assets/cardback_spellbook.png",
+      "/api/assets/cardback_atlas.png",
+    ];
+
+    // Add custom cardback URLs for both players
+    for (const player of ["p1", "p2"] as const) {
+      const urls = cardbackUrls[player];
+      if (urls?.spellbook) urlsToPreload.push(urls.spellbook);
+      if (urls?.atlas) urlsToPreload.push(urls.atlas);
+    }
+
+    // Dedupe and preload
+    const uniqueUrls = [...new Set(urlsToPreload)];
+    void preloadCardbackTextures(gl, uniqueUrls);
+  }, [gl, cardbackUrls]);
+
+  return null; // Invisible component
+}
 
 const HIGHLIGHT_COLORS = {
   attacker: HIGHLIGHT_ATTACKER,
@@ -344,6 +373,57 @@ export default function Board({
     void apply();
     return () => controller.abort();
   }, [setPlaymatUrl]);
+
+  // Fetch cardback selection for solo/hotseat mode (apply only to local player p2)
+  const setCardbackUrls = useGameStore((s) => s.setCardbackUrls);
+  useEffect(() => {
+    const controller = new AbortController();
+
+    const applyCardbacks = async () => {
+      try {
+        const res = await fetch("/api/users/me/cardbacks/selected", {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        if (!res.ok) return; // Not authenticated - use defaults
+
+        const data = (await res.json()) as {
+          selectedSpellbookRef?: string;
+          selectedAtlasRef?: string;
+        };
+
+        // Parse spellbook ref
+        let spellbookUrl: string | null = null;
+        let preset: string | null = null;
+        const sbRef = data.selectedSpellbookRef;
+        if (sbRef?.startsWith("custom:")) {
+          const id = sbRef.slice("custom:".length);
+          if (id) spellbookUrl = `/api/users/me/cardbacks/${id}/spellbook`;
+        } else if (sbRef?.startsWith("preset:")) {
+          preset = sbRef;
+        }
+
+        // Parse atlas ref
+        let atlasUrl: string | null = null;
+        const atRef = data.selectedAtlasRef;
+        if (atRef?.startsWith("custom:")) {
+          const id = atRef.slice("custom:".length);
+          if (id) atlasUrl = `/api/users/me/cardbacks/${id}/atlas`;
+        } else if (atRef?.startsWith("preset:") && !preset) {
+          // Fall back to atlas preset if no spellbook preset
+          preset = atRef;
+        }
+
+        // Apply to local player (p2) in solo mode
+        setCardbackUrls("p2", spellbookUrl, atlasUrl, preset);
+      } catch {
+        // Fetch failed - use defaults
+      }
+    };
+
+    void applyCardbacks();
+    return () => controller.abort();
+  }, [setCardbackUrls]);
 
   const boardDragControls = useBoardDragControls({
     currentPlayer,
@@ -1010,6 +1090,9 @@ export default function Board({
 
   return (
     <group>
+      {/* Preload cardback textures early */}
+      <CardbackPreloader />
+
       <BoardEnvironment
         matW={matW}
         matH={matH}

@@ -204,10 +204,10 @@ export default function Piles3D({
             : Math.PI
           : ownerRot + Math.PI;
         const ownerCardbacks = cardbackUrls[owner];
-        const usePreset = !isCemetery && ownerCardbacks?.preset;
+        const presetId = !isCemetery ? ownerCardbacks?.preset : null;
         const cardbackUrl = isCemetery
           ? undefined
-          : usePreset
+          : presetId
           ? undefined
           : key === "atlas"
           ? ownerCardbacks?.atlas ?? "/api/assets/cardback_atlas.png"
@@ -224,10 +224,10 @@ export default function Piles3D({
                   .slice(1, Math.min(cards.length, 4))
                   .filter((card) => card.slug) // Only render cards with valid slugs
                   .map((card, stackIndex) =>
-                    usePreset ? (
+                    presetId ? (
                       <MaterialCardBack
                         key={`stack-${card.slug}-${stackIndex}`}
-                        presetId={ownerCardbacks.preset!}
+                        presetId={presetId}
                         width={w}
                         height={h}
                         rotationZ={rotZ}
@@ -455,9 +455,9 @@ export default function Piles3D({
                   </mesh>
 
                   {/* Visual card */}
-                  {usePreset ? (
+                  {presetId ? (
                     <MaterialCardBack
-                      presetId={ownerCardbacks.preset!}
+                      presetId={presetId}
                       width={w}
                       height={h}
                       rotationZ={rotZ}

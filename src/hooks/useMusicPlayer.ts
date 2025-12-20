@@ -226,6 +226,9 @@ export function useMusicPlayer(): [MusicPlayerState, MusicPlayerControls] {
 
     if (audioRef.current.paused) {
       shouldBePlayingRef.current = true;
+      // Also set enabled so it persists across reloads
+      setIsEnabled(true);
+      saveSetting(MUSIC_STORAGE_KEYS.enabled, true);
       const playPromise = audioRef.current.play();
       if (playPromise) {
         playPromise
@@ -241,6 +244,9 @@ export function useMusicPlayer(): [MusicPlayerState, MusicPlayerControls] {
       }
     } else {
       shouldBePlayingRef.current = false;
+      // Also set enabled to false so it stays paused on reload
+      setIsEnabled(false);
+      saveSetting(MUSIC_STORAGE_KEYS.enabled, false);
       audioRef.current.pause();
       setIsPlaying(false);
     }

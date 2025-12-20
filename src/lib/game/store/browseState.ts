@@ -25,10 +25,12 @@ export const createBrowseSlice: StateCreator<GameState, [], [], BrowseSlice> = (
   pendingBrowse: null,
 
   beginBrowse: (input) => {
+    console.log("[Browse] beginBrowse called", { input });
     const id = newBrowseId();
     const casterSeat = input.casterSeat;
     const zones = get().zones;
     const spellbook = zones[casterSeat]?.spellbook || [];
+    console.log("[Browse] spellbook length:", spellbook.length);
 
     // Take up to 7 cards from the top of spellbook
     const revealedCards = spellbook.slice(0, 7);
@@ -121,17 +123,36 @@ export const createBrowseSlice: StateCreator<GameState, [], [], BrowseSlice> = (
 
   setBrowseBottomOrder: (order) => {
     const pending = get().pendingBrowse;
-    if (!pending || pending.phase !== "ordering") return;
+    if (!pending || pending.phase !== "ordering") {
+      console.log(
+        "[Browse] setBrowseBottomOrder: invalid phase or no pending",
+        { phase: pending?.phase }
+      );
+      return;
+    }
 
     // Validate order contains all indices except selectedCardIndex
     const expectedIndices = pending.revealedCards
       .map((_, i) => i)
       .filter((i) => i !== pending.selectedCardIndex);
 
-    if (order.length !== expectedIndices.length) return;
+    if (order.length !== expectedIndices.length) {
+      console.log("[Browse] setBrowseBottomOrder: length mismatch", {
+        order,
+        expectedIndices,
+      });
+      return;
+    }
     const orderSet = new Set(order);
-    if (!expectedIndices.every((i) => orderSet.has(i))) return;
+    if (!expectedIndices.every((i) => orderSet.has(i))) {
+      console.log("[Browse] setBrowseBottomOrder: indices mismatch", {
+        order,
+        expectedIndices,
+      });
+      return;
+    }
 
+    console.log("[Browse] setBrowseBottomOrder: updating order", { order });
     set({
       pendingBrowse: {
         ...pending,
