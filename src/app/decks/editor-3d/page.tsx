@@ -1398,7 +1398,68 @@ function AuthenticatedDeckEditor() {
             "cards from resolved cache"
           );
 
+          // Load layout positions to determine zones BEFORE setting picks
+          // This ensures picks have correct zones from the start
+          let layoutMap: Map<string, { x: number; z: number }> | null = null;
+          try {
+            const layoutKey = `draftLayout_draft_${draftId}`;
+            const rawLayout = localStorage.getItem(layoutKey);
+            if (rawLayout) {
+              const parsed = JSON.parse(rawLayout) as Array<{
+                cardId: number;
+                slug?: string;
+                zone?: Zone;
+                x: number;
+                z: number;
+              }>;
+              console.log(
+                `[Draft Init] Loaded ${parsed.length} layout entries from ${layoutKey}`,
+                parsed.slice(0, 3)
+              );
+              layoutMap = new Map<string, { x: number; z: number }>();
+              for (const entry of parsed) {
+                if (!entry) continue;
+                if (typeof entry.cardId !== "number" && !entry.slug) continue;
+                // Store by cardId
+                if (typeof entry.cardId === "number" && entry.cardId > 0) {
+                  const key = `${entry.cardId}`;
+                  if (!layoutMap.has(key)) {
+                    layoutMap.set(key, { x: entry.x, z: entry.z });
+                  }
+                }
+                // Also store by slug
+                if (entry.slug) {
+                  const slugKey = `slug:${entry.slug}`;
+                  if (!layoutMap.has(slugKey)) {
+                    layoutMap.set(slugKey, { x: entry.x, z: entry.z });
+                  }
+                }
+              }
+              console.log(
+                `[Draft Init] Layout map has ${layoutMap.size} entries for zone inference`
+              );
+            }
+          } catch (err) {
+            console.warn(
+              "[Draft Init] Failed to load layout for zone inference:",
+              err
+            );
+          }
+
           setPicks((prev) => {
+            // Guard: if picks already have cards, don't add duplicates
+            // This prevents double-adding in React StrictMode
+            const prevCount = Object.values(prev).reduce(
+              (sum, p) => sum + p.count,
+              0
+            );
+            if (prevCount >= resolvedList.length) {
+              console.log(
+                "[Draft Init] Picks already populated, skipping duplicate add"
+              );
+              return prev;
+            }
+
             const next = { ...prev } as Record<PickKey, PickItem>;
             console.log(
               "[Draft Init] Prev picks has",
@@ -1407,17 +1468,26 @@ function AuthenticatedDeckEditor() {
             );
 
             for (const r of resolvedList) {
-              const zone: Zone = "Sideboard";
+              // Determine zone from layout position (z < 0 = Deck, z >= 0 = Sideboard)
+              let zone: Zone = "Sideboard";
+              if (layoutMap) {
+                const pos =
+                  layoutMap.get(`${r.cardId}`) ??
+                  (r.slug ? layoutMap.get(`slug:${r.slug}`) : null);
+                if (pos) {
+                  zone = pos.z < 0 ? "Deck" : "Sideboard";
+                }
+              }
               const key = `${r.cardId}:${zone}:${
                 r.variantId ?? "x"
               }` as PickKey;
               const exists = next[key];
               if (exists) {
-                console.warn("[Draft Init] Card already exists in picks!", {
+                console.log("[Draft Init] Card count incremented:", {
                   cardId: r.cardId,
                   name: r.cardName,
-                  existingCount: exists.count,
-                  key,
+                  zone,
+                  newCount: exists.count + 1,
                 });
               }
               next[key] = exists
@@ -1614,10 +1684,63 @@ function AuthenticatedDeckEditor() {
           return;
         }
 
-        // Batch update picks to include all drafted cards in sideboard (not deck)
+        // Load layout positions to determine zones BEFORE setting picks
+        let layoutMap: Map<string, { x: number; z: number }> | null = null;
+        try {
+          const layoutKey = `draftLayout_draft_${draftId}`;
+          const rawLayout = localStorage.getItem(layoutKey);
+          if (rawLayout) {
+            const parsed = JSON.parse(rawLayout) as Array<{
+              cardId: number;
+              slug?: string;
+              x: number;
+              z: number;
+            }>;
+            layoutMap = new Map<string, { x: number; z: number }>();
+            for (const entry of parsed) {
+              if (!entry) continue;
+              if (typeof entry.cardId === "number" && entry.cardId > 0) {
+                const key = `${entry.cardId}`;
+                if (!layoutMap.has(key)) {
+                  layoutMap.set(key, { x: entry.x, z: entry.z });
+                }
+              }
+              if (entry.slug) {
+                const slugKey = `slug:${entry.slug}`;
+                if (!layoutMap.has(slugKey)) {
+                  layoutMap.set(slugKey, { x: entry.x, z: entry.z });
+                }
+              }
+            }
+          }
+        } catch (err) {
+          console.warn(
+            "[Draft Init] Failed to load layout for zone inference:",
+            err
+          );
+        }
+
+        // Batch update picks - use layout positions to determine zones
         // IMPORTANT: Preserve any existing picks (like Standard Cards) that may have been added
         const expandedResolved: SearchResult[] = [];
+        const expectedTotal = resolvedEntries.reduce(
+          (sum, e) => sum + Math.max(e.lookup.count, 1),
+          0
+        );
         setPicks((prev) => {
+          // Guard: if picks already have cards, don't add duplicates
+          // This prevents double-adding in React StrictMode
+          const prevCount = Object.values(prev).reduce(
+            (sum, p) => sum + p.count,
+            0
+          );
+          if (prevCount >= expectedTotal) {
+            console.log(
+              "[Draft Init] Picks already populated, skipping duplicate add"
+            );
+            return prev;
+          }
+
           const next = { ...prev } as Record<PickKey, PickItem>;
           console.log(
             `[Draft Init] Preserving ${Object.keys(prev).length} existing picks`
@@ -1627,8 +1750,16 @@ function AuthenticatedDeckEditor() {
             if (!result) continue;
             const copies = Math.max(lookup.count, 1);
             for (let i = 0; i < copies; i++) {
-              // All draft picks should start in sideboard, not directly in deck zones
-              const zone: Zone = "Sideboard";
+              // Determine zone from layout position (z < 0 = Deck, z >= 0 = Sideboard)
+              let zone: Zone = "Sideboard";
+              if (layoutMap) {
+                const pos =
+                  layoutMap.get(`${result.cardId}`) ??
+                  (result.slug ? layoutMap.get(`slug:${result.slug}`) : null);
+                if (pos) {
+                  zone = pos.z < 0 ? "Deck" : "Sideboard";
+                }
+              }
               const key = `${result.cardId}:${zone}:${
                 result.variantId ?? "x"
               }` as PickKey;
@@ -2483,7 +2614,9 @@ function AuthenticatedDeckEditor() {
       let spellbookNonAvatar = 0;
       for (const p of pick3D) {
         if (p.zone !== "Deck") continue; // only deck zone
-        const t = (p.card.type || "").toLowerCase();
+        // Use resolved type from metaByCardId if card type is missing
+        const meta = metaByCardId[p.card.cardId];
+        const t = (p.card.type || meta?.type || "").toLowerCase();
         if (t.includes("avatar")) avatar += 1;
         else if (t.includes("site")) atlas += 1;
         else spellbookNonAvatar += 1;
@@ -2705,7 +2838,9 @@ function AuthenticatedDeckEditor() {
       let spellbookNonAvatar = 0;
       for (const p of pick3D) {
         if (p.zone !== "Deck") continue; // only deck zone
-        const t = (p.card.type || "").toLowerCase();
+        // Use resolved type from metaByCardId if card type is missing
+        const meta = metaByCardId[p.card.cardId];
+        const t = (p.card.type || meta?.type || "").toLowerCase();
         if (t.includes("avatar")) avatar += 1;
         else if (t.includes("site")) atlas += 1;
         else spellbookNonAvatar += 1;
@@ -2730,30 +2865,47 @@ function AuthenticatedDeckEditor() {
       // Convert 3D picks to simple card array for sealed submission
       const deckCards = pick3D
         .filter((p) => p.zone === "Deck") // only deck zone
-        .map((p) => ({
-          id: p.card.cardId.toString(),
-          cardId: p.card.cardId,
-          name: p.card.cardName || `Card ${p.card.cardId}`,
-          type: p.card.type,
-          slug: p.card.slug,
-          set: p.card.setName || setName,
-          cost: metaByCardId[p.card.cardId]?.cost ?? 0,
-          rarity: p.card.rarity || "Common",
-        }));
+        .map((p) => {
+          // Use resolved type from metaByCardId if card type is missing
+          const meta = metaByCardId[p.card.cardId];
+          const resolvedType = p.card.type || meta?.type || null;
+          // Set zone based on card type for deckLoader compatibility
+          const t = (resolvedType || "").toLowerCase();
+          const apiZone = t.includes("site")
+            ? "atlas"
+            : t.includes("avatar")
+            ? "avatar"
+            : "spellbook";
+          return {
+            id: p.card.cardId.toString(),
+            cardId: p.card.cardId,
+            name: p.card.cardName || `Card ${p.card.cardId}`,
+            type: resolvedType,
+            slug: p.card.slug,
+            set: p.card.setName || setName,
+            cost: meta?.cost ?? 0,
+            rarity: p.card.rarity || "Common",
+            zone: apiZone,
+          };
+        });
 
       // Sideboard cards become collection cards (per limited rules: unplayed cards in card pool)
       const sideboardAsCollection = pick3D
         .filter((p) => p.zone === "Sideboard")
-        .map((p) => ({
-          id: p.card.cardId.toString(),
-          cardId: p.card.cardId,
-          name: p.card.cardName || `Card ${p.card.cardId}`,
-          type: p.card.type,
-          slug: p.card.slug,
-          set: p.card.setName || setName,
-          cost: metaByCardId[p.card.cardId]?.cost ?? 0,
-          rarity: p.card.rarity || "Common",
-        }));
+        .map((p) => {
+          const meta = metaByCardId[p.card.cardId];
+          const resolvedType = p.card.type || meta?.type || null;
+          return {
+            id: p.card.cardId.toString(),
+            cardId: p.card.cardId,
+            name: p.card.cardName || `Card ${p.card.cardId}`,
+            type: resolvedType,
+            slug: p.card.slug,
+            set: p.card.setName || setName,
+            cost: meta?.cost ?? 0,
+            rarity: p.card.rarity || "Common",
+          };
+        });
 
       // Combine deck cards with sideboard-as-collection for submission
       const fullDeckSubmission = [
@@ -2923,34 +3075,52 @@ function AuthenticatedDeckEditor() {
         set: string;
         cost: number;
         rarity: string;
-        zone?: string;
+        zone: string;
       }> = pick3D
         .filter((p) => p.zone === "Deck") // only deck zone
-        .map((p) => ({
-          id: p.card.cardId.toString(),
-          cardId: p.card.cardId,
-          name: p.card.cardName || `Card ${p.card.cardId}`,
-          type: p.card.type,
-          slug: p.card.slug,
-          set: p.card.setName || setName,
-          cost: metaByCardId[p.card.cardId]?.cost ?? 0,
-          rarity: p.card.rarity || "Common",
-        }));
+        .map((p) => {
+          // Use resolved type from metaByCardId if card type is missing
+          // This ensures server validation matches editor validation
+          const meta = metaByCardId[p.card.cardId];
+          const resolvedType = p.card.type || meta?.type || null;
+          // Set zone based on card type for deckLoader compatibility
+          const t = (resolvedType || "").toLowerCase();
+          const apiZone = t.includes("site")
+            ? "atlas"
+            : t.includes("avatar")
+            ? "avatar"
+            : "spellbook";
+          return {
+            id: p.card.cardId.toString(),
+            cardId: p.card.cardId,
+            name: p.card.cardName || `Card ${p.card.cardId}`,
+            type: resolvedType,
+            slug: p.card.slug,
+            set: p.card.setName || setName,
+            cost: meta?.cost ?? 0,
+            rarity: p.card.rarity || "Common",
+            zone: apiZone,
+          };
+        });
 
       // Sideboard cards become collection cards (per limited rules: unplayed cards in card pool)
       const sideboardAsCollection = pick3D
         .filter((p) => p.zone === "Sideboard")
-        .map((p) => ({
-          id: p.card.cardId.toString(),
-          cardId: p.card.cardId,
-          name: p.card.cardName || `Card ${p.card.cardId}`,
-          type: p.card.type,
-          slug: p.card.slug,
-          set: p.card.setName || setName,
-          cost: metaByCardId[p.card.cardId]?.cost ?? 0,
-          rarity: p.card.rarity || "Common",
-          zone: "collection",
-        }));
+        .map((p) => {
+          const meta = metaByCardId[p.card.cardId];
+          const resolvedType = p.card.type || meta?.type || null;
+          return {
+            id: p.card.cardId.toString(),
+            cardId: p.card.cardId,
+            name: p.card.cardName || `Card ${p.card.cardId}`,
+            type: resolvedType,
+            slug: p.card.slug,
+            set: p.card.setName || setName,
+            cost: meta?.cost ?? 0,
+            rarity: p.card.rarity || "Common",
+            zone: "collection",
+          };
+        });
 
       // Combine deck cards with sideboard-as-collection for submission
       const fullDeckSubmission = [...deckCards, ...sideboardAsCollection];
@@ -3882,6 +4052,8 @@ function AuthenticatedDeckEditor() {
   const draftLayoutRef = useRef<Map<string, { x: number; z: number }> | null>(
     null
   );
+  // Track when draft layout is loaded - use state to trigger pick3D rebuild
+  const [draftLayoutLoaded, setDraftLayoutLoaded] = useState(false);
   const draftLayoutLoadedRef = useRef(false);
 
   // Load draft-3d layout and stack preferences when arriving from draft
@@ -3935,6 +4107,7 @@ function AuthenticatedDeckEditor() {
         }
         if (map.size > 0) {
           draftLayoutRef.current = map;
+          setDraftLayoutLoaded(true);
         }
       } catch (err) {
         try {
@@ -4036,6 +4209,7 @@ function AuthenticatedDeckEditor() {
         );
         if (map.size > 0) {
           draftLayoutRef.current = map;
+          setDraftLayoutLoaded(true);
         }
       } catch (err) {
         try {
@@ -4062,12 +4236,18 @@ function AuthenticatedDeckEditor() {
       0
     );
 
-    // Skip rebuilding pick3D if card count hasn't changed
+    // Skip rebuilding pick3D if card count hasn't changed AND layout hasn't just loaded
     // This preserves positions when cards are just moved between zones
-    if (lastPicksCount.current === totalCards && pick3D.length > 0) {
+    // But we MUST rebuild when draftLayoutLoaded changes to apply saved positions
+    if (
+      lastPicksCount.current === totalCards &&
+      pick3D.length > 0 &&
+      !draftLayoutLoaded
+    ) {
       return;
     }
 
+    // Reset the count tracker when we actually rebuild
     lastPicksCount.current = totalCards;
 
     const newPick3D: Pick3D[] = [];
@@ -4141,6 +4321,11 @@ function AuthenticatedDeckEditor() {
         if (useExisting && existingPos) {
           x = existingPos.x;
           z = existingPos.z;
+          // For draft/sealed mode, always infer zone from z-position
+          // This ensures consistency between validator and save routine
+          if (isDraftMode || isSealed) {
+            logicalZone = existingPos.z < 0 ? "Deck" : "Sideboard";
+          }
         } else if (useLayout && layoutPos) {
           x = layoutPos.x;
           z = layoutPos.z;
@@ -4148,7 +4333,7 @@ function AuthenticatedDeckEditor() {
           // initial logical zone from the saved Z position so that
           // top-of-board cards (z < 0) start in the Deck zone and
           // bottom-of-board cards (z >= 0) start in the Sideboard zone.
-          if (isDraftMode) {
+          if (isDraftMode || isSealed) {
             logicalZone = layoutPos.z < 0 ? "Deck" : "Sideboard";
           }
         } else {
@@ -4164,6 +4349,10 @@ function AuthenticatedDeckEditor() {
               ? -2.5 + row * CARD_SPACING_Z // Deck zone: start at z=-2.5, progress down
               : 0.5 + row * CARD_SPACING_Z; // Sideboard zone: start at z=0.5, progress down
           fallbackIndex++;
+          // For draft/sealed mode, infer zone from computed z-position for consistency
+          if (isDraftMode || isSealed) {
+            logicalZone = z < 0 ? "Deck" : "Sideboard";
+          }
         }
 
         // Debug: log if slug is missing
@@ -4201,7 +4390,12 @@ function AuthenticatedDeckEditor() {
 
     setPick3D(newPick3D);
     setNextPickId(id);
-  }, [picks, isSealed, isDraftMode, pick3D.length]);
+
+    // Reset draftLayoutLoaded after applying it to prevent infinite rebuilds
+    if (draftLayoutLoaded) {
+      setDraftLayoutLoaded(false);
+    }
+  }, [picks, isSealed, isDraftMode, pick3D.length, draftLayoutLoaded]);
 
   // Update position cache whenever pick3D changes
   useEffect(() => {

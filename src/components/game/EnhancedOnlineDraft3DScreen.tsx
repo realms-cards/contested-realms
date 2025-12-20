@@ -217,6 +217,53 @@ export default function EnhancedOnlineDraft3DScreen({
   }, [isSortingEnabled]);
   const lastSavedPickCountRef = useRef(0);
 
+  // Cleanup old draft localStorage entries on mount to prevent quota issues
+  useEffect(() => {
+    if (typeof window === "undefined" || !matchId) return;
+    const DRAFT_KEY_PREFIXES = [
+      "draftedCards_",
+      "draftedCardsResolved_",
+      "draftLayout_draft_",
+      "draftStackPrefs_draft_",
+      "draftDeck_",
+      "draft_submitted_",
+    ];
+    const MAX_DRAFT_ENTRIES = 5; // Keep only the 5 most recent drafts per prefix
+    try {
+      const keysByPrefix: Record<string, string[]> = {};
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!key) continue;
+        for (const prefix of DRAFT_KEY_PREFIXES) {
+          if (key.startsWith(prefix) && !key.includes(matchId)) {
+            if (!keysByPrefix[prefix]) keysByPrefix[prefix] = [];
+            keysByPrefix[prefix].push(key);
+          }
+        }
+      }
+      // Remove oldest entries if we have too many (simple FIFO based on key order)
+      for (const prefix of DRAFT_KEY_PREFIXES) {
+        const keys = keysByPrefix[prefix] || [];
+        if (keys.length > MAX_DRAFT_ENTRIES) {
+          const toRemove = keys.slice(0, keys.length - MAX_DRAFT_ENTRIES);
+          for (const key of toRemove) {
+            try {
+              localStorage.removeItem(key);
+            } catch {}
+          }
+          console.log(
+            `[EnhancedOnlineDraft3D] Cleaned up ${toRemove.length} old ${prefix}* entries`
+          );
+        }
+      }
+    } catch (err) {
+      console.warn(
+        "[EnhancedOnlineDraft3D] Failed to cleanup old draft data:",
+        err
+      );
+    }
+  }, [matchId]);
+
   useEffect(() => {
     lastSavedPickCountRef.current = 0;
   }, [matchId]);
@@ -262,6 +309,37 @@ export default function EnhancedOnlineDraft3DScreen({
       localStorage.setItem(key, JSON.stringify(slugsOnly));
       lastSavedPickCountRef.current = pickCount;
     } catch (err) {
+      // If quota exceeded, try to free space by removing old draft data aggressively
+      if (err instanceof DOMException && err.name === "QuotaExceededError") {
+        console.warn(
+          "[EnhancedOnlineDraft3D] Quota exceeded, attempting aggressive cleanup..."
+        );
+        try {
+          const DRAFT_KEY_PREFIXES = [
+            "draftedCards_",
+            "draftedCardsResolved_",
+            "draftLayout_draft_",
+            "draftStackPrefs_draft_",
+          ];
+          for (let i = localStorage.length - 1; i >= 0; i--) {
+            const k = localStorage.key(i);
+            if (!k) continue;
+            for (const prefix of DRAFT_KEY_PREFIXES) {
+              if (k.startsWith(prefix) && !k.includes(matchId)) {
+                localStorage.removeItem(k);
+                break;
+              }
+            }
+          }
+          // Retry the save
+          localStorage.setItem(key, JSON.stringify(slugsOnly));
+          lastSavedPickCountRef.current = pickCount;
+          console.log("[EnhancedOnlineDraft3D] Retry after cleanup succeeded");
+          return;
+        } catch {
+          // Still failed, give up gracefully
+        }
+      }
       console.error(
         "[EnhancedOnlineDraft3D] Failed to persist draft picks:",
         err
@@ -637,7 +715,10 @@ export default function EnhancedOnlineDraft3DScreen({
                   ? latestPick3D.map((p) => {
                       // Use the latest slugToCardId mapping to resolve cardId if current is 0
                       let resolvedCardId = p.card.cardId;
-                      if ((!resolvedCardId || resolvedCardId === 0) && p.card.slug) {
+                      if (
+                        (!resolvedCardId || resolvedCardId === 0) &&
+                        p.card.slug
+                      ) {
                         resolvedCardId = currentSlugMap[p.card.slug] || 0;
                       }
                       return {

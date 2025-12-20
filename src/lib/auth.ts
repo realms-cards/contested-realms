@@ -93,6 +93,20 @@ if (!emailFrom || !emailServer) {
   }
 }
 
+function buildConfirmMagicLink(originalUrl: string, identifier: string): string {
+  try {
+    const base = new URL(originalUrl);
+    const confirmUrl = new URL("/auth/confirm", base);
+    confirmUrl.searchParams.set("next", originalUrl);
+    if (identifier) {
+      confirmUrl.searchParams.set("email", identifier);
+    }
+    return confirmUrl.toString();
+  } catch {
+    return originalUrl;
+  }
+}
+
 async function sendMagicLinkEmail({
   identifier,
   url,
@@ -105,10 +119,11 @@ async function sendMagicLinkEmail({
   const backgroundColor = "#0f172a";
   const previewText = "Use this link to finish signing in to Realms.cards";
   const subject = "Realms.cards — Your secure sign-in link";
+  const confirmUrl = buildConfirmMagicLink(url, identifier);
   const text = `Welcome to Realms.cards - your fan simulator for Sorcery: Contested Realm!
 
 Your one-time sign-in link is ready:
-${url}
+${confirmUrl}
 
 This link expires in 24 hours. If you did not request it, you can safely ignore this email.
 
@@ -117,7 +132,7 @@ King Arthur
 
 (this is an automated message, please do not reply)`;
 
-  const escapedUrl = url.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+  const escapedUrl = confirmUrl.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
   const html = `<!DOCTYPE html>
 <html lang="en">
   <head>

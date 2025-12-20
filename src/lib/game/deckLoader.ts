@@ -244,15 +244,24 @@ export async function loadSealedDeckFor(
     const anyZonesProvided = cards.some((c: CardRefWithZone) => !!c.__zone);
     let rawAtlas: CardRef[];
     let spellbook: CardRef[];
-    const avatars = cards.filter(isAvatar);
+    // Only count avatars that are NOT in the collection zone
+    // For sealed/draft, collection contains unplayed cards from the card pool (including extra avatars)
+    const avatars = cards.filter(
+      (c: CardRefWithZone) => isAvatar(c) && c.__zone !== "collection"
+    );
 
     if (anyZonesProvided) {
+      // Cards with explicit zones use zone-based classification
+      // Cards without zones (null) fall back to type-based classification
       const atlasZ: CardRefWithZone[] = cards.filter(
-        (c: CardRefWithZone) => c.__zone === "atlas"
+        (c: CardRefWithZone) =>
+          c.__zone === "atlas" || (c.__zone == null && isSite(c))
       );
       const spellZ: CardRefWithZone[] = cards.filter(
         (c: CardRefWithZone) =>
-          c.__zone === "spellbook" || c.__zone === "spell" || c.__zone == null
+          c.__zone === "spellbook" ||
+          c.__zone === "spell" ||
+          (c.__zone == null && !isSite(c) && !isAvatar(c))
       );
       rawAtlas = atlasZ;
       // Exclude avatar from spellbook later using isAvatar
