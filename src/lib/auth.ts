@@ -454,8 +454,8 @@ export const authOptions: NextAuthOptions = {
           const nextImageRaw = (session as Record<string, unknown>).image;
           if (typeof nextImageRaw === "string" || nextImageRaw === null) {
             const nextImage = sanitizeUserImage(nextImageRaw);
-            (token as Record<string, unknown>).picture = nextImage ?? undefined;
-            (token as Record<string, unknown>).image = nextImage ?? undefined;
+            (token as Record<string, unknown>).picture = nextImage ?? null;
+            (token as Record<string, unknown>).image = nextImage ?? null;
           }
           const nextEmail = (session as Record<string, unknown>).email;
           if (typeof nextEmail === "string" || nextEmail === null) {
@@ -492,10 +492,8 @@ export const authOptions: NextAuthOptions = {
             token.name = dbUser.name || token.name;
             token.email = dbUser.email ?? null;
             const safeImage = sanitizeUserImage(dbUser.image);
-            (token as Record<string, unknown>).picture =
-              safeImage ?? (token as Record<string, unknown>).picture;
-            (token as Record<string, unknown>).image =
-              safeImage ?? (token as Record<string, unknown>).image;
+            (token as Record<string, unknown>).picture = safeImage ?? null;
+            (token as Record<string, unknown>).image = safeImage ?? null;
             (token as Record<string, unknown>).emailVerified =
               dbUser.emailVerified ? dbUser.emailVerified.toISOString() : null;
           } else {
@@ -511,10 +509,8 @@ export const authOptions: NextAuthOptions = {
             const safeImage = sanitizeUserImage(
               user.image as string | null | undefined
             );
-            (token as Record<string, unknown>).picture =
-              safeImage ?? (token as Record<string, unknown>).picture;
-            (token as Record<string, unknown>).image =
-              safeImage ?? (token as Record<string, unknown>).image;
+            (token as Record<string, unknown>).picture = safeImage ?? null;
+            (token as Record<string, unknown>).image = safeImage ?? null;
             const userEmailVerified = (user as { emailVerified?: Date | null })
               .emailVerified;
             if (userEmailVerified instanceof Date) {
