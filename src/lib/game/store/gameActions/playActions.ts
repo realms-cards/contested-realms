@@ -300,10 +300,16 @@ export const createPlayActionsSlice: StateCreator<
       const cardNameLower = (card.name || "").toLowerCase();
       const isChaosTwister = cardNameLower.includes("chaos twister");
       const isBrowse = cardNameLower === "browse";
+      const isCommonSense = cardNameLower === "common sense";
+      const isMorgana = cardNameLower.includes("morgana le fay");
+      const isPithImp = cardNameLower.includes("pith imp");
       console.log("[playActions] Card played:", {
         cardName: card.name,
         cardNameLower,
         isBrowse,
+        isCommonSense,
+        isMorgana,
+        isPithImp,
         type,
       });
 
@@ -337,7 +343,52 @@ export const createPlayActionsSlice: StateCreator<
           });
         } catch {}
       }
-      // If this is a Magic card (but not Chaos Twister or Browse), begin the magic casting flow after placing it
+      // If this is Common Sense, begin the search spell flow
+      else if (isCommonSense && newest) {
+        try {
+          get().beginCommonSense({
+            spell: {
+              at: key,
+              index: arr.length - 1,
+              instanceId: newest.instanceId ?? null,
+              owner: newest.owner,
+              card: newest.card as CardRef,
+            },
+            casterSeat: who,
+          });
+        } catch {}
+      }
+      // If this is Morgana le Fay (minion with Genesis), trigger her ability
+      else if (isMorgana && newest && type.includes("minion")) {
+        try {
+          get().triggerMorganaGenesis({
+            minion: {
+              at: key,
+              index: arr.length - 1,
+              instanceId: newest.instanceId ?? null,
+              owner: newest.owner,
+              card: newest.card as CardRef,
+            },
+            ownerSeat: who,
+          });
+        } catch {}
+      }
+      // If this is Pith Imp (minion with Genesis), trigger steal ability
+      else if (isPithImp && newest && type.includes("minion")) {
+        try {
+          get().triggerPithImpGenesis({
+            minion: {
+              at: key,
+              index: arr.length - 1,
+              instanceId: newest.instanceId ?? null,
+              owner: newest.owner,
+              card: newest.card as CardRef,
+            },
+            ownerSeat: who,
+          });
+        } catch {}
+      }
+      // If this is a Magic card (but not one with special handling), begin the magic casting flow
       else if (type.includes("magic") && newest) {
         try {
           get().beginMagicCast({

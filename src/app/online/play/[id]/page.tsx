@@ -11,6 +11,8 @@ import UserBadge from "@/components/auth/UserBadge";
 import BrowseOverlay from "@/components/game/BrowseOverlay";
 import CardPreview from "@/components/game/CardPreview";
 import ChaosTwisterOverlay from "@/components/game/ChaosTwisterOverlay";
+import CommonSenseOverlay from "@/components/game/CommonSenseOverlay";
+import MorganaHandOverlay from "@/components/game/MorganaHandOverlay";
 import { ClientCanvas } from "@/components/game/ClientCanvas";
 import CollectionButton from "@/components/game/CollectionButton";
 import CombatHudOverlay from "@/components/game/CombatHudOverlay";
@@ -2832,6 +2834,10 @@ export default function OnlineMatchPage() {
           <ChaosTwisterOverlay transport={transport} />
           {/* Browse Overlay (spell selection) */}
           <BrowseOverlay />
+          {/* Common Sense Overlay (search for Ordinary card) */}
+          <CommonSenseOverlay />
+          {/* Morgana le Fay private hand overlay */}
+          <MorganaHandOverlay />
           {/* Switch Site HUD Overlay (layout-level, not inside Canvas) */}
           <SwitchSiteHudOverlay />
 

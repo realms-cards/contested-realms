@@ -496,6 +496,24 @@ export const createPermanentMovementSlice: StateCreator<
         patch.permanents = fallbackPatch.permanents;
       if (zonePatch?.zones) patch.zones = zonePatch.zones;
       if (Object.keys(patch).length > 0) get().trySendPatch(patch);
+
+      // Cleanup for special minions leaving the realm
+      const cardNameLower = (item.card?.name || "").toLowerCase();
+
+      // Pith Imp: return stolen cards when leaving
+      if (cardNameLower.includes("pith imp")) {
+        try {
+          get().returnStolenCard(item.instanceId ?? null, at);
+        } catch {}
+      }
+
+      // Morgana le Fay: discard private hand when leaving
+      if (cardNameLower.includes("morgana le fay")) {
+        try {
+          get().removeMorganaHand(item.instanceId ?? null, at);
+        } catch {}
+      }
+
       return {
         permanents: per,
         zones: zonesNext,
