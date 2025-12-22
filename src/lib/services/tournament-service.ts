@@ -7,6 +7,7 @@ import { prisma } from '@/lib/prisma';
 import { 
   TOURNAMENT_PLAYER_LIMITS
 } from '@/lib/tournament/constants';
+import { countActiveSeats, getRegistrationSettings, isActiveSeat } from '@/lib/tournament/registration';
 import type {
   CreateTournamentRequest,
   UpdateTournamentRequest,
@@ -171,7 +172,14 @@ export class TournamentService {
       throw new Error('Tournament is not accepting registrations');
     }
 
-    if (tournament.registrations.length >= tournament.maxPlayers) {
+    const registrationSettings = getRegistrationSettings(tournament.settings);
+    if (registrationSettings.locked) {
+      throw new Error('Tournament registration is locked');
+    }
+    if (registrationSettings.mode !== 'open' && tournament.registrations.length >= tournament.maxPlayers) {
+      throw new Error('Tournament is full');
+    }
+    if (registrationSettings.mode === 'open' && tournament.registrations.length >= TOURNAMENT_PLAYER_LIMITS.MAX_PLAYERS) {
       throw new Error('Tournament is full');
     }
 
@@ -206,7 +214,11 @@ export class TournamentService {
 
     // Check if tournament should transition to preparing phase
     const newPlayerCount = tournament.registrations.length + 1;
-    if (newPlayerCount >= TOURNAMENT_PLAYER_LIMITS.MIN_PLAYERS && newPlayerCount === tournament.maxPlayers) {
+    if (
+      registrationSettings.mode !== 'open' &&
+      newPlayerCount >= TOURNAMENT_PLAYER_LIMITS.MIN_PLAYERS &&
+      newPlayerCount === tournament.maxPlayers
+    ) {
       await this.transitionToPreparing(tournamentId);
     }
 
@@ -331,8 +343,11 @@ export class TournamentService {
     switch (tournament.status) {
       case 'registering':
         // Check if we have enough players and tournament is full
-        if (tournament.registrations.length >= TOURNAMENT_PLAYER_LIMITS.MIN_PLAYERS &&
-            tournament.registrations.length === tournament.maxPlayers) {
+        if (
+          getRegistrationSettings(tournament.settings).mode !== 'open' &&
+          tournament.registrations.length >= TOURNAMENT_PLAYER_LIMITS.MIN_PLAYERS &&
+          tournament.registrations.length === tournament.maxPlayers
+        ) {
           updatedTournament = await prisma.tournament.update({
             where: { id: tournamentId },
             data: {
@@ -348,11 +363,12 @@ export class TournamentService {
 
       case 'preparing':
         // Check if all players have completed preparation
-        const allReady = tournament.registrations.every(
+        const activeRegistrations = tournament.registrations.filter(isActiveSeat);
+        const allReady = activeRegistrations.every(
           reg => reg.preparationStatus === 'completed' && reg.deckSubmitted
         );
 
-        if (allReady && tournament.registrations.length > 0) {
+        if (allReady && activeRegistrations.length > 0) {
           updatedTournament = await prisma.tournament.update({
             where: { id: tournamentId },
             data: {
@@ -387,7 +403,9 @@ export class TournamentService {
       throw new Error('Tournament not found');
     }
 
-    const playerIds = tournament.registrations.map(reg => reg.playerId);
+    const playerIds = tournament.registrations
+      .filter(isActiveSeat)
+      .map(reg => reg.playerId);
     
     // Create first round
     const round = await prisma.tournamentRound.create({
@@ -451,7 +469,7 @@ export class TournamentService {
 
     // Find ready players
     const readyPlayers = tournament.registrations.filter(
-      reg => reg.preparationStatus === 'completed' && reg.deckSubmitted
+      reg => isActiveSeat(reg) && reg.preparationStatus === 'completed' && reg.deckSubmitted
     );
 
     if (readyPlayers.length < TOURNAMENT_PLAYER_LIMITS.MIN_PLAYERS) {
@@ -472,7 +490,7 @@ export class TournamentService {
 
     // Remove unready players
     const unreadyPlayers = tournament.registrations.filter(
-      reg => reg.preparationStatus !== 'completed' || !reg.deckSubmitted
+      reg => isActiveSeat(reg) && (reg.preparationStatus !== 'completed' || !reg.deckSubmitted)
     );
 
     await prisma.tournamentRegistration.deleteMany({
@@ -606,7 +624,7 @@ export class TournamentService {
     createdAt: Date;
     startedAt: Date | null;
     completedAt: Date | null;
-    registrations?: Array<{ id: string }>;
+    registrations?: Array<{ id: string; seatStatus?: string | null }>;
   }): TournamentResponse {
     return {
       id: tournament.id,
@@ -614,7 +632,9 @@ export class TournamentService {
       format: tournament.format as TournamentFormat,
       status: tournament.status as TournamentStatus,
       maxPlayers: tournament.maxPlayers,
-      currentPlayers: tournament.registrations?.length || 0,
+      currentPlayers: tournament.registrations
+        ? countActiveSeats(tournament.registrations)
+        : 0,
       creatorId: tournament.creatorId,
       settings: tournament.settings as Record<string, unknown>,
       createdAt: tournament.createdAt.toISOString(),

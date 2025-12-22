@@ -275,12 +275,13 @@ export const createPermanentMovementSlice: StateCreator<
         }
       }
 
-      // Remove attachments that go to zones (in reverse order to preserve indices)
-      attachmentsToRemove
-        .sort((a, b) => b.idx - a.idx)
-        .forEach(({ idx }) => {
-          arr.splice(idx, 1);
-        });
+      // Remove attachments from permanents array (in reverse order to preserve indices)
+      const allToRemoveFromArray = [...attachmentsToRemove].sort(
+        (a, b) => b.idx - a.idx
+      );
+      allToRemoveFromArray.forEach(({ idx }) => {
+        arr.splice(idx, 1);
+      });
 
       // Now find the new index of the main item after some attachments were removed
       const newMainIndex = arr.findIndex(
@@ -331,7 +332,16 @@ export const createPermanentMovementSlice: StateCreator<
       per[at] = arr;
       const owner = seatFromOwner(item.owner);
       const zonesNext = { ...state.zones } as Record<PlayerKey, Zones>;
-      const seatZones = { ...zonesNext[owner] };
+      // Create deep copy of all zone arrays to avoid mutation
+      const seatZones: Zones = {
+        spellbook: [...state.zones[owner].spellbook],
+        atlas: [...state.zones[owner].atlas],
+        hand: [...state.zones[owner].hand],
+        graveyard: [...state.zones[owner].graveyard],
+        battlefield: [...state.zones[owner].battlefield],
+        collection: [...state.zones[owner].collection],
+        banished: [...(state.zones[owner].banished || [])],
+      };
       const movedCard = prepareCardForSeat(item.card, owner);
       const isToken = String(item.card?.type || "")
         .toLowerCase()
@@ -371,8 +381,23 @@ export const createPermanentMovementSlice: StateCreator<
           .toLowerCase()
           .includes("token");
 
-        // Get the current zones for the attachment's owner (may have been updated already)
-        const attachZones = { ...zonesNext[attachOwner] };
+        // Create deep copy of attachment owner's zones if not already updated
+        let attachZones: Zones;
+        if (zonesNext[attachOwner] === state.zones[attachOwner]) {
+          // Not yet updated - create deep copy
+          attachZones = {
+            spellbook: [...state.zones[attachOwner].spellbook],
+            atlas: [...state.zones[attachOwner].atlas],
+            hand: [...state.zones[attachOwner].hand],
+            graveyard: [...state.zones[attachOwner].graveyard],
+            battlefield: [...state.zones[attachOwner].battlefield],
+            collection: [...state.zones[attachOwner].collection],
+            banished: [...(state.zones[attachOwner].banished || [])],
+          };
+        } else {
+          // Already updated - shallow copy is fine since arrays are already new
+          attachZones = { ...zonesNext[attachOwner] };
+        }
 
         if (attachedIsToken) {
           attachZones.banished = [...attachZones.banished, attachedCard];
@@ -403,6 +428,7 @@ export const createPermanentMovementSlice: StateCreator<
           `Artifact [p${attachPlayerNum}card:${attached.card.name}] dropped at tile`
         );
       }
+
       const { x, y } = parseCellKey(at);
       const cellNo = getCellNumber(x, y, state.board.size.w);
       const playerNum = owner === "p1" ? "1" : "2";
@@ -486,6 +512,8 @@ export const createPermanentMovementSlice: StateCreator<
       for (const { item: attached } of attachmentsToKeep) {
         affectedSeats.add(seatFromOwner(attached.owner));
       }
+
+      // Build and send patch
       const zonePatch = createZonesPatchFor(
         zonesNext,
         Array.from(affectedSeats)
@@ -497,13 +525,13 @@ export const createPermanentMovementSlice: StateCreator<
       if (zonePatch?.zones) patch.zones = zonePatch.zones;
       if (Object.keys(patch).length > 0) get().trySendPatch(patch);
 
-      // Cleanup for special minions leaving the realm
+      // Cleanup for special minions/artifacts leaving the realm
       const cardNameLower = (item.card?.name || "").toLowerCase();
 
-      // Pith Imp: return stolen cards when leaving
+      // Pith Imp: return stolen cards when leaving (uses private hand approach)
       if (cardNameLower.includes("pith imp")) {
         try {
-          get().returnStolenCard(item.instanceId ?? null, at);
+          get().removePithImpHand(item.instanceId ?? null, at);
         } catch {}
       }
 
@@ -511,6 +539,13 @@ export const createPermanentMovementSlice: StateCreator<
       if (cardNameLower.includes("morgana le fay")) {
         try {
           get().removeMorganaHand(item.instanceId ?? null, at);
+        } catch {}
+      }
+
+      // Omphalos: discard private hand when leaving
+      if (cardNameLower.includes("omphalos")) {
+        try {
+          get().removeOmphalosHand(item.instanceId ?? null, at);
         } catch {}
       }
 

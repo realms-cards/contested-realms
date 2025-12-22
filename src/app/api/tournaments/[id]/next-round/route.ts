@@ -1,137 +1,226 @@
-import { NextRequest } from 'next/server';
-import { getServerAuthSession } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
-import { tournamentSocketService } from '@/lib/services/tournament-broadcast';
-import { generatePairings, createRoundMatches } from '@/lib/tournament/pairing';
+import { NextRequest } from "next/server";
+import { getServerAuthSession } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { tournamentSocketService } from "@/lib/services/tournament-broadcast";
+import { createRoundMatches, generatePairings } from "@/lib/tournament/pairing";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
+
+function getTotalRounds(
+  settings: Record<string, unknown>,
+  playerCount: number
+): number {
+  const configured = Number(settings.totalRounds);
+  if (configured) return configured;
+  const pairingFormat =
+    (settings.pairingFormat as "swiss" | "elimination" | "round_robin") ||
+    "swiss";
+  if (pairingFormat === "round_robin") {
+    return Math.max(0, playerCount - 1);
+  }
+  if (pairingFormat === "elimination") {
+    return Math.max(1, Math.ceil(Math.log2(Math.max(playerCount, 1))));
+  }
+  return 3;
+}
+
+function normalizePlayers(value: unknown): Array<{ id: string; name?: string }> {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((player) => {
+      if (typeof player === "string") return { id: player };
+      if (player && typeof player === "object" && "id" in player) {
+        return player as { id?: string; name?: string };
+      }
+      return null;
+    })
+    .filter((player): player is { id: string; name?: string } =>
+      Boolean(player && typeof player.id === "string")
+    );
+}
+
+async function assignRoundMatches(
+  tournamentId: string,
+  roundId: string,
+  pairingData: Record<string, unknown> | null | undefined
+) {
+  const roundMatches = await prisma.match.findMany({
+    where: { roundId },
+  });
+
+  await Promise.all(
+    roundMatches.map(async (match) => {
+      const players = normalizePlayers(match.players);
+      const ids = players.map((p) => p.id);
+      if (ids.length === 0) return;
+      await prisma.playerStanding.updateMany({
+        where: {
+          tournamentId,
+          playerId: { in: ids },
+        },
+        data: { currentMatchId: match.id },
+      });
+    })
+  );
+
+  const byes = Array.isArray(pairingData?.byes)
+    ? pairingData?.byes.filter((id): id is string => typeof id === "string")
+    : [];
+  if (byes.length > 0) {
+    await Promise.all(
+      byes.map((playerId) =>
+        prisma.playerStanding.update({
+          where: {
+            tournamentId_playerId: {
+              tournamentId,
+              playerId,
+            },
+          },
+          data: {
+            wins: { increment: 1 },
+            matchPoints: { increment: 3 },
+            currentMatchId: null,
+          },
+        })
+      )
+    );
+  }
+
+  return roundMatches;
+}
 
 // POST /api/tournaments/[id]/next-round
-// Advances tournament to next round and generates pairings
-export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+// Starts the next pending round (host-controlled)
+export async function POST(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   const { id } = await params;
   const session = await getServerAuthSession();
   if (!session?.user) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+    });
   }
 
   try {
     const tournament = await prisma.tournament.findUnique({
       where: { id },
-      include: {
-        rounds: {
-          orderBy: { roundNumber: 'desc' },
-          take: 1
-        }
-      }
+      select: { status: true, settings: true, creatorId: true, name: true },
     });
 
     if (!tournament) {
-      return new Response(JSON.stringify({ error: 'Tournament not found' }), { status: 404 });
+      return new Response(JSON.stringify({ error: "Tournament not found" }), {
+        status: 404,
+      });
     }
 
-    if (tournament.status !== 'active') {
-      return new Response(JSON.stringify({ error: 'Tournament must be in active status' }), { status: 400 });
+    if (tournament.creatorId !== session.user.id) {
+      return new Response(JSON.stringify({ error: "Forbidden" }), {
+        status: 403,
+      });
     }
 
-    // Calculate next round number from existing rounds
-    const maxRound = tournament.rounds.length > 0 ? Math.max(...tournament.rounds.map(r => r.roundNumber)) : 0;
-    const nextRoundNumber = maxRound + 1;
-
-    // Check if we've already completed all rounds
-    const totalRounds = (tournament.settings as { totalRounds?: number })?.totalRounds || 3;
-    if (nextRoundNumber > totalRounds) {
-      return new Response(JSON.stringify({
-        error: `Cannot start round ${nextRoundNumber}. Tournament is configured for ${totalRounds} round${totalRounds === 1 ? '' : 's'}.`
-      }), { status: 400 });
+    if (tournament.status !== "active") {
+      return new Response(
+        JSON.stringify({ error: "Tournament must be active" }),
+        { status: 400 }
+      );
     }
 
-    // Check if current round is complete (if any)
-    if (tournament.rounds.length > 0) {
-      const currentRound = tournament.rounds[0];
-      const pendingMatches = await prisma.match.count({
-        where: {
-          roundId: currentRound.id,
-          status: { in: ['pending', 'active'] }
-        }
+    const activeRound = await prisma.tournamentRound.findFirst({
+      where: { tournamentId: id, status: "active" },
+      select: { id: true },
+    });
+
+    if (activeRound) {
+      return new Response(
+        JSON.stringify({ error: "A round is already active" }),
+        { status: 400 }
+      );
+    }
+
+    let pendingRound = await prisma.tournamentRound.findFirst({
+      where: { tournamentId: id, status: "pending" },
+      orderBy: { roundNumber: "asc" },
+    });
+
+    if (!pendingRound) {
+      const lastRound = await prisma.tournamentRound.findFirst({
+        where: { tournamentId: id },
+        orderBy: { roundNumber: "desc" },
+      });
+      const nextRoundNumber = (lastRound?.roundNumber ?? 0) + 1;
+      const playerCount = await prisma.playerStanding.count({
+        where: { tournamentId: id },
+      });
+      const totalRounds = getTotalRounds(
+        (tournament.settings as Record<string, unknown>) || {},
+        playerCount
+      );
+      if (nextRoundNumber > totalRounds) {
+        return new Response(
+          JSON.stringify({
+            error: `Cannot start round ${nextRoundNumber}. Tournament is configured for ${totalRounds} round${totalRounds === 1 ? "" : "s"}.`,
+          }),
+          { status: 400 }
+        );
+      }
+
+      const pairings = await generatePairings(id);
+      pendingRound = await prisma.tournamentRound.create({
+        data: {
+          tournamentId: id,
+          roundNumber: nextRoundNumber,
+          status: "pending",
+          pairingData: {
+            algorithm: "swiss",
+            seed: Date.now(),
+            byes: pairings.byes.map((bye) => bye.playerId),
+          },
+        },
       });
 
-      if (pendingMatches > 0) {
-        return new Response(JSON.stringify({ error: 'Current round is not complete' }), { status: 400 });
-      }
+      await createRoundMatches(id, pendingRound.id, pairings, {
+        assignMatches: false,
+        applyByes: false,
+      });
     }
 
-    // Create new round
-    const newRound = await prisma.tournamentRound.create({
-      data: {
-        tournamentId: id,
-        roundNumber: nextRoundNumber,
-        status: 'pending'
-      }
-    });
-
-    // Generate pairings
-    const pairings = await generatePairings(id);
-
-    // Create matches
-    const matchIds = await createRoundMatches(id, newRound.id, pairings);
-
-    // Update round status to active
     await prisma.tournamentRound.update({
-      where: { id: newRound.id },
-      data: {
-        status: 'active',
-        startedAt: new Date()
-      }
+      where: { id: pendingRound.id },
+      data: { status: "active", startedAt: new Date() },
     });
 
-    // Get match data for broadcasting
-    const roundMatches = await prisma.match.findMany({
-      where: { roundId: newRound.id }
-    });
-
-    // Get player names for the matches
-    const allPlayerIds = roundMatches.flatMap(match => 
-      Array.isArray(match.players) ? match.players.filter(id => typeof id === 'string') as string[] : []
+    const roundMatches = await assignRoundMatches(
+      id,
+      pendingRound.id,
+      (pendingRound.pairingData as Record<string, unknown>) || {}
     );
-    
-    const players = await prisma.user.findMany({
-      where: { id: { in: allPlayerIds } },
-      select: { id: true, name: true }
-    });
-    
-    const playerNameMap = new Map(players.map(p => [p.id, p.name]));
 
-    const matchData = roundMatches.map(match => {
-      const playerArray = Array.isArray(match.players) ? match.players as string[] : [];
-      const player1Id = playerArray[0] || '';
-      const player2Id = playerArray.length > 1 ? playerArray[1] : null;
-      
+    const matchData = roundMatches.map((match) => {
+      const players = normalizePlayers(match.players);
+      const player1 = players[0];
+      const player2 = players[1];
       return {
         id: match.id,
-        player1Id,
-        player1Name: playerNameMap.get(player1Id) || 'Unknown Player',
-        player2Id,
-        player2Name: player2Id ? playerNameMap.get(player2Id) || 'Unknown Player' : null
+        player1Id: player1?.id || "",
+        player1Name: player1?.name || "Unknown Player",
+        player2Id: player2?.id || null,
+        player2Name: player2?.name || null,
       };
     });
 
-    // Broadcast round started event via Socket.io
     try {
       await tournamentSocketService.broadcastRoundStarted(
         id,
-        nextRoundNumber,
+        pendingRound.roundNumber,
         matchData
       );
 
-      // Broadcast tournament update so UI refreshes automatically
       await tournamentSocketService.broadcastTournamentUpdateById(id);
 
-      // Additionally, send MATCH_ASSIGNED to each participant of created matches
-      // Optimized: Batch all broadcasts instead of sequential awaits (32 sequential → 1 parallel batch)
-      const t = await prisma.tournament.findUnique({ where: { id }, select: { name: true } });
-      const lobbyName = t?.name || 'Tournament Match';
-
+      const lobbyName = tournament.name || "Tournament Match";
       const broadcastPromises = [];
       for (const m of matchData) {
         if (m.player1Id) {
@@ -156,28 +245,26 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         }
       }
 
-      // Execute all broadcasts in parallel
       await Promise.all(broadcastPromises);
     } catch (socketError) {
-      console.warn('Failed to broadcast round started event:', socketError);
-      // Don't fail the request if socket broadcast fails
+      console.warn("Failed to broadcast round started event:", socketError);
     }
 
-    return new Response(JSON.stringify({
-      success: true,
-      roundNumber: nextRoundNumber,
-      roundId: newRound.id,
-      matchIds,
-      pairings: {
-        matches: pairings.matches.length,
-        byes: pairings.byes.length
+    return new Response(
+      JSON.stringify({
+        success: true,
+        roundNumber: pendingRound.roundNumber,
+        roundId: pendingRound.id,
+        matchIds: roundMatches.map((match) => match.id),
+      }),
+      {
+        status: 200,
+        headers: { "content-type": "application/json" },
       }
-    }), {
-      status: 200,
-      headers: { 'content-type': 'application/json' }
-    });
+    );
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : typeof e === 'string' ? e : 'Unknown error';
+    const message =
+      e instanceof Error ? e.message : typeof e === "string" ? e : "Unknown error";
     return new Response(JSON.stringify({ error: message }), { status: 500 });
   }
 }

@@ -367,6 +367,11 @@ enum PreparationStatus {
   completed
 }
 
+enum SeatStatus {
+  active
+  vacant
+}
+
 enum RoundStatus {
   pending
   active
@@ -418,6 +423,8 @@ model TournamentRegistration {
   preparationStatus PreparationStatus @default(notStarted)
   deckSubmitted     Boolean           @default(false)
   preparationData   Json?             // Format-specific preparation data
+  seatStatus        SeatStatus        @default(active)
+  seatMeta          Json?             // Open seat metadata (vacatedAt, previousPlayerId, etc)
 
   tournament   Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
   player       User       @relation(fields: [playerId], references: [id], onDelete: Cascade)

@@ -603,6 +603,7 @@ function createLobbyFeature(deps) {
               ? sc.packCounts
               : null;
           const replaceAvatars = !!sc.replaceAvatars;
+          const freeAvatars = !!sc.freeAvatars;
 
           const sets = [];
           if (packCounts) {
@@ -627,7 +628,8 @@ function createLobbyFeature(deps) {
             const picks = await generateBoosterDeterministic(
               setName,
               rng,
-              replaceAvatars
+              replaceAvatars,
+              freeAvatars
             );
             const cards = picks.map((p, idx) => ({
               id: `${String(p.variantId)}_${i}_${idx}_${pid.slice(-4)}`,

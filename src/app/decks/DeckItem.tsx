@@ -18,6 +18,7 @@ type DeckItemProps = {
     isOwner?: boolean; // Whether current user owns this deck
     avatarState: "none" | "single" | "multiple";
     avatarCard?: { name: string; slug: string | null } | null;
+    isPending?: boolean; // True while loading after import
   };
   onDelete?: (deckId: string) => void; // Optimistic delete callback
 };
@@ -115,6 +116,17 @@ export default function DeckItem({ deck, onDelete }: DeckItemProps) {
 
   const tags = useMemo(() => {
     const items: ReactNode[] = [];
+    // Show loading tag for pending decks
+    if (deck.isPending) {
+      items.push(
+        <Tag key="loading" tone="info">
+          <span className="inline-flex items-center gap-1">
+            <span className="w-3 h-3 border border-blue-300 border-t-transparent rounded-full animate-spin" />
+            Loading...
+          </span>
+        </Tag>
+      );
+    }
     if (formatLabel) {
       items.push(
         <Tag key="format" tone="default">
@@ -142,7 +154,7 @@ export default function DeckItem({ deck, onDelete }: DeckItemProps) {
           WIP (Multiple Avatars)
         </Tag>
       );
-    } else if (deck.avatarState === "none") {
+    } else if (deck.avatarState === "none" && !deck.isPending) {
       items.push(
         <Tag key="avatar-missing" tone="error">
           Avatar Missing
@@ -153,6 +165,7 @@ export default function DeckItem({ deck, onDelete }: DeckItemProps) {
   }, [
     deck.avatarState,
     deck.imported,
+    deck.isPending,
     deck.isPublic,
     effectiveIsPublic,
     formatLabel,
@@ -160,6 +173,16 @@ export default function DeckItem({ deck, onDelete }: DeckItemProps) {
   ]);
 
   const avatarPreview = useMemo(() => {
+    // Show loading spinner for pending decks
+    if (deck.isPending) {
+      return (
+        <div className="flex-shrink-0 pointer-events-none">
+          <div className="relative w-16 h-24 overflow-hidden rounded-sm shadow-lg shadow-black/40 ring-1 ring-white/15 bg-black/30 flex items-center justify-center">
+            <div className="w-6 h-6 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+          </div>
+        </div>
+      );
+    }
     if (deck.avatarState !== "single" || !deck.avatarCard) return null;
     const { name, slug } = deck.avatarCard;
     if (slug) {
@@ -189,7 +212,7 @@ export default function DeckItem({ deck, onDelete }: DeckItemProps) {
       );
     }
     return null;
-  }, [deck.avatarCard, deck.avatarState]);
+  }, [deck.avatarCard, deck.avatarState, deck.isPending]);
 
   return (
     <Link

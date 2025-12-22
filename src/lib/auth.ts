@@ -120,7 +120,10 @@ if (!emailFrom || !emailServer) {
   }
 }
 
-function buildConfirmMagicLink(originalUrl: string, identifier: string): string {
+function buildConfirmMagicLink(
+  originalUrl: string,
+  identifier: string
+): string {
   try {
     const base = new URL(originalUrl);
     const confirmUrl = new URL("/auth/confirm", base);
@@ -442,6 +445,18 @@ export const authOptions: NextAuthOptions = {
   providers,
   session: {
     strategy: "jwt",
+    maxAge: 30 * 24 * 60 * 60, // 30 days
+  },
+  cookies: {
+    sessionToken: {
+      name: `next-auth.session-token`,
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: process.env.NODE_ENV === "production",
+      },
+    },
   },
   callbacks: {
     async jwt({ token, user, account, trigger, session }): Promise<JWT> {
@@ -454,8 +469,8 @@ export const authOptions: NextAuthOptions = {
           const nextImageRaw = (session as Record<string, unknown>).image;
           if (typeof nextImageRaw === "string" || nextImageRaw === null) {
             const nextImage = sanitizeUserImage(nextImageRaw);
+            // Only store image once (not both picture and image) to reduce JWT size
             (token as Record<string, unknown>).picture = nextImage ?? null;
-            (token as Record<string, unknown>).image = nextImage ?? null;
           }
           const nextEmail = (session as Record<string, unknown>).email;
           if (typeof nextEmail === "string" || nextEmail === null) {
@@ -493,7 +508,6 @@ export const authOptions: NextAuthOptions = {
             token.email = dbUser.email ?? null;
             const safeImage = sanitizeUserImage(dbUser.image);
             (token as Record<string, unknown>).picture = safeImage ?? null;
-            (token as Record<string, unknown>).image = safeImage ?? null;
             (token as Record<string, unknown>).emailVerified =
               dbUser.emailVerified ? dbUser.emailVerified.toISOString() : null;
           } else {
@@ -510,7 +524,6 @@ export const authOptions: NextAuthOptions = {
               user.image as string | null | undefined
             );
             (token as Record<string, unknown>).picture = safeImage ?? null;
-            (token as Record<string, unknown>).image = safeImage ?? null;
             const userEmailVerified = (user as { emailVerified?: Date | null })
               .emailVerified;
             if (userEmailVerified instanceof Date) {

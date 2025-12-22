@@ -1,6 +1,8 @@
 import { NextRequest } from 'next/server';
 import { getServerAuthSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { TOURNAMENT_PLAYER_LIMITS } from '@/lib/tournament/constants';
+import { countActiveSeats, getRegistrationSettings } from '@/lib/tournament/registration';
 
 export const dynamic = 'force-dynamic';
 
@@ -87,7 +89,8 @@ export async function POST(
         isPrivate: true,
         status: true,
         maxPlayers: true,
-        registrations: { select: { playerId: true } }
+        settings: true,
+        registrations: { select: { playerId: true, seatStatus: true } }
       }
     });
 
@@ -99,13 +102,36 @@ export async function POST(
       return new Response(JSON.stringify({ error: 'Only tournament creator can send invitations' }), { status: 403 });
     }
 
-    if (tournament.status !== 'registering') {
+    const registrationSettings = getRegistrationSettings(tournament.settings);
+    const isOpenSeat = registrationSettings.mode === 'open';
+    const isLocked = registrationSettings.locked;
+
+    const canInviteNewSeat =
+      isOpenSeat &&
+      !isLocked &&
+      (tournament.status === 'registering' || tournament.status === 'preparing');
+
+    if (!isOpenSeat && tournament.status !== 'registering') {
       return new Response(JSON.stringify({ error: 'Cannot send invitations after registration closes' }), { status: 400 });
     }
-
     // Check if tournament is full
-    if (tournament.registrations.length >= tournament.maxPlayers) {
+    if (!isOpenSeat && tournament.registrations.length >= tournament.maxPlayers) {
       return new Response(JSON.stringify({ error: 'Tournament is full' }), { status: 400 });
+    }
+    if (isOpenSeat) {
+      const activeCount = countActiveSeats(tournament.registrations);
+      const hasVacantSeat = tournament.registrations.some((reg) => reg.seatStatus === 'vacant');
+      if (activeCount >= TOURNAMENT_PLAYER_LIMITS.MAX_PLAYERS) {
+        return new Response(JSON.stringify({ error: 'Tournament is full' }), { status: 400 });
+      }
+      if (!canInviteNewSeat && !hasVacantSeat) {
+        return new Response(
+          JSON.stringify({
+            error: isLocked ? 'Tournament registration is locked' : 'No vacant seats available'
+          }),
+          { status: 400 }
+        );
+      }
     }
 
     // Create invitations (skip duplicates)

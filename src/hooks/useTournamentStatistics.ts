@@ -23,6 +23,8 @@ interface MatchResult {
   status: 'pending' | 'active' | 'completed' | 'cancelled';
   players: Array<{ id: string; name: string; seat?: number | null }>;
   winnerId: string | null;
+  invalid?: boolean;
+  bye?: boolean;
   gameCount: number;
   duration: number | null;
   startedAt: string | null;
@@ -40,11 +42,14 @@ interface TournamentRound {
   statistics: {
     totalMatches: number;
     completedMatches: number;
+    cancelledMatches: number;
+    resolvedMatches: number;
     activeMatches: number;
     pendingMatches: number;
     completionRate: number;
     averageMatchDuration: number | null;
   };
+  readyToEnd?: boolean;
   matches: MatchResult[];
 }
 

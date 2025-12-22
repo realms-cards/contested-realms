@@ -36,7 +36,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
     // Get all players' preparation status for coordination
     const allRegistrations = await prisma.tournamentRegistration.findMany({
-      where: { tournamentId: id },
+      where: { tournamentId: id, seatStatus: 'active' },
       select: {
         playerId: true,
         preparationStatus: true,

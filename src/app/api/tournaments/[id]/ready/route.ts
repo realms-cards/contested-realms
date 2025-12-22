@@ -55,7 +55,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     // Get updated ready player count
     const updatedRegistrations = await prisma.tournamentRegistration.findMany({
-      where: { tournamentId: id },
+      where: { tournamentId: id, seatStatus: 'active' },
       select: { preparationData: true }
     });
 

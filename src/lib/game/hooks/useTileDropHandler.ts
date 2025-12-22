@@ -68,6 +68,9 @@ type TileDropHandlerOptions = {
   // Site dragging
   draggingSite: GameState["draggingSite"];
   dropDraggingSite: GameState["dropDraggingSite"];
+  // Private hand cast targeting (Morgana/Omphalos)
+  pendingPrivateHandCast: GameState["pendingPrivateHandCast"];
+  completePendingPrivateHandCast: GameState["completePendingPrivateHandCast"];
 };
 
 type HandleTilePointerUpArgs = {
@@ -110,6 +113,8 @@ export function useTileDropHandler({
   selectPermanent,
   draggingSite,
   dropDraggingSite,
+  pendingPrivateHandCast,
+  completePendingPrivateHandCast,
 }: TileDropHandlerOptions) {
   const {
     dragAvatar,
@@ -135,6 +140,12 @@ export function useTileDropHandler({
       // Handle site drag drop
       if (draggingSite) {
         dropDraggingSite(tileX, tileY);
+        return;
+      }
+
+      // Handle pending private hand cast (Morgana/Omphalos targeting)
+      if (pendingPrivateHandCast) {
+        completePendingPrivateHandCast({ x: tileX, y: tileY });
         return;
       }
 
@@ -599,6 +610,8 @@ export function useTileDropHandler({
       isCarryableArtifact,
       draggingSite,
       dropDraggingSite,
+      pendingPrivateHandCast,
+      completePendingPrivateHandCast,
     ]
   );
 }

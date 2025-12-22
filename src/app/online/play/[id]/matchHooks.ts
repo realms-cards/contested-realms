@@ -246,7 +246,7 @@ export function useChaosTwisterListener(transport: MessageTransport | null) {
     const off = transport.on("message", (m) => {
       const type =
         m && typeof m === "object" && (m as Record<string, unknown>).type;
-      // Route Chaos Twister messages to the custom message handler
+      // Route Chaos Twister and Pith Imp messages to the custom message handler
       if (
         type === "chaosTwisterBegin" ||
         type === "chaosTwisterSelectMinion" ||
@@ -254,7 +254,9 @@ export function useChaosTwisterListener(transport: MessageTransport | null) {
         type === "chaosTwisterMinigameResult" ||
         type === "chaosTwisterResolve" ||
         type === "chaosTwisterCancel" ||
-        type === "chaosTwisterSliderPosition"
+        type === "chaosTwisterSliderPosition" ||
+        type === "pithImpSteal" ||
+        type === "pithImpReturn"
       ) {
         // Log non-position messages for debugging
         if (type !== "chaosTwisterSliderPosition") {

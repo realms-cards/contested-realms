@@ -5,6 +5,7 @@
 
 import { prisma } from '@/lib/prisma';
 import { SWISS_PAIRING, calculateOptimalRounds } from '@/lib/tournament/constants';
+import { countActiveSeats } from '@/lib/tournament/registration';
 
 export interface PairingResult {
   player1Id: string;
@@ -498,7 +499,7 @@ export class SwissPairingService {
       return false;
     }
 
-    const playerCount = tournament.registrations.length;
+    const playerCount = countActiveSeats(tournament.registrations);
     const completedRounds = tournament.rounds.filter(r => r.status === 'completed').length;
     const optimalRounds = this.calculateRounds(playerCount);
 

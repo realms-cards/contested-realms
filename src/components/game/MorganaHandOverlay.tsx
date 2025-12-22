@@ -15,7 +15,9 @@ export default function MorganaHandOverlay({
 }: MorganaHandOverlayProps) {
   const morganaHands = useGameStore((s) => s.morganaHands);
   const actorKey = useGameStore((s) => s.actorKey);
-  const castFromMorganaHand = useGameStore((s) => s.castFromMorganaHand);
+  const setPendingPrivateHandCast = useGameStore(
+    (s) => s.setPendingPrivateHandCast
+  );
 
   const [expanded, setExpanded] = useState<string | null>(null);
   const [selectedCardIndex, setSelectedCardIndex] = useState<number | null>(
@@ -41,22 +43,29 @@ export default function MorganaHandOverlay({
     setSelectedCardIndex((prev) => (prev === index ? null : index));
   }, []);
 
-  // Cast the selected card (placeholder - actual targeting would be needed)
+  // Begin casting the selected card - puts player in targeting mode
   const handleCast = useCallback(
-    (morganaId: string, cardIndex: number) => {
-      // For now, cast to center of board (0,0) - in practice this would open targeting
-      // This is a simplified version; a full implementation would involve tile selection
-      castFromMorganaHand(morganaId, cardIndex, { x: 2, y: 2 });
+    (morgana: MorganaHandEntry, cardIndex: number) => {
+      const card = morgana.hand[cardIndex];
+      if (!card) return;
+
+      // Set pending cast - player must now click a tile to complete
+      setPendingPrivateHandCast({
+        kind: "morgana",
+        handId: morgana.id,
+        cardIndex,
+        card,
+      });
       setSelectedCardIndex(null);
       setExpanded(null);
     },
-    [castFromMorganaHand]
+    [setPendingPrivateHandCast]
   );
 
   if (visibleHands.length === 0) return null;
 
   return (
-    <div className="fixed bottom-32 right-4 z-[150] pointer-events-auto">
+    <div className="fixed bottom-32 right-4 z-[15] pointer-events-auto">
       {visibleHands.map((morgana) => (
         <MorganaHandCard
           key={morgana.id}
@@ -65,7 +74,7 @@ export default function MorganaHandOverlay({
           onToggleExpand={() => toggleExpand(morgana.id)}
           selectedCardIndex={expanded === morgana.id ? selectedCardIndex : null}
           onSelectCard={handleSelectCard}
-          onCast={(cardIndex) => handleCast(morgana.id, cardIndex)}
+          onCast={(cardIndex) => handleCast(morgana, cardIndex)}
           isOwner={actorKey === null || morgana.ownerSeat === actorKey}
         />
       ))}

@@ -19,6 +19,10 @@ export default function TournamentWaitingOverlay({
   );
   const currentRound = tournament.rounds[tournament.currentRound - 1];
   const myCurrentMatch = myStanding?.currentMatchId;
+  const activeCount = tournament.registeredPlayers.filter(
+    (player) => player.seatStatus !== "vacant"
+  ).length;
+  const vacantCount = tournament.registeredPlayers.length - activeCount;
 
   const sortedStandings = [...tournament.standings].sort((a, b) => {
     if (a.matchPoints !== b.matchPoints) return b.matchPoints - a.matchPoints;
@@ -30,7 +34,12 @@ export default function TournamentWaitingOverlay({
   const getStatusMessage = () => {
     switch (tournament.status) {
       case "registering":
-        return `Waiting for registration to complete (${tournament.registeredPlayers.length}/${tournament.maxPlayers})`;
+        if (vacantCount > 0 || activeCount > tournament.maxPlayers) {
+          return `Registration open (${activeCount} active${
+            vacantCount > 0 ? `, ${vacantCount} vacant` : ""
+          })`;
+        }
+        return `Waiting for registration to complete (${activeCount}/${tournament.maxPlayers})`;
       case "draft_phase":
         return "Draft phase in progress...";
       case "sealed_phase":

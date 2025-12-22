@@ -225,7 +225,7 @@ export default function Home() {
           <p />
         </div>
 
-        <div className="mx-auto mt-6 text-xs text-orange-200/80 grid grid-cols-3 items-center gap-1">
+        <div className="mx-auto mt-6 text-xs text-orange-200/80 grid grid-cols-5 items-center gap-1">
           <a
             href="https://github.com/realms-cards/issues/issues"
             target="_blank"
@@ -251,6 +251,18 @@ export default function Home() {
           >
             Email Us
           </a>
+          <Link
+            href="/terms"
+            className="underline hover:text-orange-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-300/70"
+          >
+            Terms
+          </Link>
+          <Link
+            href="/privacy"
+            className="underline hover:text-orange-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-300/70"
+          >
+            Privacy
+          </Link>
         </div>
       </div>
 

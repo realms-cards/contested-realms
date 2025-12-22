@@ -9,6 +9,8 @@ import { withCache, CacheKeys, invalidateCache } from "@/lib/cache/redis-cache";
 import { logPerformance } from "@/lib/monitoring/performance";
 import { prisma } from "@/lib/prisma";
 import { tournamentSocketService } from "@/lib/services/tournament-broadcast";
+import { countActiveSeats } from "@/lib/tournament/registration";
+import { TOURNAMENT_PLAYER_LIMITS } from "@/lib/tournament/constants";
 
 export const dynamic = "force-dynamic";
 
@@ -169,7 +171,7 @@ export async function GET(req: NextRequest) {
       status: tournament.status,
       maxPlayers: tournament.maxPlayers,
       isPrivate: tournament.isPrivate,
-      currentPlayers: tournament.registrations.length,
+      currentPlayers: countActiveSeats(tournament.registrations),
       registeredPlayers: tournament.registrations.map((reg) => {
         const prepData = reg.preparationData as Record<string, unknown> | null;
         return {
@@ -177,6 +179,7 @@ export async function GET(req: NextRequest) {
           displayName: reg.player.name || "Anonymous",
           ready: Boolean(prepData?.ready),
           deckSubmitted: Boolean(reg.deckSubmitted),
+          seatStatus: reg.seatStatus,
         };
       }),
       standings: tournament.standings.map((standing) => ({
@@ -255,6 +258,18 @@ export async function POST(req: NextRequest) {
     // Accept sealed/draft config from either top-level or nested in `settings`
     const incomingSettings =
       (body?.settings as Record<string, unknown> | undefined) || {};
+    const rawRegistration = incomingSettings?.registration as
+      | Record<string, unknown>
+      | undefined;
+    const registrationMode =
+      body?.registrationMode ??
+      rawRegistration?.mode ??
+      "fixed";
+    const registrationLocked =
+      body?.registrationLocked ??
+      rawRegistration?.locked ??
+      false;
+    const isOpenSeat = registrationMode === "open";
     let sealedConfig =
       (body?.sealedConfig as unknown) ??
       (incomingSettings?.sealedConfig as unknown) ??
@@ -355,7 +370,23 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (![2, 4, 8, 16, 32].includes(maxPlayers)) {
+    if (!Number.isFinite(maxPlayers) || maxPlayers < 2) {
+      return new Response(
+        JSON.stringify({ error: "Invalid max players count" }),
+        { status: 400 }
+      );
+    }
+
+    if (isOpenSeat) {
+      if (maxPlayers > TOURNAMENT_PLAYER_LIMITS.MAX_PLAYERS) {
+        return new Response(
+          JSON.stringify({
+            error: `Open seat tournaments cannot exceed ${TOURNAMENT_PLAYER_LIMITS.MAX_PLAYERS} players`,
+          }),
+          { status: 400 }
+        );
+      }
+    } else if (![2, 4, 8, 16, 32].includes(maxPlayers)) {
       return new Response(
         JSON.stringify({ error: "Invalid max players count" }),
         { status: 400 }
@@ -367,6 +398,7 @@ export async function POST(req: NextRequest) {
       await prisma.tournamentRegistration.findMany({
         where: {
           playerId: session.user.id,
+          seatStatus: "active",
           tournament: {
             status: { in: ["registering", "preparing", "active"] },
           },
@@ -402,6 +434,10 @@ export async function POST(req: NextRequest) {
       matchTimeLimit: 60,
       sealedConfig,
       draftConfig,
+      registration: {
+        mode: isOpenSeat ? "open" : "fixed",
+        locked: Boolean(registrationLocked),
+      },
     };
 
     const tournament = await prisma.tournament.create({

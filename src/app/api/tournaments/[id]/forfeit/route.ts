@@ -3,6 +3,7 @@ import { getServerAuthSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { tournamentSocketService } from '@/lib/services/tournament-broadcast';
 import { updateStandingsAfterMatch } from '@/lib/tournament/pairing';
+import { countActiveSeats, getRegistrationSettings } from '@/lib/tournament/registration';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,7 +21,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     const tournament = await prisma.tournament.findUnique({
       where: { id },
-      select: { id: true, status: true, name: true }
+      select: { id: true, status: true, name: true, settings: true }
     });
 
     if (!tournament) {
@@ -30,6 +31,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (tournament.status === 'completed' || tournament.status === 'cancelled') {
       return new Response(JSON.stringify({ error: 'Tournament already finished' }), { status: 400 });
     }
+
+    const registrationSettings = getRegistrationSettings(tournament.settings);
+    const isOpenSeat = registrationSettings.mode === 'open';
 
     // Ensure the player is registered/has standings
     const standing = await prisma.playerStanding.findUnique({
@@ -50,7 +54,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (currentMatchId) {
       const match = await prisma.match.findUnique({ where: { id: currentMatchId } });
       if (match && match.status !== 'completed') {
-        const playersArr = Array.isArray(match.players) ? (match.players as Array<{ id?: string; playerId?: string; userId?: string }>) : [];
+        const playersArr = Array.isArray(match.players)
+          ? (match.players as Array<{ id?: string; playerId?: string; userId?: string }>)
+          : [];
         const ids = playersArr
           .map((p) => (p?.id || p?.playerId || p?.userId ? String(p.id || p.playerId || p.userId) : null))
           .filter((x): x is string => !!x);
@@ -129,22 +135,59 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }
     }
 
-    // Mark player as eliminated, clear current match assignment, and remove registration
-    await prisma.$transaction([
-      prisma.playerStanding.update({
+    if (isOpenSeat) {
+      const registration = await prisma.tournamentRegistration.findUnique({
         where: {
-          tournamentId_playerId: { tournamentId: id, playerId: userId }
-        },
-        data: { isEliminated: true, currentMatchId: null }
-      }),
-      // Remove the registration to fully unregister the player
-      prisma.tournamentRegistration.deleteMany({
-        where: {
-          tournamentId: id,
-          playerId: userId
+          tournamentId_playerId: {
+            tournamentId: id,
+            playerId: userId
+          }
         }
-      })
-    ]);
+      });
+
+      if (!registration) {
+        return new Response(JSON.stringify({ error: 'Registration not found' }), { status: 400 });
+      }
+
+      const seatMeta = (registration.seatMeta as Record<string, unknown> | null) ?? {};
+      await prisma.$transaction([
+        prisma.tournamentRegistration.update({
+          where: { id: registration.id },
+          data: {
+            seatStatus: 'vacant',
+            seatMeta: {
+              ...seatMeta,
+              vacatedAt: new Date().toISOString(),
+              vacatedBy: userId,
+              reason: 'forfeit'
+            }
+          }
+        }),
+        prisma.playerStanding.update({
+          where: {
+            tournamentId_playerId: { tournamentId: id, playerId: userId }
+          },
+          data: { currentMatchId: null }
+        })
+      ]);
+    } else {
+      // Mark player as eliminated, clear current match assignment, and remove registration
+      await prisma.$transaction([
+        prisma.playerStanding.update({
+          where: {
+            tournamentId_playerId: { tournamentId: id, playerId: userId }
+          },
+          data: { isEliminated: true, currentMatchId: null }
+        }),
+        // Remove the registration to fully unregister the player
+        prisma.tournamentRegistration.deleteMany({
+          where: {
+            tournamentId: id,
+            playerId: userId
+          }
+        })
+      ]);
+    }
 
     // Broadcast update so UIs refresh standings and lists
     try {
@@ -154,9 +197,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // Notify tournament room that the player left (host and viewers)
     try {
       const regCount = await prisma.tournamentRegistration.count({ where: { tournamentId: id } });
+      const activeCount = isOpenSeat
+        ? countActiveSeats(await prisma.tournamentRegistration.findMany({ where: { tournamentId: id } }))
+        : regCount;
       const user = await prisma.user.findUnique({ where: { id: userId }, select: { name: true, shortId: true } });
       const playerName = user?.name || user?.shortId || userId;
-      await tournamentSocketService.broadcastPlayerLeft(id, userId, playerName, regCount);
+      await tournamentSocketService.broadcastPlayerLeft(id, userId, playerName, activeCount);
     } catch {}
 
     return new Response(JSON.stringify({
@@ -172,4 +218,3 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return new Response(JSON.stringify({ error: message }), { status: 500 });
   }
 }
-

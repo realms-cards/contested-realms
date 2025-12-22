@@ -58,6 +58,8 @@ interface RealtimeTournamentContextValue {
     maxPlayers: number;
     isPrivate?: boolean;
     settings?: Record<string, unknown>;
+    registrationMode?: "fixed" | "open";
+    registrationLocked?: boolean;
   }) => Promise<TournamentInfo>;
   joinTournament: (tournamentId: string) => Promise<void>;
   leaveTournament: (tournamentId: string) => Promise<void>;
@@ -66,6 +68,10 @@ interface RealtimeTournamentContextValue {
   updateTournamentSettings: (
     tournamentId: string,
     settings: Record<string, unknown>
+  ) => Promise<void>;
+  toggleTournamentRegistrationLock: (
+    tournamentId: string,
+    locked: boolean
   ) => Promise<void>;
   toggleTournamentReady: (
     tournamentId: string,
@@ -914,11 +920,17 @@ export function RealtimeTournamentProvider({
       [key: string]: unknown;
     }) => {
       console.log("Statistics updated:", data);
-      // Trust socket data - update state directly if payload includes data
-      // For now, just mark as updated - server should send full data in future
+      if (currentTournament?.id === data.tournamentId) {
+        queueStatisticsRefresh({
+          standings: true,
+          matches: true,
+          rounds: true,
+          overview: true,
+        });
+      }
       setLastUpdated(new Date().toISOString());
     },
-    []
+    [currentTournament?.id, queueStatisticsRefresh]
   );
 
   const handleRoundStarted = useCallback(
@@ -1124,6 +1136,8 @@ export function RealtimeTournamentProvider({
       maxPlayers: number;
       isPrivate?: boolean;
       settings?: Record<string, unknown>;
+      registrationMode?: "fixed" | "open";
+      registrationLocked?: boolean;
     }) => {
       setLoading(true);
       setError(null);
@@ -1395,6 +1409,45 @@ export function RealtimeTournamentProvider({
     [isConnected, refreshTournamentsDebounced]
   );
 
+  const toggleTournamentRegistrationLock = useCallback(
+    async (tournamentId: string, locked: boolean) => {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const response = await fetch(
+          `/api/tournaments/${tournamentId}/registration`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ locked }),
+          }
+        );
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(
+            error.error || "Failed to update registration lock"
+          );
+        }
+
+        if (!isConnected) {
+          refreshTournamentsDebounced();
+        }
+      } catch (err) {
+        const message =
+          err instanceof Error
+            ? err.message
+            : "Failed to update registration lock";
+        setError(message);
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [isConnected, refreshTournamentsDebounced]
+  );
+
   const toggleTournamentReady = useCallback(
     async (tournamentId: string, ready: boolean) => {
       setLoading(true);
@@ -1456,6 +1509,7 @@ export function RealtimeTournamentProvider({
     startTournament,
     endTournament,
     updateTournamentSettings,
+    toggleTournamentRegistrationLock,
     toggleTournamentReady,
     sendTournamentChat,
     refreshTournaments,

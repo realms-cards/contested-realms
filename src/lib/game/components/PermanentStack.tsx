@@ -174,6 +174,8 @@ export type PermanentStackProps = {
   playCardFlip: () => void;
   isPrimaryCardHit: (e: ThreeEvent<PointerEvent | MouseEvent>) => boolean;
   showOwnershipOverlay: boolean;
+  cardScale: number;
+  stolenCards: GameState["stolenCards"];
 };
 
 export function PermanentStack({
@@ -208,6 +210,8 @@ export function PermanentStack({
   playCardFlip,
   isPrimaryCardHit,
   showOwnershipOverlay,
+  cardScale,
+  stolenCards: _stolenCards,
 }: PermanentStackProps) {
   if (items.length === 0) {
     return null;
@@ -506,6 +510,9 @@ export function PermanentStack({
             />
             <group
               visible={!isLocalDragGhost}
+              scale={
+                tokenSiteReplace ? [1, 1, 1] : [cardScale, cardScale, cardScale]
+              }
               userData={{ cardInstance: permId }}
               onPointerDown={(e) => {
                 if (!isPrimaryCardHit(e)) {
@@ -695,6 +702,12 @@ export function PermanentStack({
                       clearHoverPreview(hoverKey);
                       return;
                     }
+                  }
+                  // Monuments cannot be dragged (they're immovable artifacts)
+                  const cardType = (p.card?.type || "").toLowerCase();
+                  if (cardType.includes("monument")) {
+                    clearHoverPreview(hoverKey);
+                    return;
                   }
                   dragStartRef.current = {
                     at: key,
@@ -1162,6 +1175,7 @@ export function PermanentStack({
                     </Html3D>
                   );
                 })()}
+                {/* Stolen cards are now rendered as attached permanents with cardback */}
                 {(() => {
                   const attachedTokens = items.filter(
                     (item) =>
@@ -1175,12 +1189,43 @@ export function PermanentStack({
                     const isArtifact = (token.card.type || "")
                       .toLowerCase()
                       .includes("artifact");
+                    const isPithImpStolen =
+                      "pithImpStolen" in token.card &&
+                      token.card.pithImpStolen === true;
                     const offsetMultiplier = 0.3;
                     const attachOffsetX =
                       CARD_SHORT *
                       offsetMultiplier *
                       (attachIdx - (attachedTokens.length - 1) / 2);
                     const offsetZ = CARD_LONG * 0.4;
+
+                    // Render Pith Imp stolen cards as face-down cardbacks
+                    if (isPithImpStolen) {
+                      const stolenW = CARD_SHORT * 0.55;
+                      const stolenH = CARD_LONG * 0.55;
+                      return (
+                        <group
+                          key={`attached-stolen-${attachIdx}`}
+                          position={[
+                            attachOffsetX,
+                            BASE_CARD_ELEVATION - CARD_THICK * 0.05,
+                            offsetZ,
+                          ]}
+                        >
+                          <CardPlane
+                            slug=""
+                            textureUrl="/api/assets/cardback_spellbook.png"
+                            forceTextureUrl
+                            width={stolenW}
+                            height={stolenH}
+                            rotationZ={rotZ}
+                            elevation={-0.001}
+                            renderOrder={90 - attachIdx}
+                            depthWrite={false}
+                          />
+                        </group>
+                      );
+                    }
 
                     if (attachTokenDef) {
                       const texUrl = tokenTextureUrl(attachTokenDef);

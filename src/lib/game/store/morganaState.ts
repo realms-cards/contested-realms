@@ -39,6 +39,9 @@ export type MorganaSlice = Pick<
   | "castFromMorganaHand"
   | "removeMorganaHand"
   | "getMorganaHandForMinion"
+  | "pendingPrivateHandCast"
+  | "setPendingPrivateHandCast"
+  | "completePendingPrivateHandCast"
 >;
 
 export const createMorganaSlice: StateCreator<
@@ -318,5 +321,38 @@ export const createMorganaSlice: StateCreator<
         (minionInstanceId && m.minion.instanceId === minionInstanceId)
     );
     return entry?.hand || [];
+  },
+
+  // Pending cast from Morgana/Omphalos private hands
+  pendingPrivateHandCast: null,
+
+  setPendingPrivateHandCast: (pending) => {
+    set({ pendingPrivateHandCast: pending } as Partial<GameState> as GameState);
+  },
+
+  completePendingPrivateHandCast: (targetTile) => {
+    const pending = get().pendingPrivateHandCast;
+    if (!pending) return;
+
+    // For Omphalos minions, must cast at artifact location
+    if (pending.mustCastAtLocation) {
+      const [mustX, mustY] = pending.mustCastAtLocation.split(",").map(Number);
+      const cardType = (pending.card.type || "").toLowerCase();
+      if (
+        cardType.includes("minion") &&
+        (targetTile.x !== mustX || targetTile.y !== mustY)
+      ) {
+        get().log("Minions from Omphalos must be summoned at its location");
+        return;
+      }
+    }
+
+    if (pending.kind === "morgana") {
+      get().castFromMorganaHand(pending.handId, pending.cardIndex, targetTile);
+    } else if (pending.kind === "omphalos") {
+      get().castFromOmphalosHand(pending.handId, pending.cardIndex, targetTile);
+    }
+
+    set({ pendingPrivateHandCast: null } as Partial<GameState> as GameState);
   },
 });

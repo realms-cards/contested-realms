@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { getServerAuthSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { tournamentSocketService } from '@/lib/services/tournament-broadcast';
+import { createRoundMatches, generatePairings } from '@/lib/tournament/pairing';
+import { getRegistrationSettings } from '@/lib/tournament/registration';
 
 const SubmitPreparationRequestSchema = z.object({
   preparationData: z.object({
@@ -162,8 +164,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // Broadcast preparation progress
     try {
       const [readyCount, totalCount] = await Promise.all([
-        prisma.tournamentRegistration.count({ where: { tournamentId: id, preparationStatus: 'completed', deckSubmitted: true } }),
-        prisma.tournamentRegistration.count({ where: { tournamentId: id } })
+        prisma.tournamentRegistration.count({ where: { tournamentId: id, preparationStatus: 'completed', deckSubmitted: true, seatStatus: 'active' } }),
+        prisma.tournamentRegistration.count({ where: { tournamentId: id, seatStatus: 'active' } })
       ]);
       await tournamentSocketService.broadcastPreparationUpdate(
         id,
@@ -215,13 +217,21 @@ function validateDeckList(deckList: Array<{ cardId: string; quantity: number }>)
 async function checkAndTransitionToActivePhase(tournamentId: string) {
   const [allRegistrations, tournament] = await Promise.all([
     prisma.tournamentRegistration.findMany({
-      where: { tournamentId },
+      where: { tournamentId, seatStatus: 'active' },
       select: { preparationStatus: true, deckSubmitted: true }
     }),
-    prisma.tournament.findUnique({ where: { id: tournamentId }, select: { status: true, name: true } })
+    prisma.tournament.findUnique({
+      where: { id: tournamentId },
+      select: { status: true, name: true, settings: true }
+    })
   ]);
 
   if (!tournament) return false;
+
+  const registrationSettings = getRegistrationSettings(tournament.settings);
+  if (registrationSettings.mode === 'open' && !registrationSettings.locked) {
+    return false;
+  }
 
   const allComplete = allRegistrations.every(reg => 
     reg.preparationStatus === 'completed' && reg.deckSubmitted
@@ -237,6 +247,33 @@ async function checkAndTransitionToActivePhase(tournamentId: string) {
   });
 
   console.log(`Tournament ${tournamentId} transitioned to active phase - host may start Round 1 manually`);
+
+  // Create a pending first round with proposed pairings if none exist yet
+  const existingRound = await prisma.tournamentRound.findFirst({
+    where: { tournamentId },
+    select: { id: true }
+  });
+
+  if (!existingRound) {
+    const pairings = await generatePairings(tournamentId);
+    const pendingRound = await prisma.tournamentRound.create({
+      data: {
+        tournamentId,
+        roundNumber: 1,
+        status: 'pending',
+        pairingData: {
+          algorithm: 'swiss',
+          seed: Date.now(),
+          byes: pairings.byes.map((bye) => bye.playerId)
+        }
+      }
+    });
+
+    await createRoundMatches(tournamentId, pendingRound.id, pairings, {
+      assignMatches: false,
+      applyByes: false
+    });
+  }
 
   try {
     await tournamentSocketService.broadcastPhaseChanged(tournamentId, 'active', {

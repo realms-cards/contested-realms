@@ -47,6 +47,7 @@ function mapToProtocolTournament(tournament: {
     avatarUrl?: string | null;
     avatar?: string | null;
     image?: string | null;
+    seatStatus?: string | null;
   }>;
   settings?: Record<string, unknown>;
   createdAt: string;
@@ -75,6 +76,9 @@ function mapToProtocolTournament(tournament: {
         location: null,
         inLobby: false,
         inMatch: false,
+        seatStatus: (player.seatStatus === "vacant" ? "vacant" : "active") as
+          | "vacant"
+          | "active",
       };
     }
   );
@@ -137,12 +141,18 @@ interface TournamentsAPI {
     format: "sealed" | "draft" | "constructed";
     maxPlayers: number;
     settings?: Record<string, unknown>;
+    registrationMode?: "fixed" | "open";
+    registrationLocked?: boolean;
   }) => Promise<unknown>;
   joinTournament: (tournamentId: string) => Promise<void>;
   leaveTournament: (tournamentId: string) => Promise<void>;
   updateTournamentSettings: (
     tournamentId: string,
     settings: Record<string, unknown>
+  ) => Promise<void>;
+  toggleTournamentRegistrationLock?: (
+    tournamentId: string,
+    locked: boolean
   ) => Promise<void>;
   toggleTournamentReady: (
     tournamentId: string,
@@ -166,6 +176,7 @@ interface TournamentsAPI {
       avatarUrl?: string | null;
       avatar?: string | null;
       image?: string | null;
+      seatStatus?: string | null;
     }>;
     settings?: Record<string, unknown>;
     createdAt: string;
@@ -228,6 +239,7 @@ function LobbyPageContent({
     joinTournament,
     leaveTournament,
     updateTournamentSettings,
+    toggleTournamentRegistrationLock,
     toggleTournamentReady,
     startTournament,
     endTournament,
@@ -245,6 +257,9 @@ function LobbyPageContent({
       throw new Error("Tournaments are disabled");
     },
     updateTournamentSettings: async () => {
+      throw new Error("Tournaments are disabled");
+    },
+    toggleTournamentRegistrationLock: async () => {
       throw new Error("Tournaments are disabled");
     },
     toggleTournamentReady: async () => {
@@ -355,6 +370,8 @@ function LobbyPageContent({
     cubeId: string | null;
     cubeName: string | null;
     includeCubeSideboardInStandard?: boolean;
+    enableSeer: boolean;
+    freeAvatars: boolean;
   }>(() => ({
     packCounts: buildDefaultPackCounts(DEFAULT_DRAFTABLE_SETS, DEFAULT_SET, 6),
     timeLimit: 40, // minutes
@@ -363,6 +380,8 @@ function LobbyPageContent({
     cubeId: null,
     cubeName: null,
     includeCubeSideboardInStandard: false,
+    enableSeer: true,
+    freeAvatars: false,
   }));
   const [sealedUseCube, setSealedUseCube] = useState(false);
   const [draftConfig, setDraftConfig] = useState<{
@@ -374,6 +393,8 @@ function LobbyPageContent({
     cubeName: string | null;
     includeCubeSideboardInStandard?: boolean;
     allowDragonlordChampion?: boolean;
+    enableSeer: boolean;
+    freeAvatars: boolean;
   }>(() => ({
     setMix: [DEFAULT_SET],
     packCount: 3,
@@ -383,6 +404,8 @@ function LobbyPageContent({
     cubeName: null,
     includeCubeSideboardInStandard: false,
     allowDragonlordChampion: true,
+    enableSeer: true,
+    freeAvatars: false,
   }));
 
   // Update configs when sets load from API
@@ -868,6 +891,8 @@ function LobbyPageContent({
       packCounts: sealedConfig.packCounts,
       replaceAvatars: sealedConfig.replaceAvatars,
       allowDragonlordChampion: sealedConfig.allowDragonlordChampion,
+      enableSeer: sealedConfig.enableSeer,
+      freeAvatars: sealedConfig.freeAvatars,
     };
     startMatch({ matchType: "sealed", sealedConfig: legacySealedConfig });
   }, [
@@ -1129,6 +1154,27 @@ function LobbyPageContent({
                   } catch (error) {
                     console.error(
                       "Failed to update tournament settings:",
+                      error
+                    );
+                  }
+                }
+              : undefined
+          }
+          onToggleTournamentRegistrationLock={
+            tournamentsEnabled
+              ? async (tournamentId: string, locked: boolean) => {
+                  console.log(
+                    `Toggling tournament registration lock: ${tournamentId}`,
+                    locked
+                  );
+                  try {
+                    await toggleTournamentRegistrationLock?.(
+                      tournamentId,
+                      locked
+                    );
+                  } catch (error) {
+                    console.error(
+                      "Failed to toggle tournament registration lock:",
                       error
                     );
                   }
@@ -1614,6 +1660,37 @@ function LobbyPageContent({
                           </div>
                         </div>
                       )}
+                      <label className="flex items-center gap-2 text-sm mt-2">
+                        <input
+                          type="checkbox"
+                          checked={draftConfig.enableSeer}
+                          onChange={(e) =>
+                            setDraftConfig((prev) => ({
+                              ...prev,
+                              enableSeer: e.target.checked,
+                            }))
+                          }
+                          className="rounded"
+                        />
+                        <span>Enable Second Seer (2nd player scries 1)</span>
+                      </label>
+                      <label className="flex items-center gap-2 text-sm mt-2">
+                        <input
+                          type="checkbox"
+                          checked={draftConfig.freeAvatars}
+                          onChange={(e) =>
+                            setDraftConfig((prev) => ({
+                              ...prev,
+                              freeAvatars: e.target.checked,
+                            }))
+                          }
+                          className="rounded"
+                        />
+                        <span>
+                          Free Avatars (remove from packs, all available in deck
+                          editor)
+                        </span>
+                      </label>
                     </div>
                   </div>
                 )}
@@ -1864,6 +1941,37 @@ function LobbyPageContent({
                       />
                       <span>Allow Dragonlord Champion selection</span>
                     </label>
+                    <label className="flex items-center gap-2 text-sm mt-2">
+                      <input
+                        type="checkbox"
+                        checked={sealedConfig.enableSeer}
+                        onChange={(e) =>
+                          setSealedConfig((prev) => ({
+                            ...prev,
+                            enableSeer: e.target.checked,
+                          }))
+                        }
+                        className="rounded"
+                      />
+                      <span>Enable Second Seer (2nd player scries 1)</span>
+                    </label>
+                    <label className="flex items-center gap-2 text-sm mt-2">
+                      <input
+                        type="checkbox"
+                        checked={sealedConfig.freeAvatars}
+                        onChange={(e) =>
+                          setSealedConfig((prev) => ({
+                            ...prev,
+                            freeAvatars: e.target.checked,
+                          }))
+                        }
+                        className="rounded"
+                      />
+                      <span>
+                        Free Avatars (remove from packs, all available in deck
+                        editor)
+                      </span>
+                    </label>
                   </>
                 )}
               </div>
@@ -1947,6 +2055,8 @@ function LobbyPageContent({
                           cubeName: sealedConfig.cubeName,
                           includeCubeSideboardInStandard:
                             sealedConfig.includeCubeSideboardInStandard,
+                          enableSeer: sealedConfig.enableSeer,
+                          freeAvatars: sealedConfig.freeAvatars,
                         };
                         startMatch({
                           matchType: "sealed",
@@ -1981,6 +2091,8 @@ function LobbyPageContent({
                         replaceAvatars: sealedConfig.replaceAvatars,
                         allowDragonlordChampion:
                           sealedConfig.allowDragonlordChampion,
+                        enableSeer: sealedConfig.enableSeer,
+                        freeAvatars: sealedConfig.freeAvatars,
                       };
                       startMatch({
                         matchType: "sealed",
@@ -2042,6 +2154,14 @@ function LobbyPageContent({
           <ChangelogOverlay />
           <span>·</span>
           <ManualOverlay />
+          <span>·</span>
+          <Link href="/terms" className="underline hover:text-slate-300">
+            Terms
+          </Link>
+          <span>·</span>
+          <Link href="/privacy" className="underline hover:text-slate-300">
+            Privacy
+          </Link>
           <span>·</span>
           <a
             href="https://www.patreon.com/realmscards"

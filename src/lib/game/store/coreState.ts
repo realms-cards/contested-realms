@@ -410,6 +410,18 @@ export const createCoreSlice: StateCreator<
     const nextPlayerNum = nextPlayer === 1 ? "1" : "2";
     // Log both messages before updating state so they use the current turn number
     get().log(`[p${curPlayerNum}:PLAYER] ends the turn`);
+
+    // Trigger Omphalos end-of-turn draws for the ending player
+    const endingPlayerSeat = (cur === 1 ? "p1" : "p2") as PlayerKey;
+    try {
+      get().triggerOmphalosEndOfTurn(endingPlayerSeat);
+    } catch {}
+
+    // Clear turn-based bonuses (bloom sites, genesis mana, etc.)
+    try {
+      get().clearTurnBonuses();
+    } catch {}
+
     get().log(`Turn passes to [p${nextPlayerNum}:PLAYER]`);
 
     const permanents: Permanents = { ...state.permanents };

@@ -11,8 +11,12 @@ import UserBadge from "@/components/auth/UserBadge";
 import BrowseOverlay from "@/components/game/BrowseOverlay";
 import CardPreview from "@/components/game/CardPreview";
 import ChaosTwisterOverlay from "@/components/game/ChaosTwisterOverlay";
+import { ElementChoiceOverlay } from "@/components/game/ElementChoiceOverlay";
 import CommonSenseOverlay from "@/components/game/CommonSenseOverlay";
 import MorganaHandOverlay from "@/components/game/MorganaHandOverlay";
+import OmphalosHandOverlay from "@/components/game/OmphalosHandOverlay";
+import PithImpOverlay from "@/components/game/PithImpOverlay";
+import PrivateHandTargetingOverlay from "@/components/game/PrivateHandTargetingOverlay";
 import { ClientCanvas } from "@/components/game/ClientCanvas";
 import CollectionButton from "@/components/game/CollectionButton";
 import CombatHudOverlay from "@/components/game/CombatHudOverlay";
@@ -778,11 +782,14 @@ export default function OnlineMatchPage() {
   }, [portalState, portalSetupComplete]);
 
   // Determine if seer phase is needed for this match type
-  // Seer is for constructed and precon matches only (not sealed/draft)
+  // Seer is always enabled for constructed and precon matches
+  // For sealed/draft, it's enabled only if enableSeer is set in the config
   const needsSeerPhase =
     match?.matchType === "constructed" ||
     match?.matchType === "precon" ||
-    !match?.matchType;
+    !match?.matchType ||
+    (match?.matchType === "sealed" && match?.sealedConfig?.enableSeer) ||
+    (match?.matchType === "draft" && match?.draftConfig?.enableSeer);
 
   // Debug logging for seer phase
   useEffect(() => {
@@ -790,8 +797,16 @@ export default function OnlineMatchPage() {
       matchType: match?.matchType,
       needsSeerPhase,
       mulliganReady,
+      sealedEnableSeer: match?.sealedConfig?.enableSeer,
+      draftEnableSeer: match?.draftConfig?.enableSeer,
     });
-  }, [match?.matchType, needsSeerPhase, mulliganReady]);
+  }, [
+    match?.matchType,
+    needsSeerPhase,
+    mulliganReady,
+    match?.sealedConfig?.enableSeer,
+    match?.draftConfig?.enableSeer,
+  ]);
 
   // After portal phase completes, call finishSetup to finalize game start
   // Note: Seer phase is now handled within OnlineMulliganScreen (before mulliganReady is set)
@@ -1541,6 +1556,11 @@ export default function OnlineMatchPage() {
       if (match.sealedConfig?.replaceAvatars) {
         params.set("replaceAvatars", "true");
       }
+      if (
+        (match.sealedConfig as { freeAvatars?: boolean } | null)?.freeAvatars
+      ) {
+        params.set("freeAvatars", "true");
+      }
 
       // Persist my exact server-generated sealed packs for the editor to consume
       try {
@@ -1595,6 +1615,11 @@ export default function OnlineMatchPage() {
         timeLimit: "30", // Default draft deck construction time
       });
       if (match.lobbyName) params.set("matchName", match.lobbyName);
+      if (
+        (match.draftConfig as { freeAvatars?: boolean } | null)?.freeAvatars
+      ) {
+        params.set("freeAvatars", "true");
+      }
 
       // Ensure drafted picks have been persisted by the draft screen before redirecting.
       // This avoids a race where match.status flips to deck_construction slightly
@@ -1958,6 +1983,8 @@ export default function OnlineMatchPage() {
   const setDragFromPile = useGameStore((s) => s.setDragFromPile);
   const previewCard = useGameStore((s) => s.previewCard);
   const setPreviewCard = useGameStore((s) => s.setPreviewCard);
+  const cardPreviewsEnabled = useGameStore((s) => s.cardPreviewsEnabled);
+  const toggleCardPreviews = useGameStore((s) => s.toggleCardPreviews);
   const contextMenu = useGameStore((s) => s.contextMenu);
   const closeContextMenu = useGameStore((s) => s.closeContextMenu);
   const clearSelection = useGameStore((s) => s.clearSelection);
@@ -2090,6 +2117,29 @@ export default function OnlineMatchPage() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [resetCamera]);
+
+  // Keyboard shortcut: P to toggle card previews
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "p" && e.key !== "P") return;
+      // Ignore if typing in input fields
+      const t = e.target as HTMLElement | null;
+      if (
+        t &&
+        (t.isContentEditable ||
+          t.tagName === "INPUT" ||
+          t.tagName === "TEXTAREA" ||
+          t.tagName === "SELECT")
+      ) {
+        return;
+      }
+      e.preventDefault();
+      toggleCardPreviews();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [toggleCardPreviews]);
+
   // Robust: reset drag flags only on hard-cancel contexts (not every pointerup)
   useEffect(() => {
     const reset = () => {
@@ -2694,7 +2744,7 @@ export default function OnlineMatchPage() {
           )}
 
           {/* Enhanced Hover Preview Overlay - uses new CardPreview component */}
-          {hoverPreview && !contextMenu && (
+          {cardPreviewsEnabled && hoverPreview && !contextMenu && (
             <CardPreview
               card={hoverPreview}
               anchor="top-right"
@@ -2703,17 +2753,20 @@ export default function OnlineMatchPage() {
           )}
 
           {/* Legacy Preview Overlay (for compatibility with existing setPreviewCard calls) */}
-          {previewCard?.slug && !hoverPreview && !contextMenu && (
-            <CardPreview
-              card={{
-                slug: previewCard.slug ?? "",
-                name: previewCard.name,
-                type: previewCard.type ?? null,
-              }}
-              anchor="top-right"
-              zIndexClass="z-30"
-            />
-          )}
+          {cardPreviewsEnabled &&
+            previewCard?.slug &&
+            !hoverPreview &&
+            !contextMenu && (
+              <CardPreview
+                card={{
+                  slug: previewCard.slug ?? "",
+                  name: previewCard.name,
+                  type: previewCard.type ?? null,
+                }}
+                anchor="top-right"
+                zIndexClass="z-30"
+              />
+            )}
 
           {/* Context Menu */}
           {contextMenu && (
@@ -2832,12 +2885,20 @@ export default function OnlineMatchPage() {
           <MagicHudOverlay />
           {/* Chaos Twister Overlay (dexterity minigame) */}
           <ChaosTwisterOverlay transport={transport} />
+          {/* Element Choice Overlay (Valley of Delight, etc.) */}
+          <ElementChoiceOverlay />
           {/* Browse Overlay (spell selection) */}
           <BrowseOverlay />
           {/* Common Sense Overlay (search for Ordinary card) */}
           <CommonSenseOverlay />
           {/* Morgana le Fay private hand overlay */}
           <MorganaHandOverlay />
+          {/* Omphalos private hand overlay */}
+          <OmphalosHandOverlay />
+          {/* Pith Imp stolen card notification */}
+          <PithImpOverlay />
+          {/* Private hand targeting overlay (Morgana/Omphalos) */}
+          <PrivateHandTargetingOverlay />
           {/* Switch Site HUD Overlay (layout-level, not inside Canvas) */}
           <SwitchSiteHudOverlay />
 

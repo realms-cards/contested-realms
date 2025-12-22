@@ -54,6 +54,7 @@ export async function GET(req: NextRequest) {
       attack: number | null;
       defence: number | null;
       type: string | null;
+      rarity: string | null;
       setId: number;
     }>;
     if (set) {
@@ -66,6 +67,7 @@ export async function GET(req: NextRequest) {
           attack: true,
           defence: true,
           type: true,
+          rarity: true,
           setId: true,
         },
       });
@@ -80,6 +82,7 @@ export async function GET(req: NextRequest) {
           attack: true,
           defence: true,
           type: true,
+          rarity: true,
           setId: true,
         },
         orderBy: { setId: "desc" },
@@ -100,6 +103,7 @@ export async function GET(req: NextRequest) {
       attack: m.attack ?? null,
       defence: m.defence ?? null,
       type: m.type ?? null,
+      rarity: m.rarity ?? null,
     }));
 
     return new Response(JSON.stringify(out), {

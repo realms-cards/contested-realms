@@ -37,6 +37,8 @@ export default function MatchInfoPopup({
   const setMagicGuides = useGameStore((s) => s.setMagicGuides);
   const actionNotifications = useGameStore((s) => s.actionNotifications);
   const setActionNotifications = useGameStore((s) => s.setActionNotifications);
+  const cardPreviewsEnabled = useGameStore((s) => s.cardPreviewsEnabled);
+  const setCardPreviewsEnabled = useGameStore((s) => s.setCardPreviewsEnabled);
 
   if (!isOpen) return null;
 
@@ -165,6 +167,22 @@ export default function MatchInfoPopup({
                       aria-pressed={actionNotifications}
                     >
                       {actionNotifications ? "On" : "Off"}
+                    </button>
+                  </div>
+                  <div className="flex items-center justify-between pt-1">
+                    <span>Card Previews (P)</span>
+                    <button
+                      className={`rounded-full px-3 py-1 text-xs transition-colors ${
+                        cardPreviewsEnabled
+                          ? "bg-cyan-600/90 hover:bg-cyan-500"
+                          : "bg-white/15 hover:bg-white/25"
+                      }`}
+                      onClick={() =>
+                        setCardPreviewsEnabled(!cardPreviewsEnabled)
+                      }
+                      aria-pressed={cardPreviewsEnabled}
+                    >
+                      {cardPreviewsEnabled ? "On" : "Off"}
                     </button>
                   </div>
                 </>

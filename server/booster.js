@@ -141,7 +141,8 @@ function pickUniqueFrom(pool, used, rng) {
 async function generateBoosterDeterministic(
   setName,
   rng,
-  replaceAvatars = false
+  replaceAvatars = false,
+  freeAvatars = false
 ) {
   const { set, variantsStd, variantsFoil, metaByCardId, nameByCardId } =
     await getBoosterMetadata(setName);
@@ -338,6 +339,16 @@ async function generateBoosterDeterministic(
 
   // Fill card names from cached map
   for (const p of picks) p.cardName = nameByCardId.get(p.cardId) || "";
+
+  // Free Avatars mode: filter out all avatars from the pack
+  if (freeAvatars) {
+    const filtered = picks.filter((p) => {
+      const t = (p.type || "").toLowerCase();
+      return !t.includes("avatar");
+    });
+    // Return the filtered pack (will have fewer cards when avatars are removed)
+    return filtered;
+  }
 
   // Avatar replacement for Alpha/Beta
   if (replaceAvatars && (setName === "Alpha" || setName === "Beta")) {

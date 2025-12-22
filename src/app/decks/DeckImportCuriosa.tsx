@@ -21,7 +21,11 @@ export default function DeckImportCuriosa() {
       const res = await fetch("/api/decks/import/curiosa", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ url: url.trim(), name: name.trim() || undefined, tts: tts.trim() || undefined }),
+        body: JSON.stringify({
+          url: url.trim(),
+          name: name.trim() || undefined,
+          tts: tts.trim() || undefined,
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -31,8 +35,20 @@ export default function DeckImportCuriosa() {
         setUrl("");
         setName("");
         setTts("");
-        // Notify listeners on the page to refetch deck lists immediately
-        try { window.dispatchEvent(new Event("decks:refresh")); } catch {}
+        // Notify listeners with deck data for optimistic add
+        try {
+          const deckInfo = {
+            id: data.id as string,
+            name: data.name as string,
+            format: (data.format as string) || "Constructed",
+          };
+          window.dispatchEvent(
+            new CustomEvent("decks:refresh", { detail: { deck: deckInfo } })
+          );
+        } catch {
+          // Fallback to simple refresh
+          window.dispatchEvent(new Event("decks:refresh"));
+        }
         router.refresh();
       }
     } catch {
@@ -47,7 +63,10 @@ export default function DeckImportCuriosa() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="w-full bg-zinc-900/70 ring-1 ring-white/10 rounded-xl p-4 space-y-3">
+    <form
+      onSubmit={onSubmit}
+      className="w-full bg-zinc-900/70 ring-1 ring-white/10 rounded-xl p-4 space-y-3"
+    >
       <div className="text-sm font-medium">Import Curiosa Deck</div>
       <div className="grid gap-2 sm:grid-cols-5">
         <input
@@ -66,7 +85,9 @@ export default function DeckImportCuriosa() {
         />
       </div>
       <details className="bg-zinc-900/50 rounded ring-1 ring-zinc-700 p-3">
-        <summary className="cursor-pointer text-sm font-medium">Paste TTS JSON (fallback if the deck is private)</summary>
+        <summary className="cursor-pointer text-sm font-medium">
+          Paste TTS JSON (fallback if the deck is private)
+        </summary>
         <textarea
           className="mt-2 w-full h-28 bg-zinc-800/80 ring-1 ring-zinc-700 rounded px-3 py-2 text-white font-mono text-xs"
           placeholder="Paste the Tabletop Simulator JSON exported from Curiosa"
@@ -75,11 +96,14 @@ export default function DeckImportCuriosa() {
           disabled={loading}
         />
         <div className="mt-1 text-xs opacity-70">
-          Tip: On Curiosa, open your deck, click Export → Tabletop Simulator, copy the JSON and paste it here.
+          Tip: On Curiosa, open your deck, click Export → Tabletop Simulator,
+          copy the JSON and paste it here.
         </div>
       </details>
       {error && (
-        <div className="text-red-400 text-xs bg-red-900/20 rounded px-3 py-2 ring-1 ring-red-800">{error}</div>
+        <div className="text-red-400 text-xs bg-red-900/20 rounded px-3 py-2 ring-1 ring-red-800">
+          {error}
+        </div>
       )}
       <div className="flex gap-2">
         <button

@@ -90,7 +90,10 @@ function createTournamentFeature(deps) {
         socketInstance.emit(EVENT_NAME_ALIASES[eventName], payload);
       }
     } catch (err) {
-      console.warn("[Tournament] Failed to emit to socket:", err?.message || err);
+      console.warn(
+        "[Tournament] Failed to emit to socket:",
+        err?.message || err
+      );
     }
   }
 
@@ -104,7 +107,11 @@ function createTournamentFeature(deps) {
         io.to(room).emit(EVENT_NAME_ALIASES[eventName], payload);
       }
     } catch (err) {
-      console.warn("[Tournament] Failed to emit event:", eventName, err?.message || err);
+      console.warn(
+        "[Tournament] Failed to emit event:",
+        eventName,
+        err?.message || err
+      );
     }
     if (!skipSnapshot) {
       setSnapshot(tournamentId, eventName, payload);
@@ -128,7 +135,9 @@ function createTournamentFeature(deps) {
         where: { id: tournamentId },
         include: {
           registrations: {
-            include: { player: { select: { id: true, name: true, shortId: true } } },
+            include: {
+              player: { select: { id: true, name: true, shortId: true } },
+            },
           },
         },
       });
@@ -142,15 +151,21 @@ function createTournamentFeature(deps) {
               registration.playerId,
             preparationStatus: registration.preparationStatus,
             deckSubmitted: registration.deckSubmitted,
+            seatStatus: registration.seatStatus,
           }))
         : [];
+      const activeCount = Array.isArray(tournament.registrations)
+        ? tournament.registrations.filter(
+            (registration) => registration.seatStatus !== "vacant"
+          ).length
+        : 0;
       const payload = {
         id: tournament.id,
         name: tournament.name,
         format: tournament.format,
         status: tournament.status,
         maxPlayers: tournament.maxPlayers,
-        currentPlayers: tournament.registrations?.length || 0,
+        currentPlayers: activeCount,
         creatorId: tournament.creatorId,
         settings: tournament.settings,
         createdAt: tournament.createdAt?.toISOString?.() || null,
@@ -167,7 +182,6 @@ function createTournamentFeature(deps) {
       );
     }
   }
-
 
   /** @type {Map<string, Map<string, { playerId: string, playerName: string|null, isConnected: boolean, lastActivity: number }>>} */
   const tournamentPresence = new Map();
@@ -187,19 +201,23 @@ function createTournamentFeature(deps) {
     return Array.from(m.values());
   }
 
-  function upsertTournamentPresence(tournamentId, playerId, playerName, isConnected) {
+  function upsertTournamentPresence(
+    tournamentId,
+    playerId,
+    playerName,
+    isConnected
+  ) {
     let m = tournamentPresence.get(tournamentId);
     if (!m) {
       m = new Map();
       tournamentPresence.set(tournamentId, m);
     }
-    const prev =
-      m.get(playerId) || {
-        playerId,
-        playerName: playerName || `Player ${String(playerId).slice(-4)}`,
-        isConnected: false,
-        lastActivity: 0,
-      };
+    const prev = m.get(playerId) || {
+      playerId,
+      playerName: playerName || `Player ${String(playerId).slice(-4)}`,
+      isConnected: false,
+      lastActivity: 0,
+    };
     const rec = {
       playerId,
       playerName: playerName || prev.playerName,
@@ -228,14 +246,24 @@ function createTournamentFeature(deps) {
     if (typeof payload.newStatus !== "string") {
       payload.newStatus = newPhase;
     }
-    tournamentBroadcast.emitPhaseChanged(io, tournamentId, newPhase, additionalData);
+    tournamentBroadcast.emitPhaseChanged(
+      io,
+      tournamentId,
+      newPhase,
+      additionalData
+    );
     emitToTournamentRoom(tournamentId, "tournament:phase:changed", payload, {
       skipLegacy: true,
     });
   }
 
   function broadcastRoundStarted(tournamentId, roundNumber, roundMatches) {
-    tournamentBroadcast.emitRoundStarted(io, tournamentId, roundNumber, roundMatches);
+    tournamentBroadcast.emitRoundStarted(
+      io,
+      tournamentId,
+      roundNumber,
+      roundMatches
+    );
     emitToTournamentRoom(
       tournamentId,
       "tournament:round:started",
@@ -248,8 +276,19 @@ function createTournamentFeature(deps) {
     );
   }
 
-  function broadcastPlayerJoined(tournamentId, playerId, playerName, currentPlayerCount) {
-    tournamentBroadcast.emitPlayerJoined(io, tournamentId, playerId, playerName, currentPlayerCount);
+  function broadcastPlayerJoined(
+    tournamentId,
+    playerId,
+    playerName,
+    currentPlayerCount
+  ) {
+    tournamentBroadcast.emitPlayerJoined(
+      io,
+      tournamentId,
+      playerId,
+      playerName,
+      currentPlayerCount
+    );
     emitToTournamentRoom(
       tournamentId,
       "tournament:player:joined",
@@ -263,8 +302,19 @@ function createTournamentFeature(deps) {
     );
   }
 
-  function broadcastPlayerLeft(tournamentId, playerId, playerName, currentPlayerCount) {
-    tournamentBroadcast.emitPlayerLeft(io, tournamentId, playerId, playerName, currentPlayerCount);
+  function broadcastPlayerLeft(
+    tournamentId,
+    playerId,
+    playerName,
+    currentPlayerCount
+  ) {
+    tournamentBroadcast.emitPlayerLeft(
+      io,
+      tournamentId,
+      playerId,
+      playerName,
+      currentPlayerCount
+    );
     emitToTournamentRoom(
       tournamentId,
       "tournament:player:left",
@@ -278,7 +328,14 @@ function createTournamentFeature(deps) {
     );
   }
 
-  function broadcastPreparationUpdate(tournamentId, playerId, preparationStatus, readyPlayerCount, totalPlayerCount, deckSubmitted = false) {
+  function broadcastPreparationUpdate(
+    tournamentId,
+    playerId,
+    preparationStatus,
+    readyPlayerCount,
+    totalPlayerCount,
+    deckSubmitted = false
+  ) {
     tournamentBroadcast.emitPreparationUpdate(
       io,
       tournamentId,
@@ -344,7 +401,9 @@ function createTournamentFeature(deps) {
         return;
       }
 
-      console.log(`[Tournament] Player ${socket.id} joining tournament room: tournament:${tournamentId}`);
+      console.log(
+        `[Tournament] Player ${socket.id} joining tournament room: tournament:${tournamentId}`
+      );
       await socket.join(`tournament:${tournamentId}`);
       currentTournamentIds.add(tournamentId);
 
@@ -371,7 +430,9 @@ function createTournamentFeature(deps) {
       const tournamentId = payload?.tournamentId;
       if (!tournamentId) return;
 
-      console.log(`[Tournament] Player ${socket.id} leaving tournament room: tournament:${tournamentId}`);
+      console.log(
+        `[Tournament] Player ${socket.id} leaving tournament room: tournament:${tournamentId}`
+      );
       await socket.leave(`tournament:${tournamentId}`);
       try {
         currentTournamentIds.delete(tournamentId);
@@ -418,22 +479,27 @@ function createTournamentFeature(deps) {
 
     socket.on("startTournamentMatch", async (payload = {}) => {
       if (!isAuthed()) return;
-      const matchId = typeof payload?.matchId === "string" ? payload.matchId : null;
+      const matchId =
+        typeof payload?.matchId === "string" ? payload.matchId : null;
       const playerIds = Array.isArray(payload?.playerIds)
         ? payload.playerIds.filter(Boolean).map(String)
         : [];
       const requestedMatchType = payload?.matchType || "constructed";
       const lobbyName = payload?.lobbyName || null;
-      const tournamentId = payload?.tournamentId ? String(payload.tournamentId) : null;
+      const tournamentId = payload?.tournamentId
+        ? String(payload.tournamentId)
+        : null;
       const sealedConfig = payload?.sealedConfig || null;
       if (!matchId || playerIds.length < 1) return;
 
-      const actualMatchType = requestedMatchType === "sealed" ? "sealed" : "constructed";
+      const actualMatchType =
+        requestedMatchType === "sealed" ? "sealed" : "constructed";
       const normalizedSealedConfig =
         actualMatchType === "sealed"
           ? (() => {
               const base = normalizeSealedConfig(sealedConfig || {});
-              if (base && !base.constructionStartTime) base.constructionStartTime = Date.now();
+              if (base && !base.constructionStartTime)
+                base.constructionStartTime = Date.now();
               return base;
             })()
           : null;
@@ -446,7 +512,8 @@ function createTournamentFeature(deps) {
           lobbyName,
           tournamentId,
           playerIds: [...new Set(playerIds)],
-          status: actualMatchType === "sealed" ? "deck_construction" : "waiting",
+          status:
+            actualMatchType === "sealed" ? "deck_construction" : "waiting",
           seed: `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
           turn: playerIds[0] || null,
           winnerId: null,
@@ -467,7 +534,13 @@ function createTournamentFeature(deps) {
         matches.set(matchId, match);
         try {
           if (storeRedis) {
-            await storeRedis.set(`match:leader:${match.id}`, INSTANCE_ID, "NX", "EX", 60);
+            await storeRedis.set(
+              `match:leader:${match.id}`,
+              INSTANCE_ID,
+              "NX",
+              "EX",
+              60
+            );
           }
         } catch {}
         try {
@@ -479,7 +552,8 @@ function createTournamentFeature(deps) {
         for (const pid of playerIds) {
           if (!match.playerIds.includes(pid)) match.playerIds.push(pid);
         }
-        if (!match.tournamentId && tournamentId) match.tournamentId = tournamentId;
+        if (!match.tournamentId && tournamentId)
+          match.tournamentId = tournamentId;
         if (!match.playerDecks || !(match.playerDecks instanceof Map)) {
           match.playerDecks = new Map();
         }
@@ -511,8 +585,11 @@ function createTournamentFeature(deps) {
               const rng = createRngFromString(`${match.seed}|${pid}|sealed`);
               const sc = match.sealedConfig || {};
               const packCounts =
-                sc.packCounts && typeof sc.packCounts === "object" ? sc.packCounts : null;
+                sc.packCounts && typeof sc.packCounts === "object"
+                  ? sc.packCounts
+                  : null;
               const replaceAvatars = !!sc.replaceAvatars;
+              const freeAvatars = !!sc.freeAvatars;
               /** @type {string[]} */
               const sets = [];
               if (packCounts) {
@@ -538,7 +615,8 @@ function createTournamentFeature(deps) {
                 const picks = await generateBoosterDeterministic(
                   setName,
                   rng,
-                  replaceAvatars
+                  replaceAvatars,
+                  freeAvatars
                 );
                 const cards = picks.map((p, idx) => ({
                   id: `${String(p.variantId)}_${i}_${idx}_${pid.slice(-4)}`,
@@ -549,18 +627,27 @@ function createTournamentFeature(deps) {
                   cost: p.cost ?? null,
                   rarity: String(p.rarity || "Ordinary"),
                   cardId: typeof p.cardId === "number" ? p.cardId : undefined,
-                  variantId: typeof p.variantId === "number" ? p.variantId : undefined,
+                  variantId:
+                    typeof p.variantId === "number" ? p.variantId : undefined,
                   finish: typeof p.finish === "string" ? p.finish : undefined,
-                  product: typeof p.product === "string" ? p.product : undefined,
+                  product:
+                    typeof p.product === "string" ? p.product : undefined,
                 }));
-                packs.push({ id: `pack_${pid.slice(-4)}_${i}`, set: setName, cards });
+                packs.push({
+                  id: `pack_${pid.slice(-4)}_${i}`,
+                  set: setName,
+                  cards,
+                });
               }
               sealedPacks[pid] = packs;
             }
             match.sealedPacks = sealedPacks;
             io.to(room).emit("matchStarted", { match: getMatchInfo(match) });
           } catch (err) {
-            console.error(`[Sealed] Error generating sealed packs for match ${match.id}:`, err);
+            console.error(
+              `[Sealed] Error generating sealed packs for match ${match.id}:`,
+              err
+            );
             io.to(room).emit("matchStarted", { match: getMatchInfo(match) });
           }
         })();
@@ -594,7 +681,9 @@ function createTournamentFeature(deps) {
             format: tournament.format,
             status: tournament.status,
             maxPlayers: tournament.maxPlayers,
-            currentPlayers: tournament.registrations.length,
+            currentPlayers: tournament.registrations.filter(
+              (registration) => registration.seatStatus !== "vacant"
+            ).length,
             creatorId: tournament.creatorId,
             settings: tournament.settings,
             createdAt: tournament.createdAt.toISOString(),
@@ -614,7 +703,9 @@ function createTournamentFeature(deps) {
       if (!tournamentId) return;
 
       socket.leave(`tournament:${tournamentId}`);
-      console.log(`[Tournament] Socket ${socket.id} left tournament ${tournamentId}`);
+      console.log(
+        `[Tournament] Socket ${socket.id} left tournament ${tournamentId}`
+      );
     });
 
     async function handlePreparationUpdate(payload) {
@@ -637,14 +728,20 @@ function createTournamentFeature(deps) {
           where: { id: registration.id },
           data: {
             preparationData: JSON.parse(JSON.stringify(preparationData)),
-            preparationStatus: preparationData?.isComplete ? "completed" : "inProgress",
+            preparationStatus: preparationData?.isComplete
+              ? "completed"
+              : "inProgress",
             deckSubmitted: Boolean(preparationData?.deckSubmitted),
           },
         });
 
         const [readyCount, totalCount] = await Promise.all([
           prisma.tournamentRegistration.count({
-            where: { tournamentId, preparationStatus: "completed", deckSubmitted: true },
+            where: {
+              tournamentId,
+              preparationStatus: "completed",
+              deckSubmitted: true,
+            },
           }),
           prisma.tournamentRegistration.count({ where: { tournamentId } }),
         ]);

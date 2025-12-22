@@ -1,0 +1,395 @@
+import type { StateCreator } from "zustand";
+import type { CustomMessage } from "@/lib/net/transport";
+import type {
+  CardRef,
+  CellKey,
+  GameState,
+  PlayerKey,
+  ServerPatchT,
+  Zones,
+} from "./types";
+
+function newOmphalosId() {
+  return `omph_${Date.now().toString(36)}_${Math.random()
+    .toString(36)
+    .slice(2, 6)}`;
+}
+
+// Omphalos private hand entry - similar to Morgana but for artifacts
+export type OmphalosHandEntry = {
+  id: string;
+  // The Omphalos artifact that has this private hand
+  artifact: {
+    at: CellKey;
+    index: number;
+    instanceId?: string | null;
+    owner: 1 | 2;
+    card: CardRef;
+  };
+  // Who played the Omphalos
+  ownerSeat: PlayerKey;
+  // The private hand of spells (grows by 1 each end of turn)
+  hand: CardRef[];
+  createdAt: number;
+};
+
+export type OmphalosSlice = Pick<
+  GameState,
+  | "omphalosHands"
+  | "registerOmphalos"
+  | "triggerOmphalosEndOfTurn"
+  | "castFromOmphalosHand"
+  | "removeOmphalosHand"
+  | "getOmphalosHandForArtifact"
+>;
+
+// Helper to detect Omphalos cards by name
+export function isOmphalos(cardName: string): boolean {
+  const name = (cardName || "").toLowerCase();
+  return (
+    name.includes("algor omphalos") ||
+    name.includes("char omphalos") ||
+    name.includes("dank omphalos") ||
+    name.includes("torrid omphalos")
+  );
+}
+
+export const createOmphalosSlice: StateCreator<
+  GameState,
+  [],
+  [],
+  OmphalosSlice
+> = (set, get) => ({
+  omphalosHands: [],
+
+  // Register an Omphalos when it enters play (creates empty hand)
+  registerOmphalos: (input: {
+    artifact: {
+      at: CellKey;
+      index: number;
+      instanceId?: string | null;
+      owner: 1 | 2;
+      card: CardRef;
+    };
+    ownerSeat: PlayerKey;
+  }) => {
+    const id = newOmphalosId();
+    console.log("[Omphalos] Registering Omphalos:", input);
+
+    // Create Omphalos's private hand entry (starts empty)
+    const newOmphalosHand: OmphalosHandEntry = {
+      id,
+      artifact: input.artifact,
+      ownerSeat: input.ownerSeat,
+      hand: [],
+      createdAt: Date.now(),
+    };
+
+    set((state) => ({
+      omphalosHands: [...state.omphalosHands, newOmphalosHand],
+    })) as unknown as void;
+
+    // Send patch
+    const patch: ServerPatchT = {
+      omphalosHands: [...get().omphalosHands],
+    };
+    get().trySendPatch(patch);
+
+    // Broadcast
+    const transport = get().transport;
+    if (transport?.sendMessage) {
+      try {
+        transport.sendMessage({
+          type: "omphalosRegister",
+          id,
+          artifact: input.artifact,
+          ownerSeat: input.ownerSeat,
+          ts: Date.now(),
+        } as unknown as CustomMessage);
+      } catch {}
+    }
+
+    get().log(
+      `[${input.ownerSeat.toUpperCase()}] ${
+        input.artifact.card.name
+      } enters the realm`
+    );
+  },
+
+  // Trigger end of turn - draws 1 spell for each Omphalos owned by the ending player
+  triggerOmphalosEndOfTurn: (endingPlayerSeat: PlayerKey) => {
+    const omphalosHands = get().omphalosHands;
+    const zones = get().zones;
+
+    // Find all Omphalos owned by the ending player
+    const playerOmphalos = omphalosHands.filter(
+      (o) => o.ownerSeat === endingPlayerSeat
+    );
+
+    if (playerOmphalos.length === 0) return;
+
+    console.log(
+      `[Omphalos] End of turn trigger for ${endingPlayerSeat}, found ${playerOmphalos.length} Omphalos`
+    );
+
+    let zonesNext = { ...zones };
+    const updatedOmphalosHands = [...omphalosHands];
+
+    for (const omphalos of playerOmphalos) {
+      const spellbook = [...(zonesNext[endingPlayerSeat]?.spellbook || [])];
+
+      if (spellbook.length === 0) {
+        get().log(
+          `[${endingPlayerSeat.toUpperCase()}] ${
+            omphalos.artifact.card.name
+          }: No spells in spellbook to draw`
+        );
+        continue;
+      }
+
+      // Draw 1 spell from top of spellbook
+      const drawnCard = spellbook.shift()!;
+
+      // Update zones
+      zonesNext = {
+        ...zonesNext,
+        [endingPlayerSeat]: {
+          ...zonesNext[endingPlayerSeat],
+          spellbook,
+        },
+      };
+
+      // Add card to Omphalos hand
+      const omphalosIndex = updatedOmphalosHands.findIndex(
+        (o) => o.id === omphalos.id
+      );
+      if (omphalosIndex !== -1) {
+        updatedOmphalosHands[omphalosIndex] = {
+          ...updatedOmphalosHands[omphalosIndex],
+          hand: [...updatedOmphalosHands[omphalosIndex].hand, drawnCard],
+        };
+      }
+
+      get().log(
+        `[${endingPlayerSeat.toUpperCase()}] ${
+          omphalos.artifact.card.name
+        } draws a spell (now has ${
+          updatedOmphalosHands[omphalosIndex]?.hand.length || 1
+        })`
+      );
+
+      // Broadcast
+      const transport = get().transport;
+      if (transport?.sendMessage) {
+        try {
+          transport.sendMessage({
+            type: "omphalosDrawn",
+            omphalosId: omphalos.id,
+            drawnCard,
+            newHandSize: updatedOmphalosHands[omphalosIndex]?.hand.length || 1,
+            ts: Date.now(),
+          } as unknown as CustomMessage);
+        } catch {}
+      }
+    }
+
+    set({
+      zones: zonesNext,
+      omphalosHands: updatedOmphalosHands,
+    } as Partial<GameState> as GameState);
+
+    // Send patch
+    const zonePatch: ServerPatchT = {
+      zones: {
+        [endingPlayerSeat]: zonesNext[endingPlayerSeat],
+      } as Record<PlayerKey, Zones>,
+      omphalosHands: updatedOmphalosHands,
+    };
+    get().trySendPatch(zonePatch);
+  },
+
+  castFromOmphalosHand: (
+    omphalosId: string,
+    cardIndex: number,
+    // For minions, targetTile MUST be the Omphalos location
+    targetTile: { x: number; y: number }
+  ) => {
+    const omphalosHands = get().omphalosHands;
+    const omphalosEntry = omphalosHands.find((o) => o.id === omphalosId);
+    if (!omphalosEntry) return;
+
+    if (cardIndex < 0 || cardIndex >= omphalosEntry.hand.length) return;
+
+    const card = omphalosEntry.hand[cardIndex];
+    const cardType = (card.type || "").toLowerCase();
+    const isMinion = cardType.includes("minion");
+
+    // Parse Omphalos location
+    const [omphalosX, omphalosY] = omphalosEntry.artifact.at
+      .split(",")
+      .map(Number);
+
+    // Enforce placement restriction: minions must be summoned at Omphalos location
+    if (
+      isMinion &&
+      (targetTile.x !== omphalosX || targetTile.y !== omphalosY)
+    ) {
+      get().log(
+        `Minions cast by ${omphalosEntry.artifact.card.name} must be summoned at its location`
+      );
+      return;
+    }
+
+    console.log(
+      `[Omphalos] Casting ${card.name} from ${omphalosEntry.artifact.card.name} at tile (${targetTile.x}, ${targetTile.y})`
+    );
+
+    // Remove card from Omphalos's hand
+    const newHand = [...omphalosEntry.hand];
+    newHand.splice(cardIndex, 1);
+
+    const updatedOmphalosHands = omphalosHands.map((o) =>
+      o.id === omphalosId ? { ...o, hand: newHand } : o
+    );
+
+    // Place the spell on the board
+    const key = `${targetTile.x},${targetTile.y}` as CellKey;
+    const permanents = get().permanents;
+    const arr = [...(permanents[key] || [])];
+
+    // Add the spell to the target tile
+    const newPermanent = {
+      card: card as CardRef,
+      owner: omphalosEntry.artifact.owner,
+      instanceId: `omphalos_spell_${Date.now()}`,
+      tapped: false,
+      attachedTo: null,
+    };
+    arr.push(newPermanent);
+
+    const per = { ...permanents, [key]: arr };
+
+    set({
+      permanents: per,
+      omphalosHands: updatedOmphalosHands,
+    } as Partial<GameState> as GameState);
+
+    // Send patch
+    const patch: ServerPatchT = {
+      permanents: per,
+      omphalosHands: updatedOmphalosHands,
+    };
+    get().trySendPatch(patch);
+
+    // Broadcast
+    const transport = get().transport;
+    if (transport?.sendMessage) {
+      try {
+        transport.sendMessage({
+          type: "omphalosCast",
+          omphalosId,
+          cardIndex,
+          cardName: card.name,
+          targetTile,
+          ts: Date.now(),
+        } as unknown as CustomMessage);
+      } catch {}
+    }
+
+    get().log(
+      `${omphalosEntry.artifact.card.name} casts ${card.name}${
+        isMinion ? " (summoned at its location)" : ""
+      }`
+    );
+  },
+
+  removeOmphalosHand: (
+    artifactInstanceId: string | null,
+    artifactAt: CellKey
+  ) => {
+    const omphalosHands = get().omphalosHands;
+    const zones = get().zones;
+
+    // Find the Omphalos entry
+    const omphalosEntry = omphalosHands.find(
+      (o) =>
+        o.artifact.at === artifactAt ||
+        (artifactInstanceId && o.artifact.instanceId === artifactInstanceId)
+    );
+
+    if (!omphalosEntry) return;
+
+    // Banish remaining cards (not graveyard - they were never properly in hand)
+    const ownerSeat = omphalosEntry.ownerSeat;
+    const banished = [...(zones[ownerSeat]?.banished || [])];
+    for (const card of omphalosEntry.hand) {
+      banished.push(card);
+    }
+
+    const discardedCount = omphalosEntry.hand.length;
+
+    const zonesNext = {
+      ...zones,
+      [ownerSeat]: {
+        ...zones[ownerSeat],
+        banished,
+      },
+    };
+
+    // Remove from tracking
+    const remainingOmphalosHands = omphalosHands.filter(
+      (o) =>
+        o.artifact.at !== artifactAt &&
+        (!artifactInstanceId || o.artifact.instanceId !== artifactInstanceId)
+    );
+
+    set({
+      zones: zonesNext,
+      omphalosHands: remainingOmphalosHands,
+    } as Partial<GameState> as GameState);
+
+    // Send patch
+    const zonePatch: ServerPatchT = {
+      zones: zonesNext,
+      omphalosHands: remainingOmphalosHands,
+    };
+    get().trySendPatch(zonePatch);
+
+    // Broadcast
+    const transport = get().transport;
+    if (transport?.sendMessage) {
+      try {
+        transport.sendMessage({
+          type: "omphalosRemove",
+          artifactAt,
+          artifactInstanceId,
+          discardedCount,
+          ts: Date.now(),
+        } as unknown as CustomMessage);
+      } catch {}
+    }
+
+    if (discardedCount > 0) {
+      get().log(
+        `${
+          omphalosEntry.artifact.card.name
+        }'s ${discardedCount} remaining spell${
+          discardedCount !== 1 ? "s" : ""
+        } ${discardedCount !== 1 ? "are" : "is"} banished`
+      );
+    }
+  },
+
+  getOmphalosHandForArtifact: (
+    artifactInstanceId: string | null,
+    artifactAt: CellKey
+  ): CardRef[] => {
+    const omphalosHands = get().omphalosHands;
+    const entry = omphalosHands.find(
+      (o) =>
+        o.artifact.at === artifactAt ||
+        (artifactInstanceId && o.artifact.instanceId === artifactInstanceId)
+    );
+    return entry?.hand || [];
+  },
+});

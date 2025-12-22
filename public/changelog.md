@@ -2,6 +2,26 @@
 
 ## December 2025
 
+### Dec 21 — Morgana, Omphalos & Reliability
+
+- **free Avatar mode** A special mode for sealed games. No avatars in booster, but you can freely select which one to play during deck construction
+- **allow Tournaments with irregular and changing player counts** Before we only allowed a fixed number to start, now the host decides when to start
+- **Leave and join for Tournaments in progress** The idea is to have mechanisms for replacing disconnected players (invite others who take over the disconnected players deck)
+- **readd second Seer to limited modes**
+- **Common Sense** will now show all ordinaries in your spellbook for you to choose from
+- **Browse** fixed the overlay to easily resolve it
+- **Morgana le Fay** gains her Genesis private hand: draw 3 hidden spells, castable via a new Morgana hand overlay.
+- **Omphalos artifacts** now keep a private spell hand (drawn end of turn) with per-Omphalos casting UI and enforced summon-at-source for minions.
+- **Pith Imp** steals a random card, shows it and then hides it underneath
+- **Game fixes**: fixed Submerge handling multiple minions correctly, fixed peek follow up action
+- **Toolbox Goodies** You can now search and draw any card in the game to hand, a scaling slider has been added that enables you do scale down all permanents
+- **Improve UX of deck import**
+- **Auth hardening**: Email login reliability improvements (edge-safe token handling, fallback flows).
+- **Mobile polish**: Added top-bar button for touch devices, fixed health display, and improved music playback/autoplay in hotseat.
+- **Hide automatic card previews** Just press "p" on keyboard to enable/disable card previews in matches (or find the toggle in Info in top bar)
+- **Special mana and treshold tracking** These sites now are fully implemented: Valley of Delight, Avalon, Pristine Paradise, The Colour Out of Space, The Empyrean, City of Glass/Plenty/Souls/Traitors, Myrrh's Trophy Room, Bloom Sites,Ghost Town
+- **Add TOS and privacy policy** These seem to be required ...
+
 ### Dec 18 — Scry & Visual Polish
 
 - **Proper dice models!** Damn they look great!
@@ -17,7 +37,7 @@
 - **Spectator mode** Ongoing matches can be spectated (if they are not private), spectators do not see hands
 - **Add Shortcuts** Zoom is now also "+" and "-", quick help is "h" and "?"
 - **Second Player Seer** is now guarded against early game start
-- **Hand Inspect**: Added Patreon button and follow-up actions when inspecting the hand
+- **Hand Inspect**: Added follow-up actions when inspecting the hand
 - **Flip cards**: Added flip cards to cards on the board
 - **Patron Shoutout**: Display all Patrons and make them stand out in Chat and the Players tab
 - **Better invites** Invites from lobby now are now overlays

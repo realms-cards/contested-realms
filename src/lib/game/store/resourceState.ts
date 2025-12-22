@@ -1,6 +1,7 @@
 import type { StateCreator } from "zustand";
 import type { CellKey, GameState, ServerPatchT, SiteTile } from "./types";
 import {
+  computeAvailableMana,
   getCachedThresholdTotals,
   siteProvidesMana,
 } from "./utils/resourceHelpers";
@@ -56,16 +57,17 @@ export const createResourceSlice: StateCreator<
   },
 
   getAvailableMana: (who) => {
-    // Available mana = total sites + offset (offset is negative when mana is spent)
+    // Available mana = base mana from sites (with special site handling) + offset
     const state = get();
-    const owner = who === "p1" ? 1 : 2;
-    let base = 0;
-    for (const site of Object.values(state.board.sites)) {
-      if (!site) continue;
-      if (site.owner === owner && siteProvidesMana(site.card ?? null)) {
-        base++;
-      }
-    }
+    const thresholds = getCachedThresholdTotals(state, who);
+    const base = computeAvailableMana(
+      state.board,
+      state.permanents,
+      who,
+      state.zones,
+      state.specialSiteState,
+      thresholds
+    );
     const offset = Number(state.players[who]?.mana || 0);
     return Math.max(0, base + offset);
   },

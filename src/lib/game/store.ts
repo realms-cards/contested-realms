@@ -30,10 +30,15 @@ import {
   createImposterMaskSlice,
   createInitialImposterMasks,
 } from "./store/imposterMaskState";
+import {
+  createSpecialSiteSlice,
+  getEmptySpecialSiteState,
+} from "./store/specialSiteState";
 import { createInteractionSlice } from "./store/interactionState";
 import { createMagicSlice } from "./store/magicState";
 import { createMorganaSlice } from "./store/morganaState";
 import { createNetworkSlice } from "./store/networkState";
+import { createOmphalosSlice } from "./store/omphalosState";
 import { createPermanentSlice } from "./store/permanentState";
 import { createPithImpSlice } from "./store/pithImpState";
 import { createPortalSlice } from "./store/portalState";
@@ -122,6 +127,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   ...createCommonSenseSlice(set, get, storeApi),
   ...createPithImpSlice(set, get, storeApi),
   ...createMorganaSlice(set, get, storeApi),
+  ...createOmphalosSlice(set, get, storeApi),
   ...createPreferenceSlice(set, get, storeApi),
   ...createCardMetaSlice(set, get, storeApi),
   ...createSessionSlice(set, get, storeApi),
@@ -133,6 +139,8 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   ...createPortalSlice(set, get, storeApi),
   ...createSeerSlice(set, get, storeApi),
   ...createImposterMaskSlice(set, get, storeApi),
+  ...createSpecialSiteSlice(set, get, storeApi),
+  cardScale: 1,
 
   // Multiplayer transport (injected by online play UI)
   receiveCustomMessage: (msg) => handleCustomMessage(msg, set, get),
@@ -192,9 +200,12 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         pendingCommonSense: null,
         stolenCards: [],
         morganaHands: [],
+        omphalosHands: [],
+        pendingPrivateHandCast: null,
         portalState: null,
         seerState: null,
         imposterMasks: createInitialImposterMasks(),
+        specialSiteState: getEmptySpecialSiteState(),
       };
       return reset as GameState;
     }),

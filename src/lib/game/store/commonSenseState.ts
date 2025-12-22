@@ -52,11 +52,23 @@ export const createCommonSenseSlice: StateCreator<
 > = (set, get) => ({
   pendingCommonSense: null,
 
-  beginCommonSense: (input) => {
+  beginCommonSense: async (input) => {
     const id = newCommonSenseId();
     const casterSeat = input.casterSeat;
     const zones = get().zones;
     const spellbook = zones[casterSeat]?.spellbook || [];
+
+    // First, fetch card meta for all spellbook cards to get rarity data
+    const cardIds = spellbook
+      .map((c) => c.cardId)
+      .filter((id) => Number.isFinite(id) && id > 0);
+    if (cardIds.length > 0) {
+      try {
+        await get().fetchCardMeta(cardIds);
+      } catch {}
+    }
+
+    // Now get the updated meta cache
     const metaByCardId = get().metaByCardId;
 
     // Find all Ordinary cards in spellbook
@@ -64,8 +76,15 @@ export const createCommonSenseSlice: StateCreator<
     const eligibleCards = spellbook.filter((card: CardRef) => {
       const meta = metaByCardId[card.cardId] as { rarity?: string } | undefined;
       const rarity = (meta?.rarity || "").toLowerCase();
+      console.log(
+        `[CommonSense] Card ${card.name} (id=${card.cardId}): rarity=${rarity}`
+      );
       return rarity === "ordinary";
     });
+
+    console.log(
+      `[CommonSense] Found ${eligibleCards.length} Ordinary cards in spellbook of ${spellbook.length} total`
+    );
 
     if (eligibleCards.length === 0) {
       get().log(

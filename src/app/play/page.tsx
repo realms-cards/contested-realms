@@ -8,8 +8,12 @@ import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import BrowseOverlay from "@/components/game/BrowseOverlay";
 import CardPreview from "@/components/game/CardPreview";
 import ChaosTwisterOverlay from "@/components/game/ChaosTwisterOverlay";
+import { ElementChoiceOverlay } from "@/components/game/ElementChoiceOverlay";
 import CommonSenseOverlay from "@/components/game/CommonSenseOverlay";
 import MorganaHandOverlay from "@/components/game/MorganaHandOverlay";
+import OmphalosHandOverlay from "@/components/game/OmphalosHandOverlay";
+import PithImpOverlay from "@/components/game/PithImpOverlay";
+import PrivateHandTargetingOverlay from "@/components/game/PrivateHandTargetingOverlay";
 import { ClientCanvas } from "@/components/game/ClientCanvas";
 import CollectionButton from "@/components/game/CollectionButton";
 import ContextMenu from "@/components/game/ContextMenu";
@@ -70,6 +74,8 @@ export default function PlayPage() {
   const setDragFromPile = useGameStore((s) => s.setDragFromPile);
   const previewCard = useGameStore((s) => s.previewCard);
   const setPreviewCard = useGameStore((s) => s.setPreviewCard);
+  const cardPreviewsEnabled = useGameStore((s) => s.cardPreviewsEnabled);
+  const toggleCardPreviews = useGameStore((s) => s.toggleCardPreviews);
   const contextMenu = useGameStore((s) => s.contextMenu);
   const closeContextMenu = useGameStore((s) => s.closeContextMenu);
   const clearSelection = useGameStore((s) => s.clearSelection);
@@ -576,6 +582,28 @@ export default function PlayPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, [resetCamera]);
 
+  // Keyboard shortcut: P to toggle card previews
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "p" && e.key !== "P") return;
+      // Ignore if typing in input fields
+      const t = e.target as HTMLElement | null;
+      if (
+        t &&
+        (t.isContentEditable ||
+          t.tagName === "INPUT" ||
+          t.tagName === "TEXTAREA" ||
+          t.tagName === "SELECT")
+      ) {
+        return;
+      }
+      e.preventDefault();
+      toggleCardPreviews();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [toggleCardPreviews]);
+
   // Determine if camera panning should be enabled
   const canPanCamera =
     !dragFromHand &&
@@ -807,6 +835,9 @@ export default function PlayPage() {
       {/* Chaos Twister Overlay (dexterity minigame) */}
       <ChaosTwisterOverlay />
 
+      {/* Element Choice Overlay (Valley of Delight, etc.) */}
+      <ElementChoiceOverlay />
+
       {/* Browse Overlay (spell selection) */}
       <BrowseOverlay />
 
@@ -815,6 +846,15 @@ export default function PlayPage() {
 
       {/* Morgana le Fay private hand overlay */}
       <MorganaHandOverlay />
+
+      {/* Omphalos private hand overlay */}
+      <OmphalosHandOverlay />
+
+      {/* Pith Imp stolen card notification */}
+      <PithImpOverlay />
+
+      {/* Private hand targeting overlay (Morgana/Omphalos) */}
+      <PrivateHandTargetingOverlay />
 
       {/* Toolbox and Collection buttons (bottom-right) */}
       {showToolbox && (
@@ -904,8 +944,8 @@ export default function PlayPage() {
         </div>
       </div>
 
-      {/* Hover Preview Overlay (hidden if context menu visible) */}
-      {previewCard && !contextMenu && (
+      {/* Hover Preview Overlay (hidden if context menu visible or previews disabled) */}
+      {cardPreviewsEnabled && previewCard && !contextMenu && (
         <CardPreview
           card={createCardPreviewData({
             slug: previewCard.slug,

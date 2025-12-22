@@ -13,10 +13,23 @@ interface OnlineD20ScreenProps {
   onRollingComplete: () => void;
 }
 
-// Constants for retry/resync timing
-const D20_RETRY_INTERVAL_MS = 3000; // Retry sending roll every 3s if not acknowledged
-const D20_RESYNC_TIMEOUT_MS = 10000; // Request resync if waiting >10s for opponent
-const D20_MAX_RETRIES = 5;
+// Constants for retry/resync timing (exponential backoff)
+const D20_RETRY_BASE_MS = 1500; // Initial retry delay 1.5s
+const D20_RETRY_MAX_MS = 8000; // Max retry delay 8s
+const D20_RESYNC_TIMEOUT_MS = 15000; // Request resync if waiting >15s for opponent
+const D20_MAX_RETRIES = 7; // More retries with exponential backoff
+
+// Calculate exponential backoff with jitter
+function getRetryDelay(attempt: number): number {
+  // Exponential backoff: 1.5s, 3s, 6s, 8s (capped)
+  const exponentialDelay = Math.min(
+    D20_RETRY_BASE_MS * Math.pow(2, attempt),
+    D20_RETRY_MAX_MS
+  );
+  // Add jitter (±20%) to prevent thundering herd
+  const jitter = exponentialDelay * 0.2 * (Math.random() * 2 - 1);
+  return Math.round(exponentialDelay + jitter);
+}
 
 export default function OnlineD20Screen({
   myPlayerKey,
@@ -136,7 +149,7 @@ export default function OnlineD20Screen({
     }
   }, [myRoll, opponentRoll]);
 
-  // Retry logic: if we have a pending roll and haven't received acknowledgment, retry
+  // Retry logic: exponential backoff if we have a pending roll and haven't received acknowledgment
   useEffect(() => {
     if (!d20PendingRoll) {
       // No pending roll, clear retry state
@@ -144,29 +157,37 @@ export default function OnlineD20Screen({
       return;
     }
 
-    // Set up retry interval
-    const retryInterval = setInterval(() => {
-      if (retryCount >= D20_MAX_RETRIES) {
-        console.warn("[D20] Max retries reached, requesting resync");
-        clearInterval(retryInterval);
-        // Request resync via transport
-        if (
-          transport &&
-          typeof (transport as { resync?: () => void }).resync === "function"
-        ) {
-          (transport as { resync: () => void }).resync();
-        }
-        return;
+    if (retryCount >= D20_MAX_RETRIES) {
+      console.warn("[D20] Max retries reached, requesting resync");
+      // Request resync via transport
+      if (
+        transport &&
+        typeof (transport as { resync?: () => void }).resync === "function"
+      ) {
+        (transport as { resync: () => void }).resync();
       }
+      return;
+    }
 
+    // Schedule next retry with exponential backoff
+    const delay = getRetryDelay(retryCount);
+    console.log(
+      `[D20] Scheduling retry ${
+        retryCount + 1
+      }/${D20_MAX_RETRIES} in ${delay}ms`
+    );
+
+    const retryTimeout = setTimeout(() => {
       const didRetry = retryD20Roll();
       if (didRetry) {
         setRetryCount((c) => c + 1);
-        console.log(`[D20] Retry attempt ${retryCount + 1}/${D20_MAX_RETRIES}`);
+        console.log(
+          `[D20] Retry attempt ${retryCount + 1}/${D20_MAX_RETRIES} sent`
+        );
       }
-    }, D20_RETRY_INTERVAL_MS);
+    }, delay);
 
-    return () => clearInterval(retryInterval);
+    return () => clearTimeout(retryTimeout);
   }, [d20PendingRoll, retryCount, retryD20Roll, transport]);
 
   // Resync trigger: if we've been waiting for opponent too long, request resync
@@ -227,6 +248,31 @@ export default function OnlineD20Screen({
 
     return unsubscribe;
   }, [transport, d20PendingRoll, myPlayerKey, clearD20Pending]);
+
+  // Listen for server errors and handle "server_not_ready" by triggering retry
+  useEffect(() => {
+    if (!transport) return;
+
+    const unsubscribe = transport.on("error", (payload) => {
+      const errorPayload = payload as {
+        code?: string;
+        message?: string;
+        retryable?: boolean;
+      };
+      if (errorPayload.code === "server_not_ready" && d20PendingRoll) {
+        console.log("[D20] Server not ready, will retry automatically");
+        // Force a retry by incrementing retry count if we haven't exceeded max
+        if (retryCount < D20_MAX_RETRIES) {
+          // Small delay before retry to give server time to warm up
+          setTimeout(() => {
+            setRetryCount((c) => c + 1);
+          }, 500);
+        }
+      }
+    });
+
+    return unsubscribe;
+  }, [transport, d20PendingRoll, retryCount]);
 
   const handleRoll = useCallback(() => {
     // Guard against double-clicking: check both local ref AND store roll value

@@ -61,12 +61,14 @@ export type PlayerInfo = z.infer<typeof PlayerInfoSchema>;
 
 const TournamentPlayerInfoInputSchema = PlayerInfoInputSchema.extend({
   ready: z.boolean().optional(),
+  seatStatus: z.enum(["active", "vacant"]).optional(),
 });
 
 export const TournamentPlayerInfoSchema =
   TournamentPlayerInfoInputSchema.transform((raw) => ({
     ...normalizePlayerInfo(raw),
     ready: raw.ready ?? false,
+    seatStatus: raw.seatStatus ?? "active",
   }));
 export type TournamentPlayerInfo = z.infer<typeof TournamentPlayerInfoSchema>;
 
@@ -115,6 +117,10 @@ export const SealedConfigSchema = z.object({
   // Optional extended fields used by lobby UI and clients
   packCounts: z.record(z.string(), z.number().int().min(0)).optional(),
   replaceAvatars: z.boolean().optional(),
+  // Free Avatars mode: removes avatars from packs, offers all avatars via deck editor extras
+  freeAvatars: z.boolean().optional(),
+  // Enable second player seer ability (scry 1 before game starts)
+  enableSeer: z.boolean().optional(),
 });
 export type SealedConfig = z.infer<typeof SealedConfigSchema>;
 
@@ -128,6 +134,10 @@ export const DraftConfigSchema = z.object({
   cubeName: z.string().optional().nullable(),
   // Optional: when true for cube drafts, offer cube sideboard cards in the standard card pool
   includeCubeSideboardInStandard: z.boolean().optional(),
+  // Free Avatars mode: removes avatars from packs, offers all avatars via deck editor extras
+  freeAvatars: z.boolean().optional(),
+  // Enable second player seer ability (scry 1 before game starts)
+  enableSeer: z.boolean().optional(),
 });
 export type DraftConfig = z.infer<typeof DraftConfigSchema>;
 
@@ -247,7 +257,7 @@ export const TournamentInfoSchema = z.object({
   creatorId: z.string(),
   format: TournamentFormatSchema,
   status: TournamentStatusSchema,
-  maxPlayers: z.number().int().min(2).max(32),
+  maxPlayers: z.number().int().min(2).max(128),
   registeredPlayers: z.array(TournamentPlayerInfoSchema),
   standings: z.array(PlayerStandingSchema),
   currentRound: z.number().int().min(0).default(0),

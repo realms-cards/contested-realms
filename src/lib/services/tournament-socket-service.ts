@@ -221,9 +221,9 @@ export class TournamentSocketService {
     // Get updated registration counts
     const [readyCount, totalCount] = await Promise.all([
       prisma.tournamentRegistration.count({
-        where: { tournamentId, preparationStatus: 'completed', deckSubmitted: true }
+        where: { tournamentId, preparationStatus: 'completed', deckSubmitted: true, seatStatus: 'active' }
       }),
-      prisma.tournamentRegistration.count({ where: { tournamentId } })
+      prisma.tournamentRegistration.count({ where: { tournamentId, seatStatus: 'active' } })
     ]);
 
     // Broadcast preparation update
@@ -641,7 +641,7 @@ export class TournamentSocketService {
     createdAt: Date;
     startedAt?: Date | null;
     completedAt?: Date | null;
-    registrations?: Array<{ id: string }>;
+    registrations?: Array<{ id: string; seatStatus?: string | null }>;
   }): TournamentResponse {
     return {
       id: tournament.id,
@@ -649,7 +649,9 @@ export class TournamentSocketService {
       format: tournament.format as TournamentResponse['format'],
       status: tournament.status as TournamentResponse['status'],
       maxPlayers: tournament.maxPlayers,
-      currentPlayers: tournament.registrations?.length || 0,
+      currentPlayers: tournament.registrations
+        ? tournament.registrations.filter((reg) => reg.seatStatus !== 'vacant').length
+        : 0,
       creatorId: tournament.creatorId,
       settings: (tournament.settings ?? {}) as Record<string, unknown>,
       createdAt: tournament.createdAt.toISOString(),

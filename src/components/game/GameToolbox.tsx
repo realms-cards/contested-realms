@@ -1,9 +1,10 @@
 "use client";
 
 import { Canvas } from "@react-three/fiber";
-import { Wrench, Eye } from "lucide-react";
+import { Wrench, Eye, Search } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useRef, useState, useMemo } from "react";
+import CardSearchDialog from "@/components/game/CardSearchDialog";
 import HandPeekDialog from "@/components/game/HandPeekDialog";
 import D20Dice from "@/lib/game/components/D20Dice";
 import D6Dice from "@/lib/game/components/D6Dice";
@@ -92,6 +93,9 @@ export default function GameToolbox({
   const [randomSpellLoading, setRandomSpellLoading] = useState(false);
   const addCardToHand = useGameStore((s) => s.addCardToHand);
 
+  // Card search state
+  const [cardSearchOpen, setCardSearchOpen] = useState(false);
+
   // Burrow/Submerge (forced)
   const selectedPermanent = useGameStore((s) => s.selectedPermanent);
   const permanents = useGameStore((s) => s.permanents);
@@ -106,6 +110,10 @@ export default function GameToolbox({
   // Ownership overlay toggle
   const showOwnershipOverlay = useGameStore((s) => s.showOwnershipOverlay);
   const toggleOwnershipOverlay = useGameStore((s) => s.toggleOwnershipOverlay);
+
+  // Card scale (for crowded tiles)
+  const cardScale = useGameStore((s) => s.cardScale);
+  const setCardScale = useGameStore((s) => s.setCardScale);
 
   // Peek dialog from central store (populated by interaction:result)
   const peekDialog = useGameStore((s) => s.peekDialog);
@@ -811,6 +819,34 @@ export default function GameToolbox({
     }
   };
 
+  const handleSearchAndDraw = (card: {
+    cardId: number;
+    variantId: number;
+    name: string;
+    slug: string;
+    type: string | null;
+    subTypes: string | null;
+    cost: number | null;
+    attack: number | null;
+    defence: number | null;
+  }) => {
+    if (!mySeat) {
+      log("No seat assigned");
+      return;
+    }
+    addCardToHand(mySeat, {
+      cardId: card.cardId,
+      variantId: card.variantId,
+      name: card.name,
+      type: card.type,
+      slug: card.slug,
+      subTypes: card.subTypes,
+      cost: card.cost,
+      thresholds: null, // Toolbox cards don't enforce thresholds
+    });
+    setCardSearchOpen(false);
+  };
+
   const collapsed = !open;
   const containerWidthClass = collapsed ? "w-56 sm:w-64" : "w-72 sm:w-80";
   const headerPaddingClass = collapsed
@@ -1173,6 +1209,22 @@ export default function GameToolbox({
                 />
                 <span className="text-xs">Show ownership highlight</span>
               </label>
+              {/* Card Scale slider */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs whitespace-nowrap">Card Size</span>
+                <input
+                  type="range"
+                  min={0.25}
+                  max={1}
+                  step={0.05}
+                  value={cardScale}
+                  onChange={(e) => setCardScale(parseFloat(e.target.value))}
+                  className="flex-1 h-1.5 bg-white/20 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                />
+                <span className="text-xs w-8 text-right">
+                  {Math.round(cardScale * 100)}%
+                </span>
+              </div>
             </div>
 
             {/* Fix Game State subview */}
@@ -1221,7 +1273,7 @@ export default function GameToolbox({
                   </div>
 
                   {/* Draw Random Spell */}
-                  <div className="rounded-lg bg-white/5 ring-1 ring-white/10 p-2">
+                  <div className="rounded-lg bg-white/5 ring-1 ring-white/10 p-2 space-y-2">
                     <button
                       className="w-full rounded bg-purple-600/90 hover:bg-purple-500 py-1 disabled:opacity-40"
                       onClick={handleDrawRandomSpell}
@@ -1229,6 +1281,15 @@ export default function GameToolbox({
                       title="Draw a random spell from the entire card pool to hand"
                     >
                       {randomSpellLoading ? "Drawing..." : "Draw Random Spell"}
+                    </button>
+                    <button
+                      className="w-full rounded bg-cyan-600/90 hover:bg-cyan-500 py-1 disabled:opacity-40 flex items-center justify-center gap-1.5"
+                      onClick={() => setCardSearchOpen(true)}
+                      disabled={!mySeat}
+                      title="Search and draw any card from the database"
+                    >
+                      <Search className="w-3.5 h-3.5" />
+                      Search &amp; Draw Card
                     </button>
                   </div>
 
@@ -1413,6 +1474,12 @@ export default function GameToolbox({
             </div>
           </div>
         </div>
+      )}
+      {cardSearchOpen && (
+        <CardSearchDialog
+          onSelectCard={handleSearchAndDraw}
+          onClose={() => setCardSearchOpen(false)}
+        />
       )}
     </div>
   );
