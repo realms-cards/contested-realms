@@ -224,12 +224,50 @@ export const createNetworkSlice: StateCreator<
             ),
           });
         } catch {}
+        let zonesCandidate = replaceKeys.has("zones")
+          ? (p.zones as GameState["zones"])
+          : (deepMergeReplaceArrays(state.zones, p.zones) as Partial<
+              Record<PlayerKey, GameState["zones"][PlayerKey]>
+            >);
+
+        // CRITICAL: Filter out stolen cards from incoming zones patches
+        // Server doesn't know about pithImpHands, so it may re-add stolen cards during turn transitions
+        // EXCEPT: Don't filter cards that are being returned (tracked in processedPithImpReturns)
+        const pithImpHands = state.pithImpHands || [];
+        const processedReturns =
+          state.processedPithImpReturns || new Set<string>();
+        if (pithImpHands.length > 0 && zonesCandidate) {
+          const stolenCardIds = new Set<number>();
+          for (const pithImpEntry of pithImpHands) {
+            // Skip entries that are being returned (race condition: set() hasn't flushed yet)
+            if (!processedReturns.has(pithImpEntry.id)) {
+              for (const card of pithImpEntry.hand) {
+                stolenCardIds.add(card.cardId);
+              }
+            }
+          }
+          if (stolenCardIds.size > 0) {
+            const filteredZones = { ...zonesCandidate } as Record<
+              PlayerKey,
+              GameState["zones"][PlayerKey]
+            >;
+            for (const seat of ["p1", "p2"] as PlayerKey[]) {
+              const seatZones = filteredZones[seat];
+              if (seatZones && Array.isArray(seatZones.hand)) {
+                filteredZones[seat] = {
+                  ...seatZones,
+                  hand: seatZones.hand.filter(
+                    (c) => !stolenCardIds.has(c.cardId)
+                  ),
+                };
+              }
+            }
+            zonesCandidate = filteredZones;
+          }
+        }
+
         next.zones = normalizeZones(
-          replaceKeys.has("zones")
-            ? (p.zones as GameState["zones"])
-            : (deepMergeReplaceArrays(state.zones, p.zones) as Partial<
-                Record<PlayerKey, GameState["zones"][PlayerKey]>
-              >),
+          zonesCandidate,
           replaceKeys.has("zones") ? undefined : state.zones
         );
       }
@@ -379,6 +417,22 @@ export const createNetworkSlice: StateCreator<
       } else if (replaceKeys.has("imposterMasks")) {
         next.imposterMasks = { p1: null, p2: null };
       }
+      // Pith Imp private hands (stolen cards)
+      // CRITICAL: Do NOT clear based on replaceKeys - owner tracks locally, server snapshots would wipe it
+      if (p.pithImpHands !== undefined) {
+        next.pithImpHands = p.pithImpHands;
+      }
+      // NOTE: No else if (replaceKeys.has("pithImpHands")) - intentionally omitted to prevent server snapshot wipes
+      // Morgana private hands
+      if (p.morganaHands !== undefined) {
+        next.morganaHands = p.morganaHands;
+      }
+      // NOTE: No else if for morganaHands either - same reason
+      // Omphalos private hands
+      if (p.omphalosHands !== undefined) {
+        next.omphalosHands = p.omphalosHands;
+      }
+      // NOTE: No else if for omphalosHands either - same reason
 
       // Snapshot creation is handled by GameToolbox.tsx useEffect
 

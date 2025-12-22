@@ -22,6 +22,7 @@ type BoardUiDefaults = Pick<
   | "gridBlend"
   | "allowSiteDrag"
   | "showOwnershipOverlay"
+  | "cardScale"
   | "boardPings"
   | "lastPointerWorldPos"
   | "draggingSite"
@@ -48,6 +49,7 @@ export const createInitialBoardUiState = (): BoardUiDefaults => ({
   gridBlend: "normal",
   allowSiteDrag: false, // Default: sites cannot be freely dragged on board
   showOwnershipOverlay: false, // Default: no ownership highlight on cards
+  cardScale: 1, // Default: full size cards (range 0.25 to 1)
   boardPings: [],
   lastPointerWorldPos: null,
   draggingSite: null,
@@ -69,6 +71,7 @@ export type BoardUiSlice = Pick<
   | "togglePlaymatOverlay"
   | "toggleAllowSiteDrag"
   | "toggleOwnershipOverlay"
+  | "setCardScale"
   | "setPlaymatUrl"
   | "setCardbackUrls"
   | "setGridColor"
@@ -101,6 +104,12 @@ export const createBoardUiSlice: StateCreator<
     set((state) => ({ allowSiteDrag: !state.allowSiteDrag })),
   toggleOwnershipOverlay: () =>
     set((state) => ({ showOwnershipOverlay: !state.showOwnershipOverlay })),
+  setCardScale: (scale: number) => {
+    const clamped = Math.max(0.25, Math.min(1, scale));
+    set({ cardScale: clamped });
+    // Sync to other player via transport
+    get().trySendPatch({ cardScale: clamped });
+  },
   setPlaymatUrl: (url: string) => set({ playmatUrl: url }),
   setCardbackUrls: (who, spellbook, atlas, preset) =>
     set((state) => ({

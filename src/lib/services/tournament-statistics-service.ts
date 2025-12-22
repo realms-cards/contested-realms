@@ -454,7 +454,7 @@ export class TournamentStatisticsService {
         where: { tournamentId },
       }),
       prisma.tournamentRegistration.count({
-        where: { tournamentId },
+        where: { tournamentId, seatStatus: "active" },
       }),
     ]);
 

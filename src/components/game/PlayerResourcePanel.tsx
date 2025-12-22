@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useGameStore } from "@/lib/game/store";
 import type { PlayerKey } from "@/lib/game/store";
 import { siteProvidesMana } from "@/lib/game/store/utils/resourceHelpers";
@@ -226,7 +227,9 @@ export function PlayerResourceColumn({
   const manaOffset = useGameStore((s) => s.players[player]?.mana ?? 0);
   const addMana = useGameStore((s) => s.addMana);
   const actorKey = useGameStore((s) => s.actorKey);
-  const thresholds = useGameStore((s) => s.getThresholdTotals(player));
+  const thresholds = useGameStore(
+    useShallow((s) => s.getThresholdTotals(player))
+  );
 
   const ownerNum = player === "p1" ? 1 : 2;
 

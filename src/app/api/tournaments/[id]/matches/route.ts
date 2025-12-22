@@ -61,14 +61,34 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     let filteredMatches = matches;
     if (playerId) {
       filteredMatches = matches.filter(match => {
-        const players = match.players as Array<{ id: string; name: string }>;
-        return players.some(p => p.id === playerId);
+        const players = Array.isArray(match.players) ? match.players : [];
+        return players.some(p => {
+          if (typeof p === 'string') return p === playerId;
+          const record = p as { id?: string };
+          return record.id === playerId;
+        });
       });
     }
 
     // Process matches to extract detailed information
     const processedMatches = filteredMatches.map(match => {
-      const players = match.players as Array<{ id: string; displayName?: string; name?: string; seat?: number }>;
+      const players = Array.isArray(match.players) ? match.players : [];
+      const normalizedPlayers = players.map((player) => {
+        if (typeof player === 'string') {
+          return { id: player, name: player, seat: null };
+        }
+        const record = player as {
+          id?: string;
+          displayName?: string;
+          name?: string;
+          seat?: number | null;
+        };
+        return {
+          id: record.id || 'unknown',
+          name: record.displayName ?? record.name ?? record.id ?? 'Unknown Player',
+          seat: typeof record.seat === 'number' ? record.seat : null
+        };
+      });
       const results = match.results as { winnerId?: string; gameResults?: Array<{ winner: string; duration?: number }> } | null;
       
       // Calculate match statistics
@@ -96,9 +116,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         tournamentName: match.tournament?.name,
         roundNumber: match.round?.roundNumber || null,
         status: match.status,
-        players: players.map(p => ({
+        players: normalizedPlayers.map(p => ({
           id: p.id,
-          name: (p.displayName ?? p.name ?? 'Unknown Player'),
+          name: p.name,
           seat: p.seat || null
         })),
         winnerId,
@@ -113,6 +133,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     // Calculate summary statistics
     const totalMatches = processedMatches.length;
     const completedMatches = processedMatches.filter(m => m.status === 'completed').length;
+    const cancelledMatches = processedMatches.filter(m => m.status === 'cancelled').length;
+    const resolvedMatches = completedMatches + cancelledMatches;
     const averageGameCount = completedMatches > 0 
       ? processedMatches.reduce((sum, m) => sum + m.gameCount, 0) / completedMatches
       : 0;
@@ -132,8 +154,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       },
       summary: {
         totalMatches,
-        completedMatches,
-        pendingMatches: totalMatches - completedMatches,
+        completedMatches: resolvedMatches,
+        cancelledMatches,
+        pendingMatches: totalMatches - resolvedMatches,
         averageGameCount: Math.round(averageGameCount * 100) / 100,
         averageDuration: averageDuration ? Math.round(averageDuration / 1000) : null // Convert to seconds
       },

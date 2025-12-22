@@ -368,6 +368,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     type: string | null;
     subTypes: string | null;
     tileKey: string;
+    card?: CardRef;
   }> = [];
   let isCarryableArtifact = false;
   let isMine = false; // Ownership check for attached items operations
@@ -529,7 +530,8 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     }
 
     // Check for attached tokens on this permanent (only if it's not a token itself)
-    if (!isToken) {
+    if (!isToken && item) {
+      // Standard attachment matching
       attachedTokens = arr
         .map((perm, idx) => ({ perm, idx }))
         .filter(
@@ -544,6 +546,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
           type: perm.card.type || null,
           subTypes: perm.card.subTypes || null,
           tileKey: t.at,
+          card: perm.card,
         }));
     }
 
@@ -901,6 +904,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
           type: perm.card.type || null,
           subTypes: perm.card.subTypes || null,
           tileKey: avatarTileKey,
+          card: perm.card,
         }));
     }
   } else if (t.kind === "pile") {
@@ -1372,6 +1376,53 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                     })}
                   </div>
                 )}
+
+              {/* Pith Imp stolen cards section - uses private hand approach */}
+              {t.kind === "permanent" &&
+                isMine &&
+                (() => {
+                  const arr = permanents[t.at] || [];
+                  const item = arr[t.index];
+                  const cardName = (item?.card?.name || "").toLowerCase();
+                  if (!cardName.includes("pith imp")) return null;
+
+                  const pithImpHands = useGameStore.getState().pithImpHands;
+                  const pithImpEntry = pithImpHands.find(
+                    (p) =>
+                      p.minion.at === t.at ||
+                      (item?.instanceId &&
+                        p.minion.instanceId === item.instanceId)
+                  );
+
+                  if (!pithImpEntry || pithImpEntry.hand.length === 0)
+                    return null;
+
+                  return (
+                    <div className="space-y-2">
+                      <div className="text-xs text-white/70 px-3 py-1">
+                        Stolen Cards ({pithImpEntry.hand.length}):
+                      </div>
+                      {pithImpEntry.hand.map((card, cardIdx) => (
+                        <button
+                          key={cardIdx}
+                          className="w-full text-left rounded bg-purple-900/20 hover:bg-purple-900/40 px-3 py-1 text-sm"
+                          onClick={() => {
+                            // Drop stolen card onto the board at Pith Imp's location
+                            useGameStore
+                              .getState()
+                              .dropStolenCard(pithImpEntry.id, cardIdx, {
+                                x: Number(t.at.split(",")[0]),
+                                y: Number(t.at.split(",")[1]),
+                              });
+                            onClose();
+                          }}
+                        >
+                          Drop {card.name}
+                        </button>
+                      ))}
+                    </div>
+                  );
+                })()}
 
               {/* Counter toggle */}
               {doToggleCounter && (

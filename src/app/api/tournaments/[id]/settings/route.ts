@@ -2,6 +2,8 @@ import { NextRequest } from 'next/server';
 import { getServerAuthSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { tournamentSocketService } from '@/lib/services/tournament-broadcast';
+import { TOURNAMENT_PLAYER_LIMITS } from '@/lib/tournament/constants';
+import { countActiveSeats, getRegistrationSettings, isActiveSeat } from '@/lib/tournament/registration';
 
 // PUT /api/tournaments/[id]/settings
 // Update tournament settings (only during registration phase and only by creator)
@@ -66,14 +68,23 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     if (body.maxPlayers !== undefined) {
       const maxPlayers = Number(body.maxPlayers);
-      if (![2, 4, 8, 16, 32].includes(maxPlayers)) {
+      const registrationSettings = getRegistrationSettings(tournament.settings);
+      if (!Number.isFinite(maxPlayers) || maxPlayers < 2) {
+        return new Response(JSON.stringify({ error: 'Invalid max players count' }), { status: 400 });
+      }
+      if (registrationSettings.mode === 'open') {
+        if (maxPlayers > TOURNAMENT_PLAYER_LIMITS.MAX_PLAYERS) {
+          return new Response(JSON.stringify({ error: 'Invalid max players count' }), { status: 400 });
+        }
+      } else if (![2, 4, 8, 16, 32].includes(maxPlayers)) {
         return new Response(JSON.stringify({ error: 'Invalid max players count' }), { status: 400 });
       }
       
       // Check if reducing max players would kick out existing registrations
-      if (maxPlayers < tournament.registrations.length) {
+      const activeCount = countActiveSeats(tournament.registrations.filter(isActiveSeat));
+      if (maxPlayers < activeCount) {
         return new Response(JSON.stringify({ 
-          error: `Cannot reduce max players to ${maxPlayers} - ${tournament.registrations.length} players already registered` 
+          error: `Cannot reduce max players to ${maxPlayers} - ${activeCount} players already registered` 
         }), { status: 400 });
       }
       

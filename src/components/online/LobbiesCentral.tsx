@@ -349,6 +349,8 @@ export type CreateTournamentConfig = {
   matchType: "constructed" | "sealed" | "draft";
   maxPlayers: number;
   isPrivate?: boolean;
+  registrationMode?: "fixed" | "open";
+  registrationLocked?: boolean;
   sealedConfig?: {
     packCounts: Record<string, number>;
     packCount?: number;
@@ -390,6 +392,7 @@ export default function LobbiesCentral({
   onUpdateTournamentSettings,
   onStartTournament,
   onEndTournament,
+  onToggleTournamentRegistrationLock,
   onRefresh,
   tournamentsEnabled = true,
   voiceSupport,
@@ -422,6 +425,10 @@ export default function LobbiesCentral({
   onToggleTournamentReady?: (tournamentId: string, ready: boolean) => void;
   onStartTournament?: (tournamentId: string) => void;
   onEndTournament?: (tournamentId: string) => void;
+  onToggleTournamentRegistrationLock?: (
+    tournamentId: string,
+    locked: boolean
+  ) => void;
   onRefresh: () => void;
   tournamentsEnabled?: boolean;
   voiceSupport?: {
@@ -474,6 +481,9 @@ export default function LobbiesCentral({
   const [pendingStartT, setPendingStartT] = useState<Record<string, boolean>>(
     {}
   );
+  const [pendingLockT, setPendingLockT] = useState<Record<string, boolean>>(
+    {}
+  );
 
   // Check if user is already engaged in a lobby or tournament
   // IMPORTANT: Use joinedLobbyId as the single source of truth for membership.
@@ -487,7 +497,9 @@ export default function LobbiesCentral({
   const isInLobby = joinedLobbyId !== null;
   const joinedTournament = tournaments.find(
     (t) =>
-      t.registeredPlayers.some((p) => p.id === myId) && t.status !== "completed"
+      t.registeredPlayers.some(
+        (p) => p.id === myId && (p as { seatStatus?: string }).seatStatus !== "vacant"
+      ) && t.status !== "completed"
   );
   const isInTournament = joinedTournament !== undefined;
   const isEngaged = isInLobby || isInTournament;
@@ -507,6 +519,10 @@ export default function LobbiesCentral({
   >("sealed");
   const [tournamentMaxPlayers, setTournamentMaxPlayers] = useState<number>(2);
   const [tournamentIsPrivate, setTournamentIsPrivate] =
+    useState<boolean>(false);
+  const [tournamentOpenSeat, setTournamentOpenSeat] =
+    useState<boolean>(false);
+  const [tournamentRegistrationLocked, setTournamentRegistrationLocked] =
     useState<boolean>(false);
   // Tournament pack settings
   // New format: array of set names, one per booster
@@ -657,15 +673,38 @@ export default function LobbiesCentral({
         const isJoined = tournament.registeredPlayers.some(
           (p) => p.id === myId
         );
+        const registrationSettings = (
+          (tournament as unknown as { settings?: Record<string, unknown> })
+            .settings ?? {}
+        ).registration as Record<string, unknown> | undefined;
+        const status = tournament.status as string;
+        const isOpenSeat = registrationSettings?.mode === "open";
+        const isLocked = registrationSettings?.locked === true;
+        const activeCount = tournament.registeredPlayers.filter(
+          (p) => (p as { seatStatus?: string }).seatStatus !== "vacant"
+        ).length;
+        const vacantCount = Math.max(
+          0,
+          tournament.registeredPlayers.length - activeCount
+        );
+        const canJoin = isOpenSeat
+          ? !isJoined &&
+            (vacantCount > 0 ||
+              (!isLocked &&
+                (status === "registering" || status === "preparing")))
+          : !isJoined &&
+            status === "registering" &&
+            activeCount < tournament.maxPlayers;
         if (q && !tournament.name.toLowerCase().includes(q)) return false;
         // Don't hide joined tournaments even if they're full or started
+        if (hideFull && !canJoin && !isJoined)
+          return false;
         if (
-          hideFull &&
-          tournament.registeredPlayers.length >= tournament.maxPlayers &&
+          hideStarted &&
+          status !== "registering" &&
+          !(isOpenSeat && !isLocked && status === "preparing") &&
           !isJoined
         )
-          return false;
-        if (hideStarted && tournament.status !== "registering" && !isJoined)
           return false;
         return true;
       })
@@ -683,7 +722,13 @@ export default function LobbiesCentral({
         if (aStatus !== bStatus) return aStatus - bStatus;
 
         // Then by player count
-        return b.registeredPlayers.length - a.registeredPlayers.length;
+        const aActive = a.registeredPlayers.filter(
+          (p) => (p as { seatStatus?: string }).seatStatus !== "vacant"
+        ).length;
+        const bActive = b.registeredPlayers.filter(
+          (p) => (p as { seatStatus?: string }).seatStatus !== "vacant"
+        ).length;
+        return bActive - aActive;
       });
   }, [tournaments, query, hideFull, hideStarted, myId]);
 
@@ -1078,13 +1123,27 @@ export default function LobbiesCentral({
         {tournamentsEnabled &&
           showTournaments &&
           filteredTournaments.map((tournament) => {
-            const isRegistered = tournament.registeredPlayers.some(
-              (p) => p.id === myId
-            );
             const myRegistration = tournament.registeredPlayers.find(
               (p) => p.id === myId
             );
+            const isSeatVacant = myRegistration?.seatStatus === "vacant";
+            const isRegistered = Boolean(myRegistration && !isSeatVacant);
             const isReady = myRegistration?.ready || false;
+            const registrationSettings = (
+              (tournament as unknown as { settings?: Record<string, unknown> })
+                .settings ?? {}
+            ).registration as Record<string, unknown> | undefined;
+            const status = tournament.status as string;
+            const isOpenSeat = registrationSettings?.mode === "open";
+            const isLocked = registrationSettings?.locked === true;
+            const activePlayers = tournament.registeredPlayers.filter(
+              (p) => (p as { seatStatus?: string }).seatStatus !== "vacant"
+            );
+            const activeCount = activePlayers.length;
+            const vacantCount = Math.max(
+              0,
+              tournament.registeredPlayers.length - activeCount
+            );
             // Consider a deck submitted when the API marks deckSubmitted (preferred) or when the player is ready
             const hasSubmitted = (() => {
               if (!myRegistration) return false;
@@ -1093,17 +1152,23 @@ export default function LobbiesCentral({
               };
               return Boolean(maybe.deckSubmitted || isReady);
             })();
-            const canJoin =
-              tournament.status === "registering" &&
-              !isRegistered &&
-              tournament.registeredPlayers.length < tournament.maxPlayers &&
-              !isEngaged;
+            const canRejoin = Boolean(isSeatVacant && !isEngaged);
+            const canJoin = isOpenSeat
+              ? canRejoin ||
+                (!isRegistered &&
+                  !isEngaged &&
+                  (vacantCount > 0 ||
+                    (!isLocked &&
+                      (status === "registering" || status === "preparing"))))
+              : status === "registering" &&
+                !isRegistered &&
+                activeCount < tournament.maxPlayers &&
+                !isEngaged;
             const allPlayersReady =
-              tournament.registeredPlayers.length >= 2 &&
-              tournament.registeredPlayers.every((p) => p.ready);
+              activeCount >= 2 && activePlayers.every((p) => p.ready);
             const canStart =
               tournament.creatorId === myId &&
-              tournament.status === "registering" &&
+              status === "registering" &&
               allPlayersReady;
             const statusColors = {
               registering: "text-green-400",
@@ -1137,13 +1202,20 @@ export default function LobbiesCentral({
                       Format: {tournament.format} • Type: {tournament.matchType}
                     </div>
                     <div>
-                      Players: {tournament.registeredPlayers.length}/
-                      {tournament.maxPlayers} • Round: {tournament.currentRound}
-                      /{tournament.totalRounds}
+                      Players:{" "}
+                      {activeCount}
+                      {isOpenSeat ? "" : `/${tournament.maxPlayers}`} • Round:{" "}
+                      {tournament.currentRound}/{tournament.totalRounds}
                     </div>
                     <div className={statusColor}>
                       Status: {tournament.status.replace("_", " ")}
                     </div>
+                    {isOpenSeat && (
+                      <div className="text-slate-400">
+                        Open Seat: {isLocked ? "Locked" : "Open"}
+                        {vacantCount > 0 ? ` • Vacant: ${vacantCount}` : ""}
+                      </div>
+                    )}
                     {isRegistered && tournament.status === "registering" && (
                       <div
                         className={
@@ -1183,11 +1255,15 @@ export default function LobbiesCentral({
                       }}
                       disabled={pendingJoinT[tournament.id]}
                     >
-                      {pendingJoinT[tournament.id] ? "Joining…" : "Join"}
+                      {pendingJoinT[tournament.id]
+                        ? "Joining…"
+                        : canRejoin
+                        ? "Rejoin"
+                        : "Join"}
                     </button>
                   )}
                   {isRegistered &&
-                    tournament.status === "registering" &&
+                    (tournament.status === "registering" || isOpenSeat) &&
                     onLeaveTournament && (
                       <button
                         className={`rounded px-3 py-1 text-xs ${
@@ -1229,6 +1305,48 @@ export default function LobbiesCentral({
                         }}
                       >
                         Settings
+                      </button>
+                    )}
+                  {isOpenSeat &&
+                    tournament.creatorId === myId &&
+                    tournament.status !== "completed" &&
+                    onToggleTournamentRegistrationLock && (
+                      <button
+                        className={`rounded px-3 py-1 text-xs ${
+                          pendingLockT[tournament.id]
+                            ? "bg-slate-600/60 cursor-not-allowed"
+                            : isLocked
+                            ? "bg-amber-600/80 hover:bg-amber-600"
+                            : "bg-emerald-600/80 hover:bg-emerald-600"
+                        } text-white`}
+                        onClick={async () => {
+                          if (pendingLockT[tournament.id]) return;
+                          setPendingLockT((m) => ({
+                            ...m,
+                            [tournament.id]: true,
+                          }));
+                          try {
+                            await Promise.resolve(
+                              onToggleTournamentRegistrationLock(
+                                tournament.id,
+                                !isLocked
+                              )
+                            );
+                            if (onRefresh) onRefresh();
+                          } finally {
+                            setPendingLockT((m) => ({
+                              ...m,
+                              [tournament.id]: false,
+                            }));
+                          }
+                        }}
+                        disabled={pendingLockT[tournament.id]}
+                      >
+                        {pendingLockT[tournament.id]
+                          ? "Updating…"
+                          : isLocked
+                          ? "Unlock Seats"
+                          : "Lock Seats"}
                       </button>
                     )}
                   {isRegistered && tournament.status === "registering" && (
@@ -1407,26 +1525,44 @@ export default function LobbiesCentral({
                   )}
                   {tournament.status === "registering" &&
                     !isRegistered &&
-                    tournament.registeredPlayers.length >=
-                      tournament.maxPlayers && (
+                    !isOpenSeat &&
+                    activeCount >= tournament.maxPlayers && (
                       <div className="rounded bg-slate-600/20 px-3 py-1 text-xs text-slate-400">
                         Full
                       </div>
                     )}
                   {tournament.status === "registering" &&
                     !isRegistered &&
-                    tournament.registeredPlayers.length <
-                      tournament.maxPlayers &&
+                    !isOpenSeat &&
+                    activeCount < tournament.maxPlayers &&
                     isEngaged && (
                       <div className="rounded bg-slate-600/20 px-3 py-1 text-xs text-slate-400">
                         In {isInLobby ? "Lobby" : "Tournament"}
                       </div>
                     )}
-                  {tournament.status !== "registering" && !isRegistered && (
-                    <div className="rounded bg-slate-600/20 px-3 py-1 text-xs text-slate-400">
-                      Started
-                    </div>
-                  )}
+                  {tournament.status === "registering" &&
+                    isOpenSeat &&
+                    !isRegistered &&
+                    isLocked && (
+                      <div className="rounded bg-slate-600/20 px-3 py-1 text-xs text-slate-400">
+                        Locked
+                      </div>
+                    )}
+                  {tournament.status !== "registering" &&
+                    !isRegistered &&
+                    (!isOpenSeat || vacantCount === 0) && (
+                      <div className="rounded bg-slate-600/20 px-3 py-1 text-xs text-slate-400">
+                        Started
+                      </div>
+                    )}
+                  {tournament.status !== "registering" &&
+                    !isRegistered &&
+                    isOpenSeat &&
+                    vacantCount > 0 && (
+                      <div className="rounded bg-emerald-600/20 px-3 py-1 text-xs text-emerald-200">
+                        Vacant Seats
+                      </div>
+                    )}
                 </div>
               </div>
             );
@@ -1630,6 +1766,38 @@ export default function LobbiesCentral({
                   <p className="text-slate-400 text-xs mt-1 ml-6">
                     Only invited players can see and join
                   </p>
+                )}
+              </div>
+              <div>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={tournamentOpenSeat}
+                    onChange={(e) => {
+                      const next = e.target.checked;
+                      setTournamentOpenSeat(next);
+                      if (!next) {
+                        setTournamentRegistrationLocked(false);
+                      }
+                    }}
+                    className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-blue-600"
+                  />
+                  <span className="text-xs">
+                    Open seat tournament (host controls registration lock)
+                  </span>
+                </label>
+                {tournamentOpenSeat && (
+                  <label className="mt-2 flex items-center gap-2 text-xs ml-6">
+                    <input
+                      type="checkbox"
+                      checked={tournamentRegistrationLocked}
+                      onChange={(e) =>
+                        setTournamentRegistrationLocked(e.target.checked)
+                      }
+                      className="w-3 h-3 rounded border-slate-600 bg-slate-700 text-blue-600"
+                    />
+                    Start locked (no new seats until unlocked)
+                  </label>
                 )}
               </div>
 
@@ -2074,21 +2242,44 @@ export default function LobbiesCentral({
 
               <div>
                 <label className="block text-xs font-medium mb-2">
-                  Max Players
+                  {tournamentOpenSeat ? "Seat Cap" : "Max Players"}
                 </label>
-                <select
-                  value={tournamentMaxPlayers}
-                  onChange={(e) =>
-                    setTournamentMaxPlayers(parseInt(e.target.value))
-                  }
-                  className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-3 py-2 text-sm"
-                >
-                  <option value={2}>2 Players</option>
-                  <option value={4}>4 Players</option>
-                  <option value={8}>8 Players</option>
-                  <option value={16}>16 Players</option>
-                  <option value={32}>32 Players</option>
-                </select>
+                {tournamentOpenSeat ? (
+                  <input
+                    type="number"
+                    min={2}
+                    max={128}
+                    value={tournamentMaxPlayers}
+                    onChange={(e) =>
+                      setTournamentMaxPlayers(
+                        Math.max(
+                          2,
+                          Math.min(128, parseInt(e.target.value) || 2)
+                        )
+                      )
+                    }
+                    className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-3 py-2 text-sm"
+                  />
+                ) : (
+                  <select
+                    value={tournamentMaxPlayers}
+                    onChange={(e) =>
+                      setTournamentMaxPlayers(parseInt(e.target.value))
+                    }
+                    className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-3 py-2 text-sm"
+                  >
+                    <option value={2}>2 Players</option>
+                    <option value={4}>4 Players</option>
+                    <option value={8}>8 Players</option>
+                    <option value={16}>16 Players</option>
+                    <option value={32}>32 Players</option>
+                  </select>
+                )}
+                {tournamentOpenSeat && (
+                  <p className="text-xs text-slate-400 mt-1">
+                    Open seat tournaments ignore the cap until locked.
+                  </p>
+                )}
               </div>
             </div>
 
@@ -2137,6 +2328,10 @@ export default function LobbiesCentral({
                       maxPlayers: tournamentMaxPlayers,
                       isPrivate: tournamentIsPrivate,
                     };
+                    if (tournamentOpenSeat) {
+                      payload.registrationMode = "open";
+                      payload.registrationLocked = tournamentRegistrationLocked;
+                    }
                     if (tournamentMatchType === "sealed") {
                       if (sealedUseCube && sealedCubeId) {
                         // Cube sealed mode
@@ -2307,6 +2502,14 @@ function TournamentSettingsForm({
   const format = "swiss";
   const [matchType, setMatchType] = useState(tournament.matchType);
   const [maxPlayers, setMaxPlayers] = useState(tournament.maxPlayers);
+  const registrationSettings = (
+    (tournament as unknown as { settings?: Record<string, unknown> })
+      .settings ?? {}
+  ).registration as Record<string, unknown> | undefined;
+  const isOpenSeat = registrationSettings?.mode === "open";
+  const activeCount = tournament.registeredPlayers.filter(
+    (p) => (p as { seatStatus?: string }).seatStatus !== "vacant"
+  ).length;
 
   const handleSave = () => {
     const settings: {
@@ -2381,22 +2584,38 @@ function TournamentSettingsForm({
 
       {/* Max Players */}
       <div>
-        <label className="block text-xs font-medium mb-2">Max Players</label>
-        <select
-          value={maxPlayers}
-          onChange={(e) => setMaxPlayers(Number(e.target.value))}
-          className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-3 py-2 text-sm"
-        >
-          <option value={2}>2 Players</option>
-          <option value={4}>4 Players</option>
-          <option value={8}>8 Players</option>
-          <option value={16}>16 Players</option>
-          <option value={32}>32 Players</option>
-        </select>
-        {maxPlayers < tournament.registeredPlayers.length && (
+        <label className="block text-xs font-medium mb-2">
+          {isOpenSeat ? "Seat Cap" : "Max Players"}
+        </label>
+        {isOpenSeat ? (
+          <input
+            type="number"
+            min={2}
+            max={128}
+            value={maxPlayers}
+            onChange={(e) =>
+              setMaxPlayers(
+                Math.max(2, Math.min(128, parseInt(e.target.value) || 2))
+              )
+            }
+            className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-3 py-2 text-sm"
+          />
+        ) : (
+          <select
+            value={maxPlayers}
+            onChange={(e) => setMaxPlayers(Number(e.target.value))}
+            className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-3 py-2 text-sm"
+          >
+            <option value={2}>2 Players</option>
+            <option value={4}>4 Players</option>
+            <option value={8}>8 Players</option>
+            <option value={16}>16 Players</option>
+            <option value={32}>32 Players</option>
+          </select>
+        )}
+        {maxPlayers < activeCount && (
           <p className="text-red-400 text-xs mt-1">
-            Cannot reduce below current player count (
-            {tournament.registeredPlayers.length})
+            Cannot reduce below current player count ({activeCount})
           </p>
         )}
       </div>
@@ -2412,7 +2631,7 @@ function TournamentSettingsForm({
         <button
           onClick={handleSave}
           disabled={
-            !hasChanges || maxPlayers < tournament.registeredPlayers.length
+            !hasChanges || maxPlayers < activeCount
           }
           className="px-3 py-2 rounded bg-blue-600 hover:bg-blue-500 disabled:bg-slate-600 disabled:cursor-not-allowed text-sm text-white transition-colors"
         >

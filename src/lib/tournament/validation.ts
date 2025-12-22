@@ -29,6 +29,10 @@ export const TournamentSettingsSchema = z.object({
     .min(TOURNAMENT_TIMEOUTS.MATCH_PHASE.MIN_MATCH_TIME)
     .max(TOURNAMENT_TIMEOUTS.MATCH_PHASE.MAX_MATCH_TIME)
     .optional(),
+  registration: z.object({
+    mode: z.enum(['fixed', 'open']).default('fixed'),
+    locked: z.boolean().default(false)
+  }).optional(),
   
   // Format-specific settings
   sealed: z.object({
@@ -230,7 +234,9 @@ export const TournamentRegistrationModelSchema = z.object({
   registeredAt: z.date(),
   preparationStatus: PreparationStatusSchema,
   deckSubmitted: z.boolean(),
-  preparationData: z.record(z.string(), z.unknown()).nullable() // JSON field
+  preparationData: z.record(z.string(), z.unknown()).nullable(), // JSON field
+  seatStatus: z.enum(['active', 'vacant']).default('active'),
+  seatMeta: z.record(z.string(), z.unknown()).nullable()
 });
 
 export const TournamentRoundModelSchema = z.object({

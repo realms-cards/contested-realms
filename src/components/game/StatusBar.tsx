@@ -1,6 +1,6 @@
 "use client";
 
-import { Grid3X3, Star } from "lucide-react";
+import { Eye, EyeOff, Grid3X3, Star } from "lucide-react";
 import AudioControls from "@/components/game/AudioControls";
 import { FEATURE_UNDO } from "@/lib/config/features";
 import { useColorBlind } from "@/lib/contexts/ColorBlindContext";
@@ -23,6 +23,8 @@ export default function StatusBar({ dragFromHand }: StatusBarProps) {
   const showPlaymatOverlay = useGameStore((s) => s.showPlaymatOverlay);
   const togglePlaymatOverlay = useGameStore((s) => s.togglePlaymatOverlay);
   const togglePlaymat = useGameStore((s) => s.togglePlaymat);
+  const cardPreviewsEnabled = useGameStore((s) => s.cardPreviewsEnabled);
+  const toggleCardPreviews = useGameStore((s) => s.toggleCardPreviews);
   const { enabled: colorBlindEnabled } = useColorBlind();
 
   const primaryActionButtonClass =
@@ -55,6 +57,23 @@ export default function StatusBar({ dragFromHand }: StatusBarProps) {
           title={showPlaymatOverlay ? "Show playmat" : "Show grid"}
         >
           <Grid3X3 className="w-4 h-4" />
+        </button>
+
+        {/* Card Previews toggle (keyboard: P) */}
+        <button
+          className={`rounded-full p-1.5 transition-colors ${
+            cardPreviewsEnabled
+              ? "bg-cyan-600/80 hover:bg-cyan-500"
+              : "bg-white/10 hover:bg-white/20"
+          }`}
+          onClick={toggleCardPreviews}
+          title={`Card Previews ${cardPreviewsEnabled ? "On" : "Off"} (P)`}
+        >
+          {cardPreviewsEnabled ? (
+            <Eye className="w-4 h-4" />
+          ) : (
+            <EyeOff className="w-4 h-4" />
+          )}
         </button>
 
         <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />

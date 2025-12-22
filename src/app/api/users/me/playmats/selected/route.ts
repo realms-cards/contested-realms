@@ -43,7 +43,9 @@ function isValidStandardRef(ref: string): boolean {
 export async function GET(): Promise<Response> {
   try {
     const me = await requirePatronUser();
-    if (!me) return json({ error: "Unauthorized" }, 401);
+    // Return null for non-patrons/unauthenticated - client uses default playmat
+    // Using 200 instead of 401 avoids noisy console errors for regular users
+    if (!me) return json({ selectedPlaymatRef: null });
     return json({ selectedPlaymatRef: me.selectedPlaymatRef });
   } catch (e: unknown) {
     const message =

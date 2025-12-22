@@ -1,6 +1,7 @@
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { buildTournamentDeckList, deckCardSelect, deckListHasMetadata, type DeckCardWithRelations } from '@/lib/tournament/deck-utils';
+import { isActiveSeat } from '@/lib/tournament/registration';
 
 export interface PlayerPairing {
   playerId: string;
@@ -30,6 +31,9 @@ export async function generatePairings(
   const tournament = await prisma.tournament.findUnique({
     where: { id: tournamentId },
     include: {
+      registrations: {
+        select: { playerId: true, seatStatus: true }
+      },
       standings: {
         where: { isEliminated: false },
         orderBy: [
@@ -48,7 +52,13 @@ export async function generatePairings(
     throw new Error('Tournament not found');
   }
 
-  const activePlayers = tournament.standings.map(standing => ({
+  const activePlayerIds = new Set(
+    tournament.registrations.filter(isActiveSeat).map((reg) => reg.playerId)
+  );
+
+  const activePlayers = tournament.standings
+    .filter((standing) => activePlayerIds.has(standing.playerId))
+    .map(standing => ({
     playerId: standing.playerId,
     displayName: standing.displayName,
     matchPoints: standing.matchPoints,
@@ -134,9 +144,12 @@ function generateSwissPairings(
 export async function createRoundMatches(
   tournamentId: string,
   roundId: string,
-  pairings: TournamentPairingResult
+  pairings: TournamentPairingResult,
+  options?: { assignMatches?: boolean; applyByes?: boolean }
 ): Promise<string[]> {
   const matchIds: string[] = [];
+  const assignMatches = options?.assignMatches !== false;
+  const applyByes = options?.applyByes !== false;
 
   // Fetch tournament to get format and player deck data
   const tournament = await prisma.tournament.findUnique({
@@ -248,33 +261,37 @@ export async function createRoundMatches(
     const match = await prisma.match.create({ data: matchData });
     matchIds.push(match.id);
 
-    // Update player standings with current match
-    await prisma.playerStanding.updateMany({
-      where: {
-        tournamentId,
-        playerId: { in: [pairing.player1.playerId, pairing.player2.playerId] }
-      },
-      data: {
-        currentMatchId: match.id
-      }
-    });
+    if (assignMatches) {
+      // Update player standings with current match
+      await prisma.playerStanding.updateMany({
+        where: {
+          tournamentId,
+          playerId: { in: [pairing.player1.playerId, pairing.player2.playerId] }
+        },
+        data: {
+          currentMatchId: match.id
+        }
+      });
+    }
   }
 
   // Handle byes (automatic wins)
-  for (const byePlayer of pairings.byes) {
-    await prisma.playerStanding.update({
-      where: {
-        tournamentId_playerId: {
-          tournamentId,
-          playerId: byePlayer.playerId
+  if (applyByes) {
+    for (const byePlayer of pairings.byes) {
+      await prisma.playerStanding.update({
+        where: {
+          tournamentId_playerId: {
+            tournamentId,
+            playerId: byePlayer.playerId
+          }
+        },
+        data: {
+          wins: { increment: 1 },
+          matchPoints: { increment: 3 }, // Standard match points for bye
+          currentMatchId: null
         }
-      },
-      data: {
-        wins: { increment: 1 },
-        matchPoints: { increment: 3 }, // Standard match points for bye
-        currentMatchId: null
-      }
-    });
+      });
+    }
   }
 
   return matchIds;

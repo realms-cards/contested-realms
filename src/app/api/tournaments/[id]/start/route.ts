@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { tournamentSocketService } from "@/lib/services/tournament-broadcast";
 import { TournamentDraftEngine } from "@/lib/services/tournament-draft-engine";
 import { deriveDraftSetupFromSettings } from "@/lib/tournament/draft-config";
+import { getRegistrationSettings, isActiveSeat } from "@/lib/tournament/registration";
 
 export const dynamic = "force-dynamic";
 
@@ -53,11 +54,21 @@ export async function POST(
       );
     }
 
-    // Require all seats to be filled before starting
-    if (tournament.registrations.length !== tournament.maxPlayers) {
+    const registrationSettings = getRegistrationSettings(tournament.settings);
+    const activeRegistrations = tournament.registrations.filter(isActiveSeat);
+    if (registrationSettings.mode === "open") {
+      if (activeRegistrations.length < 2) {
+        return new Response(
+          JSON.stringify({
+            error: "At least 2 active players are required to start",
+          }),
+          { status: 400 }
+        );
+      }
+    } else if (activeRegistrations.length !== tournament.maxPlayers) {
       return new Response(
         JSON.stringify({
-          error: `All players must join before starting (${tournament.registrations.length}/${tournament.maxPlayers})`,
+          error: `All players must join before starting (${activeRegistrations.length}/${tournament.maxPlayers})`,
         }),
         { status: 400 }
       );
@@ -100,7 +111,7 @@ export async function POST(
       const participantsByPlayer = new Map(
         draftSession.participants.map((p) => [p.playerId, p])
       );
-      const sortedRegistrations = [...tournament.registrations].sort((a, b) => {
+      const sortedRegistrations = [...activeRegistrations].sort((a, b) => {
         const aTime =
           a.registeredAt?.getTime?.() ??
           new Date(a.registeredAt ?? new Date(0)).getTime();
@@ -216,16 +227,16 @@ export async function POST(
     });
 
     // Broadcast phase change event via Socket.io (fire-and-forget so API response is instant)
-    tournamentSocketService
-      .broadcastPhaseChanged(id, nextStatus, {
-        previousStatus: tournament.status,
-        startedAt: updatedTournament.startedAt?.toISOString(),
-        format: tournament.format,
-        totalPlayers: tournament.registrations.length,
-      })
-      .catch((socketError) => {
-        console.warn("Failed to broadcast phase changed event:", socketError);
-      });
+        tournamentSocketService
+          .broadcastPhaseChanged(id, nextStatus, {
+            previousStatus: tournament.status,
+            startedAt: updatedTournament.startedAt?.toISOString(),
+            format: tournament.format,
+            totalPlayers: activeRegistrations.length,
+          })
+          .catch((socketError) => {
+            console.warn("Failed to broadcast phase changed event:", socketError);
+          });
     // Also broadcast a full tournament snapshot so lists sync immediately
     tournamentSocketService
       .broadcastTournamentUpdateById(id)
@@ -237,7 +248,7 @@ export async function POST(
       tournamentSocketService
         .broadcastDraftReady(id, {
           draftSessionId,
-          totalPlayers: tournament.registrations.length,
+          totalPlayers: activeRegistrations.length,
         })
         .catch((socketError) => {
           console.warn("Failed to broadcast draft ready event:", socketError);

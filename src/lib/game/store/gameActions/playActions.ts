@@ -1,4 +1,9 @@
 import type { StateCreator } from "zustand";
+import {
+  ELEMENT_CHOICE_SITES,
+  GENESIS_BLOOM_SITES,
+  GENESIS_MANA_SITES,
+} from "@/lib/game/mana-providers";
 import { TOKEN_BY_NAME } from "@/lib/game/tokens";
 import type {
   CardRef,
@@ -21,6 +26,36 @@ import {
 import { randomTilt } from "../utils/permanentHelpers";
 import { computeThresholdTotals } from "../utils/resourceHelpers";
 import { createZonesPatchFor } from "../utils/zoneHelpers";
+
+// Detect and trigger special site Genesis abilities
+const triggerSiteGenesis = (
+  siteName: string,
+  cellKey: CellKey,
+  owner: 1 | 2,
+  get: () => GameState
+): void => {
+  const lc = siteName.toLowerCase();
+
+  // Valley of Delight - trigger element choice overlay
+  if (ELEMENT_CHOICE_SITES.has(lc)) {
+    get().triggerElementChoice(cellKey, siteName, owner);
+    return;
+  }
+
+  // Bloom sites - register temporary threshold bonus
+  const bloomBonus = GENESIS_BLOOM_SITES[lc];
+  if (bloomBonus) {
+    get().registerBloomBonus(cellKey, siteName, bloomBonus, owner);
+    return;
+  }
+
+  // Genesis mana sites (Ghost Town) - register temporary mana bonus
+  const manaBonus = GENESIS_MANA_SITES[lc];
+  if (manaBonus) {
+    get().registerGenesisMana(cellKey, siteName, manaBonus, owner);
+    return;
+  }
+};
 
 /** Get mana cost from card (uses cost field, falls back to metaByCardId cache) */
 const getManaCost = (
@@ -184,9 +219,18 @@ export const createPlayActionsSlice: StateCreator<
           } catch {}
         }
         if (tr) {
+          // Create deep copy of all zones to ensure proper immutable updates
           const zonesNext = {
             ...state.zones,
-            [who]: { ...state.zones[who], hand },
+            [who]: {
+              spellbook: [...state.zones[who].spellbook],
+              atlas: [...state.zones[who].atlas],
+              hand,
+              graveyard: [...state.zones[who].graveyard],
+              battlefield: [...state.zones[who].battlefield],
+              collection: [...state.zones[who].collection],
+              banished: [...(state.zones[who].banished || [])],
+            },
           } as GameState["zones"];
           const zonePatch = createZonesPatchFor(zonesNext, who);
           const patch: ServerPatchT = {
@@ -202,6 +246,12 @@ export const createPlayActionsSlice: StateCreator<
         }
         // Site provides mana immediately - baseMana increases (site counted),
         // and availableMana = baseMana + offset, so both numbers increase automatically
+
+        // Trigger Genesis effects for special sites (after state update via setTimeout)
+        setTimeout(() => {
+          triggerSiteGenesis(card.name, key, ownerFromSeat(who), get);
+        }, 0);
+
         const nextInteractionLog = expireInteractionGrant(
           state,
           consumeInstantId
@@ -209,7 +259,15 @@ export const createPlayActionsSlice: StateCreator<
         return {
           zones: {
             ...state.zones,
-            [who]: { ...state.zones[who], hand },
+            [who]: {
+              spellbook: [...state.zones[who].spellbook],
+              atlas: [...state.zones[who].atlas],
+              hand,
+              graveyard: [...state.zones[who].graveyard],
+              battlefield: [...state.zones[who].battlefield],
+              collection: [...state.zones[who].collection],
+              banished: [...(state.zones[who].banished || [])],
+            },
           } as GameState["zones"],
           board: { ...state.board, sites },
           selectedCard: null,
@@ -274,9 +332,18 @@ export const createPlayActionsSlice: StateCreator<
               [who]: { ...state.players[who], mana: nextMana },
             }
           : null;
+      // Create deep copy of all zones to ensure proper immutable updates
       const zonesNext = {
         ...state.zones,
-        [who]: { ...state.zones[who], hand },
+        [who]: {
+          spellbook: [...state.zones[who].spellbook],
+          atlas: [...state.zones[who].atlas],
+          hand,
+          graveyard: [...state.zones[who].graveyard],
+          battlefield: [...state.zones[who].battlefield],
+          collection: [...state.zones[who].collection],
+          banished: [...(state.zones[who].banished || [])],
+        },
       } as GameState["zones"];
       const newest = arr[arr.length - 1];
       const deltaPatch = newest
@@ -303,6 +370,7 @@ export const createPlayActionsSlice: StateCreator<
       const isCommonSense = cardNameLower === "common sense";
       const isMorgana = cardNameLower.includes("morgana le fay");
       const isPithImp = cardNameLower.includes("pith imp");
+      const isOmphalos = cardNameLower.includes("omphalos");
       console.log("[playActions] Card played:", {
         cardName: card.name,
         cardNameLower,
@@ -310,6 +378,7 @@ export const createPlayActionsSlice: StateCreator<
         isCommonSense,
         isMorgana,
         isPithImp,
+        isOmphalos,
         type,
       });
 
@@ -375,6 +444,11 @@ export const createPlayActionsSlice: StateCreator<
       }
       // If this is Pith Imp (minion with Genesis), trigger steal ability
       else if (isPithImp && newest && type.includes("minion")) {
+        console.log("[playActions] Triggering Pith Imp genesis for:", {
+          at: key,
+          owner: newest.owner,
+          ownerSeat: who,
+        });
         try {
           get().triggerPithImpGenesis({
             minion: {
@@ -386,7 +460,31 @@ export const createPlayActionsSlice: StateCreator<
             },
             ownerSeat: who,
           });
-        } catch {}
+        } catch (e) {
+          console.error("[playActions] Error triggering Pith Imp genesis:", e);
+        }
+      }
+      // If this is an Omphalos artifact, register it for end-of-turn draws
+      else if (isOmphalos && newest && type.includes("artifact")) {
+        console.log("[playActions] Registering Omphalos:", {
+          at: key,
+          owner: newest.owner,
+          ownerSeat: who,
+        });
+        try {
+          get().registerOmphalos({
+            artifact: {
+              at: key,
+              index: arr.length - 1,
+              instanceId: newest.instanceId ?? null,
+              owner: newest.owner,
+              card: newest.card as CardRef,
+            },
+            ownerSeat: who,
+          });
+        } catch (e) {
+          console.error("[playActions] Error registering Omphalos:", e);
+        }
       }
       // If this is a Magic card (but not one with special handling), begin the magic casting flow
       else if (type.includes("magic") && newest) {

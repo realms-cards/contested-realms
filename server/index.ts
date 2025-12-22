@@ -1362,66 +1362,12 @@ async function finalizeMatch(
           );
         }
 
-        // If part of a round, possibly mark the round complete and (optionally) the tournament
-        if (tMatch.roundId) {
-          const pendingMatches = await prisma.match.count({
-            where: {
-              roundId: tMatch.roundId,
-              status: { in: ["pending", "active"] },
-            },
-          });
-          if (pendingMatches === 0) {
-            await prisma.tournamentRound.update({
-              where: { id: tMatch.roundId },
-              data: { status: "completed", completedAt: new Date() },
-            });
+        // Notify clients to refresh stats/rounds after match completion
+        try {
+          broadcastStatisticsUpdate(tMatch.tournamentId, {});
+        } catch {}
 
-            // End tournament if this was the last configured round
-            if (tMatch.tournament && tMatch.round) {
-              const settings = tMatch.tournament.settings || {};
-              const pairingFormat =
-                settings &&
-                typeof settings === "object" &&
-                "pairingFormat" in settings
-                  ? settings.pairingFormat
-                  : "swiss";
-              let totalRounds =
-                settings &&
-                typeof settings === "object" &&
-                "totalRounds" in settings
-                  ? Number(settings.totalRounds)
-                  : 0;
-              if (!totalRounds) {
-                const playerCount = await prisma.playerStanding.count({
-                  where: { tournamentId: tMatch.tournament.id },
-                });
-                if (pairingFormat === "round_robin")
-                  totalRounds = Math.max(0, playerCount - 1);
-                else if (pairingFormat === "elimination")
-                  totalRounds = Math.max(
-                    1,
-                    Math.ceil(Math.log2(Math.max(playerCount, 1)))
-                  );
-                else totalRounds = 3;
-              }
-              if (tMatch.round.roundNumber >= totalRounds) {
-                await prisma.tournament.update({
-                  where: { id: tMatch.tournament.id },
-                  data: { status: "completed", completedAt: new Date() },
-                });
-                // Emit phase_changed so clients show victory screen without reload
-                try {
-                  tournamentBroadcast.emitPhaseChanged(
-                    io,
-                    tMatch.tournament.id,
-                    "completed",
-                    { reason: "final_round_complete" }
-                  );
-                } catch {}
-              }
-            }
-          }
-        }
+        // Round completion is manual; host ends rounds explicitly.
       }
     } catch (err) {
       console.warn(
@@ -2703,6 +2649,25 @@ io.on("connection", async (socket: SocketClient) => {
     if (!player || !player.matchId) return;
     const matchId = player.matchId;
     const patch = payload ? payload.action : null;
+
+    // Server readiness gate: reject D20 rolls if server isn't fully ready
+    // This prevents lost rolls during cold starts/rebuilds when DB isn't warmed up
+    const isD20Patch =
+      patch && typeof patch === "object" && "d20Rolls" in patch;
+    if (isD20Patch && !isReady) {
+      console.warn("[d20] Rejecting D20 roll - server not ready yet", {
+        matchId,
+        playerId: player.id,
+        isReady,
+      });
+      socket.emit("error", {
+        message: "Server is starting up, please retry in a moment",
+        code: "server_not_ready",
+        retryable: true,
+      });
+      return;
+    }
+
     try {
       const leader = await getOrClaimMatchLeader(matchId);
       if (leader && leader !== INSTANCE_ID) {
@@ -3810,9 +3775,11 @@ io.on("connection", async (socket: SocketClient) => {
       type === "chaosTwisterMinigameResult" ||
       type === "chaosTwisterResolve" ||
       type === "chaosTwisterCancel" ||
-      type === "chaosTwisterSliderPosition"
+      type === "chaosTwisterSliderPosition" ||
+      type === "pithImpSteal" ||
+      type === "pithImpReturn"
     ) {
-      // Chaos Twister minigame messages - broadcast to match room
+      // Chaos Twister minigame and Pith Imp messages - broadcast to match room
       try {
         const match = await getOrLoadMatch(matchId);
         const room = `match:${matchId}`;

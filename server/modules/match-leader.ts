@@ -1534,18 +1534,21 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
             });
           }
           // Send explicit acknowledgment to the sender so they know their roll was received
-          const sender = players.get(playerId);
-          if (sender?.socketId) {
-            try {
-              io.to(sender.socketId).emit("d20Ack", {
-                matchId,
-                seat: actorSeat,
-                roll: patchToApply.d20Rolls[actorSeat as "p1" | "p2"] ?? null,
-                t: now,
-              });
-            } catch {
-              // ignore ack failures
-            }
+          // Use player room for cross-instance reliability (socket IDs can be stale after rebuild)
+          try {
+            emitToPlayer(playerId, "d20Ack", {
+              matchId,
+              seat: actorSeat,
+              roll: patchToApply.d20Rolls[actorSeat as "p1" | "p2"] ?? null,
+              t: now,
+            });
+            console.log("[d20] sent ack to player", {
+              playerId,
+              seat: actorSeat,
+              roll: patchToApply.d20Rolls[actorSeat as "p1" | "p2"] ?? null,
+            });
+          } catch {
+            // ignore ack failures
           }
         }
 

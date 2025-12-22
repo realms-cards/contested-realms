@@ -690,9 +690,18 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
       get().log(
         `[p${playerNum}:PLAYER] adds [p${playerNum}card:${card.name}] to hand`
       );
+      // Create deep copy of all zones to ensure patch contains correct state
       const zonesNext = {
         ...state.zones,
-        [who]: { ...state.zones[who], hand },
+        [who]: {
+          spellbook: [...state.zones[who].spellbook],
+          atlas: [...state.zones[who].atlas],
+          hand,
+          graveyard: [...state.zones[who].graveyard],
+          battlefield: [...state.zones[who].battlefield],
+          collection: [...state.zones[who].collection],
+          banished: [...(state.zones[who].banished || [])],
+        },
       } as GameState["zones"];
       const tr = get().transport;
       if (tr) {
@@ -1003,15 +1012,8 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
 
   handlePeekedCard: (who, pile, cardIndex, action) =>
     set((state) => {
-      console.log("[handlePeekedCard] ENTERED with:", {
-        who,
-        pile,
-        cardIndex,
-        action,
-      });
       get().pushHistory();
       if (state.transport && state.actorKey && state.actorKey !== who) {
-        console.log("[handlePeekedCard] BLOCKED: cannot modify opponent pile");
         get().log("Cannot modify opponent pile without consent");
         return state;
       }
@@ -1032,7 +1034,16 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
 
       // Build new zones based on action
       const zonesNext = { ...state.zones } as Record<PlayerKey, Zones>;
-      const seatZones = { ...zonesNext[who] } as Zones;
+      // Create deep copy of all zone arrays to avoid mutation
+      const seatZones: Zones = {
+        spellbook: [...state.zones[who].spellbook],
+        atlas: [...state.zones[who].atlas],
+        hand: [...state.zones[who].hand],
+        graveyard: [...state.zones[who].graveyard],
+        battlefield: [...state.zones[who].battlefield],
+        collection: [...state.zones[who].collection],
+        banished: [...(state.zones[who].banished || [])],
+      };
 
       // Update source pile
       if (pile === "spellbook") {

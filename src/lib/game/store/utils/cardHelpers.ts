@@ -34,7 +34,9 @@ export function normalizeCardRefEntry(candidate: unknown): CardRef | null {
       : typeof rawCardId === "string"
       ? Number(rawCardId)
       : NaN;
-  if (!Number.isFinite(cardId)) return null;
+  if (!Number.isFinite(cardId)) {
+    return null;
+  }
 
   let variantId: number | null = null;
   if (src.variantId !== undefined && src.variantId !== null) {

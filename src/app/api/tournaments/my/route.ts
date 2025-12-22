@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 import { getServerAuthSession } from "@/lib/auth";
 import { logPerformance } from "@/lib/monitoring/performance";
 import { prisma } from "@/lib/prisma";
+import { countActiveSeats } from "@/lib/tournament/registration";
 
 export const dynamic = "force-dynamic";
 
@@ -138,7 +139,7 @@ export async function GET(req: NextRequest) {
       format: tournament.format,
       status: tournament.status,
       maxPlayers: tournament.maxPlayers,
-      currentPlayers: tournament.registrations.length,
+      currentPlayers: countActiveSeats(tournament.registrations),
       registeredPlayers: tournament.registrations.map((reg) => {
         const prepData =
           (reg.preparationData as Record<string, unknown> | null) || {};
@@ -148,6 +149,7 @@ export async function GET(req: NextRequest) {
             (reg.player as { name?: string } | null)?.name || "Anonymous",
           ready: Boolean((prepData as { ready?: boolean }).ready),
           deckSubmitted: Boolean(reg.deckSubmitted),
+          seatStatus: reg.seatStatus,
         };
       }),
       standings: tournament.standings.map((standing) => ({

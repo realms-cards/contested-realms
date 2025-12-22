@@ -248,6 +248,7 @@ function AuthenticatedDeckEditor() {
     setMix: string[];
     replaceAvatars: boolean;
     allowDragonlordChampion: boolean;
+    freeAvatars?: boolean;
   } | null>(null);
 
   const [packs, setPacks] = useState<
@@ -276,7 +277,11 @@ function AuthenticatedDeckEditor() {
     []
   );
   const sealedReplaceAvatars = sealedConfig?.replaceAvatars ?? false;
+  const sealedFreeAvatars = sealedConfig?.freeAvatars ?? false;
   const [bulkOpenInProgress, setBulkOpenInProgress] = useState(false);
+
+  // Free Avatars mode: all avatars available as extras
+  const [freeAvatarsCards, setFreeAvatarsCards] = useState<SearchResult[]>([]);
 
   // Free mode state (when not in draft or sealed mode)
   const isFreeMode = !isDraftMode && !isSealed;
@@ -848,6 +853,7 @@ function AuthenticatedDeckEditor() {
     const replaceAvatars = searchParams?.get("replaceAvatars") === "true";
     const allowDragonlordChampion =
       searchParams?.get("allowDragonlordChampion") !== "false";
+    const freeAvatars = searchParams?.get("freeAvatars") === "true";
 
     if (sealed === "true" && (matchId || tournamentId) && !isSealed) {
       console.log("Initializing sealed mode...");
@@ -868,6 +874,7 @@ function AuthenticatedDeckEditor() {
           : ["Beta"],
         replaceAvatars,
         allowDragonlordChampion,
+        freeAvatars,
       };
 
       setSealedConfig(config);
@@ -1980,6 +1987,84 @@ function AuthenticatedDeckEditor() {
     };
   }, [searchParamsKey, searchParams, convertCardDataToSearchResult]);
 
+  // Free Avatars mode: fetch all avatars when freeAvatars is enabled
+  // Check URL param for draft mode freeAvatars
+  const draftFreeAvatarsFromUrl = searchParams?.get("freeAvatars") === "true";
+  const freeAvatarsEnabled = sealedFreeAvatars || draftFreeAvatarsFromUrl;
+
+  useEffect(() => {
+    if (!freeAvatarsEnabled) {
+      setFreeAvatarsCards([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        // Fetch all avatar cards from the search API
+        const res = await fetch(`/api/cards/search?type=avatar&limit=100`);
+        if (!res.ok) {
+          if (!cancelled) setFreeAvatarsCards([]);
+          return;
+        }
+        const payload = (await res.json()) as {
+          results?: Array<{
+            cardId: number;
+            variantId: number | null;
+            setId: number | null;
+            name: string;
+            slug: string | null;
+            setName: string | null;
+            type: string | null;
+            rarity: string | null;
+          }>;
+        };
+
+        const rawCards = Array.isArray(payload?.results) ? payload.results : [];
+
+        const converted: SearchResult[] = [];
+        for (const c of rawCards) {
+          const sr = convertCardDataToSearchResult(
+            {
+              slug: typeof c.slug === "string" ? c.slug : "",
+              cardName: c.name,
+              set: c.setName ?? "Beta",
+              cardId: c.cardId,
+              variantId: c.variantId ?? undefined,
+              finish: "Standard",
+              product: "Booster",
+              type: c.type,
+              rarity: c.rarity,
+            } as unknown as Record<string, unknown>,
+            c.setName ?? "Beta"
+          );
+          if (sr) converted.push(sr);
+        }
+
+        if (!cancelled) {
+          // Dedupe by cardId (keep first occurrence of each avatar)
+          const seen = new Set<number>();
+          const deduped = converted.filter((card) => {
+            if (seen.has(card.cardId)) return false;
+            seen.add(card.cardId);
+            return true;
+          });
+          setFreeAvatarsCards(deduped);
+          console.log(
+            `[Free Avatars] Loaded ${deduped.length} avatars as extras`
+          );
+        }
+      } catch {
+        if (!cancelled) setFreeAvatarsCards([]);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [freeAvatarsEnabled, convertCardDataToSearchResult]);
+
   // (moved) Load deck from URL parameter after loadDeck is declared
 
   // Tab state for cards view - default to "Your Deck"
@@ -1997,8 +2082,28 @@ function AuthenticatedDeckEditor() {
   const tournamentControlsVisible = tournamentControlsMode !== null;
 
   // Cube extras are only available when we've actually loaded cube sideboard cards
+  // Also available when freeAvatars mode is enabled with avatars loaded
   const cubeExtrasAvailable =
-    cubeStandardCards.length > 0 && cubeBoostersOpened;
+    (cubeStandardCards.length > 0 && cubeBoostersOpened) ||
+    freeAvatarsCards.length > 0;
+
+  // Combined extras: cube sideboard cards + free avatars (when enabled)
+  const combinedCubeExtras = useMemo(() => {
+    if (freeAvatarsCards.length > 0 && cubeStandardCards.length > 0) {
+      // Combine both, but dedupe by cardId
+      const seen = new Set<number>();
+      const combined: SearchResult[] = [];
+      for (const card of [...cubeStandardCards, ...freeAvatarsCards]) {
+        if (!seen.has(card.cardId)) {
+          seen.add(card.cardId);
+          combined.push(card);
+        }
+      }
+      return combined;
+    }
+    if (freeAvatarsCards.length > 0) return freeAvatarsCards;
+    return cubeStandardCards;
+  }, [cubeStandardCards, freeAvatarsCards]);
 
   // Context menu for card move actions (deck/sideboard/collection)
   const [contextMenu, setContextMenu] = useState<{
@@ -5828,7 +5933,7 @@ function AuthenticatedDeckEditor() {
           standardSites={stdSites}
           onAddSpellslinger={addSpellslinger}
           onAddStandardSite={addStandardSiteByName}
-          cubeStandardCards={cubeStandardCards}
+          cubeStandardCards={combinedCubeExtras}
           onAddCubeStandardCard={addToSideboardFromSearch}
         />
       </Suspense>

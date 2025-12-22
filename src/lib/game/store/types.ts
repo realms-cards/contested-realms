@@ -159,6 +159,59 @@ export type ImposterMaskState = {
 // --- Imposter Mana Cost --------------------------------
 export const IMPOSTER_MASK_COST = 3; // Mana cost to mask yourself
 
+// --- Special Site State (Valley of Delight, Bloom sites, etc.) --------------------------------
+export type ElementChoice = "air" | "water" | "earth" | "fire";
+
+// Tracks Valley of Delight element choices per site instance
+export type ValleyOfDelightChoice = {
+  cellKey: CellKey;
+  element: ElementChoice;
+  owner: 1 | 2;
+};
+
+// Tracks bloom sites played this turn (for temporary threshold bonus)
+export type BloomSiteBonus = {
+  cellKey: CellKey;
+  siteName: string;
+  thresholds: Partial<{
+    air: number;
+    water: number;
+    earth: number;
+    fire: number;
+  }>;
+  turnPlayed: number;
+  owner: 1 | 2;
+};
+
+// Tracks genesis mana bonuses (Ghost Town, etc.)
+export type GenesisManaBonus = {
+  cellKey: CellKey;
+  siteName: string;
+  manaAmount: number;
+  turnPlayed: number;
+  owner: 1 | 2;
+};
+
+// Pending element choice for Valley of Delight overlay
+export type PendingElementChoice = {
+  cellKey: CellKey;
+  siteName: string;
+  owner: 1 | 2;
+  chooserSeat: PlayerKey;
+};
+
+// Special site state container
+export type SpecialSiteState = {
+  // Permanent element choices for Valley of Delight sites
+  valleyChoices: ValleyOfDelightChoice[];
+  // Temporary bloom bonuses (cleared at end of turn)
+  bloomBonuses: BloomSiteBonus[];
+  // Temporary mana bonuses (cleared at end of turn)
+  genesisMana: GenesisManaBonus[];
+  // Pending element choice (shows overlay)
+  pendingElementChoice: PendingElementChoice | null;
+};
+
 // --- Harbinger Portal State (Gothic expansion) --------------------------------
 export type PortalRollPhase = "pending" | "rolling" | "complete";
 
@@ -365,11 +418,12 @@ export type PendingCommonSense = {
   createdAt: number;
 };
 
-// --- Pith Imp Stolen Card State ------------------------------------------------
+// --- Pith Imp Private Hand State ------------------------------------------------
 // "Genesis → Steals a random spell from your opponent's hand until it leaves the realm."
-export type PendingStolenCard = {
+// Uses private hand approach like Omphalos - stolen cards stored in hand array (face-down/hidden)
+export type PithImpHandEntry = {
   id: string;
-  // The Pith Imp minion that stole the card
+  // The Pith Imp minion that has this private hand
   minion: {
     at: CellKey;
     index: number;
@@ -379,9 +433,25 @@ export type PendingStolenCard = {
   };
   // Who played the Pith Imp
   ownerSeat: PlayerKey;
-  // The stolen card (random spell from opponent's hand)
+  // Original owner of the stolen card (victim)
+  victimSeat: PlayerKey;
+  // The private hand of stolen cards (face-down/hidden from victim)
+  hand: CardRef[];
+  createdAt: number;
+};
+
+// Legacy type for backwards compatibility
+export type PendingStolenCard = {
+  id: string;
+  minion: {
+    at: CellKey;
+    index: number;
+    instanceId?: string | null;
+    owner: 1 | 2;
+    card: CardRef;
+  };
+  ownerSeat: PlayerKey;
   stolenCard: CardRef;
-  // Original owner of the stolen card
   victimSeat: PlayerKey;
   createdAt: number;
 };
@@ -401,6 +471,26 @@ export type MorganaHandEntry = {
   // Who played Morgana
   ownerSeat: PlayerKey;
   // The private hand of spells (up to 3)
+  hand: CardRef[];
+  createdAt: number;
+};
+
+// --- Omphalos Private Hand State ------------------------------------------------
+// "At the end of your turn, this Omphalos draws a spell, which only it can cast.
+//  Minions it casts must be summoned here."
+export type OmphalosHandEntry = {
+  id: string;
+  // The Omphalos artifact that has this private hand
+  artifact: {
+    at: CellKey;
+    index: number;
+    instanceId?: string | null;
+    owner: 1 | 2;
+    card: CardRef;
+  };
+  // Who played the Omphalos
+  ownerSeat: PlayerKey;
+  // The private hand of spells (grows by 1 each end of turn)
   hand: CardRef[];
   createdAt: number;
 };
@@ -535,10 +625,19 @@ export type GameState = {
   // Action notifications (toasts for play/draw/move actions)
   actionNotifications: boolean;
   setActionNotifications: (on: boolean) => void;
-  // Card meta cache (subset) used to detect base power quickly
+  // Card previews toggle (show/hide card preview overlay on hover)
+  cardPreviewsEnabled: boolean;
+  setCardPreviewsEnabled: (on: boolean) => void;
+  toggleCardPreviews: () => void;
+  // Card meta cache (subset) used to detect base power and rarity
   metaByCardId: Record<
     number,
-    { attack: number | null; defence: number | null; cost: number | null }
+    {
+      attack: number | null;
+      defence: number | null;
+      cost: number | null;
+      rarity: string | null;
+    }
   >;
   fetchCardMeta: (ids: number[]) => Promise<void>;
   // Pending combat (MVP)
@@ -738,12 +837,14 @@ export type GameState = {
       card: CardRef;
     };
     casterSeat: PlayerKey;
-  }) => void;
+  }) => Promise<void>;
   selectCommonSenseCard: (cardIndex: number) => void;
   resolveCommonSense: () => void;
   cancelCommonSense: () => void;
-  // Pith Imp stolen cards tracking
-  stolenCards: PendingStolenCard[];
+  // Pith Imp private hands (stolen cards, hidden/face-down)
+  pithImpHands: PithImpHandEntry[];
+  stolenCards: PendingStolenCard[]; // Legacy - kept for backwards compatibility
+  processedPithImpReturns?: Set<string>; // Deduplication tracking for pithImpReturn messages
   triggerPithImpGenesis: (input: {
     minion: {
       at: CellKey;
@@ -758,10 +859,19 @@ export type GameState = {
     minionInstanceId: string | null,
     minionAt: CellKey
   ) => void;
-  getStolenCardsForMinion: (
+  removePithImpHand: (
+    minionInstanceId: string | null,
+    minionAt: CellKey
+  ) => void;
+  getPithImpHandForMinion: (
     minionInstanceId: string | null,
     minionAt: CellKey
   ) => CardRef[];
+  dropStolenCard: (
+    pithImpId: string,
+    cardIndex: number,
+    targetTile: { x: number; y: number }
+  ) => void;
   // Morgana le Fay private hands
   morganaHands: MorganaHandEntry[];
   triggerMorganaGenesis: (input: {
@@ -787,6 +897,53 @@ export type GameState = {
     minionInstanceId: string | null,
     minionAt: CellKey
   ) => CardRef[];
+  // Omphalos private hands (artifacts that draw spells at end of turn)
+  omphalosHands: OmphalosHandEntry[];
+  registerOmphalos: (input: {
+    artifact: {
+      at: CellKey;
+      index: number;
+      instanceId?: string | null;
+      owner: 1 | 2;
+      card: CardRef;
+    };
+    ownerSeat: PlayerKey;
+  }) => void;
+  triggerOmphalosEndOfTurn: (endingPlayerSeat: PlayerKey) => void;
+  castFromOmphalosHand: (
+    omphalosId: string,
+    cardIndex: number,
+    targetTile: { x: number; y: number }
+  ) => void;
+  removeOmphalosHand: (
+    artifactInstanceId: string | null,
+    artifactAt: CellKey
+  ) => void;
+  getOmphalosHandForArtifact: (
+    artifactInstanceId: string | null,
+    artifactAt: CellKey
+  ) => CardRef[];
+  // Pending cast from Morgana/Omphalos hands (for tile targeting)
+  pendingPrivateHandCast: {
+    kind: "morgana" | "omphalos";
+    handId: string;
+    cardIndex: number;
+    card: CardRef;
+    mustCastAtLocation?: CellKey; // For Omphalos minions
+  } | null;
+  setPendingPrivateHandCast: (
+    pending: {
+      kind: "morgana" | "omphalos";
+      handId: string;
+      cardIndex: number;
+      card: CardRef;
+      mustCastAtLocation?: CellKey;
+    } | null
+  ) => void;
+  completePendingPrivateHandCast: (targetTile: {
+    x: number;
+    y: number;
+  }) => void;
   beginMagicCast: (input: {
     tile: { x: number; y: number };
     spell: {
@@ -842,6 +999,7 @@ export type GameState = {
   gridBlend: "normal" | "subtract";
   allowSiteDrag: boolean;
   showOwnershipOverlay: boolean;
+  cardScale: number; // Scale factor for cards on board (0.25 to 1)
   draggingSite: {
     sourceKey: CellKey;
     site: SiteTile;
@@ -859,6 +1017,7 @@ export type GameState = {
   togglePlaymatOverlay: () => void;
   toggleAllowSiteDrag: () => void;
   toggleOwnershipOverlay: () => void;
+  setCardScale: (scale: number) => void;
   setDraggingSite: (
     dragging: {
       sourceKey: CellKey;
@@ -1032,6 +1191,41 @@ export type GameState = {
   unmask: (who: PlayerKey) => void;
   // Break mask due to damage (automatic unmask)
   breakMask: (who: PlayerKey) => void;
+  // Special Site State (Valley of Delight, Bloom sites, etc.)
+  specialSiteState: SpecialSiteState;
+  // Trigger element choice for Valley of Delight (shows overlay)
+  triggerElementChoice: (
+    cellKey: CellKey,
+    siteName: string,
+    owner: 1 | 2
+  ) => void;
+  // Complete element choice for Valley of Delight
+  completeElementChoice: (element: ElementChoice) => void;
+  // Cancel element choice
+  cancelElementChoice: () => void;
+  // Register bloom site bonus (called on Genesis)
+  registerBloomBonus: (
+    cellKey: CellKey,
+    siteName: string,
+    thresholds: Partial<{
+      air: number;
+      water: number;
+      earth: number;
+      fire: number;
+    }>,
+    owner: 1 | 2
+  ) => void;
+  // Register genesis mana bonus (called on Genesis)
+  registerGenesisMana: (
+    cellKey: CellKey,
+    siteName: string,
+    amount: number,
+    owner: 1 | 2
+  ) => void;
+  // Clear turn-based bonuses (called at end of turn)
+  clearTurnBonuses: () => void;
+  // Remove site choice when site is removed from board
+  removeSiteChoice: (cellKey: CellKey) => void;
   // Mulligans
   mulligans: Record<PlayerKey, number>;
   mulligan: (who: PlayerKey) => void;
@@ -1246,6 +1440,10 @@ export type ServerPatchT = Partial<{
   seerState: GameState["seerState"];
   imposterMasks: GameState["imposterMasks"];
   stolenCards: GameState["stolenCards"];
+  pithImpHands: GameState["pithImpHands"];
   morganaHands: GameState["morganaHands"];
+  omphalosHands: GameState["omphalosHands"];
+  cardScale: GameState["cardScale"];
+  specialSiteState: GameState["specialSiteState"];
   __replaceKeys: string[];
 }>;

@@ -2,6 +2,7 @@
 
 import { Text } from "@react-three/drei";
 import type { Intersection, Object3D, Raycaster } from "three";
+import { useShallow } from "zustand/react/shallow";
 import CardPlane from "@/lib/game/components/CardPlane";
 import { CARD_SHORT } from "@/lib/game/constants";
 import { useGameStore, type PlayerKey } from "@/lib/game/store";
@@ -24,7 +25,9 @@ export default function Threshold3D({
   rotationZ = 0,
   direction = "row",
 }: Threshold3DProps) {
-  const thresholds = useGameStore((s) => s.getThresholdTotals(owner));
+  const thresholds = useGameStore(
+    useShallow((s) => s.getThresholdTotals(owner))
+  );
 
   // Layout
   const size = CARD_SHORT * 0.55; // square icon size

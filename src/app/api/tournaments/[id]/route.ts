@@ -3,6 +3,7 @@ import { getServerAuthSession } from "@/lib/auth";
 import { withCache, CacheKeys } from "@/lib/cache/redis-cache";
 import { logPerformance } from "@/lib/monitoring/performance";
 import { prisma } from "@/lib/prisma";
+import { countActiveSeats } from "@/lib/tournament/registration";
 
 export const dynamic = "force-dynamic";
 
@@ -122,7 +123,7 @@ export async function GET(
           format: tournament.format,
           status: tournament.status,
           maxPlayers: tournament.maxPlayers,
-          currentPlayers: tournament.registrations.length,
+          currentPlayers: countActiveSeats(tournament.registrations),
           creatorId: tournament.creatorId,
           registeredPlayers: tournament.registrations.map((reg) => {
             const prep =
@@ -132,6 +133,7 @@ export async function GET(
               displayName: reg.player.name || "Anonymous",
               ready: Boolean((prep as { ready?: boolean }).ready),
               deckSubmitted: Boolean(reg.deckSubmitted),
+              seatStatus: reg.seatStatus,
             };
           }),
           standings: tournament.standings.map((standing) => ({

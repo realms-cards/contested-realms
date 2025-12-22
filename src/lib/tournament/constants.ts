@@ -6,7 +6,7 @@
 // Tournament Player Limits
 export const TOURNAMENT_PLAYER_LIMITS = {
   MIN_PLAYERS: 2,
-  MAX_PLAYERS: 32,
+  MAX_PLAYERS: 128,
   DEFAULT_MAX_PLAYERS: 8,
   RECOMMENDED_MIN_FOR_SWISS: 4, // Swiss pairing works better with 4+ players
 } as const;

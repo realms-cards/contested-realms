@@ -2,6 +2,7 @@ import type { StateCreator } from "zustand";
 import type { CardRef, GameState, PlayerKey } from "./types";
 
 const CAMERA_MODE_KEY = "sorcery:cameraMode";
+const CARD_PREVIEWS_KEY = "sorcery:cardPreviewsEnabled";
 
 /**
  * Load persisted camera mode preference from localStorage.
@@ -26,6 +27,27 @@ export function getStoredCameraMode(): GameState["cameraMode"] {
   return "topdown";
 }
 
+/**
+ * Load card previews preference from localStorage.
+ * Defaults to true (previews enabled).
+ */
+function loadCardPreviewsEnabled(): boolean {
+  if (typeof window === "undefined") return true;
+  try {
+    const stored = localStorage.getItem(CARD_PREVIEWS_KEY);
+    if (stored === "false") return false;
+  } catch {}
+  return true;
+}
+
+/** Persist card previews preference to localStorage */
+function saveCardPreviewsEnabled(enabled: boolean): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(CARD_PREVIEWS_KEY, String(enabled));
+  } catch {}
+}
+
 /** Persist camera mode preference to localStorage */
 function saveCameraMode(mode: GameState["cameraMode"]): void {
   if (typeof window === "undefined") return;
@@ -46,6 +68,9 @@ export type UiSlice = Pick<
   | "dragFromPile"
   | "hoverCell"
   | "previewCard"
+  | "cardPreviewsEnabled"
+  | "setCardPreviewsEnabled"
+  | "toggleCardPreviews"
   | "selectHandCard"
   | "selectAvatar"
   | "clearSelection"
@@ -75,6 +100,7 @@ type UiStateDefaults = Pick<
   | "dragFromPile"
   | "hoverCell"
   | "previewCard"
+  | "cardPreviewsEnabled"
   | "switchSiteSource"
 >;
 
@@ -89,6 +115,7 @@ export const createInitialUiState = (): UiStateDefaults => ({
   dragFromPile: null,
   hoverCell: null,
   previewCard: null,
+  cardPreviewsEnabled: loadCardPreviewsEnabled(),
   switchSiteSource: null,
 });
 
@@ -162,4 +189,15 @@ export const createUiSlice: StateCreator<GameState, [], [], UiSlice> = (
 
   setSwitchSiteSource: (source: { x: number; y: number } | null) =>
     set({ switchSiteSource: source }),
+
+  setCardPreviewsEnabled: (enabled: boolean) => {
+    saveCardPreviewsEnabled(enabled);
+    set({ cardPreviewsEnabled: enabled });
+  },
+  toggleCardPreviews: () =>
+    set((state) => {
+      const newEnabled = !state.cardPreviewsEnabled;
+      saveCardPreviewsEnabled(newEnabled);
+      return { cardPreviewsEnabled: newEnabled };
+    }),
 });

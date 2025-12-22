@@ -22,6 +22,9 @@ interface Tournament {
   startedAt: string | null;
   createdAt: string;
   completedAt: string | null;
+  settings?: Record<string, unknown>;
+  registeredPlayers?: Array<{ seatStatus?: string }>;
+  isPrivate?: boolean;
 }
 
 interface CreateTournamentForm {
@@ -29,10 +32,16 @@ interface CreateTournamentForm {
   format: "sealed" | "draft" | "constructed";
   maxPlayers: number;
   isPrivate: boolean;
+  registrationMode: "fixed" | "open";
+  registrationLocked: boolean;
   settings: {
     totalRounds?: number;
     roundDuration?: number;
     allowSpectators?: boolean;
+    registration?: {
+      mode?: "fixed" | "open";
+      locked?: boolean;
+    };
   };
 }
 
@@ -74,6 +83,8 @@ export default function TournamentsPage() {
     format: "constructed",
     maxPlayers: 8,
     isPrivate: false,
+    registrationMode: "fixed",
+    registrationLocked: false,
     settings: {
       totalRounds: 3,
       roundDuration: 60,
@@ -118,6 +129,10 @@ export default function TournamentsPage() {
   const [sealedIncludeCubeSideboard, setSealedIncludeCubeSideboard] =
     useState<boolean>(false);
 
+  // Free Avatars mode (removes avatars from packs, all available in deck editor)
+  const [sealedFreeAvatars, setSealedFreeAvatars] = useState<boolean>(false);
+  const [draftFreeAvatars, setDraftFreeAvatars] = useState<boolean>(false);
+
   // Type guard helpers
   function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null;
@@ -127,7 +142,11 @@ export default function TournamentsPage() {
     const cp = t.currentPlayers;
     if (typeof cp === "number") return cp;
     const rp = (t as Record<string, unknown>).registeredPlayers;
-    if (Array.isArray(rp)) return rp.length;
+    if (Array.isArray(rp)) {
+      return rp.filter(
+        (p) => (p as { seatStatus?: string }).seatStatus !== "vacant"
+      ).length;
+    }
     return 0;
   }
 
@@ -236,6 +255,10 @@ export default function TournamentsPage() {
       const settingsOut: Record<string, unknown> = {
         ...(form.settings as Record<string, unknown>),
         pairingFormat: "swiss",
+        registration: {
+          mode: form.registrationMode,
+          locked: form.registrationLocked,
+        },
       };
       if (form.format === "sealed") {
         if (sealedUseCube && sealedCubeId) {
@@ -246,6 +269,7 @@ export default function TournamentsPage() {
             cubeId: sealedCubeId,
             timeLimit: sealedTimeLimit,
             includeCubeSideboardInStandard: sealedIncludeCubeSideboard,
+            freeAvatars: sealedFreeAvatars,
           };
         } else {
           // Convert booster array to packCounts format for backend
@@ -256,6 +280,7 @@ export default function TournamentsPage() {
           settingsOut.sealedConfig = {
             packCounts,
             timeLimit: sealedTimeLimit,
+            freeAvatars: sealedFreeAvatars,
           };
         }
       } else if (form.format === "draft") {
@@ -267,6 +292,7 @@ export default function TournamentsPage() {
             pickTimeLimit: draftPickTimeLimit,
             constructionTimeLimit: draftConstructionTimeLimit,
             includeCubeSideboardInStandard: includeCubeSideboard,
+            freeAvatars: draftFreeAvatars,
           };
         } else {
           // Regular set-based draft
@@ -279,6 +305,7 @@ export default function TournamentsPage() {
             packCounts,
             pickTimeLimit: draftPickTimeLimit,
             constructionTimeLimit: draftConstructionTimeLimit,
+            freeAvatars: draftFreeAvatars,
           };
         }
       }
@@ -300,6 +327,8 @@ export default function TournamentsPage() {
         format: "constructed",
         maxPlayers: 8,
         isPrivate: false,
+        registrationMode: "fixed",
+        registrationLocked: false,
         settings: {
           totalRounds: 3,
           roundDuration: 60,
@@ -562,85 +591,120 @@ export default function TournamentsPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {(viewFilter === "active" ? tournaments : localTournaments).map(
-              (tournament) => (
-                <div
-                  key={tournament.id}
-                  className="bg-slate-800 border border-slate-700 rounded-lg p-6 hover:bg-slate-750 transition-colors"
-                >
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-center space-x-2">
-                      <span className="text-2xl">
-                        {getFormatIcon(tournament.format)}
-                      </span>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-fantaisie text-lg text-white truncate">
-                            {tournament.name}
-                          </h3>
-                          {(tournament as unknown as { isPrivate?: boolean })
-                            .isPrivate && (
-                            <span className="text-xs px-1.5 py-0.5 bg-purple-600/20 text-purple-300 border border-purple-500/30 rounded">
-                              🔒 Private
-                            </span>
-                          )}
+              (tournament) => {
+                const registrationSettings = (
+                  tournament as unknown as {
+                    settings?: Record<string, unknown>;
+                  }
+                ).settings?.registration as Record<string, unknown> | undefined;
+                const isOpenSeat = registrationSettings?.mode === "open";
+                const isLocked = registrationSettings?.locked === true;
+                const registeredPlayers =
+                  (
+                    tournament as unknown as {
+                      registeredPlayers?: Array<{ seatStatus?: string }>;
+                    }
+                  ).registeredPlayers ?? [];
+                const activeCount = getCurrentPlayersCount(tournament);
+                const vacantCount = Math.max(
+                  0,
+                  registeredPlayers.filter((p) => p.seatStatus === "vacant")
+                    .length
+                );
+                const canJoin = isOpenSeat
+                  ? vacantCount > 0 ||
+                    (!isLocked &&
+                      (tournament.status === "registering" ||
+                        tournament.status === "preparing"))
+                  : tournament.status === "registering" &&
+                    activeCount < tournament.maxPlayers;
+
+                return (
+                  <div
+                    key={tournament.id}
+                    className="bg-slate-800 border border-slate-700 rounded-lg p-6 hover:bg-slate-750 transition-colors"
+                  >
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="flex items-center space-x-2">
+                        <span className="text-2xl">
+                          {getFormatIcon(tournament.format)}
+                        </span>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-fantaisie text-lg text-white truncate">
+                              {tournament.name}
+                            </h3>
+                            {(tournament as unknown as { isPrivate?: boolean })
+                              .isPrivate && (
+                              <span className="text-xs px-1.5 py-0.5 bg-purple-600/20 text-purple-300 border border-purple-500/30 rounded">
+                                🔒 Private
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-slate-400 text-sm capitalize">
+                            {tournament.format}
+                          </p>
                         </div>
-                        <p className="text-slate-400 text-sm capitalize">
-                          {tournament.format}
-                        </p>
                       </div>
-                    </div>
-                    <span
-                      className={`px-2 py-1 rounded-full text-xs font-medium border capitalize ${getStatusBadgeColor(
-                        tournament.status
-                      )}`}
-                    >
-                      {tournament.status}
-                    </span>
-                  </div>
-
-                  <div className="space-y-2 mb-4">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-slate-400">Players:</span>
-                      <span className="text-white">
-                        {getCurrentPlayersCount(tournament)}/
-                        {tournament.maxPlayers}
+                      <span
+                        className={`px-2 py-1 rounded-full text-xs font-medium border capitalize ${getStatusBadgeColor(
+                          tournament.status
+                        )}`}
+                      >
+                        {tournament.status}
                       </span>
                     </div>
 
-                    <div className="w-full bg-slate-700 rounded-full h-2">
-                      <div
-                        className="bg-blue-600 h-2 rounded-full transition-all"
-                        style={{
-                          width: `${Math.min(
-                            (getCurrentPlayersCount(tournament) /
-                              tournament.maxPlayers) *
-                              100,
-                            100
-                          )}%`,
-                        }}
-                      />
-                    </div>
-
-                    {tournament.startedAt && (
+                    <div className="space-y-2 mb-4">
                       <div className="flex justify-between text-sm">
-                        <span className="text-slate-400">Started:</span>
+                        <span className="text-slate-400">Players:</span>
                         <span className="text-white">
-                          {new Date(tournament.startedAt).toLocaleDateString()}
+                          {activeCount}
+                          {isOpenSeat ? "" : `/${tournament.maxPlayers}`}
                         </span>
                       </div>
-                    )}
-                  </div>
 
-                  <div className="flex space-x-2">
-                    <Link
-                      href={`/tournaments/${tournament.id}`}
-                      className="flex-1 bg-slate-700 hover:bg-slate-600 text-white text-center px-4 py-2 rounded text-sm font-medium transition-colors"
-                    >
-                      View Details
-                    </Link>
+                      <div className="w-full bg-slate-700 rounded-full h-2">
+                        <div
+                          className="bg-blue-600 h-2 rounded-full transition-all"
+                          style={{
+                            width: `${Math.min(
+                              (activeCount / tournament.maxPlayers) * 100,
+                              100
+                            )}%`,
+                          }}
+                        />
+                      </div>
+                      {isOpenSeat && (
+                        <div className="flex justify-between text-xs text-slate-400">
+                          <span>Open Seat: {isLocked ? "Locked" : "Open"}</span>
+                          {vacantCount > 0 && (
+                            <span>Vacant: {vacantCount}</span>
+                          )}
+                        </div>
+                      )}
 
-                    {tournament.status === "registering" &&
-                      tournament.currentPlayers < tournament.maxPlayers && (
+                      {tournament.startedAt && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-slate-400">Started:</span>
+                          <span className="text-white">
+                            {new Date(
+                              tournament.startedAt
+                            ).toLocaleDateString()}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex space-x-2">
+                      <Link
+                        href={`/tournaments/${tournament.id}`}
+                        className="flex-1 bg-slate-700 hover:bg-slate-600 text-white text-center px-4 py-2 rounded text-sm font-medium transition-colors"
+                      >
+                        View Details
+                      </Link>
+
+                      {canJoin && (
                         <button
                           onClick={() => handleJoinTournament(tournament.id)}
                           className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm font-medium transition-colors"
@@ -648,9 +712,10 @@ export default function TournamentsPage() {
                           Join
                         </button>
                       )}
+                    </div>
                   </div>
-                </div>
-              )
+                );
+              }
             )}
           </div>
         )}
@@ -725,6 +790,43 @@ export default function TournamentsPage() {
                     <p className="text-slate-400 text-xs mt-1 ml-6">
                       Only invited players can see and join this tournament
                     </p>
+                  )}
+                </div>
+                <div>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={form.registrationMode === "open"}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          registrationMode: e.target.checked ? "open" : "fixed",
+                          registrationLocked: e.target.checked
+                            ? prev.registrationLocked
+                            : false,
+                        }))
+                      }
+                      className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-blue-600 focus:ring-2 focus:ring-blue-500"
+                    />
+                    <span className="text-slate-300 text-sm">
+                      Open seat tournament (host controls registration lock)
+                    </span>
+                  </label>
+                  {form.registrationMode === "open" && (
+                    <label className="mt-2 flex items-center gap-2 text-slate-300 text-xs ml-6 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={form.registrationLocked}
+                        onChange={(e) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            registrationLocked: e.target.checked,
+                          }))
+                        }
+                        className="w-3 h-3 rounded border-slate-600 bg-slate-700 text-blue-600 focus:ring-2 focus:ring-blue-500"
+                      />
+                      Start locked (no new seats until unlocked)
+                    </label>
                   )}
                 </div>
 
@@ -946,6 +1048,20 @@ export default function TournamentsPage() {
                         minutes)
                       </p>
                     </div>
+
+                    {/* Free Avatars Toggle */}
+                    <label className="flex items-start gap-2 text-slate-300 text-sm cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={sealedFreeAvatars}
+                        onChange={(e) => setSealedFreeAvatars(e.target.checked)}
+                        className="mt-0.5 w-4 h-4 rounded border-slate-600 bg-slate-700 text-blue-500"
+                      />
+                      <span>
+                        Free Avatars (remove from packs, all available in deck
+                        editor)
+                      </span>
+                    </label>
                   </div>
                 )}
 
@@ -1136,30 +1252,70 @@ export default function TournamentsPage() {
                         </p>
                       </div>
                     </div>
+
+                    {/* Free Avatars Toggle */}
+                    <label className="flex items-start gap-2 text-slate-300 text-sm cursor-pointer mt-3">
+                      <input
+                        type="checkbox"
+                        checked={draftFreeAvatars}
+                        onChange={(e) => setDraftFreeAvatars(e.target.checked)}
+                        className="mt-0.5 w-4 h-4 rounded border-slate-600 bg-slate-700 text-blue-500"
+                      />
+                      <span>
+                        Free Avatars (remove from packs, all available in deck
+                        editor)
+                      </span>
+                    </label>
                   </div>
                 )}
 
                 <div>
                   <label className="block text-slate-300 text-sm font-medium mb-2">
-                    Max Players
+                    {form.registrationMode === "open"
+                      ? "Seat Cap"
+                      : "Max Players"}
                   </label>
-                  <select
-                    value={form.maxPlayers}
-                    onChange={(e) =>
-                      setForm((prev) => ({
-                        ...prev,
-                        maxPlayers: parseInt(e.target.value),
-                      }))
-                    }
-                    className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value={2}>2 Players</option>
-                    <option value={4}>4 Players</option>
-                    <option value={8}>8 Players</option>
-                    <option value={16}>16 Players</option>
-                    <option value={32}>32 Players</option>
-                    <option value={64}>64 Players</option>
-                  </select>
+                  {form.registrationMode === "open" ? (
+                    <input
+                      type="number"
+                      min={2}
+                      max={128}
+                      value={form.maxPlayers}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          maxPlayers: Math.max(
+                            2,
+                            Math.min(128, parseInt(e.target.value) || 2)
+                          ),
+                        }))
+                      }
+                      className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  ) : (
+                    <select
+                      value={form.maxPlayers}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          maxPlayers: parseInt(e.target.value),
+                        }))
+                      }
+                      className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value={2}>2 Players</option>
+                      <option value={4}>4 Players</option>
+                      <option value={8}>8 Players</option>
+                      <option value={16}>16 Players</option>
+                      <option value={32}>32 Players</option>
+                      <option value={64}>64 Players</option>
+                    </select>
+                  )}
+                  {form.registrationMode === "open" && (
+                    <p className="text-slate-400 text-xs mt-1">
+                      Open seat tournaments ignore the cap until locked.
+                    </p>
+                  )}
                 </div>
 
                 <div>

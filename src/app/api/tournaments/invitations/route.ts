@@ -2,6 +2,7 @@ import { InvitationStatus } from '@prisma/client';
 import { NextRequest } from 'next/server';
 import { getServerAuthSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { countActiveSeats } from '@/lib/tournament/registration';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,7 +43,7 @@ export async function GET(req: NextRequest) {
             creator: {
               select: { id: true, name: true, image: true }
             },
-            registrations: { select: { playerId: true } }
+            registrations: { select: { playerId: true, seatStatus: true } }
           }
         }
       },
@@ -54,7 +55,7 @@ export async function GET(req: NextRequest) {
       ...inv,
       tournament: {
         ...inv.tournament,
-        currentPlayers: inv.tournament.registrations.length
+        currentPlayers: countActiveSeats(inv.tournament.registrations)
       }
     }));
 

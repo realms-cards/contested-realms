@@ -1582,16 +1582,62 @@ export function handleCustomMessage(
       .stolenCardName as string | undefined;
     const stolenCardAny = (msg as { stolenCard?: unknown })
       .stolenCard as unknown;
+    const stolenCardHandIndex = (msg as { stolenCardHandIndex?: unknown })
+      .stolenCardHandIndex as number | undefined;
     const victimSeat = (msg as { victimSeat?: unknown }).victimSeat as
       | PlayerKey
       | undefined;
-    if (!id || !minionAny || !ownerSeat || !victimSeat) return;
+
+    if (!id || !minionAny || !ownerSeat || !victimSeat) {
+      return;
+    }
+
+    // Skip if we're the owner - we already handled it locally
+    const actorKey = get().actorKey;
+    if (actorKey === ownerSeat) {
+      return;
+    }
+
+    // Skip if we've already processed this steal (deduplication)
+    const existingHands = get().pithImpHands;
+    if (existingHands.some((h) => h.id === id)) {
+      return;
+    }
 
     const minionRec = minionAny as Record<string, unknown>;
     const stolenCard = stolenCardAny as CardRef | undefined;
 
-    // Add to stolen cards tracking
-    const newStolenEntry = {
+    // Remove the stolen card from victim's hand
+    const zones = get().zones;
+    const victimHand = [...(zones[victimSeat]?.hand || [])];
+
+    if (
+      stolenCard &&
+      typeof stolenCardHandIndex === "number" &&
+      stolenCardHandIndex >= 0 &&
+      stolenCardHandIndex < victimHand.length
+    ) {
+      victimHand.splice(stolenCardHandIndex, 1);
+    } else if (stolenCard) {
+      // Fallback to findIndex
+      const handIndex = victimHand.findIndex(
+        (c) => c.cardId === stolenCard.cardId && c.name === stolenCard.name
+      );
+      if (handIndex !== -1) {
+        victimHand.splice(handIndex, 1);
+      }
+    }
+
+    const zonesNext = {
+      ...zones,
+      [victimSeat]: {
+        ...zones[victimSeat],
+        hand: victimHand,
+      },
+    };
+
+    // Add to pithImpHands tracking (victim doesn't need the full hand, just tracking)
+    const newPithImpHand = {
       id,
       minion: {
         at: minionRec.at as CellKey,
@@ -1601,13 +1647,40 @@ export function handleCustomMessage(
         card: minionRec.card as CardRef,
       },
       ownerSeat,
-      stolenCard: stolenCard as CardRef,
       victimSeat,
+      hand: stolenCard ? [stolenCard] : [],
       createdAt: Date.now(),
     };
 
+    // Create visual attachment for display (both players see it)
+    const permanents = get().permanents;
+    const minionAt = minionRec.at as CellKey;
+    const minionCell = permanents[minionAt] || [];
+    const minionIndex = minionCell.findIndex(
+      (p) => p.instanceId === minionRec.instanceId
+    );
+
+    let permanentsNext = permanents;
+    if (minionIndex !== -1 && stolenCard) {
+      // Add stolen card as visual attachment (for display only)
+      const stolenVisual = {
+        card: { ...stolenCard, pithImpStolen: true } as CardRef,
+        owner: Number(minionRec.owner) as 1 | 2,
+        instanceId: `pithimp_visual_${id}`,
+        tapped: false,
+        attachedTo: { at: minionAt, index: minionIndex },
+      };
+      const cellWithVisual = [...minionCell, stolenVisual];
+      permanentsNext = {
+        ...permanents,
+        [minionAt]: cellWithVisual,
+      };
+    }
+
     set((s) => ({
-      stolenCards: [...s.stolenCards, newStolenEntry],
+      pithImpHands: [...s.pithImpHands, newPithImpHand],
+      zones: zonesNext,
+      permanents: permanentsNext,
     })) as unknown as void;
 
     try {
@@ -1620,37 +1693,110 @@ export function handleCustomMessage(
     return;
   }
   if (t === "pithImpReturn") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
     const minionAt = (msg as { minionAt?: unknown }).minionAt as
       | CellKey
       | undefined;
     const minionInstanceId = (msg as { minionInstanceId?: unknown })
       .minionInstanceId as string | null | undefined;
-    const returnedCards = (msg as { returnedCards?: unknown }).returnedCards as
-      | Array<{ cardName: string; victimSeat: PlayerKey }>
+    const ownerSeat = (msg as { ownerSeat?: unknown }).ownerSeat as
+      | PlayerKey
+      | undefined;
+    const victimSeat = (msg as { victimSeat?: unknown }).victimSeat as
+      | PlayerKey
+      | undefined;
+    // Full card data from owner
+    const cardsToReturn = (msg as { cardsToReturn?: unknown }).cardsToReturn as
+      | CardRef[]
       | undefined;
 
-    if (!minionAt) return;
+    if (!minionAt || !victimSeat) return;
 
-    // Remove from stolen cards tracking
-    set((s) => ({
-      stolenCards: s.stolenCards.filter(
-        (sc) =>
-          sc.minion.at !== minionAt &&
-          (!minionInstanceId || sc.minion.instanceId !== minionInstanceId)
-      ),
-    })) as unknown as void;
+    // Skip if we're the owner - we already handled it locally
+    const actorKey = get().actorKey;
+    if (actorKey && actorKey === ownerSeat) {
+      return;
+    }
 
-    if (returnedCards && returnedCards.length > 0) {
-      for (const rc of returnedCards) {
-        try {
-          get().log(
-            `${
-              rc.cardName
-            } returns to ${rc.victimSeat.toUpperCase()}'s hand (Pith Imp left the realm)`
-          );
-        } catch {}
+    // Deduplication: Check if we already processed this return
+    if (id) {
+      const processed = get().processedPithImpReturns || new Set<string>();
+      if (processed.has(id)) {
+        return;
       }
     }
+
+    // Use cardsToReturn from message (owner is source of truth)
+    if (!cardsToReturn || cardsToReturn.length === 0) {
+      // Clean up any local tracking - single atomic update
+      set((s) => {
+        const processed = s.processedPithImpReturns || new Set<string>();
+        return {
+          processedPithImpReturns: id ? new Set([...processed, id]) : processed,
+          pithImpHands: s.pithImpHands.filter(
+            (p) =>
+              p.minion.at !== minionAt &&
+              (!minionInstanceId || p.minion.instanceId !== minionInstanceId)
+          ),
+        };
+      }) as unknown as void;
+      return;
+    }
+
+    // Remove visual attachments (stolen cards with pithImpStolen flag)
+    const permanents = get().permanents;
+    const cell = permanents[minionAt] || [];
+    const cellWithoutStolenVisuals = cell.filter((p) => {
+      const isPithImpStolen = (p.card as { pithImpStolen?: boolean })
+        ?.pithImpStolen;
+      return !isPithImpStolen || p.attachedTo?.at !== minionAt;
+    });
+    const permanentsNext =
+      cellWithoutStolenVisuals.length !== cell.length
+        ? { ...permanents, [minionAt]: cellWithoutStolenVisuals }
+        : permanents;
+
+    // CRITICAL: Victim must add cards to their own hand since owner's zones patch
+    // gets filtered out by trySendPatch sanitization (actors can only send their own seat data)
+    const zones = get().zones;
+    const victimHand = [...(zones[victimSeat]?.hand || [])];
+    for (const card of cardsToReturn) {
+      victimHand.push(card);
+    }
+    const zonesNext = {
+      ...zones,
+      [victimSeat]: {
+        ...zones[victimSeat],
+        hand: victimHand,
+      },
+    } as GameState["zones"];
+
+    // CRITICAL: Single atomic update - add cards to hand, mark as processed, remove from tracking
+    set((s) => {
+      const processed = s.processedPithImpReturns || new Set<string>();
+      return {
+        processedPithImpReturns: id ? new Set([...processed, id]) : processed,
+        pithImpHands: s.pithImpHands.filter(
+          (p) =>
+            p.minion.at !== minionAt &&
+            (!minionInstanceId || p.minion.instanceId !== minionInstanceId)
+        ),
+        permanents: permanentsNext,
+        zones: zonesNext,
+      };
+    }) as unknown as void;
+
+    // Log return messages AFTER state update (avoid duplicate logs)
+    for (const card of cardsToReturn) {
+      try {
+        get().log(
+          `${
+            card.name
+          } returns to ${victimSeat.toUpperCase()}'s hand (Pith Imp left the realm)`
+        );
+      } catch {}
+    }
+
     return;
   }
 
@@ -1667,6 +1813,15 @@ export function handleCustomMessage(
     const drawnCardsAny = (msg as { drawnCards?: unknown })
       .drawnCards as unknown;
     if (!id || !minionAny || !ownerSeat) return;
+
+    // Skip if we're the owner - we already handled it locally via triggerMorganaGenesis
+    const actorKey = get().actorKey;
+    if (actorKey === ownerSeat) {
+      console.log(
+        "[Morgana] morganaGenesis: Skipping - we are the owner, already handled locally"
+      );
+      return;
+    }
 
     const minionRec = minionAny as Record<string, unknown>;
     const drawnCards = Array.isArray(drawnCardsAny)
@@ -1761,6 +1916,164 @@ export function handleCustomMessage(
       try {
         get().log(
           `Morgana le Fay's remaining ${discardedCount} spell${
+            discardedCount !== 1 ? "s" : ""
+          } go to graveyard`
+        );
+      } catch {}
+    }
+    return;
+  }
+
+  // --- Omphalos message handlers ---
+  if (t === "omphalosRegister") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const artifactAny = (msg as { artifact?: unknown }).artifact as unknown;
+    const ownerSeat = (msg as { ownerSeat?: unknown }).ownerSeat as
+      | PlayerKey
+      | undefined;
+    if (!id || !artifactAny || !ownerSeat) return;
+
+    // Skip if we're the owner - we already handled it locally via registerOmphalos
+    const actorKey = get().actorKey;
+    if (actorKey === ownerSeat) {
+      console.log(
+        "[Omphalos] omphalosRegister: Skipping - we are the owner, already handled locally"
+      );
+      return;
+    }
+
+    const artifactRec = artifactAny as Record<string, unknown>;
+
+    // Create Omphalos's private hand entry
+    const newOmphalosHand = {
+      id,
+      artifact: {
+        at: artifactRec.at as CellKey,
+        index: Number(artifactRec.index),
+        instanceId: (artifactRec.instanceId as string | null) ?? null,
+        owner: Number(artifactRec.owner) as 1 | 2,
+        card: artifactRec.card as CardRef,
+      },
+      ownerSeat,
+      hand: [] as CardRef[],
+      createdAt: Date.now(),
+    };
+
+    set((s) => ({
+      omphalosHands: [...s.omphalosHands, newOmphalosHand],
+    })) as unknown as void;
+
+    try {
+      get().log(
+        `[${ownerSeat.toUpperCase()}] ${
+          (artifactRec.card as CardRef)?.name || "Omphalos"
+        } enters the realm`
+      );
+    } catch {}
+    return;
+  }
+  if (t === "omphalosDrawn") {
+    const omphalosId = (msg as { omphalosId?: unknown }).omphalosId as
+      | string
+      | undefined;
+    const drawnCardAny = (msg as { drawnCard?: unknown }).drawnCard as unknown;
+    const newHandSize = (msg as { newHandSize?: unknown }).newHandSize as
+      | number
+      | undefined;
+    if (!omphalosId) return;
+
+    const drawnCard = drawnCardAny as CardRef | undefined;
+
+    // Update Omphalos's hand
+    set((s) => ({
+      omphalosHands: s.omphalosHands.map((o) => {
+        if (o.id !== omphalosId) return o;
+        const newHand = drawnCard ? [...o.hand, drawnCard] : o.hand;
+        return { ...o, hand: newHand };
+      }),
+    })) as unknown as void;
+
+    // Find the Omphalos entry to log
+    const entry = get().omphalosHands.find((o) => o.id === omphalosId);
+    if (entry) {
+      try {
+        get().log(
+          `[${entry.ownerSeat.toUpperCase()}] ${
+            entry.artifact.card.name
+          } draws a spell (now has ${newHandSize ?? entry.hand.length})`
+        );
+      } catch {}
+    }
+    return;
+  }
+  if (t === "omphalosCast") {
+    const omphalosId = (msg as { omphalosId?: unknown }).omphalosId as
+      | string
+      | undefined;
+    const cardIndex = (msg as { cardIndex?: unknown }).cardIndex as
+      | number
+      | undefined;
+    const cardName = (msg as { cardName?: unknown }).cardName as
+      | string
+      | undefined;
+    const targetTileAny = (msg as { targetTile?: unknown })
+      .targetTile as unknown;
+    if (!omphalosId || cardIndex == null) return;
+
+    // Update Omphalos's hand (remove the cast card)
+    set((s) => ({
+      omphalosHands: s.omphalosHands.map((o) => {
+        if (o.id !== omphalosId) return o;
+        const newHand = [...o.hand];
+        if (cardIndex >= 0 && cardIndex < newHand.length) {
+          newHand.splice(cardIndex, 1);
+        }
+        return { ...o, hand: newHand };
+      }),
+    })) as unknown as void;
+
+    const entry = get().omphalosHands.find((o) => o.id === omphalosId);
+    const targetTile = targetTileAny as { x: number; y: number } | undefined;
+    try {
+      get().log(
+        `${entry?.artifact.card.name || "Omphalos"} casts ${
+          cardName ?? "a spell"
+        }${targetTile ? ` at tile ${targetTile.x},${targetTile.y}` : ""}`
+      );
+    } catch {}
+    return;
+  }
+  if (t === "omphalosRemove") {
+    const artifactAt = (msg as { artifactAt?: unknown }).artifactAt as
+      | CellKey
+      | undefined;
+    const artifactInstanceId = (msg as { artifactInstanceId?: unknown })
+      .artifactInstanceId as string | null | undefined;
+    const discardedCount = (msg as { discardedCount?: unknown })
+      .discardedCount as number | undefined;
+
+    if (!artifactAt) return;
+
+    // Find the entry before removing for logging
+    const entry = get().omphalosHands.find(
+      (o) =>
+        o.artifact.at === artifactAt ||
+        (artifactInstanceId && o.artifact.instanceId === artifactInstanceId)
+    );
+
+    // Remove from omphalosHands tracking
+    set((s) => ({
+      omphalosHands: s.omphalosHands.filter(
+        (o) =>
+          o.artifact.at !== artifactAt &&
+          (!artifactInstanceId || o.artifact.instanceId !== artifactInstanceId)
+      ),
+    })) as unknown as void;
+
+    if (discardedCount && discardedCount > 0 && entry) {
+      try {
+        get().log(
+          `${entry.artifact.card.name}'s remaining ${discardedCount} spell${
             discardedCount !== 1 ? "s" : ""
           } go to graveyard`
         );

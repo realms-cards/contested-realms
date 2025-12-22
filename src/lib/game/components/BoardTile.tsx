@@ -81,6 +81,10 @@ type BoardTileProps = {
   onCompleteSwitchSite?: (targetX: number, targetY: number) => void;
   // Ownership overlay
   showOwnershipOverlay: boolean;
+  // Card scale (for crowded tiles)
+  cardScale: number;
+  // Stolen cards for Pith Imp indicator
+  stolenCards: GameState["stolenCards"];
 };
 
 export function BoardTile({
@@ -140,6 +144,8 @@ export function BoardTile({
   switchSiteSource,
   onCompleteSwitchSite,
   showOwnershipOverlay,
+  cardScale,
+  stolenCards,
 }: BoardTileProps) {
   const items = permanents[tileKey] || [];
   const cellNumber = (boardSize.h - 1 - tileY) * boardSize.w + tileX + 1;
@@ -262,6 +268,8 @@ export function BoardTile({
         playCardFlip={playCardFlip}
         isPrimaryCardHit={isPrimaryCardHit}
         showOwnershipOverlay={showOwnershipOverlay}
+        cardScale={cardScale}
+        stolenCards={stolenCards}
       />
 
       {showGrid && (

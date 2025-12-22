@@ -44,8 +44,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const processedRounds = rounds.map(round => {
       const totalMatches = round.matches.length;
       const completedMatches = round.matches.filter(m => m.status === 'completed').length;
+      const cancelledMatches = round.matches.filter(m => m.status === 'cancelled').length;
       const activeMatches = round.matches.filter(m => m.status === 'active').length;
       const pendingMatches = round.matches.filter(m => m.status === 'pending').length;
+      const resolvedMatches = completedMatches + cancelledMatches;
+      const readyToEnd = round.status === 'active' && activeMatches + pendingMatches === 0;
 
       // Calculate round duration if completed
       let roundDuration = null;
@@ -72,28 +75,50 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
       // Process matches for this round
       const matchDetails = round.matches.map(match => {
-        const players = match.players as Array<{ id: string; name: string }>;
-        const results = match.results as { winnerId?: string; isDraw?: boolean; gameResults?: Array<{ winner: string }> } | null;
+        const players = Array.isArray(match.players) ? match.players : [];
+        const normalizedPlayers = players.map((player) => {
+          if (typeof player === 'string') {
+            return { id: player, name: player };
+          }
+          const record = player as { id?: string; name?: string; displayName?: string };
+          return {
+            id: record.id || 'unknown',
+            name: record.name || record.displayName || record.id || 'Unknown Player'
+          };
+        });
+        const results = match.results as {
+          winnerId?: string;
+          isDraw?: boolean;
+          gameResults?: Array<{ winner: string }>;
+          invalid?: boolean;
+          bye?: boolean;
+        } | null;
         
         let winnerId = null;
         let isDraw = false;
+        let isInvalid = false;
+        let isBye = false;
         let gameCount = 0;
 
         if (results) {
           winnerId = results.winnerId || null;
           isDraw = results.isDraw || false;
+          isInvalid = results.invalid === true;
+          isBye = results.bye === true;
           gameCount = results.gameResults?.length || 0;
         }
 
         return {
           id: match.id,
           status: match.status,
-          players: players.map(p => ({
+          players: normalizedPlayers.map(p => ({
             id: p.id,
             name: p.name
           })),
           winnerId,
           isDraw,
+          invalid: isInvalid,
+          bye: isBye,
           gameCount,
           startedAt: match.startedAt?.toISOString() || null,
           completedAt: match.completedAt?.toISOString() || null,
@@ -113,11 +138,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         statistics: {
           totalMatches,
           completedMatches,
+          cancelledMatches,
+          resolvedMatches,
           activeMatches,
           pendingMatches,
-          completionRate: totalMatches > 0 ? Math.round((completedMatches / totalMatches) * 100) / 100 : 0,
+          completionRate: totalMatches > 0 ? Math.round((resolvedMatches / totalMatches) * 100) / 100 : 0,
           averageMatchDuration: averageMatchDuration ? Math.round(averageMatchDuration / 1000) : null // Convert to seconds
         },
+        readyToEnd,
         pairingData: round.pairingData,
         matches: matchDetails
       };
@@ -131,6 +159,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const allMatches = processedRounds.flatMap(r => r.matches);
     const totalTournamentMatches = allMatches.length;
     const completedTournamentMatches = allMatches.filter(m => m.status === 'completed').length;
+    const cancelledTournamentMatches = allMatches.filter(m => m.status === 'cancelled').length;
+    const resolvedTournamentMatches = completedTournamentMatches + cancelledTournamentMatches;
 
     return new Response(JSON.stringify({
       tournament: {
@@ -147,8 +177,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         pendingRounds: totalRounds - completedRounds - activeRounds,
         totalMatches: totalTournamentMatches,
         completedMatches: completedTournamentMatches,
+        cancelledMatches: cancelledTournamentMatches,
+        resolvedMatches: resolvedTournamentMatches,
         overallCompletionRate: totalTournamentMatches > 0 
-          ? Math.round((completedTournamentMatches / totalTournamentMatches) * 100) / 100 
+          ? Math.round((resolvedTournamentMatches / totalTournamentMatches) * 100) / 100 
           : 0
       },
       rounds: processedRounds

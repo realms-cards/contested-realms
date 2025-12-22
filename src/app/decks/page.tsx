@@ -21,6 +21,8 @@ type MyDeck = {
   isPublic: boolean;
   imported?: boolean;
   updatedAt: string;
+  /** True while deck is being loaded after import */
+  isPending?: boolean;
 } & AvatarSummary;
 
 type PublicDeck = {
@@ -163,15 +165,47 @@ export default function DecksPage() {
     }
   }, [session, fetchDecks]);
 
+  // Optimistic add handler - adds a pending deck immediately after import
+  const handleOptimisticAdd = useCallback(
+    (deck: { id: string; name: string; format: string }) => {
+      const pendingDeck: MyDeck = {
+        id: deck.id,
+        name: deck.name,
+        format: deck.format,
+        isPublic: false,
+        imported: true,
+        updatedAt: new Date().toISOString(),
+        avatarState: "none",
+        avatarCard: null,
+        isPending: true,
+      };
+      setMyDecks((prev) => [pendingDeck, ...prev]);
+      setShowImport(false);
+      // Fetch full data in background to update avatar info
+      void fetchDecks(true);
+    },
+    [fetchDecks]
+  );
+
   // Listen for import components signaling a refresh
   useEffect(() => {
-    const onRefresh = () => {
-      void fetchDecks(true); // Force fresh data after import
-      setShowImport(false); // Close import panel on successful import
+    type DeckRefreshEvent = CustomEvent<{
+      deck?: { id: string; name: string; format: string };
+    }>;
+    const onRefresh = (e: Event) => {
+      const detail = (e as DeckRefreshEvent).detail;
+      if (detail?.deck) {
+        // Optimistic add with pending state
+        handleOptimisticAdd(detail.deck);
+      } else {
+        // Fallback: just refresh
+        void fetchDecks(true);
+        setShowImport(false);
+      }
     };
     window.addEventListener("decks:refresh", onRefresh);
     return () => window.removeEventListener("decks:refresh", onRefresh);
-  }, [fetchDecks]);
+  }, [fetchDecks, handleOptimisticAdd]);
 
   // Optimistic delete handler - removes deck from state immediately
   const handleDeleteDeck = useCallback((deckId: string) => {
@@ -284,6 +318,7 @@ export default function DecksPage() {
                         avatarCard: d.avatarCard,
                         updatedAt: d.updatedAt,
                         isOwner: true,
+                        isPending: d.isPending,
                       }}
                       onDelete={handleDeleteDeck}
                     />

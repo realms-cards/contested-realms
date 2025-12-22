@@ -56,6 +56,7 @@ export default function TournamentDetailsPage() {
     joinTournament: rtJoinTournament,
     startTournament: rtStartTournament,
     endTournament: rtEndTournament,
+    toggleTournamentRegistrationLock,
     statistics: rtStatistics,
     loading: rtLoading,
     error: rtError,
@@ -74,6 +75,11 @@ export default function TournamentDetailsPage() {
   >("overview");
   // Round/match flow helpers
   const [startingRound, setStartingRound] = useState(false);
+  const [endingRound, setEndingRound] = useState(false);
+  const [invalidatingMatchId, setInvalidatingMatchId] = useState<string | null>(
+    null
+  );
+  const [lockingRegistration, setLockingRegistration] = useState(false);
   // Only block with a full-screen loading overlay on the very first load
   const [initialLoaded, setInitialLoaded] = useState(false);
 
@@ -248,6 +254,7 @@ export default function TournamentDetailsPage() {
   // Round helpers
   const rounds = useMemo(() => statistics?.rounds || [], [statistics?.rounds]);
   const activeRound = rounds.find((r) => r.status === "active") || null;
+  const pendingRound = rounds.find((r) => r.status === "pending") || null;
   const maxRoundNumber = rounds.length
     ? Math.max(
         ...rounds.map((r) =>
@@ -409,10 +416,29 @@ export default function TournamentDetailsPage() {
     const stored = localStorage.getItem("sorcery:includePublicDecks");
     return stored === null ? true : stored === "1";
   });
+  // Curiosa import state
+  const [curiosaUrl, setCuriosaUrl] = useState("");
+  const [curiosaImporting, setCuriosaImporting] = useState(false);
+  const [curiosaError, setCuriosaError] = useState<string | null>(null);
+  const [showCuriosaImport, setShowCuriosaImport] = useState(false);
 
   const tId = tournament?.id ?? null;
   const tStatus = tournament?.status ?? null;
   const tFormat = tournament?.format ?? null;
+  const registeredPlayers =
+    (
+      tournament as unknown as {
+        registeredPlayers?: Array<{ id: string; seatStatus?: string | null }>;
+      }
+    )?.registeredPlayers || [];
+  const registrationSettings = (
+    tournament?.settings as Record<string, unknown> | undefined
+  )?.registration as Record<string, unknown> | undefined;
+  const isOpenSeat = registrationSettings?.mode === "open";
+  const isRegistrationLocked = registrationSettings?.locked === true;
+  const vacantCount = registeredPlayers.filter(
+    (p) => p.seatStatus === "vacant"
+  ).length;
 
   // Removed duplicate fallback effect - the one at lines 158-197 handles this
 
@@ -423,17 +449,22 @@ export default function TournamentDetailsPage() {
     if (typeof cp === "number") return cp;
     const rp = (t as unknown as { registeredPlayers?: Array<unknown> })
       .registeredPlayers;
-    return Array.isArray(rp) ? rp.length : 0;
+    if (!Array.isArray(rp)) return 0;
+    return rp.filter(
+      (p) => (p as { seatStatus?: string }).seatStatus !== "vacant"
+    ).length;
   }
 
   // Check if current user is registered (prefer explicit registrations over standings)
   const isRegistered = useMemo(() => {
     const userId = session?.user?.id;
     if (!tournament || !userId) return false;
-    const rp =
-      (tournament as unknown as { registeredPlayers?: Array<{ id: string }> })
-        .registeredPlayers || [];
-    if (Array.isArray(rp) && rp.some((p) => p.id === userId)) return true;
+    if (Array.isArray(registeredPlayers)) {
+      const seat = registeredPlayers.find((p) => p.id === userId);
+      if (seat) {
+        return seat.seatStatus !== "vacant";
+      }
+    }
     // Fallback for active phase when registrations may not be present
     return Boolean(
       statistics?.standings?.some(
@@ -442,8 +473,71 @@ export default function TournamentDetailsPage() {
     );
   }, [tournament, statistics?.standings, session?.user?.id]);
 
+  const isSeatVacant = useMemo(() => {
+    const userId = session?.user?.id;
+    if (!userId) return false;
+    const seat = registeredPlayers.find((p) => p.id === userId);
+    return seat?.seatStatus === "vacant";
+  }, [registeredPlayers, session?.user?.id]);
+
+  const activeCount = tournament ? getCurrentPlayersCount(tournament) : 0;
+
   // Check if current user is the creator
   const isCreator = tournament && session?.user?.id === tournament.creatorId;
+
+  const canJoinTournament = useMemo(() => {
+    if (!tournament || isRegistered) return false;
+    if (isOpenSeat) {
+      if (isSeatVacant || vacantCount > 0) return true;
+      if (isRegistrationLocked) return false;
+      return (
+        tournament.status === "registering" ||
+        tournament.status === "preparing"
+      );
+    }
+    return (
+      tournament.status === "registering" && activeCount < tournament.maxPlayers
+    );
+  }, [
+    tournament,
+    isRegistered,
+    isOpenSeat,
+    isSeatVacant,
+    isRegistrationLocked,
+    vacantCount,
+    activeCount,
+  ]);
+
+  const canInvitePlayers = useMemo(() => {
+    if (!tournament || !isCreator) return false;
+    if (isOpenSeat) {
+      if (vacantCount > 0) return true;
+      if (isRegistrationLocked) return false;
+      return (
+        tournament.status === "registering" ||
+        tournament.status === "preparing"
+      );
+    }
+    return (
+      tournament.status === "registering" && activeCount < tournament.maxPlayers
+    );
+  }, [
+    tournament,
+    isCreator,
+    isOpenSeat,
+    isRegistrationLocked,
+    vacantCount,
+    activeCount,
+  ]);
+
+  const canStartTournament = useMemo(() => {
+    if (!tournament || !isCreator || tournament.status !== "registering") {
+      return false;
+    }
+    return isOpenSeat
+      ? activeCount >= 2
+      : activeCount === tournament.maxPlayers;
+  }, [tournament, isCreator, isOpenSeat, activeCount]);
 
   // Refresh tournament data when returning to page (covers missed phase_changed events)
   const lastVisibilityRefreshRef = useRef<number>(0);
@@ -864,6 +958,7 @@ export default function TournamentDetailsPage() {
               packCounts: { Beta: 6 },
               timeLimit: 40,
               replaceAvatars: false,
+              freeAvatars: false,
             };
           }
           const payload = {
@@ -920,6 +1015,111 @@ export default function TournamentDetailsPage() {
       );
     } finally {
       setStartingRound(false);
+    }
+  };
+
+  const handleToggleRegistrationLock = async (locked: boolean) => {
+    if (!tournament || !isCreator) return;
+    setLockingRegistration(true);
+    setError(null);
+    try {
+      await toggleTournamentRegistrationLock?.(tournament.id, locked);
+      const msg = locked ? "Registration locked" : "Registration unlocked";
+      try {
+        localStorage.setItem("app:toast", msg);
+        window.dispatchEvent(
+          new CustomEvent("app:toast", { detail: { message: msg } })
+        );
+      } catch {}
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to update registration"
+      );
+    } finally {
+      setLockingRegistration(false);
+    }
+  };
+
+  const handleEndRound = async (roundId: string) => {
+    if (!tournament || !isCreator) return;
+    const ok = window.confirm("End this round now?");
+    if (!ok) return;
+    setEndingRound(true);
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/tournaments/${encodeURIComponent(tournament.id)}/rounds/end`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ roundId }),
+        }
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Failed to end round");
+      try {
+        const msg = data?.tournamentCompleted
+          ? "Tournament completed"
+          : `Round ${data?.roundNumber ?? ""} ended`;
+        localStorage.setItem("app:toast", msg);
+        window.dispatchEvent(
+          new CustomEvent("app:toast", { detail: { message: msg } })
+        );
+      } catch {}
+      try {
+        statistics?.actions?.refreshAll?.();
+      } catch {}
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to end round");
+    } finally {
+      setEndingRound(false);
+    }
+  };
+
+  const handleInvalidateMatch = async (
+    matchId: string,
+    mode: "invalid" | "bye",
+    winnerId?: string
+  ) => {
+    if (!tournament || !isCreator) return;
+    const confirmMessage =
+      mode === "bye"
+        ? "Award a bye for this match?"
+        : "Mark this match as invalid?";
+    if (!window.confirm(confirmMessage)) return;
+    setInvalidatingMatchId(matchId);
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/tournaments/matches/${encodeURIComponent(matchId)}/invalidate`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            mode,
+            winnerId,
+          }),
+        }
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Failed to invalidate match");
+      try {
+        const msg =
+          mode === "bye" ? "Bye awarded for match" : "Match marked invalid";
+        localStorage.setItem("app:toast", msg);
+        window.dispatchEvent(
+          new CustomEvent("app:toast", { detail: { message: msg } })
+        );
+      } catch {}
+      try {
+        statistics?.actions?.refreshAll?.();
+      } catch {}
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to invalidate match"
+      );
+    } finally {
+      setInvalidatingMatchId(null);
     }
   };
 
@@ -1124,8 +1324,7 @@ export default function TournamentDetailsPage() {
                     ? standings.findIndex((s) => s.playerId === meId)
                     : -1;
                   const myRank = myIdx >= 0 ? myIdx + 1 : null;
-                  const total =
-                    standings.length || getCurrentPlayersCount(tournament);
+                  const total = standings.length || activeCount;
                   const champion = standings[0]?.playerName || "Champion";
                   return (
                     <>
@@ -1196,14 +1395,51 @@ export default function TournamentDetailsPage() {
         {/* Instant Join CTA when match is assigned */}
         {null}
 
+        {isCreator &&
+          isOpenSeat &&
+          (tournament.status === "registering" ||
+            tournament.status === "preparing") && (
+            <div className="mb-4 rounded-lg border border-slate-700 bg-slate-900/80 backdrop-blur flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+              <div className="text-slate-200 text-sm">
+                Registration is{" "}
+                <span className="font-semibold">
+                  {isRegistrationLocked ? "locked" : "open"}
+                </span>
+                .{" "}
+                {isRegistrationLocked
+                  ? "Unlock to allow more players to join."
+                  : "Lock seats to stop new joins and prepare Round 1."}
+              </div>
+              <button
+                onClick={() =>
+                  handleToggleRegistrationLock(!isRegistrationLocked)
+                }
+                disabled={lockingRegistration}
+                className="bg-slate-700 hover:bg-slate-600 text-white px-3 py-2 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {lockingRegistration
+                  ? "Updating…"
+                  : isRegistrationLocked
+                  ? "Unlock Seats"
+                  : "Lock Seats"}
+              </button>
+            </div>
+          )}
+
         {/* Creator Controls: Start next round banner at top */}
         {tournament.status === "active" &&
           isCreator &&
           !activeRound &&
-          maxRoundNumber < (tournament.settings.totalRounds || 3) && (
+          (pendingRound ||
+            maxRoundNumber < (tournament.settings.totalRounds || 3)) && (
             <div className="mb-6 rounded-lg border border-indigo-600 bg-indigo-900/90 backdrop-blur flex items-center justify-between px-4 py-3 shadow-lg">
               <div className="text-indigo-100 text-sm">
-                {rounds.length > 0 ? (
+                {pendingRound ? (
+                  <span>
+                    Round {pendingRound.roundNumber} is ready. Start when
+                    you&apos;re ready.
+                  </span>
+                ) : rounds.length > 0 ? (
                   <span>
                     Round {lastCompletedRoundNumber} completed. Start next round
                     when ready.
@@ -1221,7 +1457,10 @@ export default function TournamentDetailsPage() {
               >
                 {startingRound
                   ? "Starting…"
-                  : `Start Round ${Math.max(1, maxRoundNumber + 1)}`}
+                  : `Start Round ${
+                      pendingRound?.roundNumber ??
+                      Math.max(1, maxRoundNumber + 1)
+                    }`}
               </button>
             </div>
           )}
@@ -1261,29 +1500,29 @@ export default function TournamentDetailsPage() {
           <div className="flex flex-col gap-2">
             <div className="flex space-x-3">
               {/* Invite Players button (creator only, during registration while capacity remains) */}
-              {isCreator &&
-                tournament.status === "registering" &&
-                getCurrentPlayersCount(tournament) < tournament.maxPlayers && (
-                  <button
-                    onClick={() => setShowInviteModal(true)}
-                    className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
-                  >
-                    <span>👥</span>
-                    <span>Invite Players</span>
-                  </button>
-                )}
+              {canInvitePlayers && (
+                <button
+                  onClick={() => setShowInviteModal(true)}
+                  className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
+                >
+                  <span>👥</span>
+                  <span>Invite Players</span>
+                </button>
+              )}
 
-              {tournament.status === "registering" &&
-                !isRegistered &&
-                getCurrentPlayersCount(tournament) < tournament.maxPlayers && (
-                  <button
-                    onClick={handleJoinTournament}
-                    disabled={joining}
-                    className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {joining ? "Joining..." : "Join Tournament"}
-                  </button>
-                )}
+              {canJoinTournament && (
+                <button
+                  onClick={handleJoinTournament}
+                  disabled={joining}
+                  className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {joining
+                    ? "Joining..."
+                    : isSeatVacant
+                    ? "Rejoin Tournament"
+                    : "Join Tournament"}
+                </button>
+              )}
 
               {/* End/Forfeit controls moved to bottom of page */}
             </div>
@@ -1669,6 +1908,7 @@ export default function TournamentDetailsPage() {
                                       packCounts?: Record<string, number>;
                                       timeLimit?: number;
                                       replaceAvatars?: boolean;
+                                      freeAvatars?: boolean;
                                     };
                                   };
                                 }
@@ -1684,6 +1924,7 @@ export default function TournamentDetailsPage() {
                               .map(([s]) => s);
                             const timeLimit = cfg.timeLimit ?? 40;
                             const replaceAvatars = cfg.replaceAvatars ?? false;
+                            const freeAvatars = cfg.freeAvatars ?? false;
                             const params = new URLSearchParams({
                               sealed: "true",
                               tournament: tournament.id,
@@ -1692,6 +1933,7 @@ export default function TournamentDetailsPage() {
                               timeLimit: String(timeLimit),
                               constructionStartTime: String(Date.now()),
                               replaceAvatars: String(replaceAvatars),
+                              freeAvatars: String(freeAvatars),
                               matchName: tournament.name,
                             });
                             window.location.href = `/decks/editor-3d?${params.toString()}`;
@@ -1764,6 +2006,114 @@ export default function TournamentDetailsPage() {
                   />
                   Include public decks
                 </label>
+                {/* Curiosa Import Section */}
+                <div className="mb-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowCuriosaImport((prev) => !prev)}
+                    className="text-xs text-emerald-300 hover:text-emerald-200 underline"
+                  >
+                    {showCuriosaImport ? "Hide" : "Import from Curiosa link"}
+                  </button>
+                  {showCuriosaImport && (
+                    <div className="mt-2 p-3 bg-slate-800/60 rounded-lg ring-1 ring-slate-700">
+                      <div className="text-xs text-slate-300 mb-2">
+                        Paste a public Curiosa deck URL to import it directly.
+                      </div>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={curiosaUrl}
+                          onChange={(e) => setCuriosaUrl(e.target.value)}
+                          placeholder="https://curiosa.io/decks/..."
+                          className="flex-1 bg-slate-900/80 ring-1 ring-slate-600 rounded px-3 py-1.5 text-sm text-white placeholder:text-slate-500"
+                          disabled={curiosaImporting}
+                        />
+                        <button
+                          type="button"
+                          disabled={curiosaImporting || !curiosaUrl.trim()}
+                          onClick={async () => {
+                            if (!curiosaUrl.trim()) return;
+                            setCuriosaImporting(true);
+                            setCuriosaError(null);
+                            try {
+                              const res = await fetch(
+                                "/api/decks/import/curiosa",
+                                {
+                                  method: "POST",
+                                  headers: {
+                                    "content-type": "application/json",
+                                  },
+                                  body: JSON.stringify({
+                                    url: curiosaUrl.trim(),
+                                  }),
+                                }
+                              );
+                              const data = await res.json().catch(() => ({}));
+                              if (!res.ok) {
+                                throw new Error(
+                                  (data && data.error) || "Import failed"
+                                );
+                              }
+                              // Success - clear input and refresh deck list
+                              setCuriosaUrl("");
+                              setShowCuriosaImport(false);
+                              // Refresh constructed decks
+                              try {
+                                const refreshRes = await fetch(
+                                  `/api/tournaments/${encodeURIComponent(
+                                    tournament?.id || ""
+                                  )}/preparation/constructed/decks?includePublic=${
+                                    includePublicDecks ? "true" : "false"
+                                  }`
+                                );
+                                const refreshData = await refreshRes.json();
+                                if (refreshRes.ok) {
+                                  const decks = Array.isArray(
+                                    refreshData?.myDecks
+                                  )
+                                    ? refreshData.myDecks
+                                    : [];
+                                  const pubDecks = Array.isArray(
+                                    refreshData?.publicDecks
+                                  )
+                                    ? refreshData.publicDecks
+                                    : [];
+                                  setConstructedDecks(decks);
+                                  setConstructedPublicDecks(pubDecks);
+                                }
+                              } catch {}
+                              window.dispatchEvent(
+                                new CustomEvent("app:toast", {
+                                  detail: {
+                                    message: "Deck imported successfully!",
+                                  },
+                                })
+                              );
+                            } catch (e) {
+                              setCuriosaError(
+                                e instanceof Error ? e.message : "Import failed"
+                              );
+                            } finally {
+                              setCuriosaImporting(false);
+                            }
+                          }}
+                          className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-3 py-1.5 rounded text-sm flex items-center gap-1"
+                        >
+                          {curiosaImporting && (
+                            <span className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin" />
+                          )}
+                          {curiosaImporting ? "Importing..." : "Import"}
+                        </button>
+                      </div>
+                      {curiosaError && (
+                        <div className="mt-2 text-xs text-red-400">
+                          {curiosaError}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
                 {constructedLoading ? (
                   <div className="text-emerald-200/80 text-sm">
                     Loading your decks…
@@ -2049,52 +2399,63 @@ export default function TournamentDetailsPage() {
         )}
 
         {/* Spectacular Start Tournament Button */}
-        {tournament.status === "registering" &&
-          isCreator &&
-          getCurrentPlayersCount(tournament) === tournament.maxPlayers && (
-            <div className="mb-8">
-              <button
-                onClick={handleStartTournament}
-                disabled={starting}
-                className="w-full relative overflow-hidden rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 p-1 transition-all hover:shadow-2xl hover:shadow-blue-500/50 disabled:opacity-50 disabled:cursor-not-allowed group"
-              >
-                <div className="relative bg-slate-900 rounded-lg px-8 py-6 flex items-center justify-center gap-3 transition-all group-hover:bg-slate-900/50">
-                  <div className="text-3xl">🏆</div>
-                  <div className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-400 to-purple-400">
-                    {starting ? "Starting Tournament..." : "Start Tournament"}
-                  </div>
-                  <div className="text-3xl">🏆</div>
+        {canStartTournament && (
+          <div className="mb-8">
+            <button
+              onClick={handleStartTournament}
+              disabled={starting}
+              className="w-full relative overflow-hidden rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 p-1 transition-all hover:shadow-2xl hover:shadow-blue-500/50 disabled:opacity-50 disabled:cursor-not-allowed group"
+            >
+              <div className="relative bg-slate-900 rounded-lg px-8 py-6 flex items-center justify-center gap-3 transition-all group-hover:bg-slate-900/50">
+                <div className="text-3xl">🏆</div>
+                <div className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-400 to-purple-400">
+                  {starting ? "Starting Tournament..." : "Start Tournament"}
                 </div>
-                {/* Animated border effect */}
-                <div className="absolute inset-0 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 opacity-0 group-hover:opacity-100 transition-opacity blur-xl -z-10" />
-              </button>
-              <div className="text-center text-slate-400 text-sm mt-2">
-                All players joined ({getCurrentPlayersCount(tournament)}/
-                {tournament.maxPlayers}) • Click to begin
+                <div className="text-3xl">🏆</div>
               </div>
+              {/* Animated border effect */}
+              <div className="absolute inset-0 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 opacity-0 group-hover:opacity-100 transition-opacity blur-xl -z-10" />
+            </button>
+            <div className="text-center text-slate-400 text-sm mt-2">
+              {isOpenSeat
+                ? `Open seat ready (${activeCount} active)`
+                : `All players joined (${activeCount}/${tournament.maxPlayers}) • Click to begin`}
             </div>
-          )}
+          </div>
+        )}
 
         {/* Tournament Stats */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <div className="bg-slate-800 border border-slate-700 rounded-lg p-4">
             <div className="text-slate-400 text-sm">Players</div>
             <div className="text-2xl font-bold text-white">
-              {getCurrentPlayersCount(tournament)}/{tournament.maxPlayers}
+              {activeCount}
+              {isOpenSeat ? (
+                <span className="text-sm font-medium text-slate-400 ml-2">
+                  active
+                </span>
+              ) : (
+                `/${tournament.maxPlayers}`
+              )}
             </div>
-            <div className="w-full bg-slate-700 rounded-full h-2 mt-2">
-              <div
-                className="bg-blue-600 h-2 rounded-full transition-all"
-                style={{
-                  width: `${Math.min(
-                    (getCurrentPlayersCount(tournament) /
-                      tournament.maxPlayers) *
-                      100,
-                    100
-                  )}%`,
-                }}
-              />
-            </div>
+            {isOpenSeat ? (
+              <div className="text-xs text-slate-400 mt-2">
+                {vacantCount} vacant seat{vacantCount === 1 ? "" : "s"} •{" "}
+                {isRegistrationLocked ? "locked" : "open"}
+              </div>
+            ) : (
+              <div className="w-full bg-slate-700 rounded-full h-2 mt-2">
+                <div
+                  className="bg-blue-600 h-2 rounded-full transition-all"
+                  style={{
+                    width: `${Math.min(
+                      (activeCount / tournament.maxPlayers) * 100,
+                      100
+                    )}%`,
+                  }}
+                />
+              </div>
+            )}
           </div>
 
           <div className="bg-slate-800 border border-slate-700 rounded-lg p-4">
@@ -2160,7 +2521,19 @@ export default function TournamentDetailsPage() {
                   </span>
                 </div>
                 <div>
-                  <span className="text-slate-400">Max Players:</span>
+                  <span className="text-slate-400">Registration:</span>
+                  <span className="text-white ml-2">
+                    {isOpenSeat
+                      ? `Open seat (${
+                          isRegistrationLocked ? "locked" : "open"
+                        })`
+                      : "Fixed"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-400">
+                    {isOpenSeat ? "Seat Target:" : "Max Players:"}
+                  </span>
                   <span className="text-white ml-2">
                     {tournament.maxPlayers}
                   </span>
@@ -2351,17 +2724,25 @@ export default function TournamentDetailsPage() {
                   Registration Open
                 </h3>
                 <p className="text-blue-200">
-                  Tournament is accepting new players.{" "}
-                  {Math.max(
-                    0,
-                    tournament.maxPlayers - getCurrentPlayersCount(tournament)
-                  )}{" "}
-                  spots remaining.
+                  {isOpenSeat
+                    ? `Open seat tournament (${activeCount} active${
+                        vacantCount > 0 ? `, ${vacantCount} vacant` : ""
+                      }). ${
+                        isRegistrationLocked
+                          ? "Registration locked (replacements only)."
+                          : "Registration open."
+                      }`
+                    : `Tournament is accepting new players. ${Math.max(
+                        0,
+                        tournament.maxPlayers - activeCount
+                      )} spots remaining.`}
                 </p>
                 {isCreator && (
                   <p className="text-blue-200 mt-2">
-                    <strong>Creator:</strong> You can start the tournament once
-                    at least 2 players have joined.
+                    <strong>Creator:</strong>{" "}
+                    {isOpenSeat
+                      ? "You can start the tournament once at least 2 players have joined."
+                      : "You can start the tournament once all players have joined."}
                   </p>
                 )}
               </div>
@@ -2444,21 +2825,50 @@ export default function TournamentDetailsPage() {
                   key={round.id}
                   className="bg-slate-800 border border-slate-700 rounded-lg p-6"
                 >
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-semibold text-white">
-                      Round {round.roundNumber}
-                    </h3>
-                    <span
-                      className={`px-3 py-1 rounded-full text-sm font-medium border capitalize ${
-                        round.status === "completed"
-                          ? "bg-gray-100 text-gray-800 border-gray-200"
-                          : round.status === "active"
-                          ? "bg-blue-100 text-blue-800 border-blue-200"
-                          : "bg-yellow-100 text-yellow-800 border-yellow-200"
-                      }`}
-                    >
-                      {round.status}
-                    </span>
+                  <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                    <div className="flex items-center gap-3">
+                      <h3 className="text-lg font-semibold text-white">
+                        Round {round.roundNumber}
+                      </h3>
+                      {round.readyToEnd && round.status === "active" && (
+                        <span className="text-xs uppercase tracking-wide text-emerald-300 border border-emerald-500/40 bg-emerald-900/30 px-2 py-1 rounded-full">
+                          Ready to end
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`px-3 py-1 rounded-full text-sm font-medium border capitalize ${
+                          round.status === "completed"
+                            ? "bg-gray-100 text-gray-800 border-gray-200"
+                            : round.status === "active"
+                            ? "bg-blue-100 text-blue-800 border-blue-200"
+                            : "bg-yellow-100 text-yellow-800 border-yellow-200"
+                        }`}
+                      >
+                        {round.status}
+                      </span>
+                      {isCreator && round.status === "pending" && (
+                        <button
+                          onClick={handleStartNextRound}
+                          disabled={startingRound}
+                          className="bg-indigo-500 hover:bg-indigo-400 text-white px-3 py-1.5 rounded-md text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {startingRound ? "Starting…" : "Start round"}
+                        </button>
+                      )}
+                      {isCreator &&
+                        round.status === "active" &&
+                        round.readyToEnd && (
+                          <button
+                            onClick={() => handleEndRound(round.id)}
+                            disabled={endingRound}
+                            className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-md text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {endingRound ? "Ending…" : "End round"}
+                          </button>
+                        )}
+                    </div>
                   </div>
 
                   <div className="text-sm text-slate-400">
@@ -2473,7 +2883,98 @@ export default function TournamentDetailsPage() {
                         {new Date(round.completedAt).toLocaleString()}
                       </div>
                     )}
+                    <div className="mt-2">
+                      Matches resolved: {round.statistics.resolvedMatches}/
+                      {round.statistics.totalMatches} • Pending:{" "}
+                      {round.statistics.pendingMatches} • Active:{" "}
+                      {round.statistics.activeMatches}
+                    </div>
                   </div>
+
+                  {Array.isArray(round.matches) && round.matches.length > 0 && (
+                    <div className="mt-4 space-y-3">
+                      {round.matches.map((match) => {
+                        const matchPlayers = Array.isArray(match.players)
+                          ? match.players
+                          : [];
+                        const player1 = matchPlayers[0];
+                        const player2 = matchPlayers[1];
+                        const isResolving = invalidatingMatchId === match.id;
+                        return (
+                          <div
+                            key={match.id}
+                            className="border border-slate-700 rounded-md p-3"
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                              <div className="text-slate-200">
+                                {player1?.name || "Player 1"}
+                                {player2
+                                  ? ` vs ${player2.name || "Player 2"}`
+                                  : " (bye)"}
+                              </div>
+                              <div className="flex items-center gap-2 text-xs">
+                                {match.bye && (
+                                  <span className="text-amber-300">bye</span>
+                                )}
+                                {match.invalid && (
+                                  <span className="text-red-300">invalid</span>
+                                )}
+                                <span className="text-slate-400">
+                                  {match.status}
+                                </span>
+                              </div>
+                            </div>
+                            {isCreator &&
+                              round.status === "active" &&
+                              (match.status === "pending" ||
+                                match.status === "active") && (
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  <button
+                                    onClick={() =>
+                                      handleInvalidateMatch(match.id, "invalid")
+                                    }
+                                    disabled={isResolving}
+                                    className="bg-red-700/70 hover:bg-red-600 text-white px-2 py-1 rounded text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                                  >
+                                    Invalidate
+                                  </button>
+                                  {player1 && player2 && (
+                                    <>
+                                      <button
+                                        onClick={() =>
+                                          handleInvalidateMatch(
+                                            match.id,
+                                            "bye",
+                                            player1.id
+                                          )
+                                        }
+                                        disabled={isResolving}
+                                        className="bg-amber-600/80 hover:bg-amber-500 text-white px-2 py-1 rounded text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                                      >
+                                        Bye: {player1.name}
+                                      </button>
+                                      <button
+                                        onClick={() =>
+                                          handleInvalidateMatch(
+                                            match.id,
+                                            "bye",
+                                            player2.id
+                                          )
+                                        }
+                                        disabled={isResolving}
+                                        className="bg-amber-600/80 hover:bg-amber-500 text-white px-2 py-1 rounded text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                                      >
+                                        Bye: {player2.name}
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+                              )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               ))
             ) : (

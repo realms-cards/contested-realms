@@ -111,6 +111,8 @@ export async function POST(req: NextRequest) {
       count: number;
       name: string;
       zone: string; // "Spellbook" | "Atlas"
+      matchedName: string;
+      wasFuzzy: boolean;
     };
 
     const mapped: Mapped[] = [];
@@ -131,11 +133,23 @@ export async function POST(req: NextRequest) {
       nameToPreferredSet
     );
 
+    // Track fuzzy matches for warnings
+    const fuzzyMatches: { original: string; matched: string; count: number }[] =
+      [];
+
     for (const e of zoneEntries) {
       const found = nameToVariant.get(e.name);
       if (!found) {
         unresolved.push({ name: e.name, count: e.count });
         continue;
+      }
+      // Track fuzzy matches
+      if (found.wasFuzzy && found.matchedName !== e.name) {
+        fuzzyMatches.push({
+          original: e.name,
+          matched: found.matchedName,
+          count: e.count,
+        });
       }
       mapped.push({
         cardId: found.cardId,
@@ -145,6 +159,8 @@ export async function POST(req: NextRequest) {
         count: e.count,
         name: e.name,
         zone: e.zone,
+        matchedName: found.matchedName,
+        wasFuzzy: found.wasFuzzy,
       });
     }
 
@@ -213,10 +229,26 @@ export async function POST(req: NextRequest) {
       await prisma.deckCard.createMany({ data: createRows });
     }
 
-    return new Response(
-      JSON.stringify({ id: deck.id, name: deck.name, format: deck.format }),
-      { status: 201, headers: { "content-type": "application/json" } }
-    );
+    // Build response with optional warnings
+    const response: {
+      id: string;
+      name: string;
+      format: string | null;
+      warnings?: { fuzzyMatches: typeof fuzzyMatches };
+    } = {
+      id: deck.id,
+      name: deck.name,
+      format: deck.format,
+    };
+
+    if (fuzzyMatches.length > 0) {
+      response.warnings = { fuzzyMatches };
+    }
+
+    return new Response(JSON.stringify(response), {
+      status: 201,
+      headers: { "content-type": "application/json" },
+    });
   } catch (e: unknown) {
     const message =
       e instanceof Error
@@ -242,6 +274,8 @@ async function batchFindVariants(
       variantId: number | null;
       setId: number | null;
       typeText: string | null;
+      matchedName: string; // The actual card name in DB
+      wasFuzzy: boolean; // True if fuzzy match was used
     }
   >();
 
@@ -339,11 +373,16 @@ async function batchFindVariants(
     flats.sort((a, b) => score(b.setName) - score(a.setName));
     const top = flats[0];
 
+    // Check if this was a fuzzy match
+    const exactNameMatch = pool.some((c) => c.name === originalName);
+    const matchedCard = pool.find((c) => c.id === top.cardId);
     result.set(originalName, {
       cardId: top.cardId,
       variantId: top.variantId,
       setId: top.setId,
       typeText: top.typeText,
+      matchedName: matchedCard?.name ?? originalName,
+      wasFuzzy: !exactNameMatch,
     });
   }
 
@@ -368,7 +407,10 @@ async function batchFindVariants(
       if (!variant.typeText && variant.setId) {
         const type = metaMap.get(`${variant.cardId}:${variant.setId}`);
         if (type) {
-          result.set(name, { ...variant, typeText: type });
+          result.set(name, {
+            ...variant,
+            typeText: type,
+          });
         }
       }
     }

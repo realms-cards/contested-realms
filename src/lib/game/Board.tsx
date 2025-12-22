@@ -178,6 +178,7 @@ export default function Board({
   const setPlaymatUrl = useScopedStore((s) => s.setPlaymatUrl);
   const allowSiteDrag = useScopedStore((s) => s.allowSiteDrag);
   const showOwnershipOverlay = useScopedStore((s) => s.showOwnershipOverlay);
+  const cardScale = useScopedStore((s) => s.cardScale);
   const playSelectedTo = useScopedStore((s) => s.playSelectedTo);
   const moveSelectedPermanentToWithOffset = useScopedStore(
     (s) => s.moveSelectedPermanentToWithOffset
@@ -229,6 +230,13 @@ export default function Board({
   const localPlayerId = useScopedStore((s) => s.localPlayerId);
   const avatars = useScopedStore((s) => s.avatars);
   const portalState = useScopedStore((s) => s.portalState);
+  const stolenCards = useScopedStore((s) => s.stolenCards);
+  const pendingPrivateHandCast = useScopedStore(
+    (s) => s.pendingPrivateHandCast
+  );
+  const completePendingPrivateHandCast = useScopedStore(
+    (s) => s.completePendingPrivateHandCast
+  );
   const switchSiteSource = useScopedStore((s) => s.switchSiteSource);
   const setSwitchSiteSource = useScopedStore((s) => s.setSwitchSiteSource);
   const switchSitePosition = useScopedStore((s) => s.switchSitePosition);
@@ -961,6 +969,8 @@ export default function Board({
     selectPermanent,
     draggingSite,
     dropDraggingSite,
+    pendingPrivateHandCast,
+    completePendingPrivateHandCast,
   });
 
   const {
@@ -1168,6 +1178,8 @@ export default function Board({
               switchSiteSource={switchSiteSource}
               onCompleteSwitchSite={onCompleteSwitchSite}
               showOwnershipOverlay={showOwnershipOverlay}
+              cardScale={cardScale}
+              stolenCards={stolenCards}
             />
           );
         })}

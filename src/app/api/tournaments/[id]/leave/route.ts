@@ -3,6 +3,8 @@ import { getServerAuthSession } from '@/lib/auth';
 import { invalidateCache, CacheKeys } from '@/lib/cache/redis-cache';
 import { prisma } from '@/lib/prisma';
 import { tournamentSocketService } from '@/lib/services/tournament-broadcast';
+import { updateStandingsAfterMatch } from '@/lib/tournament/pairing';
+import { countActiveSeats, getRegistrationSettings, isActiveSeat } from '@/lib/tournament/registration';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,7 +27,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return new Response(JSON.stringify({ error: 'Tournament not found' }), { status: 404 });
     }
 
-    if (tournament.status !== 'registering') {
+    const registrationSettings = getRegistrationSettings(tournament.settings);
+    const isOpenSeat = registrationSettings.mode === 'open';
+
+    if (!isOpenSeat && tournament.status !== 'registering') {
       return new Response(JSON.stringify({ error: 'Cannot leave tournament in progress' }), { status: 400 });
     }
 
@@ -43,29 +48,94 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           playerId: userId
         }
       },
-      select: { displayName: true }
+      select: { displayName: true, currentMatchId: true }
     });
     const playerName = playerStanding?.displayName || 'Unknown Player';
 
-    // Remove registration and standing
-    await prisma.$transaction([
-      prisma.tournamentRegistration.delete({
-        where: { id: registration.id }
-      }),
-      prisma.playerStanding.deleteMany({
-        where: {
-          tournamentId: id,
-          playerId: userId
+    if (isOpenSeat && tournament.status !== 'registering') {
+      // If in an active match, end it as a loss for the leaving player
+      const currentMatchId = playerStanding?.currentMatchId || null;
+      if (currentMatchId) {
+        const match = await prisma.match.findUnique({ where: { id: currentMatchId } });
+        if (match && match.status !== 'completed') {
+          const playersArr = Array.isArray(match.players)
+            ? (match.players as Array<{ id?: string; playerId?: string; userId?: string }>)
+            : [];
+          const ids = playersArr
+            .map((p) => (p?.id || p?.playerId || p?.userId ? String(p.id || p.playerId || p.userId) : null))
+            .filter((x): x is string => !!x);
+          const opponentId = ids.find((pid) => pid !== userId) || null;
+
+          const now = new Date();
+          await prisma.match.update({
+            where: { id: currentMatchId },
+            data: {
+              status: 'completed',
+              results: {
+                winnerId: opponentId,
+                loserId: userId,
+                isDraw: false,
+                gameResults: [],
+                completedAt: now.toISOString(),
+              },
+              completedAt: now,
+            },
+          });
+
+          if (opponentId) {
+            await updateStandingsAfterMatch(id, currentMatchId, {
+              winnerId: opponentId,
+              loserId: userId,
+              isDraw: false,
+            });
+          }
         }
-      })
-    ]);
+      }
+
+      const seatMeta = (registration.seatMeta as Record<string, unknown> | null) ?? {};
+      await prisma.$transaction([
+        prisma.tournamentRegistration.update({
+          where: { id: registration.id },
+          data: {
+            seatStatus: 'vacant',
+            seatMeta: {
+              ...seatMeta,
+              vacatedAt: new Date().toISOString(),
+              vacatedBy: userId
+            }
+          }
+        }),
+        prisma.playerStanding.updateMany({
+          where: {
+            tournamentId: id,
+            playerId: userId
+          },
+          data: { currentMatchId: null }
+        })
+      ]);
+    } else {
+      // Remove registration and standing
+      await prisma.$transaction([
+        prisma.tournamentRegistration.delete({
+          where: { id: registration.id }
+        }),
+        prisma.playerStanding.deleteMany({
+          where: {
+            tournamentId: id,
+            playerId: userId
+          }
+        })
+      ]);
+    }
 
     // Get updated player count
     const updatedTournament = await prisma.tournament.findUnique({
       where: { id },
       include: { registrations: true }
     });
-    const currentPlayerCount = updatedTournament?.registrations.length || 0;
+    const currentPlayerCount = updatedTournament
+      ? countActiveSeats(updatedTournament.registrations)
+      : countActiveSeats(tournament.registrations.filter(isActiveSeat));
 
     // Broadcast player left event via Socket.io
     try {

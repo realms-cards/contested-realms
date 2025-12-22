@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { getServerAuthSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { countActiveSeats } from '@/lib/tournament/registration';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,7 +27,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
             status: true,
             settings: true,
             registrations: {
-              select: { playerId: true },
+              select: { playerId: true, seatStatus: true },
             },
           },
         },
@@ -85,7 +86,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     });
 
     const playersJoined = draftSession.participants.length;
-    const totalPlayers = registration.tournament.registrations.length;
+    const totalPlayers = countActiveSeats(registration.tournament.registrations);
 
     return new Response(JSON.stringify({
       success: true,

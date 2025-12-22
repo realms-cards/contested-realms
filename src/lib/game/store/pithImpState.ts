@@ -4,6 +4,7 @@ import type {
   CardRef,
   CellKey,
   GameState,
+  PithImpHandEntry,
   PlayerKey,
   ServerPatchT,
   Zones,
@@ -15,33 +16,21 @@ function newPithImpId() {
     .slice(2, 6)}`;
 }
 
-export type PithImpPhase = "stealing" | "complete";
+// Re-export the type from types.ts for convenience
+export type { PithImpHandEntry };
 
-export type PendingStolenCard = {
-  id: string;
-  // The Pith Imp minion that stole the card
-  minion: {
-    at: CellKey;
-    index: number;
-    instanceId?: string | null;
-    owner: 1 | 2;
-    card: CardRef;
-  };
-  // Who played the Pith Imp
-  ownerSeat: PlayerKey;
-  // The stolen card (random spell from opponent's hand)
-  stolenCard: CardRef;
-  // Original owner of the stolen card
-  victimSeat: PlayerKey;
-  createdAt: number;
-};
+// Legacy type re-export for backwards compatibility
+export type { PendingStolenCard } from "./types";
 
 export type PithImpSlice = Pick<
   GameState,
-  | "stolenCards"
+  | "pithImpHands"
+  | "stolenCards" // Legacy - kept for backwards compatibility
   | "triggerPithImpGenesis"
   | "returnStolenCard"
-  | "getStolenCardsForMinion"
+  | "removePithImpHand"
+  | "getPithImpHandForMinion"
+  | "dropStolenCard"
 >;
 
 export const createPithImpSlice: StateCreator<
@@ -50,8 +39,10 @@ export const createPithImpSlice: StateCreator<
   [],
   PithImpSlice
 > = (set, get) => ({
-  stolenCards: [],
+  pithImpHands: [],
+  stolenCards: [], // Legacy - kept for backwards compatibility
 
+  // Register a Pith Imp when it enters play and steals a card
   triggerPithImpGenesis: (input: {
     minion: {
       at: CellKey;
@@ -62,17 +53,26 @@ export const createPithImpSlice: StateCreator<
     };
     ownerSeat: PlayerKey;
   }) => {
+    console.log("[PithImp] triggerPithImpGenesis called:", input);
     const id = newPithImpId();
     const ownerSeat = input.ownerSeat;
     const victimSeat = ownerSeat === "p1" ? "p2" : "p1";
     const zones = get().zones;
     const victimHand = zones[victimSeat]?.hand || [];
 
+    console.log(
+      `[PithImp] Victim ${victimSeat} hand has ${victimHand.length} cards`
+    );
+
     // Filter to only spells (non-site cards)
     const spellsInHand = victimHand.filter((card) => {
       const type = (card.type || "").toLowerCase();
       return !type.includes("site");
     });
+
+    console.log(
+      `[PithImp] Found ${spellsInHand.length} spells (non-site cards) in victim's hand`
+    );
 
     if (spellsInHand.length === 0) {
       get().log(
@@ -85,53 +85,98 @@ export const createPithImpSlice: StateCreator<
     const randomIndex = Math.floor(Math.random() * spellsInHand.length);
     const stolenCard = spellsInHand[randomIndex];
 
-    // Find and remove from victim's hand
-    const newVictimHand = [...victimHand];
-    const handIndex = newVictimHand.findIndex(
-      (c) =>
-        c.cardId === stolenCard.cardId &&
-        c.slug === stolenCard.slug &&
-        c.name === stolenCard.name
+    // Find the actual index in the full hand (not just spells array)
+    const actualHandIndex = victimHand.findIndex((c, idx) => {
+      let spellCount = 0;
+      for (let i = 0; i <= idx; i++) {
+        const type = (victimHand[i].type || "").toLowerCase();
+        if (!type.includes("site")) {
+          if (spellCount === randomIndex && i === idx) {
+            return true;
+          }
+          spellCount++;
+        }
+      }
+      return false;
+    });
+
+    console.log(
+      `[PithImp] Random selection: spellIndex=${randomIndex}, actualHandIndex=${actualHandIndex}, card=${stolenCard.name}`
     );
-    if (handIndex !== -1) {
-      newVictimHand.splice(handIndex, 1);
+
+    // Create Pith Imp's private hand entry with the stolen card
+    const newPithImpHand: PithImpHandEntry = {
+      id,
+      minion: input.minion,
+      ownerSeat,
+      victimSeat,
+      hand: [stolenCard], // Start with the stolen card
+      createdAt: Date.now(),
+    };
+
+    console.log("[PithImp] Owner creating private hand:", {
+      id,
+      cardName: stolenCard.name,
+      minionAt: input.minion.at,
+      minionInstanceId: input.minion.instanceId,
+    });
+
+    // Remove the card from victim's hand locally (owner's view)
+    const newVictimHand = [...victimHand];
+    if (actualHandIndex >= 0 && actualHandIndex < newVictimHand.length) {
+      newVictimHand.splice(actualHandIndex, 1);
     }
 
-    // Update zones
     const zonesNext = {
       ...zones,
       [victimSeat]: {
         ...zones[victimSeat],
         hand: newVictimHand,
       },
-    };
+    } as GameState["zones"];
 
-    // Add to stolen cards tracking
-    const newStolenEntry: PendingStolenCard = {
-      id,
-      minion: input.minion,
-      ownerSeat,
-      stolenCard,
-      victimSeat,
-      createdAt: Date.now(),
-    };
+    // Create visual attachment for display (both players see it)
+    const permanents = get().permanents;
+    const minionCell = permanents[input.minion.at] || [];
+    const minionIndex = minionCell.findIndex(
+      (p) => p.instanceId === input.minion.instanceId
+    );
+
+    let permanentsNext = permanents;
+    if (minionIndex !== -1) {
+      // Add stolen card as visual attachment (for display only, not for state)
+      const stolenVisual = {
+        card: { ...stolenCard, pithImpStolen: true } as CardRef,
+        owner: input.minion.owner,
+        instanceId: `pithimp_visual_${id}`,
+        tapped: false,
+        attachedTo: { at: input.minion.at, index: minionIndex },
+      };
+      const cellWithVisual = [...minionCell, stolenVisual];
+      permanentsNext = {
+        ...permanents,
+        [input.minion.at]: cellWithVisual,
+      };
+    }
 
     set((state) => ({
+      pithImpHands: [...state.pithImpHands, newPithImpHand],
       zones: zonesNext,
-      stolenCards: [...state.stolenCards, newStolenEntry],
+      permanents: permanentsNext,
     })) as unknown as void;
 
-    // Send zone patch
-    const zonePatch: ServerPatchT = {
-      zones: { [victimSeat]: zonesNext[victimSeat] } as Record<
-        PlayerKey,
-        Zones
-      >,
-      stolenCards: [...get().stolenCards],
+    // Send zones + permanents patch (includes visual attachment for display)
+    const patch: ServerPatchT = {
+      zones: {
+        [victimSeat]: zonesNext[victimSeat],
+      } as Record<PlayerKey, Zones>,
+      permanents: {
+        [input.minion.at]: permanentsNext[input.minion.at],
+      },
     };
-    get().trySendPatch(zonePatch);
+    get().trySendPatch(patch);
 
-    // Broadcast to opponent
+    // Broadcast to opponent (so they can remove from their hand)
     const transport = get().transport;
     if (transport?.sendMessage) {
       try {
@@ -142,6 +187,7 @@ export const createPithImpSlice: StateCreator<
           ownerSeat,
           stolenCardName: stolenCard.name,
           stolenCard,
+          stolenCardHandIndex: actualHandIndex,
           victimSeat,
           ts: Date.now(),
         } as unknown as CustomMessage);
@@ -155,87 +201,189 @@ export const createPithImpSlice: StateCreator<
     );
   },
 
+  // Return stolen cards when Pith Imp leaves the realm (called from movePermanentToZone)
   returnStolenCard: (minionInstanceId: string | null, minionAt: CellKey) => {
-    const stolenCards = get().stolenCards;
+    // Use the new removePithImpHand function
+    get().removePithImpHand(minionInstanceId, minionAt);
+  },
+
+  // Remove a Pith Imp's hand and return cards to victim
+  removePithImpHand: (minionInstanceId: string | null, minionAt: CellKey) => {
+    const pithImpHands = get().pithImpHands;
     const zones = get().zones;
 
-    // Find all stolen cards associated with this minion
-    const cardsToReturn = stolenCards.filter(
-      (sc) =>
-        sc.minion.at === minionAt ||
-        (minionInstanceId && sc.minion.instanceId === minionInstanceId)
+    // Find the Pith Imp entry
+    const pithImpEntry = pithImpHands.find(
+      (p) =>
+        p.minion.at === minionAt ||
+        (minionInstanceId && p.minion.instanceId === minionInstanceId)
     );
 
-    if (cardsToReturn.length === 0) return;
+    if (!pithImpEntry || pithImpEntry.hand.length === 0) {
+      console.log("[PithImp] No cards to return for this Pith Imp");
+      return;
+    }
 
-    // Return each card to its original owner's hand
-    let zonesNext = { ...zones };
-    for (const entry of cardsToReturn) {
-      const victimHand = [...(zonesNext[entry.victimSeat]?.hand || [])];
-      victimHand.push(entry.stolenCard);
-      zonesNext = {
-        ...zonesNext,
-        [entry.victimSeat]: {
-          ...zonesNext[entry.victimSeat],
-          hand: victimHand,
-        },
-      };
+    console.log("[PithImp] Returning stolen cards:", {
+      minionInstanceId,
+      minionAt,
+      cardsToReturn: pithImpEntry.hand.map((c) => c.name),
+    });
 
+    // Return all cards to victim's hand
+    const victimHand = [...(zones[pithImpEntry.victimSeat]?.hand || [])];
+    for (const card of pithImpEntry.hand) {
+      victimHand.push(card);
       get().log(
         `${
-          entry.stolenCard.name
-        } returns to ${entry.victimSeat.toUpperCase()}'s hand (Pith Imp left the realm)`
+          card.name
+        } returns to ${pithImpEntry.victimSeat.toUpperCase()}'s hand (Pith Imp left the realm)`
       );
     }
 
-    // Remove from stolen cards tracking
-    const remainingStolenCards = stolenCards.filter(
-      (sc) =>
-        sc.minion.at !== minionAt &&
-        (!minionInstanceId || sc.minion.instanceId !== minionInstanceId)
+    const zonesNext = {
+      ...zones,
+      [pithImpEntry.victimSeat]: {
+        ...zones[pithImpEntry.victimSeat],
+        hand: victimHand,
+      },
+    } as GameState["zones"];
+
+    // Remove from tracking
+    const remainingPithImpHands = pithImpHands.filter(
+      (p) =>
+        p.minion.at !== minionAt &&
+        (!minionInstanceId || p.minion.instanceId !== minionInstanceId)
     );
+
+    // Remove visual attachments (stolen cards with pithImpStolen flag)
+    const permanents = get().permanents;
+    const cell = permanents[minionAt] || [];
+    const cellWithoutStolenVisuals = cell.filter((p) => {
+      const isPithImpStolen = (p.card as { pithImpStolen?: boolean })
+        ?.pithImpStolen;
+      return !isPithImpStolen || p.attachedTo?.at !== minionAt;
+    });
+    const permanentsNext =
+      cellWithoutStolenVisuals.length !== cell.length
+        ? { ...permanents, [minionAt]: cellWithoutStolenVisuals }
+        : permanents;
 
     set({
       zones: zonesNext,
-      stolenCards: remainingStolenCards,
+      pithImpHands: remainingPithImpHands,
+      permanents: permanentsNext,
     } as Partial<GameState> as GameState);
 
-    // Send patch
-    const zonePatch: ServerPatchT = {
-      zones: zonesNext,
-      stolenCards: remainingStolenCards,
-    };
-    get().trySendPatch(zonePatch);
+    // NOTE: Owner cannot send a zones patch for victim's seat since trySendPatch
+    // sanitizes patches to only include the actor's own seat data.
+    // The victim adds cards to their own hand when they receive the pithImpReturn message.
 
-    // Broadcast return
+    // Broadcast return with full card data so victim can add them back
     const transport = get().transport;
     if (transport?.sendMessage) {
       try {
         transport.sendMessage({
           type: "pithImpReturn",
+          id: pithImpEntry.id, // Include id for deduplication
           minionAt,
           minionInstanceId,
-          returnedCards: cardsToReturn.map((c) => ({
-            cardName: c.stolenCard.name,
-            victimSeat: c.victimSeat,
-          })),
+          ownerSeat: pithImpEntry.ownerSeat,
+          victimSeat: pithImpEntry.victimSeat,
+          // Include full card data so victim can add cards back to hand
+          cardsToReturn: pithImpEntry.hand,
           ts: Date.now(),
         } as unknown as CustomMessage);
       } catch {}
     }
   },
 
-  getStolenCardsForMinion: (
+  // Get the private hand for a specific Pith Imp
+  getPithImpHandForMinion: (
     minionInstanceId: string | null,
     minionAt: CellKey
   ): CardRef[] => {
-    const stolenCards = get().stolenCards;
-    return stolenCards
-      .filter(
-        (sc) =>
-          sc.minion.at === minionAt ||
-          (minionInstanceId && sc.minion.instanceId === minionInstanceId)
-      )
-      .map((sc) => sc.stolenCard);
+    const pithImpHands = get().pithImpHands;
+    const entry = pithImpHands.find(
+      (p) =>
+        p.minion.at === minionAt ||
+        (minionInstanceId && p.minion.instanceId === minionInstanceId)
+    );
+    return entry?.hand || [];
+  },
+
+  // Drop a stolen card from Pith Imp's hand onto the board
+  dropStolenCard: (
+    pithImpId: string,
+    cardIndex: number,
+    targetTile: { x: number; y: number }
+  ) => {
+    const pithImpHands = get().pithImpHands;
+    const pithImpEntry = pithImpHands.find((p) => p.id === pithImpId);
+    if (!pithImpEntry) return;
+
+    if (cardIndex < 0 || cardIndex >= pithImpEntry.hand.length) return;
+
+    const card = pithImpEntry.hand[cardIndex];
+    const key = `${targetTile.x},${targetTile.y}` as CellKey;
+
+    console.log("[PithImp] Dropping stolen card:", {
+      pithImpId,
+      cardName: card.name,
+      targetTile: key,
+    });
+
+    // Add the card as a permanent on the board
+    const permanents = get().permanents;
+    const cellPerms = [...(permanents[key] || [])];
+    const newPermanent = {
+      card,
+      owner: pithImpEntry.minion.owner, // Keep current ownership
+      instanceId: `dropped_${Date.now().toString(36)}`,
+      tapped: false,
+    };
+    cellPerms.push(newPermanent);
+
+    const per = {
+      ...permanents,
+      [key]: cellPerms,
+    };
+
+    // Remove the card from Pith Imp's hand
+    const newHand = [...pithImpEntry.hand];
+    newHand.splice(cardIndex, 1);
+
+    const updatedPithImpHands = pithImpHands.map((p) =>
+      p.id === pithImpId ? { ...p, hand: newHand } : p
+    );
+
+    set({
+      permanents: per,
+      pithImpHands: updatedPithImpHands,
+    } as Partial<GameState> as GameState);
+
+    // Send patch
+    const patch: ServerPatchT = {
+      permanents: per,
+      pithImpHands: updatedPithImpHands,
+    };
+    get().trySendPatch(patch);
+
+    get().log(`Dropped ${card.name} from Pith Imp's grasp`);
+
+    // Broadcast
+    const transport = get().transport;
+    if (transport?.sendMessage) {
+      try {
+        transport.sendMessage({
+          type: "pithImpDrop",
+          pithImpId,
+          cardIndex,
+          cardName: card.name,
+          targetTile,
+          ts: Date.now(),
+        } as unknown as CustomMessage);
+      } catch {}
+    }
   },
 });

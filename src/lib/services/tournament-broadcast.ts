@@ -4,6 +4,7 @@
  */
 
 import { prisma } from '@/lib/prisma';
+import { countActiveSeats } from '@/lib/tournament/registration';
 
 // Use the same URL as WebSocket connections, but ensure we post to the server origin (no socket path)
 const SOCKET_SERVER_URL = process.env.SOCKET_SERVER_URL || process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:3010';
@@ -186,7 +187,8 @@ export async function broadcastTournamentUpdateById(tournamentId: string) {
         id: reg.playerId,
         displayName: playerName || reg.playerId,
         preparationStatus: reg.preparationStatus,
-        deckSubmitted: reg.deckSubmitted
+        deckSubmitted: reg.deckSubmitted,
+        seatStatus: reg.seatStatus
       };
     });
 
@@ -196,7 +198,7 @@ export async function broadcastTournamentUpdateById(tournamentId: string) {
       format: tournament.format,
       status: tournament.status,
       maxPlayers: tournament.maxPlayers,
-      currentPlayers: tournament.registrations.length,
+      currentPlayers: countActiveSeats(tournament.registrations),
       creatorId: tournament.creatorId,
       settings: tournament.settings,
       createdAt: tournament.createdAt.toISOString(),
