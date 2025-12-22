@@ -5,7 +5,11 @@ import { useState } from "react";
 import { createPortal } from "react-dom";
 import { useGameStore } from "@/lib/game/store";
 import type { LifeState, PlayerKey } from "@/lib/game/store";
-import { useTouchDevice } from "@/lib/hooks/useTouchDevice";
+import { useGamepadControls } from "@/lib/hooks/useGamepadControls";
+import {
+  useGamepadConnected,
+  useTouchDevice,
+} from "@/lib/hooks/useTouchDevice";
 import { generateInteractionRequestId } from "@/lib/net/interactions";
 
 interface OnlineLifeCountersProps {
@@ -263,8 +267,40 @@ export default function OnlineLifeCounters({
   const canModifyLife = !readOnly && !!myPlayerKey && !matchEnded;
   const p1LifeState = useGameStore((s) => s.players.p1.lifeState);
   const p2LifeState = useGameStore((s) => s.players.p2.lifeState);
+  const myLife = useGameStore((s) =>
+    myPlayerKey ? s.players[myPlayerKey].life : 0
+  );
+  const myLifeState = useGameStore((s) =>
+    myPlayerKey ? s.players[myPlayerKey].lifeState : "alive"
+  );
+  const addLife = useGameStore((s) => s.addLife);
   const tieGame = useGameStore((s) => s.tieGame);
   const sendInteractionRequest = useGameStore((s) => s.sendInteractionRequest);
+  const hasGamepad = useGamepadConnected();
+
+  // Gamepad controls: LB = decrease life, RB = increase life
+  useGamepadControls(
+    {
+      onLB: () => {
+        if (canModifyLife && myPlayerKey && myLifeState !== "dead") {
+          // Skip death confirmation for gamepad - just decrease
+          // (DD -> dead transition still works)
+          addLife(myPlayerKey, -1);
+        }
+      },
+      onRB: () => {
+        if (
+          canModifyLife &&
+          myPlayerKey &&
+          myLifeState !== "dead" &&
+          myLife < 20
+        ) {
+          addLife(myPlayerKey, +1);
+        }
+      },
+    },
+    canModifyLife
+  );
 
   const isOnline = !!myPlayerId && !!opponentPlayerId && !!matchId;
   const showTie =
@@ -320,6 +356,16 @@ export default function OnlineLifeCounters({
         showYou={showYouLabels}
         spectatorMode={readOnly}
       />
+
+      {/* Gamepad hint - show when gamepad connected and can modify life */}
+      {hasGamepad && canModifyLife && (
+        <div
+          className="text-[10px] text-gray-400 text-center px-1"
+          title="Use gamepad shoulder buttons to adjust your life"
+        >
+          LB/RB: Life
+        </div>
+      )}
 
       {/* Tie button shown between/under life counters */}
       {showTie && (

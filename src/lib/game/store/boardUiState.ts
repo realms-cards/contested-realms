@@ -17,6 +17,8 @@ type BoardUiDefaults = Pick<
   | "showPlaymat"
   | "showPlaymatOverlay"
   | "playmatUrl"
+  | "playmatUrls"
+  | "activePlaymatOwner"
   | "cardbackUrls"
   | "gridColor"
   | "gridBlend"
@@ -33,6 +35,8 @@ export const createInitialBoardUiState = (): BoardUiDefaults => ({
   showPlaymat: true,
   showPlaymatOverlay: false, // Default: show playmat, hide grid overlay
   playmatUrl: null, // null until user's preference is loaded
+  playmatUrls: { p1: null, p2: null }, // Per-player custom playmat URLs
+  activePlaymatOwner: null, // null = use own playmat, "p1"/"p2" = show that player's playmat
   cardbackUrls: {
     p1: {
       spellbook: null,
@@ -61,6 +65,8 @@ export type BoardUiSlice = Pick<
   | "showPlaymat"
   | "showPlaymatOverlay"
   | "playmatUrl"
+  | "playmatUrls"
+  | "activePlaymatOwner"
   | "cardbackUrls"
   | "gridColor"
   | "gridBlend"
@@ -73,6 +79,8 @@ export type BoardUiSlice = Pick<
   | "toggleOwnershipOverlay"
   | "setCardScale"
   | "setPlaymatUrl"
+  | "setPlaymatUrlFor"
+  | "setActivePlaymatOwner"
   | "setCardbackUrls"
   | "setGridColor"
   | "setGridBlend"
@@ -111,6 +119,14 @@ export const createBoardUiSlice: StateCreator<
     get().trySendPatch({ cardScale: clamped });
   },
   setPlaymatUrl: (url: string) => set({ playmatUrl: url }),
+  setPlaymatUrlFor: (who, url) =>
+    set((state) => ({
+      playmatUrls: {
+        ...state.playmatUrls,
+        [who]: url,
+      },
+    })),
+  setActivePlaymatOwner: (who) => set({ activePlaymatOwner: who }),
   setCardbackUrls: (who, spellbook, atlas, preset) =>
     set((state) => ({
       cardbackUrls: {

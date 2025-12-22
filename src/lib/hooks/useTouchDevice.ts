@@ -1,11 +1,14 @@
 /**
- * useTouchDevice - Hook for detecting touch/mobile devices
+ * useTouchDevice - Hook for detecting touch/mobile devices and gamepads
  *
  * Uses CSS media query `(pointer: coarse)` which is the most reliable
  * way to detect touch-primary devices (phones, tablets).
  *
+ * Also detects gamepad/controller input (e.g., Xbox browser) which
+ * lacks hover capability similar to touch devices.
+ *
  * Returns reactive state that updates if device capabilities change
- * (e.g., tablet with attached keyboard/mouse).
+ * (e.g., tablet with attached keyboard/mouse, gamepad connected).
  *
  * Supports manual override via localStorage for users who want to
  * switch between touch and mouse controls on touch devices.
@@ -51,11 +54,50 @@ if (typeof window !== "undefined") {
 }
 
 /**
+ * Detects if a gamepad/controller is connected
+ * Used to detect Xbox browser, Steam Deck, etc.
+ */
+export function useGamepadConnected(): boolean {
+  const [hasGamepad, setHasGamepad] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !navigator.getGamepads) return;
+
+    // Check for existing gamepads on mount
+    const checkGamepads = () => {
+      const gamepads = navigator.getGamepads();
+      const connected = gamepads.some((gp) => gp !== null);
+      setHasGamepad(connected);
+    };
+
+    checkGamepads();
+
+    const onConnect = () => setHasGamepad(true);
+    const onDisconnect = () => {
+      // Re-check in case other gamepads are still connected
+      checkGamepads();
+    };
+
+    window.addEventListener("gamepadconnected", onConnect);
+    window.addEventListener("gamepaddisconnected", onDisconnect);
+
+    return () => {
+      window.removeEventListener("gamepadconnected", onConnect);
+      window.removeEventListener("gamepaddisconnected", onDisconnect);
+    };
+  }, []);
+
+  return hasGamepad;
+}
+
+/**
  * Detects if the device primarily uses touch input (coarse pointer)
- * @returns boolean - true if touch device, false if mouse/trackpad
+ * or has a gamepad connected (no hover capability)
+ * @returns boolean - true if touch/gamepad device, false if mouse/trackpad
  */
 export function useTouchDevice(): boolean {
   const [isNativeTouchDevice, setIsNativeTouchDevice] = useState(false);
+  const hasGamepad = useGamepadConnected();
   const override = useSyncExternalStore(
     subscribeOverride,
     getOverride,
@@ -96,7 +138,8 @@ export function useTouchDevice(): boolean {
   // Apply override if set
   if (override === "mouse") return false;
   if (override === "touch") return true;
-  return isNativeTouchDevice;
+  // Gamepad users also need "touch-like" UI (always-visible buttons)
+  return isNativeTouchDevice || hasGamepad;
 }
 
 /**

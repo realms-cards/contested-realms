@@ -311,6 +311,120 @@ export default function OnlineMatchPage() {
     setCardbackUrls,
   ]);
 
+  // Fetch playmat URLs for both players (my playmat + opponent's if allowed)
+  const setPlaymatUrl = useGameStore((s) => s.setPlaymatUrl);
+  const setPlaymatUrlFor = useGameStore((s) => s.setPlaymatUrlFor);
+  const setActivePlaymatOwner = useGameStore((s) => s.setActivePlaymatOwner);
+  useEffect(() => {
+    const controller = new AbortController();
+
+    const fetchPlaymats = async () => {
+      // First, check if user wants to see opponent's playmat
+      let showOpponentPlaymat = true; // Default to true
+      try {
+        const prefRes = await fetch("/api/users/me/playmats/preferences", {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        if (prefRes.ok) {
+          const prefData = (await prefRes.json()) as {
+            showOpponentPlaymat?: boolean;
+          };
+          showOpponentPlaymat = prefData.showOpponentPlaymat !== false;
+        }
+      } catch {
+        // Ignore - use default
+      }
+
+      // Fetch my playmat
+      if (resolvedSeat && myPlayerId) {
+        try {
+          const res = await fetch("/api/users/me/playmats/selected", {
+            cache: "no-store",
+            signal: controller.signal,
+          });
+          if (res.ok) {
+            const data = (await res.json()) as { selectedPlaymatRef?: string };
+            const ref = data.selectedPlaymatRef;
+            if (ref?.startsWith("custom:")) {
+              const id = ref.slice("custom:".length);
+              if (id) {
+                setPlaymatUrlFor(
+                  resolvedSeat,
+                  `/api/users/me/playmats/${id}/image`
+                );
+              }
+            } else {
+              setPlaymatUrlFor(resolvedSeat, null);
+            }
+          }
+        } catch {
+          // Ignore fetch errors
+        }
+      }
+
+      // Fetch opponent's playmat (if allowed and opponent exists)
+      if (showOpponentPlaymat && opponentSeat && opponentPlayerId) {
+        try {
+          const res = await fetch(`/api/users/${opponentPlayerId}/playmats`, {
+            cache: "no-store",
+            signal: controller.signal,
+          });
+          if (res.ok) {
+            const data = (await res.json()) as { selectedPlaymatRef?: string };
+            const ref = data.selectedPlaymatRef;
+            if (ref?.startsWith("custom:")) {
+              const id = ref.slice("custom:".length);
+              if (id) {
+                setPlaymatUrlFor(
+                  opponentSeat,
+                  `/api/users/${opponentPlayerId}/playmats/${id}/image`
+                );
+                // Show opponent's playmat by default when they have a custom one
+                setActivePlaymatOwner(opponentSeat);
+              }
+            }
+          }
+        } catch {
+          // Ignore fetch errors
+        }
+      }
+
+      // Also set the legacy playmatUrl for own playmat (fallback)
+      try {
+        const res = await fetch("/api/users/me/playmats/selected", {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        if (res.ok) {
+          const data = (await res.json()) as { selectedPlaymatRef?: string };
+          const ref = data.selectedPlaymatRef;
+          if (ref?.startsWith("custom:")) {
+            const id = ref.slice("custom:".length);
+            if (id) {
+              setPlaymatUrl(`/api/users/me/playmats/${id}/image`);
+              return;
+            }
+          }
+        }
+        setPlaymatUrl("/playmat.jpg");
+      } catch {
+        setPlaymatUrl("/playmat.jpg");
+      }
+    };
+
+    void fetchPlaymats();
+    return () => controller.abort();
+  }, [
+    resolvedSeat,
+    opponentSeat,
+    myPlayerId,
+    opponentPlayerId,
+    setPlaymatUrl,
+    setPlaymatUrlFor,
+    setActivePlaymatOwner,
+  ]);
+
   useRemoteCursorTelemetry(transport);
   useBoardPingListener(transport);
   useChaosTwisterListener(transport);

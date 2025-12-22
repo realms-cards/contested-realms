@@ -175,6 +175,8 @@ export default function Board({
   const showPlaymat = useScopedStore((s) => s.showPlaymat);
   const showPlaymatOverlay = useScopedStore((s) => s.showPlaymatOverlay);
   const playmatUrl = useScopedStore((s) => s.playmatUrl);
+  const playmatUrls = useScopedStore((s) => s.playmatUrls);
+  const activePlaymatOwner = useScopedStore((s) => s.activePlaymatOwner);
   const setPlaymatUrl = useScopedStore((s) => s.setPlaymatUrl);
   const allowSiteDrag = useScopedStore((s) => s.allowSiteDrag);
   const showOwnershipOverlay = useScopedStore((s) => s.showOwnershipOverlay);
@@ -1107,7 +1109,12 @@ export default function Board({
         matW={matW}
         matH={matH}
         showPlaymat={showPlaymat}
-        playmatUrl={playmatUrl}
+        playmatUrl={
+          // Use active player's playmat if set, otherwise fall back to legacy playmatUrl
+          activePlaymatOwner && playmatUrls[activePlaymatOwner]
+            ? playmatUrls[activePlaymatOwner]
+            : playmatUrl
+        }
         showOverlay={showPlaymatOverlay}
       />
 

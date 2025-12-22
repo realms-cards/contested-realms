@@ -991,6 +991,8 @@ export type GameState = {
   showPlaymat: boolean;
   showPlaymatOverlay: boolean;
   playmatUrl: string | null;
+  playmatUrls: Record<PlayerKey, string | null>; // Per-player custom playmat URLs
+  activePlaymatOwner: PlayerKey | null; // Which player's playmat is currently shown (null = use own)
   cardbackUrls: Record<
     PlayerKey,
     { spellbook: string | null; atlas: string | null; preset: string | null }
@@ -1006,6 +1008,8 @@ export type GameState = {
     worldPos: { x: number; z: number };
   } | null;
   setPlaymatUrl: (url: string) => void;
+  setPlaymatUrlFor: (who: PlayerKey, url: string | null) => void;
+  setActivePlaymatOwner: (who: PlayerKey | null) => void;
   setCardbackUrls: (
     who: PlayerKey,
     spellbook: string | null,
