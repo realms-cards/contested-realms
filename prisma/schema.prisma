@@ -269,6 +269,7 @@ model User {
   presenceHidden Boolean  @default(false)
   colorBlindMode Boolean  @default(false)
   patronTier    String?   // "apprentice" | "grandmaster" | null
+  showOpponentPlaymat Boolean @default(true) // Whether to show opponent's custom playmat
 
   selectedPlaymatRef String?
   selectedSpellbookRef String?  // "custom:<id>" or "preset:<id>" or null

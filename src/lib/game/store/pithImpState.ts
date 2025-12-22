@@ -82,8 +82,17 @@ export const createPithImpSlice: StateCreator<
     }
 
     // Pick a random spell
-    const randomIndex = Math.floor(Math.random() * spellsInHand.length);
+    const randomValue = Math.random();
+    const randomIndex = Math.floor(randomValue * spellsInHand.length);
     const stolenCard = spellsInHand[randomIndex];
+
+    console.log("[PithImp] Random selection details:", {
+      randomValue,
+      spellsCount: spellsInHand.length,
+      randomIndex,
+      allSpells: spellsInHand.map((c) => c.name),
+      selectedCard: stolenCard.name,
+    });
 
     // Find the actual index in the full hand (not just spells array)
     const actualHandIndex = victimHand.findIndex((c, idx) => {

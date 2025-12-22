@@ -75,6 +75,8 @@ export default function UserBadge({
   } | null>(null);
   const { enabled: colorBlindEnabled, setEnabled: setColorBlindEnabled } =
     useColorBlind();
+  const [showOpponentPlaymat, setShowOpponentPlaymat] = useState(true);
+  const [playmatPrefLoading, setPlaymatPrefLoading] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteInProgress, setDeleteInProgress] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -170,6 +172,52 @@ export default function UserBadge({
   useEffect(() => {
     setAvatarDataUrl(undefined);
   }, [user?.image]);
+
+  // Load playmat preference on mount
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    const loadPlaymatPref = async () => {
+      try {
+        const res = await fetch("/api/users/me/playmats/preferences", {
+          cache: "no-store",
+        });
+        if (!res.ok || cancelled) return;
+        const data = (await res.json()) as { showOpponentPlaymat?: boolean };
+        if (!cancelled) {
+          setShowOpponentPlaymat(data.showOpponentPlaymat !== false);
+        }
+      } catch {
+        // Ignore errors
+      }
+    };
+    void loadPlaymatPref();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
+
+  const handleToggleOpponentPlaymat = useCallback(async () => {
+    const newValue = !showOpponentPlaymat;
+    setShowOpponentPlaymat(newValue);
+    setPlaymatPrefLoading(true);
+    try {
+      const res = await fetch("/api/users/me/playmats/preferences", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ showOpponentPlaymat: newValue }),
+      });
+      if (!res.ok) {
+        // Revert on failure
+        setShowOpponentPlaymat(!newValue);
+      }
+    } catch {
+      // Revert on error
+      setShowOpponentPlaymat(!newValue);
+    } finally {
+      setPlaymatPrefLoading(false);
+    }
+  }, [showOpponentPlaymat]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -804,6 +852,33 @@ export default function UserBadge({
                     }`}
                   />
                   <span>{colorBlindEnabled ? "On" : "Off"}</span>
+                </button>
+              </div>
+              <div className="flex items-center justify-between gap-3 text-xs text-slate-300">
+                <div className="flex flex-col">
+                  <span>Show opponent&apos;s playmat</span>
+                  <span className="mt-0.5 text-[11px] text-slate-400">
+                    Display custom playmats from Patron opponents.
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleToggleOpponentPlaymat}
+                  disabled={playmatPrefLoading}
+                  className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] ring-1 transition-colors ${
+                    playmatPrefLoading ? "opacity-60 cursor-wait" : ""
+                  } ${
+                    showOpponentPlaymat
+                      ? "bg-emerald-500/20 text-emerald-100 ring-emerald-500/40"
+                      : "bg-slate-800 text-slate-200 ring-slate-600"
+                  }`}
+                >
+                  <span
+                    className={`inline-block w-2 h-2 rounded-full ${
+                      showOpponentPlaymat ? "bg-emerald-300" : "bg-slate-400"
+                    }`}
+                  />
+                  <span>{showOpponentPlaymat ? "On" : "Off"}</span>
                 </button>
               </div>
               {/* Card Image Cache section */}
