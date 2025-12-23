@@ -180,7 +180,8 @@ export default function DecksPage() {
         isPending: true,
       };
       setMyDecks((prev) => [pendingDeck, ...prev]);
-      setShowImport(false);
+      // Don't hide import form - let the success message stay visible for a moment
+      // The import form will auto-clear the success after 5 seconds
       // Fetch full data in background to update avatar info
       void fetchDecks(true);
     },
@@ -198,9 +199,8 @@ export default function DecksPage() {
         // Optimistic add with pending state
         handleOptimisticAdd(detail.deck);
       } else {
-        // Fallback: just refresh
+        // Fallback: just refresh (no deck info, don't hide import form)
         void fetchDecks(true);
-        setShowImport(false);
       }
     };
     window.addEventListener("decks:refresh", onRefresh);
