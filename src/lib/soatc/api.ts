@@ -45,10 +45,18 @@ interface ParticipationCache {
 const participationCache: ParticipationCache = {};
 
 /**
- * Check if SOATC league features are enabled
+ * Check if SOATC league features are enabled (server-side)
  */
 export function isSoatcEnabled(): boolean {
   return process.env.SOATC_LEAGUE_ENABLED === "true";
+}
+
+/**
+ * Check if SOATC league features are enabled (client-side)
+ * Uses NEXT_PUBLIC_ prefix so it's available in browser
+ */
+export function isSoatcEnabledClient(): boolean {
+  return process.env.NEXT_PUBLIC_SOATC_ENABLED === "true";
 }
 
 /**
