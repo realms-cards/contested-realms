@@ -95,15 +95,15 @@ export async function GET(
     })();
 
     // If a CDN origin is configured, permanently redirect there instead of streaming from disk.
+    // In development, NEVER redirect to CDN - always serve locally so service worker can cache
     const cdn = (
       process.env.ASSET_CDN_ORIGIN || process.env.NEXT_PUBLIC_TEXTURE_ORIGIN
     )?.trim();
     const forceCdn = (process.env.FORCE_TEXTURE_CDN || "").toLowerCase();
     const shouldRedirectToCdn =
       !!cdn &&
-      (process.env.NODE_ENV === "production" ||
-        forceCdn === "1" ||
-        forceCdn === "true");
+      process.env.NODE_ENV === "production" &&
+      (forceCdn === "1" || forceCdn === "true" || forceCdn === "");
     if (shouldRedirectToCdn) {
       // Build CDN path using the same set/slug logic
       const setDir = setDirFromSlug(slug);

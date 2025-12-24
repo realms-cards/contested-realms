@@ -75,7 +75,7 @@ export type TournamentPlayerInfo = z.infer<typeof TournamentPlayerInfoSchema>;
 export const LobbyStatusSchema = z.enum(["open", "started", "closed"]);
 export type LobbyStatus = z.infer<typeof LobbyStatusSchema>;
 
-export const LobbyVisibilitySchema = z.enum(["open", "private"]);
+export const LobbyVisibilitySchema = z.enum(["open", "private", "tournament"]);
 export type LobbyVisibility = z.infer<typeof LobbyVisibilitySchema>;
 
 export const LobbyInfoSchema = z.object({
@@ -98,6 +98,17 @@ export const LobbyInfoSchema = z.object({
   matchId: z.string().nullable().optional(),
   // Timestamp when lobby was created or match started
   startedAt: z.number().nullable().optional(),
+  // SOATC league match info when both players are in same tournament
+  soatcLeagueMatch: z
+    .object({
+      isLeagueMatch: z.boolean(),
+      tournamentId: z.string(),
+      tournamentName: z.string(),
+    })
+    .nullable()
+    .optional(),
+  // Tournament lobbies: host must "open" lobby before others can join
+  hostReady: z.boolean().optional(),
 });
 export type LobbyInfo = z.infer<typeof LobbyInfoSchema>;
 
@@ -208,6 +219,17 @@ export const MatchInfoSchema = z.object({
   playerIds: z.array(z.string()).optional(),
   maxPlayers: z.number().int().min(2).max(8).default(2),
   isMultiplayer: z.boolean().default(false),
+  // SOATC league match info (when match is part of a Sorcerers at the Core tournament)
+  soatcLeagueMatch: z
+    .object({
+      isLeagueMatch: z.boolean(),
+      tournamentId: z.string(),
+      tournamentName: z.string(),
+    })
+    .nullable()
+    .optional(),
+  // Match start timestamp
+  startedAt: z.number().nullable().optional(),
 });
 export type MatchInfo = z.infer<typeof MatchInfoSchema>;
 

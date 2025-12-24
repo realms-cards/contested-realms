@@ -163,8 +163,8 @@ export async function getCacheStats(): Promise<CacheStats | null> {
       return null;
     }
 
-    const cardCache = await caches.open("realms-cards-v1");
-    const staticCache = await caches.open("realms-static-v1");
+    const cardCache = await caches.open("realms-cards-v3");
+    const staticCache = await caches.open("realms-static-v3");
 
     const cardKeys = await cardCache.keys();
     const staticKeys = await staticCache.keys();
@@ -195,7 +195,7 @@ export async function getCacheStats(): Promise<CacheStats | null> {
       staticCount: staticKeys.length,
       staticCacheSize,
       totalSize: cardCacheSize + staticCacheSize,
-      version: "v1",
+      version: "v3",
     };
   } catch (error) {
     console.error("[Cache] Failed to get stats:", error);
@@ -208,7 +208,7 @@ export async function getCacheStats(): Promise<CacheStats | null> {
  */
 export async function clearCardCache(): Promise<boolean> {
   try {
-    await caches.delete("realms-cards-v1");
+    await caches.delete("realms-cards-v3");
     console.log("[Cache] Card cache cleared");
     return true;
   } catch (error) {
@@ -247,7 +247,7 @@ export async function preCacheCards(
     return { cached: 0, failed: 0, skipped: 0 };
   }
 
-  const cache = await caches.open("realms-cards-v1");
+  const cache = await caches.open("realms-cards-v3");
   let cached = 0;
   let failed = 0;
   let skipped = 0;

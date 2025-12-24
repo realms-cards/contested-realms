@@ -30,10 +30,6 @@ import {
   createImposterMaskSlice,
   createInitialImposterMasks,
 } from "./store/imposterMaskState";
-import {
-  createSpecialSiteSlice,
-  getEmptySpecialSiteState,
-} from "./store/specialSiteState";
 import { createInteractionSlice } from "./store/interactionState";
 import { createMagicSlice } from "./store/magicState";
 import { createMorganaSlice } from "./store/morganaState";
@@ -52,6 +48,10 @@ import {
   createSnapshotSlice,
   createEmptySnapshots,
 } from "./store/snapshotState";
+import {
+  createSpecialSiteSlice,
+  getEmptySpecialSiteState,
+} from "./store/specialSiteState";
 import {
   createTransportSlice,
   setTransportStateAccessor,

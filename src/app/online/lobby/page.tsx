@@ -1,7 +1,8 @@
 "use client";
 
+import { Trophy, ExternalLink, AlertCircle } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { useOnline } from "@/app/online/online-context";
 import LobbyChatConsole from "@/components/chat/LobbyChatConsole";
@@ -10,6 +11,7 @@ import LobbiesCentral from "@/components/online/LobbiesCentral";
 import MatchmakingPanel from "@/components/online/MatchmakingPanel";
 import OnlinePageShell from "@/components/online/OnlinePageShell";
 import PlayersInvitePanel from "@/components/online/PlayersInvitePanel";
+import { SoatcLeagueCheckbox } from "@/components/online/SoatcLeagueBadge";
 import ChangelogOverlay from "@/components/ui/ChangelogOverlay";
 import ManualOverlay from "@/components/ui/ManualOverlay";
 import PatreonMarquee from "@/components/ui/PatreonMarquee";
@@ -25,6 +27,10 @@ import {
   DEFAULT_SET,
   DEFAULT_DRAFTABLE_SETS,
 } from "@/lib/hooks/useAvailableSets";
+import {
+  useSharedTournament,
+  useSoatcStatus,
+} from "@/lib/hooks/useSoatcStatus";
 import type {
   TournamentInfo as ProtocolTournamentInfo,
   SealedConfig,
@@ -197,6 +203,7 @@ function LobbyPageContent({
   tournamentsApi?: TournamentsAPI;
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const {
     connected,
     lobby,
@@ -230,7 +237,17 @@ function LobbyPageContent({
     addCpuBot,
     removeCpuBot,
     voice,
+    transport,
   } = useOnline();
+
+  // Check for invite link params
+  const inviteLobbyId = searchParams?.get("invite") ?? null;
+  const inviteTournamentId = searchParams?.get("tournament") ?? null;
+  const [showIneligibleModal, setShowIneligibleModal] = useState(false);
+  const [ineligibleReason, setIneligibleReason] = useState<string>("");
+
+  // Get current user's SOATC status
+  const { status: myStatus, loading: myStatusLoading } = useSoatcStatus();
 
   // Tournaments API is provided by parent when the feature is enabled; otherwise undefined
   const tournamentsEnabled = !!tournamentsApi;
@@ -384,6 +401,7 @@ function LobbyPageContent({
     freeAvatars: false,
   }));
   const [sealedUseCube, setSealedUseCube] = useState(false);
+
   const [draftConfig, setDraftConfig] = useState<{
     setMix: string[];
     packCount: number;
@@ -782,6 +800,158 @@ function LobbyPageContent({
 
   const hasAtLeastTwoPlayers = !!lobby && lobby.players.length > 1;
 
+  // Get opponent ID for SOATC shared tournament check
+  const opponentId = useMemo(() => {
+    if (!lobby || !me?.id) return null;
+    const opponent = lobby.players.find((p) => p.id !== me.id);
+    return opponent?.id ?? null;
+  }, [lobby, me?.id]);
+
+  // Check if both players are in the same SOATC tournament
+  const { status: sharedTournament } = useSharedTournament(opponentId);
+
+  // Debug logging for SOATC shared tournament status
+  useEffect(() => {
+    if (opponentId) {
+      console.log("[SOATC] Shared tournament check:", {
+        opponentId,
+        sharedTournament,
+        joinedLobby,
+        hasTransport: !!transport,
+        lobbyLeagueMatch: lobby?.soatcLeagueMatch,
+      });
+    }
+  }, [
+    opponentId,
+    sharedTournament,
+    joinedLobby,
+    transport,
+    lobby?.soatcLeagueMatch,
+  ]);
+
+  // Auto-set league match on lobby when both players have auto-detect enabled
+  useEffect(() => {
+    if (
+      sharedTournament?.shared &&
+      sharedTournament?.bothAutoDetect &&
+      sharedTournament?.tournament &&
+      transport &&
+      joinedLobby &&
+      !lobby?.soatcLeagueMatch // Only set if not already set
+    ) {
+      console.log("[SOATC] Auto-setting league match:", {
+        tournamentId: sharedTournament.tournament.id,
+        tournamentName: sharedTournament.tournament.name,
+      });
+      transport.emit("setSoatcLeagueMatch", {
+        soatcLeagueMatch: {
+          isLeagueMatch: true,
+          tournamentId: sharedTournament.tournament.id,
+          tournamentName: sharedTournament.tournament.name,
+        },
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    sharedTournament?.shared,
+    sharedTournament?.bothAutoDetect,
+    sharedTournament?.tournament,
+    lobby?.soatcLeagueMatch,
+    joinedLobby,
+  ]);
+
+  // Handle invite link with SOATC tournament eligibility check
+  useEffect(() => {
+    // Wait for myStatus to finish loading before checking eligibility
+    if (
+      !inviteLobbyId ||
+      !inviteTournamentId ||
+      !connected ||
+      !me?.id ||
+      myStatusLoading
+    )
+      return;
+
+    // Check eligibility
+    const checkEligibility = async () => {
+      try {
+        // Check if user has SOATC UUID (only after status is loaded)
+        if (!myStatus?.soatcUuid) {
+          setIneligibleReason("no-uuid");
+          setShowIneligibleModal(true);
+          return;
+        }
+
+        // Check if user is registered in the tournament
+        const response = await fetch(
+          `/api/soatc/tournaments/${inviteTournamentId}/participants`
+        );
+        if (!response.ok) {
+          setIneligibleReason("tournament-check-failed");
+          setShowIneligibleModal(true);
+          return;
+        }
+
+        const data = await response.json();
+        const isParticipant = data.participants?.some(
+          (p: { id: string }) => p.id === myStatus.soatcUuid
+        );
+
+        if (!isParticipant) {
+          setIneligibleReason("not-registered");
+          setShowIneligibleModal(true);
+          return;
+        }
+
+        // Get tournament details to check format
+        const tournamentResponse = await fetch(
+          `/api/soatc/tournaments/${inviteTournamentId}`
+        );
+        if (tournamentResponse.ok) {
+          const tournamentData = await tournamentResponse.json();
+          const tournamentFormat = tournamentData.format?.toLowerCase();
+
+          // Check if lobby exists and has a planned match type
+          if (lobby && lobby.id === inviteLobbyId) {
+            const lobbyFormat = lobby.plannedMatchType?.toLowerCase();
+
+            // Validate format match if tournament has a specific format
+            if (
+              tournamentFormat &&
+              lobbyFormat &&
+              tournamentFormat !== lobbyFormat
+            ) {
+              setIneligibleReason(`format-mismatch:${tournamentFormat}`);
+              setShowIneligibleModal(true);
+              return;
+            }
+          }
+        }
+
+        // Eligible - join the lobby
+        if (!lobby || lobby.id !== inviteLobbyId) {
+          await joinLobby(inviteLobbyId);
+        }
+      } catch (error) {
+        console.error("Failed to check SOATC eligibility:", error);
+        setIneligibleReason("check-failed");
+        setShowIneligibleModal(true);
+      }
+    };
+
+    checkEligibility();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    inviteLobbyId,
+    inviteTournamentId,
+    connected,
+    me?.id,
+    myStatus?.soatcUuid,
+    myStatusLoading,
+    lobby?.id,
+    lobby?.plannedMatchType,
+  ]);
+
   // Determine if this client is rejoining an ongoing match (not used in simplified CTA)
 
   // Local flags: has deck been submitted for sealed/draft flows?
@@ -857,8 +1027,11 @@ function LobbyPageContent({
 
     autoStartAttemptedRef.current = true;
 
+    // Get SOATC league match info from lobby
+    const soatcPayload = lobby?.soatcLeagueMatch || null;
+
     if (matchType === "constructed" || matchType === "precon") {
-      startMatch({ matchType });
+      startMatch({ matchType, soatcLeagueMatch: soatcPayload });
       return;
     }
 
@@ -870,7 +1043,11 @@ function LobbyPageContent({
         ...draftConfig,
         setMix: activeSets.length ? activeSets : draftConfig.setMix,
       };
-      startMatch({ matchType: "draft", draftConfig: payload });
+      startMatch({
+        matchType: "draft",
+        draftConfig: payload,
+        soatcLeagueMatch: soatcPayload,
+      });
       return;
     }
 
@@ -894,7 +1071,11 @@ function LobbyPageContent({
       enableSeer: sealedConfig.enableSeer,
       freeAvatars: sealedConfig.freeAvatars,
     };
-    startMatch({ matchType: "sealed", sealedConfig: legacySealedConfig });
+    startMatch({
+      matchType: "sealed",
+      sealedConfig: legacySealedConfig,
+      soatcLeagueMatch: soatcPayload,
+    });
   }, [
     isHost,
     setupConfirmedOnce,
@@ -992,6 +1173,44 @@ function LobbyPageContent({
                 Leave Match
               </button>
             </div>
+          </div>
+        )}
+        {/* SOATC League Match indicator */}
+        {lobby?.soatcLeagueMatch?.isLeagueMatch && (
+          <div className="rounded-xl bg-gradient-to-r from-amber-900/40 to-amber-800/20 ring-1 ring-amber-500/40 p-4 flex items-center gap-3">
+            <Trophy className="w-5 h-5 text-amber-400 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-semibold text-amber-200">
+                SOATC League Match
+              </div>
+              <div className="text-xs text-amber-300/70 truncate">
+                {lobby.soatcLeagueMatch.tournamentName}
+              </div>
+            </div>
+            {lobby.players &&
+              lobby.players.length < (lobby.maxPlayers || 2) && (
+                <button
+                  className="rounded-lg bg-amber-600/20 hover:bg-amber-600/30 ring-1 ring-amber-500/50 px-3 py-1.5 text-xs font-medium text-amber-200 transition-colors shrink-0"
+                  onClick={() => {
+                    if (lobby?.soatcLeagueMatch?.tournamentId) {
+                      const inviteUrl = `${
+                        window.location.origin
+                      }/online/lobby?invite=${encodeURIComponent(
+                        lobby.id
+                      )}&tournament=${encodeURIComponent(
+                        lobby.soatcLeagueMatch.tournamentId
+                      )}`;
+                      navigator.clipboard.writeText(inviteUrl);
+                      alert(
+                        "Invite link copied! Share with tournament participants."
+                      );
+                    }
+                  }}
+                  title="Copy invite link for tournament participants"
+                >
+                  Copy Invite Link
+                </button>
+              )}
           </div>
         )}
         {/* Host-only match start/config controls, only when lobby is open, all players ready, and no active match exists */}
@@ -1099,6 +1318,7 @@ function LobbyPageContent({
               console.error("Failed to create lobby:", error);
               return;
             }
+
             setConfigOpen(true);
           }}
           onLeaveLobby={leaveLobby}
@@ -1223,6 +1443,7 @@ function LobbyPageContent({
           tournamentsEnabled={tournamentsEnabled}
           externalOverlayOpen={createMatchOverlayOpen}
           onExternalOverlayChange={setCreateMatchOverlayOpen}
+          soatcStatus={myStatus}
           onRefresh={async () => {
             try {
               await requestLobbies();
@@ -1340,6 +1561,136 @@ function LobbyPageContent({
                 </button>
               </div>
               <div className="mt-3 space-y-4">
+                {/* Tournament Match Mode - show if player is in a SOATC tournament matching the selected game type */}
+                {(() => {
+                  // Filter tournaments by selected match type
+                  const matchingTournaments =
+                    myStatus?.tournaments?.filter(
+                      (t) => t.gameType?.toLowerCase() === matchType
+                    ) || [];
+
+                  if (matchingTournaments.length === 0) return null;
+
+                  // Use first matching tournament or selected one
+                  const selectedTournament = matchingTournaments[0];
+                  const isTournamentMode =
+                    lobby?.soatcLeagueMatch?.isLeagueMatch === true;
+
+                  return (
+                    <div className="p-3 rounded-lg bg-amber-900/20 ring-1 ring-amber-500/30">
+                      <label className="flex items-start gap-3 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={isTournamentMode}
+                          onChange={(e) => {
+                            if (transport && selectedTournament) {
+                              if (e.target.checked) {
+                                // Set the SOATC league match flag
+                                transport.emit("setSoatcLeagueMatch", {
+                                  soatcLeagueMatch: {
+                                    isLeagueMatch: true,
+                                    tournamentId: selectedTournament.id,
+                                    tournamentName: selectedTournament.name,
+                                  },
+                                });
+                                // Also set visibility to tournament
+                                if (setLobbyVisibility) {
+                                  setLobbyVisibility("tournament");
+                                }
+                              } else {
+                                // Clear the SOATC league match flag
+                                transport.emit("setSoatcLeagueMatch", {
+                                  soatcLeagueMatch: null,
+                                });
+                                if (setLobbyVisibility) {
+                                  setLobbyVisibility("open");
+                                }
+                              }
+                            }
+                          }}
+                          className="mt-0.5 rounded"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 text-sm font-semibold text-amber-200">
+                            <Trophy className="w-4 h-4 shrink-0" />
+                            <span>Tournament Match</span>
+                          </div>
+                          <div className="text-xs text-amber-300/80 mt-1">
+                            {selectedTournament.name}
+                          </div>
+                          <div className="text-xs text-amber-300/60 mt-0.5 flex items-center gap-2">
+                            <span>Invite-only • Spectators enabled</span>
+                            {selectedTournament.playersCount && (
+                              <span className="text-amber-400/70">
+                                • {selectedTournament.playersCount} players
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </label>
+
+                      {/* Tournament Invite Link - show when tournament mode is enabled */}
+                      {isTournamentMode && lobby && (
+                        <div className="mt-3 pt-3 border-t border-amber-500/20">
+                          <label className="block text-xs font-medium mb-2 text-amber-200">
+                            Tournament Invite Link
+                          </label>
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              readOnly
+                              value={`${window.location.origin}/online/lobby?invite=${lobby.id}&tournament=${selectedTournament.id}`}
+                              className="flex-1 bg-slate-900/60 ring-1 ring-amber-500/30 rounded px-2 py-1.5 text-xs font-mono text-slate-200"
+                            />
+                            <button
+                              className="rounded-lg bg-amber-600/20 hover:bg-amber-600/30 ring-1 ring-amber-500/50 px-3 py-1.5 text-xs font-medium text-amber-200 transition-colors"
+                              onClick={() => {
+                                const inviteUrl = `${
+                                  window.location.origin
+                                }/online/lobby?invite=${encodeURIComponent(
+                                  lobby.id
+                                )}&tournament=${encodeURIComponent(
+                                  selectedTournament.id
+                                )}`;
+                                navigator.clipboard.writeText(inviteUrl);
+                                alert("Invite link copied!");
+                              }}
+                            >
+                              Copy
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* Open Lobby section - applies to all lobbies */}
+                {lobby && !lobby.hostReady && (
+                  <div className="rounded-lg bg-slate-800/50 ring-1 ring-slate-700 p-3">
+                    <p className="text-xs text-slate-300 mb-2">
+                      Other players cannot join until you open the lobby.
+                    </p>
+                    <button
+                      className="w-full rounded-lg bg-emerald-600/80 hover:bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors"
+                      onClick={() => {
+                        if (transport?.openLobby) {
+                          transport.openLobby();
+                        }
+                      }}
+                    >
+                      Open Lobby for Players
+                    </button>
+                  </div>
+                )}
+                {lobby && lobby.hostReady && (
+                  <div className="rounded-lg bg-emerald-900/30 ring-1 ring-emerald-700/50 p-3">
+                    <p className="text-xs text-emerald-400">
+                      ✓ Lobby is open - waiting for players to join
+                    </p>
+                  </div>
+                )}
+
                 <div>
                   <label className="block text-xs font-medium mb-2">
                     Match Type
@@ -1974,6 +2325,34 @@ function LobbyPageContent({
                     </label>
                   </>
                 )}
+
+                {/* SOATC League Match option - show when both players are in same tournament */}
+                {sharedTournament?.shared && (
+                  <div className="mt-4 pt-4 border-t border-slate-700">
+                    <SoatcLeagueCheckbox
+                      checked={!!lobby?.soatcLeagueMatch?.isLeagueMatch}
+                      onChange={(checked) => {
+                        if (
+                          transport &&
+                          joinedLobby &&
+                          sharedTournament?.tournament
+                        ) {
+                          transport.emit("setSoatcLeagueMatch", {
+                            soatcLeagueMatch: checked
+                              ? {
+                                  isLeagueMatch: true,
+                                  tournamentId: sharedTournament.tournament.id,
+                                  tournamentName:
+                                    sharedTournament.tournament.name,
+                                }
+                              : null,
+                          });
+                        }
+                      }}
+                      tournamentName={sharedTournament.tournament?.name}
+                    />
+                  </div>
+                )}
               </div>
               <div className="mt-5 flex items-center justify-between">
                 <div className="text-xs opacity-70 truncate">
@@ -1998,8 +2377,14 @@ function LobbyPageContent({
                         return;
                       }
 
+                      // Use lobby's soatcLeagueMatch flag (set via auto-detect or manually)
+                      const soatcPayload = lobby?.soatcLeagueMatch || null;
+
                       if (matchType === "constructed") {
-                        startMatch({ matchType: "constructed" });
+                        startMatch({
+                          matchType: "constructed",
+                          soatcLeagueMatch: soatcPayload,
+                        });
                         setConfigOpen(false);
                         return;
                       }
@@ -2033,6 +2418,7 @@ function LobbyPageContent({
                         startMatch({
                           matchType: "draft",
                           draftConfig: payload,
+                          soatcLeagueMatch: soatcPayload,
                         });
                         setConfigOpen(false);
                         return;
@@ -2061,6 +2447,7 @@ function LobbyPageContent({
                         startMatch({
                           matchType: "sealed",
                           sealedConfig: cubeSealedConfig,
+                          soatcLeagueMatch: soatcPayload,
                         });
                         setConfigOpen(false);
                         return;
@@ -2097,6 +2484,7 @@ function LobbyPageContent({
                       startMatch({
                         matchType: "sealed",
                         sealedConfig: legacySealedConfig,
+                        soatcLeagueMatch: soatcPayload,
                       });
                       setConfigOpen(false);
                     }}
@@ -2194,6 +2582,87 @@ function LobbyPageContent({
             dismissInvite(inv.lobbyId, inv.from.id);
           }}
         />
+      )}
+
+      {/* SOATC Tournament Invite Ineligibility Modal */}
+      {showIneligibleModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 rounded-xl ring-1 ring-slate-700 max-w-md w-full p-6 shadow-2xl">
+            <div className="flex items-start gap-3 mb-4">
+              <AlertCircle className="w-6 h-6 text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <h3 className="text-lg font-semibold text-slate-100 mb-2">
+                  Sorcerers at the Core Tournament Match
+                </h3>
+                <p className="text-sm text-slate-300 leading-relaxed">
+                  {ineligibleReason === "no-uuid" && (
+                    <>
+                      You need to link your Sorcerers at the Core account to
+                      join this tournament match. Please add your UUID in
+                      settings (the long string at the end of your profile page
+                      URL).
+                    </>
+                  )}
+                  {ineligibleReason === "not-registered" && (
+                    <>
+                      You are not registered for this tournament. Please
+                      register at sorcerersatthecore.com first.
+                    </>
+                  )}
+                  {ineligibleReason?.startsWith("format-mismatch:") && (
+                    <>
+                      This match format doesn&apos;t match the tournament
+                      format. This tournament requires{" "}
+                      <strong className="text-amber-300">
+                        {ineligibleReason.split(":")[1]}
+                      </strong>{" "}
+                      format matches.
+                    </>
+                  )}
+                  {(ineligibleReason === "tournament-check-failed" ||
+                    ineligibleReason === "check-failed") && (
+                    <>
+                      Failed to verify your tournament registration. Please
+                      check your connection and try again.
+                    </>
+                  )}
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end mt-6">
+              {ineligibleReason === "no-uuid" && (
+                <Link
+                  href="/settings/soatc"
+                  className="rounded-lg bg-amber-600 hover:bg-amber-700 px-4 py-2 text-sm font-medium transition-colors inline-flex items-center gap-2"
+                  onClick={() => setShowIneligibleModal(false)}
+                >
+                  Go to Sorcerers at the Core Settings
+                  <ExternalLink className="w-4 h-4" />
+                </Link>
+              )}
+              {ineligibleReason === "not-registered" && (
+                <a
+                  href="https://sorcerersatthecore.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-lg bg-amber-600 hover:bg-amber-700 px-4 py-2 text-sm font-medium transition-colors inline-flex items-center gap-2"
+                >
+                  Visit SOATC
+                  <ExternalLink className="w-4 h-4" />
+                </a>
+              )}
+              <button
+                onClick={() => {
+                  setShowIneligibleModal(false);
+                  router.push("/online/lobby");
+                }}
+                className="rounded-lg bg-slate-700 hover:bg-slate-600 px-4 py-2 text-sm font-medium transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </OnlinePageShell>
   );

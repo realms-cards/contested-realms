@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { getServerAuthSession } from "@/lib/auth";
+import { invalidateCache, CacheKeys } from "@/lib/cache/redis-cache";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -160,6 +161,8 @@ export async function POST(req: NextRequest) {
             { status: 400 }
           );
         }
+        // Invalidate deck list cache for this user
+        await invalidateCache(CacheKeys.decks.list(session.user.id));
         return new Response(
           JSON.stringify({
             id: importResult.deck.id,
@@ -350,6 +353,9 @@ export async function POST(req: NextRequest) {
       await prisma.deckCard.createMany({ data: createRows });
     }
 
+    // Invalidate deck list cache for this user
+    await invalidateCache(CacheKeys.decks.list(session.user.id));
+
     return new Response(
       JSON.stringify({ id: deck.id, name: deck.name, format: deck.format }),
       { status: 201, headers: { "content-type": "application/json" } }
@@ -379,34 +385,54 @@ function extractDeckId(urlOrId: string): string | null {
   }
 }
 
+// Fetch with timeout helper
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit = {},
+  timeoutMs = 10000
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { ...options, signal: controller.signal });
+    return res;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+// Try multiple URLs in parallel, return first successful JSON response
 async function fetchFirstJson(urls: string[]): Promise<JSONValue | null> {
-  const tried = new Set<string>();
-  for (const url of urls) {
-    const u = String(url);
-    if (!u || tried.has(u)) continue;
-    tried.add(u);
-    try {
-      const res = await fetch(u, {
-        cache: "no-store",
-        headers: {
-          Accept: "application/json, text/plain, */*",
+  const uniqueUrls = [...new Set(urls.filter(Boolean))];
+  if (uniqueUrls.length === 0) return null;
+
+  // Try all URLs in parallel with individual timeouts
+  const results = await Promise.allSettled(
+    uniqueUrls.map(async (url) => {
+      const res = await fetchWithTimeout(
+        url,
+        {
+          cache: "no-store",
+          headers: {
+            Accept: "application/json, text/plain, */*",
+          },
         },
-      });
-      if (!res.ok) continue;
+        8000 // 8 second timeout per URL
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const ct = res.headers.get("content-type") || "";
       if (!ct.includes("json")) {
-        // Try to parse anyway
         const txt = await res.text();
-        try {
-          return JSON.parse(txt) as JSONValue;
-        } catch {
-          continue;
-        }
-      } else {
-        return (await res.json()) as JSONValue;
+        return JSON.parse(txt) as JSONValue;
       }
-    } catch {
-      // try next
+      return (await res.json()) as JSONValue;
+    })
+  );
+
+  // Return first successful result
+  for (const result of results) {
+    if (result.status === "fulfilled" && result.value) {
+      return result.value;
     }
   }
   return null;
@@ -717,25 +743,28 @@ async function fetchCuriosatrpc(
   };
 
   try {
-    // Fetch deck list, sideboard, and deck metadata in parallel
+    // Fetch deck list, sideboard, and deck metadata in parallel with timeout
     const [listRes, sideboardRes, metaRes] = await Promise.all([
-      fetch(
+      fetchWithTimeout(
         `https://curiosa.io/api/trpc/deck.getDecklistById?input=${encodeURIComponent(
           input
         )}`,
-        { cache: "no-store", headers }
+        { cache: "no-store", headers },
+        10000 // 10 second timeout
       ),
-      fetch(
+      fetchWithTimeout(
         `https://curiosa.io/api/trpc/deck.getSideboardById?input=${encodeURIComponent(
           input
         )}`,
-        { cache: "no-store", headers }
+        { cache: "no-store", headers },
+        10000
       ),
-      fetch(
+      fetchWithTimeout(
         `https://curiosa.io/api/trpc/deck.getById?input=${encodeURIComponent(
           input
         )}`,
-        { cache: "no-store", headers }
+        { cache: "no-store", headers },
+        10000
       ),
     ]);
 

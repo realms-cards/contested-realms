@@ -2,15 +2,29 @@
 
 /**
  * Build recording summaries from finished MatchResult rows and fallback OnlineMatchSession rows.
- * Returns: Array<{ matchId, playerNames, startTime, endTime?, duration?, actionCount, matchType, playerIds }>
+ * Returns: { recordings: Array<{ matchId, playerNames, startTime, endTime?, duration?, actionCount, matchType, playerIds }>, hasMore: boolean, nextCursor?: string }
+ *
+ * Options:
+ *  - limit: Number of results per page (default: 50, max: 200)
+ *  - cursor: Pagination cursor (ISO timestamp)
+ *  - playerId: Filter to matches with this player ID
+ *  - includeOwn: When true and playerId set, show only matches with this player
  */
 async function listRecordings(prisma, opts = {}) {
-  const limit = Number(opts.limit) || 200;
+  const limit = Math.min(Number(opts.limit) || 50, 200);
+  const cursor = opts.cursor ? new Date(opts.cursor) : null;
+  const playerId = opts.playerId || null;
 
   // Finished matches first (prefer authoritative summary)
+  const whereClause = {};
+  if (cursor) {
+    whereClause.completedAt = { lt: cursor };
+  }
+
   const results = await prisma.matchResult.findMany({
+    where: whereClause,
     orderBy: { completedAt: "desc" },
-    take: limit,
+    take: limit + 1,
   });
   const finishedIds = results.map((r) => r.matchId);
 
@@ -74,13 +88,18 @@ async function listRecordings(prisma, opts = {}) {
   });
 
   // Fallback: sessions that are in progress or ended, without a MatchResult row
+  const fallbackWhere = {
+    status: { in: ["in_progress", "ended"] },
+    id: { notIn: finishedIds },
+  };
+  if (cursor) {
+    fallbackWhere.updatedAt = { lt: cursor };
+  }
+
   const fallbackSessions = await prisma.onlineMatchSession.findMany({
-    where: {
-      status: { in: ["in_progress", "ended"] },
-      id: { notIn: finishedIds },
-    },
+    where: fallbackWhere,
     orderBy: { updatedAt: "desc" },
-    take: limit,
+    take: limit + 1,
   });
 
   // Resolve display names for fallback sessions in a single query
@@ -153,7 +172,29 @@ async function listRecordings(prisma, opts = {}) {
     return bt - at;
   });
 
-  return multiplayerOnly;
+  // Filter by playerId if requested
+  let filtered = multiplayerOnly;
+  if (playerId) {
+    filtered = multiplayerOnly.filter((r) =>
+      (r.playerIds || []).includes(playerId)
+    );
+  }
+
+  // Check if there are more results
+  const hasMore = filtered.length > limit;
+  const recordings = hasMore ? filtered.slice(0, limit) : filtered;
+
+  // Generate next cursor from the last item's timestamp
+  let nextCursor = undefined;
+  if (hasMore && recordings.length > 0) {
+    const lastItem = recordings[recordings.length - 1];
+    const lastTime = lastItem.endTime || lastItem.startTime;
+    if (lastTime) {
+      nextCursor = new Date(lastTime).toISOString();
+    }
+  }
+
+  return { recordings, hasMore, nextCursor };
 }
 
 /**
@@ -258,43 +299,6 @@ function findSetupStartIndex(actions) {
 
 module.exports = { listRecordings, loadRecording };
 
-// ---------------- Retention policy (optional enhancement) -----------------
-
-function setupReplayRetentionPruner(prisma, options = {}) {
-  const days = Number(process.env.REPLAY_RETENTION_DAYS || options.days || 14);
-  if (!Number.isFinite(days) || days <= 0) return;
-  const intervalMs = 24 * 60 * 60 * 1000; // daily
-
-  async function pruneOnce() {
-    try {
-      const thresholdDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-      // Find completed matches older than threshold
-      const oldResults = await prisma.matchResult.findMany({
-        where: { completedAt: { lt: thresholdDate } },
-        select: { matchId: true },
-      });
-      const ids = oldResults.map((r) => r.matchId);
-      if (!ids.length) return;
-
-      // Delete actions for those matchIds
-      await prisma.onlineMatchAction.deleteMany({
-        where: { matchId: { in: ids } },
-      });
-      // Optionally delete session rows that are stale
-      await prisma.onlineMatchSession.deleteMany({
-        where: { id: { in: ids }, updatedAt: { lt: thresholdDate } },
-      });
-    } catch (e) {
-      try {
-        console.warn("[replay] retention prune failed:", e?.message || e);
-      } catch {}
-    }
-  }
-
-  // Initial delayed run to avoid startup thundering herd
-  setTimeout(pruneOnce, 10_000);
-  // Schedule daily
-  setInterval(pruneOnce, intervalMs).unref?.();
-}
-
-module.exports.setupReplayRetentionPruner = setupReplayRetentionPruner;
+// ---------------- Retention policy disabled - keeping replays indefinitely -----------------
+// The retention pruner has been removed. Replays are now kept permanently.
+// To implement custom cleanup, use database maintenance scripts or admin tools.

@@ -57,6 +57,16 @@ export const GENESIS_MANA_SITES: Record<string, number> = {
   "ghost town": 1, // Genesis → Gain (1) this turn
 };
 
+// Tower sites that provide +1 mana on genesis if you control only one copy
+// "Dark Tower", "Lone Tower", "Gothic Tower", "Accursed Tower"
+// Genesis → If you control only one [Tower Name], gain (1) this turn.
+export const TOWER_GENESIS_SITES = new Set<string>([
+  "dark tower",
+  "lone tower",
+  "gothic tower",
+  "accursed tower",
+]);
+
 // Sites with conditional threshold based on nearby units/state
 // These need special runtime checks
 export const CONDITIONAL_THRESHOLD_SITES = {
@@ -114,6 +124,23 @@ export const BACK_ROW_ONLY_SITES = new Set<string>([
   "joyous garde",
   "tintagel",
 ]);
+
+// Multi-threshold sites - sites that provide multiple element thresholds
+// These override the standard single-threshold calculation
+export const MULTI_THRESHOLD_SITES: Record<
+  string,
+  Partial<{ air: number; water: number; earth: number; fire: number }>
+> = {
+  // Arthurian back-row sites (only work in back row - checked via BACK_ROW_ONLY_SITES)
+  tintagel: { air: 1, earth: 1, water: 1 }, // (A)(E)(W)
+  "caerleon-upon-usk": { earth: 1, fire: 1, water: 1 }, // (E)(F)(W)
+  "glastonbury tor": { air: 1, earth: 1, fire: 1 }, // (A)(E)(F)
+  "joyous garde": { air: 1, fire: 1, water: 1 }, // (A)(F)(W)
+  // Avalon provides all 4 elements to everyone (also in SHARED_MANA_SITES)
+  avalon: { air: 1, earth: 1, fire: 1, water: 1 }, // (A)(E)(F)(W)
+  // Colour Out of Space - provides all 4 elements when adjacent to void (conditional check applied first)
+  "the colour out of space": { air: 1, earth: 1, fire: 1, water: 1 }, // (A)(E)(F)(W)
+};
 
 // Sites with conditional mana based on board state (need special handling).
 // These MUST pass their condition check to provide mana/threshold.

@@ -2,7 +2,9 @@
 
 import { Trophy, Skull, Users } from "lucide-react";
 import { createPortal } from "react-dom";
+import { SoatcLeagueResultCard } from "@/components/game/SoatcLeagueResultCard";
 import type { PlayerKey } from "@/lib/game/store";
+import type { LeagueMatchResult } from "@/lib/soatc/types";
 
 interface MatchEndOverlayProps {
   isVisible: boolean;
@@ -18,6 +20,7 @@ interface MatchEndOverlayProps {
   winnerId?: string | null;
   myPlayerId?: string | null;
   rated?: boolean;
+  soatcLeagueResult?: LeagueMatchResult | null;
 }
 
 export default function MatchEndOverlay({
@@ -34,6 +37,7 @@ export default function MatchEndOverlay({
   winnerId,
   myPlayerId,
   rated,
+  soatcLeagueResult,
 }: MatchEndOverlayProps) {
   if (!isVisible) return null;
 
@@ -254,6 +258,16 @@ export default function MatchEndOverlay({
                 </span>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* SOATC League Result Card */}
+        {soatcLeagueResult && (
+          <div className="mb-6">
+            <SoatcLeagueResultCard
+              result={soatcLeagueResult}
+              isWinner={didIWin}
+            />
           </div>
         )}
 

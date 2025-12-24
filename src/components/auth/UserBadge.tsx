@@ -80,6 +80,7 @@ export default function UserBadge({
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteInProgress, setDeleteInProgress] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [soatcLinked, setSoatcLinked] = useState<boolean | null>(null);
 
   const SPINNER_CHARS = ["✦", "❊", "✤", "❀", "❇︎"] as const;
   const [spinnerIndex, setSpinnerIndex] = useState(0);
@@ -248,6 +249,30 @@ export default function UserBadge({
 
     void loadProfile();
 
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
+
+  // Load SOATC linked status
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    const loadSoatcStatus = async () => {
+      try {
+        const res = await fetch("/api/users/me/presence", {
+          cache: "no-store",
+        });
+        if (!res.ok || cancelled) return;
+        const data = (await res.json()) as { soatcUuid?: string | null };
+        if (!cancelled) {
+          setSoatcLinked(Boolean(data.soatcUuid));
+        }
+      } catch {
+        // Ignore errors
+      }
+    };
+    void loadSoatcStatus();
     return () => {
       cancelled = true;
     };
@@ -883,6 +908,28 @@ export default function UserBadge({
               </div>
               {/* Card Image Cache section */}
               <CacheSettingsSection />
+              {/* SOATC League section */}
+              <div className="mt-2 pt-3 border-t border-slate-700/50">
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleCloseSettings();
+                    router.push("/settings/soatc");
+                  }}
+                  className="w-full flex items-center justify-between gap-2 h-10 px-4 rounded-lg bg-gradient-to-r from-amber-900/30 to-amber-800/20 ring-1 ring-amber-500/30 text-sm font-medium text-amber-100 hover:from-amber-900/40 hover:to-amber-800/30 transition-all"
+                >
+                  <span>Sorcerers at the Core</span>
+                  {soatcLinked ? (
+                    <span className="text-[10px] text-emerald-400">
+                      Account linked ✓
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-amber-300/70">
+                      Link your account
+                    </span>
+                  )}
+                </button>
+              </div>
               {/* Patron Perks section */}
               <div className="mt-2 pt-3 border-t border-slate-700/50">
                 <div className="flex items-center gap-2 mb-2">

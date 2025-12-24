@@ -503,11 +503,12 @@ export default function CardbackSettingsPage() {
       const p = pointerToSpellbookCanvas(e);
       const dx = p.x - spellbookDragStartRef.current.x;
       const dy = p.y - spellbookDragStartRef.current.y;
+      const dragStart = spellbookDragStartRef.current;
       setSpellbookEditor((prev) => ({
         ...prev,
         offset: {
-          x: spellbookDragStartRef.current!.ox + dx,
-          y: spellbookDragStartRef.current!.oy + dy,
+          x: dragStart.ox + dx,
+          y: dragStart.oy + dy,
         },
       }));
     },
@@ -582,11 +583,12 @@ export default function CardbackSettingsPage() {
       const p = pointerToAtlasCanvas(e);
       const dx = p.x - atlasDragStartRef.current.x;
       const dy = p.y - atlasDragStartRef.current.y;
+      const dragStart = atlasDragStartRef.current;
       setAtlasEditor((prev) => ({
         ...prev,
         offset: {
-          x: atlasDragStartRef.current!.ox + dx,
-          y: atlasDragStartRef.current!.oy + dy,
+          x: dragStart.ox + dx,
+          y: dragStart.oy + dy,
         },
       }));
     },
@@ -1029,25 +1031,23 @@ export default function CardbackSettingsPage() {
                   No custom sleeves uploaded yet.
                 </div>
               ) : (
-                <>
-                  <div className="mt-3 space-y-2">
-                    {cardbacks.map((c) => (
-                      <div
-                        key={c.id}
-                        className="flex items-center gap-2 px-3 py-2 rounded bg-white/5 ring-1 ring-white/10"
+                <div className="mt-3 space-y-2">
+                  {cardbacks.map((c) => (
+                    <div
+                      key={c.id}
+                      className="flex items-center gap-2 px-3 py-2 rounded bg-white/5 ring-1 ring-white/10"
+                    >
+                      <div className="flex-1 text-sm truncate">{c.name}</div>
+                      <button
+                        type="button"
+                        onClick={() => void deleteCardback(c.id)}
+                        className="px-3 py-1 rounded bg-rose-500/15 text-rose-200 hover:bg-rose-500/25 ring-1 ring-rose-500/20 text-xs"
                       >
-                        <div className="flex-1 text-sm truncate">{c.name}</div>
-                        <button
-                          type="button"
-                          onClick={() => void deleteCardback(c.id)}
-                          className="px-3 py-1 rounded bg-rose-500/15 text-rose-200 hover:bg-rose-500/25 ring-1 ring-rose-500/20 text-xs"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </>
+                        Delete
+                      </button>
+                    </div>
+                  ))}
+                </div>
               )}
 
               {uploadError && (

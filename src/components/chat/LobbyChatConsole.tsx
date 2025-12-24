@@ -231,6 +231,12 @@ export default function LobbyChatConsole({
                 const patronStyle = patronTier
                   ? PATRON_COLORS[patronTier]
                   : null;
+                const timeStr = m.ts
+                  ? new Date(m.ts).toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })
+                  : null;
                 return (
                   <div
                     key={`${m.scope}-${i}-${m.from?.id ?? "system"}`}
@@ -238,17 +244,26 @@ export default function LobbyChatConsole({
                       isMine ? "text-slate-50" : "text-slate-100"
                     }`}
                   >
-                    <span
-                      className={`font-medium ${patronStyle?.text ?? ""}`}
-                      style={
-                        patronStyle
-                          ? { textShadow: patronStyle.textShadowMinimal }
-                          : undefined
-                      }
-                    >
-                      {fromName}
-                    </span>
-                    : {m.content}
+                    <div className="flex flex-col">
+                      <div>
+                        <span
+                          className={`font-medium ${patronStyle?.text ?? ""}`}
+                          style={
+                            patronStyle
+                              ? { textShadow: patronStyle.textShadowMinimal }
+                              : undefined
+                          }
+                        >
+                          {fromName}
+                        </span>
+                        {timeStr && (
+                          <span className="text-[9px] text-slate-400 ml-1.5">
+                            {timeStr}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-slate-200">{m.content}</div>
+                    </div>
                   </div>
                 );
               })}

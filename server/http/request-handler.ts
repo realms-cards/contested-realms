@@ -225,6 +225,12 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
       if (pathname === "/players/available" && method === "GET") {
         allowCors(res, reqOrigin);
 
+        // Guard: track if response was aborted
+        let aborted = false;
+        req.on("close", () => {
+          if (!res.writableEnded) aborted = true;
+        });
+
         const qRaw = (u.searchParams.get("q") || "").trim().toLowerCase();
         const sortParam = (
           u.searchParams.get("sort") || "recent"
@@ -484,6 +490,9 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
         const nextCursor =
           offset + limit < total ? String(offset + limit) : null;
 
+        // Guard against writing to closed connection
+        if (aborted || res.writableEnded) return;
+
         res.statusCode = 200;
         res.setHeader("Content-Type", "application/json");
         res.end(JSON.stringify({ items: page, nextCursor }));
@@ -702,8 +711,10 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
             try {
               metricsInc("http.tournament.broadcast.ok", 1);
             } catch {}
-            res.writeHead(200, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ success: true }));
+            if (!res.writableEnded) {
+              res.writeHead(200, { "Content-Type": "application/json" });
+              res.end(JSON.stringify({ success: true }));
+            }
           } catch (err) {
             console.error(
               "[Tournament] Broadcast error:",
@@ -712,13 +723,15 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
             try {
               metricsInc("http.tournament.broadcast.error", 1);
             } catch {}
-            res.writeHead(400, { "Content-Type": "application/json" });
-            res.end(
-              JSON.stringify({
-                error: "Invalid request",
-                details: String(safeErrorMessage(err)),
-              })
-            );
+            if (!res.writableEnded) {
+              res.writeHead(400, { "Content-Type": "application/json" });
+              res.end(
+                JSON.stringify({
+                  error: "Invalid request",
+                  details: String(safeErrorMessage(err)),
+                })
+              );
+            }
           }
         });
 
@@ -819,19 +832,25 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
           // Sort by most recent first
           activeMatches.sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));
 
-          res.statusCode = 200;
-          res.setHeader("Content-Type", "application/json");
-          res.end(
-            JSON.stringify({
-              matches: activeMatches,
-              total: activeMatches.length,
-            })
-          );
+          if (!res.writableEnded) {
+            res.statusCode = 200;
+            res.setHeader("Content-Type", "application/json");
+            res.end(
+              JSON.stringify({
+                matches: activeMatches,
+                total: activeMatches.length,
+              })
+            );
+          }
         } catch (err) {
           console.error("[http] /matches/active error:", safeErrorMessage(err));
-          res.statusCode = 500;
-          res.setHeader("Content-Type", "application/json");
-          res.end(JSON.stringify({ error: "Failed to fetch active matches" }));
+          if (!res.writableEnded) {
+            res.statusCode = 500;
+            res.setHeader("Content-Type", "application/json");
+            res.end(
+              JSON.stringify({ error: "Failed to fetch active matches" })
+            );
+          }
         }
         return;
       }
@@ -946,17 +965,21 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
               }`
             );
 
-            res.statusCode = 200;
-            res.setHeader("Content-Type", "application/json");
-            res.end(JSON.stringify({ success: true, matchId }));
+            if (!res.writableEnded) {
+              res.statusCode = 200;
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ success: true, matchId }));
+            }
           } catch (err) {
             console.error(
               "[http] /matches/cleanup error:",
               safeErrorMessage(err)
             );
-            res.statusCode = 500;
-            res.setHeader("Content-Type", "application/json");
-            res.end(JSON.stringify({ error: "Failed to cleanup match" }));
+            if (!res.writableEnded) {
+              res.statusCode = 500;
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ error: "Failed to cleanup match" }));
+            }
           }
         });
         return;

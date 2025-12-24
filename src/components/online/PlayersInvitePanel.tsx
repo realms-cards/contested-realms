@@ -2,6 +2,8 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { AvailablePlayer } from "@/app/online/online-context";
+import { SoatcLeagueBadge } from "@/components/online/SoatcLeagueBadge";
+import { useSoatcPlayers } from "@/lib/hooks/useSoatcStatus";
 import type { LobbyInfo, PlayerInfo } from "@/lib/net/protocol";
 import { fetchPatrons, PATRON_COLORS, type PatronData } from "@/lib/patrons";
 
@@ -53,6 +55,12 @@ export default function PlayersInvitePanel({
     () => new Set()
   );
   const [patrons, setPatrons] = useState<PatronData | null>(null);
+
+  // Get user IDs for SOATC status check
+  const playerUserIds = useMemo(() => {
+    return available.map((p) => p.userId);
+  }, [available]);
+  const { players: soatcPlayers } = useSoatcPlayers(playerUserIds);
 
   useEffect(() => {
     fetchPatrons().then(setPatrons);
@@ -483,6 +491,15 @@ export default function PlayersInvitePanel({
                           >
                             {p.displayName}
                           </span>
+                          {/* SOATC participant badge */}
+                          {soatcPlayers[p.userId]?.isParticipant && (
+                            <SoatcLeagueBadge
+                              compact
+                              tournamentName={
+                                soatcPlayers[p.userId]?.tournamentName
+                              }
+                            />
+                          )}
                           {/* Location badge */}
                           {p.presence.location &&
                             p.presence.location !== "lobby" && (

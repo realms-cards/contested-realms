@@ -23,11 +23,15 @@ export default function ReplayListPage() {
   const router = useRouter();
   const [recordings, setRecordings] = useState<MatchRecordingSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [transport, setTransport] = useState<SocketTransport | null>(null);
   const [connected, setConnected] = useState(false);
   const [socketReady, setSocketReady] = useState(false);
   const [currentPlayerId, setCurrentPlayerId] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [showOwnOnly, setShowOwnOnly] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { data: session } = useSession();
 
@@ -148,18 +152,60 @@ export default function ReplayListPage() {
     if (!socketReady || !transport) return;
 
     const handleRecordings = (payload: unknown) => {
-      const data = payload as { recordings: MatchRecordingSummary[] };
+      const data = payload as {
+        recordings: MatchRecordingSummary[];
+        hasMore: boolean;
+        nextCursor?: string;
+      };
       setRecordings(data.recordings);
+      setHasMore(data.hasMore || false);
+      setNextCursor(data.nextCursor || null);
       setLoading(false);
     };
 
     transport.onGeneric("matchRecordingsResponse", handleRecordings);
-    transport.emit("getMatchRecordings");
+
+    // Request recordings with optional playerId filter
+    const payload: { limit?: number; playerId?: string } = { limit: 50 };
+    if (showOwnOnly && currentPlayerId) {
+      payload.playerId = currentPlayerId;
+    }
+    transport.emit("getMatchRecordings", payload);
 
     return () => {
       transport.offGeneric("matchRecordingsResponse", handleRecordings);
     };
-  }, [socketReady, transport]);
+  }, [socketReady, transport, showOwnOnly, currentPlayerId]);
+
+  const loadMore = () => {
+    if (!transport || !nextCursor || loadingMore) return;
+
+    setLoadingMore(true);
+
+    const handleMoreRecordings = (payload: unknown) => {
+      const data = payload as {
+        recordings: MatchRecordingSummary[];
+        hasMore: boolean;
+        nextCursor?: string;
+      };
+      setRecordings((prev) => [...prev, ...data.recordings]);
+      setHasMore(data.hasMore || false);
+      setNextCursor(data.nextCursor || null);
+      setLoadingMore(false);
+      transport.offGeneric("matchRecordingsResponse", handleMoreRecordings);
+    };
+
+    transport.onGeneric("matchRecordingsResponse", handleMoreRecordings);
+
+    const payload: { limit?: number; cursor?: string; playerId?: string } = {
+      limit: 50,
+      cursor: nextCursor,
+    };
+    if (showOwnOnly && currentPlayerId) {
+      payload.playerId = currentPlayerId;
+    }
+    transport.emit("getMatchRecordings", payload);
+  };
 
   const formatDuration = (ms: number) => {
     const minutes = Math.floor(ms / 60000);
@@ -241,6 +287,29 @@ export default function ReplayListPage() {
           )}
         </div>
 
+        {/* Filter Section */}
+        {currentPlayerId && (
+          <div className="rounded-xl bg-slate-950/60 ring-1 ring-slate-900/70 p-4">
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showOwnOnly}
+                onChange={(e) => {
+                  setShowOwnOnly(e.target.checked);
+                  setRecordings([]);
+                  setLoading(true);
+                  setHasMore(false);
+                  setNextCursor(null);
+                }}
+                className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-emerald-600 focus:ring-emerald-500 focus:ring-offset-slate-950"
+              />
+              <span className="text-sm text-slate-300">
+                Show only my matches
+              </span>
+            </label>
+          </div>
+        )}
+
         {loading ? (
           <div className="rounded-xl bg-slate-950/60 ring-1 ring-slate-900/70 p-5 text-center text-sm text-slate-300">
             Loading recordings…
@@ -253,6 +322,73 @@ export default function ReplayListPage() {
             <div className="text-sm text-slate-400">
               Play some online matches to generate replays!
             </div>
+          </div>
+        ) : showOwnOnly ? (
+          <div className="rounded-xl bg-slate-950/60 ring-1 ring-slate-900/70 p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold uppercase tracking-wide text-slate-200">
+                Your Matches
+              </h2>
+              <span className="text-xs text-slate-400">
+                {recordings.length} replays
+              </span>
+            </div>
+            <div className="grid gap-3">
+              {recordings.map((recording) => (
+                <div
+                  key={recording.matchId}
+                  className="bg-slate-900/60 border border-slate-800/70 rounded-xl px-4 py-4 hover:bg-slate-900/80 transition-colors cursor-pointer"
+                  onClick={() => router.push(`/replay/${recording.matchId}`)}
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <h3 className="text-sm font-semibold text-slate-100">
+                          {recording.playerNames.join(" vs ")}
+                        </h3>
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide ${
+                            recording.matchType === "sealed"
+                              ? "bg-blue-500/60 text-blue-50"
+                              : "bg-emerald-500/60 text-emerald-50"
+                          }`}
+                        >
+                          {recording.matchType}
+                        </span>
+                      </div>
+                      <div className="text-xs text-slate-400">
+                        {formatDate(recording.startTime)}
+                      </div>
+                    </div>
+                    <div className="text-right text-xs text-slate-400 space-y-1">
+                      <div>
+                        <span className="uppercase tracking-wide text-slate-500">
+                          Duration:
+                        </span>{" "}
+                        {recording.duration
+                          ? formatDuration(recording.duration)
+                          : "In Progress"}
+                      </div>
+                      <div>
+                        <span className="uppercase tracking-wide text-slate-500">
+                          Actions:
+                        </span>{" "}
+                        {recording.actionCount}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {hasMore && (
+              <button
+                onClick={loadMore}
+                disabled={loadingMore}
+                className="w-full py-3 px-4 bg-slate-800/60 hover:bg-slate-800 disabled:bg-slate-800/40 border border-slate-700 rounded-lg text-sm text-slate-200 disabled:text-slate-500 transition-colors"
+              >
+                {loadingMore ? "Loading…" : "Load More"}
+              </button>
+            )}
           </div>
         ) : (
           <div className="space-y-6">
@@ -377,6 +513,18 @@ export default function ReplayListPage() {
                     </div>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {hasMore && (
+              <div className="rounded-xl bg-slate-950/60 ring-1 ring-slate-900/70 p-4">
+                <button
+                  onClick={loadMore}
+                  disabled={loadingMore}
+                  className="w-full py-3 px-4 bg-slate-800/60 hover:bg-slate-800 disabled:bg-slate-800/40 border border-slate-700 rounded-lg text-sm text-slate-200 disabled:text-slate-500 transition-colors"
+                >
+                  {loadingMore ? "Loading…" : "Load More"}
+                </button>
               </div>
             )}
           </div>

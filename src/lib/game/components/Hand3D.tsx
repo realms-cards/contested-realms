@@ -1154,9 +1154,9 @@ export default function Hand3D({
             )}
 
             <group>
-              {usePreset ? (
+              {usePreset && ownerCardbacks.preset ? (
                 <MaterialCardBack
-                  presetId={ownerCardbacks.preset!}
+                  presetId={ownerCardbacks.preset}
                   width={CARD_SHORT}
                   height={CARD_LONG}
                   rotationZ={cardRotationZ}

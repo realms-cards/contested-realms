@@ -338,10 +338,11 @@ const CORS_ORIGINS = Array.isArray(serverConfig.corsOrigins)
 try {
   tournamentBroadcast.setPrismaClient?.(prisma);
 } catch {}
-// Optional: start periodic pruning of old replay actions/sessions
-try {
-  replay.setupReplayRetentionPruner?.(prisma);
-} catch {}
+// Replay retention pruner disabled - keeping replays indefinitely
+// To re-enable with a custom retention period, uncomment and set REPLAY_RETENTION_DAYS env var:
+// try {
+//   replay.setupReplayRetentionPruner?.(prisma);
+// } catch {}
 let isReady = false; // readiness flips true once DB connected and recovery done
 let isShuttingDown = false;
 // Rules enforcement modes:
@@ -1833,6 +1834,7 @@ function getMatchInfo(match: ServerMatchState): AnyRecord {
       match.draftState && typeof match.draftState === "object"
         ? match.draftState
         : undefined,
+    soatcLeagueMatch: (match as AnyRecord).soatcLeagueMatch || null,
   };
 }
 
@@ -4314,17 +4316,25 @@ io.on("connection", async (socket: SocketClient) => {
   });
 
   // Match recording endpoints (DB-backed)
-  socket.on("getMatchRecordings", async () => {
+  socket.on("getMatchRecordings", async (payload) => {
     if (!authed) return;
     const player = getPlayerBySocket(socket);
     try {
-      const allRecordings = (await replay.listRecordings(prisma, {
-        limit: 200,
-      })) as Array<Record<string, unknown>>;
+      const opts = {
+        limit: Math.min(Number(payload?.limit) || 50, 200),
+        cursor: payload?.cursor || null,
+        playerId: payload?.playerId || null,
+      };
+
+      const result = (await replay.listRecordings(prisma, opts)) as {
+        recordings: Array<Record<string, unknown>>;
+        hasMore: boolean;
+        nextCursor?: string;
+      };
 
       // Filter out bot matches (those with CPU bots or host accounts)
       // Only admins should see bot matches (via admin endpoints)
-      const recordings = allRecordings.filter((recording) => {
+      const recordings = result.recordings.filter((recording) => {
         const playerIds = Array.isArray(recording.playerIds)
           ? (recording.playerIds as unknown[])
           : null;
@@ -4341,17 +4351,26 @@ io.on("connection", async (socket: SocketClient) => {
         console.log(
           `[Recording] Request for recordings from ${
             player?.displayName || "unknown"
-          }, returning ${recordings.length} DB-backed summaries (filtered ${
-            allRecordings.length - recordings.length
-          } bot matches)`
+          } (limit: ${opts.limit}, cursor: ${opts.cursor}, playerId: ${
+            opts.playerId
+          }), returning ${recordings.length} DB-backed summaries (filtered ${
+            result.recordings.length - recordings.length
+          } bot matches), hasMore: ${result.hasMore}`
         );
       } catch {}
-      socket.emit("matchRecordingsResponse", { recordings });
+      socket.emit("matchRecordingsResponse", {
+        recordings,
+        hasMore: result.hasMore,
+        nextCursor: result.nextCursor,
+      });
     } catch (e) {
       try {
         console.warn("[Recording] listRecordings failed:", safeErrorMessage(e));
       } catch {}
-      socket.emit("matchRecordingsResponse", { recordings: [] });
+      socket.emit("matchRecordingsResponse", {
+        recordings: [],
+        hasMore: false,
+      });
     }
   });
 

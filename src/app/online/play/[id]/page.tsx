@@ -11,16 +11,12 @@ import UserBadge from "@/components/auth/UserBadge";
 import BrowseOverlay from "@/components/game/BrowseOverlay";
 import CardPreview from "@/components/game/CardPreview";
 import ChaosTwisterOverlay from "@/components/game/ChaosTwisterOverlay";
-import { ElementChoiceOverlay } from "@/components/game/ElementChoiceOverlay";
-import CommonSenseOverlay from "@/components/game/CommonSenseOverlay";
-import MorganaHandOverlay from "@/components/game/MorganaHandOverlay";
-import OmphalosHandOverlay from "@/components/game/OmphalosHandOverlay";
-import PithImpOverlay from "@/components/game/PithImpOverlay";
-import PrivateHandTargetingOverlay from "@/components/game/PrivateHandTargetingOverlay";
 import { ClientCanvas } from "@/components/game/ClientCanvas";
 import CollectionButton from "@/components/game/CollectionButton";
 import CombatHudOverlay from "@/components/game/CombatHudOverlay";
+import CommonSenseOverlay from "@/components/game/CommonSenseOverlay";
 import ContextMenu from "@/components/game/ContextMenu";
+import { ElementChoiceOverlay } from "@/components/game/ElementChoiceOverlay";
 import EnhancedOnlineDraft3DScreen from "@/components/game/EnhancedOnlineDraft3DScreen";
 import GameToolbox from "@/components/game/GameToolbox";
 import HarbingerPortalScreen from "@/components/game/HarbingerPortalScreen";
@@ -29,6 +25,8 @@ import MagicHudOverlay from "@/components/game/MagicHudOverlay";
 import MatchEndOverlay from "@/components/game/MatchEndOverlay";
 import MatchInfoPopup from "@/components/game/MatchInfoPopup";
 import MobileHandHint from "@/components/game/MobileHandHint";
+import MorganaHandOverlay from "@/components/game/MorganaHandOverlay";
+import OmphalosHandOverlay from "@/components/game/OmphalosHandOverlay";
 import OnlineConsole from "@/components/game/OnlineConsole";
 import OnlineD20Screen from "@/components/game/OnlineD20Screen";
 import OnlineDeckSelector from "@/components/game/OnlineDeckSelector";
@@ -38,8 +36,10 @@ import OnlineMulliganScreen from "@/components/game/OnlineMulliganScreen";
 import OnlineSealedDeckLoader from "@/components/game/OnlineSealedDeckLoader";
 import OnlineStatusBar from "@/components/game/OnlineStatusBar";
 import PileSearchDialog from "@/components/game/PileSearchDialog";
+import PithImpOverlay from "@/components/game/PithImpOverlay";
 import PlacementDialog from "@/components/game/PlacementDialog";
 import PlayerResourcePanels from "@/components/game/PlayerResourcePanel";
+import PrivateHandTargetingOverlay from "@/components/game/PrivateHandTargetingOverlay";
 // SeerScreen is now integrated into OnlineMulliganScreen
 import SwitchSiteHudOverlay from "@/components/game/SwitchSiteHudOverlay";
 import {
@@ -75,8 +75,11 @@ import {
   needsPortalPhaseForHarbinger,
 } from "@/lib/game/store/portalState";
 import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
+import { useSoatcPlayers } from "@/lib/hooks/useSoatcStatus";
 import { useZoomKeyboardShortcuts } from "@/lib/hooks/useZoomKeyboardShortcuts";
 import { LegacySeatVideo3D } from "@/lib/rtc/SeatVideo3D";
+import { generateClientLeagueMatchResult } from "@/lib/soatc/clientResult";
+import type { LeagueMatchResult } from "@/lib/soatc/types";
 import {
   useBoardPingListener,
   useChaosTwisterListener,
@@ -2050,6 +2053,10 @@ export default function OnlineMatchPage() {
     myPlayerKey: PlayerKey | null;
   } | null>(null);
 
+  // SOATC League result for match end overlay
+  const [soatcLeagueResult, setSoatcLeagueResult] =
+    useState<LeagueMatchResult | null>(null);
+
   // Debug: page mount/unmount
   useEffect(() => {
     try {
@@ -2357,7 +2364,94 @@ export default function OnlineMatchPage() {
     setMatchEndOverlayOpen(false);
     prevEndedRef.current = false;
     setFinalEndContext(null);
+    setSoatcLeagueResult(null);
   }, [matchId]);
+
+  // Get player IDs for SOATC lookup
+  const matchPlayerIds = useMemo(() => {
+    const players = match?.players || [];
+    return players.map((p) => p.id).filter(Boolean);
+  }, [match?.players]);
+
+  // Fetch SOATC player info (UUIDs) for the match players
+  const { players: soatcPlayerInfo } = useSoatcPlayers(matchPlayerIds);
+
+  // Generate SOATC league result when match ends (if it's a league match)
+  useEffect(() => {
+    console.log("[SOATC] Match end result generation check:", {
+      matchEndOverlayOpen,
+      matchEnded,
+      hasResult: !!soatcLeagueResult,
+      matchHasSoatcFlag: !!(match as { soatcLeagueMatch?: unknown })
+        ?.soatcLeagueMatch,
+    });
+
+    if (!matchEndOverlayOpen || !matchEnded || soatcLeagueResult) return;
+
+    // Check if this is a SOATC league match
+    const soatcMatch = (
+      match as {
+        soatcLeagueMatch?: {
+          isLeagueMatch: boolean;
+          tournamentId: string;
+          tournamentName: string;
+        } | null;
+      }
+    )?.soatcLeagueMatch;
+
+    console.log("[SOATC] Match soatcLeagueMatch data:", soatcMatch);
+    if (!soatcMatch?.isLeagueMatch) return;
+
+    // Get player info from match
+    const players = match?.players || [];
+    const p1 = players[0];
+    const p2 = players[1];
+
+    if (!p1 || !p2 || !matchId) return;
+
+    // Get SOATC UUIDs from the fetched player info
+    const p1SoatcInfo = soatcPlayerInfo[p1.id];
+    const p2SoatcInfo = soatcPlayerInfo[p2.id];
+
+    try {
+      const result = generateClientLeagueMatchResult({
+        matchId,
+        tournamentId: soatcMatch.tournamentId,
+        tournamentName: soatcMatch.tournamentName,
+        player1: {
+          realmsUserId: p1.id,
+          displayName: p1.displayName || "Player 1",
+          soatcUuid: p1SoatcInfo?.soatcUuid || "",
+        },
+        player2: {
+          realmsUserId: p2.id,
+          displayName: p2.displayName || "Player 2",
+          soatcUuid: p2SoatcInfo?.soatcUuid || "",
+        },
+        winnerPlayerKey: winner,
+        isDraw: winner === null,
+        format:
+          (match?.matchType as "constructed" | "sealed" | "draft") ||
+          "constructed",
+        startedAt: new Date(
+          (match as { startedAt?: number })?.startedAt || Date.now()
+        ),
+        completedAt: new Date(),
+        replayId: matchId,
+      });
+      setSoatcLeagueResult(result);
+    } catch (err) {
+      console.error("Failed to generate SOATC league result:", err);
+    }
+  }, [
+    matchEndOverlayOpen,
+    matchEnded,
+    match,
+    matchId,
+    winner,
+    soatcLeagueResult,
+    soatcPlayerInfo,
+  ]);
 
   // Check if we're in the correct match
   const inThisMatch = !!matchId && (match?.id === matchId || isSpectatorView);
@@ -2971,6 +3065,7 @@ export default function OnlineMatchPage() {
               undefined
             }
             myPlayerId={myPlayerId || undefined}
+            soatcLeagueResult={soatcLeagueResult}
             rated={
               (match as unknown as { rated?: boolean | null })?.rated ??
               undefined

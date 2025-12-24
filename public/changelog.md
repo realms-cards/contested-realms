@@ -2,6 +2,13 @@
 
 ## December 2025
 
+### Dec 23 - Performance, Sorcerers at the Core
+
+- **add easy tournament mode** for Sorcerers at the Core. You can now easily find other players participating in monthly tournament by their badge and can create new matches with **a link to pass to discord**
+- **super fast curiosa import** direct import from curiosa.io deck url is much faster, more reliable and has better user experience now
+- **indefinite storage for replays** although we can download replays, they are small, so I chose to keep them around a long time if we can (before they would be deleted after 2 weeks)
+- **less requests, more caching, more performance** we try to request less, cache more
+
 ### Dec 21 — Morgana, Omphalos & Reliability
 
 - **free Avatar mode** A special mode for sealed games. No avatars in booster, but you can freely select which one to play during deck construction

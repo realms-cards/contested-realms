@@ -9,8 +9,8 @@ import { withCache, CacheKeys, invalidateCache } from "@/lib/cache/redis-cache";
 import { logPerformance } from "@/lib/monitoring/performance";
 import { prisma } from "@/lib/prisma";
 import { tournamentSocketService } from "@/lib/services/tournament-broadcast";
-import { countActiveSeats } from "@/lib/tournament/registration";
 import { TOURNAMENT_PLAYER_LIMITS } from "@/lib/tournament/constants";
+import { countActiveSeats } from "@/lib/tournament/registration";
 
 export const dynamic = "force-dynamic";
 
@@ -262,13 +262,9 @@ export async function POST(req: NextRequest) {
       | Record<string, unknown>
       | undefined;
     const registrationMode =
-      body?.registrationMode ??
-      rawRegistration?.mode ??
-      "fixed";
+      body?.registrationMode ?? rawRegistration?.mode ?? "fixed";
     const registrationLocked =
-      body?.registrationLocked ??
-      rawRegistration?.locked ??
-      false;
+      body?.registrationLocked ?? rawRegistration?.locked ?? false;
     const isOpenSeat = registrationMode === "open";
     let sealedConfig =
       (body?.sealedConfig as unknown) ??

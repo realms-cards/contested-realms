@@ -3,6 +3,7 @@ import {
   ELEMENT_CHOICE_SITES,
   GENESIS_BLOOM_SITES,
   GENESIS_MANA_SITES,
+  TOWER_GENESIS_SITES,
 } from "@/lib/game/mana-providers";
 import { TOKEN_BY_NAME } from "@/lib/game/tokens";
 import type {
@@ -27,6 +28,22 @@ import { randomTilt } from "../utils/permanentHelpers";
 import { computeThresholdTotals } from "../utils/resourceHelpers";
 import { createZonesPatchFor } from "../utils/zoneHelpers";
 
+// Count how many copies of a site the player controls
+const countPlayerSitesByName = (
+  state: GameState,
+  siteName: string,
+  owner: 1 | 2
+): number => {
+  const lc = siteName.toLowerCase();
+  let count = 0;
+  for (const tile of Object.values(state.board.sites ?? {})) {
+    if (!tile || tile.owner !== owner) continue;
+    const tileName = String(tile.card?.name || "").toLowerCase();
+    if (tileName === lc) count++;
+  }
+  return count;
+};
+
 // Detect and trigger special site Genesis abilities
 const triggerSiteGenesis = (
   siteName: string,
@@ -35,24 +52,40 @@ const triggerSiteGenesis = (
   get: () => GameState
 ): void => {
   const lc = siteName.toLowerCase();
+  const state = get();
 
   // Valley of Delight - trigger element choice overlay
   if (ELEMENT_CHOICE_SITES.has(lc)) {
-    get().triggerElementChoice(cellKey, siteName, owner);
+    state.triggerElementChoice(cellKey, siteName, owner);
     return;
   }
 
   // Bloom sites - register temporary threshold bonus
   const bloomBonus = GENESIS_BLOOM_SITES[lc];
   if (bloomBonus) {
-    get().registerBloomBonus(cellKey, siteName, bloomBonus, owner);
+    state.registerBloomBonus(cellKey, siteName, bloomBonus, owner);
     return;
   }
 
   // Genesis mana sites (Ghost Town) - register temporary mana bonus
   const manaBonus = GENESIS_MANA_SITES[lc];
   if (manaBonus) {
-    get().registerGenesisMana(cellKey, siteName, manaBonus, owner);
+    state.registerGenesisMana(cellKey, siteName, manaBonus, owner);
+    return;
+  }
+
+  // Tower genesis sites (Dark Tower, Lone Tower, etc.)
+  // Genesis → If you control only one [Tower Name], gain (1) this turn.
+  if (TOWER_GENESIS_SITES.has(lc)) {
+    const towerCount = countPlayerSitesByName(state, lc, owner);
+    if (towerCount === 1) {
+      state.registerGenesisMana(cellKey, siteName, 1, owner);
+      state.log(`${siteName} Genesis: Only one copy - gain (1) this turn`);
+    } else {
+      state.log(
+        `${siteName} Genesis: You control ${towerCount} copies - no bonus`
+      );
+    }
     return;
   }
 };

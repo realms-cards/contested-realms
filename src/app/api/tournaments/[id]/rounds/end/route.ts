@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { getServerAuthSession } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
 import { invalidateCache, CacheKeys } from "@/lib/cache/redis-cache";
+import { prisma } from "@/lib/prisma";
 import { tournamentSocketService } from "@/lib/services/tournament-broadcast";
 import { createRoundMatches, generatePairings } from "@/lib/tournament/pairing";
 
@@ -135,10 +135,7 @@ export async function POST(
           message: "Tournament completed!",
         });
       } catch (socketError) {
-        console.warn(
-          "Failed to broadcast tournament completion:",
-          socketError
-        );
+        console.warn("Failed to broadcast tournament completion:", socketError);
       }
 
       try {
@@ -212,7 +209,11 @@ export async function POST(
     );
   } catch (e: unknown) {
     const message =
-      e instanceof Error ? e.message : typeof e === "string" ? e : "Unknown error";
+      e instanceof Error
+        ? e.message
+        : typeof e === "string"
+        ? e
+        : "Unknown error";
     return new Response(JSON.stringify({ error: message }), { status: 500 });
   }
 }

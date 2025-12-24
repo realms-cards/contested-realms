@@ -1,18 +1,19 @@
 {
   "matchId": "cm4abc123def456ghi789",
-  "leagueId": "soatc-2025-01",
+  "tournamentId": "01990bff-77c3-7324-98bb-8adeae88a4cb",
+  "tournamentName": "December 2024 Monthly League",
   "player1": {
-    "discordId": "760593198501330964",
+    "soatcUuid": "01990bff-77c3-7324-98bb-8adeae88a4cb",
     "displayName": "KingArthur",
-    "odentifier": "clxyz789abc123"
+    "realmsUserId": "clxyz789abc123"
   },
   "player2": {
-    "discordId": "123456789012345678",
+    "soatcUuid": "02990bff-88d4-8435-99cc-9bdfbf99b5db",
     "displayName": "Merlin",
-    "odentifier": "clxyz790def456"
+    "realmsUserId": "clxyz790def456"
   },
-  "winnerId": "760593198501330964",
-  "loserId": "123456789012345678",
+  "winnerId": "01990bff-77c3-7324-98bb-8adeae88a4cb",
+  "loserId": "02990bff-88d4-8435-99cc-9bdfbf99b5db",
   "isDraw": false,
   "format": "constructed",
   "startedAt": "2025-01-15T14:30:00.000Z",
