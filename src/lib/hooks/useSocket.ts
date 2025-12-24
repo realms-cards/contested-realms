@@ -175,7 +175,9 @@ export function useSocket(options: UseSocketOptions = {}): Socket | null {
           const msg = (error as { message?: string })?.message || String(error);
           if (
             msg?.toLowerCase().includes("jwt") ||
-            msg?.toLowerCase().includes("unauthor")
+            msg?.toLowerCase().includes("unauthor") ||
+            msg?.toLowerCase().includes("invalid_token") ||
+            msg?.toLowerCase().includes("token")
           ) {
             const token = await fetchSocketToken(true); // Force refresh on auth errors
             if (token) {

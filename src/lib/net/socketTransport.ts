@@ -1122,8 +1122,31 @@ export class SocketTransport implements GameTransport {
       }
     });
 
-    socket.on("connect_error", (error: Error) => {
+    socket.on("connect_error", async (error: Error) => {
       console.warn("[Transport] Connect error:", error);
+      // If token-related error, force refresh token before reconnection
+      const msg = error?.message?.toLowerCase() || "";
+      if (
+        msg.includes("token") ||
+        msg.includes("jwt") ||
+        msg.includes("unauthor") ||
+        msg.includes("invalid")
+      ) {
+        try {
+          const res = await fetch("/api/socket-token", {
+            credentials: "include",
+          });
+          if (res.ok) {
+            const j = await res.json();
+            type ManagerWithOpts = { opts: { auth?: Record<string, unknown> } };
+            const mgr = socket.io as unknown as ManagerWithOpts;
+            mgr.opts.auth = { token: j?.token as string };
+            console.log("[Transport] Refreshed token after auth error");
+          }
+        } catch (tokenError) {
+          console.warn("[Transport] Failed to refresh token:", tokenError);
+        }
+      }
       if (!this.isIntentionalDisconnect) {
         this.connectionState = "reconnecting";
         this.attemptReconnection(opts);
