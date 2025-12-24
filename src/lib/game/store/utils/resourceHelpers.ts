@@ -8,6 +8,7 @@ import {
   ELEMENT_CHOICE_SITES,
   GENESIS_MANA_SITES,
   MANA_PROVIDER_BY_NAME,
+  MULTI_THRESHOLD_SITES,
   NON_MANA_SITE_IDENTIFIERS,
   SHARED_MANA_SITES,
   THRESHOLD_GRANT_BY_NAME,
@@ -180,10 +181,9 @@ export const computeThresholdTotals = (
 
     // Check if this is an element choice site (Valley of Delight)
     if (ELEMENT_CHOICE_SITES.has(siteName)) {
-      // Look up the player's choice for this site
+      // Look up the choice for this site cell (each cell can only have one choice)
       const choice = specialSiteState?.valleyChoices.find(
-        (c) =>
-          c.cellKey === cellKey && c.owner === (isShared ? owner : tile?.owner)
+        (c) => c.cellKey === cellKey
       );
       if (choice) {
         totals[choice.element] += 1;
@@ -206,7 +206,14 @@ export const computeThresholdTotals = (
       continue;
     }
 
-    // Standard threshold from site
+    // Check multi-threshold sites (Tintagel, Avalon, etc.)
+    const multiThreshold = MULTI_THRESHOLD_SITES[siteName];
+    if (multiThreshold) {
+      accumulateThresholds(totals, multiThreshold);
+      continue;
+    }
+
+    // Standard threshold from site card data (fallback)
     accumulateThresholds(totals, tile?.card?.thresholds ?? null);
   }
 
@@ -262,15 +269,17 @@ export const siteProvidesMana = (card: CardRef | null | undefined): boolean => {
 };
 
 // Check if a site is in the owner's back row.
-// P1's back row is y=0, P2's back row is y=boardHeight-1 (typically y=3).
+// Board coordinate system: y=0 is at the bottom (P2's side), y=boardHeight-1 is at the top (P1's side).
+// P1's back row is y=boardHeight-1 (top), P2's back row is y=0 (bottom).
 export const isInBackRow = (
   cellKey: string,
   owner: 1 | 2,
   boardHeight: number
 ): boolean => {
   const { y } = parseCellKey(cellKey);
-  if (owner === 1) return y === 0;
-  return y === boardHeight - 1;
+  // P1 (owner=1) back row is at the top (y = boardHeight - 1)
+  // P2 (owner=2) back row is at the bottom (y = 0)
+  return owner === 1 ? y === boardHeight - 1 : y === 0;
 };
 
 // Check if a back-row-only site provides mana based on its position.

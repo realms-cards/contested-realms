@@ -64,9 +64,10 @@ export interface LobbyState extends AnyRecord {
   status: string;
   maxPlayers: number;
   ready: Set<string>;
-  visibility: "open" | "private";
+  visibility: "open" | "private" | "tournament";
   plannedMatchType?: string | null;
   lastActive: number;
+  allowSpectators?: boolean;
 }
 
 export interface VoiceParticipant {

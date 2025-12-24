@@ -275,6 +275,10 @@ model User {
   selectedSpellbookRef String?  // "custom:<id>" or "preset:<id>" or null
   selectedAtlasRef String?      // "custom:<id>" or "preset:<id>" or null
 
+  // SOATC League Integration
+  soatcUuid        String?   // User's UUID from ranking.sorcerersatthecore.com
+  soatcAutoDetect  Boolean   @default(false) // Auto-flag matches as league matches
+
   accounts              Account[]
   sessions              Session[]
   decks                 Deck[]
@@ -296,6 +300,8 @@ model User {
 
   customPlaymats         CustomPlaymat[]
   customCardbacks        CustomCardback[]
+  soatcMatchesAsPlayer1  SoatcMatchResult[] @relation("SoatcPlayer1")
+  soatcMatchesAsPlayer2  SoatcMatchResult[] @relation("SoatcPlayer2")
 }
 
 model CustomPlaymat {
@@ -337,6 +343,34 @@ model CustomCardback {
 
   @@index([userId])
   @@index([createdAt])
+}
+
+// SOATC League Integration - Match results for external league tracking
+model SoatcMatchResult {
+  id              String     @id @default(cuid())
+  matchId         String     @unique // Realms.cards match UUID (from MatchResult or session)
+  tournamentId    String     // SOATC tournament UUID
+  tournamentName  String     // Tournament display name for reference
+  player1Id       String     // Realms.cards user ID
+  player1SoatcId  String     // Player 1's SOATC UUID
+  player2Id       String     // Realms.cards user ID
+  player2SoatcId  String     // Player 2's SOATC UUID
+  winnerId        String?    // Realms.cards user ID of winner (null if draw)
+  winnerSoatcId   String?    // SOATC UUID of winner (null if draw)
+  isDraw          Boolean    @default(false)
+  format          GameFormat
+  resultJson      Json       // Full signed LeagueMatchResult object
+  startedAt       DateTime
+  completedAt     DateTime   @default(now())
+  createdAt       DateTime   @default(now())
+
+  player1 User @relation("SoatcPlayer1", fields: [player1Id], references: [id], onDelete: Cascade)
+  player2 User @relation("SoatcPlayer2", fields: [player2Id], references: [id], onDelete: Cascade)
+
+  @@index([player1Id])
+  @@index([player2Id])
+  @@index([tournamentId])
+  @@index([completedAt])
 }
 
 model VerificationToken {

@@ -106,6 +106,13 @@ export type TransportHandler<E extends TransportEvent> = (
   payload: TransportEventMap[E]
 ) => void;
 
+// SOATC league match info passed when starting a match
+export type SoatcLeagueMatchInfo = {
+  isLeagueMatch: boolean;
+  tournamentId: string;
+  tournamentName: string;
+} | null;
+
 // Optional match configuration for starting a match
 export type StartMatchConfig = {
   matchType?: "constructed" | "sealed" | "draft" | "precon";
@@ -115,6 +122,7 @@ export type StartMatchConfig = {
     replaceAvatars?: boolean;
   };
   draftConfig?: DraftConfig;
+  soatcLeagueMatch?: SoatcLeagueMatchInfo;
 };
 
 export interface GameTransport {
@@ -146,6 +154,8 @@ export interface GameTransport {
   setLobbyVisibility(visibility: LobbyVisibility): void;
   inviteToLobby(targetPlayerId: string, lobbyId?: string): void;
   setLobbyPlan?(planned: "constructed" | "sealed" | "draft"): void;
+  /** Host opens the lobby for other players to join (tournament lobbies) */
+  openLobby?(): void;
   // Presence tracking - set player location (collection, browsing, etc.)
   setLocation?(location: PlayerLocation): void;
   // Invite response - decline or postpone an invite

@@ -907,6 +907,10 @@ export class SocketTransport implements GameTransport {
     );
   }
 
+  openLobby(): void {
+    this.requireSocket().emit("openLobby");
+  }
+
   addCpuBot(displayName?: string): void {
     // Host-only server handler will validate permissions.
     // Optional displayName allows picking a difficulty label.

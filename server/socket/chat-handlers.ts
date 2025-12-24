@@ -217,11 +217,11 @@ export function registerChatHandlers({
     }
 
     if (room) {
-      io.to(room).emit("chat", { from, content, scope });
+      io.to(room).emit("chat", { from, content, scope, ts: Date.now() });
       incrementMetric("chatSentTotal");
       debugLog(`[chat] room message sent from ${player.id} to ${room}`);
     } else {
-      socket.emit("chat", { from: null, content, scope });
+      socket.emit("chat", { from: null, content, scope, ts: Date.now() });
       incrementMetric("chatSentTotal");
     }
   });

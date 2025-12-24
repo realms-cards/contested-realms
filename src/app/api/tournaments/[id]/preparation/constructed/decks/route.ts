@@ -3,13 +3,13 @@ import { getServerAuthSession } from "@/lib/auth";
 import { CONSTRUCTED_REQUIREMENTS } from "@/lib/deck/validation-rules";
 import { prisma } from "@/lib/prisma";
 import { tournamentSocketService } from "@/lib/services/tournament-broadcast";
-import { createRoundMatches, generatePairings } from "@/lib/tournament/pairing";
-import { getRegistrationSettings } from "@/lib/tournament/registration";
 import {
   buildTournamentDeckList,
   deckCardSelect,
   type DeckCardWithRelations,
 } from "@/lib/tournament/deck-utils";
+import { createRoundMatches, generatePairings } from "@/lib/tournament/pairing";
+import { getRegistrationSettings } from "@/lib/tournament/registration";
 
 export const dynamic = "force-dynamic";
 
@@ -572,7 +572,9 @@ export async function POST(
             seatStatus: "active",
           },
         }),
-        prisma.tournamentRegistration.count({ where: { tournamentId: id, seatStatus: "active" } }),
+        prisma.tournamentRegistration.count({
+          where: { tournamentId: id, seatStatus: "active" },
+        }),
       ]);
 
       await tournamentSocketService.broadcastPreparationUpdate(

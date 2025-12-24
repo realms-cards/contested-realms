@@ -165,31 +165,21 @@ export const createSpecialSiteSlice: StateCreator<
 
   clearTurnBonuses: () => {
     const state = get();
-    const currentTurn = state.turn;
 
-    // Clear bloom bonuses from previous turns
-    const activeBloomBonuses = state.specialSiteState.bloomBonuses.filter(
-      (b) => b.turnPlayed === currentTurn
-    );
+    // Clear ALL temporary bonuses at end of turn
+    // (Genesis bloom and genesis mana are "this turn only" effects)
+    const hasBloomBonuses = state.specialSiteState.bloomBonuses.length > 0;
+    const hasGenesisMana = state.specialSiteState.genesisMana.length > 0;
 
-    // Clear genesis mana from previous turns
-    const activeGenesisMana = state.specialSiteState.genesisMana.filter(
-      (b) => b.turnPlayed === currentTurn
-    );
-
-    // Only update if something changed
-    if (
-      activeBloomBonuses.length !==
-        state.specialSiteState.bloomBonuses.length ||
-      activeGenesisMana.length !== state.specialSiteState.genesisMana.length
-    ) {
+    if (hasBloomBonuses || hasGenesisMana) {
       const newState: SpecialSiteState = {
         ...state.specialSiteState,
-        bloomBonuses: activeBloomBonuses,
-        genesisMana: activeGenesisMana,
+        bloomBonuses: [],
+        genesisMana: [],
       };
 
       set({ specialSiteState: newState });
+      state.trySendPatch({ specialSiteState: newState });
     }
   },
 

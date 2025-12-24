@@ -425,20 +425,20 @@ export default function TournamentDetailsPage() {
   const tId = tournament?.id ?? null;
   const tStatus = tournament?.status ?? null;
   const tFormat = tournament?.format ?? null;
-  const registeredPlayers =
-    (
-      tournament as unknown as {
-        registeredPlayers?: Array<{ id: string; seatStatus?: string | null }>;
-      }
-    )?.registeredPlayers || [];
+  const registeredPlayers = useMemo(
+    () =>
+      (
+        tournament as unknown as {
+          registeredPlayers?: Array<{ id: string; seatStatus?: string | null }>;
+        }
+      )?.registeredPlayers || [],
+    [tournament]
+  );
   const registrationSettings = (
     tournament?.settings as Record<string, unknown> | undefined
   )?.registration as Record<string, unknown> | undefined;
   const isOpenSeat = registrationSettings?.mode === "open";
   const isRegistrationLocked = registrationSettings?.locked === true;
-  const vacantCount = registeredPlayers.filter(
-    (p) => p.seatStatus === "vacant"
-  ).length;
 
   // Removed duplicate fallback effect - the one at lines 158-197 handles this
 
@@ -471,7 +471,7 @@ export default function TournamentDetailsPage() {
         (s) => s.playerId === userId && !s.isEliminated
       )
     );
-  }, [tournament, statistics?.standings, session?.user?.id]);
+  }, [tournament, statistics?.standings, session?.user?.id, registeredPlayers]);
 
   const isSeatVacant = useMemo(() => {
     const userId = session?.user?.id;
@@ -479,6 +479,10 @@ export default function TournamentDetailsPage() {
     const seat = registeredPlayers.find((p) => p.id === userId);
     return seat?.seatStatus === "vacant";
   }, [registeredPlayers, session?.user?.id]);
+
+  const vacantCount = useMemo(() => {
+    return registeredPlayers.filter((p) => p.seatStatus === "vacant").length;
+  }, [registeredPlayers]);
 
   const activeCount = tournament ? getCurrentPlayersCount(tournament) : 0;
 
@@ -491,8 +495,7 @@ export default function TournamentDetailsPage() {
       if (isSeatVacant || vacantCount > 0) return true;
       if (isRegistrationLocked) return false;
       return (
-        tournament.status === "registering" ||
-        tournament.status === "preparing"
+        tournament.status === "registering" || tournament.status === "preparing"
       );
     }
     return (
@@ -514,8 +517,7 @@ export default function TournamentDetailsPage() {
       if (vacantCount > 0) return true;
       if (isRegistrationLocked) return false;
       return (
-        tournament.status === "registering" ||
-        tournament.status === "preparing"
+        tournament.status === "registering" || tournament.status === "preparing"
       );
     }
     return (

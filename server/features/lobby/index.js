@@ -90,6 +90,7 @@ function createLobbyFeature(deps) {
       visibility: lobby.visibility,
       plannedMatchType: lobby.plannedMatchType,
       isMatchmakingLobby: lobby.isMatchmakingLobby || false,
+      soatcLeagueMatch: lobby.soatcLeagueMatch || null,
       lastActive: lobby.lastActive,
       playerIds: Array.from(lobby.playerIds || []),
       ready: Array.from(lobby.ready || []),
@@ -100,6 +101,7 @@ function createLobbyFeature(deps) {
     const lb = lobbies.get(obj.id) || {
       id: obj.id,
       name: null,
+      soatcLeagueMatch: null,
       hostId: null,
       playerIds: new Set(),
       status: "open",
@@ -117,6 +119,7 @@ function createLobbyFeature(deps) {
     lb.visibility = obj.visibility;
     lb.plannedMatchType = obj.plannedMatchType;
     lb.isMatchmakingLobby = obj.isMatchmakingLobby || false;
+    lb.soatcLeagueMatch = obj.soatcLeagueMatch || null;
     lb.lastActive = obj.lastActive || Date.now();
     lb.playerIds = new Set(Array.isArray(obj.playerIds) ? obj.playerIds : []);
     lb.ready = new Set(Array.isArray(obj.ready) ? obj.ready : []);
@@ -156,6 +159,9 @@ function createLobbyFeature(deps) {
       plannedMatchType: lobby.plannedMatchType,
       matchId: lobby.matchId || null,
       startedAt: lobby.createdAt || lobby.lastActive || null,
+      soatcLeagueMatch: lobby.soatcLeagueMatch || null,
+      allowSpectators: lobby.allowSpectators || false,
+      hostReady: lobby.hostReady !== false, // Default to true for backward compatibility
     };
   }
 
@@ -315,7 +321,9 @@ function createLobbyFeature(deps) {
   }
 
   function createLobby(hostId, opts = {}) {
-    const vis = opts.visibility === "private" ? "private" : "open";
+    const vis = ["private", "tournament"].includes(opts.visibility)
+      ? opts.visibility
+      : "open";
     const maxPlayers = Number.isInteger(opts.maxPlayers)
       ? Math.max(2, Math.min(8, opts.maxPlayers))
       : 2;
@@ -336,6 +344,9 @@ function createLobbyFeature(deps) {
       plannedMatchType: "constructed",
       createdAt: now,
       lastActive: now,
+      allowSpectators: vis === "tournament" || opts.allowSpectators === true,
+      // All lobbies start in setup mode - host must "open" before others can join
+      hostReady: false,
     };
     lobbies.set(lobby.id, lobby);
     return lobby;
@@ -367,14 +378,52 @@ function createLobbyFeature(deps) {
       socket.emit("error", { message: "Lobby is full", code: "lobby_full" });
       return;
     }
-    if (suppliedLobbyId && lobby.visibility === "private") {
+    // Private and tournament lobbies require explicit invite link (not matchmaking)
+    if (
+      (lobby.visibility === "private" || lobby.visibility === "tournament") &&
+      !suppliedLobbyId
+    ) {
+      socket.emit("error", {
+        message:
+          lobby.visibility === "tournament"
+            ? "Tournament lobbies require an invite link."
+            : "Private lobbies require an invite link.",
+        code:
+          lobby.visibility === "tournament"
+            ? "tournament_invite_required"
+            : "private_invite_required",
+      });
+      return;
+    }
+    // Tournament lobbies: non-host players can only join after host has opened the lobby
+    if (
+      lobby.visibility === "tournament" &&
+      lobby.hostId !== player.id &&
+      !lobby.hostReady
+    ) {
+      socket.emit("error", {
+        message: "The host is still setting up the match. Please wait.",
+        code: "host_not_ready",
+      });
+      return;
+    }
+    if (
+      suppliedLobbyId &&
+      (lobby.visibility === "private" || lobby.visibility === "tournament")
+    ) {
       const allowed =
         lobby.hostId === player.id ||
         (lobbyInvites.get(lobby.id)?.has(player.id) ?? false);
       if (!allowed) {
         socket.emit("error", {
-          message: "Lobby is private. You need an invite.",
-          code: "private_lobby",
+          message:
+            lobby.visibility === "tournament"
+              ? "This is a tournament match. You need an invite link."
+              : "Lobby is private. You need an invite.",
+          code:
+            lobby.visibility === "tournament"
+              ? "tournament_lobby"
+              : "private_lobby",
         });
         try {
           console.info(
@@ -470,7 +519,8 @@ function createLobbyFeature(deps) {
     requestingPlayer,
     matchType = "constructed",
     sealedConfig = null,
-    draftConfig = null
+    draftConfig = null,
+    soatcLeagueMatch = null
   ) {
     console.log(
       `[Match] Starting match requested by ${requestingPlayer?.displayName}, type: ${matchType}`
@@ -511,6 +561,7 @@ function createLobbyFeature(deps) {
             }
           : null,
       draftConfig: matchType === "draft" ? draftConfig : null,
+      soatcLeagueMatch: soatcLeagueMatch || null,
       playerDecks:
         matchType === "sealed" || matchType === "draft" ? new Map() : null,
       draftState: null,
@@ -737,8 +788,9 @@ function createLobbyFeature(deps) {
     }
     if (msg.type === "create") {
       const { hostId, socketId, options } = msg;
-      const vis =
-        options && options.visibility === "private" ? "private" : "open";
+      const vis = ["private", "tournament"].includes(options?.visibility)
+        ? options.visibility
+        : "open";
       const maxPlayers = Number.isInteger(options && options.maxPlayers)
         ? Math.max(2, Math.min(8, options.maxPlayers))
         : 2;
@@ -940,7 +992,13 @@ function createLobbyFeature(deps) {
       const lobby = findLobbyForPlayer(playerId, lobbyId);
       if (!lobby) return;
       if (lobby.hostId !== playerId) return;
-      lobby.visibility = visibility === "private" ? "private" : "open";
+      // Support open, private, and tournament visibility
+      const validVisibilities = ["open", "private", "tournament"];
+      const newVisibility = validVisibilities.includes(visibility)
+        ? visibility
+        : "open";
+      lobby.visibility = newVisibility;
+      // hostReady is managed separately via openLobby - don't reset on visibility change
       markLobbyActive(lobby);
       io.to(`lobby:${lobby.id}`).emit("lobbyUpdated", {
         lobby: getLobbyInfo(lobby),
@@ -999,7 +1057,13 @@ function createLobbyFeature(deps) {
       return;
     }
     if (msg.type === "startMatch") {
-      const { playerId, matchType, sealedConfig, draftConfig } = msg;
+      const {
+        playerId,
+        matchType,
+        sealedConfig,
+        draftConfig,
+        soatcLeagueMatch,
+      } = msg;
       const p = await ensurePlayerCached(playerId);
       const lobby = findLobbyForPlayer(playerId, p.lobbyId);
       if (!lobby) return;
@@ -1010,7 +1074,8 @@ function createLobbyFeature(deps) {
         p,
         matchType || "constructed",
         sealedConfig || null,
-        draftConfig || null
+        draftConfig || null,
+        soatcLeagueMatch || null
       );
       if (lobby && lobbies.has(lobby.id)) {
         await publishLobbyState(lobbies.get(lobby.id));
@@ -1141,6 +1206,56 @@ function createLobbyFeature(deps) {
           return;
         }
         await handleLobbyControlAsLeader(msg);
+      } catch {}
+    });
+
+    // Set SOATC league match flag on lobby
+    socket.on("setSoatcLeagueMatch", async (payload = {}) => {
+      if (!isAuthed()) return;
+      const player = getPlayerBySocket(socket);
+      if (!player || !player.lobbyId) return;
+      const lobby = lobbies.get(player.lobbyId);
+      if (!lobby) return;
+
+      // Update the lobby's SOATC league match status
+      lobby.soatcLeagueMatch = payload?.soatcLeagueMatch || null;
+      markLobbyActive(lobby);
+
+      const info = getLobbyInfo(lobby);
+      io.to(`lobby:${lobby.id}`).emit("lobbyUpdated", { lobby: info });
+      broadcastLobbies();
+
+      try {
+        await publishLobbyState(lobby);
+      } catch {}
+    });
+
+    // Host opens the lobby for other players to join (tournament lobbies)
+    socket.on("openLobby", async () => {
+      if (!isAuthed()) return;
+      const player = getPlayerBySocket(socket);
+      if (!player || !player.lobbyId) return;
+      const lobby = lobbies.get(player.lobbyId);
+      if (!lobby) return;
+
+      // Only host can open the lobby
+      if (lobby.hostId !== player.id) {
+        socket.emit("error", {
+          message: "Only the host can open the lobby",
+          code: "not_host",
+        });
+        return;
+      }
+
+      lobby.hostReady = true;
+      markLobbyActive(lobby);
+
+      const info = getLobbyInfo(lobby);
+      io.to(`lobby:${lobby.id}`).emit("lobbyUpdated", { lobby: info });
+      broadcastLobbies();
+
+      try {
+        await publishLobbyState(lobby);
       } catch {}
     });
 
@@ -1478,6 +1593,7 @@ function createLobbyFeature(deps) {
         matchType: payload?.matchType || "constructed",
         sealedConfig: payload?.sealedConfig || null,
         draftConfig: payload?.draftConfig || null,
+        soatcLeagueMatch: payload?.soatcLeagueMatch || null,
       };
       try {
         const leader = await getOrClaimLobbyLeader();

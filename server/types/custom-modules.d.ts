@@ -165,16 +165,20 @@ declare module "./modules/tournament/broadcast" {
 declare module "./modules/replay" {
   export function listRecordings(
     prisma: PrismaClient,
-    opts?: AnyRecord
-  ): Promise<AnyRecord[]>;
+    opts?: {
+      limit?: number;
+      cursor?: string;
+      playerId?: string;
+    }
+  ): Promise<{
+    recordings: AnyRecord[];
+    hasMore: boolean;
+    nextCursor?: string;
+  }>;
   export function loadRecording(
     prisma: PrismaClient,
     matchId: string
   ): Promise<AnyRecord | null>;
-  export function setupReplayRetentionPruner(
-    prisma: PrismaClient,
-    options?: AnyRecord
-  ): void;
 }
 
 declare module "./features" {

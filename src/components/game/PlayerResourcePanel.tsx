@@ -1,10 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useGameStore } from "@/lib/game/store";
 import type { PlayerKey } from "@/lib/game/store";
-import { siteProvidesMana } from "@/lib/game/store/utils/resourceHelpers";
 import { useTouchDevice } from "@/lib/hooks/useTouchDevice";
 
 // Element config matching Threshold3D exactly
@@ -223,30 +221,19 @@ export function PlayerResourceColumn({
   dragFromHand = false,
 }: PlayerResourceColumnProps) {
   // Get mana data
-  const sites = useGameStore((s) => s.board.sites);
-  const manaOffset = useGameStore((s) => s.players[player]?.mana ?? 0);
   const addMana = useGameStore((s) => s.addMana);
   const actorKey = useGameStore((s) => s.actorKey);
+  const manaOffset = useGameStore((s) => s.players[player]?.mana ?? 0);
   const thresholds = useGameStore(
     useShallow((s) => s.getThresholdTotals(player))
   );
+  const getAvailableMana = useGameStore((s) => s.getAvailableMana);
 
-  const ownerNum = player === "p1" ? 1 : 2;
-
-  // Count sites that provide mana
-  const baseMana = useMemo(() => {
-    let count = 0;
-    for (const site of Object.values(sites)) {
-      // Skip null entries (deleted sites)
-      if (!site) continue;
-      if (site.owner === ownerNum && siteProvidesMana(site.card ?? null)) {
-        count++;
-      }
-    }
-    return count;
-  }, [sites, ownerNum]);
-
-  const mana = Math.max(0, baseMana + manaOffset);
+  // Use the store's getAvailableMana which includes all special mana sources
+  // (Ether Core in void, City bonuses, shared sites like Avalon, etc.)
+  const mana = getAvailableMana(player);
+  // Base mana is the total before any spending (offset is negative when mana spent)
+  const baseMana = mana - manaOffset;
 
   // Can adjust if we're the actor (or offline) and not dragging
   const canAdjust =

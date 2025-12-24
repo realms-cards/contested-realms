@@ -341,7 +341,9 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     );
   }
 
-  const t = contextMenu!.target;
+  if (!contextMenu) return null;
+
+  const t = contextMenu.target;
   let header = "";
   let tapped = false;
   let hasToggle = false;

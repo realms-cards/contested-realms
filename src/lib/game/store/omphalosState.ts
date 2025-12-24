@@ -148,7 +148,13 @@ export const createOmphalosSlice: StateCreator<
       }
 
       // Draw 1 spell from top of spellbook
-      const drawnCard = spellbook.shift()!;
+      const drawnCard = spellbook.shift();
+      if (!drawnCard) {
+        console.warn(
+          `[Omphalos] No card to draw from spellbook for ${endingPlayerSeat}`
+        );
+        continue;
+      }
 
       // Update zones
       zonesNext = {

@@ -1,56 +1,59 @@
 # SOATC League Integration - Developer Guide
 
-Hi! This document explains how Realms.cards can integrate with the SOATC monthly league system.
+Hi! This document explains how Realms.cards integrates with the SOATC ranking system at https://ranking.sorcerersatthecore.com.
 
 ## Overview
 
-We want to enable SOATC league participants to:
+We enable SOATC tournament participants to:
 
-1. Play official league matches on Realms.cards
-2. Get a signed result object they can submit to your system
-3. (Future) Have results automatically posted to your system
+1. Link their SOATC UUID to their Realms.cards account
+2. Play official tournament matches on Realms.cards
+3. Get a signed result object they can submit to your system
+4. (Future) Have results automatically posted to your system
+
+## How It Works
+
+### User Setup
+
+1. User gets their SOATC UUID from their profile at https://ranking.sorcerersatthecore.com
+2. User enters the UUID in Realms.cards User Settings
+3. User optionally enables "Auto-detect SOATC tournament matches"
+
+### Match Detection
+
+We query your API to find ongoing tournaments where `realms_cards_allowed: true`:
+
+```
+GET https://ranking.sorcerersatthecore.com/api/tournaments?state=ongoing&realms_cards_allowed=true
+Authorization: Bearer <SORCERERS_AT_THE_CORE_APITOKEN>
+```
+
+When two players start a match, we check if both are participants in the same tournament. If so, we flag it as a league match.
+
+### Result Export
+
+After the match, both players see a "SOATC League Result" card with:
+
+- Copy to Clipboard button
+- Download JSON button
+- Instructions for submission
+
+---
 
 ## What We Need From You
 
-### 1. League Participants API
-
-We need an endpoint that returns current league participants by Discord ID.
-
-**Suggested endpoint:**
-
-```
-GET https://your-domain.com/api/league/participants
-Authorization: Bearer <API_KEY>  (or however you prefer to auth)
-
-Response:
-{
-  "leagueId": "soatc-2025-01",
-  "leagueName": "January 2025 Monthly League",
-  "participants": [
-    { "discordId": "123456789012345678", "displayName": "PlayerOne" },
-    { "discordId": "987654321098765432", "displayName": "PlayerTwo" }
-  ]
-}
-```
-
-**Questions:**
-
-- What URL will this be at?
-- What authentication do you want? (API key, none, OAuth?)
-- How often does the participant list change? (We'll cache it)
-
-### 2. Shared Secret
+### 1. Shared Secret (Optional for Phase 1)
 
 We'll sign all result objects with HMAC-SHA256 so you can verify they came from us.
 
-**Action needed:** Let's exchange a shared secret (generate with `openssl rand -base64 32`)
+**Action needed:** Exchange a shared secret (generate with `openssl rand -base64 32`)
 
-### 3. Result Submission Method (Phase 1)
+### 2. Result Submission Method
 
-For the MVP, players will copy/paste the result JSON. Where should they submit it?
+For Phase 1, players copy/paste the result JSON. Where should they submit it?
 
 - Discord bot command? (e.g., `/submit-result <paste JSON>`)
-- Web form on your site?
+- Web form on your ranking site?
 - Something else?
 
 ---
@@ -59,24 +62,25 @@ For the MVP, players will copy/paste the result JSON. Where should they submit i
 
 ### League Match Result Object
 
-After a league match ends, both players see this JSON object with a "Copy" button:
+After a league match ends, both players see this JSON object:
 
 ```json
 {
   "matchId": "cm4abc123def456ghi789",
-  "leagueId": "soatc-2025-01",
+  "tournamentId": "01990bff-77c3-7324-98bb-8adeae88a4cb",
+  "tournamentName": "December 2024 Monthly League",
   "player1": {
-    "discordId": "760593198501330964",
+    "soatcUuid": "01990bff-77c3-7324-98bb-8adeae88a4cb",
     "displayName": "KingArthur",
-    "odentifier": "clxyz789abc123"
+    "realmsUserId": "clxyz789abc123"
   },
   "player2": {
-    "discordId": "123456789012345678",
+    "soatcUuid": "02990bff-88d4-8435-99cc-9bdfbf99b5db",
     "displayName": "Merlin",
-    "odentifier": "clxyz790def456"
+    "realmsUserId": "clxyz790def456"
   },
-  "winnerId": "760593198501330964",
-  "loserId": "123456789012345678",
+  "winnerId": "01990bff-77c3-7324-98bb-8adeae88a4cb",
+  "loserId": "02990bff-88d4-8435-99cc-9bdfbf99b5db",
   "isDraw": false,
   "format": "constructed",
   "startedAt": "2025-01-15T14:30:00.000Z",
@@ -91,22 +95,23 @@ After a league match ends, both players see this JSON object with a "Copy" butto
 
 ### Field Descriptions
 
-| Field                | Type           | Description                                                   |
-| -------------------- | -------------- | ------------------------------------------------------------- |
-| `matchId`            | string         | Unique Realms.cards match identifier                          |
-| `leagueId`           | string         | League identifier (e.g., "soatc-2025-01")                     |
-| `player1`, `player2` | object         | Player info with Discord ID, display name, and Realms user ID |
-| `winnerId`           | string \| null | Discord ID of winner (null if draw)                           |
-| `loserId`            | string \| null | Discord ID of loser (null if draw)                            |
-| `isDraw`             | boolean        | True if match ended in a draw                                 |
-| `format`             | string         | "constructed", "sealed", or "draft"                           |
-| `startedAt`          | string         | ISO 8601 timestamp when match started                         |
-| `completedAt`        | string         | ISO 8601 timestamp when match ended                           |
-| `durationSeconds`    | number         | Match duration in seconds                                     |
-| `replayId`           | string \| null | Replay identifier (if available)                              |
-| `replayUrl`          | string \| null | Direct link to watch the replay                               |
-| `timestamp`          | string         | When this result object was generated                         |
-| `signature`          | string         | HMAC-SHA256 signature for verification                        |
+| Field                | Type           | Description                                               |
+| -------------------- | -------------- | --------------------------------------------------------- |
+| `matchId`            | string         | Unique Realms.cards match identifier                      |
+| `tournamentId`       | string         | SOATC tournament UUID                                     |
+| `tournamentName`     | string         | Tournament display name                                   |
+| `player1`, `player2` | object         | Player info with SOATC UUID, display name, Realms user ID |
+| `winnerId`           | string \| null | SOATC UUID of winner (null if draw)                       |
+| `loserId`            | string \| null | SOATC UUID of loser (null if draw)                        |
+| `isDraw`             | boolean        | True if match ended in a draw                             |
+| `format`             | string         | "constructed", "sealed", or "draft"                       |
+| `startedAt`          | string         | ISO 8601 timestamp when match started                     |
+| `completedAt`        | string         | ISO 8601 timestamp when match ended                       |
+| `durationSeconds`    | number         | Match duration in seconds                                 |
+| `replayId`           | string \| null | Replay identifier (if available)                          |
+| `replayUrl`          | string \| null | Direct link to watch the replay                           |
+| `timestamp`          | string         | When this result object was generated                     |
+| `signature`          | string         | HMAC-SHA256 signature for verification                    |
 
 ### Signature Verification
 

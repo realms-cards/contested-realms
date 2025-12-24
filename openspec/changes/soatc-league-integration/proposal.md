@@ -2,41 +2,50 @@
 
 ## Summary
 
-Integrate Realms.cards with the "Sorcerers at the Core" (SOATC) Discord community's monthly league system. This enables league participants to play official league matches on Realms.cards and have results automatically tracked.
+Integrate Realms.cards with the "Sorcerers at the Core" (SOATC) Discord community's monthly tournament/league system. This enables league participants to play official matches on Realms.cards and export results for submission to the SOATC ranking system at https://ranking.sorcerersatthecore.com.
 
 ## Problem Statement
 
-The SOATC community runs a monthly league with match tracking and leaderboards on a separate platform. Currently, there's no way to:
+The SOATC community runs monthly tournaments with match tracking and ELO-based leaderboards. Currently, there's no way to:
 
-1. Identify if a Realms.cards user is a member of the SOATC Discord server
-2. Know if they're participating in the current month's league
-3. Flag matches as "league matches" for official scoring
-4. Export match results in a format the league system can consume
+1. Link a Realms.cards user to their SOATC account
+2. Know if they're participating in an ongoing SOATC tournament
+3. Automatically detect when two tournament participants are playing each other
+4. Export match results in a format the SOATC ranking system can consume
+5. View historical league match data
 
 ## Proposed Solution
 
 ### Phase 1: Manual Result Export (MVP)
 
-1. **Discord Server Membership Check**
+1. **SOATC UUID Linking**
 
-   - Query Discord API to check if user is member of SOATC server (ID: `760593198501330964`)
-   - Requires user's Discord ID (available via `Account.providerAccountId` for Discord provider)
+   - User enters their SOATC UUID in User Settings (from https://ranking.sorcerersatthecore.com)
+   - Store as `User.soatcUuid` in database
+   - User opts in via checkbox: "Auto-detect SOATC tournament matches"
 
-2. **League Participation Flag**
+2. **Tournament Participant Detection**
 
-   - SOATC provides an API endpoint or static list of current league participants (Discord IDs)
-   - Realms.cards queries this to determine if a user is "playing the league"
+   - Query SOATC API: `GET /api/tournaments?state=ongoing&realms_cards_allowed=true`
+   - For each ongoing tournament, check if user's SOATC UUID is in participants list
+   - Cache tournament data with 5-minute TTL to minimize API calls
 
-3. **League Match Flagging**
+3. **League Match Detection**
 
-   - When both players in a lobby are identified as league participants:
-     - Show a prompt to the host: "Both players are SOATC League participants. Count this match for the league?"
-     - If confirmed, flag the match as `isLeagueMatch: true`
+   - When both players have opted in AND both are participants in the same ongoing tournament:
+     - Auto-flag match as `isLeagueMatch: true` with tournament context
+   - When only one player is a participant or opt-in differs:
+     - Show optional checkbox to host: "Count as SOATC League Match?"
 
 4. **Result Object Export**
-   - After match ends, generate a signed result object
-   - Display to both players with a "Copy to Clipboard" button
-   - Players can paste this into the SOATC system for verification
+
+   - After match ends, generate result object with SOATC UUIDs
+   - Display to both players with "Copy to Clipboard" and "Download JSON" buttons
+   - Include instructions for submitting to SOATC
+
+5. **Historical Match Export**
+   - Store league match results in database with tournament context
+   - Provide exportable list of historical SOATC matches per user
 
 ### Phase 2: Automated Webhook (Future)
 
@@ -50,35 +59,43 @@ The SOATC community runs a monthly league with match tracking and leaderboards o
 │                         REALMS.CARDS                            │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
-│  1. User signs in via Discord OAuth                             │
-│     └─> We store Account.providerAccountId (Discord user ID)    │
+│  1. User enters SOATC UUID in settings                          │
+│     └─> Stored as User.soatcUuid                                │
+│     └─> User enables "Auto-detect SOATC tournament matches"     │
 │                                                                 │
-│  2. User joins lobby                                            │
-│     └─> Check: Is user in SOATC server? (Discord API)           │
-│     └─> Check: Is user in current league? (SOATC API)           │
+│  2. User joins lobby / starts match                             │
+│     └─> Query cached SOATC tournaments (ongoing, realms_cards)  │
+│     └─> Check: Is user's UUID in any tournament participant list│
 │     └─> Cache result for session                                │
 │                                                                 │
-│  3. Both players are league participants                        │
-│     └─> Host sees: "Count as league match?" checkbox            │
+│  3. Both players are tournament participants (same tournament)  │
+│     └─> Auto-flag as league match (if both opted in)            │
+│     └─> Or show checkbox to host                                │
 │                                                                 │
 │  4. Match completes                                             │
 │     └─> Generate LeagueMatchResult object                       │
 │     └─> Sign with HMAC (shared secret)                          │
 │     └─> Display to players for manual submission                │
+│     └─> Store in league match history                           │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────┐
-│                         SOATC SYSTEM                            │
+│                         SOATC RANKING SYSTEM                    │
+│              https://ranking.sorcerersatthecore.com             │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
-│  Provides:                                                      │
-│  - API endpoint: GET /api/league/participants                   │
-│    Returns: { participants: ["discord_id_1", "discord_id_2"] }  │
+│  Provides (API with Bearer token auth):                         │
+│  - GET /api/tournaments                                         │
+│    Filters: state=ongoing, realms_cards_allowed=true            │
+│    Returns: { data: [{ id, name, participants: [...] }] }       │
+│                                                                 │
+│  - GET /api/tournaments/{uuid}                                  │
+│    Returns: tournament details with full participant list       │
 │                                                                 │
 │  Accepts:                                                       │
-│  - LeagueMatchResult object (pasted by player or via webhook)   │
-│  - Verifies HMAC signature before accepting                     │
+│  - LeagueMatchResult object (copied by player, submitted via    │
+│    Discord bot or web form - TBD by SOATC team)                 │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -87,24 +104,28 @@ The SOATC community runs a monthly league with match tracking and leaderboards o
 
 ### From SOATC (they provide)
 
-1. **League Participants Endpoint**
+1. **Tournament API** (already available at ranking.sorcerersatthecore.com)
 
    ```
-   GET https://soatc-league.example.com/api/participants
-   Authorization: Bearer <API_KEY>
+   GET https://ranking.sorcerersatthecore.com/api/tournaments?state=ongoing&realms_cards_allowed=true
+   Authorization: Bearer <SORCERERS_AT_THE_CORE_APITOKEN>
 
    Response:
    {
-     "leagueId": "2025-01",
-     "leagueName": "January 2025 Monthly League",
-     "participants": [
-       { "discordId": "123456789", "displayName": "Player1" },
-       { "discordId": "987654321", "displayName": "Player2" }
-     ]
+     "data": [{
+       "id": "uuid",
+       "name": "December 2024 Monthly League",
+       "game_type": "constructed",
+       "is_ongoing": true,
+       "realms_cards_allowed": true,
+       "participants": [
+         { "id": "uuid", "name": "Player Name", "email_hash": "..." }
+       ]
+     }]
    }
    ```
 
-2. **Shared Secret** for HMAC signatures (exchanged out-of-band)
+2. **Shared Secret** for HMAC signatures (exchanged out-of-band, optional for Phase 1)
 
 ### From Realms.cards (we provide)
 
@@ -114,23 +135,24 @@ The SOATC community runs a monthly league with match tracking and leaderboards o
 interface LeagueMatchResult {
   // Identifiers
   matchId: string; // Realms.cards match UUID
-  leagueId: string; // e.g., "soatc-2025-01"
+  tournamentId: string; // SOATC tournament UUID
+  tournamentName: string; // e.g., "December 2024 Monthly League"
 
-  // Players (Discord IDs)
+  // Players (SOATC UUIDs)
   player1: {
-    discordId: string;
+    soatcUuid: string;
     displayName: string;
-    odentifier: string; // Realms.cards user ID (for cross-reference)
+    realmsUserId: string; // Realms.cards user ID (for cross-reference)
   };
   player2: {
-    discordId: string;
+    soatcUuid: string;
     displayName: string;
-    odentifier: string;
+    realmsUserId: string;
   };
 
   // Result
-  winnerId: string | null; // Discord ID of winner, null if draw
-  loserId: string | null; // Discord ID of loser, null if draw
+  winnerId: string | null; // SOATC UUID of winner, null if draw
+  loserId: string | null; // SOATC UUID of loser, null if draw
   isDraw: boolean;
 
   // Match metadata
@@ -153,29 +175,30 @@ interface LeagueMatchResult {
 
 ```json
 {
-  "matchId": "cm4abc123def456",
-  "leagueId": "soatc-2025-01",
+  "matchId": "cm4abc123def456ghi789",
+  "tournamentId": "01990bff-77c3-7324-98bb-8adeae88a4cb",
+  "tournamentName": "December 2024 Monthly League",
   "player1": {
-    "discordId": "760593198501330964",
+    "soatcUuid": "01990bff-77c3-7324-98bb-8adeae88a4cb",
     "displayName": "KingArthur",
-    "odentifier": "clxyz789"
+    "realmsUserId": "clxyz789abc123"
   },
   "player2": {
-    "discordId": "123456789012345678",
+    "soatcUuid": "02990bff-88d4-8435-99cc-9bdfbf99b5db",
     "displayName": "Merlin",
-    "odentifier": "clxyz790"
+    "realmsUserId": "clxyz790def456"
   },
-  "winnerId": "760593198501330964",
-  "loserId": "123456789012345678",
+  "winnerId": "01990bff-77c3-7324-98bb-8adeae88a4cb",
+  "loserId": "02990bff-88d4-8435-99cc-9bdfbf99b5db",
   "isDraw": false,
   "format": "constructed",
   "startedAt": "2025-01-15T14:30:00.000Z",
   "completedAt": "2025-01-15T15:05:32.000Z",
   "durationSeconds": 2132,
-  "replayId": "cm4replay789",
-  "replayUrl": "https://realms.cards/replay/cm4replay789",
+  "replayId": "cm4replay789xyz",
+  "replayUrl": "https://realms.cards/replay/cm4replay789xyz",
   "timestamp": "2025-01-15T15:05:35.000Z",
-  "signature": "a1b2c3d4e5f6..."
+  "signature": "a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef12345678"
 }
 ```
 
@@ -184,59 +207,43 @@ interface LeagueMatchResult {
 ```bash
 # SOATC League Integration
 SOATC_LEAGUE_ENABLED=true
-SOATC_LEAGUE_API_URL=https://soatc-league.example.com/api
-SOATC_LEAGUE_API_KEY=<api-key-from-soatc>
-SOATC_SHARED_SECRET=<shared-secret-for-hmac>
-SOATC_DISCORD_SERVER_ID=760593198501330964
+SORCERERS_AT_THE_CORE_APITOKEN=<bearer-token-from-soatc>
+SOATC_SHARED_SECRET=<shared-secret-for-hmac>  # Optional for Phase 1
 ```
 
-## Questions for SOATC Developer
+## API Integration Notes
 
-1. **Participants API**: Can you provide an endpoint that returns current league participants by Discord ID?
+The SOATC ranking system at https://ranking.sorcerersatthecore.com provides:
 
-   - What authentication do you prefer? (API key, none for public, etc.)
-   - Should we cache this? What's the refresh interval?
+1. **Tournament List**: `GET /api/tournaments?state=ongoing&realms_cards_allowed=true`
+2. **Tournament Details**: `GET /api/tournaments/{uuid}` (includes participant list)
+3. **User Profile**: `GET /api/user` (for validating SOATC UUID)
 
-2. **Result Submission**: For Phase 1, players will copy/paste the result object. Where should they paste it?
-
-   - Discord bot command?
-   - Web form?
-   - Both?
-
-3. **Signature Verification**: Are you comfortable implementing HMAC-SHA256 verification on your end?
-
-   - We can provide sample code in JS/Python/etc.
-
-4. **Additional Fields**: Do you need any other data in the result object?
-
-   - Avatar names?
-   - Deck archetypes?
-   - Turn count?
-
-5. **Discord Bot**: Do you have a Discord bot that could:
-   - Provide the participants list via API?
-   - Accept result submissions?
+All endpoints require `Authorization: Bearer <token>` header.
 
 ## Implementation Effort
 
-| Task                                       | Effort    |
-| ------------------------------------------ | --------- |
-| Add Discord ID lookup from Account table   | 1h        |
-| Create SOATC participants check service    | 2h        |
-| Add "league match" checkbox to lobby UI    | 2h        |
-| Generate signed result object on match end | 2h        |
-| Display result with copy button            | 1h        |
-| Add env vars and feature flag              | 0.5h      |
-| **Total Phase 1**                          | **~8.5h** |
+| Task                                          | Effort     |
+| --------------------------------------------- | ---------- |
+| Add `soatcUuid` and `soatcAutoDetect` to User | 1h         |
+| Create SOATC API service with caching         | 2h         |
+| Add SOATC UUID input to User Settings UI      | 1.5h       |
+| Tournament participant detection logic        | 2h         |
+| Add league match checkbox to lobby UI         | 1.5h       |
+| Generate signed result object on match end    | 2h         |
+| Display result with copy/download buttons     | 1h         |
+| League match history storage & export         | 2h         |
+| Add env vars and feature flag                 | 0.5h       |
+| **Total Phase 1**                             | **~13.5h** |
 
 ## Risks & Mitigations
 
-| Risk                           | Mitigation                                                          |
-| ------------------------------ | ------------------------------------------------------------------- |
-| User not signed in via Discord | Show message: "Sign in with Discord to participate in SOATC League" |
-| SOATC API unavailable          | Cache participants list, graceful degradation                       |
-| Player forgets to copy result  | Also email/store in match history                                   |
-| Signature tampering            | HMAC with shared secret; include timestamp to prevent replay        |
+| Risk                          | Mitigation                                                          |
+| ----------------------------- | ------------------------------------------------------------------- |
+| User hasn't linked SOATC UUID | Show prompt in settings with link to SOATC ranking site             |
+| SOATC API unavailable         | Cache tournament/participant data with 5-min TTL, graceful fallback |
+| Player forgets to copy result | Also email/store in match history                                   |
+| Signature tampering           | HMAC with shared secret; include timestamp to prevent replay        |
 
 ## Success Criteria
 

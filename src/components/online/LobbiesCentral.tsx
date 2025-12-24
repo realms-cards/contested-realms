@@ -7,6 +7,7 @@ import { RefreshCw, Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState, useRef } from "react";
 import type { VoiceOutgoingRequest } from "@/app/online/online-context";
+import type { SoatcStatus } from "@/lib/hooks/useSoatcStatus";
 import type { TournamentInfo, LobbyInfo } from "@/lib/net/protocol";
 import { generateLobbyName } from "@/lib/random-name-generator";
 
@@ -38,7 +39,7 @@ function formatDuration(startedAt: number | null | undefined): string {
 
 export type CreateLobbyConfig = {
   name: string;
-  visibility: "open" | "private";
+  visibility: "open" | "private" | "tournament";
   maxPlayers: number;
 };
 
@@ -398,6 +399,7 @@ export default function LobbiesCentral({
   voiceSupport,
   externalOverlayOpen,
   onExternalOverlayChange,
+  soatcStatus,
 }: {
   lobbies: LobbyInfo[];
   tournaments: TournamentInfo[];
@@ -406,7 +408,9 @@ export default function LobbiesCentral({
   onJoin: (lobbyId: string) => void;
   onCreate: (config: CreateLobbyConfig) => void;
   onLeaveLobby?: () => void;
-  onSetLobbyVisibility?: (visibility: "open" | "private") => void;
+  onSetLobbyVisibility?: (
+    visibility: "open" | "private" | "tournament"
+  ) => void;
   onResync?: () => void;
   onAddCpuBot?: (displayName?: string) => void;
   onRemoveCpuBot?: (playerId?: string) => void;
@@ -440,6 +444,8 @@ export default function LobbiesCentral({
   } | null;
   externalOverlayOpen?: boolean;
   onExternalOverlayChange?: (open: boolean) => void;
+  /** Current user's SOATC status - used to check tournament eligibility */
+  soatcStatus?: SoatcStatus | null;
 }) {
   const [query, setQuery] = useState("");
   const [hideFull, setHideFull] = useState(false);
@@ -481,9 +487,7 @@ export default function LobbiesCentral({
   const [pendingStartT, setPendingStartT] = useState<Record<string, boolean>>(
     {}
   );
-  const [pendingLockT, setPendingLockT] = useState<Record<string, boolean>>(
-    {}
-  );
+  const [pendingLockT, setPendingLockT] = useState<Record<string, boolean>>({});
 
   // Check if user is already engaged in a lobby or tournament
   // IMPORTANT: Use joinedLobbyId as the single source of truth for membership.
@@ -498,7 +502,9 @@ export default function LobbiesCentral({
   const joinedTournament = tournaments.find(
     (t) =>
       t.registeredPlayers.some(
-        (p) => p.id === myId && (p as { seatStatus?: string }).seatStatus !== "vacant"
+        (p) =>
+          p.id === myId &&
+          (p as { seatStatus?: string }).seatStatus !== "vacant"
       ) && t.status !== "completed"
   );
   const isInTournament = joinedTournament !== undefined;
@@ -506,9 +512,9 @@ export default function LobbiesCentral({
   // Voice support is available but not used in condensed lobby list view
   void voiceSupport;
   const [cfgName, setCfgName] = useState<string>("");
-  const [cfgVisibility, setCfgVisibility] = useState<"open" | "private">(
-    "open"
-  );
+  const [cfgVisibility, setCfgVisibility] = useState<
+    "open" | "private" | "tournament"
+  >("open");
 
   // Tournament creation state
   const [tournamentName, setTournamentName] = useState<string>("");
@@ -520,8 +526,7 @@ export default function LobbiesCentral({
   const [tournamentMaxPlayers, setTournamentMaxPlayers] = useState<number>(2);
   const [tournamentIsPrivate, setTournamentIsPrivate] =
     useState<boolean>(false);
-  const [tournamentOpenSeat, setTournamentOpenSeat] =
-    useState<boolean>(false);
+  const [tournamentOpenSeat, setTournamentOpenSeat] = useState<boolean>(false);
   const [tournamentRegistrationLocked, setTournamentRegistrationLocked] =
     useState<boolean>(false);
   // Tournament pack settings
@@ -697,8 +702,7 @@ export default function LobbiesCentral({
             activeCount < tournament.maxPlayers;
         if (q && !tournament.name.toLowerCase().includes(q)) return false;
         // Don't hide joined tournaments even if they're full or started
-        if (hideFull && !canJoin && !isJoined)
-          return false;
+        if (hideFull && !canJoin && !isJoined) return false;
         if (
           hideStarted &&
           status !== "registering" &&
@@ -951,6 +955,14 @@ export default function LobbiesCentral({
                         <EyeOff className="w-3 h-3 text-amber-300" />
                       </span>
                     )}
+                    {l.visibility === "tournament" && l.soatcLeagueMatch && (
+                      <span
+                        className="text-[9px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/30"
+                        title={`Tournament: ${l.soatcLeagueMatch.tournamentName}`}
+                      >
+                        🏆 {l.soatcLeagueMatch.tournamentName}
+                      </span>
+                    )}
                     <span>{host}</span>
                     <span>•</span>
                     <span>
@@ -1089,30 +1101,104 @@ export default function LobbiesCentral({
                             Spectate
                           </Link>
                         )}
-                      <button
-                        className={`rounded px-4 py-1.5 text-sm font-medium disabled:opacity-40 ${
-                          full
-                            ? "bg-slate-700 hover:bg-slate-600"
-                            : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-500/20"
-                        }`}
-                        onClick={() => onJoin(l.id)}
-                        disabled={
-                          !open || full || (isEngaged && l.id !== joinedLobbyId)
-                        }
-                        title={
-                          !open
-                            ? "Lobby not open"
-                            : full
-                            ? "Lobby is full"
-                            : isEngaged
-                            ? `Already in ${
-                                isInLobby ? "another lobby" : "tournament"
-                              }`
-                            : "Join this lobby"
-                        }
-                      >
-                        {full ? "Full" : "Join Game"}
-                      </button>
+                      {/* Open lobbies: show Join button only after host has opened the lobby */}
+                      {l.visibility === "open" && l.hostReady && (
+                        <button
+                          className={`rounded px-4 py-1.5 text-sm font-medium disabled:opacity-40 ${
+                            full
+                              ? "bg-slate-700 hover:bg-slate-600"
+                              : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-500/20"
+                          }`}
+                          onClick={() => onJoin(l.id)}
+                          disabled={
+                            !open ||
+                            full ||
+                            (isEngaged && l.id !== joinedLobbyId)
+                          }
+                          title={
+                            !open
+                              ? "Lobby not open"
+                              : full
+                              ? "Lobby is full"
+                              : isEngaged
+                              ? `Already in ${
+                                  isInLobby ? "another lobby" : "tournament"
+                                }`
+                              : "Join this lobby"
+                          }
+                        >
+                          {full ? "Full" : "Join Game"}
+                        </button>
+                      )}
+                      {/* Open lobbies: show "Setting up" indicator when host hasn't opened yet */}
+                      {l.visibility === "open" && !l.hostReady && (
+                        <span className="text-xs text-slate-400 px-2 py-1 italic">
+                          ⏳ Host is configuring...
+                        </span>
+                      )}
+                      {/* Tournament lobbies: show special join button only for registered participants */}
+                      {l.visibility === "tournament" &&
+                        l.soatcLeagueMatch &&
+                        (() => {
+                          // Check if user is registered in this tournament
+                          const isRegisteredInTournament =
+                            soatcStatus?.tournaments?.some(
+                              (t) => t.id === l.soatcLeagueMatch?.tournamentId
+                            ) ||
+                            soatcStatus?.tournament?.id ===
+                              l.soatcLeagueMatch?.tournamentId;
+
+                          if (!isRegisteredInTournament) {
+                            // Show indicator that this is a tournament match (no join button)
+                            return (
+                              <span className="text-xs text-amber-400/60 px-2 py-1 italic">
+                                Tournament participants only
+                              </span>
+                            );
+                          }
+
+                          return (
+                            <button
+                              className={`rounded px-4 py-1.5 text-sm font-medium disabled:opacity-40 ${
+                                full
+                                  ? "bg-slate-700 hover:bg-slate-600"
+                                  : "bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white shadow-lg shadow-amber-500/30 ring-1 ring-amber-400/50"
+                              }`}
+                              onClick={() => onJoin(l.id)}
+                              disabled={
+                                !open ||
+                                full ||
+                                (isEngaged && l.id !== joinedLobbyId) ||
+                                !l.hostReady
+                              }
+                              title={
+                                !l.hostReady
+                                  ? "Host is still setting up the match"
+                                  : !open
+                                  ? "Lobby not open"
+                                  : full
+                                  ? "Lobby is full"
+                                  : isEngaged
+                                  ? `Already in ${
+                                      isInLobby ? "another lobby" : "tournament"
+                                    }`
+                                  : `Join tournament match: ${l.soatcLeagueMatch.tournamentName}`
+                              }
+                            >
+                              {full
+                                ? "Full"
+                                : !l.hostReady
+                                ? "⏳ Setting up..."
+                                : "🏆 Join Match"}
+                            </button>
+                          );
+                        })()}
+                      {/* Show invite-only indicator for private lobbies */}
+                      {l.visibility === "private" && (
+                        <span className="text-xs text-amber-400/80 px-2 py-1">
+                          🔒 Invite Only
+                        </span>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1202,8 +1288,7 @@ export default function LobbiesCentral({
                       Format: {tournament.format} • Type: {tournament.matchType}
                     </div>
                     <div>
-                      Players:{" "}
-                      {activeCount}
+                      Players: {activeCount}
                       {isOpenSeat ? "" : `/${tournament.maxPlayers}`} • Round:{" "}
                       {tournament.currentRound}/{tournament.totalRounds}
                     </div>
@@ -2630,9 +2715,7 @@ function TournamentSettingsForm({
         </button>
         <button
           onClick={handleSave}
-          disabled={
-            !hasChanges || maxPlayers < activeCount
-          }
+          disabled={!hasChanges || maxPlayers < activeCount}
           className="px-3 py-2 rounded bg-blue-600 hover:bg-blue-500 disabled:bg-slate-600 disabled:cursor-not-allowed text-sm text-white transition-colors"
         >
           Save Changes
