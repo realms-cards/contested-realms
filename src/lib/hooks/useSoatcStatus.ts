@@ -5,6 +5,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { isSoatcEnabledClient } from "@/lib/soatc/api";
 
 // Cache configuration
 // Tournament participation is cached for 1 week (fetched ~4x per month)
@@ -82,6 +83,13 @@ export function useSoatcStatus(): UseSoatcStatusResult {
   const fetchingRef = useRef(false);
 
   const fetchStatus = useCallback(async (force = false) => {
+    // Skip if SOATC is disabled
+    if (!isSoatcEnabledClient()) {
+      setStatus(null);
+      setLoading(false);
+      return;
+    }
+
     // Use cache if valid and not forcing refresh
     if (!force && isCacheValid(statusCache.entry, CACHE_TTL_MS)) {
       setStatus(statusCache.entry.data);
@@ -174,6 +182,12 @@ export function useSoatcSettings(): UseSoatcSettingsResult {
   const fetchingRef = useRef(false);
 
   const fetchSettings = useCallback(async (force = false) => {
+    // Skip if SOATC is disabled
+    if (!isSoatcEnabledClient()) {
+      setLoading(false);
+      return;
+    }
+
     // Use cache if valid and not forcing refresh
     if (!force && isCacheValid(settingsCache.entry, CACHE_TTL_MS)) {
       setSoatcUuid(settingsCache.entry.data.soatcUuid);
@@ -328,6 +342,13 @@ export function useSoatcPlayers(userIds: string[]): UseSoatcPlayersResult {
   const fetchingRef = useRef(false);
 
   useEffect(() => {
+    // Skip if SOATC is disabled
+    if (!isSoatcEnabledClient()) {
+      setPlayers({});
+      setLoading(false);
+      return;
+    }
+
     if (userIds.length === 0) {
       setPlayers({});
       return;
@@ -407,6 +428,13 @@ export function useSharedTournament(
 
   const fetchStatus = useCallback(
     async (force = false) => {
+      // Skip if SOATC is disabled
+      if (!isSoatcEnabledClient()) {
+        setStatus(null);
+        setLoading(false);
+        return;
+      }
+
       if (!opponentId) {
         setStatus(null);
         return;
