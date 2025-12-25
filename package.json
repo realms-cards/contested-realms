@@ -33,6 +33,8 @@
     "generate:search-index": "node scripts/generate-search-index.js",
     "ingest:codex": "node scripts/ingest-codex.js",
     "seed:packs": "node scripts/seed-pack-config.js",
+    "ratings:recalculate": "node scripts/recalculate-ratings.js",
+    "ratings:recalculate:dry": "node scripts/recalculate-ratings.js --dry-run",
     "seed:precons": "node scripts/seed-precon-decks.js",
     "seed:gothic": "node scripts/seed-gothic-precons.js",
     "assets:compress": "node scripts/compress-ktx2.js",
