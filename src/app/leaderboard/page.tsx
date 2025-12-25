@@ -45,7 +45,10 @@ export default function LeaderboardPage() {
   const [timeFrame, setTimeFrame] = useState<"all_time" | "monthly" | "weekly">(
     "all_time"
   );
+  const [page, setPage] = useState(0);
   const [patrons, setPatrons] = useState<PatronData | null>(null);
+
+  const PAGE_SIZE = 25;
 
   // Fetch patron data on mount
   useEffect(() => {
@@ -70,7 +73,9 @@ export default function LeaderboardPage() {
     setError(null);
     try {
       const response = await fetch(
-        `/api/leaderboard?format=${format}&timeFrame=${timeFrame}&limit=50`
+        `/api/leaderboard?format=${format}&timeFrame=${timeFrame}&limit=${PAGE_SIZE}&offset=${
+          page * PAGE_SIZE
+        }`
       );
       if (!response.ok) {
         throw new Error("Failed to fetch leaderboard");
@@ -82,11 +87,16 @@ export default function LeaderboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [format, timeFrame]);
+  }, [format, timeFrame, page]);
 
   useEffect(() => {
     void fetchLeaderboard();
   }, [fetchLeaderboard]);
+
+  // Reset to first page when filters change
+  useEffect(() => {
+    setPage(0);
+  }, [format, timeFrame]);
 
   const formatWinRate = (winRate: number) => `${(winRate * 100).toFixed(1)}%`;
 
@@ -158,7 +168,9 @@ export default function LeaderboardPage() {
                         ? "bg-blue-600 text-white shadow-inner"
                         : "bg-slate-800/80 text-slate-300 hover:bg-slate-700"
                     }`}
-                    onClick={() => setFormat(f)}
+                    onClick={() => {
+                      setFormat(f);
+                    }}
                   >
                     {getFormatDisplay(f)}
                   </button>
@@ -178,7 +190,9 @@ export default function LeaderboardPage() {
                         ? "bg-purple-600 text-white shadow-inner"
                         : "bg-slate-800/80 text-slate-300 hover:bg-slate-700"
                     }`}
-                    onClick={() => setTimeFrame(t)}
+                    onClick={() => {
+                      setTimeFrame(t);
+                    }}
                   >
                     {getTimeFrameDisplay(t)}
                   </button>
@@ -321,6 +335,32 @@ export default function LeaderboardPage() {
           ) : (
             <div className="text-center py-10 text-sm text-slate-400">
               No leaderboard data available. Play some matches to see rankings!
+            </div>
+          )}
+
+          {/* Pagination Controls */}
+          {data && data.pagination.total > PAGE_SIZE && (
+            <div className="flex items-center justify-center gap-4 mt-6 pt-4 border-t border-slate-800/50">
+              <button
+                type="button"
+                className="px-4 py-2 text-sm font-semibold rounded-lg bg-slate-800 text-slate-200 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                disabled={page === 0 || loading}
+              >
+                ← Previous
+              </button>
+              <span className="text-sm text-slate-300">
+                Page {page + 1} of{" "}
+                {Math.ceil(data.pagination.total / PAGE_SIZE)}
+              </span>
+              <button
+                type="button"
+                className="px-4 py-2 text-sm font-semibold rounded-lg bg-slate-800 text-slate-200 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                onClick={() => setPage((p) => p + 1)}
+                disabled={!data.pagination.hasMore || loading}
+              >
+                Next →
+              </button>
             </div>
           )}
         </div>
