@@ -21,8 +21,19 @@ interface LeaderboardEntry {
   lastActive: string;
 }
 
+interface CurrentUserRank {
+  rank: number;
+  rating: number;
+  wins: number;
+  losses: number;
+  draws: number;
+  winRate: number;
+  uniqueOpponents: number;
+}
+
 interface LeaderboardData {
   leaderboard: LeaderboardEntry[];
+  currentUser: CurrentUserRank | null;
   pagination: {
     total: number;
     limit: number;
@@ -222,6 +233,57 @@ export default function LeaderboardPage() {
               </span>
             )}
           </div>
+
+          {/* Current User's Rank */}
+          {data?.currentUser && (
+            <div className="mb-4 p-4 bg-gradient-to-r from-indigo-900/40 to-purple-900/40 border border-indigo-700/50 rounded-xl">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="text-xs uppercase tracking-wide text-indigo-300 font-medium">
+                    Your Rank
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl font-bold text-white">
+                      #{data.currentUser.rank}
+                    </span>
+                    <span className="text-sm text-slate-400">
+                      of {data.pagination.total}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-6 text-sm">
+                  <div className="text-center">
+                    <div className="font-semibold text-white">
+                      {data.currentUser.rating}
+                    </div>
+                    <div className="text-xs text-slate-400">Rating</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="font-semibold text-emerald-300">
+                      {formatWinRate(data.currentUser.winRate)}
+                    </div>
+                    <div className="text-xs text-slate-400">Win Rate</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="font-semibold text-white">
+                      {data.currentUser.wins}-{data.currentUser.losses}
+                      {data.currentUser.draws > 0 &&
+                        `-${data.currentUser.draws}`}
+                    </div>
+                    <div className="text-xs text-slate-400">
+                      W-L{data.currentUser.draws > 0 && "-D"}
+                    </div>
+                  </div>
+                  <div className="text-center">
+                    <div className="font-semibold text-cyan-300">
+                      {data.currentUser.uniqueOpponents}
+                    </div>
+                    <div className="text-xs text-slate-400">Opponents</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {loading ? (
             <div className="text-center py-10 text-sm text-slate-400">
