@@ -306,6 +306,18 @@ export class SocketTransport implements GameTransport {
     return "unknown";
   }
 
+  getConnectionState():
+    | "disconnected"
+    | "connecting"
+    | "connected"
+    | "reconnecting" {
+    return this.connectionState;
+  }
+
+  isConnected(): boolean {
+    return this.connectionState === "connected";
+  }
+
   async connect(opts: {
     playerId?: string;
     displayName: string;

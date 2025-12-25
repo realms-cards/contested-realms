@@ -17,6 +17,7 @@ interface LeaderboardEntry {
   winRate: number;
   rating: number;
   tournamentWins: number;
+  uniqueOpponents: number;
   lastActive: string;
 }
 
@@ -326,6 +327,14 @@ export default function LeaderboardPage() {
                       </div>
                       <div className="text-xs uppercase tracking-wide text-slate-400">
                         W-L{entry.draws > 0 && "-D"}
+                      </div>
+                    </div>
+                    <div className="text-center min-w-[60px]">
+                      <div className="text-base font-semibold text-cyan-300">
+                        {entry.uniqueOpponents}
+                      </div>
+                      <div className="text-xs uppercase tracking-wide text-slate-400">
+                        Opponents
                       </div>
                     </div>
                   </div>
