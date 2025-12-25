@@ -1233,20 +1233,6 @@ export class SocketTransport implements GameTransport {
     return this.socket;
   }
 
-  getConnectionState():
-    | "disconnected"
-    | "connecting"
-    | "connected"
-    | "reconnecting" {
-    return this.connectionState;
-  }
-
-  isConnected(): boolean {
-    return (
-      this.connectionState === "connected" && this.socket?.connected === true
-    );
-  }
-
   // Generic methods for replay and other custom events
   emit(event: string, payload?: unknown): void {
     this.requireSocket().emit(event, payload);
