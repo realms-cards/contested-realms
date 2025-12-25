@@ -34,6 +34,7 @@ export const TOKEN_DEFS: TokenDef[] = [
     siteReplacement: true,
     textureRotation: -Math.PI / 2,
   },
+  { key: "Burned", name: "Burned", fileBase: "burned", size: "small" },
 ];
 
 export const TOKEN_BY_KEY = Object.fromEntries(
