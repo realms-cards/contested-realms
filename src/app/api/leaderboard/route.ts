@@ -106,6 +106,66 @@ export async function GET(req: NextRequest) {
       },
     });
 
+    // Get current user's entry and rank
+    const currentUserId = session.user.id;
+    const currentUserEntry = await prisma.leaderboardEntry.findUnique({
+      where: {
+        playerId_format_timeFrame: {
+          playerId: currentUserId,
+          format,
+          timeFrame,
+        },
+      },
+    });
+
+    let currentUserRank: {
+      rank: number;
+      rating: number;
+      wins: number;
+      losses: number;
+      draws: number;
+      winRate: number;
+      uniqueOpponents: number;
+    } | null = null;
+
+    if (currentUserEntry) {
+      // Count how many players are ranked above this user
+      const playersAbove = await prisma.leaderboardEntry.count({
+        where: {
+          format,
+          timeFrame,
+          OR: [
+            { rating: { gt: currentUserEntry.rating } },
+            {
+              rating: currentUserEntry.rating,
+              winRate: { gt: currentUserEntry.winRate },
+            },
+            {
+              rating: currentUserEntry.rating,
+              winRate: currentUserEntry.winRate,
+              wins: { gt: currentUserEntry.wins },
+            },
+          ],
+        },
+      });
+
+      const userUniqueOpponents = await countUniqueOpponents(
+        currentUserId,
+        format,
+        timeFrame
+      );
+
+      currentUserRank = {
+        rank: playersAbove + 1,
+        rating: currentUserEntry.rating,
+        wins: currentUserEntry.wins,
+        losses: currentUserEntry.losses,
+        draws: currentUserEntry.draws,
+        winRate: currentUserEntry.winRate,
+        uniqueOpponents: userUniqueOpponents,
+      };
+    }
+
     // Fetch unique opponent counts for all players in parallel
     const uniqueOpponentCounts = await Promise.all(
       leaderboard.map((entry) =>
@@ -131,6 +191,7 @@ export async function GET(req: NextRequest) {
     return new Response(
       JSON.stringify({
         leaderboard: leaderboardData,
+        currentUser: currentUserRank,
         pagination: {
           total: totalCount,
           limit,
