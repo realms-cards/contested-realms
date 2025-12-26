@@ -1,0 +1,5 @@
+1 Interrogator
+1 Pathfinder
+1 Sorcerer
+1 Persecutor
+1 Flamecaller
