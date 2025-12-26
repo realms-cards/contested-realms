@@ -417,6 +417,12 @@ export const createNetworkSlice: StateCreator<
       } else if (replaceKeys.has("imposterMasks")) {
         next.imposterMasks = { p1: null, p2: null };
       }
+      // Necromancer skeleton used state (Gothic expansion)
+      if (p.necromancerSkeletonUsed !== undefined) {
+        next.necromancerSkeletonUsed = p.necromancerSkeletonUsed;
+      } else if (replaceKeys.has("necromancerSkeletonUsed")) {
+        next.necromancerSkeletonUsed = { p1: false, p2: false };
+      }
       // Pith Imp private hands (stolen cards)
       // CRITICAL: Do NOT clear based on replaceKeys - owner tracks locally, server snapshots would wipe it
       if (p.pithImpHands !== undefined) {
@@ -725,6 +731,10 @@ export const createNetworkSlice: StateCreator<
       // Imposter mask state (Gothic expansion) - applyPatch version
       if (p.imposterMasks !== undefined) {
         next.imposterMasks = p.imposterMasks;
+      }
+      // Necromancer skeleton used state - applyPatch version
+      if (p.necromancerSkeletonUsed !== undefined) {
+        next.necromancerSkeletonUsed = p.necromancerSkeletonUsed;
       }
 
       // CRITICAL: Spread state first, then next - otherwise we lose all state not in the patch

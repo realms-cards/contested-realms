@@ -33,6 +33,10 @@ import {
 import { createInteractionSlice } from "./store/interactionState";
 import { createMagicSlice } from "./store/magicState";
 import { createMorganaSlice } from "./store/morganaState";
+import {
+  createNecromancerSlice,
+  createInitialNecromancerSkeletonUsed,
+} from "./store/necromancerState";
 import { createNetworkSlice } from "./store/networkState";
 import { createOmphalosSlice } from "./store/omphalosState";
 import { createPermanentSlice } from "./store/permanentState";
@@ -139,6 +143,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   ...createPortalSlice(set, get, storeApi),
   ...createSeerSlice(set, get, storeApi),
   ...createImposterMaskSlice(set, get, storeApi),
+  ...createNecromancerSlice(set, get, storeApi),
   ...createSpecialSiteSlice(set, get, storeApi),
   cardScale: 1,
 
@@ -205,6 +210,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         portalState: null,
         seerState: null,
         imposterMasks: createInitialImposterMasks(),
+        necromancerSkeletonUsed: createInitialNecromancerSkeletonUsed(),
         specialSiteState: getEmptySpecialSiteState(),
       };
       return reset as GameState;

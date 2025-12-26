@@ -12,7 +12,9 @@ import AttachmentTargetSelectionDialog, {
 } from "@/lib/game/components/AttachmentTargetSelectionDialog";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef } from "@/lib/game/store";
+import { isNecromancer } from "@/lib/game/avatarAbilities";
 import { isMasked } from "@/lib/game/store/imposterMaskState";
+import { NECROMANCER_SKELETON_COST } from "@/lib/game/store/types";
 import {
   getCellNumber,
   parseCellKey,
@@ -76,6 +78,12 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   const opponentPlayerId = useGameStore((s) => s.opponentPlayerId);
   const imposterMasks = useGameStore((s) => s.imposterMasks);
   const unmask = useGameStore((s) => s.unmask);
+  const necromancerSkeletonUsed = useGameStore(
+    (s) => s.necromancerSkeletonUsed
+  );
+  const summonSkeletonHere = useGameStore((s) => s.summonSkeletonHere);
+  const players = useGameStore((s) => s.players);
+  const getAvailableMana = useGameStore((s) => s.getAvailableMana);
 
   // Permanent position management (burrow/submerge)
   const getAvailableActions = useGameStore((s) => s.getAvailableActions);
@@ -885,6 +893,40 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
       });
     }
 
+    // Necromancer skeleton summon action (once per turn, costs 1 mana)
+    // Check if avatar is Necromancer (or masked as Necromancer)
+    const avatarName = a?.card?.name;
+    const maskedState = imposterMasks[t.who];
+    const effectiveAvatarName = maskedState?.maskAvatar?.name ?? avatarName;
+    const currentSeat = currentPlayer === 1 ? "p1" : "p2";
+    const isMyTurn = t.who === currentSeat;
+    const availableMana = getAvailableMana(t.who);
+    const hasEnoughMana = availableMana >= NECROMANCER_SKELETON_COST;
+    const hasAlreadyUsed = necromancerSkeletonUsed[t.who];
+    const hasPosition = Array.isArray(a?.pos) && a.pos.length === 2;
+
+    if (isMine && isNecromancer(effectiveAvatarName)) {
+      const canSummon =
+        isMyTurn && hasEnoughMana && !hasAlreadyUsed && hasPosition;
+      let description = `Summon a Skeleton token at your avatar's location (costs ${NECROMANCER_SKELETON_COST} mana, once per turn)`;
+      if (!isMyTurn) description = "Can only summon skeleton on your turn";
+      else if (hasAlreadyUsed)
+        description = "Already summoned a skeleton this turn";
+      else if (!hasEnoughMana)
+        description = `Not enough mana (need ${NECROMANCER_SKELETON_COST}, have ${availableMana})`;
+      else if (!hasPosition) description = "Avatar must be on the board";
+
+      extraActions.push({
+        actionId: "__summon_skeleton__",
+        displayText: `Summon Skeleton (${NECROMANCER_SKELETON_COST}💧)${
+          hasAlreadyUsed ? " ✓" : ""
+        }`,
+        isEnabled: canSummon,
+        targetPermanentId: 0,
+        description,
+      });
+    }
+
     // Find artifacts attached to this avatar (attachedTo.index === -1)
     const avatarPos =
       Array.isArray(a?.pos) && a.pos.length === 2 ? a.pos : null;
@@ -1553,6 +1595,29 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                           onClick={() => {
                             if (t.kind === "avatar") {
                               unmask(t.who);
+                            }
+                            onClose();
+                          }}
+                        >
+                          {action.displayText}
+                        </button>
+                      );
+                    }
+                    // Necromancer summon skeleton action
+                    if (action.actionId === "__summon_skeleton__") {
+                      return (
+                        <button
+                          key={action.actionId}
+                          className={`w-full text-left rounded px-3 py-1 ${
+                            action.isEnabled
+                              ? "bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-200"
+                              : "bg-gray-600/20 text-gray-400 cursor-not-allowed"
+                          }`}
+                          title={action.description}
+                          disabled={!action.isEnabled}
+                          onClick={() => {
+                            if (t.kind === "avatar" && action.isEnabled) {
+                              summonSkeletonHere(t.who);
                             }
                             onClose();
                           }}

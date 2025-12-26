@@ -17,6 +17,7 @@ export type AvatarAbility =
   | "magician"
   | "duplicator"
   | "imposter"
+  | "necromancer"
   | null;
 
 /**
@@ -80,6 +81,16 @@ export function isImposter(avatarName: string | null | undefined): boolean {
 }
 
 /**
+ * Check if an avatar name indicates Necromancer
+ * Uses case-insensitive matching
+ * Necromancer: Once on your turn, you may pay (1) to summon a Skeleton token here.
+ */
+export function isNecromancer(avatarName: string | null | undefined): boolean {
+  if (!avatarName) return false;
+  return avatarName.toLowerCase().includes("necromancer");
+}
+
+/**
  * Get the primary ability type for an avatar by name
  * Returns null if no special ability detected
  */
@@ -95,6 +106,7 @@ export function getAvatarAbility(
   if (name.includes("magician")) return "magician";
   if (name.includes("duplicator")) return "duplicator";
   if (name.includes("imposter")) return "imposter";
+  if (name.includes("necromancer")) return "necromancer";
 
   return null;
 }

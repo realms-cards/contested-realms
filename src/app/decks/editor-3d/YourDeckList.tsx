@@ -192,10 +192,9 @@ export default function YourDeckList(props: YourDeckListProps) {
       (p) => p.card.cardId === it.cardId && p.zone === "Sideboard"
     ).length;
     // Cards in Collection zone (for constructed 10-card collection)
-    const cardInCollection =
-      pick3D.filter(
-        (p) => p.card.cardId === it.cardId && p.zone === "Collection"
-      ).length + (collectionCountsByCardId[it.cardId] ?? 0);
+    const cardInCollection = pick3D.filter(
+      (p) => p.card.cardId === it.cardId && p.zone === "Collection"
+    ).length;
 
     const handleClick = (e: React.MouseEvent) => {
       e.preventDefault();

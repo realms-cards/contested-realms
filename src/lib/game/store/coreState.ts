@@ -464,12 +464,19 @@ export const createCoreSlice: StateCreator<
       [nextKey]: { ...state.players[nextKey], mana: 0 },
     };
 
+    // Reset necromancer skeleton usage for the next player's turn
+    const necromancerSkeletonUsedNext = {
+      ...state.necromancerSkeletonUsed,
+      [nextKey]: false, // Reset for the player whose turn is starting
+    };
+
     // Don't send turn in patch - server increments turn when currentPlayer changes
     const base: ServerPatchT = {
       phase: "Start",
       currentPlayer: nextPlayer,
       hasDrawnThisTurn: false, // Reset draw tracking for new turn
       players: playersNext,
+      necromancerSkeletonUsed: necromancerSkeletonUsedNext,
     };
     const deltaPatch =
       updates.length > 0 ? createPermanentDeltaPatch(updates) : undefined;
@@ -484,6 +491,7 @@ export const createCoreSlice: StateCreator<
       permanents,
       avatars: avatarsNext,
       players: playersNext,
+      necromancerSkeletonUsed: necromancerSkeletonUsedNext,
       selectedCard: null,
       selectedPermanent: null,
     });
