@@ -46,6 +46,11 @@ type BoardTileProps = {
   combatContext: PermanentStackProps["combatContext"];
   magicContext: PermanentStackProps["magicContext"];
   chaosTwisterContext: PermanentStackProps["chaosTwisterContext"];
+  earthquakeContext: {
+    pendingEarthquake: GameState["pendingEarthquake"];
+    selectEarthquakeArea: GameState["selectEarthquakeArea"];
+    performEarthquakeSwap: GameState["performEarthquakeSwap"];
+  };
   counterHandlers: PermanentStackProps["counterHandlers"];
   movementHandlers: PermanentStackProps["movementHandlers"];
   handlePointerMove: (x: number, z: number) => void;
@@ -111,6 +116,7 @@ export function BoardTile({
   combatContext,
   magicContext,
   chaosTwisterContext,
+  earthquakeContext,
   counterHandlers,
   movementHandlers,
   handlePointerMove,
@@ -172,6 +178,9 @@ export function BoardTile({
         pendingChaosTwister={chaosTwisterContext.pendingChaosTwister}
         actorKey={actorKey}
         selectChaosTwisterSite={chaosTwisterContext.selectChaosTwisterSite}
+        pendingEarthquake={earthquakeContext.pendingEarthquake}
+        selectEarthquakeArea={earthquakeContext.selectEarthquakeArea}
+        performEarthquakeSwap={earthquakeContext.performEarthquakeSwap}
         hasSiteAtTile={Boolean(site)}
       />
 

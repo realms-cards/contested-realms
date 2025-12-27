@@ -14,8 +14,9 @@ import {
   tokenSlug,
 } from "@/lib/game/tokens";
 import { toCellKey } from "./utils/boardHelpers";
-import { prepareCardForSeat } from "./utils/cardPrepare";
-import { newPermanentInstanceId, randomTilt } from "./utils/permanentHelpers";
+import { prepareCardForSeat } from "./utils/cardHelpers";
+import { newPermanentInstanceId } from "./utils/idHelpers";
+import { randomTilt } from "./utils/permanentHelpers";
 
 export const createInitialNecromancerSkeletonUsed =
   (): GameState["necromancerSkeletonUsed"] => ({

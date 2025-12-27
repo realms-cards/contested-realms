@@ -31,6 +31,10 @@ export type TileInteractionPlaneProps = {
   pendingChaosTwister: GameState["pendingChaosTwister"];
   actorKey: GameState["actorKey"];
   selectChaosTwisterSite?: GameState["selectChaosTwisterSite"];
+  // Earthquake site rearrangement support
+  pendingEarthquake?: GameState["pendingEarthquake"];
+  selectEarthquakeArea?: GameState["selectEarthquakeArea"];
+  performEarthquakeSwap?: GameState["performEarthquakeSwap"];
   hasSiteAtTile: boolean;
 };
 
@@ -54,6 +58,9 @@ export function TileInteractionPlane({
   pendingChaosTwister,
   actorKey,
   selectChaosTwisterSite,
+  pendingEarthquake,
+  selectEarthquakeArea,
+  performEarthquakeSwap,
   hasSiteAtTile,
 }: TileInteractionPlaneProps) {
   const { dragAvatar, dragging, setGhost, draggedBody, moveDraggedBody } =
@@ -103,6 +110,44 @@ export function TileInteractionPlane({
           e.stopPropagation();
           selectChaosTwisterSite({ x: tileX, y: tileY });
           return;
+        }
+        // Earthquake area selection - click on any tile to select 2x2 area corner
+        if (
+          pendingEarthquake &&
+          pendingEarthquake.phase === "selectingArea" &&
+          (pendingEarthquake.casterSeat === actorKey || !actorKey) &&
+          selectEarthquakeArea
+        ) {
+          e.stopPropagation();
+          selectEarthquakeArea({ x: tileX, y: tileY });
+          return;
+        }
+        // Earthquake swap - click on tiles within the 2x2 area to swap
+        if (
+          pendingEarthquake &&
+          pendingEarthquake.phase === "rearranging" &&
+          pendingEarthquake.areaCorner &&
+          (pendingEarthquake.casterSeat === actorKey || !actorKey) &&
+          performEarthquakeSwap
+        ) {
+          const { areaCorner } = pendingEarthquake;
+          const inArea =
+            tileX >= areaCorner.x &&
+            tileX < areaCorner.x + 2 &&
+            tileY >= areaCorner.y &&
+            tileY < areaCorner.y + 2;
+          if (inArea && hasSiteAtTile) {
+            e.stopPropagation();
+            // Dispatch custom event for the overlay to handle swap selection
+            if (typeof window !== "undefined") {
+              window.dispatchEvent(
+                new CustomEvent("earthquake:tileClick", {
+                  detail: { x: tileX, y: tileY },
+                })
+              );
+            }
+            return;
+          }
         }
         handleTilePointerUp({
           event: e,

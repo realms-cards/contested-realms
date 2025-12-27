@@ -82,7 +82,6 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     (s) => s.necromancerSkeletonUsed
   );
   const summonSkeletonHere = useGameStore((s) => s.summonSkeletonHere);
-  const players = useGameStore((s) => s.players);
   const getAvailableMana = useGameStore((s) => s.getAvailableMana);
 
   // Permanent position management (burrow/submerge)

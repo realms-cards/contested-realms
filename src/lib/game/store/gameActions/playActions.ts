@@ -401,6 +401,7 @@ export const createPlayActionsSlice: StateCreator<
       const isChaosTwister = cardNameLower.includes("chaos twister");
       const isBrowse = cardNameLower === "browse";
       const isCommonSense = cardNameLower === "common sense";
+      const isEarthquake = cardNameLower === "earthquake";
       const isMorgana = cardNameLower.includes("morgana le fay");
       const isPithImp = cardNameLower.includes("pith imp");
       const isOmphalos = cardNameLower.includes("omphalos");
@@ -409,6 +410,7 @@ export const createPlayActionsSlice: StateCreator<
         cardNameLower,
         isBrowse,
         isCommonSense,
+        isEarthquake,
         isMorgana,
         isPithImp,
         isOmphalos,
@@ -449,6 +451,21 @@ export const createPlayActionsSlice: StateCreator<
       else if (isCommonSense && newest) {
         try {
           get().beginCommonSense({
+            spell: {
+              at: key,
+              index: arr.length - 1,
+              instanceId: newest.instanceId ?? null,
+              owner: newest.owner,
+              card: newest.card as CardRef,
+            },
+            casterSeat: who,
+          });
+        } catch {}
+      }
+      // If this is Earthquake, begin the site rearrangement flow
+      else if (isEarthquake && newest) {
+        try {
+          get().beginEarthquake({
             spell: {
               at: key,
               index: arr.length - 1,
