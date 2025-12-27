@@ -421,6 +421,40 @@ export type PendingCommonSense = {
   createdAt: number;
 };
 
+// --- Earthquake Spell State ------------------------------------------------
+// "You may rearrange sites within a two-by-two area, carrying along everything of normal size.
+//  Then burrow all minions and artifacts on those sites."
+export type EarthquakePhase =
+  | "selectingArea" // Player is selecting the top-left corner of a 2x2 area
+  | "rearranging" // Player is rearranging sites within the 2x2 area
+  | "resolving"
+  | "complete";
+
+export type EarthquakeSwap = {
+  from: { x: number; y: number };
+  to: { x: number; y: number };
+};
+
+export type PendingEarthquake = {
+  id: string;
+  spell: {
+    at: CellKey;
+    index: number;
+    instanceId?: string | null;
+    owner: 1 | 2;
+    card: CardRef;
+  };
+  casterSeat: PlayerKey;
+  phase: EarthquakePhase;
+  // Top-left corner of the 2x2 area (null if not yet selected)
+  areaCorner: { x: number; y: number } | null;
+  // List of swaps performed during rearranging phase
+  swaps: EarthquakeSwap[];
+  // Sites in the 2x2 area that will be burrowed after rearranging
+  affectedCells: CellKey[];
+  createdAt: number;
+};
+
 // --- Pith Imp Private Hand State ------------------------------------------------
 // "Genesis → Steals a random spell from your opponent's hand until it leaves the realm."
 // Uses private hand approach like Omphalos - stolen cards stored in hand array (face-down/hidden)
@@ -844,6 +878,25 @@ export type GameState = {
   selectCommonSenseCard: (cardIndex: number) => void;
   resolveCommonSense: () => void;
   cancelCommonSense: () => void;
+  // Earthquake spell flow
+  pendingEarthquake: PendingEarthquake | null;
+  beginEarthquake: (input: {
+    spell: {
+      at: CellKey;
+      index: number;
+      instanceId?: string | null;
+      owner: 1 | 2;
+      card: CardRef;
+    };
+    casterSeat: PlayerKey;
+  }) => void;
+  selectEarthquakeArea: (corner: { x: number; y: number }) => void;
+  performEarthquakeSwap: (
+    from: { x: number; y: number },
+    to: { x: number; y: number }
+  ) => void;
+  resolveEarthquake: () => void;
+  cancelEarthquake: () => void;
   // Pith Imp private hands (stolen cards, hidden/face-down)
   pithImpHands: PithImpHandEntry[];
   stolenCards: PendingStolenCard[]; // Legacy - kept for backwards compatibility
@@ -1458,5 +1511,6 @@ export type ServerPatchT = Partial<{
   omphalosHands: GameState["omphalosHands"];
   cardScale: GameState["cardScale"];
   specialSiteState: GameState["specialSiteState"];
+  pendingEarthquake: GameState["pendingEarthquake"];
   __replaceKeys: string[];
 }>;

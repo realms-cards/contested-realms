@@ -646,6 +646,11 @@ export default function Board({
     (s) => s.selectChaosTwisterSite
   );
 
+  // Earthquake spell flow
+  const pendingEarthquake = useScopedStore((s) => s.pendingEarthquake);
+  const selectEarthquakeArea = useScopedStore((s) => s.selectEarthquakeArea);
+  const performEarthquakeSwap = useScopedStore((s) => s.performEarthquakeSwap);
+
   // Helper to check if a token can be attached
   const isAttachableToken = (tokenName: string): boolean => {
     const name = tokenName.toLowerCase();
@@ -922,6 +927,14 @@ export default function Board({
       metaByCardId,
     ]
   );
+  const earthquakeContext = useMemo(
+    () => ({
+      pendingEarthquake,
+      selectEarthquakeArea,
+      performEarthquakeSwap,
+    }),
+    [pendingEarthquake, selectEarthquakeArea, performEarthquakeSwap]
+  );
   const counterHandlers = useMemo(
     () => ({
       increment: incrementPermanentCounter,
@@ -1152,6 +1165,7 @@ export default function Board({
               combatContext={combatContext}
               magicContext={magicContext}
               chaosTwisterContext={chaosTwisterContext}
+              earthquakeContext={earthquakeContext}
               counterHandlers={counterHandlers}
               movementHandlers={movementHandlers}
               handlePointerMove={handlePointerMove}

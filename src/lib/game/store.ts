@@ -20,6 +20,7 @@ import {
   createDialogSlice,
   createInitialDialogState,
 } from "./store/dialogState";
+import { createEarthquakeSlice } from "./store/earthquakeState";
 import { createEventSlice } from "./store/eventState";
 import { createGameActionsSlice } from "./store/gameActions";
 import {
@@ -129,6 +130,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   ...createChaosTwisterSlice(set, get, storeApi),
   ...createBrowseSlice(set, get, storeApi),
   ...createCommonSenseSlice(set, get, storeApi),
+  ...createEarthquakeSlice(set, get, storeApi),
   ...createPithImpSlice(set, get, storeApi),
   ...createMorganaSlice(set, get, storeApi),
   ...createOmphalosSlice(set, get, storeApi),
@@ -203,6 +205,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         pendingChaosTwister: null,
         pendingBrowse: null,
         pendingCommonSense: null,
+        pendingEarthquake: null,
         stolenCards: [],
         morganaHands: [],
         omphalosHands: [],

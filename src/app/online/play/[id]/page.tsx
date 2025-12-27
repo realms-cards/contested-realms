@@ -15,6 +15,7 @@ import { ClientCanvas } from "@/components/game/ClientCanvas";
 import CollectionButton from "@/components/game/CollectionButton";
 import CombatHudOverlay from "@/components/game/CombatHudOverlay";
 import CommonSenseOverlay from "@/components/game/CommonSenseOverlay";
+import EarthquakeOverlay from "@/components/game/EarthquakeOverlay";
 import ContextMenu from "@/components/game/ContextMenu";
 import { ElementChoiceOverlay } from "@/components/game/ElementChoiceOverlay";
 import EnhancedOnlineDraft3DScreen from "@/components/game/EnhancedOnlineDraft3DScreen";
@@ -3094,6 +3095,8 @@ export default function OnlineMatchPage() {
           <MagicHudOverlay />
           {/* Chaos Twister Overlay (dexterity minigame) */}
           <ChaosTwisterOverlay transport={transport} />
+          {/* Earthquake Overlay (site rearrangement) */}
+          <EarthquakeOverlay transport={transport} />
           {/* Element Choice Overlay (Valley of Delight, etc.) */}
           <ElementChoiceOverlay />
           {/* Browse Overlay (spell selection) */}

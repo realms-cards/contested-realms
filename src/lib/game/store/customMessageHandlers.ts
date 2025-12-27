@@ -2081,4 +2081,182 @@ export function handleCustomMessage(
     }
     return;
   }
+
+  // --- Earthquake spell message handlers ---
+  if (t === "earthquakeBegin") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const spellAny = (msg as { spell?: unknown }).spell as unknown;
+    const casterSeat = (msg as { casterSeat?: unknown }).casterSeat as
+      | PlayerKey
+      | undefined;
+    if (!id || !spellAny || !casterSeat) return;
+    const rec = spellAny as Record<string, unknown>;
+    // Opponent sees Earthquake begin
+    set({
+      pendingEarthquake: {
+        id,
+        spell: {
+          at: rec.at as CellKey,
+          index: Number(rec.index),
+          instanceId: (rec.instanceId as string | null) ?? null,
+          owner: Number(rec.owner) as 1 | 2,
+          card: rec.card as CardRef,
+        },
+        casterSeat,
+        phase: "selectingArea",
+        areaCorner: null,
+        swaps: [],
+        affectedCells: [],
+        createdAt: Date.now(),
+      },
+    } as Partial<GameState> as GameState);
+    try {
+      get().log(
+        `[${casterSeat.toUpperCase()}] casts Earthquake - selecting a 2×2 area...`
+      );
+    } catch {}
+    return;
+  }
+  if (t === "earthquakeSelectArea") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const corner = (msg as { corner?: unknown }).corner as
+      | { x: number; y: number }
+      | undefined;
+    const affectedCells = (msg as { affectedCells?: unknown }).affectedCells as
+      | CellKey[]
+      | undefined;
+    if (!id || !corner) return;
+    set((s) => {
+      if (!s.pendingEarthquake || s.pendingEarthquake.id !== id)
+        return s as GameState;
+      return {
+        pendingEarthquake: {
+          ...s.pendingEarthquake,
+          areaCorner: corner,
+          affectedCells: affectedCells || [],
+          phase: "rearranging",
+        },
+      } as Partial<GameState> as GameState;
+    });
+    try {
+      const board = get().board;
+      const cells = affectedCells || [];
+      const cellNos = cells
+        .map((cell) => {
+          const [cx, cy] = cell.split(",").map(Number);
+          return `#${getCellNumber(cx, cy, board.size.w)}`;
+        })
+        .join(", ");
+      get().log(`Earthquake area selected: ${cellNos}`);
+    } catch {}
+    return;
+  }
+  if (t === "earthquakeSwap") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const from = (msg as { from?: unknown }).from as
+      | { x: number; y: number }
+      | undefined;
+    const to = (msg as { to?: unknown }).to as
+      | { x: number; y: number }
+      | undefined;
+    if (!id || !from || !to) return;
+
+    // Skip if we're the caster - we already handled it locally
+    const pending = get().pendingEarthquake;
+    const actorKey = get().actorKey;
+    if (pending && actorKey === pending.casterSeat) {
+      return;
+    }
+
+    // Perform the swap on opponent's side
+    try {
+      get().switchSitePosition(from.x, from.y, to.x, to.y);
+    } catch {}
+
+    // Update pending state with the swap
+    set((s) => {
+      if (!s.pendingEarthquake || s.pendingEarthquake.id !== id)
+        return s as GameState;
+      return {
+        pendingEarthquake: {
+          ...s.pendingEarthquake,
+          swaps: [...s.pendingEarthquake.swaps, { from, to }],
+        },
+      } as Partial<GameState> as GameState;
+    });
+
+    try {
+      const board = get().board;
+      const fromNo = getCellNumber(from.x, from.y, board.size.w);
+      const toNo = getCellNumber(to.x, to.y, board.size.w);
+      get().log(`Earthquake: swapped sites #${fromNo} <-> #${toNo}`);
+    } catch {}
+    return;
+  }
+  if (t === "earthquakeResolve") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const burrowedItems = (msg as { burrowedItems?: unknown }).burrowedItems as
+      | Array<{ at: CellKey; index: number; name: string }>
+      | undefined;
+    const pending = get().pendingEarthquake;
+    if (!pending || (id && pending.id !== id)) return;
+
+    // Skip if we're the caster - we already handled it locally
+    const actorKey = get().actorKey;
+    if (actorKey === pending.casterSeat) {
+      set({ pendingEarthquake: null } as Partial<GameState> as GameState);
+      return;
+    }
+
+    // Burrow the items on opponent's side
+    const permanents = get().permanents;
+    for (const cellKey of pending.affectedCells) {
+      const cellPermanents = permanents[cellKey] || [];
+      for (let i = 0; i < cellPermanents.length; i++) {
+        const perm = cellPermanents[i];
+        if (!perm || perm.attachedTo) continue;
+        const type = (perm.card?.type || "").toLowerCase();
+        if (type.includes("minion") || type.includes("artifact")) {
+          if (!perm.tapped) {
+            try {
+              get().setTapPermanent(cellKey, i, true);
+            } catch {}
+          }
+        }
+      }
+    }
+
+    // Move spell to graveyard (opponent side)
+    try {
+      get().movePermanentToZone(
+        pending.spell.at,
+        pending.spell.index,
+        "graveyard"
+      );
+    } catch {}
+
+    set({ pendingEarthquake: null } as Partial<GameState> as GameState);
+    try {
+      const burrowedList =
+        burrowedItems && burrowedItems.length > 0
+          ? burrowedItems.map((b) => b.name).join(", ")
+          : "no units";
+      get().log(
+        `[${pending.casterSeat.toUpperCase()}] Earthquake resolved. Burrowed: ${burrowedList}`
+      );
+    } catch {}
+    return;
+  }
+  if (t === "earthquakeCancel") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    set((s) => {
+      if (!s.pendingEarthquake || (id && s.pendingEarthquake.id !== id))
+        return s as GameState;
+      return { pendingEarthquake: null } as Partial<GameState> as GameState;
+    });
+    try {
+      get().log("Earthquake cancelled");
+    } catch {}
+    return;
+  }
 }

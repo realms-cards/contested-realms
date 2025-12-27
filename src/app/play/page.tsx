@@ -11,6 +11,7 @@ import ChaosTwisterOverlay from "@/components/game/ChaosTwisterOverlay";
 import { ClientCanvas } from "@/components/game/ClientCanvas";
 import CollectionButton from "@/components/game/CollectionButton";
 import CommonSenseOverlay from "@/components/game/CommonSenseOverlay";
+import EarthquakeOverlay from "@/components/game/EarthquakeOverlay";
 import ContextMenu from "@/components/game/ContextMenu";
 import DeckSelector from "@/components/game/DeckSelector";
 import { ElementChoiceOverlay } from "@/components/game/ElementChoiceOverlay";
@@ -834,6 +835,9 @@ export default function PlayPage() {
 
       {/* Chaos Twister Overlay (dexterity minigame) */}
       <ChaosTwisterOverlay />
+
+      {/* Earthquake Overlay (site rearrangement) */}
+      <EarthquakeOverlay />
 
       {/* Element Choice Overlay (Valley of Delight, etc.) */}
       <ElementChoiceOverlay />
