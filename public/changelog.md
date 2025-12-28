@@ -2,7 +2,7 @@
 
 ## December 2025
 
-### Dec 27 - Nercomancer, Earthquake
+### Dec 27 - Necromancer, Earthquake
 
 - **Necromancer can spawn Skeleton** added an option to Necromancers right click menu to summon a skeleton "here" for one mana
 - **Earthquake implemented** probably not needed as it was perfectly resolvable before, but lmk
