@@ -9,6 +9,7 @@ interface VirtualizedCollectionGridProps {
   cards: CollectionCardResponse[];
   loading?: boolean;
   onQuantityChange?: () => void;
+  zoom?: number; // 50-150, default 100
 }
 
 /**
@@ -21,10 +22,44 @@ interface VirtualizedCollectionGridProps {
  * - Smooth scrolling with 60fps maintained
  * - Memory efficient - only active elements in memory
  */
+// Calculate grid columns based on zoom level
+function getGridCols(zoom: number): { className: string; count: number } {
+  if (zoom <= 60)
+    return {
+      className:
+        "grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10",
+      count: 10,
+    };
+  if (zoom <= 80)
+    return {
+      className:
+        "grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8",
+      count: 8,
+    };
+  if (zoom <= 100)
+    return {
+      className:
+        "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6",
+      count: 6,
+    };
+  if (zoom <= 120)
+    return {
+      className:
+        "grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5",
+      count: 5,
+    };
+  return {
+    className:
+      "grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4",
+    count: 4,
+  };
+}
+
 export default function VirtualizedCollectionGrid({
   cards,
   loading,
   onQuantityChange,
+  zoom = 100,
 }: VirtualizedCollectionGridProps) {
   // Local optimistic state for quantities and notes
   const [localQuantities, setLocalQuantities] = useState<Map<number, number>>(
@@ -34,24 +69,77 @@ export default function VirtualizedCollectionGrid({
   const refreshDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const parentRef = useRef<HTMLDivElement>(null);
 
-  // Responsive column count based on screen size
+  // Responsive column count based on screen size and zoom
   const [columns, setColumns] = useState(6);
+  const [gridClassName, setGridClassName] = useState(
+    "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
+  );
 
-  // Update column count on resize
+  // Update column count on resize or zoom change
   useEffect(() => {
     const updateColumns = () => {
       const width = window.innerWidth;
-      if (width < 640) setColumns(2); // sm
-      else if (width < 768) setColumns(3); // md
-      else if (width < 1024) setColumns(4); // lg
-      else if (width < 1280) setColumns(5); // xl
-      else setColumns(6); // 2xl+
+      const { count, className } = getGridCols(zoom);
+      setGridClassName(className);
+
+      // Adjust actual column count based on viewport and zoom
+      if (width < 640) {
+        setColumns(
+          zoom <= 60
+            ? 4
+            : zoom <= 80
+            ? 3
+            : zoom <= 100
+            ? 2
+            : zoom <= 120
+            ? 2
+            : 1
+        );
+      } else if (width < 768) {
+        setColumns(
+          zoom <= 60
+            ? 5
+            : zoom <= 80
+            ? 4
+            : zoom <= 100
+            ? 3
+            : zoom <= 120
+            ? 2
+            : 2
+        );
+      } else if (width < 1024) {
+        setColumns(
+          zoom <= 60
+            ? 6
+            : zoom <= 80
+            ? 5
+            : zoom <= 100
+            ? 4
+            : zoom <= 120
+            ? 3
+            : 2
+        );
+      } else if (width < 1280) {
+        setColumns(
+          zoom <= 60
+            ? 8
+            : zoom <= 80
+            ? 6
+            : zoom <= 100
+            ? 5
+            : zoom <= 120
+            ? 4
+            : 3
+        );
+      } else {
+        setColumns(count);
+      }
     };
 
     updateColumns();
     window.addEventListener("resize", updateColumns);
     return () => window.removeEventListener("resize", updateColumns);
-  }, []);
+  }, [zoom]);
 
   // Clear local state when cards prop changes (after refresh)
   useEffect(() => {
@@ -176,17 +264,20 @@ export default function VirtualizedCollectionGrid({
   // Calculate rows (each row contains `columns` cards)
   const rowCount = Math.ceil(visibleCards.length / columns);
 
+  // Calculate row height based on zoom
+  const estimatedRowHeight = Math.round(400 * (zoom / 100));
+
   // Virtualizer for rows (must be called before any early returns)
   const rowVirtualizer = useVirtualizer({
     count: rowCount,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 400, // Approximate row height (card aspect 2.5/3.5 + info section + gap)
+    estimateSize: () => estimatedRowHeight, // Approximate row height (card aspect 2.5/3.5 + info section + gap)
     overscan: 2, // Render 2 extra rows above/below viewport for smooth scrolling
   });
 
   if (loading) {
     return (
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+      <div className={`grid ${gridClassName} gap-4`}>
         {Array.from({ length: 12 }).map((_, i) => (
           <div
             key={i}
@@ -231,7 +322,7 @@ export default function VirtualizedCollectionGrid({
                 transform: `translateY(${virtualRow.start}px)`,
               }}
             >
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 px-1">
+              <div className={`grid ${gridClassName} gap-4 px-1`}>
                 {rowCards.map((card) => (
                   <CollectionCard
                     key={card.id}

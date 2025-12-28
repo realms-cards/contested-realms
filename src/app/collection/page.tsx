@@ -10,6 +10,10 @@ import type {
 } from "@/lib/collection/types";
 import CollectionFilters from "./CollectionFilters";
 import CollectionGrid from "./CollectionGrid";
+import CollectionListView from "./CollectionListView";
+import CollectionViewControls, {
+  type ViewMode,
+} from "./CollectionViewControls";
 import QuickAdd from "./QuickAdd";
 
 export default function CollectionPage() {
@@ -23,6 +27,37 @@ export default function CollectionPage() {
   const [sort, setSort] = useState<CollectionSortField>("name");
   const [order, setOrder] = useState<SortOrder>("asc");
   const [page, setPage] = useState(1);
+
+  // View controls - initialize with defaults, then hydrate from localStorage
+  const [viewMode, setViewMode] = useState<ViewMode>("grid");
+  const [zoom, setZoom] = useState(100);
+  const [viewHydrated, setViewHydrated] = useState(false);
+
+  // Hydrate view preferences from localStorage after mount (avoids SSR mismatch)
+  useEffect(() => {
+    const savedMode = localStorage.getItem(
+      "sorcery:collectionViewMode"
+    ) as ViewMode;
+    const savedZoom = localStorage.getItem("sorcery:collectionZoom");
+    if (savedMode === "grid" || savedMode === "list") {
+      setViewMode(savedMode);
+    }
+    if (savedZoom) {
+      setZoom(Number(savedZoom));
+    }
+    setViewHydrated(true);
+  }, []);
+
+  // Persist view preferences
+  const handleViewModeChange = (mode: ViewMode) => {
+    setViewMode(mode);
+    localStorage.setItem("sorcery:collectionViewMode", mode);
+  };
+
+  const handleZoomChange = (newZoom: number) => {
+    setZoom(newZoom);
+    localStorage.setItem("sorcery:collectionZoom", String(newZoom));
+  };
 
   // Track fetch state to avoid duplicate fetches
   const abortRef = useRef<AbortController | null>(null);
@@ -273,14 +308,22 @@ export default function CollectionPage() {
         </div>
       )}
 
-      {/* Filters */}
-      <CollectionFilters
-        filters={filters}
-        sort={sort}
-        order={order}
-        onFiltersChange={handleFiltersChange}
-        onSortChange={handleSortChange}
-      />
+      {/* Filters and View Controls */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <CollectionFilters
+          filters={filters}
+          sort={sort}
+          order={order}
+          onFiltersChange={handleFiltersChange}
+          onSortChange={handleSortChange}
+        />
+        <CollectionViewControls
+          viewMode={viewMode}
+          onViewModeChange={handleViewModeChange}
+          zoom={zoom}
+          onZoomChange={handleZoomChange}
+        />
+      </div>
 
       {/* Error State */}
       {error && (
@@ -298,12 +341,21 @@ export default function CollectionPage() {
         </div>
       )}
 
-      {/* Collection Grid */}
-      <CollectionGrid
-        cards={data?.cards || []}
-        loading={loading}
-        onQuantityChange={refreshCollection}
-      />
+      {/* Collection View */}
+      {viewMode === "grid" ? (
+        <CollectionGrid
+          cards={data?.cards || []}
+          loading={loading}
+          onQuantityChange={refreshCollection}
+          zoom={zoom}
+        />
+      ) : (
+        <CollectionListView
+          cards={data?.cards || []}
+          loading={loading}
+          onQuantityChange={refreshCollection}
+        />
+      )}
 
       {/* Pagination */}
       {data?.pagination && data.pagination.totalPages > 1 && (
