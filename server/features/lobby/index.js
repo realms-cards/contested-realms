@@ -23,11 +23,14 @@
  * @param {() => any} deps.loadBotClientCtor
  * @param {number} deps.port
  * @param {(id: string) => boolean} deps.isCpuPlayerId
+ * @param {import('../../core/redis-state').RedisStateManager} [deps.redisState] - Redis state manager for horizontal scaling
+ * @param {{ migrateToMatch: (lobbyId: string, matchId: string, playerIds: string[]) => void }} [deps.rtcMigration] - RTC migration helper for voice persistence
  */
 function createLobbyFeature(deps) {
   const io = deps.io;
   const storeRedis = deps.storeRedis || null;
   const INSTANCE_ID = deps.instanceId;
+  const redisState = deps.redisState || null;
   const rid = deps.rid;
   const ensurePlayerCached = deps.ensurePlayerCached;
   const players = deps.players;
@@ -46,6 +49,7 @@ function createLobbyFeature(deps) {
   const loadBotClientCtor = deps.loadBotClientCtor;
   const PORT = deps.port;
   const isCpuPlayerId = deps.isCpuPlayerId;
+  const rtcMigration = deps.rtcMigration || null;
 
   /** @type {Map<string, { id: string, name: string|null, hostId: string|null, playerIds: Set<string>, status: string, maxPlayers: number, ready: Set<string>, visibility: 'open'|'private', plannedMatchType?: string|null, lastActive: number }>} */
   const lobbies = new Map();
@@ -57,6 +61,55 @@ function createLobbyFeature(deps) {
 
   function setBotManager(manager) {
     botManager = manager || null;
+  }
+
+  /**
+   * Persist full lobby state to Redis for cross-instance visibility
+   * @param {object} lobby - The lobby object to persist
+   */
+  async function persistLobbyToRedis(lobby) {
+    if (!redisState || !redisState.isEnabled()) return;
+    try {
+      await redisState.setFullLobbyState(lobby.id, {
+        id: lobby.id,
+        name: lobby.name ?? null,
+        hostId: lobby.hostId ?? null,
+        status: lobby.status,
+        maxPlayers: lobby.maxPlayers,
+        visibility: lobby.visibility ?? "open",
+        plannedMatchType: lobby.plannedMatchType ?? null,
+        isMatchmakingLobby: lobby.isMatchmakingLobby || false,
+        soatcLeagueMatch: lobby.soatcLeagueMatch ?? null,
+        matchId: lobby.matchId ?? null,
+        lastActive: lobby.lastActive || Date.now(),
+        createdAt: lobby.createdAt || lobby.lastActive || Date.now(),
+        allowSpectators: lobby.allowSpectators || false,
+        hostReady: lobby.hostReady !== false,
+        playerIds: Array.from(lobby.playerIds || []),
+        ready: Array.from(lobby.ready || []),
+      });
+    } catch (err) {
+      console.error(
+        `[lobby] Failed to persist lobby ${lobby.id} to Redis:`,
+        err
+      );
+    }
+  }
+
+  /**
+   * Delete lobby state from Redis
+   * @param {string} lobbyId - The lobby ID to delete
+   */
+  async function deleteLobbyFromRedis(lobbyId) {
+    if (!redisState || !redisState.isEnabled()) return;
+    try {
+      await redisState.deleteLobbyState(lobbyId);
+    } catch (err) {
+      console.error(
+        `[lobby] Failed to delete lobby ${lobbyId} from Redis:`,
+        err
+      );
+    }
   }
 
   async function getOrClaimLobbyLeader() {
@@ -128,6 +181,9 @@ function createLobbyFeature(deps) {
 
   async function publishLobbyState(lobby) {
     try {
+      // Persist to Redis for cross-instance state
+      await persistLobbyToRedis(lobby);
+      // Also publish for real-time sync
       if (storeRedis)
         await storeRedis.publish(
           LOBBY_STATE_CHANNEL,
@@ -138,6 +194,9 @@ function createLobbyFeature(deps) {
 
   async function publishLobbyDelete(lobbyId) {
     try {
+      // Delete from Redis state
+      await deleteLobbyFromRedis(lobbyId);
+      // Also publish for real-time sync
       if (storeRedis)
         await storeRedis.publish(
           LOBBY_STATE_CHANNEL,
@@ -349,11 +408,17 @@ function createLobbyFeature(deps) {
       hostReady: false,
     };
     lobbies.set(lobby.id, lobby);
+    // Persist to Redis for cross-instance visibility (fire and forget)
+    persistLobbyToRedis(lobby).catch(() => {});
     return lobby;
   }
 
   function markLobbyActive(lobby) {
     lobby.lastActive = Date.now();
+    // Update Redis activity timestamp (fire and forget)
+    if (redisState && redisState.isEnabled()) {
+      redisState.updateLobbyActivity(lobby.id).catch(() => {});
+    }
   }
 
   function _joinLobby(socket, player, suppliedLobbyId) {
@@ -620,6 +685,11 @@ function createLobbyFeature(deps) {
       p.matchId = match.id;
     }
 
+    // NOTE: For lobby-based matches, we do NOT migrate RTC participants.
+    // The client's voice scope stays as lobby.id (since lobby is still set),
+    // so voice continues working in the lobby room throughout draft/construction/match.
+    // RTC migration is only needed for matches created without a lobby (e.g., tournaments).
+
     try {
       const basicInfo = getMatchInfo(match);
       io.to(`lobby:${lobby.id}`).emit("matchStarted", { match: basicInfo });
@@ -726,6 +796,95 @@ function createLobbyFeature(deps) {
   // Hide started matches that have been inactive for more than 1 hour
   const STALE_MATCH_DISPLAY_MS = 60 * 60 * 1000; // 1 hour
 
+  /**
+   * Convert Redis lobby format to internal format with Sets
+   */
+  function redisLobbyToInternal(redisLobby) {
+    return {
+      id: redisLobby.id,
+      name: redisLobby.name,
+      hostId: redisLobby.hostId,
+      playerIds: new Set(redisLobby.playerIds || []),
+      status: redisLobby.status,
+      maxPlayers: redisLobby.maxPlayers,
+      ready: new Set(redisLobby.ready || []),
+      visibility: redisLobby.visibility,
+      plannedMatchType: redisLobby.plannedMatchType,
+      isMatchmakingLobby: redisLobby.isMatchmakingLobby,
+      soatcLeagueMatch: redisLobby.soatcLeagueMatch,
+      matchId: redisLobby.matchId,
+      lastActive: redisLobby.lastActive,
+      createdAt: redisLobby.createdAt,
+      allowSpectators: redisLobby.allowSpectators,
+      hostReady: redisLobby.hostReady,
+    };
+  }
+
+  /**
+   * Get lobby list - uses Redis for cross-instance visibility when enabled
+   * @returns {Promise<Array>} Array of lobby info objects
+   */
+  async function lobbiesArrayAsync() {
+    let allLobbies = [];
+    const now = Date.now();
+
+    // If Redis is enabled, fetch from Redis (includes all instances)
+    if (redisState && redisState.isEnabled()) {
+      try {
+        const redisLobbies = await redisState.getActiveLobbies(
+          STALE_MATCH_DISPLAY_MS
+        );
+        for (const redisLobby of redisLobbies) {
+          const lobby = redisLobbyToInternal(redisLobby);
+          // Update local cache
+          lobbies.set(lobby.id, lobby);
+          allLobbies.push(lobby);
+        }
+      } catch (err) {
+        console.error(
+          "[lobby] Failed to fetch lobbies from Redis, using local:",
+          err
+        );
+        // Fall back to local
+        allLobbies = Array.from(lobbies.values());
+      }
+    } else {
+      // No Redis, use local only
+      allLobbies = Array.from(lobbies.values());
+    }
+
+    const arr = [];
+    for (const lobby of allLobbies) {
+      if (lobby.status === "closed") continue;
+      // Hide stale started matches from the lobby list (but don't delete them)
+      if (lobby.status === "started") {
+        // Check both lobby.lastActive and match.lastTs for activity
+        let lastActivity = lobby.lastActive || 0;
+        if (lobby.matchId) {
+          const match = matches.get(lobby.matchId);
+          if (match && typeof match.lastTs === "number") {
+            lastActivity = Math.max(lastActivity, match.lastTs);
+          }
+        }
+        const inactiveMs = now - lastActivity;
+        if (inactiveMs > STALE_MATCH_DISPLAY_MS) continue;
+      }
+      const info = getLobbyInfo(lobby);
+      info._sortTs = lobby.lastActive || lobby.createdAt || 0;
+      arr.push(info);
+    }
+    // Sort by newest first (most recent activity)
+    arr.sort((a, b) => (b._sortTs || 0) - (a._sortTs || 0));
+    // Remove internal sort field before returning
+    for (const item of arr) delete item._sortTs;
+    return arr;
+  }
+
+  /**
+   * Synchronous version for backward compatibility
+   * Uses local cache only (won't show cross-instance lobbies)
+   * @deprecated Use lobbiesArrayAsync() for cross-instance visibility
+   */
   function lobbiesArray() {
     const arr = [];
     const now = Date.now();
@@ -770,8 +929,11 @@ function createLobbyFeature(deps) {
     (async () => {
       try {
         const leader = await getOrClaimLobbyLeader();
-        if (leader === INSTANCE_ID)
-          io.emit("lobbiesUpdated", { lobbies: lobbiesArray() });
+        if (leader === INSTANCE_ID) {
+          // Use async version for cross-instance visibility
+          const lobbyList = await lobbiesArrayAsync();
+          io.emit("lobbiesUpdated", { lobbies: lobbyList });
+        }
       } catch {}
     })();
   }
@@ -1549,9 +1711,11 @@ function createLobbyFeature(deps) {
       botManager.stopAndRemoveBot(targetId, "removed_by_host");
     });
 
-    socket.on("requestLobbies", () => {
+    socket.on("requestLobbies", async () => {
       if (!isAuthed()) return;
-      socket.emit("lobbiesUpdated", { lobbies: lobbiesArray() });
+      // Use async version for cross-instance visibility
+      const lobbyList = await lobbiesArrayAsync();
+      socket.emit("lobbiesUpdated", { lobbies: lobbyList });
     });
 
     socket.on("requestPlayers", () => {
@@ -1676,6 +1840,7 @@ function createLobbyFeature(deps) {
     markLobbyActive,
     broadcastLobbies,
     lobbiesArray,
+    lobbiesArrayAsync,
     playersArray,
     publishLobbyState,
     publishLobbyDelete,

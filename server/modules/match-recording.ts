@@ -6,6 +6,7 @@ import type {
   PlayerState,
   ServerMatchState,
 } from "../types";
+import type { RedisStateManager } from "../core/redis-state";
 
 export interface MatchRecordingEntry {
   matchId: string;
@@ -28,6 +29,8 @@ type PlayersMap = Map<string, PlayerState>;
 interface MatchRecordingDeps {
   players: PlayersMap;
   matchRecordings: MatchRecordingsMap;
+  /** Redis state manager for cross-instance recording persistence */
+  redisState?: RedisStateManager | null;
 }
 
 const seatFromOwner = (owner: 1 | 2): "p1" | "p2" =>
@@ -36,6 +39,7 @@ const seatFromOwner = (owner: 1 | 2): "p1" | "p2" =>
 export function createMatchRecordingService({
   players,
   matchRecordings,
+  redisState,
 }: MatchRecordingDeps) {
   function startMatchRecording(match: ServerMatchState): void {
     const playerNames = match.playerIds.map((pid) => {
@@ -43,18 +47,21 @@ export function createMatchRecordingService({
       return p ? p.displayName : `Player ${pid}`;
     });
 
+    const startTime = Date.now();
+    const initialState = {
+      playerIds: [...match.playerIds],
+      seed: (match as AnyRecord).seed ?? null,
+      matchType: match.matchType,
+      playerDecks: match.playerDecks
+        ? Object.fromEntries(match.playerDecks)
+        : undefined,
+    };
+
     const recording: MatchRecordingEntry = {
       matchId: match.id,
       playerNames,
-      startTime: Date.now(),
-      initialState: {
-        playerIds: [...match.playerIds],
-        seed: (match as AnyRecord).seed ?? null,
-        matchType: match.matchType,
-        playerDecks: match.playerDecks
-          ? Object.fromEntries(match.playerDecks)
-          : undefined,
-      },
+      startTime,
+      initialState,
       actions: [],
       cardPlays: { p1: new Set<number>(), p2: new Set<number>() },
       lastZones: (() => {
@@ -94,6 +101,23 @@ export function createMatchRecordingService({
     };
 
     matchRecordings.set(match.id, recording);
+
+    // Persist to Redis for cross-instance continuity (fire and forget)
+    if (redisState?.isEnabled()) {
+      redisState
+        .startRecording(match.id, {
+          playerNames,
+          startTime,
+          initialState,
+        })
+        .catch((err) => {
+          console.error(
+            `[Recording] Failed to persist recording start to Redis for match ${match.id}:`,
+            err
+          );
+        });
+    }
+
     try {
       console.log(
         `[Recording] Started recording match ${
@@ -116,11 +140,21 @@ export function createMatchRecordingService({
       return;
     }
 
+    const timestamp = Date.now();
     recording.actions.push({
       patch,
-      timestamp: Date.now(),
+      timestamp,
       playerId,
     });
+
+    // Persist action to Redis stream for cross-instance continuity (fire and forget)
+    if (redisState?.isEnabled()) {
+      redisState
+        .recordAction(matchId, { patch, playerId, timestamp })
+        .catch(() => {
+          // Silently fail - local recording is primary
+        });
+    }
     try {
       if (patch && typeof patch === "object") {
         const plays: Array<{ owner: 1 | 2; cardId: number }> = [];
@@ -350,6 +384,14 @@ export function createMatchRecordingService({
     if (!recording) return;
 
     recording.endTime = Date.now();
+
+    // Mark recording as finished in Redis (fire and forget)
+    if (redisState?.isEnabled()) {
+      redisState.finishRecording(matchId).catch(() => {
+        // Silently fail - local recording is primary
+      });
+    }
+
     try {
       console.log(
         `[Recording] Finished recording match ${matchId}, total actions: ${recording.actions.length}`

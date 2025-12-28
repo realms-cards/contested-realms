@@ -35,6 +35,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const text = body?.text;
     const format = body?.format || "sorcery";
+    const skipExisting = body?.skipExisting === true;
 
     if (!text || typeof text !== "string") {
       return new Response(
@@ -99,6 +100,10 @@ export async function POST(req: NextRequest) {
         });
 
         if (existing) {
+          // Skip if user wants to only add new cards
+          if (skipExisting) {
+            continue;
+          }
           const newQuantity = Math.min(99, existing.quantity + item.count);
           await prisma.collectionCard.update({
             where: { id: existing.id },
@@ -327,6 +332,10 @@ export async function POST(req: NextRequest) {
       for (const [key, match] of aggregatedByKey) {
         const existing = existingByKey.get(key);
         if (existing) {
+          // Skip if user wants to only add new cards
+          if (skipExisting) {
+            continue;
+          }
           const newQuantity = Math.min(99, existing.quantity + match.count);
           // Append notes if both have them, otherwise use whichever has content
           const newNotes =
@@ -441,6 +450,10 @@ export async function POST(req: NextRequest) {
       for (const match of matchedCards) {
         const existing = existingByCardId.get(match.cardId);
         if (existing) {
+          // Skip if user wants to only add new cards
+          if (skipExisting) {
+            continue;
+          }
           const newQuantity = Math.min(99, existing.quantity + match.count);
           updateOps.push(
             prisma.collectionCard.update({

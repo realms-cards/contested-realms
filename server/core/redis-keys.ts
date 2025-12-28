@@ -33,6 +33,9 @@ export const LEADER_HEARTBEAT_INTERVAL_MS = 5000;
 /** Disconnect grace period (30 seconds) */
 export const DISCONNECT_GRACE_PERIOD_MS = 30000;
 
+/** Match recording TTL (24 hours) */
+export const RECORDING_TTL_SEC = 86400;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Key Generators
 // ─────────────────────────────────────────────────────────────────────────────
@@ -92,12 +95,69 @@ export const matchKeys = {
 };
 
 /**
+ * Match Recording Keys (for horizontal scaling)
+ *
+ * recording:stream:{matchId} - STREAM containing action log entries
+ * recording:meta:{matchId} - HASH containing recording metadata
+ *
+ * Each stream entry contains:
+ *   - patch: JSON string of the action patch
+ *   - playerId: string
+ *   - timestamp: number
+ */
+export const recordingKeys = {
+  /** Recording action stream: recording:stream:{matchId} */
+  stream: (matchId: string) => `recording:stream:${matchId}` as const,
+
+  /** Recording metadata hash: recording:meta:{matchId} */
+  meta: (matchId: string) => `recording:meta:${matchId}` as const,
+
+  /** Pattern for scanning all recording streams */
+  streamPattern: "recording:stream:*" as const,
+
+  /** Pattern for scanning all recording metadata */
+  metaPattern: "recording:meta:*" as const,
+};
+
+/**
+ * RTC/Voice State Keys (for horizontal scaling)
+ *
+ * rtc:room:{roomId}:members - SET of participant playerIds
+ * rtc:participant:{playerId} - HASH containing participant details
+ * rtc:request:{requestId} - HASH containing pending voice request
+ */
+export const rtcKeys = {
+  /** Room members set: rtc:room:{roomId}:members */
+  roomMembers: (roomId: string) => `rtc:room:${roomId}:members` as const,
+
+  /** Participant details hash: rtc:participant:{playerId} */
+  participant: (playerId: string) => `rtc:participant:${playerId}` as const,
+
+  /** Pending voice request hash: rtc:request:{requestId} */
+  request: (requestId: string) => `rtc:request:${requestId}` as const,
+
+  /** Pattern for scanning all room members */
+  roomPattern: "rtc:room:*:members" as const,
+
+  /** Pattern for scanning all participants */
+  participantPattern: "rtc:participant:*" as const,
+};
+
+/** RTC state TTL: 5 minutes (short-lived, session-bound) */
+export const RTC_STATE_TTL_SEC = 5 * 60;
+
+/** Pending voice request TTL: 30 seconds */
+export const RTC_REQUEST_TTL_SEC = 30;
+
+/**
  * Lobby State Keys
  *
  * lobby:state:{lobbyId} - HASH containing lobby state
  * lobby:members:{lobbyId} - SET of playerIds in lobby
  * lobby:ready:{lobbyId} - SET of playerIds who are ready
  * lobby:leader - STRING containing instanceId of lobby leader
+ * lobby:active - SORTED SET of active lobby IDs (score = lastActive timestamp)
+ * lobby:invites:{lobbyId} - SET of invited playerIds
  */
 export const lobbyKeys = {
   /** Lobby state hash: lobby:state:{lobbyId} */
@@ -109,8 +169,14 @@ export const lobbyKeys = {
   /** Lobby ready set: lobby:ready:{lobbyId} */
   ready: (lobbyId: string) => `lobby:ready:${lobbyId}` as const,
 
+  /** Lobby invites set: lobby:invites:{lobbyId} */
+  invites: (lobbyId: string) => `lobby:invites:${lobbyId}` as const,
+
   /** Global lobby leader lock */
   leader: "lobby:leader" as const,
+
+  /** Active lobbies sorted set (score = lastActive timestamp) */
+  active: "lobby:active" as const,
 
   /** Pattern for scanning all lobby states */
   statePattern: "lobby:state:*" as const,

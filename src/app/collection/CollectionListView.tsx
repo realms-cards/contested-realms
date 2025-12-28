@@ -295,7 +295,7 @@ export default function CollectionListView({
               <div className="fixed top-20 right-4 z-[9999] pointer-events-none">
                 <div
                   className={`rounded-xl overflow-hidden bg-black/80 shadow-2xl ring-1 ring-white/10 ${
-                    isSite ? "w-80 aspect-[4/3]" : "w-72 aspect-[2.5/3.5]"
+                    isSite ? "w-96 aspect-[4/3]" : "w-72 aspect-[2.5/3.5]"
                   }`}
                 >
                   <img

@@ -68,6 +68,69 @@ let globalSocketRefCount = 0;
 let cachedToken: { token: string; expiresAt: number } | null = null;
 const TOKEN_CACHE_DURATION = 4 * 60 * 1000; // 4 minutes (80% of 5min TTL)
 
+// Auth failure tracking - uses exponential backoff instead of hard stop
+let authFailureCount = 0;
+let lastAuthFailureTime = 0;
+const AUTH_FAILURE_RESET_MS = 300000; // Reset failure count after 5 minutes of no failures
+
+// Backoff delays: 2s, 5s, 10s, 30s, 60s, then stay at 60s
+const AUTH_BACKOFF_DELAYS = [2000, 5000, 10000, 30000, 60000];
+
+/**
+ * Get the current backoff delay based on failure count
+ */
+function getAuthBackoffDelay(): number {
+  const index = Math.min(authFailureCount, AUTH_BACKOFF_DELAYS.length - 1);
+  return AUTH_BACKOFF_DELAYS[index];
+}
+
+/**
+ * Check if we should delay reconnection (exponential backoff)
+ * Returns true if we should wait before trying again
+ */
+function shouldDelayReconnection(): boolean {
+  // Reset failure count if enough time has passed
+  if (Date.now() - lastAuthFailureTime > AUTH_FAILURE_RESET_MS) {
+    authFailureCount = 0;
+    return false;
+  }
+
+  // If we have failures, check if enough time has passed since last failure
+  if (authFailureCount > 0) {
+    const backoffDelay = getAuthBackoffDelay();
+    const timeSinceLastFailure = Date.now() - lastAuthFailureTime;
+    return timeSinceLastFailure < backoffDelay;
+  }
+
+  return false;
+}
+
+/**
+ * Record an auth failure and return the backoff delay
+ */
+function recordAuthFailure(): number {
+  authFailureCount++;
+  lastAuthFailureTime = Date.now();
+  const delay = getAuthBackoffDelay();
+  if (authFailureCount > 2) {
+    console.warn(
+      `[useSocket] Auth failure #${authFailureCount}, backing off for ${delay / 1000}s`
+    );
+  }
+  return delay;
+}
+
+/**
+ * Reset auth failure tracking (call on successful connection)
+ */
+function resetAuthFailures(): void {
+  if (authFailureCount > 0) {
+    console.log("[useSocket] Auth failures reset after successful connection");
+  }
+  authFailureCount = 0;
+  lastAuthFailureTime = 0;
+}
+
 /**
  * Fetch socket token with caching to prevent excessive requests
  * @param forceRefresh - Force fetching a new token even if cached one is valid
@@ -98,6 +161,12 @@ async function fetchSocketToken(
         };
         return token;
       }
+    } else if (res.status === 401) {
+      // User is not authenticated - clear cache and record failure
+      console.warn("[useSocket] Token fetch returned 401 - user not authenticated");
+      cachedToken = null;
+      recordAuthFailure();
+      return undefined;
     }
   } catch (error) {
     console.warn("[useSocket] Failed to fetch token:", error);
@@ -161,8 +230,10 @@ export function useSocket(options: UseSocketOptions = {}): Socket | null {
       socketRef.current = socketInstance;
       setSocket(socketInstance);
 
-      const handleConnect = () =>
+      const handleConnect = () => {
         console.log("[useSocket] Connected to server");
+        resetAuthFailures(); // Reset auth failure tracking on successful connection
+      };
       const handleDisconnect = (reason: string) =>
         console.log(`[useSocket] Disconnected: ${reason}`);
       const handleConnecting = () => console.log("[useSocket] Connecting...");
@@ -179,6 +250,12 @@ export function useSocket(options: UseSocketOptions = {}): Socket | null {
             msg?.toLowerCase().includes("invalid_token") ||
             msg?.toLowerCase().includes("token")
           ) {
+            // Check if we should wait before trying again (exponential backoff)
+            if (shouldDelayReconnection()) {
+              // Already backing off, let socket.io's built-in reconnection handle it
+              return;
+            }
+
             const token = await fetchSocketToken(true); // Force refresh on auth errors
             if (token) {
               const mgr = socketInstance.io as unknown as {
@@ -190,11 +267,15 @@ export function useSocket(options: UseSocketOptions = {}): Socket | null {
                 if (!socketInstance.connected) socketInstance.connect();
               } catch {}
             }
+            // If token fetch failed, recordAuthFailure was already called in fetchSocketToken
+            // Socket.io will retry with exponential backoff
           }
         } catch {}
       };
-      const handleReconnect = (attemptNumber: number) =>
+      const handleReconnect = (attemptNumber: number) => {
         console.log(`[useSocket] Reconnected after ${attemptNumber} attempts`);
+        resetAuthFailures(); // Reset auth failure tracking on successful reconnection
+      };
       const handleReconnectAttempt = (attemptNumber: number) =>
         console.log(`[useSocket] Reconnection attempt ${attemptNumber}`);
       const handleReconnectError = (error: Error) =>
@@ -215,6 +296,12 @@ export function useSocket(options: UseSocketOptions = {}): Socket | null {
       // Refresh token before reconnect attempts (only if cached token expired)
       type ManagerWithOpts = { opts: { auth?: Record<string, unknown> } };
       socketInstance.io.on("reconnect_attempt", async () => {
+        // Check if we should delay this attempt (exponential backoff)
+        if (shouldDelayReconnection()) {
+          // Skip this attempt, socket.io will retry later
+          return;
+        }
+
         try {
           // Use cached token if still valid, otherwise fetch new one
           const token = await fetchSocketToken();
@@ -222,6 +309,7 @@ export function useSocket(options: UseSocketOptions = {}): Socket | null {
             const mgr = socketInstance.io as unknown as ManagerWithOpts;
             mgr.opts.auth = { token };
           }
+          // If token fetch failed, we'll try again on next attempt with backoff
         } catch {}
       });
 
