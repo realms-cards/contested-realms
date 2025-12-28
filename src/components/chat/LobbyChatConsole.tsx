@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, ChevronUp, MessageCircle } from "lucide-react";
+import { ChevronDown, ChevronUp, Loader2, MessageCircle } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChatScope, ServerChatPayloadT } from "@/lib/net/protocol";
 import { fetchPatrons, PATRON_COLORS, type PatronData } from "@/lib/patrons";
@@ -17,6 +17,7 @@ interface LobbyChatConsoleProps {
   position?: "bottom-left" | "top-right" | "top-left";
   // Pagination for global chat history
   chatHasMore?: boolean;
+  chatLoading?: boolean;
   onRequestMoreHistory?: () => void;
   // Inline mode: renders as a normal flow element instead of fixed position
   inline?: boolean;
@@ -33,6 +34,7 @@ export default function LobbyChatConsole({
   myPlayerId,
   position = "bottom-left",
   chatHasMore,
+  chatLoading,
   onRequestMoreHistory,
   inline = false,
 }: LobbyChatConsoleProps) {
@@ -57,9 +59,13 @@ export default function LobbyChatConsole({
   const chatRef = useRef<HTMLDivElement | null>(null);
   const prevMessageCountRef = useRef<number>(0);
   const isNearBottomRef = useRef<boolean>(true);
+  const loadingHistoryRef = useRef<boolean>(false);
+  const lastHistoryRequestRef = useRef<number>(0);
+  const prevScrollHeightRef = useRef<number>(0);
 
   // Auto-scroll to latest message only when NEW messages arrive (not when loading history)
   // and only if user is already near the bottom
+  // Also preserve scroll position when prepending history
   useEffect(() => {
     if (!consoleOpen) return;
     const el = chatRef.current;
@@ -67,16 +73,21 @@ export default function LobbyChatConsole({
 
     const prevCount = prevMessageCountRef.current;
     const currentCount = activeMessages.length;
+    const prevScrollHeight = prevScrollHeightRef.current;
 
-    // Detect if new messages were added at the end (vs prepended history)
-    const newMessagesAdded = currentCount > prevCount;
-
-    // Only auto-scroll if new messages arrived AND user is near bottom
-    if (newMessagesAdded && isNearBottomRef.current) {
+    // If we were loading history, preserve scroll position
+    if (loadingHistoryRef.current && currentCount > prevCount) {
+      // History was prepended - maintain scroll position relative to old content
+      const scrollDelta = el.scrollHeight - prevScrollHeight;
+      el.scrollTop = el.scrollTop + scrollDelta;
+      loadingHistoryRef.current = false;
+    } else if (currentCount > prevCount && isNearBottomRef.current) {
+      // New messages at the end - scroll to bottom
       el.scrollTop = el.scrollHeight;
     }
 
     prevMessageCountRef.current = currentCount;
+    prevScrollHeightRef.current = el.scrollHeight;
   }, [consoleOpen, activeMessages.length]);
 
   // Scroll to bottom when switching tabs
@@ -100,9 +111,21 @@ export default function LobbyChatConsole({
     isNearBottomRef.current = distanceFromBottom < 50;
 
     // Load more history when near top (global chat only)
-    if (chatTab === "global" && chatHasMore && onRequestMoreHistory) {
-      if (el.scrollTop < 20) {
-        onRequestMoreHistory();
+    // Throttle requests to prevent rapid firing (500ms cooldown)
+    if (
+      chatTab === "global" &&
+      chatHasMore &&
+      onRequestMoreHistory &&
+      !chatLoading
+    ) {
+      if (el.scrollTop < 40) {
+        const now = Date.now();
+        if (now - lastHistoryRequestRef.current > 500) {
+          lastHistoryRequestRef.current = now;
+          loadingHistoryRef.current = true;
+          prevScrollHeightRef.current = el.scrollHeight;
+          onRequestMoreHistory();
+        }
       }
     }
   };
@@ -212,7 +235,23 @@ export default function LobbyChatConsole({
               className="flex-1 overflow-y-auto thin-scrollbar px-3 py-3 text-xs space-y-1 min-h-0 max-h-full"
               onScroll={handleScroll}
             >
-              {activeMessages.length === 0 && (
+              {/* Loading indicator for history */}
+              {chatTab === "global" && chatLoading && (
+                <div className="flex items-center justify-center py-2 text-slate-400">
+                  <Loader2 className="w-3 h-3 animate-spin mr-1.5" />
+                  <span className="text-[10px]">Loading older messages...</span>
+                </div>
+              )}
+              {/* Load more hint when scrolled to top */}
+              {chatTab === "global" &&
+                chatHasMore &&
+                !chatLoading &&
+                activeMessages.length > 0 && (
+                  <div className="text-center py-1 text-[10px] text-slate-500">
+                    ↑ Scroll up for more
+                  </div>
+                )}
+              {activeMessages.length === 0 && !chatLoading && (
                 <div className="opacity-60">No messages</div>
               )}
               {activeMessages.map((m, i) => {

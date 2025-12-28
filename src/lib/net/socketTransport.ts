@@ -269,6 +269,10 @@ function normalizeResyncResponsePayload(payload: unknown): unknown {
   }
 }
 
+// Auth failure tracking - uses exponential backoff instead of hard stop
+const AUTH_FAILURE_RESET_MS = 300000; // Reset failure count after 5 minutes
+const AUTH_BACKOFF_DELAYS = [2000, 5000, 10000, 30000, 60000]; // 2s, 5s, 10s, 30s, 60s
+
 export class SocketTransport implements GameTransport {
   private handlers: Partial<
     Record<TransportEvent, Set<(payload: unknown) => void>>
@@ -294,6 +298,10 @@ export class SocketTransport implements GameTransport {
     new Map();
   private inflightWatch: Map<string, Promise<void>> = new Map();
 
+  // Auth failure tracking - prevents infinite reconnection when user is not authenticated
+  private authFailureCount = 0;
+  private lastAuthFailureTime = 0;
+
   private static getMessageType(m: unknown): string {
     if (
       m &&
@@ -304,6 +312,51 @@ export class SocketTransport implements GameTransport {
       return typeof t === "string" ? t : "unknown";
     }
     return "unknown";
+  }
+
+  private getAuthBackoffDelay(): number {
+    const index = Math.min(
+      this.authFailureCount,
+      AUTH_BACKOFF_DELAYS.length - 1
+    );
+    return AUTH_BACKOFF_DELAYS[index];
+  }
+
+  private shouldDelayReconnection(): boolean {
+    // Reset failure count if enough time has passed
+    if (Date.now() - this.lastAuthFailureTime > AUTH_FAILURE_RESET_MS) {
+      this.authFailureCount = 0;
+      return false;
+    }
+
+    // If we have failures, check if enough time has passed since last failure
+    if (this.authFailureCount > 0) {
+      const backoffDelay = this.getAuthBackoffDelay();
+      const timeSinceLastFailure = Date.now() - this.lastAuthFailureTime;
+      return timeSinceLastFailure < backoffDelay;
+    }
+
+    return false;
+  }
+
+  private recordAuthFailure(): number {
+    this.authFailureCount++;
+    this.lastAuthFailureTime = Date.now();
+    const delay = this.getAuthBackoffDelay();
+    if (this.authFailureCount > 2) {
+      console.warn(
+        `[Transport] Auth failure #${this.authFailureCount}, backing off for ${delay / 1000}s`
+      );
+    }
+    return delay;
+  }
+
+  private resetAuthFailures(): void {
+    if (this.authFailureCount > 0) {
+      console.log("[Transport] Auth failures reset after successful connection");
+    }
+    this.authFailureCount = 0;
+    this.lastAuthFailureTime = 0;
   }
 
   getConnectionState():
@@ -1138,12 +1191,19 @@ export class SocketTransport implements GameTransport {
       console.warn("[Transport] Connect error:", error);
       // If token-related error, force refresh token before reconnection
       const msg = error?.message?.toLowerCase() || "";
-      if (
+      const isAuthError =
         msg.includes("token") ||
         msg.includes("jwt") ||
         msg.includes("unauthor") ||
-        msg.includes("invalid")
-      ) {
+        msg.includes("invalid");
+
+      if (isAuthError) {
+        // Check if we should delay this attempt (exponential backoff)
+        if (this.shouldDelayReconnection()) {
+          // Already backing off, let socket.io's built-in reconnection handle it
+          return;
+        }
+
         try {
           const res = await fetch("/api/socket-token", {
             credentials: "include",
@@ -1154,6 +1214,11 @@ export class SocketTransport implements GameTransport {
             const mgr = socket.io as unknown as ManagerWithOpts;
             mgr.opts.auth = { token: j?.token as string };
             console.log("[Transport] Refreshed token after auth error");
+          } else if (res.status === 401) {
+            // User is not authenticated - record failure for backoff
+            console.warn("[Transport] Token fetch returned 401 - user not authenticated");
+            this.recordAuthFailure();
+            // Will retry with exponential backoff
           }
         } catch (tokenError) {
           console.warn("[Transport] Failed to refresh token:", tokenError);
@@ -1169,6 +1234,7 @@ export class SocketTransport implements GameTransport {
       console.log(`[Transport] Reconnected after ${attemptNumber} attempts`);
       this.connectionState = "connected";
       this.reconnectionAttempts = 0;
+      this.resetAuthFailures(); // Reset auth failure tracking on successful reconnection
     });
 
     socket.on("reconnect_error", (error: Error) => {
@@ -1187,6 +1253,14 @@ export class SocketTransport implements GameTransport {
     playerId?: string;
     displayName: string;
   }): void {
+    // Check if we should delay this attempt (exponential backoff)
+    if (this.shouldDelayReconnection()) {
+      // Schedule retry after backoff delay
+      const delay = this.getAuthBackoffDelay();
+      setTimeout(() => this.attemptReconnection(opts), delay);
+      return;
+    }
+
     if (
       Number.isFinite(this.maxReconnectionAttempts) &&
       this.reconnectionAttempts >= this.maxReconnectionAttempts

@@ -76,6 +76,7 @@ export type OnlineContextValue = {
   resyncing: boolean;
   chatLog: ServerChatPayloadT[];
   chatHasMore: boolean;
+  chatLoading: boolean;
   chatOldestIndex: number;
   requestMoreChatHistory: () => void;
   // Extended state

@@ -639,6 +639,7 @@ const { recordMatchResult: recordLeaderboardMatchResult } = leaderboardService;
 const matchRecordingService = createMatchRecordingService({
   players,
   matchRecordings,
+  redisState, // For horizontal scaling - cross-instance recording continuity
 });
 
 const {
@@ -843,6 +844,9 @@ const {
   port: PORT,
   isCpuPlayerId,
   tournamentBroadcast,
+  redisState, // For horizontal scaling - cross-instance lobby visibility
+  rtcParticipants, // For lobby-to-match voice connection persistence
+  participantDetails, // For lobby-to-match voice connection persistence
 });
 
 const {
@@ -995,6 +999,8 @@ const handleHttpRequest = createRequestHandler({
   toOptionalString,
   toOptionalNumber,
   safeErrorMessage,
+  redisState, // For horizontal scaling health endpoint
+  instanceId: INSTANCE_ID,
 });
 
 server.on("request", handleHttpRequest);
@@ -1971,6 +1977,50 @@ const REQUIRE_JWT = Boolean(
     (process.env.SOCKET_REQUIRE_JWT || "").toLowerCase() === "true"
 );
 
+// Rate limiting for auth rejection logs to prevent log flooding
+// Key: IP or origin, Value: { lastLogTime, count }
+const authRejectionLogCache = new Map<
+  string,
+  { lastLogTime: number; count: number }
+>();
+const AUTH_LOG_COOLDOWN_MS = 60000; // Only log once per minute per source
+const AUTH_LOG_CACHE_CLEANUP_INTERVAL = 300000; // Clean cache every 5 minutes
+
+// Periodically clean up stale entries
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, value] of authRejectionLogCache.entries()) {
+    if (now - value.lastLogTime > AUTH_LOG_COOLDOWN_MS * 2) {
+      authRejectionLogCache.delete(key);
+    }
+  }
+}, AUTH_LOG_CACHE_CLEANUP_INTERVAL);
+
+function shouldLogAuthRejection(socket: SocketClient): boolean {
+  const ip =
+    socket.handshake?.address ||
+    (socket.handshake?.headers?.["x-forwarded-for"] as string | undefined) ||
+    "unknown";
+  const now = Date.now();
+  const cached = authRejectionLogCache.get(ip);
+
+  if (!cached || now - cached.lastLogTime > AUTH_LOG_COOLDOWN_MS) {
+    // Log this rejection and update cache
+    const suppressedCount = cached?.count || 0;
+    authRejectionLogCache.set(ip, { lastLogTime: now, count: 0 });
+    if (suppressedCount > 0) {
+      console.warn(
+        `[auth] (${suppressedCount} similar rejections suppressed for ${ip})`
+      );
+    }
+    return true;
+  }
+
+  // Suppress logging, just increment counter
+  cached.count++;
+  return false;
+}
+
 // Enforce NextAuth-signed JWT at connect time
 io.use((socket: SocketClient, next: (err?: Error) => void) => {
   try {
@@ -1991,28 +2041,32 @@ io.use((socket: SocketClient, next: (err?: Error) => void) => {
       return next();
     }
     if (REQUIRE_JWT) {
-      try {
-        console.warn("[auth] connect rejected: auth_required", {
-          tokenPresent: !!token,
-          origin:
-            socket.handshake &&
-            socket.handshake.headers &&
-            socket.handshake.headers.origin,
-          referer:
-            socket.handshake &&
-            socket.handshake.headers &&
-            socket.handshake.headers.referer,
-        });
-      } catch {}
+      if (shouldLogAuthRejection(socket)) {
+        try {
+          console.warn("[auth] connect rejected: auth_required", {
+            tokenPresent: !!token,
+            origin:
+              socket.handshake &&
+              socket.handshake.headers &&
+              socket.handshake.headers.origin,
+            referer:
+              socket.handshake &&
+              socket.handshake.headers &&
+              socket.handshake.headers.referer,
+          });
+        } catch {}
+      }
       return next(new Error("auth_required"));
     }
     return next();
   } catch (e) {
-    try {
-      console.warn("[auth] connect rejected: invalid_token", {
-        message: String(safeErrorMessage(e)),
-      });
-    } catch {}
+    if (shouldLogAuthRejection(socket)) {
+      try {
+        console.warn("[auth] connect rejected: invalid_token", {
+          message: String(safeErrorMessage(e)),
+        });
+      } catch {}
+    }
     return next(new Error("invalid_token"));
   }
 });
@@ -2042,6 +2096,7 @@ io.on("connection", async (socket: SocketClient) => {
     rtcParticipants,
     participantDetails,
     rid,
+    redisState, // For cross-instance RTC state
   });
 
   registerChatHandlers({

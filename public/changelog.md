@@ -2,7 +2,16 @@
 
 ## December 2025
 
-### Dec 27 - Nercomancer, Earthquake
+### Dec 28 - Collection improvements, Fix Mephistopheles
+
+- **Collection** has now a list view for bulk card commands and import can take into account not adding cards already present, also deleting the whole collection is now possible
+- **Fix Mephistopheles** Mephistopheles tagline tripped our algorithm, which is fixed now
+- **add lazy loading for chat**
+- **persist webrtc sessions** from lobby to match
+- **better handling for auth sessions** exponential backoff after disconnect
+- **increase sites card preview** for some views
+
+### Dec 27 - Necromancer, Earthquake
 
 - **Necromancer can spawn Skeleton** added an option to Necromancers right click menu to summon a skeleton "here" for one mana
 - **Earthquake implemented** probably not needed as it was perfectly resolvable before, but lmk

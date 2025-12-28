@@ -8,6 +8,7 @@ import type {
   ServerMatchState,
   VoiceParticipant,
 } from "../types";
+import type { RedisStateManager } from "../core/redis-state";
 
 interface RtcHandlersDeps {
   io: SocketIOServer;
@@ -23,6 +24,8 @@ interface RtcHandlersDeps {
   rtcParticipants: Map<string, Set<string>>;
   participantDetails: Map<string, VoiceParticipant>;
   rid: (prefix: string) => string;
+  /** Redis state manager for cross-instance RTC state (optional) */
+  redisState?: RedisStateManager | null;
 }
 
 interface RtcHandlers {
@@ -56,6 +59,7 @@ export function registerRtcHandlers(deps: RtcHandlersDeps): RtcHandlers {
     rtcParticipants,
     participantDetails,
     rid,
+    redisState,
   } = deps;
 
   const ensureRoomParticipants = (roomId: string): Set<string> => {
@@ -143,14 +147,23 @@ export function registerRtcHandlers(deps: RtcHandlersDeps): RtcHandlers {
     const roomParticipants = ensureRoomParticipants(roomId);
     roomParticipants.add(playerId);
 
-    participantDetails.set(playerId, {
+    const participantData = {
       id: playerId,
       displayName: player.displayName,
       lobbyId: player.lobbyId || null,
       matchId: player.matchId || null,
       roomId,
       joinedAt: Date.now(),
-    });
+    };
+
+    participantDetails.set(playerId, participantData);
+
+    // Persist to Redis for cross-instance visibility (fire and forget)
+    if (redisState?.isEnabled()) {
+      redisState.addRtcParticipant(roomId, participantData).catch(() => {
+        // Silently fail - local state is primary
+      });
+    }
 
     const serialized = serializeParticipants(roomParticipants);
 
@@ -207,6 +220,13 @@ export function registerRtcHandlers(deps: RtcHandlersDeps): RtcHandlers {
 
     removeParticipantFromRoom(roomId, player.id);
     participantDetails.delete(player.id);
+
+    // Remove from Redis (fire and forget)
+    if (redisState?.isEnabled()) {
+      redisState.removeRtcParticipant(roomId, player.id).catch(() => {
+        // Silently fail - local state is primary
+      });
+    }
   });
 
   socket.on("rtc:connection-failed", (payload: Record<string, unknown> = {}) => {
@@ -333,6 +353,7 @@ export function registerRtcHandlers(deps: RtcHandlersDeps): RtcHandlers {
     }
 
     const requestId = rid("rtc_req");
+    const createdAt = Date.now();
 
     pendingVoiceRequests.set(requestId, {
       id: requestId,
@@ -340,8 +361,23 @@ export function registerRtcHandlers(deps: RtcHandlersDeps): RtcHandlers {
       to: targetId,
       lobbyId,
       matchId,
-      createdAt: Date.now(),
+      createdAt,
     });
+
+    // Persist to Redis for cross-instance lookup (fire and forget)
+    if (redisState?.isEnabled()) {
+      redisState
+        .createVoiceRequest({
+          requestId,
+          senderId: player.id,
+          targetId,
+          roomId: lobbyId || matchId || "",
+          createdAt,
+        })
+        .catch(() => {
+          // Silently fail - local state is primary
+        });
+    }
 
     console.log("[RTC][request] forwarding request", {
       requestId,
@@ -408,6 +444,13 @@ export function registerRtcHandlers(deps: RtcHandlersDeps): RtcHandlers {
     }
 
     pendingVoiceRequests.delete(requestId);
+
+    // Delete from Redis (fire and forget)
+    if (redisState?.isEnabled()) {
+      redisState.deleteVoiceRequest(requestId).catch(() => {
+        // Silently fail - local state is primary
+      });
+    }
 
     const requesterPlayer = players.get(requesterId);
     if (!requesterPlayer?.socketId) {
@@ -486,6 +529,14 @@ export function registerRtcHandlers(deps: RtcHandlersDeps): RtcHandlers {
     for (const [requestId, request] of Array.from(pendingVoiceRequests.entries())) {
       if (request.from === playerId || request.to === playerId) {
         pendingVoiceRequests.delete(requestId);
+
+        // Delete from Redis (fire and forget)
+        if (redisState?.isEnabled()) {
+          redisState.deleteVoiceRequest(requestId).catch(() => {
+            // Silently fail
+          });
+        }
+
         const otherId = request.from === playerId ? request.to : request.from;
         const otherPlayer = players.get(otherId);
         if (otherPlayer?.socketId) {
@@ -508,6 +559,13 @@ export function registerRtcHandlers(deps: RtcHandlersDeps): RtcHandlers {
     const roomId = getVoiceRoomIdForPlayer(player);
     if (roomId) {
       removeParticipantFromRoom(roomId, playerId);
+
+      // Remove from Redis (fire and forget)
+      if (redisState?.isEnabled()) {
+        redisState.removeRtcParticipant(roomId, playerId).catch(() => {
+          // Silently fail - local state is primary
+        });
+      }
     }
 
     participantDetails.delete(playerId);

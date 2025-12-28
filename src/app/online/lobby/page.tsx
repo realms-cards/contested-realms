@@ -218,6 +218,7 @@ function LobbyPageContent({
     sendChat,
     chatLog,
     chatHasMore,
+    chatLoading,
     requestMoreChatHistory,
     resync,
     // New context state/actions
@@ -1536,6 +1537,7 @@ function LobbyPageContent({
               onSendChat={(message, scope) => sendChat(message, scope)}
               myPlayerId={me?.id ?? null}
               chatHasMore={chatHasMore}
+              chatLoading={chatLoading}
               onRequestMoreHistory={requestMoreChatHistory}
               inline
             />

@@ -194,10 +194,10 @@ export function startMaintenanceTimers({
   );
 
   // NOTE: We only clean up "completed" and "cancelled" sessions here.
-  // "ended" sessions are preserved for replay functionality and are cleaned
-  // by the replay retention pruner (REPLAY_RETENTION_DAYS, default 14 days).
-  // Deleting "ended" sessions here would cascade-delete OnlineMatchAction
-  // records, destroying replay data prematurely.
+  // "ended" sessions are preserved for replay functionality indefinitely.
+  // The replay retention pruner has been DISABLED - replays are kept permanently.
+  // To re-enable retention, see REPLAY_RETENTION_DAYS in server/index.ts.
+  // Deleting "ended" sessions would cascade-delete OnlineMatchAction records.
   timers.push(
     setInterval(async () => {
       try {
