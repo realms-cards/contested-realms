@@ -2,6 +2,11 @@
 
 ## December 2025
 
+### Dec 27 - Nercomancer, Earthquake
+
+- **Necromancer can spawn Skeleton** added an option to Necromancers right click menu to summon a skeleton "here" for one mana
+- **Earthquake implemented** probably not needed as it was perfectly resolvable before, but lmk
+
 ### Dec 23 - Performance, Sorcerers at the Core
 
 - **add easy tournament mode** for Sorcerers at the Core. You can now easily find other players participating in monthly tournament by their badge and can create new matches with **a link to pass to discord**

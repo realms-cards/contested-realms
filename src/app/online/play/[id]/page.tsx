@@ -3067,6 +3067,11 @@ export default function OnlineMatchPage() {
             }
             myPlayerId={myPlayerId || undefined}
             soatcLeagueResult={soatcLeagueResult}
+            viewerSoatcUuid={
+              myPlayerId
+                ? soatcPlayerInfo[myPlayerId]?.soatcUuid ?? undefined
+                : undefined
+            }
             rated={
               (match as unknown as { rated?: boolean | null })?.rated ??
               undefined
