@@ -21,6 +21,7 @@ interface MatchEndOverlayProps {
   myPlayerId?: string | null;
   rated?: boolean;
   soatcLeagueResult?: LeagueMatchResult | null;
+  viewerSoatcUuid?: string;
 }
 
 export default function MatchEndOverlay({
@@ -38,6 +39,7 @@ export default function MatchEndOverlay({
   myPlayerId,
   rated,
   soatcLeagueResult,
+  viewerSoatcUuid,
 }: MatchEndOverlayProps) {
   if (!isVisible) return null;
 
@@ -267,6 +269,7 @@ export default function MatchEndOverlay({
             <SoatcLeagueResultCard
               result={soatcLeagueResult}
               isWinner={didIWin}
+              viewerSoatcUuid={viewerSoatcUuid}
             />
           </div>
         )}
