@@ -3,6 +3,7 @@
 const { createLobbyFeature } = require("./lobby");
 const { createMatchmakingFeature } = require("./matchmaking");
 const { createTournamentFeature } = require("./tournament");
+const { createRtcMigrationHelper } = require("../socket/rtc-migration");
 
 /**
  * Register all server feature modules with the shared container.
@@ -11,6 +12,17 @@ const { createTournamentFeature } = require("./tournament");
  * @param {object} deps
  */
 function registerFeatures(container, deps) {
+  // Create RTC migration helper for lobby-to-match voice persistence
+  const rtcMigration = deps.rtcParticipants
+    ? createRtcMigrationHelper({
+        io: container.resolve("io"),
+        players: deps.players,
+        rtcParticipants: deps.rtcParticipants,
+        participantDetails: deps.participantDetails,
+        redisState: deps.redisState,
+      })
+    : null;
+
   const lobby = container.registerFeature("lobby", () =>
     createLobbyFeature({
       io: container.resolve("io"),
@@ -35,6 +47,7 @@ function registerFeatures(container, deps) {
       port: deps.port,
       isCpuPlayerId: deps.isCpuPlayerId,
       redisState: deps.redisState, // For horizontal scaling - cross-instance lobby visibility
+      rtcMigration, // For preserving voice connections from lobby to match
     })
   );
 

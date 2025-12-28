@@ -46,6 +46,12 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
   const disconnectTimerRef = useRef<NodeJS.Timeout | null>(null);
   const pendingConnectRef = useRef<boolean>(false);
   const negotiationTimerRef = useRef<NodeJS.Timeout | null>(null);
+  // Track if we received a room migration event - prevents connection teardown on scope change
+  const roomMigratedRef = useRef<{
+    from: string;
+    to: string;
+    timestamp: number;
+  } | null>(null);
   const [state, setState] = useState<RtcState>("idle");
   const [participantIds, setParticipantIds] = useState<string[]>([]);
   const [micMuted, setMicMuted] = useState(false);
@@ -680,10 +686,33 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
       }
       previousScopeIdRef.current = null;
       setParticipantIds([]);
+      roomMigratedRef.current = null;
       return;
     }
 
     if (prevScopeId && prevScopeId !== activeScopeId) {
+      // Check if this scope change is due to a room migration (lobby → match)
+      // If so, preserve the connection instead of tearing it down
+      const migration = roomMigratedRef.current;
+      const isMigration =
+        migration &&
+        migration.to === `match:${activeScopeId}` &&
+        Date.now() - migration.timestamp < 10000; // Within 10 seconds
+
+      if (isMigration) {
+        console.log(
+          "[RTC] Scope changed due to room migration, preserving connection",
+          {
+            from: prevScopeId,
+            to: activeScopeId,
+          }
+        );
+        previousScopeIdRef.current = activeScopeId;
+        roomMigratedRef.current = null;
+        return;
+      }
+
+      // Not a migration - tear down and rejoin if was active
       if (state !== "idle") {
         leave();
       }
@@ -788,6 +817,50 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
   }, []);
 
   // Wire socket listeners
+  // Handle room migration event (lobby → match)
+  const handleRoomMigrated = useCallback(
+    (payload: unknown) => {
+      if (!payload || typeof payload !== "object") return;
+      const obj = payload as {
+        from?: string;
+        to?: string;
+        lobbyId?: string;
+        matchId?: string;
+        participants?: Array<{ id?: string }>;
+        timestamp?: number;
+      };
+
+      const from = typeof obj.from === "string" ? obj.from : null;
+      const to = typeof obj.to === "string" ? obj.to : null;
+      const matchId = typeof obj.matchId === "string" ? obj.matchId : null;
+
+      if (!from || !to || !matchId) return;
+
+      console.log("[RTC] Room migrated, preserving connection", {
+        from,
+        to,
+        matchId,
+      });
+
+      // Store migration info so the scope change effect knows not to tear down the connection
+      roomMigratedRef.current = {
+        from,
+        to,
+        timestamp:
+          typeof obj.timestamp === "number" ? obj.timestamp : Date.now(),
+      };
+
+      // Update participants if provided
+      if (Array.isArray(obj.participants)) {
+        const ids = obj.participants
+          .map((p) => (p && p.id ? String(p.id) : null))
+          .filter((id): id is string => !!id && id !== myPlayerId);
+        setParticipantIds(ids);
+      }
+    },
+    [myPlayerId]
+  );
+
   useEffect(() => {
     if (!enabled || !transport) return;
 
@@ -795,17 +868,20 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
     const onJoined = (p: unknown) => void handlePeerJoined(p);
     const onLeft = (p: unknown) => void handlePeerLeft(p);
     const onParticipants = (p: unknown) => void handleParticipants(p);
+    const onRoomMigrated = (p: unknown) => void handleRoomMigrated(p);
 
     transport.onGeneric?.("rtc:signal", onSignal);
     transport.onGeneric?.("rtc:peer-joined", onJoined);
     transport.onGeneric?.("rtc:peer-left", onLeft);
     transport.onGeneric?.("rtc:participants", onParticipants);
+    transport.onGeneric?.("rtc:room-migrated", onRoomMigrated);
 
     return () => {
       transport.offGeneric?.("rtc:signal", onSignal);
       transport.offGeneric?.("rtc:peer-joined", onJoined);
       transport.offGeneric?.("rtc:peer-left", onLeft);
       transport.offGeneric?.("rtc:participants", onParticipants);
+      transport.offGeneric?.("rtc:room-migrated", onRoomMigrated);
     };
   }, [
     enabled,
@@ -814,6 +890,7 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
     handleSignal,
     handlePeerLeft,
     handleParticipants,
+    handleRoomMigrated,
   ]);
 
   // Phase 3 Fix: Connection quality monitoring

@@ -110,9 +110,17 @@ declare module "socket.io" {
     "draft:session:presence": DraftSessionPresencePayload;
     "draft:session:update": { matchId: string; state: DraftState };
     "rtc:participants": { participants: RTCParticipant[] };
-    "rtc:peer-joined": { from: PlayerInfo | null; participants: RTCParticipant[] };
+    "rtc:peer-joined": {
+      from: PlayerInfo | null;
+      participants: RTCParticipant[];
+    };
     "rtc:peer-left": { from: string; participants: RTCParticipant[] };
-    "rtc:peer-connection-failed": { from: string; reason: string; code: string; timestamp: number };
+    "rtc:peer-connection-failed": {
+      from: string;
+      reason: string;
+      code: string;
+      timestamp: number;
+    };
     "rtc:request": {
       requestId: string;
       from: PlayerInfo | null;
@@ -152,7 +160,21 @@ declare module "socket.io" {
       timestamp: number;
     };
     "rtc:signal": { from: string; data: Record<string, unknown> };
-    "rtc:connection-failed": { playerId: string; matchId: string | null; lobbyId: string | null; reason: string; code: string };
+    "rtc:connection-failed": {
+      playerId: string;
+      matchId: string | null;
+      lobbyId: string | null;
+      reason: string;
+      code: string;
+    };
+    "rtc:room-migrated": {
+      from: string;
+      to: string;
+      lobbyId: string;
+      matchId: string;
+      participants: RTCParticipant[];
+      timestamp: number;
+    };
   }
 
   // Events emitted by clients and handled on the server.
@@ -190,10 +212,7 @@ declare module "socket.io" {
       playerId: string;
       socketId: string;
     }) => void;
-    "match:cleanup": (payload: {
-      matchId: string;
-      reason?: string;
-    }) => void;
+    "match:cleanup": (payload: { matchId: string; reason?: string }) => void;
     [event: string]: (...args: unknown[]) => void;
   }
 

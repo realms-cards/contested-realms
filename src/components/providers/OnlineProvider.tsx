@@ -112,6 +112,7 @@ export default function OnlineProvider({
   const [ready, setReady] = useState<boolean>(false);
   const [chatLog, setChatLog] = useState<ServerChatPayloadT[]>([]);
   const [chatHasMore, setChatHasMore] = useState<boolean>(false);
+  const [chatLoading, setChatLoading] = useState<boolean>(false);
   const [chatOldestIndex, setChatOldestIndex] = useState<number>(0);
   const [me, setMe] = useState<PlayerInfo | null>(null);
   const [lobbies, setLobbies] = useState<LobbyInfo[]>([]);
@@ -1122,9 +1123,10 @@ export default function OnlineProvider({
         })
       ),
       transport.on("chatHistory", (p) => {
-        // Update pagination state
+        // Update pagination state and clear loading
         setChatHasMore(p.hasMore);
         setChatOldestIndex(p.oldestIndex);
+        setChatLoading(false);
         // Merge server chat history with existing messages, avoiding duplicates
         setChatLog((prev) => {
           const existingKeys = new Set(
@@ -1655,12 +1657,16 @@ export default function OnlineProvider({
     resyncing,
     chatLog,
     chatHasMore,
+    chatLoading,
     chatOldestIndex,
     requestMoreChatHistory: () => {
-      if (!chatHasMore) return;
+      if (!chatHasMore || chatLoading) return;
+      setChatLoading(true);
       try {
         transport.requestChatHistory(chatOldestIndex, 25);
-      } catch {}
+      } catch {
+        setChatLoading(false);
+      }
     },
     lobbies,
     players,
