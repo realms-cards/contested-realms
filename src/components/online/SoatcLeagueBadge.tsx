@@ -16,10 +16,10 @@ export function SoatcLeagueBadge({
       <span
         className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium
                    bg-amber-600/20 text-amber-300 rounded border border-amber-500/30"
-        title={tournamentName || "SOATC League Participant"}
+        title={tournamentName || "SATC League Participant"}
       >
         <Trophy className="w-3 h-3" />
-        SOATC
+        SATC
       </span>
     );
   }
@@ -31,7 +31,7 @@ export function SoatcLeagueBadge({
                  text-amber-200 rounded-lg border border-amber-500/30"
     >
       <Trophy className="w-3.5 h-3.5 text-amber-400" />
-      <span>SOATC League</span>
+      <span>SATC League</span>
       {tournamentName && (
         <span className="text-amber-400/70 text-[10px]">
           • {tournamentName}
@@ -85,7 +85,7 @@ export function SoatcLeagueCheckbox({
             checked ? "text-amber-200" : "text-slate-300"
           }`}
         >
-          Count as SOATC League Match
+          Count as SATC League Match
         </span>
         {tournamentName && (
           <span className="text-xs text-slate-400">{tournamentName}</span>

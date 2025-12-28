@@ -107,7 +107,7 @@ export default function SoatcSettingsPage() {
     return (
       <div className="min-h-screen bg-gradient-to-b from-stone-900 to-stone-950 text-stone-100 p-6">
         <div className="max-w-2xl mx-auto">
-          <div className="animate-pulse">Loading SOATC settings...</div>
+          <div className="animate-pulse">Loading SATC settings...</div>
         </div>
       </div>
     );
@@ -117,11 +117,11 @@ export default function SoatcSettingsPage() {
     <div className="min-h-screen bg-gradient-to-b from-stone-900 to-stone-950 text-stone-100 p-6">
       <div className="max-w-2xl mx-auto">
         <Link
-          href="/settings"
+          href="/"
           className="inline-flex items-center gap-2 text-amber-400 hover:text-amber-300 mb-6"
         >
           <ArrowLeft className="w-4 h-4" />
-          Back to Settings
+          Back to Home
         </Link>
 
         <div className="flex items-center gap-3 mb-6">
@@ -137,7 +137,7 @@ export default function SoatcSettingsPage() {
             rel="noopener noreferrer"
             className="text-amber-400 hover:text-amber-300 inline-flex items-center gap-1"
           >
-            SOATC Ranking System
+            SATC Ranking System
             <ExternalLink className="w-3 h-3" />
           </a>{" "}
           to participate in monthly tournaments.
@@ -150,10 +150,10 @@ export default function SoatcSettingsPage() {
               htmlFor="soatc-uuid"
               className="block text-sm font-medium text-stone-300 mb-2"
             >
-              Your SOATC UUID
+              Your SATC UUID
             </label>
             <p className="text-xs text-stone-500 mb-3">
-              Find your UUID in your profile at{" "}
+              Find your UUID by clicking on your name at{" "}
               <a
                 href="https://ranking.sorcerersatthecore.com"
                 target="_blank"
@@ -161,7 +161,9 @@ export default function SoatcSettingsPage() {
                 className="text-amber-400 hover:text-amber-300"
               >
                 ranking.sorcerersatthecore.com
-              </a>
+              </a>{" "}
+              to see the page showing your scores and then copying the long
+              string from the address bar after /u/.
             </p>
             <input
               id="soatc-uuid"
@@ -205,7 +207,7 @@ export default function SoatcSettingsPage() {
                     uuidInput ? "text-stone-100" : "text-stone-500"
                   }`}
                 >
-                  Auto-detect SOATC tournament matches
+                  Auto-detect SATC tournament matches
                 </label>
                 <p className="text-sm text-stone-500 mt-1">
                   When enabled, matches against other tournament participants
@@ -332,17 +334,15 @@ export default function SoatcSettingsPage() {
               <span className="flex-shrink-0 w-6 h-6 rounded-full bg-amber-600 text-white flex items-center justify-center text-xs font-bold">
                 1
               </span>
-              <span>
-                Enter your SOATC UUID from your ranking profile above.
-              </span>
+              <span>Enter your SATC UUID from your ranking profile above.</span>
             </li>
             <li className="flex gap-3">
               <span className="flex-shrink-0 w-6 h-6 rounded-full bg-amber-600 text-white flex items-center justify-center text-xs font-bold">
                 2
               </span>
               <span>
-                When you play against another SOATC participant, the match can
-                be flagged as a league match.
+                When you play against another SATC participant, the match can be
+                flagged as a league match.
               </span>
             </li>
             <li className="flex gap-3">
@@ -351,7 +351,7 @@ export default function SoatcSettingsPage() {
               </span>
               <span>
                 After the match, you&apos;ll get a result JSON to submit to the
-                SOATC ranking system.
+                SATC ranking system.
               </span>
             </li>
           </ol>

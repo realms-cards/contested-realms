@@ -1181,7 +1181,7 @@ function LobbyPageContent({
             <Trophy className="w-5 h-5 text-amber-400 shrink-0" />
             <div className="flex-1 min-w-0">
               <div className="text-sm font-semibold text-amber-200">
-                SOATC League Match
+                SATC League Match
               </div>
               <div className="text-xs text-amber-300/70 truncate">
                 {lobby.soatcLeagueMatch.tournamentName}
