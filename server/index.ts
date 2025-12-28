@@ -845,6 +845,8 @@ const {
   isCpuPlayerId,
   tournamentBroadcast,
   redisState, // For horizontal scaling - cross-instance lobby visibility
+  rtcParticipants, // For lobby-to-match voice connection persistence
+  participantDetails, // For lobby-to-match voice connection persistence
 });
 
 const {

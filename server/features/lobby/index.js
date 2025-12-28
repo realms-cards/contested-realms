@@ -24,6 +24,7 @@
  * @param {number} deps.port
  * @param {(id: string) => boolean} deps.isCpuPlayerId
  * @param {import('../../core/redis-state').RedisStateManager} [deps.redisState] - Redis state manager for horizontal scaling
+ * @param {{ migrateToMatch: (lobbyId: string, matchId: string, playerIds: string[]) => void }} [deps.rtcMigration] - RTC migration helper for voice persistence
  */
 function createLobbyFeature(deps) {
   const io = deps.io;
@@ -48,6 +49,7 @@ function createLobbyFeature(deps) {
   const loadBotClientCtor = deps.loadBotClientCtor;
   const PORT = deps.port;
   const isCpuPlayerId = deps.isCpuPlayerId;
+  const rtcMigration = deps.rtcMigration || null;
 
   /** @type {Map<string, { id: string, name: string|null, hostId: string|null, playerIds: Set<string>, status: string, maxPlayers: number, ready: Set<string>, visibility: 'open'|'private', plannedMatchType?: string|null, lastActive: number }>} */
   const lobbies = new Map();
@@ -87,7 +89,10 @@ function createLobbyFeature(deps) {
         ready: Array.from(lobby.ready || []),
       });
     } catch (err) {
-      console.error(`[lobby] Failed to persist lobby ${lobby.id} to Redis:`, err);
+      console.error(
+        `[lobby] Failed to persist lobby ${lobby.id} to Redis:`,
+        err
+      );
     }
   }
 
@@ -100,7 +105,10 @@ function createLobbyFeature(deps) {
     try {
       await redisState.deleteLobbyState(lobbyId);
     } catch (err) {
-      console.error(`[lobby] Failed to delete lobby ${lobbyId} from Redis:`, err);
+      console.error(
+        `[lobby] Failed to delete lobby ${lobbyId} from Redis:`,
+        err
+      );
     }
   }
 
@@ -677,6 +685,11 @@ function createLobbyFeature(deps) {
       p.matchId = match.id;
     }
 
+    // NOTE: For lobby-based matches, we do NOT migrate RTC participants.
+    // The client's voice scope stays as lobby.id (since lobby is still set),
+    // so voice continues working in the lobby room throughout draft/construction/match.
+    // RTC migration is only needed for matches created without a lobby (e.g., tournaments).
+
     try {
       const basicInfo = getMatchInfo(match);
       io.to(`lobby:${lobby.id}`).emit("matchStarted", { match: basicInfo });
@@ -818,7 +831,9 @@ function createLobbyFeature(deps) {
     // If Redis is enabled, fetch from Redis (includes all instances)
     if (redisState && redisState.isEnabled()) {
       try {
-        const redisLobbies = await redisState.getActiveLobbies(STALE_MATCH_DISPLAY_MS);
+        const redisLobbies = await redisState.getActiveLobbies(
+          STALE_MATCH_DISPLAY_MS
+        );
         for (const redisLobby of redisLobbies) {
           const lobby = redisLobbyToInternal(redisLobby);
           // Update local cache
@@ -826,7 +841,10 @@ function createLobbyFeature(deps) {
           allLobbies.push(lobby);
         }
       } catch (err) {
-        console.error("[lobby] Failed to fetch lobbies from Redis, using local:", err);
+        console.error(
+          "[lobby] Failed to fetch lobbies from Redis, using local:",
+          err
+        );
         // Fall back to local
         allLobbies = Array.from(lobbies.values());
       }
