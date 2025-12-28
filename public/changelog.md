@@ -6,6 +6,10 @@
 
 - **Collection** has now a list view for bulk card commands and import can take into account not adding cards already present, also deleting the whole collection is now possible
 - **Fix Mephistopheles** Mephistopheles tagline tripped our algorithm, which is fixed now
+- **add lazy loading for chat**
+- **persist webrtc sessions** from lobby to match
+- **better handling for auth sessions** exponential backoff after disconnect
+- **increase sites card preview** for some views
 
 ### Dec 27 - Necromancer, Earthquake
 
