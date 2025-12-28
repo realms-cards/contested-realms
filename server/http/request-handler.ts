@@ -4,6 +4,7 @@ import type { IncomingMessage, ServerResponse } from "http";
 import type { PrismaClient } from "@prisma/client";
 import jwt from "jsonwebtoken";
 import type { AnyRecord, PlayerState } from "../types";
+import type { RedisStateManager } from "../core/redis-state";
 
 export interface RequestHandlerDeps {
   io: import("socket.io").Server;
@@ -74,6 +75,10 @@ export interface RequestHandlerDeps {
   toOptionalNumber: (value: unknown) => number | null;
   matchesMap: Map<string, AnyRecord>;
   safeErrorMessage: (err: unknown) => unknown;
+  /** Redis state manager for horizontal scaling (optional) */
+  redisState?: RedisStateManager | null;
+  /** Instance ID for this server instance */
+  instanceId?: string;
 }
 
 interface NextAuthJwtPayload {
@@ -97,7 +102,12 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
     matchesMap,
     players,
     safeErrorMessage,
+    redisState,
+    instanceId,
   } = deps;
+
+  // Track server start time for uptime calculation
+  const startTimeMs = Date.now();
 
   const CORS_ORIGINS = Array.isArray(serverConfig.corsOrigins)
     ? serverConfig.corsOrigins
@@ -185,6 +195,80 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
         res.statusCode = 200;
         res.setHeader("Content-Type", "application/json");
         res.end(body);
+        return;
+      }
+
+      // Horizontal scaling health endpoint
+      if (pathname === "/admin/scaling/health" && method === "GET") {
+        allowCors(res, reqOrigin);
+        try {
+          const uptimeSec = Math.floor((Date.now() - startTimeMs) / 1000);
+          const redisEnabled = redisState?.isEnabled() ?? false;
+
+          // Count matches where this instance is the leader
+          let ownedMatches = 0;
+          let lobbyLeaderStatus: "leader" | "follower" | "unknown" = "unknown";
+
+          if (redisEnabled && redisState) {
+            // Try to claim/check lobby leader status
+            try {
+              const leader = await redisState.claimLobbyLeader();
+              lobbyLeaderStatus =
+                leader === instanceId ? "leader" : "follower";
+            } catch {
+              lobbyLeaderStatus = "unknown";
+            }
+
+            // Count matches owned by this instance
+            for (const matchId of matchesMap.keys()) {
+              try {
+                const leader = await redisState.getMatchLeader(matchId);
+                if (leader === instanceId) {
+                  ownedMatches++;
+                }
+              } catch {
+                // Skip match if we can't check leader
+              }
+            }
+          } else {
+            // Without Redis, this instance owns all its local matches
+            ownedMatches = matchesMap.size;
+            lobbyLeaderStatus = "leader"; // Single instance is always leader
+          }
+
+          const body = JSON.stringify({
+            instanceId: instanceId || "unknown",
+            uptimeSec,
+            redis: {
+              enabled: redisEnabled,
+              connected: redisEnabled,
+            },
+            scaling: {
+              totalMatchesLocal: matchesMap.size,
+              matchesOwned: ownedMatches,
+              lobbyLeader: lobbyLeaderStatus,
+              connectedPlayers: players.size,
+            },
+            timestamp: new Date().toISOString(),
+          });
+
+          res.statusCode = 200;
+          res.setHeader("Content-Type", "application/json");
+          res.end(body);
+        } catch (err) {
+          console.error(
+            "[http] /admin/scaling/health error:",
+            safeErrorMessage(err)
+          );
+          res.statusCode = 500;
+          res.setHeader("Content-Type", "application/json");
+          res.end(
+            JSON.stringify({
+              error: "Failed to get scaling health",
+              details: String(safeErrorMessage(err)),
+            })
+          );
+        }
         return;
       }
 

@@ -21,6 +21,9 @@ export default function CollectionPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showQuickAdd, setShowQuickAdd] = useState(false);
+  const [showDangerZone, setShowDangerZone] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
 
   // Filter state
   const [filters, setFilters] = useState<FilterType>({});
@@ -304,6 +307,70 @@ export default function CollectionPage() {
             >
               📷 Scan
             </Link>
+            <div className="relative">
+              <button
+                onClick={() => setShowDangerZone(!showDangerZone)}
+                className="p-2 text-yellow-500 hover:text-yellow-400 hover:bg-gray-700 rounded-lg transition-colors"
+                title="Danger Zone"
+              >
+                ⚠️
+              </button>
+              {showDangerZone && (
+                <div className="absolute right-0 top-full mt-2 w-80 bg-gray-900 border border-red-900/50 rounded-lg p-4 shadow-xl z-50">
+                  <h3 className="text-red-400 font-bold mb-2">
+                    ⚠️ Danger Zone
+                  </h3>
+                  <p className="text-sm text-gray-400 mb-4">
+                    Permanently delete your entire collection. This cannot be
+                    undone.
+                  </p>
+                  <div className="flex flex-col gap-3">
+                    <input
+                      type="text"
+                      placeholder='Type "DELETE" to confirm'
+                      value={deleteConfirmText}
+                      onChange={(e) => setDeleteConfirmText(e.target.value)}
+                      className="px-3 py-2 bg-gray-800 border border-gray-700 rounded text-sm w-full"
+                    />
+                    <button
+                      onClick={async () => {
+                        if (deleteConfirmText !== "DELETE") {
+                          alert('Please type "DELETE" to confirm');
+                          return;
+                        }
+                        setIsDeleting(true);
+                        try {
+                          const res = await fetch("/api/collection", {
+                            method: "DELETE",
+                          });
+                          const result = await res.json();
+                          if (res.ok) {
+                            setDeleteConfirmText("");
+                            setShowDangerZone(false);
+                            refreshCollection();
+                            alert(
+                              `Deleted ${result.deleted} cards from your collection.`
+                            );
+                          } else {
+                            alert(
+                              result.error || "Failed to delete collection"
+                            );
+                          }
+                        } catch (e) {
+                          alert("Failed to delete collection");
+                        } finally {
+                          setIsDeleting(false);
+                        }
+                      }}
+                      disabled={isDeleting || deleteConfirmText !== "DELETE"}
+                      className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-red-900 disabled:opacity-50 rounded text-sm font-medium transition-colors"
+                    >
+                      {isDeleting ? "Deleting..." : "Delete Entire Collection"}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

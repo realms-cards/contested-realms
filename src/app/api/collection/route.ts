@@ -165,7 +165,7 @@ export async function GET(req: NextRequest) {
         meta: c.card.meta[0]
           ? {
               type: c.card.meta[0].type,
-              rarity: c.card.meta[0].rarity ?? 'Unknown',
+              rarity: c.card.meta[0].rarity ?? "Unknown",
               cost: c.card.meta[0].cost,
               attack: c.card.meta[0].attack,
               defence: c.card.meta[0].defence,
@@ -411,6 +411,56 @@ export async function POST(req: NextRequest) {
         { status: 401, headers: { "content-type": "application/json" } }
       );
     }
+    const message = e instanceof Error ? e.message : "Unknown error";
+    return new Response(JSON.stringify({ error: message }), {
+      status: 500,
+      headers: { "content-type": "application/json" },
+    });
+  }
+}
+
+// DELETE /api/collection
+// Deletes ALL cards in the user's collection (danger zone)
+export async function DELETE() {
+  const startTime = performance.now();
+  const session = await getServerAuthSession();
+  if (!session?.user) {
+    return new Response(
+      JSON.stringify({ error: "Unauthorized", code: "UNAUTHORIZED" }),
+      { status: 401, headers: { "content-type": "application/json" } }
+    );
+  }
+
+  try {
+    const userId = session.user.id;
+
+    // Verify user exists
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      return new Response(
+        JSON.stringify({
+          error: "Your account could not be found in the database.",
+          code: "USER_NOT_FOUND",
+        }),
+        { status: 401, headers: { "content-type": "application/json" } }
+      );
+    }
+
+    // Delete all collection cards for this user
+    const result = await prisma.collectionCard.deleteMany({
+      where: { userId },
+    });
+
+    // Invalidate user's collection caches
+    await invalidateCache(CacheKeys.collection.invalidateUser(userId));
+
+    logPerformance("DELETE /api/collection", performance.now() - startTime);
+    return new Response(
+      JSON.stringify({ deleted: result.count, message: "Collection deleted" }),
+      { status: 200, headers: { "content-type": "application/json" } }
+    );
+  } catch (e) {
+    logPerformance("DELETE /api/collection", performance.now() - startTime);
     const message = e instanceof Error ? e.message : "Unknown error";
     return new Response(JSON.stringify({ error: message }), {
       status: 500,

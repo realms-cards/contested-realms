@@ -122,8 +122,11 @@ export default function ReplayViewerPage() {
         setError(data.error);
       } else if (data.recording) {
         setRecording(data.recording);
-        // Initialize game state
-        useGameStore.getState().resetGameState();
+        // Initialize game state and set grid view for replays (no custom playmats)
+        const store = useGameStore.getState();
+        store.resetGameState();
+        // Use grid overlay instead of playmat for spectator/replay view
+        useGameStore.setState({ showPlaymat: false, showPlaymatOverlay: true });
       }
       setLoading(false);
     };
@@ -168,6 +171,7 @@ export default function ReplayViewerPage() {
     if (!recording) return;
     // Reset to beginning and replay up to previous action
     useGameStore.getState().resetGameState();
+    useGameStore.setState({ showPlaymat: false, showPlaymatOverlay: true });
     const prevIndex = Math.max(currentActionIndex - 1, 0);
     for (let i = 0; i <= prevIndex; i++) {
       const action = recording.actions[i];
@@ -180,6 +184,7 @@ export default function ReplayViewerPage() {
     (targetIndex: number) => {
       if (!recording) return;
       useGameStore.getState().resetGameState();
+      useGameStore.setState({ showPlaymat: false, showPlaymatOverlay: true });
       for (let i = 0; i <= targetIndex; i++) {
         const action = recording.actions[i];
         useGameStore.getState().applyPatch(action.patch);

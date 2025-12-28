@@ -210,6 +210,7 @@ export async function POST(req: NextRequest) {
       variantId: number | null;
       setId: number | null;
       typeText: string | null;
+      type: string | null;
       count: number;
       name: string;
     };
@@ -235,6 +236,7 @@ export async function POST(req: NextRequest) {
         variantId: found.variantId,
         setId: found.setId,
         typeText: found.typeText,
+        type: found.type,
         count,
         name,
       });
@@ -265,7 +267,7 @@ export async function POST(req: NextRequest) {
       count: number;
     };
     const zoneItems: ZoneItem[] = mapped.map((m) => {
-      const t = (m.typeText || "").toLowerCase();
+      const t = (m.type || "").toLowerCase();
       const isSite = t.includes("site");
       const zone = isSite ? "Atlas" : "Spellbook";
       return {
@@ -277,9 +279,9 @@ export async function POST(req: NextRequest) {
       };
     });
 
-    // 6) Validate avatar count and minimums, using variant type text if available
+    // 6) Validate avatar count and minimums, using CardSetMetadata.type (not typeText which is flavor text)
     const avatars = mapped.filter((m) =>
-      (m.typeText || "").toLowerCase().includes("avatar")
+      (m.type || "").toLowerCase().includes("avatar")
     );
     if (avatars.length !== 1) {
       return new Response(
@@ -580,6 +582,7 @@ async function findBestVariantsForNames(
       variantId: number | null;
       setId: number | null;
       typeText: string | null;
+      type: string | null;
     }
   >
 > {
@@ -590,6 +593,7 @@ async function findBestVariantsForNames(
       variantId: number | null;
       setId: number | null;
       typeText: string | null;
+      type: string | null;
     }
   >();
 
@@ -684,15 +688,16 @@ async function findBestVariantsForNames(
       variantId: top.variantId,
       setId: top.setId,
       typeText: top.typeText,
+      type: null, // Will be populated from CardSetMetadata
     });
 
-    // Track if we need metadata fallback
-    if ((top.typeText == null || top.typeText === "") && top.setId != null) {
+    // Track all cards that have a setId for metadata lookup
+    if (top.setId != null) {
       needsMetadata.push({ name, cardId: card.id, setId: top.setId });
     }
   }
 
-  // Batch fetch metadata for cards missing typeText
+  // Batch fetch metadata to get proper card type (not flavor typeText)
   if (needsMetadata.length > 0) {
     const metaConditions = needsMetadata.map((m) => ({
       cardId: m.cardId,
@@ -713,7 +718,7 @@ async function findBestVariantsForNames(
       if (type) {
         const existing = result.get(name);
         if (existing) {
-          result.set(name, { ...existing, typeText: type });
+          result.set(name, { ...existing, type });
         }
       }
     }

@@ -2,6 +2,11 @@
 
 ## December 2025
 
+### Dec 28 - Collection improvements, Fix Mephistopheles
+
+- **Collection** has now a list view for bulk card commands and import can take into account not adding cards already present, also deleting the whole collection is now possible
+- **Fix Mephistopheles** Mephistopheles tagline tripped our algorithm, which is fixed now
+
 ### Dec 27 - Necromancer, Earthquake
 
 - **Necromancer can spawn Skeleton** added an option to Necromancers right click menu to summon a skeleton "here" for one mana

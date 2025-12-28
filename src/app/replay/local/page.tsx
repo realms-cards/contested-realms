@@ -61,6 +61,8 @@ function LocalReplayContent() {
         const parsed = JSON.parse(stored) as MatchRecording;
         setRecording(parsed);
         useGameStore.getState().resetGameState();
+        // Use grid overlay instead of playmat for spectator/replay view
+        useGameStore.setState({ showPlaymat: false, showPlaymatOverlay: true });
       } else {
         setError("No replay data found. Please upload a replay file.");
       }
@@ -101,6 +103,7 @@ function LocalReplayContent() {
     if (!recording) return;
     // Reset to beginning and replay up to previous action
     useGameStore.getState().resetGameState();
+    useGameStore.setState({ showPlaymat: false, showPlaymatOverlay: true });
     const prevIndex = Math.max(currentActionIndex - 1, 0);
     for (let i = 0; i <= prevIndex; i++) {
       const action = recording.actions[i];
@@ -113,6 +116,7 @@ function LocalReplayContent() {
     (targetIndex: number) => {
       if (!recording) return;
       useGameStore.getState().resetGameState();
+      useGameStore.setState({ showPlaymat: false, showPlaymatOverlay: true });
       for (let i = 0; i <= targetIndex; i++) {
         const action = recording.actions[i];
         useGameStore.getState().applyPatch(action.patch);
