@@ -2441,6 +2441,35 @@ export default function OnlineMatchPage() {
         replayId: matchId,
       });
       setSoatcLeagueResult(result);
+
+      // Save to database for match history
+      fetch("/api/soatc/matches", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          matchId,
+          tournamentId: soatcMatch.tournamentId,
+          tournamentName: soatcMatch.tournamentName,
+          player1Id: p1.id,
+          player1SoatcId: p1SoatcInfo?.soatcUuid || "",
+          player2Id: p2.id,
+          player2SoatcId: p2SoatcInfo?.soatcUuid || "",
+          winnerId: result.winnerId,
+          winnerSoatcId: result.winnerId
+            ? (result.winnerId === p1.id
+                ? p1SoatcInfo?.soatcUuid
+                : p2SoatcInfo?.soatcUuid) || null
+            : null,
+          isDraw: winner === null,
+          format:
+            (match?.matchType as "constructed" | "sealed" | "draft") ||
+            "constructed",
+          resultJson: result,
+          startedAt: (match as { startedAt?: number })?.startedAt || Date.now(),
+        }),
+      }).catch((err) => {
+        console.error("Failed to save SOATC match result to database:", err);
+      });
     } catch (err) {
       console.error("Failed to generate SOATC league result:", err);
     }
