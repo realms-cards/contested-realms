@@ -12,12 +12,14 @@ interface CollectionGridProps {
   cards: CollectionCardResponse[];
   loading?: boolean;
   onQuantityChange?: () => void;
+  zoom?: number; // 50-150, default 100
 }
 
 export default function CollectionGrid({
   cards,
   loading,
   onQuantityChange,
+  zoom = 100,
 }: CollectionGridProps) {
   // Always call hooks at the top level (Rules of Hooks)
   // Local optimistic state for quantities and notes
@@ -40,9 +42,24 @@ export default function CollectionGrid({
         cards={cards}
         loading={loading}
         onQuantityChange={onQuantityChange}
+        zoom={zoom}
       />
     );
   }
+
+  // Calculate grid columns based on zoom level
+  // At zoom 100% = default, 50% = more columns (smaller), 150% = fewer columns (larger)
+  const getGridCols = () => {
+    if (zoom <= 60)
+      return "grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10";
+    if (zoom <= 80)
+      return "grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8";
+    if (zoom <= 100)
+      return "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6";
+    if (zoom <= 120)
+      return "grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5";
+    return "grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
+  };
 
   // Standard grid for smaller collections (< 50 cards)
 
@@ -143,7 +160,7 @@ export default function CollectionGrid({
 
   if (loading) {
     return (
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+      <div className={`grid ${getGridCols()} gap-4`}>
         {Array.from({ length: 12 }).map((_, i) => (
           <div
             key={i}
@@ -182,7 +199,7 @@ export default function CollectionGrid({
     });
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 pb-8">
+    <div className={`grid ${getGridCols()} gap-4 pb-8`}>
       {visibleCards.map((card) => (
         <CollectionCard
           key={card.id}

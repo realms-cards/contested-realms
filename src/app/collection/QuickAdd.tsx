@@ -12,25 +12,14 @@ import {
 // Use CardSearchResult from the hook
 type CardResult = CardSearchResult;
 
-interface RecentCard {
-  cardId: number;
-  name: string;
-  slug: string;
-  addedAt: number;
-}
-
 interface QuickAddProps {
   onClose: () => void;
   onCardAdded?: () => void; // Called when modal closes if cards were added
 }
 
-const MAX_RECENT = 10;
-
 export default function QuickAdd({ onClose, onCardAdded }: QuickAddProps) {
   const [query, setQuery] = useState("");
-  const [adding, setAdding] = useState<number | null>(null);
   const [finish, setFinish] = useState<Finish>("Standard");
-  const [recentCards, setRecentCards] = useState<RecentCard[]>([]);
   const [cardsAddedCount, setCardsAddedCount] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const [hoverCard, setHoverCard] = useState<CardResult | null>(null);
@@ -44,40 +33,15 @@ export default function QuickAdd({ onClose, onCardAdded }: QuickAddProps) {
     return search(query, 8);
   }, [query, search]);
 
-  // Load recent cards from localStorage
+  // Focus input on mount
   useEffect(() => {
-    const stored = localStorage.getItem("collection:recentAdds");
-    if (stored) {
-      try {
-        setRecentCards(JSON.parse(stored));
-      } catch {
-        // Ignore parse errors
-      }
-    }
     inputRef.current?.focus();
   }, []);
-
-  const saveRecentCard = (card: CardResult) => {
-    const recent: RecentCard = {
-      cardId: card.cardId,
-      name: card.cardName,
-      slug: card.slug,
-      addedAt: Date.now(),
-    };
-
-    setRecentCards((prev) => {
-      const filtered = prev.filter((r) => r.cardId !== card.cardId);
-      const updated = [recent, ...filtered].slice(0, MAX_RECENT);
-      localStorage.setItem("collection:recentAdds", JSON.stringify(updated));
-      return updated;
-    });
-  };
 
   // No debounce needed - search is instant now
 
   const handleQuickAdd = async (card: CardResult) => {
     // Optimistic update - show success immediately
-    saveRecentCard(card);
     setCardsAddedCount((c) => c + 1);
     setQuery("");
     inputRef.current?.focus();
@@ -92,47 +56,6 @@ export default function QuickAdd({ onClose, onCardAdded }: QuickAddProps) {
             cardId: card.cardId,
             variantId: card.variantId,
             setId: card.setId,
-            finish,
-            quantity: 1,
-          },
-        ],
-      }),
-    })
-      .then((res) => {
-        if (!res.ok) {
-          res.json().then((data) => {
-            console.error("Failed to add card:", data.error);
-          });
-        }
-        // Don't refresh collection while modal is open - will refresh on close
-      })
-      .catch((e) => {
-        console.error("Failed to add card:", e);
-      });
-  };
-
-  const handleRecentAdd = async (recent: RecentCard) => {
-    // Brief visual feedback then optimistic success
-    setAdding(recent.cardId);
-    setTimeout(() => setAdding(null), 150);
-
-    // Move to front of recent list
-    setRecentCards((prev) => {
-      const filtered = prev.filter((r) => r.cardId !== recent.cardId);
-      const updated = [{ ...recent, addedAt: Date.now() }, ...filtered];
-      localStorage.setItem("collection:recentAdds", JSON.stringify(updated));
-      return updated;
-    });
-    setCardsAddedCount((c) => c + 1);
-
-    // Fire and forget
-    fetch("/api/collection", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        cards: [
-          {
-            cardId: recent.cardId,
             finish,
             quantity: 1,
           },
@@ -228,8 +151,7 @@ export default function QuickAdd({ onClose, onCardAdded }: QuickAddProps) {
                       onClick={() => handleQuickAdd(card)}
                       onMouseEnter={() => setHoverCard(card)}
                       onMouseLeave={() => setHoverCard(null)}
-                      disabled={adding === card.cardId}
-                      className="w-full p-3 flex items-center gap-3 hover:bg-gray-800 transition-colors disabled:opacity-50"
+                      className="w-full p-3 flex items-center gap-3 hover:bg-gray-800 transition-colors"
                     >
                       <div
                         className={`relative rounded overflow-hidden flex-shrink-0 bg-black ${
@@ -254,9 +176,7 @@ export default function QuickAdd({ onClose, onCardAdded }: QuickAddProps) {
                           {card.set || "Unknown Set"}
                         </div>
                       </div>
-                      <div className="text-blue-400 text-sm">
-                        {adding === card.cardId ? "Adding..." : "+ Add"}
-                      </div>
+                      <div className="text-blue-400 text-sm">+ Add</div>
                     </button>
                   ))}
               </div>
@@ -266,35 +186,6 @@ export default function QuickAdd({ onClose, onCardAdded }: QuickAddProps) {
               </div>
             ) : null}
           </div>
-
-          {/* Recent Cards */}
-          {recentCards.length > 0 && !query.trim() && (
-            <div className="border-t border-gray-800">
-              <div className="px-4 py-2 text-xs text-gray-500 uppercase">
-                Recently Added
-              </div>
-              <div className="flex gap-2 px-4 pb-4 overflow-x-auto">
-                {recentCards.map((recent) => (
-                  <button
-                    key={recent.cardId}
-                    onClick={() => handleRecentAdd(recent)}
-                    disabled={adding === recent.cardId}
-                    className="flex-shrink-0 w-16 disabled:opacity-50"
-                  >
-                    <div className="w-16 h-22 relative rounded overflow-hidden">
-                      <Image
-                        src={`/api/images/${recent.slug}`}
-                        alt={recent.name}
-                        fill
-                        className="object-cover"
-                        unoptimized
-                      />
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
 
           {/* Tip */}
           <div className="p-4 border-t border-gray-800 text-center text-xs text-gray-500">
