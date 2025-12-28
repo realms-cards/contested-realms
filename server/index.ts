@@ -660,6 +660,9 @@ const persistence = createPersistenceLayer({
     matchId: string,
     match: Record<string, unknown>
   ) => Promise<void>,
+  startMatchRecording: startMatchRecording as unknown as (
+    match: Record<string, unknown>
+  ) => void,
   config: {
     isWriteBehind: PERSIST_IS_WRITE_BEHIND,
     flushIntervalMs: PERSIST_FLUSH_INTERVAL_MS,
@@ -1521,6 +1524,10 @@ async function getOrLoadMatch(
                 await hydrateMatchFromDatabase(matchId, m);
               } catch {}
               matches.set(matchId, m);
+              // Start recording for recovered match so subsequent actions can be tracked
+              try {
+                startMatchRecording(m);
+              } catch {}
               return m;
             }
           }
@@ -1541,6 +1548,10 @@ async function getOrLoadMatch(
           await hydrateMatchFromDatabase(matchId, m);
         } catch {}
         matches.set(matchId, m);
+        // Start recording for recovered match so subsequent actions can be tracked
+        try {
+          startMatchRecording(m);
+        } catch {}
         return m;
       }
     }
@@ -1653,6 +1664,10 @@ async function getOrLoadMatch(
       } catch {}
       try {
         await hydrateMatchFromDatabase(matchId, match);
+      } catch {}
+      // Start recording for this match so actions can be tracked
+      try {
+        startMatchRecording(match);
       } catch {}
       return match;
     }

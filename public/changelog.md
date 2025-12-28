@@ -9,7 +9,7 @@
 - **add lazy loading for chat**
 - **persist webrtc sessions** from lobby to match
 - **better handling for auth sessions** exponential backoff after disconnect
-- **increase sites card preview** for some views
+- **increase size of sites card preview** for some views
 
 ### Dec 27 - Necromancer, Earthquake
 

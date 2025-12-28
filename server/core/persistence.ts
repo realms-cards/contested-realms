@@ -37,6 +37,8 @@ interface PersistenceDeps {
     matchId: string,
     match: Record<string, unknown>
   ) => Promise<void>;
+  /** Start recording for a recovered match so actions can be tracked */
+  startMatchRecording?: (match: Record<string, unknown>) => void;
   config: PersistenceConfig;
 }
 
@@ -48,6 +50,7 @@ const createPersistenceLayerInternal = ({
   metricsObserveMs,
   matches,
   hydrateMatchFromDatabase,
+  startMatchRecording,
   config,
 }: PersistenceDeps) => {
   const {
@@ -585,6 +588,10 @@ const createPersistenceLayerInternal = ({
             await hydrateMatchFromDatabase(m.id, m);
           } catch {}
           matches.set(m.id, m);
+          // Start recording for recovered match so subsequent actions can be tracked
+          try {
+            if (startMatchRecording) startMatchRecording(m);
+          } catch {}
           count++;
         }
       }
@@ -618,6 +625,10 @@ const createPersistenceLayerInternal = ({
           await hydrateMatchFromDatabase(m.id, m);
         } catch {}
         matches.set(m.id, m);
+        // Start recording for recovered match so subsequent actions can be tracked
+        try {
+          if (startMatchRecording) startMatchRecording(m);
+        } catch {}
       }
       return m;
     } catch {
