@@ -639,6 +639,7 @@ const { recordMatchResult: recordLeaderboardMatchResult } = leaderboardService;
 const matchRecordingService = createMatchRecordingService({
   players,
   matchRecordings,
+  redisState, // For horizontal scaling - cross-instance recording continuity
 });
 
 const {
@@ -843,6 +844,7 @@ const {
   port: PORT,
   isCpuPlayerId,
   tournamentBroadcast,
+  redisState, // For horizontal scaling - cross-instance lobby visibility
 });
 
 const {
@@ -995,6 +997,8 @@ const handleHttpRequest = createRequestHandler({
   toOptionalString,
   toOptionalNumber,
   safeErrorMessage,
+  redisState, // For horizontal scaling health endpoint
+  instanceId: INSTANCE_ID,
 });
 
 server.on("request", handleHttpRequest);
@@ -2042,6 +2046,7 @@ io.on("connection", async (socket: SocketClient) => {
     rtcParticipants,
     participantDetails,
     rid,
+    redisState, // For cross-instance RTC state
   });
 
   registerChatHandlers({

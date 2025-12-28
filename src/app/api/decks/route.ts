@@ -141,9 +141,10 @@ export async function GET() {
             FROM "DeckCard" dc
             JOIN "Variant" v ON dc."variantId" = v.id
             JOIN "Card" c ON dc."cardId" = c.id
+            JOIN "CardSetMetadata" csm ON dc."cardId" = csm."cardId" AND v."setId" = csm."setId"
             WHERE dc."deckId" = ANY(${uncachedIds})
               AND dc.zone IN ('Spellbook', 'Atlas', 'Sideboard')
-              AND v."typeText" ILIKE '%Avatar%'
+              AND csm.type ILIKE '%Avatar%'
           `;
 
           type AvatarCardRow = (typeof avatarCards)[number];

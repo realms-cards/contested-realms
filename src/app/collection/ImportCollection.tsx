@@ -14,6 +14,7 @@ export default function ImportCollection({
 }: ImportCollectionProps) {
   const [text, setText] = useState("");
   const [format, setFormat] = useState<"sorcery" | "csv">("sorcery");
+  const [skipExisting, setSkipExisting] = useState(false);
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState<{
     imported: number;
@@ -30,7 +31,7 @@ export default function ImportCollection({
       const res = await fetch("/api/collection/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, format }),
+        body: JSON.stringify({ text, format, skipExisting }),
       });
 
       const data = await res.json();
@@ -105,6 +106,20 @@ export default function ImportCollection({
               </button>
             </div>
           </div>
+
+          {/* Skip Existing Option */}
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={skipExisting}
+              onChange={(e) => setSkipExisting(e.target.checked)}
+              className="w-4 h-4 rounded bg-gray-700 border-gray-600"
+            />
+            <span className="text-sm text-gray-300">Only add new cards</span>
+            <span className="text-xs text-gray-500">
+              (skip cards already in collection)
+            </span>
+          </label>
 
           {/* Text Input */}
           <div>

@@ -34,6 +34,7 @@ function registerFeatures(container, deps) {
       loadBotClientCtor: deps.loadBotClientCtor,
       port: deps.port,
       isCpuPlayerId: deps.isCpuPlayerId,
+      redisState: deps.redisState, // For horizontal scaling - cross-instance lobby visibility
     })
   );
 

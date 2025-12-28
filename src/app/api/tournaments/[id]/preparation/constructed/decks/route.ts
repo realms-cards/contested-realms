@@ -207,15 +207,13 @@ export async function GET(
       if (dc.zone === "Spellbook") agg.spellbook += qty;
       if (dc.zone === "Atlas") agg.atlas += qty;
       if (dc.zone === "Collection") agg.collection += qty;
-      // Avatar detection - prefer metadata.type over typeText
+      // Avatar detection - use metadata.type from CardSetMetadata (not typeText which is flavor text)
       // Use DeckCard.setId or fall back to Variant.setId for metaMap lookup
       const effectiveSetId = dc.setId ?? dc.variant?.setId ?? null;
       const type = (
-        (effectiveSetId != null
-          ? metaMap.get(`${dc.cardId}:${effectiveSetId}`)
-          : undefined) ||
-        dc.variant?.typeText ||
-        ""
+        effectiveSetId != null
+          ? metaMap.get(`${dc.cardId}:${effectiveSetId}`) || ""
+          : ""
       ).toLowerCase();
       if (type.includes("avatar")) {
         console.log(`[Constructed Decks] Found avatar in deck ${key}:`, {
@@ -470,11 +468,9 @@ export async function POST(
       const qty = Number(c.count || 0);
       if (c.zone === "Spellbook") spellbook += qty;
       if (c.zone === "Atlas") atlas += qty;
-      // Prefer metadata.type over typeText (flavor text)
+      // Use metadata.type from CardSetMetadata (not typeText which is flavor text)
       const type = (
-        (c.setId != null ? metaSel.get(`${c.cardId}:${c.setId}`) : undefined) ||
-        c.variant?.typeText ||
-        ""
+        c.setId != null ? metaSel.get(`${c.cardId}:${c.setId}`) || "" : ""
       ).toLowerCase();
       if (type.includes("avatar")) avatarCount += qty;
     }
