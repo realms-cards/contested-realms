@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { Globe, Lock, Trash2, FileText, List } from "lucide-react";
+import { Globe, Lock, Trash2, FileText, List, Pencil } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -244,6 +244,18 @@ export default function DeckItem({ deck, onDelete }: DeckItemProps) {
             {copiedMsg}
           </div>
         )}
+
+        {/* Edit Deck - prominent button */}
+        <Link
+          href={`/decks/${deck.id}/edit`}
+          aria-label="Edit Deck"
+          data-tooltip="Edit Deck"
+          onClick={(e: MouseEvent) => e.stopPropagation()}
+          className="inline-flex items-center justify-center h-12 px-4 gap-2 rounded-lg bg-gradient-to-r from-amber-600 to-amber-500 ring-2 ring-amber-400/60 hover:from-amber-500 hover:to-amber-400 text-white font-semibold shadow-lg shadow-amber-500/25 transition-all hover:scale-105"
+        >
+          <Pencil className="h-5 w-5" />
+          <span>Edit</span>
+        </Link>
 
         {/* TTS Export (for Tabletop Simulator) - downloads JSON file */}
         <button
