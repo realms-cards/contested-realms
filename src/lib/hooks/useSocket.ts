@@ -240,37 +240,67 @@ export function useSocket(options: UseSocketOptions = {}): Socket | null {
       const handleConnectError = async (
         error: Error | { message?: string }
       ) => {
-        console.error("[useSocket] Connection error:", error);
-        // If token expired/unauthorized, force refresh token for the next attempt
-        try {
-          const msg = (error as { message?: string })?.message || String(error);
-          if (
-            msg?.toLowerCase().includes("jwt") ||
-            msg?.toLowerCase().includes("unauthor") ||
-            msg?.toLowerCase().includes("invalid_token") ||
-            msg?.toLowerCase().includes("token")
-          ) {
-            // Check if we should wait before trying again (exponential backoff)
-            if (shouldDelayReconnection()) {
-              // Already backing off, let socket.io's built-in reconnection handle it
-              return;
-            }
+        const msg = (error as { message?: string })?.message || String(error);
+        const isAuthError =
+          msg?.toLowerCase().includes("jwt") ||
+          msg?.toLowerCase().includes("unauthor") ||
+          msg?.toLowerCase().includes("invalid_token") ||
+          msg?.toLowerCase().includes("token");
 
-            const token = await fetchSocketToken(true); // Force refresh on auth errors
-            if (token) {
-              const mgr = socketInstance.io as unknown as {
-                opts: { auth?: Record<string, unknown> };
-              };
-              mgr.opts.auth = { token };
-              // Nudge a reconnect attempt if currently disconnected
-              try {
-                if (!socketInstance.connected) socketInstance.connect();
-              } catch {}
-            }
-            // If token fetch failed, recordAuthFailure was already called in fetchSocketToken
-            // Socket.io will retry with exponential backoff
+        // Only log non-auth errors at error level (auth errors are expected during token refresh)
+        if (isAuthError) {
+          console.warn("[useSocket] Auth error, refreshing token...");
+        } else {
+          console.error("[useSocket] Connection error:", error);
+        }
+
+        if (!isAuthError) return;
+
+        // CRITICAL: Temporarily disable socket.io's auto-reconnection to prevent
+        // it from racing ahead with the old token while we fetch a new one
+        type ManagerWithOpts = {
+          opts: { auth?: Record<string, unknown> };
+          reconnection: boolean;
+        };
+        const mgr = socketInstance.io as unknown as ManagerWithOpts;
+        mgr.reconnection = false;
+
+        // Check if we should wait before trying again (exponential backoff)
+        if (shouldDelayReconnection()) {
+          const delay = getAuthBackoffDelay();
+          console.log(`[useSocket] Backing off for ${delay / 1000}s before retry`);
+          setTimeout(() => {
+            mgr.reconnection = true;
+            if (!socketInstance.connected) socketInstance.connect();
+          }, delay);
+          return;
+        }
+
+        try {
+          const token = await fetchSocketToken(true); // Force refresh on auth errors
+          if (token) {
+            mgr.opts.auth = { token };
+            console.log("[useSocket] Token refreshed, reconnecting...");
+            // Re-enable reconnection and connect
+            mgr.reconnection = true;
+            if (!socketInstance.connected) socketInstance.connect();
+          } else {
+            // Token fetch failed (401) - back off before trying again
+            const delay = getAuthBackoffDelay();
+            console.log(`[useSocket] Token refresh failed, backing off for ${delay / 1000}s`);
+            setTimeout(() => {
+              mgr.reconnection = true;
+              if (!socketInstance.connected) socketInstance.connect();
+            }, delay);
           }
-        } catch {}
+        } catch (e) {
+          console.warn("[useSocket] Error during token refresh:", e);
+          // Re-enable reconnection after delay
+          const delay = getAuthBackoffDelay();
+          setTimeout(() => {
+            mgr.reconnection = true;
+          }, delay);
+        }
       };
       const handleReconnect = (attemptNumber: number) => {
         console.log(`[useSocket] Reconnected after ${attemptNumber} attempts`);
@@ -293,23 +323,16 @@ export function useSocket(options: UseSocketOptions = {}): Socket | null {
       socketInstance.on("reconnect_error", handleReconnectError);
       socketInstance.on("reconnect_failed", handleReconnectFailed);
 
-      // Refresh token before reconnect attempts (only if cached token expired)
+      // Refresh token before reconnect attempts (use cached token if valid)
       type ManagerWithOpts = { opts: { auth?: Record<string, unknown> } };
       socketInstance.io.on("reconnect_attempt", async () => {
-        // Check if we should delay this attempt (exponential backoff)
-        if (shouldDelayReconnection()) {
-          // Skip this attempt, socket.io will retry later
-          return;
-        }
-
+        // Only refresh token if it's about to expire (use cached if valid)
         try {
-          // Use cached token if still valid, otherwise fetch new one
-          const token = await fetchSocketToken();
+          const token = await fetchSocketToken(false); // Don't force refresh
           if (token) {
             const mgr = socketInstance.io as unknown as ManagerWithOpts;
             mgr.opts.auth = { token };
           }
-          // If token fetch failed, we'll try again on next attempt with backoff
         } catch {}
       });
 

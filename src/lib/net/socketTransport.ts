@@ -1188,8 +1188,6 @@ export class SocketTransport implements GameTransport {
     });
 
     socket.on("connect_error", async (error: Error) => {
-      console.warn("[Transport] Connect error:", error);
-      // If token-related error, force refresh token before reconnection
       const msg = error?.message?.toLowerCase() || "";
       const isAuthError =
         msg.includes("token") ||
@@ -1197,36 +1195,76 @@ export class SocketTransport implements GameTransport {
         msg.includes("unauthor") ||
         msg.includes("invalid");
 
+      // Only log non-auth errors at warn level (auth errors are expected during token refresh)
       if (isAuthError) {
-        // Check if we should delay this attempt (exponential backoff)
-        if (this.shouldDelayReconnection()) {
-          // Already backing off, let socket.io's built-in reconnection handle it
-          return;
+        console.log("[Transport] Auth error, refreshing token...");
+      } else {
+        console.warn("[Transport] Connect error:", error);
+        if (!this.isIntentionalDisconnect) {
+          this.connectionState = "reconnecting";
+          this.attemptReconnection(opts);
         }
-
-        try {
-          const res = await fetch("/api/socket-token", {
-            credentials: "include",
-          });
-          if (res.ok) {
-            const j = await res.json();
-            type ManagerWithOpts = { opts: { auth?: Record<string, unknown> } };
-            const mgr = socket.io as unknown as ManagerWithOpts;
-            mgr.opts.auth = { token: j?.token as string };
-            console.log("[Transport] Refreshed token after auth error");
-          } else if (res.status === 401) {
-            // User is not authenticated - record failure for backoff
-            console.warn("[Transport] Token fetch returned 401 - user not authenticated");
-            this.recordAuthFailure();
-            // Will retry with exponential backoff
-          }
-        } catch (tokenError) {
-          console.warn("[Transport] Failed to refresh token:", tokenError);
-        }
+        return;
       }
-      if (!this.isIntentionalDisconnect) {
-        this.connectionState = "reconnecting";
-        this.attemptReconnection(opts);
+
+      // CRITICAL: Temporarily disable socket.io's auto-reconnection to prevent
+      // it from racing ahead with the old token while we fetch a new one
+      type ManagerWithOpts = {
+        opts: { auth?: Record<string, unknown> };
+        reconnection: boolean;
+      };
+      const mgr = socket.io as unknown as ManagerWithOpts;
+      mgr.reconnection = false;
+
+      // Check if we should wait before trying again (exponential backoff)
+      if (this.shouldDelayReconnection()) {
+        const delay = this.getAuthBackoffDelay();
+        console.log(`[Transport] Backing off for ${delay / 1000}s before retry`);
+        setTimeout(() => {
+          mgr.reconnection = true;
+          if (!socket.connected && !this.isIntentionalDisconnect) {
+            socket.connect();
+          }
+        }, delay);
+        return;
+      }
+
+      try {
+        const res = await fetch("/api/socket-token", {
+          credentials: "include",
+        });
+        if (res.ok) {
+          const j = await res.json();
+          mgr.opts.auth = { token: j?.token as string };
+          console.log("[Transport] Token refreshed, reconnecting...");
+          // Re-enable reconnection and connect
+          mgr.reconnection = true;
+          if (!socket.connected && !this.isIntentionalDisconnect) {
+            socket.connect();
+          }
+        } else if (res.status === 401) {
+          // User is not authenticated - record failure and back off
+          console.warn("[Transport] Token fetch returned 401 - user not authenticated");
+          this.recordAuthFailure();
+          const delay = this.getAuthBackoffDelay();
+          console.log(`[Transport] Backing off for ${delay / 1000}s`);
+          setTimeout(() => {
+            mgr.reconnection = true;
+            if (!socket.connected && !this.isIntentionalDisconnect) {
+              socket.connect();
+            }
+          }, delay);
+        } else {
+          // Other error - re-enable reconnection
+          mgr.reconnection = true;
+        }
+      } catch (tokenError) {
+        console.warn("[Transport] Failed to refresh token:", tokenError);
+        // Re-enable reconnection after delay
+        const delay = this.getAuthBackoffDelay();
+        setTimeout(() => {
+          mgr.reconnection = true;
+        }, delay);
       }
     });
 
