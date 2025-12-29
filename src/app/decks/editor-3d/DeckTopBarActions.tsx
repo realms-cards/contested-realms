@@ -1,8 +1,7 @@
 "use client";
 
-import { FolderOpen, Grid3X3 } from "lucide-react";
+import { FolderOpen } from "lucide-react";
 import React from "react";
-import { useGameStore } from "@/lib/game/store";
 type DeckListItem = { id: string; name: string; format: string };
 
 type DeckTopBarActionsProps = {
@@ -56,30 +55,11 @@ export default function DeckTopBarActions(props: DeckTopBarActionsProps) {
   const [chooserOpen, setChooserOpen] = React.useState(false);
   const [editingName, setEditingName] = React.useState(false);
   const [tempName, setTempName] = React.useState(deckName);
-  const showPlaymatOverlay = useGameStore((s) => s.showPlaymatOverlay);
-  const togglePlaymatOverlay = useGameStore((s) => s.togglePlaymatOverlay);
-  const togglePlaymat = useGameStore((s) => s.togglePlaymat);
 
   React.useEffect(() => setTempName(deckName), [deckName]);
 
   return (
     <div className="flex items-center gap-3 relative">
-      {/* Playmat/Grid toggle - toggles between playmat (no grid) and grid (no playmat) */}
-      <button
-        className={`rounded p-1.5 transition-colors ${
-          showPlaymatOverlay
-            ? "bg-blue-600/80 hover:bg-blue-500"
-            : "bg-white/10 hover:bg-white/20"
-        }`}
-        onClick={() => {
-          togglePlaymatOverlay();
-          togglePlaymat();
-        }}
-        title={showPlaymatOverlay ? "Show playmat" : "Show grid"}
-      >
-        <Grid3X3 className="w-4 h-4" />
-      </button>
-
       {!isSealed && !isDraftMode && (
         <>
           {/* Load deck (dropdown chooser) */}

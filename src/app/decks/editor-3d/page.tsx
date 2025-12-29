@@ -199,6 +199,27 @@ function AuthenticatedDeckEditor() {
   >("waiting");
   const [orbitLocked, setOrbitLocked] = useState(false);
 
+  // Editor canvas store (for playmat toggle)
+  const [editorShowPlaymat, setEditorShowPlaymat] = useState(true);
+  const editorStoreRef = useRef<ReturnType<
+    typeof import("@/lib/game/store").createGameStore
+  > | null>(null);
+  const handleEditorStoreReady = useCallback(
+    (
+      storeApi: ReturnType<typeof import("@/lib/game/store").createGameStore>
+    ) => {
+      editorStoreRef.current = storeApi;
+    },
+    []
+  );
+  const handleTogglePlaymat = useCallback(() => {
+    if (editorStoreRef.current) {
+      editorStoreRef.current.getState().togglePlaymat();
+      editorStoreRef.current.getState().togglePlaymatOverlay();
+      setEditorShowPlaymat((v) => !v);
+    }
+  }, []);
+
   // Clear transient errors when auth status changes to authenticated
   // Intentionally running once per pick3D change; server batching relies on prior state
 
@@ -5028,7 +5049,10 @@ function AuthenticatedDeckEditor() {
 
       {/* 3D Game View as the stage - EXACT same as draft-3d (minus draft hand) */}
       <div className="absolute inset-0 w-full h-full">
-        <EditorCanvas orbitLocked={orbitLocked}>
+        <EditorCanvas
+          orbitLocked={orbitLocked}
+          onStoreReady={handleEditorStoreReady}
+        >
           {/* 3D Cards with proper stacking order */}
           <group>
             {(() => {
@@ -5305,6 +5329,9 @@ function AuthenticatedDeckEditor() {
           }}
           // Tournament context for "Back to Tournament" link
           tournamentId={searchParams?.get("tournament") || null}
+          // Playmat toggle
+          showPlaymat={editorShowPlaymat}
+          onTogglePlaymat={handleTogglePlaymat}
         />
         {/* (Removed background usage text in favor of Help overlay) */}
         <Suspense fallback={null}>
