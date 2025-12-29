@@ -153,7 +153,8 @@ export default function SoatcSettingsPage() {
               Your SATC UUID
             </label>
             <p className="text-xs text-stone-500 mb-3">
-              Find your UUID by clicking on your name at{" "}
+              Find your UUID by scrolling down to the bottom of this page when
+              logged in:{" "}
               <a
                 href="https://ranking.sorcerersatthecore.com"
                 target="_blank"
@@ -161,9 +162,7 @@ export default function SoatcSettingsPage() {
                 className="text-amber-400 hover:text-amber-300"
               >
                 ranking.sorcerersatthecore.com
-              </a>{" "}
-              to see the page showing your scores and then copying the long
-              string from the address bar after /u/.
+              </a>
             </p>
             <input
               id="soatc-uuid"
