@@ -2,6 +2,12 @@
 
 ## December 2025
 
+### Dec 29 - Druid and Hardening
+
+- **Druid can now flip** to summon Bruin "here" and flip the card art
+- **Harbinger portals hardening** it was possible before to begin a match with less than three portals which should be fixed now
+- **harden replay recording** if the server was rebuilt during a match (I push changes to production), it was possible to break replay recording
+
 ### Dec 28 - Collection improvements, Fix Mephistopheles
 
 - **Collection** has now a list view for bulk card commands and import can take into account not adding cards already present, also deleting the whole collection is now possible

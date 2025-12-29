@@ -18,6 +18,7 @@ export type AvatarAbility =
   | "duplicator"
   | "imposter"
   | "necromancer"
+  | "druid"
   | null;
 
 /**
@@ -91,6 +92,16 @@ export function isNecromancer(avatarName: string | null | undefined): boolean {
 }
 
 /**
+ * Check if an avatar name indicates Druid (Arthurian Legends)
+ * Uses case-insensitive matching
+ * Druid: Tap → Flip this card. Bruin comes to board here. Cannot flip back.
+ */
+export function isDruid(avatarName: string | null | undefined): boolean {
+  if (!avatarName) return false;
+  return avatarName.toLowerCase().includes("druid");
+}
+
+/**
  * Get the primary ability type for an avatar by name
  * Returns null if no special ability detected
  */
@@ -107,6 +118,7 @@ export function getAvatarAbility(
   if (name.includes("duplicator")) return "duplicator";
   if (name.includes("imposter")) return "imposter";
   if (name.includes("necromancer")) return "necromancer";
+  if (name.includes("druid")) return "druid";
 
   return null;
 }

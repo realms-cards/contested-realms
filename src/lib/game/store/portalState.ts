@@ -177,8 +177,18 @@ export const createPortalSlice: StateCreator<
       const playerState = state.portalState[seat];
       if (!playerState) return state;
 
-      // Check for duplicates
+      // Ensure exactly 3 rolls exist before finalizing
       const rolls = playerState.rolls;
+      if (rolls.length !== 3 || rolls.some((r) => r === undefined)) {
+        get().log(
+          `${seat.toUpperCase()} must roll all 3 dice before confirming (have ${
+            rolls.filter((r) => r !== undefined).length
+          }/3)`
+        );
+        return state;
+      }
+
+      // Check for duplicates
       const uniqueRolls = new Set(rolls);
       if (uniqueRolls.size !== rolls.length) {
         get().log(

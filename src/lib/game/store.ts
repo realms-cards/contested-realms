@@ -20,6 +20,10 @@ import {
   createDialogSlice,
   createInitialDialogState,
 } from "./store/dialogState";
+import {
+  createDruidSlice,
+  createInitialDruidFlipped,
+} from "./store/druidState";
 import { createEarthquakeSlice } from "./store/earthquakeState";
 import { createEventSlice } from "./store/eventState";
 import { createGameActionsSlice } from "./store/gameActions";
@@ -146,6 +150,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   ...createSeerSlice(set, get, storeApi),
   ...createImposterMaskSlice(set, get, storeApi),
   ...createNecromancerSlice(set, get, storeApi),
+  ...createDruidSlice(set, get, storeApi),
   ...createSpecialSiteSlice(set, get, storeApi),
   cardScale: 1,
 
@@ -214,6 +219,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         seerState: null,
         imposterMasks: createInitialImposterMasks(),
         necromancerSkeletonUsed: createInitialNecromancerSkeletonUsed(),
+        druidFlipped: createInitialDruidFlipped(),
         specialSiteState: getEmptySpecialSiteState(),
       };
       return reset as GameState;

@@ -162,6 +162,9 @@ export const IMPOSTER_MASK_COST = 3; // Mana cost to mask yourself
 // --- Necromancer Mana Cost --------------------------------
 export const NECROMANCER_SKELETON_COST = 1; // Mana cost to summon a Skeleton token
 
+// --- Druid Flip State --------------------------------
+// Tracks when a Druid avatar has been flipped (one-way transformation)
+
 // --- Special Site State (Valley of Delight, Bloom sites, etc.) --------------------------------
 export type ElementChoice = "air" | "water" | "earth" | "fire";
 
@@ -1256,6 +1259,11 @@ export type GameState = {
   necromancerSkeletonUsed: Record<PlayerKey, boolean>;
   // Summon a skeleton token at the avatar's current position (costs 1 mana, once per turn)
   summonSkeletonHere: (who: PlayerKey) => boolean;
+  // Druid Flip State (Arthurian Legends)
+  // Tracks whether each player's Druid has been flipped (one-way transformation)
+  druidFlipped: Record<PlayerKey, boolean>;
+  // Flip the Druid avatar: tap it, change art, and summon Bruin token here
+  flipDruid: (who: PlayerKey) => boolean;
   // Special Site State (Valley of Delight, Bloom sites, etc.)
   specialSiteState: SpecialSiteState;
   // Trigger element choice for Valley of Delight (shows overlay)
@@ -1505,6 +1513,7 @@ export type ServerPatchT = Partial<{
   seerState: GameState["seerState"];
   imposterMasks: GameState["imposterMasks"];
   necromancerSkeletonUsed: GameState["necromancerSkeletonUsed"];
+  druidFlipped: GameState["druidFlipped"];
   stolenCards: GameState["stolenCards"];
   pithImpHands: GameState["pithImpHands"];
   morganaHands: GameState["morganaHands"];
