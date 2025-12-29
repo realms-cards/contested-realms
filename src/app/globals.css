@@ -326,3 +326,27 @@ body[data-colorblind="true"] *[class*="ring-rose-"] {
 .animate-thank-you-flash {
   animation: thank-you-flash 3s ease-in-out forwards;
 }
+
+/* Instant tooltip using data-tooltip attribute */
+[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 8px;
+  background: rgba(0, 0, 0, 0.95);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  border-radius: 4px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.1s ease;
+  z-index: 100;
+}
+
+[data-tooltip]:hover::after {
+  opacity: 1;
+}
