@@ -466,8 +466,8 @@ export async function PUT(
           await tx.deckCard.createMany({ data: createData });
         }
       });
-    } else if (needsConstructedValidation) {
-      // Validate using existing deck cards if only changing format/name/visibility
+    } else if (needsConstructedValidation && format) {
+      // Only validate when explicitly changing format to constructed (not for name/visibility changes)
       const deckWithCards = await prisma.deck.findUnique({
         where: { id },
         include: {
