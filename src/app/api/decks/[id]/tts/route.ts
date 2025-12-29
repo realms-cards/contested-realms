@@ -3,9 +3,25 @@ import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
-// Card image base URL - use CDN or local assets
-const CDN_BASE = process.env.NEXT_PUBLIC_TEXTURE_ORIGIN || "";
-const CARD_BACK_URL = `${CDN_BASE}/api/assets/cardback_spellbook.png`;
+// Use Curiosa's CloudFront CDN for TTS - has correct formats including pre-rotated sites
+const CURIOSA_CDN = "https://d27a44hjr9gen3.cloudfront.net";
+const SPELLBOOK_BACK_URL = `${CURIOSA_CDN}/assets/tts/cardbacks/cardback-spellbook.png`;
+const ATLAS_BACK_URL = `${CURIOSA_CDN}/assets/tts/cardbacks/cardback-atlas.png`;
+const AVATAR_BACK_URL = `${CURIOSA_CDN}/assets/tts/cardbacks/cardback-avatar.png`;
+
+// Build card image URL (normal orientation)
+// Slug format: got-harbinger-b-s -> https://d27a44hjr9gen3.cloudfront.net/cards/got-harbinger-b-s.png
+function buildCardImageUrl(slug: string): string {
+  if (!slug) return SPELLBOOK_BACK_URL;
+  return `${CURIOSA_CDN}/cards/${slug}.png`;
+}
+
+// Build rotated site image URL (for atlas cards)
+// Slug format: got-the_void-b-s -> https://d27a44hjr9gen3.cloudfront.net/rotated/got-the_void-b-s.png
+function buildRotatedImageUrl(slug: string): string {
+  if (!slug) return ATLAS_BACK_URL;
+  return `${CURIOSA_CDN}/rotated/${slug}.png`;
+}
 
 // GET /api/decks/[id]/tts
 // Returns TTS-compatible JSON format (same structure as curiosa.io/api/decks/[id]/tts)
@@ -40,15 +56,11 @@ export async function GET(
       },
     });
 
-    // Only allow access to public decks (TTS import doesn't have auth)
-    if (!deck || !deck.isPublic) {
-      return new Response(
-        JSON.stringify({ error: "Deck not found or private" }),
-        {
-          status: 404,
-          headers: { "content-type": "application/json" },
-        }
-      );
+    if (!deck) {
+      return new Response(JSON.stringify({ error: "Deck not found" }), {
+        status: 404,
+        headers: { "content-type": "application/json" },
+      });
     }
 
     // Get metadata for card types
@@ -67,7 +79,7 @@ export async function GET(
       }
     }
 
-    // Build card objects for TTS
+    // TTS card type
     type TTSCard = {
       GUID: string;
       Name: string;
@@ -98,19 +110,28 @@ export async function GET(
       >;
     };
 
-    const containedObjects: TTSCard[] = [];
-    const deckIDs: number[] = [];
-    const customDeck: Record<
-      string,
-      {
-        FaceURL: string;
-        BackURL: string;
-        NumWidth: number;
-        NumHeight: number;
-        BackIsHidden: boolean;
-        UniqueBack: boolean;
-      }
-    > = {};
+    type CustomDeckEntry = {
+      FaceURL: string;
+      BackURL: string;
+      NumWidth: number;
+      NumHeight: number;
+      BackIsHidden: boolean;
+      UniqueBack: boolean;
+    };
+
+    // Group cards by zone and detect avatar from type
+    type ZoneData = {
+      cards: TTSCard[];
+      deckIDs: number[];
+      customDeck: Record<string, CustomDeckEntry>;
+    };
+
+    const zones: Record<string, ZoneData> = {
+      Avatar: { cards: [], deckIDs: [], customDeck: {} },
+      Spellbook: { cards: [], deckIDs: [], customDeck: {} },
+      Atlas: { cards: [], deckIDs: [], customDeck: {} },
+      Collection: { cards: [], deckIDs: [], customDeck: {} },
+    };
 
     let cardIndex = 100; // TTS uses 100-based card IDs
 
@@ -120,24 +141,44 @@ export async function GET(
       const type = meta?.type || dc.variant?.typeText || "";
       const slug = dc.variant?.slug || "";
 
-      // Build image URL
-      const imageUrl = slug
-        ? `${CDN_BASE}/api/images/${slug}`
-        : `${CDN_BASE}/api/assets/cardback_spellbook.png`;
+      // Determine zone - check if it's an avatar by type
+      const isAvatar = type.toLowerCase().includes("avatar");
+      const isSite = type.toLowerCase().includes("site");
+      const zone = isAvatar
+        ? "Avatar"
+        : (dc as { zone?: string }).zone || "Spellbook";
+      const normalizedZone = zone === "Sideboard" ? "Collection" : zone;
+      const targetZone = zones[normalizedZone] || zones.Spellbook;
+
+      // Determine image URL and back URL based on card type
+      let faceUrl: string;
+      let backUrl: string;
+      if (isAvatar) {
+        faceUrl = buildCardImageUrl(slug);
+        backUrl = AVATAR_BACK_URL;
+      } else if (normalizedZone === "Atlas" || isSite) {
+        faceUrl = buildRotatedImageUrl(slug); // Use pre-rotated images for sites
+        backUrl = ATLAS_BACK_URL;
+      } else {
+        faceUrl = buildCardImageUrl(slug);
+        backUrl = SPELLBOOK_BACK_URL;
+      }
 
       // Add cards based on count
       for (let i = 0; i < dc.count; i++) {
-        const cardID = cardIndex * 100; // TTS format: deckId * 100
+        const cardID = cardIndex * 100;
         const deckKey = String(cardIndex);
 
-        customDeck[deckKey] = {
-          FaceURL: imageUrl,
-          BackURL: CARD_BACK_URL,
+        const deckEntry: CustomDeckEntry = {
+          FaceURL: faceUrl,
+          BackURL: backUrl,
           NumWidth: 1,
           NumHeight: 1,
           BackIsHidden: true,
           UniqueBack: false,
         };
+
+        targetZone.customDeck[deckKey] = deckEntry;
 
         const cardObj: TTSCard = {
           GUID: generateGUID(),
@@ -156,51 +197,102 @@ export async function GET(
           Nickname: dc.card.name,
           Description: type,
           CardID: cardID,
-          CustomDeck: { [deckKey]: customDeck[deckKey] },
+          CustomDeck: { [deckKey]: deckEntry },
         };
 
-        containedObjects.push(cardObj);
-        deckIDs.push(cardID);
+        targetZone.cards.push(cardObj);
+        targetZone.deckIDs.push(cardID);
         cardIndex++;
       }
     }
 
-    // Build TTS deck object
-    const ttsObject = {
-      SaveName: deck.name,
-      GameMode: "",
-      Gravity: 0.5,
-      PlayArea: 0.5,
-      Date: "",
-      Table: "",
-      Sky: "",
-      Note: `Exported from realms.cards - ${deck.name}`,
-      Rules: "",
-      XmlUI: "",
-      LuaScript: "",
-      LuaScriptState: "",
-      ObjectStates: [
-        {
+    // Build TTS object states for each non-empty zone
+    // Positions match curiosa.io TTS export layout
+    type ZoneConfig = {
+      posX: number;
+      posZ: number;
+      rotZ: number; // 0 = face up, 180 = face down
+      scaleX: number;
+      scaleZ: number;
+    };
+
+    // Positions from reference: Avatar at center-top, decks on right side
+    const zoneConfigs: Record<string, ZoneConfig> = {
+      Avatar: { posX: 0, posZ: -7.3, rotZ: 0, scaleX: 1, scaleZ: 1 }, // Face up, center top
+      Spellbook: { posX: 13.13, posZ: 3.7, rotZ: 180, scaleX: 1, scaleZ: 1 }, // Face down, right side
+      Atlas: { posX: 13.13, posZ: 6.9, rotZ: 180, scaleX: 0.71, scaleZ: 0.71 }, // Face down, scaled, right side above spellbook
+      Collection: { posX: -13.13, posZ: 3.7, rotZ: 180, scaleX: 1, scaleZ: 1 }, // Face down, left side (sideboard)
+    };
+
+    const objectStates: Record<string, unknown>[] = [];
+
+    for (const [zoneName, zoneData] of Object.entries(zones)) {
+      if (zoneData.cards.length === 0) continue;
+
+      const config = zoneConfigs[zoneName] || {
+        posX: 0,
+        posZ: 0,
+        rotZ: 180,
+        scaleX: 1,
+        scaleZ: 1,
+      };
+
+      // Single card = Card object, multiple cards = Deck
+      if (zoneData.cards.length === 1) {
+        const card = zoneData.cards[0];
+        objectStates.push({
           GUID: generateGUID(),
-          Name: "DeckCustom",
+          Name: "Card",
           Transform: {
-            posX: 0,
+            posX: config.posX,
             posY: 1,
-            posZ: 0,
+            posZ: config.posZ,
             rotX: 0,
             rotY: 180,
-            rotZ: 180,
-            scaleX: 1,
+            rotZ: config.rotZ,
+            scaleX: config.scaleX,
             scaleY: 1,
-            scaleZ: 1,
+            scaleZ: config.scaleZ,
           },
-          Nickname: deck.name,
-          Description: `${deck.format} deck from realms.cards`,
-          ColorDiffuse: {
-            r: 0.713235259,
-            g: 0.713235259,
-            b: 0.713235259,
+          Nickname: card.Nickname,
+          Description: card.Description,
+          CardID: card.CardID,
+          CustomDeck: card.CustomDeck,
+          ColorDiffuse: { r: 0.713235259, g: 0.713235259, b: 0.713235259 },
+          LayoutGroupSortIndex: 0,
+          Value: 0,
+          Locked: false,
+          Grid: true,
+          Snap: true,
+          IgnoreFoW: false,
+          MeasureMovement: false,
+          DragSelectable: true,
+          Autoraise: true,
+          Sticky: true,
+          Tooltip: true,
+          GridProjection: false,
+          HideWhenFaceDown: true,
+          Hands: true,
+          SidewaysCard: false,
+        });
+      } else {
+        objectStates.push({
+          GUID: generateGUID(),
+          Name: "Deck",
+          Transform: {
+            posX: config.posX,
+            posY: 1,
+            posZ: config.posZ,
+            rotX: 0,
+            rotY: 180,
+            rotZ: config.rotZ,
+            scaleX: config.scaleX,
+            scaleY: 1,
+            scaleZ: config.scaleZ,
           },
+          Nickname: "",
+          Description: "",
+          ColorDiffuse: { r: 0.713235259, g: 0.713235259, b: 0.713235259 },
           LayoutGroupSortIndex: 0,
           Value: 0,
           Locked: false,
@@ -216,11 +308,28 @@ export async function GET(
           HideWhenFaceDown: true,
           Hands: false,
           SidewaysCard: false,
-          DeckIDs: deckIDs,
-          CustomDeck: customDeck,
-          ContainedObjects: containedObjects,
-        },
-      ],
+          DeckIDs: zoneData.deckIDs,
+          CustomDeck: zoneData.customDeck,
+          ContainedObjects: zoneData.cards,
+        });
+      }
+    }
+
+    // Build final TTS save object
+    const ttsObject = {
+      SaveName: deck.name,
+      GameMode: "",
+      Gravity: 0.5,
+      PlayArea: 0.5,
+      Date: "",
+      Table: "",
+      Sky: "",
+      Note: `Exported from realms.cards - ${deck.name}\nPiles: Avatar, Spellbook, Atlas, Collection`,
+      Rules: "",
+      XmlUI: "",
+      LuaScript: "",
+      LuaScriptState: "",
+      ObjectStates: objectStates,
     };
 
     return new Response(JSON.stringify(ttsObject, null, 2), {

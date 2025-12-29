@@ -245,48 +245,43 @@ export default function DeckItem({ deck, onDelete }: DeckItemProps) {
           </div>
         )}
 
-        {/* TTS Export (for Tabletop Simulator) */}
+        {/* TTS Export (for Tabletop Simulator) - downloads JSON file */}
         <button
           aria-label="TTS Export"
-          data-tooltip={
-            effectiveIsPublic ? "Copy TTS link" : "Make public & copy TTS link"
-          }
+          data-tooltip="Download TTS JSON"
           onClick={async (e: MouseEvent) => {
             e.preventDefault();
             e.stopPropagation();
-            // If deck is private, make it public first (TTS requires public decks)
-            if (!effectiveIsPublic && isOwner) {
-              try {
-                const res = await fetch(
-                  `/api/decks/${encodeURIComponent(deck.id)}`,
-                  {
-                    method: "PUT",
-                    headers: { "content-type": "application/json" },
-                    body: JSON.stringify({ isPublic: true }),
-                  }
-                );
-                if (!res.ok) {
-                  throw new Error("Failed to make deck public");
-                }
-                setIsPublicState(true);
-                setCopiedMsg("Deck made public!");
-                await new Promise((r) => setTimeout(r, 800));
-              } catch {
-                alert("Failed to make deck public for TTS export");
-                return;
-              }
-            }
-            // Copy the TTS endpoint URL to clipboard
-            const ttsUrl = `${
-              window.location.origin
-            }/api/decks/${encodeURIComponent(deck.id)}/tts`;
             try {
-              await navigator.clipboard.writeText(ttsUrl);
-              setCopiedMsg("TTS link copied!");
+              // Fetch TTS JSON from our endpoint
+              const ttsUrl = `/api/decks/${encodeURIComponent(deck.id)}/tts`;
+              const res = await fetch(ttsUrl);
+              if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.error || "Failed to fetch TTS data");
+              }
+              const ttsJson = await res.json();
+              // Create and download the JSON file
+              const blob = new Blob([JSON.stringify(ttsJson, null, 2)], {
+                type: "application/json",
+              });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = `${deck.name.replace(
+                /[^a-zA-Z0-9]/g,
+                "_"
+              )}_TTS.json`;
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              URL.revokeObjectURL(url);
+              setCopiedMsg("TTS file downloaded!");
               setTimeout(() => setCopiedMsg(null), 1500);
-            } catch {
-              // Fallback: show the URL in an alert
-              window.prompt("TTS URL (copy manually):", ttsUrl);
+            } catch (err) {
+              alert(
+                err instanceof Error ? err.message : "Failed to export TTS"
+              );
             }
           }}
           className="inline-flex items-center justify-center h-10 w-10 rounded-lg bg-zinc-700/80 ring-1 ring-purple-500/50 hover:bg-purple-600/70 text-purple-300 hover:text-white transition-colors"
