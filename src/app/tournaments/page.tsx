@@ -723,7 +723,7 @@ export default function TournamentsPage() {
         {/* Create Tournament Modal */}
         {showCreateForm && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-slate-800 rounded-lg p-6 w-full max-w-md">
+            <div className="bg-slate-800 rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl font-semibold text-white">
                   Create Tournament
@@ -792,8 +792,8 @@ export default function TournamentsPage() {
                     </p>
                   )}
                 </div>
-                <div>
-                  <label className="flex items-center gap-2 cursor-pointer">
+                <div className="bg-slate-700/50 rounded-lg p-3 border border-slate-600">
+                  <label className="flex items-start gap-2 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={form.registrationMode === "open"}
@@ -806,11 +806,17 @@ export default function TournamentsPage() {
                             : false,
                         }))
                       }
-                      className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-blue-600 focus:ring-2 focus:ring-blue-500"
+                      className="mt-0.5 w-4 h-4 rounded border-slate-600 bg-slate-700 text-blue-600 focus:ring-2 focus:ring-blue-500"
                     />
-                    <span className="text-slate-300 text-sm">
-                      Open seat tournament (host controls registration lock)
-                    </span>
+                    <div>
+                      <span className="text-slate-200 text-sm font-medium">
+                        Flexible Registration
+                      </span>
+                      <p className="text-slate-400 text-xs mt-0.5">
+                        Players can join or leave freely. You control when to
+                        lock registration and start.
+                      </p>
+                    </div>
                   </label>
                   {form.registrationMode === "open" && (
                     <label className="mt-2 flex items-center gap-2 text-slate-300 text-xs ml-6 cursor-pointer">
@@ -825,38 +831,106 @@ export default function TournamentsPage() {
                         }
                         className="w-3 h-3 rounded border-slate-600 bg-slate-700 text-blue-600 focus:ring-2 focus:ring-blue-500"
                       />
-                      Start locked (no new seats until unlocked)
+                      Start with registration locked
                     </label>
                   )}
                 </div>
 
-                {/* Pairing Format */}
-                <div>
-                  <label className="block text-slate-300 text-sm font-medium mb-2">
-                    Format
-                  </label>
-                  <select
-                    value={form.format}
-                    onChange={(e) =>
-                      setForm((prev) => ({
-                        ...prev,
-                        format: e.target.value as
-                          | "sealed"
-                          | "draft"
-                          | "constructed",
-                      }))
-                    }
-                    className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="constructed">Constructed</option>
-                    <option value="sealed">Sealed</option>
-                    <option value="draft">Draft</option>
-                  </select>
+                {/* Tournament Structure Row */}
+                <div className="flex flex-wrap gap-4">
+                  <div>
+                    <label className="block text-slate-300 text-sm font-medium mb-1">
+                      Format
+                    </label>
+                    <select
+                      value={form.format}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          format: e.target.value as
+                            | "sealed"
+                            | "draft"
+                            | "constructed",
+                        }))
+                      }
+                      className="bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="constructed">Constructed</option>
+                      <option value="sealed">Sealed</option>
+                      <option value="draft">Draft</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-slate-300 text-sm font-medium mb-1">
+                      {form.registrationMode === "open"
+                        ? "Seat Cap"
+                        : "Players"}
+                    </label>
+                    {form.registrationMode === "open" ? (
+                      <input
+                        type="number"
+                        min={2}
+                        max={128}
+                        value={form.maxPlayers}
+                        onChange={(e) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            maxPlayers: Math.max(
+                              2,
+                              Math.min(128, parseInt(e.target.value) || 2)
+                            ),
+                          }))
+                        }
+                        className="w-20 bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    ) : (
+                      <select
+                        value={form.maxPlayers}
+                        onChange={(e) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            maxPlayers: parseInt(e.target.value),
+                          }))
+                        }
+                        className="bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value={2}>2</option>
+                        <option value={4}>4</option>
+                        <option value={8}>8</option>
+                        <option value={16}>16</option>
+                        <option value={32}>32</option>
+                        <option value={64}>64</option>
+                      </select>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-slate-300 text-sm font-medium mb-1">
+                      Rounds
+                    </label>
+                    <select
+                      value={form.settings.totalRounds || 3}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          settings: {
+                            ...prev.settings,
+                            totalRounds: parseInt(e.target.value),
+                          },
+                        }))
+                      }
+                      className="bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value={2}>2</option>
+                      <option value={3}>3</option>
+                      <option value={4}>4</option>
+                      <option value={5}>5</option>
+                    </select>
+                  </div>
                 </div>
 
                 {/* Sealed Booster Configuration */}
                 {form.format === "sealed" && (
-                  <div className="space-y-3">
+                  <div className="space-y-3 bg-slate-700/30 rounded-lg p-4 border border-slate-600/50">
                     {/* Cube sealed toggle */}
                     <label className="flex items-center gap-2">
                       <input
@@ -990,14 +1064,14 @@ export default function TournamentsPage() {
                             </button>
                           </div>
                         </div>
-                        <div className="space-y-2">
+                        <div className="grid grid-cols-2 gap-2">
                           {sealedBoosters.map((setName, idx) => (
                             <div
                               key={`sealed-booster-${idx}`}
                               className="flex items-center gap-2"
                             >
-                              <div className="text-slate-300 text-sm w-24">
-                                Booster {idx + 1}
+                              <div className="text-slate-400 text-sm w-16 shrink-0">
+                                Pack {idx + 1}
                               </div>
                               <select
                                 value={setName}
@@ -1008,7 +1082,7 @@ export default function TournamentsPage() {
                                     return next;
                                   });
                                 }}
-                                className="flex-1 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white"
+                                className="flex-1 bg-slate-700 border border-slate-600 rounded px-2 py-1.5 text-white text-sm"
                               >
                                 {draftableSets.map((name) => (
                                   <option key={name} value={name}>
@@ -1067,7 +1141,7 @@ export default function TournamentsPage() {
 
                 {/* Draft Booster Configuration */}
                 {form.format === "draft" && (
-                  <div className="space-y-3">
+                  <div className="space-y-3 bg-slate-700/30 rounded-lg p-4 border border-slate-600/50">
                     {/* Cube draft toggle */}
                     <label className="flex items-center gap-2">
                       <input
@@ -1169,14 +1243,14 @@ export default function TournamentsPage() {
                             </button>
                           </div>
                         </div>
-                        <div className="space-y-2">
+                        <div className="grid grid-cols-2 gap-2">
                           {draftBoosters.map((setName, idx) => (
                             <div
                               key={`draft-booster-${idx}`}
                               className="flex items-center gap-2"
                             >
-                              <div className="text-slate-300 text-sm w-24">
-                                Booster {idx + 1}
+                              <div className="text-slate-400 text-sm w-16 shrink-0">
+                                Pack {idx + 1}
                               </div>
                               <select
                                 value={setName}
@@ -1187,7 +1261,7 @@ export default function TournamentsPage() {
                                     return next;
                                   });
                                 }}
-                                className="flex-1 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white"
+                                className="flex-1 bg-slate-700 border border-slate-600 rounded px-2 py-1.5 text-white text-sm"
                               >
                                 {draftableSets.map((name) => (
                                   <option key={name} value={name}>
@@ -1269,80 +1343,7 @@ export default function TournamentsPage() {
                   </div>
                 )}
 
-                <div>
-                  <label className="block text-slate-300 text-sm font-medium mb-2">
-                    {form.registrationMode === "open"
-                      ? "Seat Cap"
-                      : "Max Players"}
-                  </label>
-                  {form.registrationMode === "open" ? (
-                    <input
-                      type="number"
-                      min={2}
-                      max={128}
-                      value={form.maxPlayers}
-                      onChange={(e) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          maxPlayers: Math.max(
-                            2,
-                            Math.min(128, parseInt(e.target.value) || 2)
-                          ),
-                        }))
-                      }
-                      className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  ) : (
-                    <select
-                      value={form.maxPlayers}
-                      onChange={(e) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          maxPlayers: parseInt(e.target.value),
-                        }))
-                      }
-                      className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value={2}>2 Players</option>
-                      <option value={4}>4 Players</option>
-                      <option value={8}>8 Players</option>
-                      <option value={16}>16 Players</option>
-                      <option value={32}>32 Players</option>
-                      <option value={64}>64 Players</option>
-                    </select>
-                  )}
-                  {form.registrationMode === "open" && (
-                    <p className="text-slate-400 text-xs mt-1">
-                      Open seat tournaments ignore the cap until locked.
-                    </p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-slate-300 text-sm font-medium mb-2">
-                    Rounds
-                  </label>
-                  <select
-                    value={form.settings.totalRounds || 3}
-                    onChange={(e) =>
-                      setForm((prev) => ({
-                        ...prev,
-                        settings: {
-                          ...prev.settings,
-                          totalRounds: parseInt(e.target.value),
-                        },
-                      }))
-                    }
-                    className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value={2}>2 Rounds</option>
-                    <option value={3}>3 Rounds</option>
-                    <option value={4}>4 Rounds</option>
-                    <option value={5}>5 Rounds</option>
-                  </select>
-                </div>
-
-                <div className="flex space-x-3 pt-4">
+                <div className="flex space-x-3 pt-2">
                   <button
                     type="button"
                     onClick={() => setShowCreateForm(false)}

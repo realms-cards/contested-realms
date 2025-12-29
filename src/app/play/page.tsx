@@ -18,7 +18,7 @@ import { ElementChoiceOverlay } from "@/components/game/ElementChoiceOverlay";
 import GameToolbox from "@/components/game/GameToolbox";
 import HarbingerPortalScreen from "@/components/game/HarbingerPortalScreen";
 import { InteractionConsentDialog } from "@/components/game/InteractionConsentDialog";
-import LifeCounters from "@/components/game/LifeCounters";
+import OnlineLifeCounters from "@/components/game/OnlineLifeCounters";
 import MobileHandHint from "@/components/game/MobileHandHint";
 import MorganaHandOverlay from "@/components/game/MorganaHandOverlay";
 import OfflineMulliganScreen from "@/components/game/OfflineMulliganScreen";
@@ -877,11 +877,16 @@ export default function PlayPage() {
       {/* HUD */}
       <StatusBar dragFromHand={dragFromHand} />
 
-      <LifeCounters dragFromHand={dragFromHand} />
+      <OnlineLifeCounters
+        dragFromHand={dragFromHand}
+        myPlayerKey={currentPlayerKey}
+        playerNames={offlinePlayerNames}
+        showYouLabels={false}
+      />
 
       {/* Mana and Thresholds panel on the right */}
       <PlayerResourcePanels
-        myPlayerKey="p1"
+        myPlayerKey={currentPlayerKey}
         playerNames={{ p1: "Player 1", p2: "Player 2" }}
         showYouLabels={false}
         readOnly={false}

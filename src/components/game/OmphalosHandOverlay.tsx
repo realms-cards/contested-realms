@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef, OmphalosHandEntry } from "@/lib/game/store/types";
 
@@ -225,7 +225,7 @@ function OmphalosHandCard({
   );
 }
 
-// Card display component
+// Card display component with hover preview
 function CardDisplay({
   card,
   onClick,
@@ -239,9 +239,29 @@ function CardDisplay({
   interactive: boolean;
   accentColor: string;
 }) {
+  const setPreviewCard = useGameStore((s) => s.setPreviewCard);
+  const hoverTimerRef = useRef<number | null>(null);
+
+  const handleMouseEnter = useCallback(() => {
+    if (hoverTimerRef.current) window.clearTimeout(hoverTimerRef.current);
+    hoverTimerRef.current = window.setTimeout(() => {
+      setPreviewCard(card);
+    }, 200);
+  }, [card, setPreviewCard]);
+
+  const handleMouseLeave = useCallback(() => {
+    if (hoverTimerRef.current) {
+      window.clearTimeout(hoverTimerRef.current);
+      hoverTimerRef.current = null;
+    }
+    setPreviewCard(null);
+  }, [setPreviewCard]);
+
   return (
     <div
       onClick={interactive ? onClick : undefined}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
       className={`relative aspect-[2.5/3.5] rounded-lg overflow-hidden transition-all ${
         interactive
           ? `cursor-pointer hover:scale-105 hover:ring-2 hover:${accentColor}`

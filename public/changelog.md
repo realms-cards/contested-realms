@@ -4,6 +4,12 @@
 
 ### Dec 29 - Druid and Hardening
 
+- **fix booster rarity** they were a bit too good, sorry
+- **add deck export for TTS** export realms decks as TTS json objects
+- **add omphalos and morgana hand card preview** these also get card previews now as they are quite small
+- **add missing Dragonlord champions**
+- **better health and mana manipulation in hotseat**
+- **improve create tournament** user experience
 - **Druid can now flip** to summon Bruin "here" and flip the card art
 - **Harbinger portals hardening** it was possible before to begin a match with less than three portals which should be fixed now
 - **harden replay recording** if the server was rebuilt during a match (I push changes to production), it was possible to break replay recording
