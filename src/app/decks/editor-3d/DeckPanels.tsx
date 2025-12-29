@@ -135,7 +135,6 @@ export default function DeckPanels(props: DeckPanelsProps) {
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm font-medium transition-colors"
             >
               <ArrowLeft className="h-4 w-4" />
-              Decks
             </Link>
           )}
           {/* Back to Tournament link */}
