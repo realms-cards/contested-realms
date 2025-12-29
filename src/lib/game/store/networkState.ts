@@ -423,6 +423,12 @@ export const createNetworkSlice: StateCreator<
       } else if (replaceKeys.has("necromancerSkeletonUsed")) {
         next.necromancerSkeletonUsed = { p1: false, p2: false };
       }
+      // Druid flipped state (Arthurian Legends)
+      if (p.druidFlipped !== undefined) {
+        next.druidFlipped = p.druidFlipped;
+      } else if (replaceKeys.has("druidFlipped")) {
+        next.druidFlipped = { p1: false, p2: false };
+      }
       // Pith Imp private hands (stolen cards)
       // CRITICAL: Do NOT clear based on replaceKeys - owner tracks locally, server snapshots would wipe it
       if (p.pithImpHands !== undefined) {
@@ -735,6 +741,10 @@ export const createNetworkSlice: StateCreator<
       // Necromancer skeleton used state - applyPatch version
       if (p.necromancerSkeletonUsed !== undefined) {
         next.necromancerSkeletonUsed = p.necromancerSkeletonUsed;
+      }
+      // Druid flipped state - applyPatch version
+      if (p.druidFlipped !== undefined) {
+        next.druidFlipped = p.druidFlipped;
       }
 
       // CRITICAL: Spread state first, then next - otherwise we lose all state not in the patch

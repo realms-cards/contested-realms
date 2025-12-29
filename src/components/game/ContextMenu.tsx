@@ -12,7 +12,7 @@ import AttachmentTargetSelectionDialog, {
 } from "@/lib/game/components/AttachmentTargetSelectionDialog";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef } from "@/lib/game/store";
-import { isNecromancer } from "@/lib/game/avatarAbilities";
+import { isNecromancer, isDruid } from "@/lib/game/avatarAbilities";
 import { isMasked } from "@/lib/game/store/imposterMaskState";
 import { NECROMANCER_SKELETON_COST } from "@/lib/game/store/types";
 import {
@@ -82,6 +82,8 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     (s) => s.necromancerSkeletonUsed
   );
   const summonSkeletonHere = useGameStore((s) => s.summonSkeletonHere);
+  const druidFlipped = useGameStore((s) => s.druidFlipped);
+  const flipDruid = useGameStore((s) => s.flipDruid);
   const getAvailableMana = useGameStore((s) => s.getAvailableMana);
 
   // Permanent position management (burrow/submerge)
@@ -926,6 +928,27 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
       });
     }
 
+    // Druid flip action (tap → flip, summon Bruin, one-way transformation)
+    const hasAlreadyFlipped = druidFlipped[t.who];
+    if (isMine && isDruid(effectiveAvatarName)) {
+      const isNotTapped = !a?.tapped;
+      const canFlip = !hasAlreadyFlipped && isNotTapped && hasPosition;
+      let flipDescription =
+        "Tap and flip your Druid to summon Bruin here. Cannot flip back.";
+      if (hasAlreadyFlipped) flipDescription = "Druid has already been flipped";
+      else if (!isNotTapped)
+        flipDescription = "Avatar must be untapped to flip";
+      else if (!hasPosition) flipDescription = "Avatar must be on the board";
+
+      extraActions.push({
+        actionId: "__flip_druid__",
+        displayText: `Flip Druid${hasAlreadyFlipped ? " ✓" : ""}`,
+        isEnabled: canFlip,
+        targetPermanentId: 0,
+        description: flipDescription,
+      });
+    }
+
     // Find artifacts attached to this avatar (attachedTo.index === -1)
     const avatarPos =
       Array.isArray(a?.pos) && a.pos.length === 2 ? a.pos : null;
@@ -1617,6 +1640,29 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                           onClick={() => {
                             if (t.kind === "avatar" && action.isEnabled) {
                               summonSkeletonHere(t.who);
+                            }
+                            onClose();
+                          }}
+                        >
+                          {action.displayText}
+                        </button>
+                      );
+                    }
+                    // Druid flip action
+                    if (action.actionId === "__flip_druid__") {
+                      return (
+                        <button
+                          key={action.actionId}
+                          className={`w-full text-left rounded px-3 py-1 ${
+                            action.isEnabled
+                              ? "bg-amber-600/20 hover:bg-amber-600/30 text-amber-200"
+                              : "bg-gray-600/20 text-gray-400 cursor-not-allowed"
+                          }`}
+                          title={action.description}
+                          disabled={!action.isEnabled}
+                          onClick={() => {
+                            if (t.kind === "avatar" && action.isEnabled) {
+                              flipDruid(t.who);
                             }
                             onClose();
                           }}
