@@ -17,6 +17,7 @@ import { useZoomKeyboardShortcuts } from "@/lib/hooks/useZoomKeyboardShortcuts";
 interface EditorCanvasProps {
   children?: React.ReactNode;
   orbitLocked?: boolean;
+  onStoreReady?: (storeApi: ReturnType<typeof createGameStore>) => void;
 }
 
 interface PanBoundsProps {
@@ -29,6 +30,7 @@ interface PanBoundsProps {
 export default function EditorCanvas({
   children,
   orbitLocked = false,
+  onStoreReady,
 }: EditorCanvasProps) {
   const storeApi = useMemo<ReturnType<typeof createGameStore>>(
     () => createGameStore(),
@@ -38,6 +40,11 @@ export default function EditorCanvas({
   useEffect(() => {
     storeApi.getState().resetGameState();
   }, [storeApi]);
+
+  // Notify parent of store availability
+  useEffect(() => {
+    onStoreReady?.(storeApi);
+  }, [storeApi, onStoreReady]);
 
   return (
     <div className="absolute inset-0 w-full h-full">

@@ -2,6 +2,7 @@
 
 import {
   ArrowLeft,
+  Grid3X3,
   HelpCircle,
   Shuffle,
   SlidersHorizontal,
@@ -60,6 +61,9 @@ type DeckPanelsProps = {
   onToggleAutoSave?: (enabled: boolean) => void;
   // Tournament context (for "Back to Tournament" link)
   tournamentId?: string | null;
+  // Playmat/grid toggle
+  showPlaymat?: boolean;
+  onTogglePlaymat?: () => void;
 };
 
 export default function DeckPanels(props: DeckPanelsProps) {
@@ -115,12 +119,25 @@ export default function DeckPanels(props: DeckPanelsProps) {
     onToggleAutoSave,
     // Tournament context
     tournamentId,
+    // Playmat toggle
+    showPlaymat = true,
+    onTogglePlaymat,
   } = props;
 
   return (
     <div className="absolute inset-0 z-20 pointer-events-none select-none">
       <div className="max-w-7xl mx-auto p-4 lg:pr-[20rem] xl:pr-[24rem] 2xl:pr-[28rem] flex flex-wrap items-end gap-4 pointer-events-auto select-none">
         <div className="flex items-center gap-3">
+          {/* Back to Decks link (free mode only) */}
+          {isFreeMode && !tournamentId && (
+            <Link
+              href="/decks"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm font-medium transition-colors"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Decks
+            </Link>
+          )}
           {/* Back to Tournament link */}
           {tournamentId && (
             <Link
@@ -130,6 +147,23 @@ export default function DeckPanels(props: DeckPanelsProps) {
               <ArrowLeft className="h-4 w-4" />
               Back to Tournament
             </Link>
+          )}
+          {/* Playmat/Grid toggle */}
+          {onTogglePlaymat && (
+            <button
+              onClick={onTogglePlaymat}
+              className={`${iconButtonStyles.base} ${
+                !showPlaymat ? "bg-blue-600/80 text-white border-blue-500" : ""
+              }`}
+              title={
+                showPlaymat
+                  ? "Hide playmat (show grid)"
+                  : "Show playmat (hide grid)"
+              }
+              aria-label={showPlaymat ? "Hide playmat" : "Show playmat"}
+            >
+              <Grid3X3 className="h-5 w-5" strokeWidth={2.5} />
+            </button>
           )}
           <div className="text-3xl font-fantaisie text-white">
             Deck Editor
