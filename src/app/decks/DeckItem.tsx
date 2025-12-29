@@ -246,16 +246,19 @@ export default function DeckItem({ deck, onDelete }: DeckItemProps) {
         )}
 
         {/* Edit Deck - prominent button */}
-        <Link
-          href={`/decks/${deck.id}/edit`}
+        <button
           aria-label="Edit Deck"
           data-tooltip="Edit Deck"
-          onClick={(e: MouseEvent) => e.stopPropagation()}
-          className="inline-flex items-center justify-center h-12 px-4 gap-2 rounded-lg bg-gradient-to-r from-amber-600 to-amber-500 ring-2 ring-amber-400/60 hover:from-amber-500 hover:to-amber-400 text-white font-semibold shadow-lg shadow-amber-500/25 transition-all hover:scale-105"
+          onClick={(e: MouseEvent) => {
+            e.preventDefault();
+            e.stopPropagation();
+            router.push(`/decks/${deck.id}/edit`);
+          }}
+          className="inline-flex items-center justify-center h-10 px-3 gap-1.5 rounded-lg bg-gradient-to-r from-amber-600 to-amber-500 ring-1 ring-amber-400/60 hover:from-amber-500 hover:to-amber-400 text-white font-medium shadow-md shadow-amber-500/20 transition-all hover:scale-105"
         >
-          <Pencil className="h-5 w-5" />
-          <span>Edit</span>
-        </Link>
+          <Pencil className="h-4 w-4" />
+          <span className="text-sm">Edit</span>
+        </button>
 
         {/* TTS Export (for Tabletop Simulator) - downloads JSON file */}
         <button

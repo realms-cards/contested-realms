@@ -8,15 +8,19 @@ export const dynamic = "force-dynamic";
  */
 export async function GET() {
   try {
-    // Find cards where any variant has "Unique Dragon" in its typeText
+    // Find cards that are Unique rarity AND have "Dragon" in subTypes
+    // This is more reliable than checking typeText which varies in format
     const dragons = await prisma.card.findMany({
       where: {
-        variants: {
+        // Card must have Dragon in its subTypes
+        subTypes: {
+          contains: "Dragon",
+          mode: "insensitive",
+        },
+        // Card must have Unique rarity in its metadata
+        meta: {
           some: {
-            typeText: {
-              contains: "Unique Dragon",
-              mode: "insensitive",
-            },
+            rarity: "Unique",
           },
         },
         // Exclude Dragonlord itself (it's the avatar, not a champion option)
@@ -28,6 +32,7 @@ export async function GET() {
         id: true,
         name: true,
         elements: true,
+        subTypes: true,
         variants: {
           select: {
             id: true,
@@ -35,19 +40,17 @@ export async function GET() {
             setId: true,
             typeText: true,
           },
-          where: {
-            typeText: {
-              contains: "Unique Dragon",
-              mode: "insensitive",
-            },
-          },
           take: 1,
         },
         meta: {
           select: {
             setId: true,
+            rarity: true,
             rulesText: true,
             thresholds: true,
+          },
+          where: {
+            rarity: "Unique",
           },
           take: 1,
         },

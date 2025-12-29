@@ -27,15 +27,15 @@ async function upsertPackConfig(setId, cfg) {
 }
 
 async function main() {
-  // Alpha (from collector sources)
+  // Alpha (11 Ordinary, 3 Exceptional, 1 Elite with Unique upgrade chance)
   const alpha = await upsertSet("Alpha");
   await upsertPackConfig(alpha.id, {
-    ordinaryCount: 10,
+    ordinaryCount: 11,
     exceptionalCount: 3,
     eliteOrUniqueCount: 1,
-    uniqueChance: 0.2, // 20%
-    siteOrAvatarCount: 1,
-    foilChance: 0.25, // 25% chance
+    uniqueChance: 0.125, // 1 in 8 packs has Unique instead of Elite
+    siteOrAvatarCount: 0,
+    foilChance: 0.25,
     foilUniqueWeight: 1,
     foilEliteWeight: 3,
     foilExceptionalWeight: 6,
@@ -43,15 +43,15 @@ async function main() {
     foilReplacesOrdinary: true,
   });
 
-  // Beta (baseline; exact foil/unique odds TBD)
+  // Beta (11 Ordinary, 3 Exceptional, 1 Elite with Unique upgrade chance)
   const beta = await upsertSet("Beta");
   await upsertPackConfig(beta.id, {
     ordinaryCount: 11,
     exceptionalCount: 3,
     eliteOrUniqueCount: 1,
-    uniqueChance: 0.2, // placeholder until confirmed
+    uniqueChance: 0.125, // 1 in 8 packs has Unique instead of Elite
     siteOrAvatarCount: 0,
-    foilChance: 0.25, // provisional
+    foilChance: 0.25,
     foilUniqueWeight: 1,
     foilEliteWeight: 3,
     foilExceptionalWeight: 6,
@@ -59,15 +59,15 @@ async function main() {
     foilReplacesOrdinary: true,
   });
 
-  // Arthurian Legends
+  // Arthurian Legends (11 Ordinary, 3 Exceptional, 1 Elite with Unique upgrade chance)
   const arthurian = await upsertSet("Arthurian Legends");
   await upsertPackConfig(arthurian.id, {
     ordinaryCount: 11,
     exceptionalCount: 3,
     eliteOrUniqueCount: 1,
-    uniqueChance: 0.2, // standard rate
+    uniqueChance: 0.125, // 1 in 8 packs has Unique instead of Elite
     siteOrAvatarCount: 0,
-    foilChance: 0.25, // standard rate
+    foilChance: 0.25,
     foilUniqueWeight: 1,
     foilEliteWeight: 3,
     foilExceptionalWeight: 6,
@@ -92,14 +92,14 @@ async function main() {
     isFixedPack: true, // All cards come in one booster
   });
 
-  // Gothic (standard booster - same as Beta)
+  // Gothic (11 Ordinary, 3 Exceptional, 1 Elite with Unique upgrade chance)
   const gothic = await upsertSet("Gothic");
   await upsertPackConfig(gothic.id, {
-    ordinaryCount: 9,
+    ordinaryCount: 11,
     exceptionalCount: 3,
     eliteOrUniqueCount: 1,
     uniqueChance: 0.125, // 1 in 8 packs has Unique instead of Elite
-    siteOrAvatarCount: 2,
+    siteOrAvatarCount: 0, // no extra site/avatar slots in Gothic
     foilChance: 0.25, // standard rate
     foilUniqueWeight: 1,
     foilEliteWeight: 3,

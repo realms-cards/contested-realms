@@ -1,70 +1,50 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  provider          = "postgresql"
+  url               = env("DATABASE_URL")
+  directUrl         = env("DIRECT_URL")
   shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
 }
 
-// Enums for consistency with Sorcery rarities and finishes
-enum Rarity {
-  Ordinary
-  Exceptional
-  Elite
-  Unique
-}
-
-enum Finish {
-  Standard
-  Foil
-  Rainbow
-}
-
 model Set {
-  id          Int       @id @default(autoincrement())
-  name        String    @unique
-  releasedAt  DateTime?
-
-  cardMeta    CardSetMetadata[]
-  variants    Variant[]
-  packConfig  PackConfig?
-  deckCards   DeckCard[] @relation("DeckCardSet")
-  cubeCards   CubeCard[] @relation("CubeCardSet")
-  collectionCards CollectionCard[] @relation("CollectionCardSet")
-  cardListCards   CardListCard[]   @relation("CardListCardSet")
+  id              Int               @id @default(autoincrement())
+  name            String            @unique
+  releasedAt      DateTime?
+  cardListCards   CardListCard[]    @relation("CardListCardSet")
+  cardMeta        CardSetMetadata[]
+  collectionCards CollectionCard[]  @relation("CollectionCardSet")
+  cubeCards       CubeCard[]        @relation("CubeCardSet")
+  deckCards       DeckCard[]        @relation("DeckCardSet")
+  packConfig      PackConfig?
+  variants        Variant[]
 
   @@index([name])
 }
 
 model Card {
-  id         Int       @id @default(autoincrement())
-  name       String
-  elements   String?
-  subTypes   String?
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
-
-  meta       CardSetMetadata[]
-  variants   Variant[]
-  deckCards  DeckCard[]
-  cubeCards  CubeCard[]
-  evaluation CardEvaluation?
-  collectionCards CollectionCard[]
-  cardListCards CardListCard[]
-  championedByDecks Deck[] @relation("DeckChampion")
+  id                Int               @id @default(autoincrement())
+  name              String
+  elements          String?
+  subTypes          String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  evaluation        CardEvaluation?
+  cardListCards     CardListCard[]
+  meta              CardSetMetadata[]
+  collectionCards   CollectionCard[]
+  cubeCards         CubeCard[]
+  championedByDecks Deck[]            @relation("DeckChampion")
+  deckCards         DeckCard[]
+  variants          Variant[]
 
   @@index([name])
 }
 
-// Per-set card metadata (rarity, rules, stats)
 model CardSetMetadata {
-  id         Int      @id @default(autoincrement())
+  id         Int     @id @default(autoincrement())
   cardId     Int
   setId      Int
   rarity     Rarity?
@@ -75,137 +55,124 @@ model CardSetMetadata {
   defence    Int?
   life       Int?
   thresholds Json?
-
-  card Card @relation(fields: [cardId], references: [id], onDelete: Cascade)
-  set  Set  @relation(fields: [setId], references: [id], onDelete: Cascade)
+  card       Card    @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  set        Set     @relation(fields: [setId], references: [id], onDelete: Cascade)
 
   @@unique([cardId, setId])
   @@index([setId, rarity])
 }
 
-// Concrete printings/variants (with slug, product, finish, artist)
 model Variant {
-  id            Int      @id @default(autoincrement())
-  cardId        Int
-  setId         Int
-  slug          String   @unique
-  finish        Finish
-  product       String
-  artist        String?
-  flavorText    String?
-  typeText      String?
-  imageBasename String?  // e.g. apprentice_wizard_b_f (for local image mapping)
-
-  card Card @relation(fields: [cardId], references: [id], onDelete: Cascade)
-  set  Set  @relation(fields: [setId], references: [id], onDelete: Cascade)
-  deckCards DeckCard[] @relation("DeckCardVariant")
-  cubeCards CubeCard[] @relation("CubeCardVariant")
-  collectionCards CollectionCard[] @relation("CollectionCardVariant")
+  id              Int              @id @default(autoincrement())
+  cardId          Int
+  setId           Int
+  slug            String           @unique
+  finish          Finish
+  product         String
+  artist          String?
+  flavorText      String?
+  typeText        String?
+  imageBasename   String?
   cardListCards   CardListCard[]   @relation("CardListCardVariant")
+  collectionCards CollectionCard[] @relation("CollectionCardVariant")
+  cubeCards       CubeCard[]       @relation("CubeCardVariant")
+  deckCards       DeckCard[]       @relation("DeckCardVariant")
+  card            Card             @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  set             Set              @relation(fields: [setId], references: [id], onDelete: Cascade)
 
   @@index([setId])
   @@index([cardId])
-  @@index([typeText]) // For avatar type filtering in deck queries
+  @@index([typeText])
 }
 
-// Booster configuration per set
 model PackConfig {
-  id                     Int     @id @default(autoincrement())
-  setId                  Int     @unique
-  ordinaryCount          Int
-  exceptionalCount       Int
-  eliteOrUniqueCount     Int
-  uniqueChance           Float   // 0..1 chance that the top rarity slot is Unique instead of Elite
-  siteOrAvatarCount      Int     @default(0) // Alpha has 1, Beta 0
-  foilChance             Float?  // Probability a foil replaces an ordinary slot (if applicable)
-  foilUniqueWeight       Int     @default(1)
-  foilEliteWeight        Int     @default(3)
-  foilExceptionalWeight  Int     @default(6)
-  foilOrdinaryWeight     Int     @default(7)
-  foilReplacesOrdinary   Boolean @default(true)
-  isFixedPack            Boolean @default(false) // If true, booster contains all cards from set (for mini-sets)
-
-  set Set @relation(fields: [setId], references: [id], onDelete: Cascade)
+  id                    Int     @id @default(autoincrement())
+  setId                 Int     @unique
+  ordinaryCount         Int
+  exceptionalCount      Int
+  eliteOrUniqueCount    Int
+  uniqueChance          Float
+  siteOrAvatarCount     Int     @default(0)
+  foilChance            Float?
+  foilUniqueWeight      Int     @default(1)
+  foilEliteWeight       Int     @default(3)
+  foilExceptionalWeight Int     @default(6)
+  foilOrdinaryWeight    Int     @default(7)
+  foilReplacesOrdinary  Boolean @default(true)
+  isFixedPack           Boolean @default(false)
+  set                   Set     @relation(fields: [setId], references: [id], onDelete: Cascade)
 }
 
-// Decks for users
 model Deck {
-  id             String   @id @default(cuid())
+  id             String     @id @default(cuid())
   name           String
-  format         String   @default("Constructed")
-  isPublic       Boolean  @default(false)
-  imported       Boolean  @default(false)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  format         String     @default("Constructed")
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
   userId         String
-  // Dragonlord champion: when Dragonlord is the avatar, this stores the chosen Unique Dragon's cardId
+  isPublic       Boolean    @default(false)
+  imported       Boolean    @default(false)
   championCardId Int?
-
-  user     User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  cards    DeckCard[]
-  champion Card?      @relation("DeckChampion", fields: [championCardId], references: [id])
+  champion       Card?      @relation("DeckChampion", fields: [championCardId], references: [id])
+  user           User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cards          DeckCard[]
 
   @@index([userId])
   @@index([isPublic, createdAt])
 }
 
 model DeckCard {
-  id        Int     @id @default(autoincrement())
+  id        Int      @id @default(autoincrement())
   deckId    String
   cardId    Int
   setId     Int?
   variantId Int?
-  zone      String  // Spellbook | Atlas | Collection | Sideboard
+  zone      String
   count     Int
-
-  deck    Deck    @relation(fields: [deckId], references: [id], onDelete: Cascade)
-  card    Card    @relation(fields: [cardId], references: [id], onDelete: Cascade)
-  set     Set?    @relation("DeckCardSet", fields: [setId], references: [id])
-  variant Variant? @relation("DeckCardVariant", fields: [variantId], references: [id])
+  card      Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  deck      Deck     @relation(fields: [deckId], references: [id], onDelete: Cascade)
+  set       Set?     @relation("DeckCardSet", fields: [setId], references: [id])
+  variant   Variant? @relation("DeckCardVariant", fields: [variantId], references: [id])
 
   @@index([deckId])
   @@index([cardId])
   @@index([variantId])
-  @@index([deckId, zone]) // Composite for avatar queries
+  @@index([deckId, zone])
 }
 
-// Cubes are draftable card pools managed by users
 model Cube {
-  id        String   @id @default(cuid())
-  name      String
-  description String? @db.Text
-  isPublic  Boolean  @default(false)
-  imported  Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  userId    String
-
-  user  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  cards CubeCard[]
+  id          String     @id @default(cuid())
+  name        String
+  description String?
+  isPublic    Boolean    @default(false)
+  imported    Boolean    @default(false)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  userId      String
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cards       CubeCard[]
 
   @@index([userId])
   @@index([isPublic, createdAt])
 }
 
 model CubeCard {
-  id        Int     @id @default(autoincrement())
+  id        Int      @id @default(autoincrement())
   cubeId    String
   cardId    Int
   setId     Int?
   variantId Int?
   count     Int
-  zone      String  @default("main")
-
-  cube    Cube    @relation(fields: [cubeId], references: [id], onDelete: Cascade)
-  card    Card    @relation(fields: [cardId], references: [id], onDelete: Cascade)
-  set     Set?    @relation("CubeCardSet", fields: [setId], references: [id])
-  variant Variant? @relation("CubeCardVariant", fields: [variantId], references: [id])
+  zone      String   @default("main")
+  card      Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  cube      Cube     @relation(fields: [cubeId], references: [id], onDelete: Cascade)
+  set       Set?     @relation("CubeCardSet", fields: [setId], references: [id])
+  variant   Variant? @relation("CubeCardVariant", fields: [variantId], references: [id])
 
   @@index([cubeId])
   @@index([cardId])
 }
 
-// Collection tracker - user's physical card collection
 model CollectionCard {
   id        Int      @id @default(autoincrement())
   userId    String
@@ -214,14 +181,13 @@ model CollectionCard {
   variantId Int?
   finish    Finish   @default(Standard)
   quantity  Int      @default(1)
-  notes     String?  // Optional notes (e.g., condition, source, Curiosa notes)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
-  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  card    Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
-  set     Set?     @relation("CollectionCardSet", fields: [setId], references: [id])
-  variant Variant? @relation("CollectionCardVariant", fields: [variantId], references: [id])
+  notes     String?
+  card      Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  set       Set?     @relation("CollectionCardSet", fields: [setId], references: [id])
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  variant   Variant? @relation("CollectionCardVariant", fields: [variantId], references: [id])
 
   @@unique([userId, cardId, variantId, finish])
   @@index([userId])
@@ -229,7 +195,6 @@ model CollectionCard {
   @@index([userId, setId])
 }
 
-// Auth models
 model Account {
   id                String  @id @default(cuid())
   userId            String
@@ -243,8 +208,7 @@ model Account {
   scope             String?
   id_token          String?
   session_state     String?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
 }
@@ -258,50 +222,45 @@ model Session {
 }
 
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String?   @unique
-  emailVerified DateTime?
-  image         String? // From Discord
-  isPro         Boolean   @default(false)
-  stats         String? // Stored as a stringified JSON object
-  shortId       String?   @unique
-  presenceHidden Boolean  @default(false)
-  colorBlindMode Boolean  @default(false)
-  patronTier    String?   // "apprentice" | "grandmaster" | null
-  showOpponentPlaymat Boolean @default(true) // Whether to show opponent's custom playmat
-
-  selectedPlaymatRef String?
-  selectedSpellbookRef String?  // "custom:<id>" or "preset:<id>" or null
-  selectedAtlasRef String?      // "custom:<id>" or "preset:<id>" or null
-
-  // SOATC League Integration
-  soatcUuid        String?   // User's UUID from ranking.sorcerersatthecore.com
-  soatcAutoDetect  Boolean   @default(false) // Auto-flag matches as league matches
-
-  accounts              Account[]
-  sessions              Session[]
-  decks                 Deck[]
-  cubes                 Cube[]
-  createdTournaments    Tournament[]
+  id                      String                   @id @default(cuid())
+  name                    String?
+  email                   String?                  @unique
+  emailVerified           DateTime?
+  image                   String?
+  isPro                   Boolean                  @default(false)
+  stats                   String?
+  presenceHidden          Boolean                  @default(false)
+  shortId                 String?                  @unique
+  colorBlindMode          Boolean                  @default(false)
+  patronTier              String?
+  selectedPlaymatRef      String?
+  selectedAtlasRef        String?
+  selectedSpellbookRef    String?
+  showOpponentPlaymat     Boolean                  @default(true)
+  soatcAutoDetect         Boolean                  @default(false)
+  soatcUuid               String?
+  accounts                Account[]
+  cardLists               CardList[]
+  collectionCards         CollectionCard[]
+  cubes                   Cube[]
+  customCardbacks         CustomCardback[]
+  customPlaymats          CustomPlaymat[]
+  decks                   Deck[]
+  draftParticipations     DraftParticipant[]
+  friendshipsOwned        Friendship[]             @relation("FriendshipOwner")
+  friendshipsTargeted     Friendship[]             @relation("FriendshipTarget")
+  leaderboardEntries      LeaderboardEntry[]
+  lostMatches             MatchResult[]            @relation("MatchLoser")
+  wonMatches              MatchResult[]            @relation("MatchWinner")
+  passkeys                PasskeyCredential[]
+  standings               PlayerStanding[]
+  sessions                Session[]
+  soatcMatchesAsPlayer1   SoatcMatchResult[]       @relation("SoatcPlayer1")
+  soatcMatchesAsPlayer2   SoatcMatchResult[]       @relation("SoatcPlayer2")
+  createdTournaments      Tournament[]
+  tournamentInvitations   TournamentInvitation[]
   tournamentRegistrations TournamentRegistration[]
-  standings             PlayerStanding[]
-  leaderboardEntries    LeaderboardEntry[]
-  tournamentStatistics  TournamentStatistics[] @relation("TournamentPlayerStats")
-  wonMatches            MatchResult[] @relation("MatchWinner")
-  lostMatches           MatchResult[] @relation("MatchLoser")
-  draftParticipations   DraftParticipant[]
-  passkeys              PasskeyCredential[]
-  friendshipsOwned      Friendship[] @relation("FriendshipOwner")
-  friendshipsTargeted   Friendship[] @relation("FriendshipTarget")
-  tournamentInvitations TournamentInvitation[]
-  collectionCards       CollectionCard[]
-  cardLists             CardList[]
-
-  customPlaymats         CustomPlaymat[]
-  customCardbacks        CustomCardback[]
-  soatcMatchesAsPlayer1  SoatcMatchResult[] @relation("SoatcPlayer1")
-  soatcMatchesAsPlayer2  SoatcMatchResult[] @relation("SoatcPlayer2")
+  tournamentStatistics    TournamentStatistics[]   @relation("TournamentPlayerStats")
 }
 
 model CustomPlaymat {
@@ -315,8 +274,7 @@ model CustomPlaymat {
   data      Bytes
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([createdAt])
@@ -338,34 +296,31 @@ model CustomCardback {
   atlasData       Bytes
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([createdAt])
 }
 
-// SOATC League Integration - Match results for external league tracking
 model SoatcMatchResult {
-  id              String     @id @default(cuid())
-  matchId         String     @unique // Realms.cards match UUID (from MatchResult or session)
-  tournamentId    String     // SOATC tournament UUID
-  tournamentName  String     // Tournament display name for reference
-  player1Id       String     // Realms.cards user ID
-  player1SoatcId  String     // Player 1's SOATC UUID
-  player2Id       String     // Realms.cards user ID
-  player2SoatcId  String     // Player 2's SOATC UUID
-  winnerId        String?    // Realms.cards user ID of winner (null if draw)
-  winnerSoatcId   String?    // SOATC UUID of winner (null if draw)
-  isDraw          Boolean    @default(false)
-  format          GameFormat
-  resultJson      Json       // Full signed LeagueMatchResult object
-  startedAt       DateTime
-  completedAt     DateTime   @default(now())
-  createdAt       DateTime   @default(now())
-
-  player1 User @relation("SoatcPlayer1", fields: [player1Id], references: [id], onDelete: Cascade)
-  player2 User @relation("SoatcPlayer2", fields: [player2Id], references: [id], onDelete: Cascade)
+  id             String     @id @default(cuid())
+  matchId        String     @unique
+  tournamentId   String
+  tournamentName String
+  player1Id      String
+  player1SoatcId String
+  player2Id      String
+  player2SoatcId String
+  winnerId       String?
+  winnerSoatcId  String?
+  isDraw         Boolean    @default(false)
+  format         GameFormat
+  resultJson     Json
+  startedAt      DateTime
+  completedAt    DateTime   @default(now())
+  createdAt      DateTime   @default(now())
+  player1        User       @relation("SoatcPlayer1", fields: [player1Id], references: [id], onDelete: Cascade)
+  player2        User       @relation("SoatcPlayer2", fields: [player2Id], references: [id], onDelete: Cascade)
 
   @@index([player1Id])
   @@index([player2Id])
@@ -381,7 +336,422 @@ model VerificationToken {
   @@unique([identifier, token])
 }
 
-// Tournament system models
+model Tournament {
+  id            String                   @id @default(cuid())
+  name          String
+  creatorId     String
+  format        TournamentFormat
+  status        TournamentStatus         @default(registering)
+  maxPlayers    Int
+  settings      Json
+  featureFlags  Json?
+  startedAt     DateTime?
+  createdAt     DateTime                 @default(now())
+  updatedAt     DateTime                 @updatedAt
+  completedAt   DateTime?
+  isPrivate     Boolean                  @default(false)
+  draftSessions DraftSession[]
+  matches       Match[]
+  standings     PlayerStanding[]
+  creator       User                     @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  invitations   TournamentInvitation[]
+  registrations TournamentRegistration[]
+  rounds        TournamentRound[]
+  statistics    TournamentStatistics[]   @relation("TournamentStatistics")
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([creatorId])
+  @@index([isPrivate])
+}
+
+model TournamentRegistration {
+  id                String            @id @default(cuid())
+  tournamentId      String
+  playerId          String
+  registeredAt      DateTime          @default(now())
+  preparationStatus PreparationStatus @default(notStarted)
+  deckSubmitted     Boolean           @default(false)
+  preparationData   Json?
+  seatMeta          Json?
+  seatStatus        SeatStatus        @default(active)
+  player            User              @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  tournament        Tournament        @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+
+  @@unique([tournamentId, playerId])
+  @@index([tournamentId])
+}
+
+model PlayerStanding {
+  id                         String     @id @default(cuid())
+  tournamentId               String
+  playerId                   String
+  displayName                String
+  wins                       Int        @default(0)
+  losses                     Int        @default(0)
+  draws                      Int        @default(0)
+  matchPoints                Int        @default(0)
+  gameWinPercentage          Float      @default(0.0)
+  opponentMatchWinPercentage Float      @default(0.0)
+  isEliminated               Boolean    @default(false)
+  currentMatchId             String?
+  updatedAt                  DateTime   @updatedAt
+  player                     User       @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  tournament                 Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+
+  @@unique([tournamentId, playerId])
+  @@index([tournamentId])
+  @@index([matchPoints])
+  @@index([tournamentId, matchPoints(sort: Desc)])
+}
+
+model TournamentRound {
+  id           String      @id @default(cuid())
+  tournamentId String
+  roundNumber  Int
+  status       RoundStatus @default(pending)
+  startedAt    DateTime?
+  completedAt  DateTime?
+  pairingData  Json?
+  matches      Match[]
+  tournament   Tournament  @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+
+  @@unique([tournamentId, roundNumber])
+  @@index([tournamentId])
+}
+
+model Match {
+  id           String           @id @default(cuid())
+  tournamentId String?
+  roundId      String?
+  status       MatchStatus      @default(pending)
+  players      Json
+  results      Json?
+  startedAt    DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime         @default(now())
+  playerDecks  Json?
+  round        TournamentRound? @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  tournament   Tournament?      @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+
+  @@index([tournamentId])
+  @@index([roundId])
+  @@index([status])
+  @@index([tournamentId, status])
+}
+
+model TournamentStatistics {
+  id           String     @id @default(cuid())
+  tournamentId String
+  playerId     String
+  wins         Int        @default(0)
+  losses       Int        @default(0)
+  draws        Int        @default(0)
+  matchPoints  Int        @default(0)
+  tiebreakers  Json
+  finalRanking Int?
+  player       User       @relation("TournamentPlayerStats", fields: [playerId], references: [id], onDelete: Cascade)
+  tournament   Tournament @relation("TournamentStatistics", fields: [tournamentId], references: [id], onDelete: Cascade)
+
+  @@unique([tournamentId, playerId])
+  @@index([tournamentId])
+  @@index([matchPoints])
+}
+
+model LeaderboardEntry {
+  id             String     @id @default(cuid())
+  playerId       String
+  displayName    String
+  format         GameFormat
+  timeFrame      TimeFrame
+  wins           Int        @default(0)
+  losses         Int        @default(0)
+  draws          Int        @default(0)
+  winRate        Float      @default(0.0)
+  rating         Int        @default(1200)
+  rank           Int        @default(0)
+  tournamentWins Int        @default(0)
+  lastActive     DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  player         User       @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([playerId, format, timeFrame])
+  @@index([format, timeFrame, rating])
+  @@index([format, timeFrame, winRate])
+  @@index([rank])
+}
+
+model HumanCardStats {
+  id        String     @id @default(cuid())
+  cardId    Int
+  format    GameFormat
+  plays     Int        @default(0)
+  wins      Int        @default(0)
+  losses    Int        @default(0)
+  draws     Int        @default(0)
+  updatedAt DateTime   @updatedAt
+
+  @@unique([cardId, format])
+  @@index([cardId])
+  @@index([format, plays])
+}
+
+model OnlineMatchSession {
+  id           String              @id @default(cuid())
+  lobbyId      String?
+  lobbyName    String?
+  playerIds    String[]
+  status       OnlineMatchStatus   @default(waiting)
+  seed         String
+  turn         String?
+  winnerId     String?
+  matchType    GameFormat
+  sealedConfig Json?
+  draftConfig  Json?
+  draftState   Json?
+  playerDecks  Json?
+  sealedPacks  Json?
+  game         Json?
+  lastTs       BigInt?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  actions      OnlineMatchAction[]
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+model OnlineMatchAction {
+  id        String             @id @default(cuid())
+  matchId   String
+  playerId  String
+  timestamp BigInt
+  patch     Json
+  match     OnlineMatchSession @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@index([matchId])
+  @@index([timestamp])
+}
+
+model MatchResult {
+  id           String     @id @default(cuid())
+  matchId      String
+  lobbyName    String?
+  winnerId     String?
+  loserId      String?
+  isDraw       Boolean    @default(false)
+  format       GameFormat
+  tournamentId String?
+  players      Json
+  duration     Int?
+  completedAt  DateTime   @default(now())
+  loser        User?      @relation("MatchLoser", fields: [loserId], references: [id])
+  winner       User?      @relation("MatchWinner", fields: [winnerId], references: [id])
+
+  @@index([winnerId])
+  @@index([loserId])
+  @@index([format])
+  @@index([tournamentId])
+  @@index([completedAt])
+}
+
+model DraftSession {
+  id                String             @id @default(cuid())
+  tournamentId      String
+  status            DraftStatus        @default(waiting)
+  packConfiguration Json
+  settings          Json
+  startedAt         DateTime?
+  completedAt       DateTime?
+  createdAt         DateTime           @default(now())
+  draftState        Json?
+  participants      DraftParticipant[]
+  tournament        Tournament         @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+
+  @@index([tournamentId])
+  @@index([status])
+}
+
+model DraftParticipant {
+  id             String            @id @default(cuid())
+  draftSessionId String
+  playerId       String
+  seatNumber     Int
+  status         ParticipantStatus @default(waiting)
+  pickData       Json?
+  deckData       Json?
+  joinedAt       DateTime          @default(now())
+  draftSession   DraftSession      @relation(fields: [draftSessionId], references: [id], onDelete: Cascade)
+  player         User              @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([draftSessionId, playerId])
+  @@unique([draftSessionId, seatNumber])
+  @@index([draftSessionId])
+  @@index([playerId])
+}
+
+model PasskeyCredential {
+  id              String    @id @default(cuid())
+  userId          String
+  credentialId    Bytes     @unique
+  publicKey       Bytes
+  counter         Int       @default(0)
+  transports      String?
+  aaguid          String?
+  attestationType String?
+  deviceType      String?
+  backedUp        Boolean?
+  createdAt       DateTime  @default(now())
+  lastUsedAt      DateTime?
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Friendship {
+  id           String   @id @default(cuid())
+  ownerUserId  String
+  targetUserId String
+  createdAt    DateTime @default(now())
+  owner        User     @relation("FriendshipOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  target       User     @relation("FriendshipTarget", fields: [targetUserId], references: [id], onDelete: Cascade)
+
+  @@unique([ownerUserId, targetUserId])
+  @@index([ownerUserId])
+  @@index([targetUserId])
+}
+
+model TournamentInvitation {
+  id           String           @id @default(cuid())
+  tournamentId String
+  inviteeId    String
+  inviterId    String?
+  status       InvitationStatus @default(pending)
+  createdAt    DateTime         @default(now())
+  respondedAt  DateTime?
+  expiresAt    DateTime?
+  invitee      User             @relation(fields: [inviteeId], references: [id], onDelete: Cascade)
+  tournament   Tournament       @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+
+  @@unique([tournamentId, inviteeId])
+  @@index([tournamentId])
+  @@index([inviteeId])
+  @@index([status])
+}
+
+model TournamentBroadcastEvent {
+  id           String   @id @default(cuid())
+  tournamentId String
+  eventType    String
+  payload      Json
+  timestamp    DateTime @default(now())
+  emittedBy    String?
+  roomTarget   String
+
+  @@index([tournamentId, timestamp(sort: Desc)])
+  @@index([eventType])
+}
+
+model SocketBroadcastHealth {
+  id           String   @id @default(cuid())
+  timestamp    DateTime @default(now())
+  eventType    String
+  tournamentId String?
+  targetUrl    String
+  success      Boolean
+  statusCode   Int?
+  errorMessage String?
+  retryCount   Int      @default(0)
+  latencyMs    Int
+
+  @@index([timestamp(sort: Desc)])
+  @@index([success])
+  @@index([eventType])
+}
+
+model CardEvaluation {
+  id                 Int      @id @default(autoincrement())
+  cardId             Int      @unique
+  category           String
+  evaluationFunction String
+  priority           String
+  synergies          Json
+  antiSynergies      Json
+  situational        Boolean  @default(false)
+  complexity         String
+  generatedBy        String
+  model              String?
+  validationStatus   String   @default("pending")
+  validationError    String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  card               Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  @@index([cardId])
+  @@index([category])
+  @@index([validationStatus])
+  @@index([generatedBy])
+}
+
+model CodexEntry {
+  id        Int      @id @default(autoincrement())
+  title     String   @unique
+  content   String
+  cardRefs  String[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([title])
+}
+
+model CardList {
+  id          String         @id @default(cuid())
+  name        String
+  description String?
+  userId      String
+  isPublic    Boolean        @default(false)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cards       CardListCard[]
+
+  @@index([userId])
+  @@index([isPublic, createdAt])
+}
+
+model CardListCard {
+  id        Int      @id @default(autoincrement())
+  listId    String
+  cardId    Int
+  setId     Int?
+  variantId Int?
+  finish    Finish   @default(Standard)
+  quantity  Int      @default(1)
+  notes     String?
+  createdAt DateTime @default(now())
+  card      Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  list      CardList @relation(fields: [listId], references: [id], onDelete: Cascade)
+  set       Set?     @relation("CardListCardSet", fields: [setId], references: [id])
+  variant   Variant? @relation("CardListCardVariant", fields: [variantId], references: [id])
+
+  @@unique([listId, cardId, variantId, finish])
+  @@index([listId])
+  @@index([cardId])
+}
+
+enum Rarity {
+  Ordinary
+  Exceptional
+  Elite
+  Unique
+}
+
+enum Finish {
+  Standard
+  Foil
+  Rainbow
+}
+
 enum TournamentFormat {
   sealed
   draft
@@ -420,133 +790,6 @@ enum MatchStatus {
   cancelled
 }
 
-model Tournament {
-  id                String            @id @default(cuid())
-  name              String
-  creatorId         String            // Tournament creator/host
-  format            TournamentFormat
-  status            TournamentStatus  @default(registering)
-  maxPlayers        Int
-  isPrivate         Boolean           @default(false) // Private tournaments require invitation
-  settings          Json              // Tournament settings (format-specific configuration)
-  featureFlags      Json?             // Tournament-specific feature toggles
-  startedAt         DateTime?         // When preparation phase began
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
-  completedAt       DateTime?         // When tournament was completed
-
-  creator           User              @relation(fields: [creatorId], references: [id], onDelete: Cascade)
-  registrations     TournamentRegistration[]
-  standings         PlayerStanding[]
-  rounds            TournamentRound[]
-  matches           Match[]
-  statistics        TournamentStatistics[] @relation("TournamentStatistics")
-  draftSessions     DraftSession[]
-  invitations       TournamentInvitation[]
-
-  @@index([status])
-  @@index([createdAt])
-  @@index([creatorId])
-  @@index([isPrivate])
-}
-
-model TournamentRegistration {
-  id                String            @id @default(cuid())
-  tournamentId      String
-  playerId          String
-  registeredAt      DateTime          @default(now())
-  preparationStatus PreparationStatus @default(notStarted)
-  deckSubmitted     Boolean           @default(false)
-  preparationData   Json?             // Format-specific preparation data
-  seatStatus        SeatStatus        @default(active)
-  seatMeta          Json?             // Open seat metadata (vacatedAt, previousPlayerId, etc)
-
-  tournament   Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
-  player       User       @relation(fields: [playerId], references: [id], onDelete: Cascade)
-
-  @@unique([tournamentId, playerId])
-  @@index([tournamentId])
-}
-
-model PlayerStanding {
-  id                           String     @id @default(cuid())
-  tournamentId                 String
-  playerId                     String
-  displayName                  String
-  wins                         Int        @default(0)
-  losses                       Int        @default(0)
-  draws                        Int        @default(0)
-  matchPoints                  Int        @default(0)
-  gameWinPercentage            Float      @default(0.0)
-  opponentMatchWinPercentage   Float      @default(0.0)
-  isEliminated                 Boolean    @default(false)
-  currentMatchId               String?
-  updatedAt                    DateTime   @updatedAt
-
-  tournament                   Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
-  player                       User       @relation(fields: [playerId], references: [id], onDelete: Cascade)
-
-  @@unique([tournamentId, playerId])
-  @@index([tournamentId])
-  @@index([matchPoints])
-  @@index([tournamentId, matchPoints(sort: Desc)]) // Composite index for standings queries
-}
-
-model TournamentRound {
-  id           String      @id @default(cuid())
-  tournamentId String
-  roundNumber  Int
-  status       RoundStatus @default(pending)
-  startedAt    DateTime?
-  completedAt  DateTime?
-  pairingData  Json?       // Swiss pairing information
-
-  tournament   Tournament  @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
-  matches      Match[]
-
-  @@unique([tournamentId, roundNumber])
-  @@index([tournamentId])
-}
-
-model Match {
-  id           String      @id @default(cuid())
-  tournamentId String?
-  roundId      String?
-  status       MatchStatus @default(pending)
-  players      Json        // Array of player IDs and info
-  results      Json?       // Match results and game scores
-  playerDecks  Json?       // Submitted decklists per player (constructed/sealed/draft)
-  startedAt    DateTime?
-  completedAt  DateTime?
-  createdAt    DateTime    @default(now())
-
-  tournament   Tournament?      @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
-  round        TournamentRound? @relation(fields: [roundId], references: [id], onDelete: Cascade)
-
-  @@index([tournamentId])
-  @@index([roundId])
-  @@index([status])
-  @@index([tournamentId, status]) // Composite index for common query pattern
-}
-
-model TournamentStatistics {
-  id            String     @id @default(cuid())
-  tournamentId  String
-  playerId      String
-  wins          Int        @default(0)
-  losses        Int        @default(0)
-  draws         Int        @default(0)
-  matchPoints   Int        @default(0)
-  tiebreakers   Json       // Tiebreaker calculations
-  finalRanking  Int?       // Final tournament position
-  tournament    Tournament @relation("TournamentStatistics", fields: [tournamentId], references: [id], onDelete: Cascade)
-  player        User       @relation("TournamentPlayerStats", fields: [playerId], references: [id], onDelete: Cascade)
-  @@unique([tournamentId, playerId])
-  @@index([tournamentId])
-  @@index([matchPoints])
-}
-
-// Global leaderboard system
 enum GameFormat {
   constructed
   sealed
@@ -559,118 +802,15 @@ enum TimeFrame {
   weekly
 }
 
-model LeaderboardEntry {
-  id           String     @id @default(cuid())
-  playerId     String
-  displayName  String
-  format       GameFormat
-  timeFrame    TimeFrame
-  wins         Int        @default(0)
-  losses       Int        @default(0)
-  draws        Int        @default(0)
-  winRate      Float      @default(0.0)
-  rating       Int        @default(1200)  // ELO-style rating
-  rank         Int        @default(0)
-  tournamentWins Int      @default(0)
-  lastActive   DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
-
-  player       User       @relation(fields: [playerId], references: [id], onDelete: Cascade)
-
-  @@unique([playerId, format, timeFrame])
-  @@index([format, timeFrame, rating])
-  @@index([format, timeFrame, winRate])
-  @@index([rank])
-}
-
-model HumanCardStats {
-  id        String     @id @default(cuid())
-  cardId    Int
-  format    GameFormat
-  plays     Int        @default(0)
-  wins      Int        @default(0)
-  losses    Int        @default(0)
-  draws     Int        @default(0)
-  updatedAt DateTime   @updatedAt
-
-  @@unique([cardId, format])
-  @@index([cardId])
-  @@index([format, plays]) // For meta stats queries ordering by plays
-}
-
-// Online match persistence for real-time games (non-tournament quick play)
 enum OnlineMatchStatus {
   waiting
   deck_construction
   in_progress
+  ended
   completed
   cancelled
-  ended
 }
 
-model OnlineMatchSession {
-  id           String            @id @default(cuid())
-  lobbyId      String?
-  lobbyName    String?
-  playerIds    String[]          // Array of player IDs participating in the match
-  status       OnlineMatchStatus @default(waiting)
-  seed         String
-  turn         String?
-  winnerId     String?
-  matchType    GameFormat        // constructed | sealed | draft
-  sealedConfig Json?
-  draftConfig  Json?
-  draftState   Json?
-  playerDecks  Json?
-  sealedPacks  Json?
-  game         Json?
-  lastTs       BigInt?
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
-
-  actions      OnlineMatchAction[]
-
-  @@index([status])
-  @@index([createdAt])
-}
-
-model OnlineMatchAction {
-  id        String             @id @default(cuid())
-  matchId   String
-  playerId  String
-  timestamp BigInt
-  patch     Json
-
-  match OnlineMatchSession @relation(fields: [matchId], references: [id], onDelete: Cascade)
-
-  @@index([matchId])
-  @@index([timestamp])
-}
-
-model MatchResult {
-  id           String     @id @default(cuid())
-  matchId      String
-  lobbyName    String?    // Store lobby name for titles
-  winnerId     String?
-  loserId      String?
-  isDraw       Boolean    @default(false)
-  format       GameFormat
-  tournamentId String?
-  players      Json       // Array of player info
-  duration     Int?       // Match duration in seconds
-  completedAt  DateTime   @default(now())
-
-  winner       User?      @relation("MatchWinner", fields: [winnerId], references: [id], onDelete: SetNull)
-  loser        User?      @relation("MatchLoser", fields: [loserId], references: [id], onDelete: SetNull)
-
-  @@index([winnerId])
-  @@index([loserId])
-  @@index([format])
-  @@index([tournamentId])
-  @@index([completedAt])
-}
-
-// Draft session models for tournament draft format
 enum DraftStatus {
   waiting
   active
@@ -685,212 +825,9 @@ enum ParticipantStatus {
   disconnected
 }
 
-model DraftSession {
-  id                String             @id @default(cuid())
-  tournamentId      String
-  status            DraftStatus        @default(waiting)
-  packConfiguration Json               // Pack configuration for the draft
-  settings          Json               // Draft settings (time limits, etc.)
-  draftState        Json?              // Current draft state (packs, picks, etc.)
-  startedAt         DateTime?
-  completedAt       DateTime?
-  createdAt         DateTime           @default(now())
-
-  tournament        Tournament         @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
-  participants      DraftParticipant[]
-
-  @@index([tournamentId])
-  @@index([status])
-}
-
-model DraftParticipant {
-  id              String            @id @default(cuid())
-  draftSessionId  String
-  playerId        String
-  seatNumber      Int
-  status          ParticipantStatus @default(waiting)
-  pickData        Json?             // Player's picks and pack data
-  deckData        Json?             // Final deck after draft
-  joinedAt        DateTime          @default(now())
-
-  draftSession    DraftSession      @relation(fields: [draftSessionId], references: [id], onDelete: Cascade)
-  player          User              @relation(fields: [playerId], references: [id], onDelete: Cascade)
-
-  @@unique([draftSessionId, playerId])
-  @@unique([draftSessionId, seatNumber])
-  @@index([draftSessionId])
-  @@index([playerId])
-}
-
-// WebAuthn passkey credentials per user
-model PasskeyCredential {
-  id                String   @id @default(cuid())
-  userId            String
-  credentialId      Bytes    @unique         // Raw credential ID bytes
-  publicKey         Bytes                     // Raw public key bytes (COSE)
-  counter           Int       @default(0)
-  transports        String?                    // CSV of transports
-  aaguid            String?                    // Authenticator AAGUID
-  attestationType   String?                    // none, basic, etc.
-  deviceType        String?                    // platform or cross-platform
-  backedUp          Boolean?                   // authenticator backups supported
-  createdAt         DateTime @default(now())
-  lastUsedAt        DateTime?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-}
-
-model Friendship {
-  id           String   @id @default(cuid())
-  ownerUserId  String
-  targetUserId String
-  createdAt    DateTime @default(now())
-
-  owner  User @relation("FriendshipOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
-  target User @relation("FriendshipTarget", fields: [targetUserId], references: [id], onDelete: Cascade)
-
-  @@unique([ownerUserId, targetUserId])
-  @@index([ownerUserId])
-  @@index([targetUserId])
-}
-
-// Tournament invitation system for private tournaments
 enum InvitationStatus {
   pending
   accepted
   declined
   expired
-}
-
-model TournamentInvitation {
-  id           String           @id @default(cuid())
-  tournamentId String
-  inviteeId    String           // User being invited
-  inviterId    String?          // User who sent the invite (null if system-generated)
-  status       InvitationStatus @default(pending)
-  createdAt    DateTime         @default(now())
-  respondedAt  DateTime?        // When invitation was accepted/declined
-  expiresAt    DateTime?        // Optional expiration time
-
-  tournament   Tournament       @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
-  invitee      User             @relation(fields: [inviteeId], references: [id], onDelete: Cascade)
-
-  @@unique([tournamentId, inviteeId])
-  @@index([tournamentId])
-  @@index([inviteeId])
-  @@index([status])
-}
-
-// T027: Audit logging for tournament broadcast events
-model TournamentBroadcastEvent {
-  id           String   @id @default(cuid())
-  tournamentId String
-  eventType    String   // PHASE_CHANGED, ROUND_STARTED, etc.
-  payload      Json     // Complete event payload
-  timestamp    DateTime @default(now())
-  emittedBy    String?  // Server ID or process identifier
-  roomTarget   String   // Socket.IO room (e.g., "tournament:xyz")
-
-  @@index([tournamentId, timestamp(sort: Desc)])
-  @@index([eventType])
-}
-
-// T028: Health monitoring for socket broadcast requests
-model SocketBroadcastHealth {
-  id           String   @id @default(cuid())
-  timestamp    DateTime @default(now())
-  eventType    String   // Event being broadcast
-  tournamentId String?  // Tournament ID if applicable
-  targetUrl    String   // Full URL of broadcast endpoint
-  success      Boolean  // Whether broadcast succeeded
-  statusCode   Int?     // HTTP status code
-  errorMessage String?  // Error message if failed
-  retryCount   Int      @default(0) // Number of retries attempted
-  latencyMs    Int      // Latency in milliseconds
-
-  @@index([timestamp(sort: Desc)])
-  @@index([success])
-  @@index([eventType])
-}
-
-// Card evaluation storage for bot AI
-model CardEvaluation {
-  id                  Int      @id @default(autoincrement())
-  cardId              Int      @unique
-  card                Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
-  
-  // Evaluation data
-  category            String   // minion, spell, artifact, aura, site
-  evaluationFunction  String   @db.Text
-  priority            String   @db.Text
-  synergies           Json     // Array of synergy tags
-  antiSynergies       Json     // Array of anti-synergy tags
-  situational         Boolean  @default(false)
-  complexity          String   // simple, moderate, complex
-  
-  // Generation metadata
-  generatedBy         String   // "llm" or "direct"
-  model               String?  // e.g., "claude-3-5-sonnet-20241022"
-  validationStatus    String   @default("pending") // pending, validated, failed
-  validationError     String?  @db.Text
-  
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-  
-  @@index([cardId])
-  @@index([category])
-  @@index([validationStatus])
-  @@index([generatedBy])
-}
-
-// Codex entries for rules/errata from official codex
-model CodexEntry {
-  id        Int      @id @default(autoincrement())
-  title     String   @unique // Entry title (keyword or concept name)
-  content   String   @db.Text // Full content including subcodexes
-  cardRefs  String[] // Array of card names referenced [[Card Name]]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([title])
-}
-
-// User-defined card lists for arbitrary groupings (wishlists, want-to-buy, trade binders, etc.)
-model CardList {
-  id          String   @id @default(cuid())
-  name        String
-  description String?  @db.Text
-  userId      String
-  isPublic    Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  user  User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  cards CardListCard[]
-
-  @@index([userId])
-  @@index([isPublic, createdAt])
-}
-
-model CardListCard {
-  id        Int      @id @default(autoincrement())
-  listId    String
-  cardId    Int
-  setId     Int?
-  variantId Int?
-  finish    Finish   @default(Standard)
-  quantity  Int      @default(1)
-  notes     String?  @db.Text
-  createdAt DateTime @default(now())
-
-  list    CardList @relation(fields: [listId], references: [id], onDelete: Cascade)
-  card    Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
-  set     Set?     @relation("CardListCardSet", fields: [setId], references: [id])
-  variant Variant? @relation("CardListCardVariant", fields: [variantId], references: [id])
-
-  @@unique([listId, cardId, variantId, finish])
-  @@index([listId])
-  @@index([cardId])
 }
