@@ -7,6 +7,7 @@ import AuthProvider from "@/components/auth/AuthProvider";
 import GlobalUserBadge from "@/components/auth/GlobalUserBadge";
 import GlobalNetworkLoadingBridge from "@/components/providers/GlobalNetworkLoadingBridge";
 import OnlineProvider from "@/components/providers/OnlineProvider";
+import PreventBrowserZoom from "@/components/providers/PreventBrowserZoom";
 import ThemeScope from "@/components/ui/ThemeScope";
 import { CacheProvider } from "@/contexts/CacheContext";
 import { RealtimeTournamentProvider } from "@/contexts/RealtimeTournamentContext";
@@ -48,6 +49,10 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   viewportFit: "cover",
   themeColor: "#111111",
+  // Prevent browser zoom from pinch gestures on mobile/touch devices
+  userScalable: false,
+  maximumScale: 1,
+  initialScale: 1,
 };
 
 export default async function RootLayout({
@@ -66,6 +71,7 @@ export default async function RootLayout({
       >
         <LoadingProvider>
           <GlobalNetworkLoadingBridge />
+          <PreventBrowserZoom />
           <ThemeProvider defaultMode="colorful">
             <ColorBlindProvider>
               <SoundProvider>
