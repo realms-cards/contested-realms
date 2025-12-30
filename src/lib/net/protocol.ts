@@ -96,6 +96,8 @@ export const LobbyInfoSchema = z.object({
   isMatchmakingLobby: z.boolean().optional(),
   // Match ID when lobby status is "started" - allows spectating
   matchId: z.string().nullable().optional(),
+  // Match status - 'waiting' | 'in_progress' | 'ended' | null (for spectate visibility)
+  matchStatus: z.string().nullable().optional(),
   // Timestamp when lobby was created or match started
   startedAt: z.number().nullable().optional(),
   // SOATC league match info when both players are in same tournament

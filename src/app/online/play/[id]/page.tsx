@@ -3161,10 +3161,12 @@ export default function OnlineMatchPage() {
                 }}
               >
                 <color attach="background" args={["#0b0b0c"]} />
-                <ambientLight intensity={0.5} />
+                {/* Reduced ambient for more dramatic shadows */}
+                <ambientLight intensity={0.35} />
+                {/* Main directional light (sun-like) */}
                 <directionalLight
-                  position={[5, 10, 5]}
-                  intensity={1.2}
+                  position={[5, 12, 5]}
+                  intensity={1.4}
                   castShadow
                   shadow-mapSize-width={2048}
                   shadow-mapSize-height={2048}
@@ -3173,7 +3175,19 @@ export default function OnlineMatchPage() {
                   shadow-camera-right={15}
                   shadow-camera-top={15}
                   shadow-camera-bottom={-15}
-                  shadow-bias={-0.0001}
+                  shadow-bias={-0.0005}
+                />
+                {/* Soft fill light from opposite side for depth */}
+                <directionalLight
+                  position={[-8, 6, -3]}
+                  intensity={0.3}
+                  color="#b4c5e4"
+                />
+                {/* Subtle rim light from behind for card edge definition */}
+                <directionalLight
+                  position={[0, 3, -10]}
+                  intensity={0.2}
+                  color="#e8d5c4"
                 />
 
                 {/* Interactive board (physics-enabled) */}

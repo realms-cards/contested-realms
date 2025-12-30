@@ -12,6 +12,7 @@ interface MaterialCardBackProps {
   elevation?: number;
   interactive?: boolean;
   depthWrite?: boolean;
+  castShadow?: boolean; // if true (default), cast shadows; set false for hand cards
 }
 
 // Generate a noise texture for roughness variation
@@ -62,6 +63,7 @@ export default function MaterialCardBack({
   elevation = 0.001,
   interactive = true,
   depthWrite = false,
+  castShadow: shouldCastShadow = true,
 }: MaterialCardBackProps) {
   const preset = useMemo(
     () => SLEEVE_PRESETS.find((p) => p.id === presetId),
@@ -84,7 +86,7 @@ export default function MaterialCardBack({
       rotation-z={rotationZ}
       position={[0, elevation, 0]}
       raycast={interactive ? undefined : () => []}
-      castShadow
+      castShadow={shouldCastShadow}
       receiveShadow
     >
       <planeGeometry args={[width, height]} />

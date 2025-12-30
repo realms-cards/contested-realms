@@ -1088,8 +1088,10 @@ export default function LobbiesCentral({
                     </>
                   ) : (
                     <div className="flex items-center gap-2">
+                      {/* Only show spectate when match is actually in progress (not during setup/draft/deck building) */}
                       {l.status === "started" &&
                         l.matchId &&
+                        l.matchStatus === "in_progress" &&
                         l.visibility === "open" && (
                           <Link
                             href={`/online/play/${encodeURIComponent(
