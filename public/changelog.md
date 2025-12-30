@@ -2,6 +2,11 @@
 
 ## December 2025
 
+### Dec 30 - Engine improvements
+
+- **added proper visual candy to board views** they have materials, light, shadow and improved selection outline now. you can go back to flat view in settings
+- **fixed Morgana/Omphalos hand cards being duplicated** to the top of stack
+
 ### Dec 29 - Druid and Hardening
 
 - **fix booster rarity** they were a bit too good, sorry
