@@ -26,8 +26,7 @@ import MagicHudOverlay from "@/components/game/MagicHudOverlay";
 import MatchEndOverlay from "@/components/game/MatchEndOverlay";
 import MatchInfoPopup from "@/components/game/MatchInfoPopup";
 import MobileHandHint from "@/components/game/MobileHandHint";
-import MorganaHandOverlay from "@/components/game/MorganaHandOverlay";
-import OmphalosHandOverlay from "@/components/game/OmphalosHandOverlay";
+import UnitHandsOverlay from "@/components/game/UnitHandsOverlay";
 import OnlineConsole from "@/components/game/OnlineConsole";
 import OnlineD20Screen from "@/components/game/OnlineD20Screen";
 import OnlineDeckSelector from "@/components/game/OnlineDeckSelector";
@@ -3137,10 +3136,8 @@ export default function OnlineMatchPage() {
           <BrowseOverlay />
           {/* Common Sense Overlay (search for Ordinary card) */}
           <CommonSenseOverlay />
-          {/* Morgana le Fay private hand overlay */}
-          <MorganaHandOverlay />
-          {/* Omphalos private hand overlay */}
-          <OmphalosHandOverlay />
+          {/* Unit hands overlay (Morgana, Omphalos) */}
+          <UnitHandsOverlay />
           {/* Pith Imp stolen card notification */}
           <PithImpOverlay />
           {/* Private hand targeting overlay (Morgana/Omphalos) */}
