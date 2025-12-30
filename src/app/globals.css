@@ -34,6 +34,15 @@ body {
   /* Ensure all views can occupy the full available viewport height */
   min-height: 100vh;
   min-height: 100dvh;
+  /* Prevent browser back/forward navigation gestures from horizontal swipes */
+  overscroll-behavior-x: none;
+}
+
+/* Prevent browser navigation gestures globally */
+html {
+  overscroll-behavior: none;
+  /* Prevent pinch-to-zoom on touch devices */
+  touch-action: pan-x pan-y;
 }
 
 /* Global: disable text selection by default; allow opt-in where needed */
