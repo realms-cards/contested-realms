@@ -22,7 +22,8 @@ export type BodyApi = {
 // Shared stack/placement constants for permanents on the board.
 export const STACK_SPACING = TILE_SIZE * 0.32;
 export const STACK_MARGIN_Z = TILE_SIZE * 0.1;
-export const STACK_LAYER_LIFT = CARD_THICK * 0.04;
+// Each stacked card lifts by full card thickness + small margin so they sit on top of each other
+export const STACK_LAYER_LIFT = CARD_THICK * 1.2;
 export const BASE_CARD_ELEVATION = CARD_THICK * 0.55;
 export const BURROWED_ELEVATION = CARD_THICK * 0.08;
 export const RUBBLE_ELEVATION = CARD_THICK * 0.04;

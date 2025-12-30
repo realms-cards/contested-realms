@@ -18,6 +18,7 @@ import CacheSettingsSection from "@/components/settings/CacheSettingsSection";
 import { FEATURE_CARD_SLEEVES } from "@/lib/config/features";
 import { useColorBlind } from "@/lib/contexts/ColorBlindContext";
 import { useLoadingContext } from "@/lib/contexts/LoadingContext";
+import { useGraphicsSettings } from "@/hooks/useGraphicsSettings";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
 
@@ -75,6 +76,8 @@ export default function UserBadge({
   } | null>(null);
   const { enabled: colorBlindEnabled, setEnabled: setColorBlindEnabled } =
     useColorBlind();
+  const { settings: graphicsSettings, toggleEnhanced3DCards } =
+    useGraphicsSettings();
   const [showOpponentPlaymat, setShowOpponentPlaymat] = useState(true);
   const [playmatPrefLoading, setPlaymatPrefLoading] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -788,7 +791,7 @@ export default function UserBadge({
           role="dialog"
         >
           <div
-            className="relative w-full max-w-md rounded-xl bg-slate-900 ring-1 ring-slate-800 shadow-2xl p-4"
+            className="relative w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-xl bg-slate-900 ring-1 ring-slate-800 shadow-2xl p-5"
             onMouseDown={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
@@ -855,55 +858,72 @@ export default function UserBadge({
                   placeholder="Enter your name"
                 />
               </label>
-              <div className="flex items-center justify-between gap-3 text-xs text-slate-300">
-                <div className="flex flex-col">
-                  <span>Color blind mode</span>
-                  <span className="mt-0.5 text-[11px] text-slate-400">
-                    Switch greens to blues and reds to yellows in the UI.
-                  </span>
-                </div>
+              {/* Settings toggles in a compact grid */}
+              <div className="grid grid-cols-2 gap-3">
+                {/* Enhanced 3D Cards */}
+                <button
+                  type="button"
+                  onClick={toggleEnhanced3DCards}
+                  className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg ring-1 transition-colors text-left ${
+                    graphicsSettings.enhanced3DCards
+                      ? "bg-purple-500/20 ring-purple-500/40"
+                      : "bg-slate-800 ring-slate-600"
+                  }`}
+                >
+                  <div className="min-w-0">
+                    <div className="text-xs text-slate-200 font-medium">Enhanced 3D</div>
+                    <div className="text-[10px] text-slate-400 truncate">Lit cards with depth</div>
+                  </div>
+                  <span
+                    className={`shrink-0 w-2.5 h-2.5 rounded-full ${
+                      graphicsSettings.enhanced3DCards ? "bg-purple-300" : "bg-slate-500"
+                    }`}
+                  />
+                </button>
+
+                {/* Color blind mode */}
                 <button
                   type="button"
                   onClick={() => setColorBlindEnabled(!colorBlindEnabled)}
-                  className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] ring-1 transition-colors ${
+                  className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg ring-1 transition-colors text-left ${
                     colorBlindEnabled
-                      ? "bg-sky-500/20 text-sky-100 ring-sky-500/40"
-                      : "bg-slate-800 text-slate-200 ring-slate-600"
+                      ? "bg-sky-500/20 ring-sky-500/40"
+                      : "bg-slate-800 ring-slate-600"
                   }`}
                 >
+                  <div className="min-w-0">
+                    <div className="text-xs text-slate-200 font-medium">Color blind</div>
+                    <div className="text-[10px] text-slate-400 truncate">Accessible colors</div>
+                  </div>
                   <span
-                    className={`inline-block w-2 h-2 rounded-full ${
-                      colorBlindEnabled ? "bg-sky-300" : "bg-slate-400"
+                    className={`shrink-0 w-2.5 h-2.5 rounded-full ${
+                      colorBlindEnabled ? "bg-sky-300" : "bg-slate-500"
                     }`}
                   />
-                  <span>{colorBlindEnabled ? "On" : "Off"}</span>
                 </button>
-              </div>
-              <div className="flex items-center justify-between gap-3 text-xs text-slate-300">
-                <div className="flex flex-col">
-                  <span>Show opponent&apos;s playmat</span>
-                  <span className="mt-0.5 text-[11px] text-slate-400">
-                    Display custom playmats from Patron opponents.
-                  </span>
-                </div>
+
+                {/* Show opponent's playmat */}
                 <button
                   type="button"
                   onClick={handleToggleOpponentPlaymat}
                   disabled={playmatPrefLoading}
-                  className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] ring-1 transition-colors ${
+                  className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg ring-1 transition-colors text-left ${
                     playmatPrefLoading ? "opacity-60 cursor-wait" : ""
                   } ${
                     showOpponentPlaymat
-                      ? "bg-emerald-500/20 text-emerald-100 ring-emerald-500/40"
-                      : "bg-slate-800 text-slate-200 ring-slate-600"
+                      ? "bg-emerald-500/20 ring-emerald-500/40"
+                      : "bg-slate-800 ring-slate-600"
                   }`}
                 >
+                  <div className="min-w-0">
+                    <div className="text-xs text-slate-200 font-medium">Opponent mat</div>
+                    <div className="text-[10px] text-slate-400 truncate">Show custom playmats</div>
+                  </div>
                   <span
-                    className={`inline-block w-2 h-2 rounded-full ${
-                      showOpponentPlaymat ? "bg-emerald-300" : "bg-slate-400"
+                    className={`shrink-0 w-2.5 h-2.5 rounded-full ${
+                      showOpponentPlaymat ? "bg-emerald-300" : "bg-slate-500"
                     }`}
                   />
-                  <span>{showOpponentPlaymat ? "On" : "Off"}</span>
                 </button>
               </div>
               {/* Card Image Cache section */}

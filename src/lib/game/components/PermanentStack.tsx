@@ -506,7 +506,6 @@ export function PermanentStack({
               args={[CARD_SHORT / 2, CARD_THICK / 2, CARD_LONG / 2]}
               friction={0.9}
               restitution={0}
-              sensor
             />
             <group
               visible={!isLocalDragGhost}

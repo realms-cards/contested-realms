@@ -13,6 +13,7 @@ import {
 } from "three";
 import { CARD_THICK } from "@/lib/game/constants";
 import { useCardTexture } from "@/lib/game/textures/useCardTexture";
+import { getGraphicsSettings } from "@/hooks/useGraphicsSettings";
 
 // Card edge color (dark gray to simulate card stock)
 const EDGE_COLOR = "#2a2a2a";
@@ -134,7 +135,7 @@ function CardFallback({
   polygonOffsetFactor = -0.5,
   polygonOffsetUnits = -0.5,
   opacity = 1.0,
-  lit = true,
+  lit: litProp,
   castShadow: castShadowProp,
   onContextMenu,
   onPointerDown,
@@ -147,6 +148,7 @@ function CardFallback({
 }: Omit<CardPlaneProps, "slug" | "textureUrl">) {
   const meshRef = useRef<Mesh>(null);
   const thickness = CARD_THICK;
+  const lit = litProp ?? getGraphicsSettings().enhanced3DCards;
   const shouldCastShadow = castShadowProp ?? lit;
 
   useEffect(() => {
@@ -210,7 +212,7 @@ function CardBackFallback({
   polygonOffsetFactor = -0.5,
   polygonOffsetUnits = -0.5,
   opacity = 1.0,
-  lit = true,
+  lit: litProp,
   castShadow: castShadowProp,
   onContextMenu,
   onPointerDown,
@@ -226,6 +228,7 @@ function CardBackFallback({
   const meshRef = useRef<Mesh>(null);
   const backTex = useCardTexture({ textureUrl: "/api/assets/cardback_spellbook.png", preferRaster });
   const thickness = CARD_THICK;
+  const lit = litProp ?? getGraphicsSettings().enhanced3DCards;
   const shouldCastShadow = castShadowProp ?? lit;
 
   const rotatedMap = useMemo(() => {
@@ -338,7 +341,7 @@ const CardWithTexture = React.memo(function CardWithTexture(props: CardPlaneProp
     forceTextureUrl = false,
     opacity = 1.0,
     preferRaster = false,
-    lit = true,
+    lit: litProp,
     castShadow: castShadowProp,
     onContextMenu,
     onPointerDown,
@@ -354,6 +357,8 @@ const CardWithTexture = React.memo(function CardWithTexture(props: CardPlaneProp
 
   const meshRef = useRef<Mesh>(null);
   const thickness = CARD_THICK;
+  // Use explicit lit prop if provided, otherwise fall back to graphics settings
+  const lit = litProp ?? getGraphicsSettings().enhanced3DCards;
   const shouldCastShadow = castShadowProp ?? lit;
 
   // If slug is missing and no explicit textureUrl is provided, fall back to a generic cardback

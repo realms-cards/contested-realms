@@ -898,11 +898,7 @@ export default function Hand3D({
   return (
     <group ref={rootRef}>
       {/* Fixed light for hand cards - stays with hand, not affected by board rotation */}
-      <directionalLight
-        position={[0, 2, 3]}
-        intensity={1.5}
-        color="#ffffff"
-      />
+      <directionalLight position={[0, 2, 3]} intensity={1.0} color="#ffffff" />
       {/* Unified hand cards in fan */}
       {sortedHand.map((c, i) => {
         const layoutInfo = handLayout[i];
