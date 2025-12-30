@@ -20,9 +20,8 @@ import HarbingerPortalScreen from "@/components/game/HarbingerPortalScreen";
 import { InteractionConsentDialog } from "@/components/game/InteractionConsentDialog";
 import OnlineLifeCounters from "@/components/game/OnlineLifeCounters";
 import MobileHandHint from "@/components/game/MobileHandHint";
-import MorganaHandOverlay from "@/components/game/MorganaHandOverlay";
 import OfflineMulliganScreen from "@/components/game/OfflineMulliganScreen";
-import OmphalosHandOverlay from "@/components/game/OmphalosHandOverlay";
+import UnitHandsOverlay from "@/components/game/UnitHandsOverlay";
 import PileSearchDialog from "@/components/game/PileSearchDialog";
 import PithImpOverlay from "@/components/game/PithImpOverlay";
 import PlacementDialog from "@/components/game/PlacementDialog";
@@ -848,11 +847,8 @@ export default function PlayPage() {
       {/* Common Sense Overlay (search for Ordinary card) */}
       <CommonSenseOverlay />
 
-      {/* Morgana le Fay private hand overlay */}
-      <MorganaHandOverlay />
-
-      {/* Omphalos private hand overlay */}
-      <OmphalosHandOverlay />
+      {/* Unit hands overlay (Morgana, Omphalos) */}
+      <UnitHandsOverlay />
 
       {/* Pith Imp stolen card notification */}
       <PithImpOverlay />
