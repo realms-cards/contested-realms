@@ -1843,9 +1843,22 @@ export function handleCustomMessage(
       createdAt: Date.now(),
     };
 
-    set((s) => ({
-      morganaHands: [...s.morganaHands, newMorganaHand],
-    })) as unknown as void;
+    // Remove drawn cards from spellbook (opponent side sync)
+    const drawCount = drawnCards.length;
+    set((s) => {
+      const currentSpellbook = s.zones[ownerSeat]?.spellbook || [];
+      const updatedSpellbook = currentSpellbook.slice(drawCount); // Remove from top
+      return {
+        morganaHands: [...s.morganaHands, newMorganaHand],
+        zones: {
+          ...s.zones,
+          [ownerSeat]: {
+            ...s.zones[ownerSeat],
+            spellbook: updatedSpellbook,
+          },
+        },
+      };
+    }) as unknown as void;
 
     try {
       get().log(
@@ -1984,14 +1997,36 @@ export function handleCustomMessage(
 
     const drawnCard = drawnCardAny as CardRef | undefined;
 
-    // Update Omphalos's hand
-    set((s) => ({
-      omphalosHands: s.omphalosHands.map((o) => {
+    // Find the Omphalos entry to get owner seat
+    const omphalosEntry = get().omphalosHands.find((o) => o.id === omphalosId);
+    const ownerSeat = omphalosEntry?.ownerSeat;
+
+    // Update Omphalos's hand and remove card from spellbook (opponent side sync)
+    set((s) => {
+      const updatedOmphalosHands = s.omphalosHands.map((o) => {
         if (o.id !== omphalosId) return o;
         const newHand = drawnCard ? [...o.hand, drawnCard] : o.hand;
         return { ...o, hand: newHand };
-      }),
-    })) as unknown as void;
+      });
+
+      // Also remove 1 card from top of owner's spellbook
+      if (ownerSeat && drawnCard) {
+        const currentSpellbook = s.zones[ownerSeat]?.spellbook || [];
+        const updatedSpellbook = currentSpellbook.slice(1); // Remove 1 from top
+        return {
+          omphalosHands: updatedOmphalosHands,
+          zones: {
+            ...s.zones,
+            [ownerSeat]: {
+              ...s.zones[ownerSeat],
+              spellbook: updatedSpellbook,
+            },
+          },
+        };
+      }
+
+      return { omphalosHands: updatedOmphalosHands };
+    }) as unknown as void;
 
     // Find the Omphalos entry to log
     const entry = get().omphalosHands.find((o) => o.id === omphalosId);
