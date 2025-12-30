@@ -639,66 +639,75 @@ export default function PlayPage() {
 
   const minDist = Math.max(1, Math.min(matW, matH) * 0.15);
   const maxDist = Math.max(14, Math.hypot(matW, matH) * 1.3);
+  // Re-entry guard to prevent infinite loop when c.update() triggers onChange
+  const isClampingRef = useRef(false);
   const clampControls = useCallback(() => {
-    const c = controlsRef.current;
-    if (!c) return;
-    const halfW = matW / 2;
-    const halfH = matH / 2;
-    const t = c.target;
-    const cam = (c as unknown as { object: THREE.PerspectiveCamera }).object;
-    const offset = cam.position.clone().sub(t.clone());
-    let changed = false;
-    if (t.x < -halfW) {
-      t.x = -halfW;
-      changed = true;
-    } else if (t.x > halfW) {
-      t.x = halfW;
-      changed = true;
-    }
-    if (t.z < -halfH) {
-      t.z = -halfH;
-      changed = true;
-    } else if (t.z > halfH) {
-      t.z = halfH;
-      changed = true;
-    }
-    if (t.y !== 0) {
-      t.y = 0;
-      changed = true;
-    }
+    // Prevent re-entry: c.update() triggers onChange which calls clampControls
+    if (isClampingRef.current) return;
+    isClampingRef.current = true;
+    try {
+      const c = controlsRef.current;
+      if (!c) return;
+      const halfW = matW / 2;
+      const halfH = matH / 2;
+      const t = c.target;
+      const cam = (c as unknown as { object: THREE.PerspectiveCamera }).object;
+      const offset = cam.position.clone().sub(t.clone());
+      let changed = false;
+      if (t.x < -halfW) {
+        t.x = -halfW;
+        changed = true;
+      } else if (t.x > halfW) {
+        t.x = halfW;
+        changed = true;
+      }
+      if (t.z < -halfH) {
+        t.z = -halfH;
+        changed = true;
+      } else if (t.z > halfH) {
+        t.z = halfH;
+        changed = true;
+      }
+      if (t.y !== 0) {
+        t.y = 0;
+        changed = true;
+      }
 
-    // Prevent camera from getting into extreme positions that cause rotation flips.
-    // Clamp the camera's absolute XZ position to prevent gimbal-lock-like behavior
-    // when panning far from the board while zoomed out.
-    const camBoundX = halfW + maxDist * 1.5;
-    const camBoundZ = halfH + maxDist * 1.5;
-    if (cam.position.x < -camBoundX) {
-      cam.position.x = -camBoundX;
-      t.x = cam.position.x - offset.x;
-      changed = true;
-    } else if (cam.position.x > camBoundX) {
-      cam.position.x = camBoundX;
-      t.x = cam.position.x - offset.x;
-      changed = true;
-    }
-    if (cam.position.z < -camBoundZ) {
-      cam.position.z = -camBoundZ;
-      t.z = cam.position.z - offset.z;
-      changed = true;
-    } else if (cam.position.z > camBoundZ) {
-      cam.position.z = camBoundZ;
-      t.z = cam.position.z - offset.z;
-      changed = true;
-    }
-    // Ensure camera Y stays positive (above the board) to prevent flip
-    if (cam.position.y < 0.5) {
-      cam.position.y = 0.5;
-      changed = true;
-    }
+      // Prevent camera from getting into extreme positions that cause rotation flips.
+      // Clamp the camera's absolute XZ position to prevent gimbal-lock-like behavior
+      // when panning far from the board while zoomed out.
+      const camBoundX = halfW + maxDist * 1.5;
+      const camBoundZ = halfH + maxDist * 1.5;
+      if (cam.position.x < -camBoundX) {
+        cam.position.x = -camBoundX;
+        t.x = cam.position.x - offset.x;
+        changed = true;
+      } else if (cam.position.x > camBoundX) {
+        cam.position.x = camBoundX;
+        t.x = cam.position.x - offset.x;
+        changed = true;
+      }
+      if (cam.position.z < -camBoundZ) {
+        cam.position.z = -camBoundZ;
+        t.z = cam.position.z - offset.z;
+        changed = true;
+      } else if (cam.position.z > camBoundZ) {
+        cam.position.z = camBoundZ;
+        t.z = cam.position.z - offset.z;
+        changed = true;
+      }
+      // Ensure camera Y stays positive (above the board) to prevent flip
+      if (cam.position.y < 0.5) {
+        cam.position.y = 0.5;
+        changed = true;
+      }
 
-    if (changed) {
-      cam.position.copy(t.clone().add(offset));
-      c.update();
+      if (changed) {
+        cam.position.copy(t.clone().add(offset));
+        c.update();
+      }
+    } finally {
+      isClampingRef.current = false;
     }
   }, [matW, matH, maxDist]);
 
@@ -1026,10 +1035,12 @@ export default function PlayPage() {
         }}
       >
         <color attach="background" args={["#0b0b0c"]} />
+        {/* Ambient light for overall brightness */}
         <ambientLight intensity={0.5} />
+        {/* Main directional light (sun-like) */}
         <directionalLight
-          position={[5, 10, 5]}
-          intensity={1.2}
+          position={[5, 12, 5]}
+          intensity={1.6}
           castShadow
           shadow-mapSize-width={2048}
           shadow-mapSize-height={2048}
@@ -1038,7 +1049,19 @@ export default function PlayPage() {
           shadow-camera-right={15}
           shadow-camera-top={15}
           shadow-camera-bottom={-15}
-          shadow-bias={-0.0001}
+          shadow-bias={-0.0005}
+        />
+        {/* Soft fill light from opposite side for depth */}
+        <directionalLight
+          position={[-8, 6, -3]}
+          intensity={0.3}
+          color="#b4c5e4"
+        />
+        {/* Subtle rim light from behind for card edge definition */}
+        <directionalLight
+          position={[0, 3, -10]}
+          intensity={0.2}
+          color="#e8d5c4"
         />
 
         {/* Interactive board (physics-enabled) */}

@@ -1702,11 +1702,27 @@ export default function TournamentDraft3DScreen({
           frameloop="always"
         >
           <color attach="background" args={["#0b0b0c"]} />
-          <ambientLight intensity={0.8} />
+          {/* Reduced ambient for more dramatic shadows */}
+          <ambientLight intensity={0.4} />
+          {/* Main directional light */}
           <directionalLight
             position={[10, 12, 8]}
-            intensity={1.35}
+            intensity={1.5}
             castShadow
+            shadow-mapSize-width={2048}
+            shadow-mapSize-height={2048}
+            shadow-camera-far={50}
+            shadow-camera-left={-15}
+            shadow-camera-right={15}
+            shadow-camera-top={15}
+            shadow-camera-bottom={-15}
+            shadow-bias={-0.0005}
+          />
+          {/* Soft fill light from opposite side */}
+          <directionalLight
+            position={[-8, 6, -3]}
+            intensity={0.25}
+            color="#b4c5e4"
           />
 
           <Physics gravity={[0, -9.81, 0]}>

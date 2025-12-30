@@ -1,9 +1,21 @@
 "use client";
 
 import type { ThreeEvent } from "@react-three/fiber";
-import React, { Suspense, useEffect, useMemo } from "react";
-import { type Object3D, type Raycaster, type Intersection } from "three";
+import React, { Suspense, useEffect, useMemo, useRef } from "react";
+import {
+  type Object3D,
+  type Raycaster,
+  type Intersection,
+  type Mesh,
+  MeshStandardMaterial,
+  MeshBasicMaterial,
+  type Texture,
+} from "three";
+import { CARD_THICK } from "@/lib/game/constants";
 import { useCardTexture } from "@/lib/game/textures/useCardTexture";
+
+// Card edge color (dark gray to simulate card stock)
+const EDGE_COLOR = "#2a2a2a";
 
 function noopRaycast(
   this: Object3D,
@@ -33,6 +45,8 @@ interface CardPlaneProps {
   forceTextureUrl?: boolean; // if true, ignore slug completely and only use textureUrl
   opacity?: number; // transparency (0.0 to 1.0, default 1.0)
   preferRaster?: boolean; // if true, skip KTX2 attempt and use raster
+  lit?: boolean; // if true (default), use lit material; if false, use unlit (for hand cards)
+  castShadow?: boolean; // if true (default same as lit), cast shadows
   onContextMenu?: (e: ThreeEvent<PointerEvent>) => void;
   onPointerDown?: (e: ThreeEvent<PointerEvent>) => void;
   onPointerOver?: (e: ThreeEvent<PointerEvent>) => void;
@@ -42,6 +56,67 @@ interface CardPlaneProps {
   onDoubleClick?: (e: ThreeEvent<PointerEvent>) => void;
   onClick?: (e: ThreeEvent<PointerEvent>) => void;
   cardId?: number; // for raycasting identification
+}
+
+// Create material array for box: [+X, -X, +Y, -Y, +Z (front), -Z (back)]
+function createMaterials(
+  frontMap: Texture | null,
+  backMap: Texture | null,
+  lit: boolean,
+  depthWrite: boolean,
+  depthTest: boolean,
+  polygonOffset: boolean,
+  polygonOffsetFactor: number,
+  polygonOffsetUnits: number,
+  opacity: number
+): (MeshStandardMaterial | MeshBasicMaterial)[] {
+  // Note: polygonOffset not used - 3D box geometry has real thickness so no z-fighting
+  const materialProps = {
+    depthWrite,
+    depthTest,
+    transparent: opacity < 1.0,
+    opacity,
+  };
+  // Suppress unused variable warnings
+  void polygonOffset;
+  void polygonOffsetFactor;
+  void polygonOffsetUnits;
+
+  // Edge material (sides of the card)
+  const edgeMaterial = lit
+    ? new MeshStandardMaterial({ color: EDGE_COLOR, roughness: 0.9, metalness: 0, ...materialProps })
+    : new MeshBasicMaterial({ color: EDGE_COLOR, toneMapped: false, ...materialProps });
+
+  // Front face material (card art)
+  const frontMaterial = lit
+    ? new MeshStandardMaterial({
+        map: frontMap ?? undefined,
+        roughness: 0.7,
+        metalness: 0,
+        ...materialProps,
+      })
+    : new MeshBasicMaterial({ map: frontMap ?? undefined, toneMapped: false, ...materialProps });
+
+  // Back face material (card back)
+  const backMaterial = lit
+    ? new MeshStandardMaterial({
+        map: backMap ?? undefined,
+        roughness: 0.7,
+        metalness: 0,
+        ...materialProps,
+      })
+    : new MeshBasicMaterial({ map: backMap ?? undefined, toneMapped: false, ...materialProps });
+
+  // Box material order: [+X, -X, +Y, -Y, +Z, -Z]
+  // When lying flat (rotation-x = -PI/2): +Z faces up (front), -Z faces down (back)
+  return [
+    edgeMaterial, // +X (right edge)
+    edgeMaterial, // -X (left edge)
+    edgeMaterial, // +Y (now points forward after rotation)
+    edgeMaterial, // -Y (now points backward after rotation)
+    frontMaterial, // +Z (front face - faces UP when lying flat)
+    backMaterial, // -Z (back face - faces DOWN when lying flat)
+  ];
 }
 
 // Fallback component while texture loads
@@ -59,6 +134,8 @@ function CardFallback({
   polygonOffsetFactor = -0.5,
   polygonOffsetUnits = -0.5,
   opacity = 1.0,
+  lit = true,
+  castShadow: castShadowProp,
   onContextMenu,
   onPointerDown,
   onPointerOver,
@@ -68,12 +145,39 @@ function CardFallback({
   onDoubleClick,
   onClick,
 }: Omit<CardPlaneProps, "slug" | "textureUrl">) {
+  const meshRef = useRef<Mesh>(null);
+  const thickness = CARD_THICK;
+  const shouldCastShadow = castShadowProp ?? lit;
+
+  useEffect(() => {
+    if (!interactive && meshRef.current) {
+      meshRef.current.raycast = noopRaycast;
+    }
+  }, [interactive]);
+
+  // Solid gray fallback material
+  const materials = useMemo(() => {
+    const props = {
+      depthWrite,
+      depthTest,
+      polygonOffset,
+      polygonOffsetFactor,
+      polygonOffsetUnits,
+      transparent: opacity < 1.0,
+      opacity,
+    };
+    const mat = lit
+      ? new MeshStandardMaterial({ color: "#4a5568", roughness: 0.8, metalness: 0, ...props })
+      : new MeshBasicMaterial({ color: "#4a5568", toneMapped: false, ...props });
+    return [mat, mat, mat, mat, mat, mat];
+  }, [lit, depthWrite, depthTest, polygonOffset, polygonOffsetFactor, polygonOffsetUnits, opacity]);
+
   return (
     <mesh
+      ref={meshRef}
       rotation-x={upright ? 0 : -Math.PI / 2}
       rotation-z={rotationZ}
-      position={[0, elevation, 0]}
-      raycast={interactive ? undefined : noopRaycast}
+      position={[0, elevation + thickness / 2, 0]}
       renderOrder={renderOrder}
       onContextMenu={onContextMenu}
       onPointerDown={onPointerDown}
@@ -83,20 +187,11 @@ function CardFallback({
       onPointerUp={onPointerUp}
       onDoubleClick={onDoubleClick}
       onClick={onClick}
-      castShadow
+      castShadow={shouldCastShadow}
+      receiveShadow={lit}
+      material={materials}
     >
-      <planeGeometry args={[width, height]} />
-      <meshBasicMaterial
-        color="#4a5568"
-        toneMapped={false}
-        depthWrite={depthWrite}
-        depthTest={depthTest}
-        polygonOffset={polygonOffset}
-        polygonOffsetFactor={polygonOffsetFactor}
-        polygonOffsetUnits={polygonOffsetUnits}
-        transparent={opacity < 1.0}
-        opacity={opacity}
-      />
+      <boxGeometry args={[width, height, thickness]} />
     </mesh>
   );
 }
@@ -115,6 +210,8 @@ function CardBackFallback({
   polygonOffsetFactor = -0.5,
   polygonOffsetUnits = -0.5,
   opacity = 1.0,
+  lit = true,
+  castShadow: castShadowProp,
   onContextMenu,
   onPointerDown,
   onPointerOver,
@@ -126,7 +223,11 @@ function CardBackFallback({
   preferRaster = false,
   textureRotation,
 }: CardPlaneProps) {
+  const meshRef = useRef<Mesh>(null);
   const backTex = useCardTexture({ textureUrl: "/api/assets/cardback_spellbook.png", preferRaster });
+  const thickness = CARD_THICK;
+  const shouldCastShadow = castShadowProp ?? lit;
+
   const rotatedMap = useMemo(() => {
     if (!backTex) return null;
     if (!textureRotation || Math.abs(textureRotation) < 1e-6) return backTex;
@@ -136,14 +237,38 @@ function CardBackFallback({
     t.needsUpdate = true;
     return t;
   }, [backTex, textureRotation]);
+
   useEffect(() => {
     return () => {
       if (rotatedMap && rotatedMap !== backTex) {
-        try { rotatedMap.dispose(); } catch {}
+        try { rotatedMap.dispose(); } catch { /* ignore */ }
       }
     };
   }, [rotatedMap, backTex]);
-  if (!backTex) {
+
+  useEffect(() => {
+    if (!interactive && meshRef.current) {
+      meshRef.current.raycast = noopRaycast;
+    }
+  }, [interactive]);
+
+  // Materials: card back on both front and back faces
+  const materials = useMemo(() => {
+    if (!backTex) return null;
+    return createMaterials(
+      rotatedMap,
+      rotatedMap,
+      lit,
+      depthWrite,
+      depthTest,
+      polygonOffset,
+      polygonOffsetFactor,
+      polygonOffsetUnits,
+      opacity
+    );
+  }, [rotatedMap, lit, depthWrite, depthTest, polygonOffset, polygonOffsetFactor, polygonOffsetUnits, opacity, backTex]);
+
+  if (!backTex || !materials) {
     return (
       <CardFallback
         width={width}
@@ -156,6 +281,8 @@ function CardBackFallback({
         depthWrite={depthWrite}
         depthTest={depthTest}
         opacity={opacity}
+        lit={lit}
+        castShadow={castShadowProp}
         onContextMenu={onContextMenu}
         onPointerDown={onPointerDown}
         onPointerOver={onPointerOver}
@@ -167,12 +294,13 @@ function CardBackFallback({
       />
     );
   }
+
   return (
     <mesh
+      ref={meshRef}
       rotation-x={upright ? 0 : -Math.PI / 2}
       rotation-z={rotationZ}
-      position={[0, elevation, 0]}
-      raycast={interactive ? undefined : noopRaycast}
+      position={[0, elevation + thickness / 2, 0]}
       renderOrder={renderOrder}
       onContextMenu={onContextMenu}
       onPointerDown={onPointerDown}
@@ -182,20 +310,11 @@ function CardBackFallback({
       onPointerUp={onPointerUp}
       onDoubleClick={onDoubleClick}
       onClick={onClick}
-      castShadow
+      castShadow={shouldCastShadow}
+      receiveShadow={lit}
+      material={materials}
     >
-      <planeGeometry args={[width, height]} />
-      <meshBasicMaterial
-        map={rotatedMap ?? undefined}
-        toneMapped={false}
-        depthWrite={depthWrite}
-        depthTest={depthTest}
-        polygonOffset={polygonOffset}
-        polygonOffsetFactor={polygonOffsetFactor}
-        polygonOffsetUnits={polygonOffsetUnits}
-        transparent={true}
-        opacity={opacity}
-      />
+      <boxGeometry args={[width, height, thickness]} />
     </mesh>
   );
 }
@@ -219,6 +338,8 @@ const CardWithTexture = React.memo(function CardWithTexture(props: CardPlaneProp
     forceTextureUrl = false,
     opacity = 1.0,
     preferRaster = false,
+    lit = true,
+    castShadow: castShadowProp,
     onContextMenu,
     onPointerDown,
     onPointerOver,
@@ -231,6 +352,10 @@ const CardWithTexture = React.memo(function CardWithTexture(props: CardPlaneProp
     textureRotation,
   } = props;
 
+  const meshRef = useRef<Mesh>(null);
+  const thickness = CARD_THICK;
+  const shouldCastShadow = castShadowProp ?? lit;
+
   // If slug is missing and no explicit textureUrl is provided, fall back to a generic cardback
   // so that unknown cards (e.g., CPU placeholders) still render visibly.
   const effectiveTextureUrl = React.useMemo(() => {
@@ -239,12 +364,16 @@ const CardWithTexture = React.memo(function CardWithTexture(props: CardPlaneProp
     return undefined;
   }, [textureUrl, slug]);
 
-  // Simple texture loading - just use the hook for everything
-  const tex = useCardTexture({ 
-    slug: forceTextureUrl ? "" : slug, 
+  // Load front texture (card art)
+  const tex = useCardTexture({
+    slug: forceTextureUrl ? "" : slug,
     textureUrl: effectiveTextureUrl,
     preferRaster,
   });
+
+  // Load back texture (card back)
+  const backTex = useCardTexture({ textureUrl: "/api/assets/cardback_spellbook.png", preferRaster });
+
   const instancedMap = useMemo(() => {
     if (!tex) return null;
     if (!textureRotation || Math.abs(textureRotation) < 1e-6) return tex;
@@ -261,24 +390,51 @@ const CardWithTexture = React.memo(function CardWithTexture(props: CardPlaneProp
     t.needsUpdate = true;
     return t;
   }, [tex, textureRotation, props.preferRaster, props.textureUrl, props.slug]);
+
   useEffect(() => {
     return () => {
       if (instancedMap && instancedMap !== tex) {
-        try { instancedMap.dispose(); } catch {}
+        try { instancedMap.dispose(); } catch { /* ignore */ }
       }
     };
   }, [instancedMap, tex]);
 
-  if (!tex) {
+  // Create materials with front art and back texture
+  const materials = useMemo(() => {
+    if (!tex) return null;
+    return createMaterials(
+      instancedMap,
+      backTex,
+      lit,
+      depthWrite,
+      depthTest,
+      polygonOffset,
+      polygonOffsetFactor,
+      polygonOffsetUnits,
+      opacity
+    );
+  }, [instancedMap, backTex, lit, depthWrite, depthTest, polygonOffset, polygonOffsetFactor, polygonOffsetUnits, opacity, tex]);
+
+  // Disable raycasting on mount if not interactive, and set userData
+  useEffect(() => {
+    if (meshRef.current) {
+      if (!interactive) {
+        meshRef.current.raycast = noopRaycast;
+      }
+      meshRef.current.userData = { cardId, slug };
+    }
+  }, [interactive, cardId, slug]);
+
+  if (!tex || !materials) {
     return <CardBackFallback {...props} />;
   }
 
   return (
     <mesh
+      ref={meshRef}
       rotation-x={upright ? 0 : -Math.PI / 2}
       rotation-z={rotationZ}
-      position={[0, elevation, 0]}
-      raycast={interactive ? undefined : noopRaycast}
+      position={[0, elevation + thickness / 2, 0]}
       renderOrder={renderOrder}
       onContextMenu={onContextMenu}
       onPointerDown={onPointerDown}
@@ -288,24 +444,11 @@ const CardWithTexture = React.memo(function CardWithTexture(props: CardPlaneProp
       onPointerUp={onPointerUp}
       onDoubleClick={onDoubleClick}
       onClick={onClick}
-      castShadow
-      userData={{ 
-        cardId, 
-        slug
-      }}
+      castShadow={shouldCastShadow}
+      receiveShadow={lit}
+      material={materials}
     >
-      <planeGeometry args={[width, height]} />
-      <meshBasicMaterial
-        map={instancedMap ?? undefined}
-        toneMapped={false}
-        depthWrite={depthWrite}
-        depthTest={depthTest}
-        polygonOffset={polygonOffset}
-        polygonOffsetFactor={polygonOffsetFactor}
-        polygonOffsetUnits={polygonOffsetUnits}
-        transparent={true}
-        opacity={opacity}
-      />
+      <boxGeometry args={[width, height, thickness]} />
     </mesh>
   );
 });

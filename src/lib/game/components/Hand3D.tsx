@@ -897,6 +897,12 @@ export default function Hand3D({
 
   return (
     <group ref={rootRef}>
+      {/* Fixed light for hand cards - stays with hand, not affected by board rotation */}
+      <directionalLight
+        position={[0, 2, 3]}
+        intensity={1.5}
+        color="#ffffff"
+      />
       {/* Unified hand cards in fan */}
       {sortedHand.map((c, i) => {
         const layoutInfo = handLayout[i];
@@ -1163,6 +1169,7 @@ export default function Hand3D({
                   elevation={0.002 + 0.018 * (hoverWeight || 0)}
                   interactive={false}
                   depthWrite={true}
+                  castShadow={false} // Hand cards should not cast shadows on the board
                 />
               ) : (
                 <CardPlane
@@ -1176,6 +1183,8 @@ export default function Hand3D({
                   renderOrder={renderOrder}
                   interactive={!isDragging && !showCardBacks}
                   elevation={0.002 + 0.018 * (hoverWeight || 0)}
+                  lit={true} // Hand cards use lit material with fixed directional light in hand group
+                  castShadow={false} // Hand cards should not cast shadows on the board
                   textureUrl={
                     showCardBacks
                       ? ownerIsMagician

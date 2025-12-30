@@ -6,6 +6,8 @@ import {
   SRGBColorSpace,
   Texture,
   TextureLoader,
+  LinearFilter,
+  LinearMipmapLinearFilter,
   type WebGLRenderer,
 } from "three";
 import { KTX2Loader } from "three/examples/jsm/loaders/KTX2Loader.js";
@@ -150,11 +152,27 @@ function normalizeTexture(
     changed = true;
   }
 
-  // Improve readability of card text/details (use moderate anisotropy to save memory)
+  // Set proper texture filtering to prevent moire/ripple patterns
+  if (t.minFilter !== LinearMipmapLinearFilter) {
+    t.minFilter = LinearMipmapLinearFilter;
+    changed = true;
+  }
+  if (t.magFilter !== LinearFilter) {
+    t.magFilter = LinearFilter;
+    changed = true;
+  }
+  // Generate mipmaps for smooth filtering at various distances
+  if (!t.generateMipmaps) {
+    t.generateMipmaps = true;
+    changed = true;
+  }
+
+  // Improve readability of card text/details (use higher anisotropy to reduce ripple at angles)
   if (gl) {
     try {
       const maxAniso = gl.capabilities.getMaxAnisotropy();
-      const desired = maxAniso && maxAniso > 1 ? Math.min(4, maxAniso) : 0;
+      // Use max available anisotropy for best quality at oblique angles
+      const desired = maxAniso && maxAniso > 1 ? Math.min(16, maxAniso) : 0;
       if (desired && t.anisotropy !== desired) {
         t.anisotropy = desired;
         changed = true;

@@ -206,6 +206,14 @@ function createLobbyFeature(deps) {
   }
 
   function getLobbyInfo(lobby) {
+    // Look up match status if match exists
+    let matchStatus = null;
+    if (lobby.matchId) {
+      const match = matches.get(lobby.matchId);
+      if (match && typeof match.status === "string") {
+        matchStatus = match.status;
+      }
+    }
     return {
       id: lobby.id,
       name: lobby.name,
@@ -217,6 +225,7 @@ function createLobbyFeature(deps) {
       readyPlayerIds: Array.from(lobby.ready),
       plannedMatchType: lobby.plannedMatchType,
       matchId: lobby.matchId || null,
+      matchStatus, // 'waiting' | 'in_progress' | 'ended' | null
       startedAt: lobby.createdAt || lobby.lastActive || null,
       soatcLeagueMatch: lobby.soatcLeagueMatch || null,
       allowSpectators: lobby.allowSpectators || false,

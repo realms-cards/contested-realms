@@ -866,8 +866,16 @@ export default function Draft3DPage() {
           <ambientLight intensity={0.8} />
           <directionalLight
             position={[10, 12, 8]}
-            intensity={1.35}
+            intensity={1.5}
             castShadow
+            shadow-mapSize-width={2048}
+            shadow-mapSize-height={2048}
+            shadow-camera-far={50}
+            shadow-camera-left={-15}
+            shadow-camera-right={15}
+            shadow-camera-top={15}
+            shadow-camera-bottom={-15}
+            shadow-bias={-0.0005}
           />
 
           <Physics gravity={[0, -9.81, 0]}>
