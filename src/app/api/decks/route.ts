@@ -83,14 +83,14 @@ export async function GET() {
               updatedAt: true,
             },
           }),
-          // Get public decks from other users
+          // Get precon decks only (from system user public-decks@system.local)
+          // User's own public decks are already included in myDecks
           prisma.deck.findMany({
             where: {
               isPublic: true,
-              userId: { not: userId },
+              user: { email: "public-decks@system.local" },
             },
             orderBy: { createdAt: "desc" },
-            take: 50, // Limit to recent 50 public decks
             select: {
               id: true,
               name: true,

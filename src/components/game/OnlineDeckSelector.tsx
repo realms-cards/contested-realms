@@ -252,7 +252,7 @@ export default function OnlineDeckSelector({
                     } catch {}
                   }}
                 />
-                Include public decks
+                Include precon decks
               </label>
             </div>
           )}
@@ -298,10 +298,10 @@ export default function OnlineDeckSelector({
                 </optgroup>
               )}
               {includePublic && publicDecks.length > 0 && (
-                <optgroup label="Public Decks">
+                <optgroup label="Precon Decks">
                   {publicDecks.map((deck) => (
                     <option key={deck.id} value={deck.id}>
-                      {deck.name} ({deck.format}) — {deck.userName}
+                      {deck.name} ({deck.format})
                     </option>
                   ))}
                 </optgroup>
