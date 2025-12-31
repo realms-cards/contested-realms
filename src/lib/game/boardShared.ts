@@ -22,11 +22,13 @@ export type BodyApi = {
 // Shared stack/placement constants for permanents on the board.
 export const STACK_SPACING = TILE_SIZE * 0.32;
 export const STACK_MARGIN_Z = TILE_SIZE * 0.1;
-// Each stacked card lifts by full card thickness + small margin so they sit on top of each other
+// Each stacked card lifts by card thickness so they sit on top of each other
 export const STACK_LAYER_LIFT = CARD_THICK * 1.2;
-export const BASE_CARD_ELEVATION = CARD_THICK * 0.55;
-export const BURROWED_ELEVATION = CARD_THICK * 0.08;
-export const RUBBLE_ELEVATION = CARD_THICK * 0.04;
+// Card elevations - Y position is center of 3D card (thickness ~0.003)
+// Cards rest on playmat (Y=0), so center is at half thickness
+export const BURROWED_ELEVATION = CARD_THICK * 0.5; // Card center when lying flat
+export const BASE_CARD_ELEVATION = CARD_THICK * 2; // Sites/normal cards slightly above burrowed
+export const RUBBLE_ELEVATION = CARD_THICK * 2; // Same as BASE_CARD_ELEVATION to sit at site level
 export const AVATAR_AVOID_Z = TILE_SIZE * 0.15;
 export const TILE_OFFSET_LIMIT_X = TILE_SIZE * 0.35;
 export const TILE_OFFSET_LIMIT_Z = TILE_SIZE * 0.65; // Increased to allow reaching tile center and beyond

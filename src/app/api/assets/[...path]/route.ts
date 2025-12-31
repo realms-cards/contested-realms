@@ -82,8 +82,8 @@ export async function GET(
         "earth.webp",
         "cardback_spellbook.png",
         "cardback_spellbook.webp",
-        "cardback_atlas.png",
-        "cardback_atlas.webp",
+        "cardback_atlas_landscape.png",
+        "cardback_atlas_landscape.webp",
         // Booster pack images
         "alphabeta-booster.png",
         "arthurian-booster.png",
@@ -261,7 +261,7 @@ export async function GET(
       "earth.png",
       // Card back images
       "cardback_spellbook.png",
-      "cardback_atlas.png",
+      "cardback_atlas_landscape.png",
       // Booster pack images
       "beta-booster.png",
       "alpha-booster.png",

@@ -1,5 +1,6 @@
 import type { ThreeEvent } from "@react-three/fiber";
 import type { MutableRefObject } from "react";
+import { BASE_CARD_ELEVATION } from "@/lib/game/boardShared";
 import CardOutline from "@/lib/game/components/CardOutline";
 import CardPlane from "@/lib/game/components/CardPlane";
 import { CARD_LONG, CARD_SHORT, PLAYER_COLORS } from "@/lib/game/constants";
@@ -313,7 +314,7 @@ export function SiteCard({
             depthWrite
             depthTest
             rotationZ={rotZ}
-            elevation={0.001}
+            elevation={BASE_CARD_ELEVATION}
             renderOrder={10}
             textureUrl={!site.card.slug ? "/api/assets/earth.png" : undefined}
             onPointerDown={(e) => {
@@ -356,7 +357,7 @@ export function SiteCard({
         <mesh
           rotation-x={-Math.PI / 2}
           rotation-z={rotZ}
-          position={[edgeOffset.x, 0.001, edgeOffset.z]}
+          position={[edgeOffset.x, BASE_CARD_ELEVATION, edgeOffset.z]}
           castShadow
           onPointerDown={(e) => {
             handlePointerDown(e);

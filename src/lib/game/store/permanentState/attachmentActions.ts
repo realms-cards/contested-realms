@@ -1,4 +1,5 @@
 import type { StateCreator } from "zustand";
+import { isMonumentByName, isAutomatonByName } from "../omphalosState";
 import type { GameState, Permanents, PlayerKey } from "../types";
 import {
   createPermanentDeltaPatch,
@@ -69,19 +70,25 @@ export const createAttachmentActionsSlice: StateCreator<
 
       const itemType = (token.card.type || "").toLowerCase();
       const itemSubTypes = (token.card.subTypes || "").toLowerCase();
+      const itemName = token.card.name || "";
       const isToken = itemType.includes("token");
       const isArtifact = itemType.includes("artifact");
-      const isMonument = itemSubTypes.includes("monument");
-      const isAutomaton = itemSubTypes.includes("automaton");
+      const isMonument =
+        itemSubTypes.includes("monument") || isMonumentByName(itemName);
+      const isAutomaton =
+        itemSubTypes.includes("automaton") || isAutomatonByName(itemName);
       const isCarryableArtifact = isArtifact && !isMonument && !isAutomaton;
       if (!isToken && !isCarryableArtifact) return state;
 
       const targetType = (target.card.type || "").toLowerCase();
       const targetSubTypes = (target.card.subTypes || "").toLowerCase();
+      const targetName = target.card.name || "";
       const targetIsToken = targetType.includes("token");
       const targetIsArtifact = targetType.includes("artifact");
-      const targetIsMonument = targetSubTypes.includes("monument");
-      const targetIsAutomaton = targetSubTypes.includes("automaton");
+      const targetIsMonument =
+        targetSubTypes.includes("monument") || isMonumentByName(targetName);
+      const targetIsAutomaton =
+        targetSubTypes.includes("automaton") || isAutomatonByName(targetName);
       const targetIsCarryableArtifact =
         targetIsArtifact && !targetIsMonument && !targetIsAutomaton;
       if (targetIsToken || targetIsCarryableArtifact) return state;

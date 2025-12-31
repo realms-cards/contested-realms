@@ -6,6 +6,7 @@ import { type Object3D } from "three";
 import { type StoreApi, type UseBoundStore } from "zustand";
 // (overlay components are no longer used)
 import { useSound } from "@/lib/contexts/SoundContext";
+import { useGraphicsSettings } from "@/hooks/useGraphicsSettings";
 import {
   AVATAR_AVOID_Z,
   BASE_CARD_ELEVATION,
@@ -40,6 +41,10 @@ import {
   type GameState,
   type PlayerKey,
 } from "@/lib/game/store";
+import {
+  isMonumentByName,
+  isAutomatonByName,
+} from "@/lib/game/store/omphalosState";
 import { seatFromOwner } from "@/lib/game/store/utils/boardHelpers";
 import { preloadCardbackTextures } from "@/lib/game/textures/useCardTexture";
 import { generateInteractionRequestId } from "@/lib/net/interactions";
@@ -72,7 +77,7 @@ function CardbackPreloader() {
     const urlsToPreload: string[] = [
       // Always preload default cardbacks
       "/api/assets/cardback_spellbook.png",
-      "/api/assets/cardback_atlas.png",
+      "/api/assets/cardback_atlas_landscape.png",
     ];
 
     // Add custom cardback URLs for both players
@@ -167,6 +172,7 @@ export default function Board({
   >;
   const useScopedStore = <T,>(selector: (state: GameState) => T): T =>
     resolvedStoreApi(selector);
+  const { settings: graphicsSettings } = useGraphicsSettings();
   const isSpectator = interactionMode === "spectator";
   const boardState = useScopedStore((s) => s.board);
   const fallbackBoard = useMemo(() => createInitialBoard(), []);
@@ -663,12 +669,16 @@ export default function Board({
   };
 
   // Helper to check if a card is a carryable artifact
+  // Excludes Monuments and Automatons (uses name-based fallback when subTypes missing)
   const isCarryableArtifact = (card: CardRef): boolean => {
     const cardType = (card.type || "").toLowerCase();
     const cardSubTypes = (card.subTypes || "").toLowerCase();
+    const cardName = card.name || "";
     const isArtifact = cardType.includes("artifact");
-    const isMonument = cardSubTypes.includes("monument");
-    const isAutomaton = cardSubTypes.includes("automaton");
+    const isMonument =
+      cardSubTypes.includes("monument") || isMonumentByName(cardName);
+    const isAutomaton =
+      cardSubTypes.includes("automaton") || isAutomatonByName(cardName);
     return isArtifact && !isMonument && !isAutomaton;
   };
 
@@ -1129,6 +1139,7 @@ export default function Board({
             : playmatUrl
         }
         showOverlay={showPlaymatOverlay}
+        showTable={graphicsSettings.showTable}
       />
 
       {/* Interactive tiles */}

@@ -5,7 +5,7 @@ import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { flushSync } from "react-dom";
 import { Group } from "three";
 import { NumberBadge, type Digit } from "@/components/game/manacost";
-import { BASE_CARD_ELEVATION, BodyApi } from "@/lib/game/boardShared";
+import { BodyApi } from "@/lib/game/boardShared";
 import { detectSpellcasterSync } from "@/lib/game/cardAbilities";
 import CardOutline from "@/lib/game/components/CardOutline";
 import CardPlane from "@/lib/game/components/CardPlane";
@@ -292,9 +292,28 @@ export function PermanentStack({
   const boardHalfW = (boardSize.w * TILE_SIZE) / 2;
   const boardHalfH = (boardSize.h * TILE_SIZE) / 2;
 
+  // Sort items so burrowed/submerged cards render first (at bottom of stack)
+  // Site stays on top, submerged card goes underneath
+  const [cellX, cellY] = key.split(",").map(Number);
+  const sortedItems = [...items]
+    .map((p, originalIdx) => ({ p, originalIdx }))
+    .sort((a, b) => {
+      const aPermanentId = cellX * 100000 + cellY * 1000 + a.originalIdx;
+      const bPermanentId = cellX * 100000 + cellY * 1000 + b.originalIdx;
+      const aState = permanentPositions[aPermanentId]?.state;
+      const bState = permanentPositions[bPermanentId]?.state;
+      const aIsBurrowed = aState === "burrowed" || aState === "submerged";
+      const bIsBurrowed = bState === "burrowed" || bState === "submerged";
+      // Burrowed cards go first (bottom of stack)
+      if (aIsBurrowed && !bIsBurrowed) return -1;
+      if (!aIsBurrowed && bIsBurrowed) return 1;
+      return 0;
+    });
+
   return (
     <>
-      {items.map((p, idx) => {
+      {sortedItems.map(({ p, originalIdx }, sortedIdx) => {
+        const idx = originalIdx; // Use original index for permanentId and selection matching
         const remoteDragSet = remoteDragLookup.get(key);
         if (remoteDragSet?.has(idx)) {
           return null;
@@ -339,8 +358,7 @@ export function PermanentStack({
         const offX = p.offset?.[0] ?? 0;
         const offZ = p.offset?.[1] ?? 0;
 
-        // Use cell position + index as unique ID to avoid linking multiple copies of the same card
-        const [cellX, cellY] = key.split(",").map(Number);
+        // Use cell position + original index as unique ID
         const permanentId = cellX * 100000 + cellY * 1000 + idx;
         const permanentPosition = permanentPositions[permanentId];
         const isBurrowed =
@@ -349,19 +367,31 @@ export function PermanentStack({
 
         const permId = (p.instanceId ?? `perm:${key}:${idx}`) as string;
         const isLastTouched = lastTouchedId === permId;
+        // Count burrowed cards in this stack for elevation offset
+        const burrowedCount = sortedItems.filter(
+          ({ p: _sp, originalIdx: oi }) => {
+            const pid = cellX * 100000 + cellY * 1000 + oi;
+            const pstate = permanentPositions[pid]?.state;
+            return pstate === "burrowed" || pstate === "submerged";
+          }
+        ).length;
+
+        // Burrowed cards at ground level, non-burrowed cards elevated above them
         const baseY = isBurrowed
           ? burrowedElevation
           : tokenSiteReplace
           ? rubbleElevation
-          : baseElevation;
+          : baseElevation + burrowedCount * layerLift; // Lift above any burrowed cards
         const isTopCandidate =
           (dragging && dragging.from === key && dragging.index === idx) ||
           isSel ||
           isLastTouched;
+        // Stack index for non-burrowed cards only (burrowed cards don't stack)
+        const nonBurrowedIdx = isBurrowed ? 0 : sortedIdx - burrowedCount;
         const effectiveStackIndex =
           !isBurrowed && !tokenSiteReplace && isTopCandidate
-            ? items.length + 1
-            : idx;
+            ? sortedItems.length - burrowedCount + 1
+            : nonBurrowedIdx;
         const stackLift =
           !isBurrowed && !tokenSiteReplace
             ? effectiveStackIndex * layerLift
@@ -509,9 +539,7 @@ export function PermanentStack({
             />
             <group
               visible={!isLocalDragGhost}
-              scale={
-                tokenSiteReplace ? [1, 1, 1] : [cardScale, cardScale, cardScale]
-              }
+              scale={tokenSiteReplace ? [1, 1, 1] : [cardScale, 1, cardScale]}
               userData={{ cardInstance: permId }}
               onPointerDown={(e) => {
                 if (!isPrimaryCardHit(e)) {
@@ -1084,9 +1112,10 @@ export function PermanentStack({
                         : CARD_LONG
                     }
                     rotationZ={rotZ}
-                    elevation={0.005}
-                    depthWrite={!tokenSiteReplace}
-                    renderOrder={tokenSiteReplace ? -5 : 100}
+                    elevation={0}
+                    depthWrite
+                    depthTest
+                    renderOrder={tokenSiteReplace ? 5 : 100}
                   />
                 ) : (
                   <CardPlane
@@ -1095,14 +1124,14 @@ export function PermanentStack({
                     height={CARD_LONG}
                     rotationZ={rotZ}
                     renderOrder={
-                      isBurrowed
-                        ? -10
-                        : isDraggingPermanent || isSel || isLastTouched
+                      isDraggingPermanent || isSel || isLastTouched
                         ? 1000
+                        : isBurrowed
+                        ? 50
                         : 100
                     }
-                    depthWrite={!isBurrowed}
-                    depthTest={true}
+                    depthWrite
+                    depthTest
                     textureUrl={
                       p.faceDown
                         ? "/api/assets/cardback_spellbook.png"
@@ -1207,7 +1236,8 @@ export function PermanentStack({
                           key={`attached-stolen-${attachIdx}`}
                           position={[
                             attachOffsetX,
-                            BASE_CARD_ELEVATION - CARD_THICK * 0.05,
+                            (isBurrowed ? burrowedElevation : baseElevation) -
+                              CARD_THICK * 0.05,
                             offsetZ,
                           ]}
                         >
@@ -1241,7 +1271,8 @@ export function PermanentStack({
                           key={`attached-${attachIdx}`}
                           position={[
                             attachOffsetX,
-                            BASE_CARD_ELEVATION + CARD_THICK * 0.1,
+                            (isBurrowed ? burrowedElevation : baseElevation) +
+                              CARD_THICK * 0.1,
                             offsetZ,
                           ]}
                         >
@@ -1272,7 +1303,8 @@ export function PermanentStack({
                           key={`attached-${attachIdx}`}
                           position={[
                             attachOffsetX,
-                            BASE_CARD_ELEVATION - CARD_THICK * 0.05,
+                            (isBurrowed ? burrowedElevation : baseElevation) -
+                              CARD_THICK * 0.05,
                             offsetZ,
                           ]}
                         >
@@ -1281,9 +1313,10 @@ export function PermanentStack({
                             width={artifactW}
                             height={artifactH}
                             rotationZ={rotZ}
-                            elevation={-0.001}
+                            elevation={isBurrowed ? 0 : -0.001}
                             renderOrder={parentRenderOrder - 10 - attachIdx}
-                            depthWrite={false}
+                            depthWrite
+                            depthTest
                             interactive
                             onPointerOver={(evt: ThreeEvent<PointerEvent>) => {
                               evt.stopPropagation();

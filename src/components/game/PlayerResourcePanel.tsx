@@ -1,8 +1,9 @@
 "use client";
 
-import { useShallow } from "zustand/react/shallow";
+import { useMemo } from "react";
 import { useGameStore } from "@/lib/game/store";
 import type { PlayerKey } from "@/lib/game/store";
+import { computeThresholdTotals } from "@/lib/game/store/utils/resourceHelpers";
 import { useTouchDevice } from "@/lib/hooks/useTouchDevice";
 
 // Element config matching Threshold3D exactly
@@ -112,10 +113,18 @@ interface ThresholdRowProps {
 }
 
 function ThresholdRow({ thresholds }: ThresholdRowProps) {
+  console.log("[ThresholdRow] thresholds:", thresholds);
   // Only show elements that have at least 1 threshold
   const activeElements = ELEMENTS.filter((el) => (thresholds[el.key] ?? 0) > 0);
 
-  if (activeElements.length === 0) return null;
+  // DEBUG: Show placeholder when no thresholds (remove after debugging)
+  if (activeElements.length === 0) {
+    return (
+      <div className="text-xs text-gray-500" title={JSON.stringify(thresholds)}>
+        (no thresh)
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col items-center gap-1">
@@ -224,9 +233,38 @@ export function PlayerResourceColumn({
   const addMana = useGameStore((s) => s.addMana);
   const actorKey = useGameStore((s) => s.actorKey);
   const manaOffset = useGameStore((s) => s.players[player]?.mana ?? 0);
-  const thresholds = useGameStore(
-    useShallow((s) => s.getThresholdTotals(player))
-  );
+
+  // Subscribe to granular state slices for threshold reactivity
+  const boardSize = useGameStore((s) => s.board.size);
+  const boardSites = useGameStore((s) => s.board.sites);
+  const permanents = useGameStore((s) => s.permanents);
+  const avatar = useGameStore((s) => s.avatars[player]);
+  const specialSiteState = useGameStore((s) => s.specialSiteState);
+
+  // Compute thresholds from subscribed state
+  const thresholds = useMemo(() => {
+    const result = computeThresholdTotals(
+      { size: boardSize, sites: boardSites },
+      permanents,
+      player,
+      avatar,
+      specialSiteState
+    );
+    // DEBUG: Log explicit site data for threshold debugging
+    const siteEntries = Object.entries(boardSites ?? {});
+    console.log(`[PlayerResourceColumn] ${player} thresholds:`, result);
+    console.log(`[PlayerResourceColumn] ${player} site data:`, {
+      siteCount: siteEntries.length,
+      sites: siteEntries.map(([k, s]) => ({
+        key: k,
+        name: (s as { card?: { name?: string } })?.card?.name,
+        owner: (s as { owner?: number })?.owner,
+        thresholds: (s as { card?: { thresholds?: unknown } })?.card
+          ?.thresholds,
+      })),
+    });
+    return result;
+  }, [boardSize, boardSites, permanents, player, avatar, specialSiteState]);
   const getAvailableMana = useGameStore((s) => s.getAvailableMana);
 
   // Use the store's getAvailableMana which includes all special mana sources
@@ -280,6 +318,7 @@ export default function PlayerResourcePanels({
   readOnly = false,
   dragFromHand = false,
 }: PlayerResourcePanelsProps) {
+  console.log("[PlayerResourcePanels] Rendering, myPlayerKey:", myPlayerKey);
   // Suppress unused vars - kept for API compatibility
   void playerNames;
   void showYouLabels;

@@ -23,6 +23,7 @@ const COMMON_SHORTCUTS: ShortcutItem[] = [
   { keys: ["S", "↓"], description: "Pan camera down" },
   { keys: ["A", "←"], description: "Pan camera left" },
   { keys: ["D", "→"], description: "Pan camera right" },
+  { keys: ["Y", "C"], description: "Rotate camera left / right" },
   { keys: ["Esc"], description: "Close dialogs / Cancel" },
 ];
 

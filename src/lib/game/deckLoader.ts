@@ -84,6 +84,19 @@ export async function loadDeckFor(
 
     const data = await res.json();
 
+    // DEBUG: Log API response to see if thresholds are included
+    console.log(
+      `[loadDeckFor] ${who} API response atlas sites:`,
+      (data?.atlas || [])
+        .filter((c: { type?: string }) =>
+          c?.type?.toLowerCase().includes("site")
+        )
+        .map((c: { name?: string; thresholds?: unknown }) => ({
+          name: c?.name,
+          thresholds: c?.thresholds,
+        }))
+    );
+
     // Pre-cache card images in the background for offline play
     preCacheDeckFromResponse(data);
 

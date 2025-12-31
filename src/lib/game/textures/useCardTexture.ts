@@ -356,7 +356,7 @@ export function useCardTexture({
         "air.png",
         "water.png",
         "earth.png",
-        "cardback_atlas.png",
+        "cardback_atlas_landscape.png",
         "cardback_spellbook.png",
         // Booster pack images
         "beta-booster.png",

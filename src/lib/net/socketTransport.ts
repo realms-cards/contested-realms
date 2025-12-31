@@ -302,6 +302,10 @@ export class SocketTransport implements GameTransport {
   private authFailureCount = 0;
   private lastAuthFailureTime = 0;
 
+  // Visibility change handler for reconnection on tab focus
+  private visibilityHandler: (() => void) | null = null;
+  private connectionOpts: { playerId?: string; displayName: string } | null = null;
+
   private static getMessageType(m: unknown): string {
     if (
       m &&
@@ -357,6 +361,53 @@ export class SocketTransport implements GameTransport {
     }
     this.authFailureCount = 0;
     this.lastAuthFailureTime = 0;
+  }
+
+  private setupVisibilityHandler(): void {
+    if (typeof document === "undefined") return;
+    if (this.visibilityHandler) return; // Already set up
+
+    this.visibilityHandler = async () => {
+      if (document.visibilityState !== "visible") return;
+
+      // Check if socket exists but is disconnected
+      if (this.socket && !this.socket.connected && !this.isIntentionalDisconnect) {
+        console.log("[Transport] Tab became visible, socket disconnected - attempting reconnect");
+
+        // Refresh token before reconnecting
+        try {
+          const res = await fetch("/api/socket-token", { credentials: "include" });
+          if (res.ok) {
+            const j = await res.json();
+            type ManagerWithOpts = { opts: { auth?: Record<string, unknown> }; reconnection: boolean };
+            const mgr = this.socket.io as unknown as ManagerWithOpts;
+            mgr.opts.auth = { token: j?.token as string };
+            mgr.reconnection = true;
+            this.connectionState = "reconnecting";
+            this.socket.connect();
+          } else {
+            // Still try to reconnect with existing auth
+            this.connectionState = "reconnecting";
+            this.socket.connect();
+          }
+        } catch (e) {
+          console.warn("[Transport] Failed to refresh token on visibility change:", e);
+          // Still try to reconnect with existing auth
+          this.connectionState = "reconnecting";
+          this.socket.connect();
+        }
+      }
+    };
+
+    document.addEventListener("visibilitychange", this.visibilityHandler);
+  }
+
+  private cleanupVisibilityHandler(): void {
+    if (typeof document === "undefined") return;
+    if (this.visibilityHandler) {
+      document.removeEventListener("visibilitychange", this.visibilityHandler);
+      this.visibilityHandler = null;
+    }
   }
 
   getConnectionState():
@@ -434,8 +485,10 @@ export class SocketTransport implements GameTransport {
     }
 
     this.socket = socket;
+    this.connectionOpts = opts; // Store for visibility-triggered reconnects
     this.setupReconnectionHandlers(socket, opts);
     this.attachGenericHandlers(socket);
+    this.setupVisibilityHandler();
 
     await new Promise<void>((resolve, reject) => {
       let resolved = false;
@@ -780,8 +833,10 @@ export class SocketTransport implements GameTransport {
     if (!this.socket) return;
     this.isIntentionalDisconnect = true;
     this.connectionState = "disconnected";
+    this.cleanupVisibilityHandler();
     this.socket.disconnect();
     this.socket = undefined;
+    this.connectionOpts = null;
   }
 
   async joinLobby(lobbyId?: string): Promise<{ lobbyId: string }> {

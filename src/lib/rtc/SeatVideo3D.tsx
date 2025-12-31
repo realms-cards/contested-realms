@@ -75,6 +75,9 @@ export function SeatVideo3D({
     const tex = new THREE.VideoTexture(vid);
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.flipY = false; // Better for video textures
+    tex.generateMipmaps = false; // Video textures don't support mipmap generation
+    tex.minFilter = THREE.LinearFilter; // Use linear filter instead of mipmap filter
+    tex.magFilter = THREE.LinearFilter;
     tex.needsUpdate = true;
     return tex;
   }, []);

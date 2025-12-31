@@ -1,4 +1,5 @@
 import type { StateCreator } from "zustand";
+import { isMonumentByName, isAutomatonByName } from "../omphalosState";
 import type {
   CellKey,
   GameState,
@@ -261,9 +262,12 @@ export const createPermanentMovementSlice: StateCreator<
         const attached = arr[idx];
         const attachType = (attached.card.type || "").toLowerCase();
         const attachSubTypes = (attached.card.subTypes || "").toLowerCase();
+        const attachName = attached.card.name || "";
         const isArtifact = attachType.includes("artifact");
-        const isMonument = attachSubTypes.includes("monument");
-        const isAutomaton = attachSubTypes.includes("automaton");
+        const isMonument =
+          attachSubTypes.includes("monument") || isMonumentByName(attachName);
+        const isAutomaton =
+          attachSubTypes.includes("automaton") || isAutomatonByName(attachName);
         const isCarryableArtifact = isArtifact && !isMonument && !isAutomaton;
 
         if (isCarryableArtifact) {

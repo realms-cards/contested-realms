@@ -15,10 +15,10 @@ import { OnlineContext } from "@/app/online/online-context";
 import AuthButton from "@/components/auth/AuthButton";
 import SeatMediaControls from "@/components/rtc/SeatMediaControls";
 import CacheSettingsSection from "@/components/settings/CacheSettingsSection";
+import { useGraphicsSettings } from "@/hooks/useGraphicsSettings";
 import { FEATURE_CARD_SLEEVES } from "@/lib/config/features";
 import { useColorBlind } from "@/lib/contexts/ColorBlindContext";
 import { useLoadingContext } from "@/lib/contexts/LoadingContext";
-import { useGraphicsSettings } from "@/hooks/useGraphicsSettings";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
 
@@ -76,8 +76,11 @@ export default function UserBadge({
   } | null>(null);
   const { enabled: colorBlindEnabled, setEnabled: setColorBlindEnabled } =
     useColorBlind();
-  const { settings: graphicsSettings, toggleEnhanced3DCards } =
-    useGraphicsSettings();
+  const {
+    settings: graphicsSettings,
+    toggleEnhanced3DCards,
+    toggleShowTable,
+  } = useGraphicsSettings();
   const [showOpponentPlaymat, setShowOpponentPlaymat] = useState(true);
   const [playmatPrefLoading, setPlaymatPrefLoading] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -871,12 +874,18 @@ export default function UserBadge({
                   }`}
                 >
                   <div className="min-w-0">
-                    <div className="text-xs text-slate-200 font-medium">Enhanced 3D</div>
-                    <div className="text-[10px] text-slate-400 truncate">Lit cards with depth</div>
+                    <div className="text-xs text-slate-200 font-medium">
+                      Enhanced 3D
+                    </div>
+                    <div className="text-[10px] text-slate-400 truncate">
+                      Lit cards with depth
+                    </div>
                   </div>
                   <span
                     className={`shrink-0 w-2.5 h-2.5 rounded-full ${
-                      graphicsSettings.enhanced3DCards ? "bg-purple-300" : "bg-slate-500"
+                      graphicsSettings.enhanced3DCards
+                        ? "bg-purple-300"
+                        : "bg-slate-500"
                     }`}
                   />
                 </button>
@@ -892,8 +901,12 @@ export default function UserBadge({
                   }`}
                 >
                   <div className="min-w-0">
-                    <div className="text-xs text-slate-200 font-medium">Color blind</div>
-                    <div className="text-[10px] text-slate-400 truncate">Accessible colors</div>
+                    <div className="text-xs text-slate-200 font-medium">
+                      Color blind
+                    </div>
+                    <div className="text-[10px] text-slate-400 truncate">
+                      Accessible colors
+                    </div>
                   </div>
                   <span
                     className={`shrink-0 w-2.5 h-2.5 rounded-full ${
@@ -916,12 +929,43 @@ export default function UserBadge({
                   }`}
                 >
                   <div className="min-w-0">
-                    <div className="text-xs text-slate-200 font-medium">Opponent mat</div>
-                    <div className="text-[10px] text-slate-400 truncate">Show custom playmats</div>
+                    <div className="text-xs text-slate-200 font-medium">
+                      Opponent mat
+                    </div>
+                    <div className="text-[10px] text-slate-400 truncate">
+                      Show custom playmats
+                    </div>
                   </div>
                   <span
                     className={`shrink-0 w-2.5 h-2.5 rounded-full ${
                       showOpponentPlaymat ? "bg-emerald-300" : "bg-slate-500"
+                    }`}
+                  />
+                </button>
+
+                {/* Show 3D table */}
+                <button
+                  type="button"
+                  onClick={toggleShowTable}
+                  className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg ring-1 transition-colors text-left ${
+                    graphicsSettings.showTable
+                      ? "bg-amber-500/20 ring-amber-500/40"
+                      : "bg-slate-800 ring-slate-600"
+                  }`}
+                >
+                  <div className="min-w-0">
+                    <div className="text-xs text-slate-200 font-medium">
+                      3D Table
+                    </div>
+                    <div className="text-[10px] text-slate-400 truncate">
+                      Wooden table model
+                    </div>
+                  </div>
+                  <span
+                    className={`shrink-0 w-2.5 h-2.5 rounded-full ${
+                      graphicsSettings.showTable
+                        ? "bg-amber-300"
+                        : "bg-slate-500"
                     }`}
                   />
                 </button>

@@ -200,9 +200,15 @@ export default function PlayPage() {
     const saved = await loadHotseatGame();
     if (saved) {
       console.log("[hotseat] Loaded saved game:", saved);
+      console.log("[hotseat] saved.boardSites:", saved.boardSites);
       const state = useGameStore.getState();
       const updates = applyLoadedGame(state, saved);
+      console.log("[hotseat] updates.board:", updates.board);
       useGameStore.setState(updates);
+      console.log(
+        "[hotseat] After setState, store.board.sites:",
+        useGameStore.getState().board?.sites
+      );
       setSetupOpen(false);
       setPrepared(true);
       setP1Ready(true);
@@ -1110,7 +1116,10 @@ export default function PlayPage() {
           minPolarAngle={0}
           maxPolarAngle={Math.PI / 2.4}
         />
-        <KeyboardPanControls enabled={canPanCamera} />
+        <KeyboardPanControls
+          enabled={canPanCamera}
+          viewPlayerNumber={currentPlayer as 1 | 2}
+        />
         <TrackpadOrbitAdapter />
       </ClientCanvas>
 
@@ -1130,14 +1139,16 @@ export default function PlayPage() {
 function KeyboardPanControls({
   enabled = true,
   step = 0.4,
+  viewPlayerNumber = 1,
 }: {
   enabled?: boolean;
   step?: number;
+  viewPlayerNumber?: 1 | 2;
 }) {
   const { controls } = useThree((state) => ({
     controls: state.controls as OrbitControlsImpl | undefined,
   }));
-  useOrbitKeyboardPan(controls, { enabled, panStep: step });
+  useOrbitKeyboardPan(controls, { enabled, panStep: step, viewPlayerNumber });
   useZoomKeyboardShortcuts(controls, { enabled });
   return null;
 }

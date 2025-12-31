@@ -7,7 +7,12 @@ import { cardRefToPreview } from "@/lib/game/card-preview.types";
 import type { CardPreviewData } from "@/lib/game/card-preview.types";
 import CardPlane from "@/lib/game/components/CardPlane";
 import MaterialCardBack from "@/lib/game/components/MaterialCardBack";
-import { CARD_LONG, CARD_SHORT, TILE_SIZE } from "@/lib/game/constants";
+import {
+  CARD_LONG,
+  CARD_SHORT,
+  CARD_THICK,
+  TILE_SIZE,
+} from "@/lib/game/constants";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef, PlayerKey } from "@/lib/game/store";
 
@@ -203,6 +208,8 @@ export default function Piles3D({
             ? 0
             : Math.PI
           : ownerRot + Math.PI;
+        // Atlas needs 180° extra rotation to display upright (landscape card with portrait-oriented texture)
+        const pileRotZ = isAtlas ? rotZ + Math.PI : rotZ;
         const ownerCardbacks = cardbackUrls[owner];
         const presetId = !isCemetery ? ownerCardbacks?.preset : null;
         const cardbackUrl = isCemetery
@@ -210,18 +217,22 @@ export default function Piles3D({
           : presetId
           ? undefined
           : key === "atlas"
-          ? ownerCardbacks?.atlas ?? "/api/assets/cardback_atlas.png"
+          ? ownerCardbacks?.atlas ?? "/api/assets/cardback_atlas_landscape.png"
           : ownerCardbacks?.spellbook ?? "/api/assets/cardback_spellbook.png";
         const w = isAtlas ? CARD_LONG : CARD_SHORT;
         const h = isAtlas ? CARD_SHORT : CARD_LONG;
+        // Physically realistic pile: use real card thickness for all cards
+        const stackSpacing = CARD_THICK * 1.1; // Slight gap between cards
+        const visibleStackCount = cards.length - 1;
+        const topCardElevation = visibleStackCount * stackSpacing;
         return (
           <group key={key} position={[x, 0, z]}>
-            {/* Stack visualization with simpler approach */}
+            {/* Stack visualization with realistic thickness */}
             {cards.length > 0 ? (
               <group>
                 {/* Bottom cards for stack depth (non-interactive) */}
                 {cards
-                  .slice(1, Math.min(cards.length, 4))
+                  .slice(1)
                   .filter((card) => card.slug) // Only render cards with valid slugs
                   .map((card, stackIndex) =>
                     presetId ? (
@@ -230,10 +241,10 @@ export default function Piles3D({
                         presetId={presetId}
                         width={w}
                         height={h}
-                        rotationZ={rotZ}
+                        rotationZ={pileRotZ}
                         depthWrite={false}
                         interactive={false}
-                        elevation={stackIndex * 0.01}
+                        elevation={stackIndex * stackSpacing}
                       />
                     ) : (
                       <CardPlane
@@ -243,10 +254,10 @@ export default function Piles3D({
                         forceTextureUrl={!isCemetery}
                         width={w}
                         height={h}
-                        rotationZ={rotZ}
+                        rotationZ={pileRotZ}
                         depthWrite={false}
                         interactive={false}
-                        elevation={stackIndex * 0.01}
+                        elevation={stackIndex * stackSpacing}
                       />
                     )
                   )}
@@ -256,12 +267,8 @@ export default function Piles3D({
                   {/* Invisible clickable area */}
                   <mesh
                     rotation-x={-Math.PI / 2}
-                    rotation-z={rotZ}
-                    position={[
-                      0,
-                      Math.min(cards.length - 1, 3) * 0.01 + 0.002,
-                      0,
-                    ]}
+                    rotation-z={pileRotZ}
+                    position={[0, topCardElevation + 0.001, 0]}
                     raycast={noRaycast ? () => [] : undefined}
                     onPointerOver={() => {
                       const isDragging = !!dragFromHand || !!dragFromPile;
@@ -460,10 +467,10 @@ export default function Piles3D({
                       presetId={presetId}
                       width={w}
                       height={h}
-                      rotationZ={rotZ}
+                      rotationZ={pileRotZ}
                       depthWrite={true}
                       interactive={false}
-                      elevation={Math.min(cards.length - 1, 3) * 0.01 + 0.01}
+                      elevation={topCardElevation}
                     />
                   ) : (
                     <CardPlane
@@ -472,19 +479,19 @@ export default function Piles3D({
                       forceTextureUrl={!isCemetery}
                       width={w}
                       height={h}
-                      rotationZ={rotZ}
+                      rotationZ={pileRotZ}
                       depthWrite={true}
                       interactive={false}
-                      elevation={Math.min(cards.length - 1, 3) * 0.01 + 0.01}
+                      elevation={topCardElevation}
                     />
                   )}
                 </group>
               </group>
-            ) : (
-              // Empty pile placeholder
+            ) : // Empty pile placeholder - skip for cemetery (no visual indicator)
+            isCemetery ? null : (
               <mesh
                 rotation-x={-Math.PI / 2}
-                rotation-z={rotZ}
+                rotation-z={pileRotZ}
                 position={[0, 0.001, 0]}
                 raycast={noRaycast ? () => [] : undefined}
                 onContextMenu={(e: ThreeEvent<PointerEvent>) => {
@@ -498,8 +505,6 @@ export default function Piles3D({
                   const pileType =
                     key === "atlas"
                       ? "atlas"
-                      : key === "graveyard"
-                      ? "graveyard"
                       : key === "collection"
                       ? "collection"
                       : "spellbook";

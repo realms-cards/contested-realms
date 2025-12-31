@@ -897,8 +897,7 @@ export default function Hand3D({
 
   return (
     <group ref={rootRef}>
-      {/* Fixed light for hand cards - stays with hand, not affected by board rotation */}
-      <directionalLight position={[0, 2, 3]} intensity={1.0} color="#ffffff" />
+      {/* Hand cards use unlit materials, no directional light needed */}
       {/* Unified hand cards in fan */}
       {sortedHand.map((c, i) => {
         const layoutInfo = handLayout[i];
@@ -980,7 +979,7 @@ export default function Hand3D({
                 rotationZ={cardRotationZ}
                 elevation={0}
                 color={remoteHighlightColor}
-                renderOrder={renderOrder - 5}
+                renderOrder={renderOrder + 10000 - 5}
               />
             ) : null}
             {/* Touch selection glow for mobile - tap again to play */}
@@ -991,7 +990,7 @@ export default function Hand3D({
                 rotationZ={cardRotationZ}
                 elevation={0}
                 color={touchSelectColor}
-                renderOrder={renderOrder - 4}
+                renderOrder={renderOrder + 10000 - 4}
               />
             )}
             {/* Invisible larger interaction box to ensure cards are always clickable */}
@@ -1174,26 +1173,27 @@ export default function Hand3D({
                   height={CARD_LONG}
                   rotationZ={cardRotationZ}
                   upright={!flatCards}
-                  depthWrite={showCardBacks ? true : false}
-                  depthTest={showCardBacks ? true : false}
-                  renderOrder={renderOrder}
+                  depthWrite={false}
+                  depthTest={false}
+                  renderOrder={renderOrder + 10000} // Very high to render on top of board elements
                   interactive={!isDragging && !showCardBacks}
                   elevation={0.002 + 0.018 * (hoverWeight || 0)}
-                  lit={true} // Hand cards use lit material with fixed directional light in hand group
-                  castShadow={false} // Hand cards should not cast shadows on the board
+                  lit={false} // Unlit material - completely isolated from scene lighting
+                  castShadow={false}
+                  receiveShadow={false}
+                  opacity={isDraggedCard ? 0.6 : 0.9999} // Slightly < 1 forces transparent render pass for proper renderOrder
                   textureUrl={
                     showCardBacks
                       ? ownerIsMagician
                         ? "/api/assets/cardback_spellbook.png" // Magician: all cards look like spellbook cards
                         : isSite
                         ? ownerCardbacks?.atlas ??
-                          "/api/assets/cardback_atlas.png"
+                          "/api/assets/cardback_atlas_landscape.png"
                         : ownerCardbacks?.spellbook ??
                           "/api/assets/cardback_spellbook.png"
                       : undefined
                   }
                   forceTextureUrl={showCardBacks}
-                  opacity={isDraggedCard ? 0.6 : 1.0} // Make dragged card semi-transparent when shown for return
                 />
               )}
             </group>

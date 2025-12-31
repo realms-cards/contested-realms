@@ -485,7 +485,7 @@ export default function OnlineMulliganScreen({
                       {/* Atlas cardback (landscape) */}
                       <div className="relative w-24 h-16 rounded overflow-hidden ring-1 ring-white/20">
                         <Image
-                          src="/api/assets/cardback_atlas.png"
+                          src="/api/assets/cardback_atlas_landscape.png"
                           alt="Atlas"
                           fill
                           sizes="96px"
