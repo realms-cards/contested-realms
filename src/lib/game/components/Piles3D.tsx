@@ -222,7 +222,8 @@ export default function Piles3D({
         const w = isAtlas ? CARD_LONG : CARD_SHORT;
         const h = isAtlas ? CARD_SHORT : CARD_LONG;
         // Physically realistic pile: use real card thickness for all cards
-        const stackSpacing = CARD_THICK * 1.1; // Slight gap between cards
+        // Multiply by 2 to ensure enough depth buffer separation and visible stack effect
+        const stackSpacing = CARD_THICK * 2;
         const visibleStackCount = cards.length - 1;
         const topCardElevation = visibleStackCount * stackSpacing;
         return (
