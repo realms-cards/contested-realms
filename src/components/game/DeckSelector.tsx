@@ -106,8 +106,7 @@ export default function DeckSelector({ onPrepareComplete }: DeckSelectorProps) {
     <div className="w-full max-w-5xl bg-zinc-900/80 text-white rounded-2xl ring-1 ring-white/10 p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
       <div className="md:col-span-2 flex items-center justify-between gap-4">
         <div className="text-sm opacity-80">
-          Select decks for both players. Optionally include public decks from
-          other players.
+          Select decks for both players. Optionally include precon decks.
         </div>
         <label className="flex items-center gap-2 text-sm">
           <input
@@ -125,7 +124,7 @@ export default function DeckSelector({ onPrepareComplete }: DeckSelectorProps) {
               } catch {}
             }}
           />
-          Include public decks
+          Include precon decks
         </label>
       </div>
 
@@ -152,10 +151,10 @@ export default function DeckSelector({ onPrepareComplete }: DeckSelectorProps) {
               </optgroup>
             )}
             {includePublic && publicDecks.length > 0 && (
-              <optgroup label="Public Decks">
+              <optgroup label="Precon Decks">
                 {publicDecks.map((d) => (
                   <option key={d.id} value={d.id}>
-                    {d.name} ({d.format}) — {d.userName}
+                    {d.name} ({d.format})
                   </option>
                 ))}
               </optgroup>
@@ -196,10 +195,10 @@ export default function DeckSelector({ onPrepareComplete }: DeckSelectorProps) {
               </optgroup>
             )}
             {includePublic && publicDecks.length > 0 && (
-              <optgroup label="Public Decks">
+              <optgroup label="Precon Decks">
                 {publicDecks.map((d) => (
                   <option key={d.id} value={d.id}>
-                    {d.name} ({d.format}) — {d.userName}
+                    {d.name} ({d.format})
                   </option>
                 ))}
               </optgroup>
