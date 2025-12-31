@@ -136,6 +136,8 @@ export default function OnlineD20Screen({
   useEffect(() => {
     if (myRoll === null) {
       setMyDiceComplete(false);
+      // CRITICAL: Reset the roll guard so player can roll again after a tie
+      hasInitiatedRollRef.current = false;
     }
     if (opponentRoll === null) {
       setOpponentDiceComplete(false);

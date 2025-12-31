@@ -52,19 +52,30 @@ export default function D20Dice({
     "/3dmodels/rpg-dice/textures/RPGDiceSet_m.webp",
   ]);
 
-  // Track the previous isRolling state to detect when a new roll starts
+  // Track the previous isRolling state and roll value to detect when a new roll starts
   const prevIsRollingRef = useRef(isRolling);
+  const prevRollRef = useRef(roll);
 
-  // Start rolling when isRolling becomes true (edge trigger)
+  // Start rolling when isRolling becomes true (edge trigger) OR when roll value changes (reroll)
   useEffect(() => {
     // Detect rising edge: was not rolling, now is rolling
-    if (isRolling && !prevIsRollingRef.current) {
+    const risingEdge = isRolling && !prevIsRollingRef.current;
+    // Detect reroll: roll value changed while still rolling (both are numbers)
+    const isReroll =
+      isRolling &&
+      prevIsRollingRef.current &&
+      roll !== null &&
+      prevRollRef.current !== null &&
+      roll !== prevRollRef.current;
+
+    if (risingEdge || isReroll) {
       setHasCompletedRoll(false);
       setRollStartTime(Date.now());
       onRollCompleteCalledRef.current = false;
     }
     prevIsRollingRef.current = isRolling;
-  }, [isRolling]);
+    prevRollRef.current = roll;
+  }, [isRolling, roll]);
 
   // Color based on player or custom override
   const defaultColor = player === "p1" ? "#3b82f6" : "#ef4444"; // blue or red
