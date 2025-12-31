@@ -1,11 +1,12 @@
 "use client";
 
 import { Text } from "@react-three/drei";
+import { useMemo } from "react";
 import type { Intersection, Object3D, Raycaster } from "three";
-import { useShallow } from "zustand/react/shallow";
 import CardPlane from "@/lib/game/components/CardPlane";
 import { CARD_SHORT } from "@/lib/game/constants";
 import { useGameStore, type PlayerKey } from "@/lib/game/store";
+import { computeThresholdTotals } from "@/lib/game/store/utils/resourceHelpers";
 
 function noopRaycast(this: Object3D, _r: Raycaster, _i: Intersection[]) {
   void _r;
@@ -25,8 +26,25 @@ export default function Threshold3D({
   rotationZ = 0,
   direction = "row",
 }: Threshold3DProps) {
-  const thresholds = useGameStore(
-    useShallow((s) => s.getThresholdTotals(owner))
+  // Subscribe to granular state slices for proper reactivity
+  // Using individual selectors ensures re-render when any dependency changes
+  const boardSize = useGameStore((s) => s.board.size);
+  const boardSites = useGameStore((s) => s.board.sites);
+  const permanents = useGameStore((s) => s.permanents);
+  const avatar = useGameStore((s) => s.avatars[owner]);
+  const specialSiteState = useGameStore((s) => s.specialSiteState);
+
+  // Compute thresholds from the subscribed state
+  const thresholds = useMemo(
+    () =>
+      computeThresholdTotals(
+        { size: boardSize, sites: boardSites },
+        permanents,
+        owner,
+        avatar,
+        specialSiteState
+      ),
+    [boardSize, boardSites, permanents, owner, avatar, specialSiteState]
   );
 
   // Layout

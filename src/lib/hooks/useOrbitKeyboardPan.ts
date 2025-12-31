@@ -5,6 +5,8 @@ import type { OrbitControls } from "three-stdlib";
 type Options = {
   enabled?: boolean;
   panStep?: number;
+  /** Player seat (1 or 2) - affects fallback direction in top-down mode */
+  viewPlayerNumber?: 1 | 2;
 };
 
 const PAN_KEYS = new Set([
@@ -19,6 +21,9 @@ const PAN_KEYS = new Set([
   "ArrowLeft",
   "ArrowRight",
 ]);
+
+// Use event.key (character) for rotation to support different keyboard layouts (QWERTY/QWERTZ)
+const ROTATE_KEYS = new Set(["y", "Y", "c", "C"]);
 
 function shouldIgnoreTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -36,7 +41,7 @@ export function useOrbitKeyboardPan(
   controls: OrbitControls | null | undefined,
   options: Options = {}
 ): void {
-  const { enabled = true, panStep = 20 } = options;
+  const { enabled = true, panStep = 20, viewPlayerNumber = 1 } = options;
 
   useEffect(() => {
     if (!controls || !enabled) return;
@@ -72,7 +77,11 @@ export function useOrbitKeyboardPan(
             forward.copy(t).sub(cam.position);
           }
           forward.y = 0;
-          if (forward.lengthSq() < 1e-6) forward.set(0, 0, -1);
+          // In top-down mode, forward becomes near-zero; use seat-aware fallback
+          // Player 1 views from +Z (forward = -Z), Player 2 views from -Z (forward = +Z)
+          if (forward.lengthSq() < 1e-6) {
+            forward.set(0, 0, viewPlayerNumber === 2 ? 1 : -1);
+          }
           forward.normalize();
           // Right vector: up × forward (right-handed)
           const up = new Vector3(0, 1, 0);
@@ -109,6 +118,24 @@ export function useOrbitKeyboardPan(
         }
       }
 
+      const rotateLeft = pressed.has("y") || pressed.has("Y");
+      const rotateRight = pressed.has("c") || pressed.has("C");
+      if (rotateLeft || rotateRight) {
+        const t = controls.target as Vector3;
+        const cam = controlsAny.object;
+        if (cam && cam.position) {
+          const offset = new Vector3().copy(cam.position).sub(t);
+          const sph = new Spherical().setFromVector3(offset);
+          const step = 0.02;
+          // Player 2 views from opposite side, so invert rotation direction
+          const dir = viewPlayerNumber === 2 ? -1 : 1;
+          sph.theta += rotateLeft ? step * dir : -step * dir;
+          offset.setFromSpherical(sph);
+          cam.position.copy(new Vector3().copy(t).add(offset));
+          controls.update?.();
+        }
+      }
+
       if (pressed.size > 0) {
         frame = window.requestAnimationFrame(tick);
       } else {
@@ -118,20 +145,27 @@ export function useOrbitKeyboardPan(
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (!enabled) return;
-      if (!PAN_KEYS.has(event.code)) return;
+      const isPanKey = PAN_KEYS.has(event.code);
+      const isRotateKey = ROTATE_KEYS.has(event.key);
+      if (!isPanKey && !isRotateKey) return;
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       if (shouldIgnoreTarget(event.target)) return;
-      if (pressed.has(event.code)) return;
+      // Use event.key for rotation keys, event.code for others
+      const keyId = isRotateKey ? event.key : event.code;
+      if (pressed.has(keyId)) return;
       event.preventDefault();
-      pressed.add(event.code);
+      pressed.add(keyId);
       if (frame === null) {
         frame = window.requestAnimationFrame(tick);
       }
     };
 
     const handleKeyUp = (event: KeyboardEvent) => {
-      if (!PAN_KEYS.has(event.code)) return;
-      pressed.delete(event.code);
+      const isPanKey = PAN_KEYS.has(event.code);
+      const isRotateKey = ROTATE_KEYS.has(event.key);
+      if (!isPanKey && !isRotateKey) return;
+      const keyId = isRotateKey ? event.key : event.code;
+      pressed.delete(keyId);
       if (pressed.size === 0 && frame !== null) {
         window.cancelAnimationFrame(frame);
         frame = null;
@@ -148,5 +182,5 @@ export function useOrbitKeyboardPan(
         window.cancelAnimationFrame(frame);
       }
     };
-  }, [controls, enabled, panStep]);
+  }, [controls, enabled, panStep, viewPlayerNumber]);
 }

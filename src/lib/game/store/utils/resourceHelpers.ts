@@ -148,6 +148,26 @@ export const computeThresholdTotals = (
   const boardHeight = board?.size?.h ?? 4;
   const totals = emptyThresholds();
 
+  // DEBUG: Log threshold computation inputs
+  if (typeof window !== "undefined" && process.env.NODE_ENV !== "production") {
+    const siteCount = Object.keys(board?.sites ?? {}).length;
+    const allSites = Object.entries(board?.sites ?? {});
+    const ownedSites = allSites.filter(([, s]) => s?.owner === owner);
+    console.log(
+      `[threshold] Computing for ${who} (owner=${owner}): ${siteCount} total sites, ${ownedSites.length} owned by this player`
+    );
+    console.log(
+      `[threshold] All sites:`,
+      allSites.map(([k, s]) => ({
+        key: k,
+        name: s?.card?.name,
+        siteOwner: s?.owner,
+        ownerType: typeof s?.owner,
+        thresholds: s?.card?.thresholds,
+      }))
+    );
+  }
+
   // Elementalist avatar grants +1 to each threshold
   if (avatar && isElementalist(avatar.card?.name)) {
     totals.air += 1;

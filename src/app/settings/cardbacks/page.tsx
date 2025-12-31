@@ -126,7 +126,7 @@ export default function CardbackSettingsPage() {
           url:
             type === "spellbook"
               ? "/api/assets/cardback_spellbook.png"
-              : "/api/assets/cardback_atlas.png",
+              : "/api/assets/cardback_atlas_landscape.png",
         };
       }
       if (ref.startsWith("preset:")) {
@@ -151,7 +151,7 @@ export default function CardbackSettingsPage() {
         url:
           type === "spellbook"
             ? "/api/assets/cardback_spellbook.png"
-            : "/api/assets/cardback_atlas.png",
+            : "/api/assets/cardback_atlas_landscape.png",
       };
     },
     []

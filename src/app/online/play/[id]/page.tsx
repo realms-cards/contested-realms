@@ -3346,7 +3346,10 @@ export default function OnlineMatchPage() {
                     resetKey={viewPlayerNumber}
                   />
                 )}
-                <KeyboardPanControls enabled={canPanCamera} />
+                <KeyboardPanControls
+                  enabled={canPanCamera}
+                  viewPlayerNumber={(viewPlayerNumber ?? 1) as 1 | 2}
+                />
                 <TrackpadOrbitAdapter />
               </ClientCanvas>
             </div>
@@ -3427,14 +3430,16 @@ export default function OnlineMatchPage() {
 function KeyboardPanControls({
   enabled = true,
   step = 0.4,
+  viewPlayerNumber = 1,
 }: {
   enabled?: boolean;
   step?: number;
+  viewPlayerNumber?: 1 | 2;
 }) {
   const { controls } = useThree((state) => ({
     controls: state.controls as OrbitControlsImpl | undefined,
   }));
-  useOrbitKeyboardPan(controls, { enabled, panStep: step });
+  useOrbitKeyboardPan(controls, { enabled, panStep: step, viewPlayerNumber });
   useZoomKeyboardShortcuts(controls, { enabled });
   return null;
 }

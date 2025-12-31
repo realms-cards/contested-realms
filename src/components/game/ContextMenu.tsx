@@ -2,6 +2,7 @@
 
 import { useLayoutEffect, useRef, useState, useEffect } from "react";
 import { useSound } from "@/lib/contexts/SoundContext";
+import { isNecromancer, isDruid } from "@/lib/game/avatarAbilities";
 import {
   detectBurrowSubmergeAbilities,
   detectBurrowSubmergeAbilitiesSync,
@@ -12,8 +13,11 @@ import AttachmentTargetSelectionDialog, {
 } from "@/lib/game/components/AttachmentTargetSelectionDialog";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef } from "@/lib/game/store";
-import { isNecromancer, isDruid } from "@/lib/game/avatarAbilities";
 import { isMasked } from "@/lib/game/store/imposterMaskState";
+import {
+  isMonumentByName,
+  isAutomatonByName,
+} from "@/lib/game/store/omphalosState";
 import { NECROMANCER_SKELETON_COST } from "@/lib/game/store/types";
 import {
   getCellNumber,
@@ -61,6 +65,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   const setDragFromPile = useGameStore((s) => s.setDragFromPile);
   const shuffleSpellbook = useGameStore((s) => s.shuffleSpellbook);
   const shuffleAtlas = useGameStore((s) => s.shuffleAtlas);
+  const drawFromBottom = useGameStore((s) => s.drawFromBottom);
   const openSearchDialog = useGameStore((s) => s.openSearchDialog);
   const openPlacementDialog = useGameStore((s) => s.openPlacementDialog);
   const addTokenToHand = useGameStore((s) => s.addTokenToHand);
@@ -366,6 +371,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   let doTransfer: (() => void) | null = null;
   let transferTo: 1 | 2 | null = null;
   let doDrawFromPile: (() => void) | null = null;
+  let doDrawFromPileBottom: (() => void) | null = null;
   let doShufflePile: (() => void) | null = null;
   let doAddToAtlas: (() => void) | null = null;
   let doSearchPile: (() => void) | null = null;
@@ -519,11 +525,15 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
 
     // Check if this is a carryable artifact
     // Carryable artifacts: type = "Artifact" and subTypes != "Monument" or "Automaton"
+    // Use name-based fallback when subTypes might not be populated
     const cardType = (item?.card?.type || "").toLowerCase();
     const cardSubTypes = (item?.card?.subTypes || "").toLowerCase();
+    const cardName = item?.card?.name || "";
     const isArtifact = cardType.includes("artifact");
-    const isMonument = cardSubTypes.includes("monument");
-    const isAutomaton = cardSubTypes.includes("automaton");
+    const isMonument =
+      cardSubTypes.includes("monument") || isMonumentByName(cardName);
+    const isAutomaton =
+      cardSubTypes.includes("automaton") || isAutomatonByName(cardName);
     const isCarryableArtifactType = isArtifact && !isMonument && !isAutomaton;
     isCarryableArtifact = isCarryableArtifactType && !item?.attachedTo;
 
@@ -1000,6 +1010,13 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         if (!top) return;
         setDragFromPile({ who: t.who, from: t.from, card: top });
         drawFromPileToHand();
+        try {
+          playCardSelect();
+        } catch {}
+        onClose();
+      };
+      doDrawFromPileBottom = () => {
+        drawFromBottom(t.who, t.from as "spellbook" | "atlas");
         try {
           playCardSelect();
         } catch {}
@@ -1755,7 +1772,10 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                 </div>
               )}
 
-              {(doDrawFromPile || doShufflePile || doSearchPile) && (
+              {(doDrawFromPile ||
+                doDrawFromPileBottom ||
+                doShufflePile ||
+                doSearchPile) && (
                 <div className="space-y-2">
                   {doDrawFromPile && (
                     <button
@@ -1763,6 +1783,14 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                       onClick={doDrawFromPile}
                     >
                       Draw top
+                    </button>
+                  )}
+                  {doDrawFromPileBottom && (
+                    <button
+                      className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
+                      onClick={doDrawFromPileBottom}
+                    >
+                      Draw from bottom
                     </button>
                   )}
                   {doSearchPile && (

@@ -4,8 +4,11 @@
 
 ### Dec 30 - Engine improvements
 
-- **added proper visual candy to board views** they have materials, light, shadow and improved selection outline now. you can go back to flat view in settings
+- **welcome to the table** if you don't like it, disable it in user settings! I recommend to hide the playmat and only show the grid on it(button on top)
+- **added proper visual candy to board views** cards have bodym, materials, light, shadow and improved selection outline now. you can go back to flat view in settings
 - **fixed Morgana/Omphalos hand cards being duplicated** to the top of stack
+- **fix monuments and automatons triggering attachment** they should never have ...
+- **fix burrowing/submerging minions**
 
 ### Dec 29 - Druid and Hardening
 

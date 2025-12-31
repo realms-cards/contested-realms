@@ -7,6 +7,8 @@ export interface GraphicsSettings {
   enhanced3DCards: boolean;
   /** Ambient light intensity multiplier (1.0 = default) */
   lightingIntensity: number;
+  /** Show the 3D table model underneath the playmat */
+  showTable: boolean;
 }
 
 const STORAGE_KEY = "sorcery-graphics-settings";
@@ -14,6 +16,7 @@ const STORAGE_KEY = "sorcery-graphics-settings";
 const DEFAULT_SETTINGS: GraphicsSettings = {
   enhanced3DCards: true,
   lightingIntensity: 1.0,
+  showTable: true,
 };
 
 function loadSettings(): GraphicsSettings {
@@ -39,10 +42,12 @@ function saveSettings(settings: GraphicsSettings): void {
 }
 
 /**
- * Hook for managing graphics settings with localStorage persistence
+ * Hook for managing graphics settings with localStorage persistence.
+ * Syncs across components via storage events.
  */
 export function useGraphicsSettings() {
-  const [settings, setSettingsState] = useState<GraphicsSettings>(DEFAULT_SETTINGS);
+  const [settings, setSettingsState] =
+    useState<GraphicsSettings>(DEFAULT_SETTINGS);
   const [isLoaded, setIsLoaded] = useState(false);
 
   // Load settings from localStorage on mount
@@ -51,10 +56,37 @@ export function useGraphicsSettings() {
     setIsLoaded(true);
   }, []);
 
+  // Sync across tabs/components when localStorage changes
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === STORAGE_KEY && e.newValue) {
+        try {
+          setSettingsState({ ...DEFAULT_SETTINGS, ...JSON.parse(e.newValue) });
+        } catch {
+          // Ignore parse errors
+        }
+      }
+    };
+
+    // Also listen for custom event for same-tab sync
+    const handleCustomSync = () => {
+      setSettingsState(loadSettings());
+    };
+
+    window.addEventListener("storage", handleStorageChange);
+    window.addEventListener("graphics-settings-changed", handleCustomSync);
+    return () => {
+      window.removeEventListener("storage", handleStorageChange);
+      window.removeEventListener("graphics-settings-changed", handleCustomSync);
+    };
+  }, []);
+
   const setSettings = useCallback((updates: Partial<GraphicsSettings>) => {
     setSettingsState((prev) => {
       const next = { ...prev, ...updates };
       saveSettings(next);
+      // Dispatch custom event to sync other hook instances in the same tab
+      window.dispatchEvent(new CustomEvent("graphics-settings-changed"));
       return next;
     });
   }, []);
@@ -65,10 +97,16 @@ export function useGraphicsSettings() {
 
   const setLightingIntensity = useCallback(
     (intensity: number) => {
-      setSettings({ lightingIntensity: Math.max(0.5, Math.min(2.0, intensity)) });
+      setSettings({
+        lightingIntensity: Math.max(0.5, Math.min(2.0, intensity)),
+      });
     },
     [setSettings]
   );
+
+  const toggleShowTable = useCallback(() => {
+    setSettings({ showTable: !settings.showTable });
+  }, [settings.showTable, setSettings]);
 
   return {
     settings,
@@ -76,6 +114,7 @@ export function useGraphicsSettings() {
     setSettings,
     toggleEnhanced3DCards,
     setLightingIntensity,
+    toggleShowTable,
   };
 }
 

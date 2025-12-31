@@ -54,6 +54,57 @@ export function isOmphalos(cardName: string): boolean {
   );
 }
 
+// Known monument card names (for fallback when subTypes not populated)
+const MONUMENT_NAMES = [
+  "belfry",
+  "black obelisk",
+  "blasted oak",
+  "chains of prometheus",
+  "orb of ba'al berith",
+  "pendulum of peril",
+  "the immortal throne",
+  "bailey",
+  "the round table",
+  "shrine of the dragonlord",
+  "algor omphalos",
+  "arcade of bones",
+  "cage of sidrak",
+  "char omphalos",
+  "dank omphalos",
+  "makeshift barricade",
+  "pile of skulls",
+  "red rock of ravannis",
+  "sentinel trap",
+  "tombstone wardens",
+  "torrid omphalos",
+];
+
+// Known automaton card names (for fallback when subTypes not populated)
+const AUTOMATON_NAMES = [
+  "crave golem",
+  "purge juggernaut",
+  "undertaker engine",
+  "wicker manikin",
+  "iron man talus",
+  "kairos the archivist",
+  "clay golem",
+  "driftwood marrows",
+  "hemogolem",
+  "i am colossus!",
+];
+
+// Helper to detect Monument cards by name (fallback for missing subTypes)
+export function isMonumentByName(cardName: string): boolean {
+  const name = (cardName || "").toLowerCase();
+  return MONUMENT_NAMES.some((m) => name.includes(m));
+}
+
+// Helper to detect Automaton cards by name (fallback for missing subTypes)
+export function isAutomatonByName(cardName: string): boolean {
+  const name = (cardName || "").toLowerCase();
+  return AUTOMATON_NAMES.some((a) => name.includes(a));
+}
+
 export const createOmphalosSlice: StateCreator<
   GameState,
   [],

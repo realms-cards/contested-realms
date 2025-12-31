@@ -184,6 +184,42 @@ export function useSocket(options: UseSocketOptions = {}): Socket | null {
   const [socket, setSocket] = useState<Socket | null>(null);
   const socketRef = useRef<Socket | null>(null);
 
+  // Handle visibility change - reconnect when tab becomes visible
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState !== "visible") return;
+
+      // Check if we have a socket but it's disconnected
+      if (globalSocket && !globalSocket.connected) {
+        console.log("[useSocket] Tab became visible, socket disconnected - attempting reconnect");
+
+        // Refresh token before reconnecting
+        try {
+          const token = await fetchSocketToken(true); // Force refresh
+          if (token) {
+            type ManagerWithOpts = { opts: { auth?: Record<string, unknown> }; reconnection: boolean };
+            const mgr = globalSocket.io as unknown as ManagerWithOpts;
+            mgr.opts.auth = { token };
+            mgr.reconnection = true;
+            globalSocket.connect();
+          }
+        } catch (e) {
+          console.warn("[useSocket] Failed to refresh token on visibility change:", e);
+          // Still try to reconnect with existing auth
+          globalSocket.connect();
+        }
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, []); // Empty deps - we want this listener to persist
+
   // Initialize socket connection
   useEffect(() => {
     if (!opts.autoConnect) return;

@@ -108,7 +108,7 @@ export default function TournamentControls({
                         src={
                           hit?.slug
                             ? `/api/images/${hit.slug}`
-                            : "/api/assets/cardback_atlas.png"
+                            : "/api/assets/cardback_atlas_landscape.png"
                         }
                         alt={name}
                         fill
