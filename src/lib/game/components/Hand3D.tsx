@@ -388,7 +388,7 @@ export default function Hand3D({
     if (isEdgePlacement) {
       // Board-edge placement (top or bottom relative to viewer)
       const gridHalfH = (boardSize?.h || 4) * TILE_SIZE * 0.5;
-      const marginZ = CARD_LONG * HAND_CARD_SCALE * 0.65; // keep comfortably outside grid
+      const marginZ = CARD_LONG * HAND_CARD_SCALE * 1.3; // push further back to sit behind table edge
       const edge = gridHalfH + marginZ;
       const topZ = viewerPlayerNumber === 1 ? -edge : edge;
       const bottomZ = viewerPlayerNumber === 1 ? edge : -edge;
@@ -1173,15 +1173,17 @@ export default function Hand3D({
                   height={CARD_LONG}
                   rotationZ={cardRotationZ}
                   upright={!flatCards}
-                  depthWrite={false}
-                  depthTest={false}
-                  renderOrder={renderOrder + 10000} // Very high to render on top of board elements
+                  depthWrite={showCardBacks} // Opponent hand: proper depth; Own hand: overlay on top
+                  depthTest={showCardBacks} // Opponent hand: proper depth; Own hand: overlay on top
+                  renderOrder={
+                    showCardBacks ? renderOrder : renderOrder + 10000
+                  } // Own hand needs high renderOrder
                   interactive={!isDragging && !showCardBacks}
                   elevation={0.002 + 0.018 * (hoverWeight || 0)}
                   lit={false} // Unlit material - completely isolated from scene lighting
                   castShadow={false}
                   receiveShadow={false}
-                  opacity={isDraggedCard ? 0.6 : 0.9999} // Slightly < 1 forces transparent render pass for proper renderOrder
+                  opacity={isDraggedCard ? 0.6 : showCardBacks ? 1 : 0.9999} // Opponent: solid; Own: slightly < 1 for renderOrder
                   textureUrl={
                     showCardBacks
                       ? ownerIsMagician
