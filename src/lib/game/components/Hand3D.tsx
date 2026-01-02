@@ -3,6 +3,7 @@
 import { useFrame, useThree } from "@react-three/fiber";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Group, PerspectiveCamera } from "three";
+import { cardbackAtlasUrl, cardbackSpellbookUrl } from "@/lib/assets";
 import { useSound } from "@/lib/contexts/SoundContext";
 import { isMagician } from "@/lib/game/avatarAbilities";
 import { cardRefToPreview } from "@/lib/game/card-preview.types";
@@ -1187,12 +1188,10 @@ export default function Hand3D({
                   textureUrl={
                     showCardBacks
                       ? ownerIsMagician
-                        ? "/api/assets/cardback_spellbook.png" // Magician: all cards look like spellbook cards
+                        ? cardbackSpellbookUrl() // Magician: all cards look like spellbook cards
                         : isSite
-                        ? ownerCardbacks?.atlas ??
-                          "/api/assets/cardback_atlas_landscape.png"
-                        : ownerCardbacks?.spellbook ??
-                          "/api/assets/cardback_spellbook.png"
+                        ? ownerCardbacks?.atlas ?? cardbackAtlasUrl()
+                        : ownerCardbacks?.spellbook ?? cardbackSpellbookUrl()
                       : undefined
                   }
                   forceTextureUrl={showCardBacks}

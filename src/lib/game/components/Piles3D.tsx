@@ -2,6 +2,7 @@
 
 import type { ThreeEvent } from "@react-three/fiber";
 import { useMemo, useRef, useEffect } from "react";
+import { cardbackAtlasUrl, cardbackSpellbookUrl } from "@/lib/assets";
 import { useSound } from "@/lib/contexts/SoundContext";
 import { cardRefToPreview } from "@/lib/game/card-preview.types";
 import type { CardPreviewData } from "@/lib/game/card-preview.types";
@@ -217,8 +218,8 @@ export default function Piles3D({
           : presetId
           ? undefined
           : key === "atlas"
-          ? ownerCardbacks?.atlas ?? "/api/assets/cardback_atlas_landscape.png"
-          : ownerCardbacks?.spellbook ?? "/api/assets/cardback_spellbook.png";
+          ? ownerCardbacks?.atlas ?? cardbackAtlasUrl()
+          : ownerCardbacks?.spellbook ?? cardbackSpellbookUrl();
         const w = isAtlas ? CARD_LONG : CARD_SHORT;
         const h = isAtlas ? CARD_SHORT : CARD_LONG;
         // Physically realistic pile: use real card thickness for all cards

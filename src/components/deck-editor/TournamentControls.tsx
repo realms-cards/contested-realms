@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { cardbackAtlasUrl } from "@/lib/assets";
 import type { SearchResult } from "@/lib/game/types";
 
 type StandardSiteName = "Spire" | "Stream" | "Valley" | "Wasteland";
@@ -108,7 +109,7 @@ export default function TournamentControls({
                         src={
                           hit?.slug
                             ? `/api/images/${hit.slug}`
-                            : "/api/assets/cardback_atlas_landscape.png"
+                            : cardbackAtlasUrl()
                         }
                         alt={name}
                         fill

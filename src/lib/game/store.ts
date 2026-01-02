@@ -6,7 +6,10 @@ import {
   createInitialBoardUiState,
 } from "./store/boardUiState";
 import { createBrowseSlice } from "./store/browseState";
+import { createCallToWarSlice } from "./store/callToWarState";
 import { createCardMetaSlice } from "./store/cardMetaState";
+import { createSearingTruthSlice } from "./store/searingTruthState";
+import { createAccusationSlice } from "./store/accusationState";
 import { createChaosTwisterSlice } from "./store/chaosTwisterState";
 import { createCombatSlice } from "./store/combatState";
 import { createCommonSenseSlice } from "./store/commonSenseState";
@@ -133,6 +136,9 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   ...createMagicSlice(set, get, storeApi),
   ...createChaosTwisterSlice(set, get, storeApi),
   ...createBrowseSlice(set, get, storeApi),
+  ...createCallToWarSlice(set, get, storeApi),
+  ...createSearingTruthSlice(set, get, storeApi),
+  ...createAccusationSlice(set, get, storeApi),
   ...createCommonSenseSlice(set, get, storeApi),
   ...createEarthquakeSlice(set, get, storeApi),
   ...createPithImpSlice(set, get, storeApi),
@@ -209,6 +215,9 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         pendingMagic: null,
         pendingChaosTwister: null,
         pendingBrowse: null,
+        pendingCallToWar: null,
+        pendingSearingTruth: null,
+        pendingAccusation: null,
         pendingCommonSense: null,
         pendingEarthquake: null,
         stolenCards: [],

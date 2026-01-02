@@ -401,6 +401,9 @@ export const createPlayActionsSlice: StateCreator<
       const isChaosTwister = cardNameLower.includes("chaos twister");
       const isBrowse = cardNameLower === "browse";
       const isCommonSense = cardNameLower === "common sense";
+      const isCallToWar = cardNameLower === "call to war";
+      const isSearingTruth = cardNameLower === "searing truth";
+      const isAccusation = cardNameLower === "accusation";
       const isEarthquake = cardNameLower === "earthquake";
       const isMorgana = cardNameLower.includes("morgana le fay");
       const isPithImp = cardNameLower.includes("pith imp");
@@ -410,6 +413,9 @@ export const createPlayActionsSlice: StateCreator<
         cardNameLower,
         isBrowse,
         isCommonSense,
+        isCallToWar,
+        isSearingTruth,
+        isAccusation,
         isEarthquake,
         isMorgana,
         isPithImp,
@@ -451,6 +457,51 @@ export const createPlayActionsSlice: StateCreator<
       else if (isCommonSense && newest) {
         try {
           get().beginCommonSense({
+            spell: {
+              at: key,
+              index: arr.length - 1,
+              instanceId: newest.instanceId ?? null,
+              owner: newest.owner,
+              card: newest.card as CardRef,
+            },
+            casterSeat: who,
+          });
+        } catch {}
+      }
+      // If this is Call to War, begin the search spell flow
+      else if (isCallToWar && newest) {
+        try {
+          get().beginCallToWar({
+            spell: {
+              at: key,
+              index: arr.length - 1,
+              instanceId: newest.instanceId ?? null,
+              owner: newest.owner,
+              card: newest.card as CardRef,
+            },
+            casterSeat: who,
+          });
+        } catch {}
+      }
+      // If this is Searing Truth, begin the target player flow
+      else if (isSearingTruth && newest) {
+        try {
+          get().beginSearingTruth({
+            spell: {
+              at: key,
+              index: arr.length - 1,
+              instanceId: newest.instanceId ?? null,
+              owner: newest.owner,
+              card: newest.card as CardRef,
+            },
+            casterSeat: who,
+          });
+        } catch {}
+      }
+      // If this is Accusation, begin the opponent hand reveal flow
+      else if (isAccusation && newest) {
+        try {
+          get().beginAccusation({
             spell: {
               at: key,
               index: arr.length - 1,
