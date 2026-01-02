@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useState, useCallback } from "react";
+import { cardbackAtlasUrl } from "@/lib/assets";
 import { useSound } from "@/lib/contexts/SoundContext";
 import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
 import { useGameStore } from "@/lib/game/store";
@@ -485,7 +486,7 @@ export default function OnlineMulliganScreen({
                       {/* Atlas cardback (landscape) */}
                       <div className="relative w-24 h-16 rounded overflow-hidden ring-1 ring-white/20">
                         <Image
-                          src="/api/assets/cardback_atlas_landscape.png"
+                          src={cardbackAtlasUrl()}
                           alt="Atlas"
                           fill
                           sizes="96px"

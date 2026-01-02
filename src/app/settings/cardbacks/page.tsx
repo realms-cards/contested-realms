@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { cardbackAtlasUrl, cardbackSpellbookUrl } from "@/lib/assets";
 import { FEATURE_CARD_SLEEVES } from "@/lib/config/features";
 import { SLEEVE_PRESETS } from "@/lib/game/sleevePresets";
 
@@ -125,8 +126,8 @@ export default function CardbackSettingsPage() {
           type: "image" as const,
           url:
             type === "spellbook"
-              ? "/api/assets/cardback_spellbook.png"
-              : "/api/assets/cardback_atlas_landscape.png",
+              ? cardbackSpellbookUrl()
+              : cardbackAtlasUrl(),
         };
       }
       if (ref.startsWith("preset:")) {
@@ -150,8 +151,8 @@ export default function CardbackSettingsPage() {
         type: "image" as const,
         url:
           type === "spellbook"
-            ? "/api/assets/cardback_spellbook.png"
-            : "/api/assets/cardback_atlas_landscape.png",
+            ? cardbackSpellbookUrl()
+            : cardbackAtlasUrl(),
       };
     },
     []

@@ -5,8 +5,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type Object3D } from "three";
 import { type StoreApi, type UseBoundStore } from "zustand";
 // (overlay components are no longer used)
-import { useSound } from "@/lib/contexts/SoundContext";
 import { useGraphicsSettings } from "@/hooks/useGraphicsSettings";
+import { cardbackAtlasUrl, cardbackSpellbookUrl } from "@/lib/assets";
+import { useSound } from "@/lib/contexts/SoundContext";
 import {
   AVATAR_AVOID_Z,
   BASE_CARD_ELEVATION,
@@ -75,9 +76,9 @@ function CardbackPreloader() {
   useEffect(() => {
     // Collect all custom cardback URLs that need preloading
     const urlsToPreload: string[] = [
-      // Always preload default cardbacks
-      "/api/assets/cardback_spellbook.png",
-      "/api/assets/cardback_atlas_landscape.png",
+      // Always preload default cardbacks (uses CDN when available)
+      cardbackSpellbookUrl(),
+      cardbackAtlasUrl(),
     ];
 
     // Add custom cardback URLs for both players

@@ -32,3 +32,25 @@ export function imgUrl(relativePath: string): string {
   const clean = relativePath.replace(/^\/+/, '');
   return assetUrl(`/data/${clean}`);
 }
+
+/**
+ * Get URL for cardback atlas (landscape orientation).
+ * Returns CDN URL if NEXT_PUBLIC_TEXTURE_ORIGIN is set, otherwise falls back to API route.
+ */
+export function cardbackAtlasUrl(): string {
+  if (ORIGIN) {
+    return `${ORIGIN}/cardback_atlas_landscape.webp`;
+  }
+  return '/api/assets/cardback_atlas_landscape.png';
+}
+
+/**
+ * Get URL for spellbook cardback.
+ * Returns CDN URL if NEXT_PUBLIC_TEXTURE_ORIGIN is set, otherwise falls back to API route.
+ */
+export function cardbackSpellbookUrl(): string {
+  if (ORIGIN) {
+    return `${ORIGIN}/cardback_spellbook.webp`;
+  }
+  return '/api/assets/cardback_spellbook.png';
+}

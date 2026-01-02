@@ -424,6 +424,88 @@ export type PendingCommonSense = {
   createdAt: number;
 };
 
+// --- Call to War Spell State ------------------------------------------------
+// "Search your spellbook for an Exceptional Mortal, reveal it, and put it into your hand. Shuffle your spellbook."
+export type CallToWarPhase = "selecting" | "resolving" | "complete";
+
+export type PendingCallToWar = {
+  id: string;
+  spell: {
+    at: CellKey;
+    index: number;
+    instanceId?: string | null;
+    owner: 1 | 2;
+    card: CardRef;
+  };
+  casterSeat: PlayerKey;
+  phase: CallToWarPhase;
+  // All Exceptional Mortal cards in spellbook that can be selected
+  eligibleCards: CardRef[];
+  // Index of selected card in eligibleCards array
+  selectedCardIndex: number | null;
+  createdAt: number;
+};
+
+// --- Searing Truth Spell State ------------------------------------------------
+// "Target player draws and reveals two spells, then takes damage equal to the higher mana cost."
+export type SearingTruthPhase =
+  | "selectingTarget"
+  | "revealing"
+  | "resolving"
+  | "complete";
+
+export type PendingSearingTruth = {
+  id: string;
+  spell: {
+    at: CellKey;
+    index: number;
+    instanceId?: string | null;
+    owner: 1 | 2;
+    card: CardRef;
+  };
+  casterSeat: PlayerKey;
+  phase: SearingTruthPhase;
+  // Target player who will draw and take damage
+  targetSeat: PlayerKey | null;
+  // The two cards drawn (visible to both players during reveal)
+  revealedCards: CardRef[];
+  // The damage that will be dealt (higher mana cost)
+  damageAmount: number;
+  createdAt: number;
+};
+
+// --- Accusation Spell State ------------------------------------------------
+// "Target opponent reveals their hand and banishes a card. If any of their cards or allies are Evil, you may choose which."
+export type AccusationPhase =
+  | "revealing"
+  | "selecting"
+  | "resolving"
+  | "complete";
+
+export type PendingAccusation = {
+  id: string;
+  spell: {
+    at: CellKey;
+    index: number;
+    instanceId?: string | null;
+    owner: 1 | 2;
+    card: CardRef;
+  };
+  casterSeat: PlayerKey;
+  phase: AccusationPhase;
+  // The opponent whose hand is revealed
+  victimSeat: PlayerKey;
+  // The revealed hand (visible to caster during selection)
+  revealedHand: CardRef[];
+  // Whether caster has choice (if any Evil cards/allies)
+  casterHasChoice: boolean;
+  // Indices of Evil cards in the revealed hand
+  evilCardIndices: number[];
+  // Index of selected card to banish
+  selectedCardIndex: number | null;
+  createdAt: number;
+};
+
 // --- Earthquake Spell State ------------------------------------------------
 // "You may rearrange sites within a two-by-two area, carrying along everything of normal size.
 //  Then burrow all minions and artifacts on those sites."
@@ -881,6 +963,51 @@ export type GameState = {
   selectCommonSenseCard: (cardIndex: number) => void;
   resolveCommonSense: () => void;
   cancelCommonSense: () => void;
+  // Call to War spell flow
+  pendingCallToWar: PendingCallToWar | null;
+  beginCallToWar: (input: {
+    spell: {
+      at: CellKey;
+      index: number;
+      instanceId?: string | null;
+      owner: 1 | 2;
+      card: CardRef;
+    };
+    casterSeat: PlayerKey;
+  }) => Promise<void>;
+  selectCallToWarCard: (cardIndex: number) => void;
+  resolveCallToWar: () => void;
+  cancelCallToWar: () => void;
+  // Searing Truth spell flow
+  pendingSearingTruth: PendingSearingTruth | null;
+  beginSearingTruth: (input: {
+    spell: {
+      at: CellKey;
+      index: number;
+      instanceId?: string | null;
+      owner: 1 | 2;
+      card: CardRef;
+    };
+    casterSeat: PlayerKey;
+  }) => void;
+  selectSearingTruthTarget: (targetSeat: PlayerKey) => Promise<void>;
+  resolveSearingTruth: () => void;
+  cancelSearingTruth: () => void;
+  // Accusation spell flow
+  pendingAccusation: PendingAccusation | null;
+  beginAccusation: (input: {
+    spell: {
+      at: CellKey;
+      index: number;
+      instanceId?: string | null;
+      owner: 1 | 2;
+      card: CardRef;
+    };
+    casterSeat: PlayerKey;
+  }) => Promise<void>;
+  selectAccusationCard: (cardIndex: number) => void;
+  resolveAccusation: () => void;
+  cancelAccusation: () => void;
   // Earthquake spell flow
   pendingEarthquake: PendingEarthquake | null;
   beginEarthquake: (input: {

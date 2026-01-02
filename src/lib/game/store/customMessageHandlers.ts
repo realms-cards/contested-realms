@@ -1571,6 +1571,330 @@ export function handleCustomMessage(
     return;
   }
 
+  // --- Call to War spell message handlers ---
+  if (t === "callToWarBegin") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const spellAny = (msg as { spell?: unknown }).spell as unknown;
+    const casterSeat = (msg as { casterSeat?: unknown }).casterSeat as
+      | PlayerKey
+      | undefined;
+    const eligibleCount = (msg as { eligibleCount?: unknown }).eligibleCount as
+      | number
+      | undefined;
+    if (!id || !spellAny || !casterSeat) return;
+    const rec = spellAny as Record<string, unknown>;
+    // Opponent sees Call to War begin but doesn't see the actual cards
+    set({
+      pendingCallToWar: {
+        id,
+        spell: {
+          at: rec.at as CellKey,
+          index: Number(rec.index),
+          instanceId: (rec.instanceId as string | null) ?? null,
+          owner: Number(rec.owner) as 1 | 2,
+          card: rec.card as CardRef,
+        },
+        casterSeat,
+        phase: "selecting",
+        eligibleCards: [], // Opponent doesn't see the cards
+        selectedCardIndex: null,
+        createdAt: Date.now(),
+      },
+    } as Partial<GameState> as GameState);
+    try {
+      get().log(
+        `[${casterSeat.toUpperCase()}] is searching for Exceptional Mortals (${
+          eligibleCount ?? "?"
+        } found)...`
+      );
+    } catch {}
+    return;
+  }
+  if (t === "callToWarSelectCard") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const cardIndex = (msg as { cardIndex?: unknown }).cardIndex as
+      | number
+      | undefined;
+    if (!id || cardIndex == null) return;
+    set((s) => {
+      if (!s.pendingCallToWar || s.pendingCallToWar.id !== id)
+        return s as GameState;
+      return {
+        pendingCallToWar: {
+          ...s.pendingCallToWar,
+          selectedCardIndex: cardIndex,
+        },
+      } as Partial<GameState> as GameState;
+    });
+    return;
+  }
+  if (t === "callToWarResolve") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const selectedCardName = (msg as { selectedCardName?: unknown })
+      .selectedCardName as string | undefined;
+    const pending = get().pendingCallToWar;
+    if (!pending || (id && pending.id !== id)) return;
+
+    // Move spell to graveyard (opponent side)
+    try {
+      get().movePermanentToZone(
+        pending.spell.at,
+        pending.spell.index,
+        "graveyard"
+      );
+    } catch {}
+
+    set({ pendingCallToWar: null } as Partial<GameState> as GameState);
+    try {
+      get().log(
+        `[${pending.casterSeat.toUpperCase()}] Call to War resolved: found ${
+          selectedCardName ?? "a warrior"
+        }`
+      );
+    } catch {}
+    return;
+  }
+  if (t === "callToWarCancel") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    set((s) => {
+      if (!s.pendingCallToWar || (id && s.pendingCallToWar.id !== id))
+        return s as GameState;
+      return { pendingCallToWar: null } as Partial<GameState> as GameState;
+    });
+    try {
+      get().log("Call to War cancelled");
+    } catch {}
+    return;
+  }
+
+  // --- Searing Truth spell message handlers ---
+  if (t === "searingTruthBegin") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const spellAny = (msg as { spell?: unknown }).spell as unknown;
+    const casterSeat = (msg as { casterSeat?: unknown }).casterSeat as
+      | PlayerKey
+      | undefined;
+    if (!id || !spellAny || !casterSeat) return;
+    const rec = spellAny as Record<string, unknown>;
+    set({
+      pendingSearingTruth: {
+        id,
+        spell: {
+          at: rec.at as CellKey,
+          index: Number(rec.index),
+          instanceId: (rec.instanceId as string | null) ?? null,
+          owner: Number(rec.owner) as 1 | 2,
+          card: rec.card as CardRef,
+        },
+        casterSeat,
+        phase: "selectingTarget",
+        targetSeat: null,
+        revealedCards: [],
+        damageAmount: 0,
+        createdAt: Date.now(),
+      },
+    } as Partial<GameState> as GameState);
+    try {
+      get().log(`[${casterSeat.toUpperCase()}] casts Searing Truth...`);
+    } catch {}
+    return;
+  }
+  if (t === "searingTruthTarget") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const targetSeat = (msg as { targetSeat?: unknown }).targetSeat as
+      | PlayerKey
+      | undefined;
+    const revealedCardsAny = (msg as { revealedCards?: unknown })
+      .revealedCards as unknown;
+    const damageAmount = (msg as { damageAmount?: unknown }).damageAmount as
+      | number
+      | undefined;
+    if (!id || !targetSeat) return;
+    const revealedCards = Array.isArray(revealedCardsAny)
+      ? (revealedCardsAny as CardRef[])
+      : [];
+    set((s) => {
+      if (!s.pendingSearingTruth || s.pendingSearingTruth.id !== id)
+        return s as GameState;
+      return {
+        pendingSearingTruth: {
+          ...s.pendingSearingTruth,
+          phase: "revealing",
+          targetSeat,
+          revealedCards,
+          damageAmount: damageAmount ?? 0,
+        },
+      } as Partial<GameState> as GameState;
+    });
+    const cardNames = revealedCards.map((c) => c.name || "Unknown").join(", ");
+    try {
+      get().log(
+        `[${targetSeat.toUpperCase()}] reveals ${cardNames} - ${damageAmount ?? 0} damage incoming`
+      );
+    } catch {}
+    return;
+  }
+  if (t === "searingTruthResolve") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const damageAmount = (msg as { damageAmount?: unknown }).damageAmount as
+      | number
+      | undefined;
+    const pending = get().pendingSearingTruth;
+    if (!pending || (id && pending.id !== id)) return;
+
+    // Move spell to graveyard (opponent side)
+    try {
+      get().movePermanentToZone(
+        pending.spell.at,
+        pending.spell.index,
+        "graveyard"
+      );
+    } catch {}
+
+    set({ pendingSearingTruth: null } as Partial<GameState> as GameState);
+    try {
+      get().log(
+        `Searing Truth resolved: ${pending.targetSeat?.toUpperCase()} takes ${damageAmount ?? 0} damage`
+      );
+    } catch {}
+    return;
+  }
+  if (t === "searingTruthCancel") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    set((s) => {
+      if (!s.pendingSearingTruth || (id && s.pendingSearingTruth.id !== id))
+        return s as GameState;
+      return { pendingSearingTruth: null } as Partial<GameState> as GameState;
+    });
+    try {
+      get().log("Searing Truth cancelled");
+    } catch {}
+    return;
+  }
+
+  // --- Accusation spell message handlers ---
+  if (t === "accusationBegin") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const spellAny = (msg as { spell?: unknown }).spell as unknown;
+    const casterSeat = (msg as { casterSeat?: unknown }).casterSeat as
+      | PlayerKey
+      | undefined;
+    const victimSeat = (msg as { victimSeat?: unknown }).victimSeat as
+      | PlayerKey
+      | undefined;
+    const handSize = (msg as { handSize?: unknown }).handSize as
+      | number
+      | undefined;
+    const casterHasChoice = (msg as { casterHasChoice?: unknown })
+      .casterHasChoice as boolean | undefined;
+    const evilCardIndices = (msg as { evilCardIndices?: unknown })
+      .evilCardIndices as number[] | undefined;
+    if (!id || !spellAny || !casterSeat || !victimSeat) return;
+    const rec = spellAny as Record<string, unknown>;
+
+    // Get victim's hand (they can see their own cards)
+    const zones = get().zones;
+    const actorKey = get().actorKey;
+    const isVictim = actorKey === victimSeat;
+    const revealedHand = isVictim ? (zones[victimSeat]?.hand || []) : [];
+
+    set({
+      pendingAccusation: {
+        id,
+        spell: {
+          at: rec.at as CellKey,
+          index: Number(rec.index),
+          instanceId: (rec.instanceId as string | null) ?? null,
+          owner: Number(rec.owner) as 1 | 2,
+          card: rec.card as CardRef,
+        },
+        casterSeat,
+        phase: "revealing",
+        victimSeat,
+        revealedHand,
+        casterHasChoice: casterHasChoice ?? false,
+        evilCardIndices: evilCardIndices ?? [],
+        selectedCardIndex: null,
+        createdAt: Date.now(),
+      },
+    } as Partial<GameState> as GameState);
+    try {
+      get().log(
+        `[${casterSeat.toUpperCase()}] casts Accusation - ${victimSeat.toUpperCase()}'s hand is revealed (${
+          handSize ?? "?"
+        } cards)`
+      );
+    } catch {}
+
+    // Auto-transition to selecting phase
+    setTimeout(() => {
+      const current = get().pendingAccusation;
+      if (current?.id === id && current.phase === "revealing") {
+        set({
+          pendingAccusation: {
+            ...current,
+            phase: "selecting",
+          },
+        } as Partial<GameState> as GameState);
+      }
+    }, 1500);
+    return;
+  }
+  if (t === "accusationSelectCard") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const cardIndex = (msg as { cardIndex?: unknown }).cardIndex as
+      | number
+      | undefined;
+    if (!id || cardIndex == null) return;
+    set((s) => {
+      if (!s.pendingAccusation || s.pendingAccusation.id !== id)
+        return s as GameState;
+      return {
+        pendingAccusation: {
+          ...s.pendingAccusation,
+          selectedCardIndex: cardIndex,
+        },
+      } as Partial<GameState> as GameState;
+    });
+    return;
+  }
+  if (t === "accusationResolve") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const selectedCardName = (msg as { selectedCardName?: unknown })
+      .selectedCardName as string | undefined;
+    const pending = get().pendingAccusation;
+    if (!pending || (id && pending.id !== id)) return;
+
+    // Move spell to graveyard (opponent side)
+    try {
+      get().movePermanentToZone(
+        pending.spell.at,
+        pending.spell.index,
+        "graveyard"
+      );
+    } catch {}
+
+    set({ pendingAccusation: null } as Partial<GameState> as GameState);
+    try {
+      get().log(
+        `Accusation resolved: ${selectedCardName ?? "a card"} banished from ${pending.victimSeat.toUpperCase()}'s hand`
+      );
+    } catch {}
+    return;
+  }
+  if (t === "accusationCancel") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    set((s) => {
+      if (!s.pendingAccusation || (id && s.pendingAccusation.id !== id))
+        return s as GameState;
+      return { pendingAccusation: null } as Partial<GameState> as GameState;
+    });
+    try {
+      get().log("Accusation cancelled");
+    } catch {}
+    return;
+  }
+
   // --- Pith Imp message handlers ---
   if (t === "pithImpSteal") {
     const id = (msg as { id?: unknown }).id as string | undefined;
