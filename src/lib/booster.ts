@@ -67,6 +67,38 @@ function pickUniqueFrom(
   return choice(candidates);
 }
 
+// Avatar-aware pick: prefer non-avatars once limit reached
+const MAX_AVATARS_PER_PACK = 2;
+
+function isAvatar(meta: CardMeta | undefined): boolean {
+  return (meta?.type || "").toLowerCase().includes("avatar");
+}
+
+function pickUniqueFromWithAvatarLimit(
+  pool: VariantSel[],
+  used: Set<number>,
+  metaByCardId: Map<number, CardMeta>,
+  avatarCount: number
+): VariantSel | null {
+  if (!pool.length) return null;
+  let candidates = pool.filter((v) => !used.has(v.cardId));
+  if (!candidates.length) return null;
+
+  // If at avatar limit, filter out avatars
+  if (avatarCount >= MAX_AVATARS_PER_PACK) {
+    const nonAvatars = candidates.filter((v) => {
+      const meta = metaByCardId.get(v.cardId);
+      return !isAvatar(meta);
+    });
+    if (nonAvatars.length > 0) {
+      candidates = nonAvatars;
+    }
+    // If only avatars left, fall through and pick one anyway
+  }
+
+  return choice(candidates);
+}
+
 export async function generateBooster(
   setName: string,
   client: PrismaClient = defaultPrisma,
@@ -212,17 +244,29 @@ export async function generateBooster(
 
   const picks: BoosterCard[] = [];
   const used = new Set<number>(); // track cardIds to prevent duplicates in a pack
+  let avatarCount = 0; // track avatars to limit per pack
 
   // Top rarity slot (Elite or Unique)
   const pickUnique = Math.random() < cfg.uniqueChance;
   const topPool = pickUnique ? stdByRarity.Unique : stdByRarity.Elite;
   const topVariant =
-    pickUniqueFrom(topPool, used) ??
-    pickUniqueFrom(stdByRarity.Elite, used) ??
-    pickUniqueFrom(stdByRarity.Unique, used);
+    pickUniqueFromWithAvatarLimit(topPool, used, metaByCardId, avatarCount) ??
+    pickUniqueFromWithAvatarLimit(
+      stdByRarity.Elite,
+      used,
+      metaByCardId,
+      avatarCount
+    ) ??
+    pickUniqueFromWithAvatarLimit(
+      stdByRarity.Unique,
+      used,
+      metaByCardId,
+      avatarCount
+    );
   if (topVariant) {
     const meta = metaByCardId.get(topVariant.cardId);
     if (meta) {
+      if (isAvatar(meta)) avatarCount++;
       picks.push(toBoosterCard(topVariant, meta));
       used.add(topVariant.cardId);
     }
@@ -230,20 +274,32 @@ export async function generateBooster(
 
   // Exceptional slots
   for (let i = 0; i < cfg.exceptionalCount; i++) {
-    const v = pickUniqueFrom(stdByRarity.Exceptional, used);
+    const v = pickUniqueFromWithAvatarLimit(
+      stdByRarity.Exceptional,
+      used,
+      metaByCardId,
+      avatarCount
+    );
     if (!v) break;
     const meta = metaByCardId.get(v.cardId);
     if (!meta) continue;
+    if (isAvatar(meta)) avatarCount++;
     picks.push(toBoosterCard(v, meta));
     used.add(v.cardId);
   }
 
   // Ordinary slots
   for (let i = 0; i < cfg.ordinaryCount; i++) {
-    const v = pickUniqueFrom(stdByRarity.Ordinary, used);
+    const v = pickUniqueFromWithAvatarLimit(
+      stdByRarity.Ordinary,
+      used,
+      metaByCardId,
+      avatarCount
+    );
     if (!v) break;
     const meta = metaByCardId.get(v.cardId);
     if (!meta) continue;
+    if (isAvatar(meta)) avatarCount++;
     picks.push(toBoosterCard(v, meta));
     used.add(v.cardId);
   }
@@ -269,13 +325,23 @@ export async function generateBooster(
       { item: "Ordinary" as Rarity, weight: cfg.foilOrdinaryWeight },
     ]);
     const foilPool = foilRarity ? foilByRarity[foilRarity] : [];
-    const foil = pickUniqueFrom(foilPool, used);
+    // Use avatar-limited pick for foil too
+    const foil = pickUniqueFromWithAvatarLimit(
+      foilPool,
+      used,
+      metaByCardId,
+      avatarCount
+    );
     if (foil) {
       // Find an ordinary index to replace
       const ordIdx = picks.findIndex((p) => p.rarity === "Ordinary");
       if (ordIdx !== -1) {
         const meta = metaByCardId.get(foil.cardId);
         if (meta) {
+          // Track avatar changes
+          const replacedMeta = metaByCardId.get(picks[ordIdx].cardId);
+          if (isAvatar(replacedMeta)) avatarCount--;
+          if (isAvatar(meta)) avatarCount++;
           // update used set: remove the replaced ordinary and add the foil card
           used.delete(picks[ordIdx].cardId);
           picks[ordIdx] = toBoosterCard(foil, meta);
@@ -621,17 +687,29 @@ function generateBoosterFromCache(cache: BoosterGenCache): BoosterCard[] {
 
   const picks: BoosterCard[] = [];
   const used = new Set<number>(); // track cardIds to prevent duplicates in a pack
+  let avatarCount = 0; // track avatars to limit per pack
 
   // Top rarity slot (Elite or Unique)
   const pickUnique = Math.random() < cfg.uniqueChance;
   const topPool = pickUnique ? stdByRarity.Unique : stdByRarity.Elite;
   const topVariant =
-    pickUniqueFrom(topPool, used) ??
-    pickUniqueFrom(stdByRarity.Elite, used) ??
-    pickUniqueFrom(stdByRarity.Unique, used);
+    pickUniqueFromWithAvatarLimit(topPool, used, metaByCardId, avatarCount) ??
+    pickUniqueFromWithAvatarLimit(
+      stdByRarity.Elite,
+      used,
+      metaByCardId,
+      avatarCount
+    ) ??
+    pickUniqueFromWithAvatarLimit(
+      stdByRarity.Unique,
+      used,
+      metaByCardId,
+      avatarCount
+    );
   if (topVariant) {
     const meta = metaByCardId.get(topVariant.cardId);
     if (meta) {
+      if (isAvatar(meta)) avatarCount++;
       picks.push(toBoosterCard(topVariant, meta));
       used.add(topVariant.cardId);
     }
@@ -639,20 +717,32 @@ function generateBoosterFromCache(cache: BoosterGenCache): BoosterCard[] {
 
   // Exceptional slots
   for (let i = 0; i < cfg.exceptionalCount; i++) {
-    const v = pickUniqueFrom(stdByRarity.Exceptional, used);
+    const v = pickUniqueFromWithAvatarLimit(
+      stdByRarity.Exceptional,
+      used,
+      metaByCardId,
+      avatarCount
+    );
     if (!v) break;
     const meta = metaByCardId.get(v.cardId);
     if (!meta) continue;
+    if (isAvatar(meta)) avatarCount++;
     picks.push(toBoosterCard(v, meta));
     used.add(v.cardId);
   }
 
   // Ordinary slots
   for (let i = 0; i < cfg.ordinaryCount; i++) {
-    const v = pickUniqueFrom(stdByRarity.Ordinary, used);
+    const v = pickUniqueFromWithAvatarLimit(
+      stdByRarity.Ordinary,
+      used,
+      metaByCardId,
+      avatarCount
+    );
     if (!v) break;
     const meta = metaByCardId.get(v.cardId);
     if (!meta) continue;
+    if (isAvatar(meta)) avatarCount++;
     picks.push(toBoosterCard(v, meta));
     used.add(v.cardId);
   }
@@ -678,13 +768,23 @@ function generateBoosterFromCache(cache: BoosterGenCache): BoosterCard[] {
       { item: "Ordinary" as Rarity, weight: cfg.foilOrdinaryWeight },
     ]);
     const foilPool = foilRarity ? foilByRarity[foilRarity] : [];
-    const foil = pickUniqueFrom(foilPool, used);
+    // Use avatar-limited pick for foil too
+    const foil = pickUniqueFromWithAvatarLimit(
+      foilPool,
+      used,
+      metaByCardId,
+      avatarCount
+    );
     if (foil) {
       // Find an ordinary index to replace
       const ordIdx = picks.findIndex((p) => p.rarity === "Ordinary");
       if (ordIdx !== -1) {
         const meta = metaByCardId.get(foil.cardId);
         if (meta) {
+          // Track avatar changes
+          const replacedMeta = metaByCardId.get(picks[ordIdx].cardId);
+          if (isAvatar(replacedMeta)) avatarCount--;
+          if (isAvatar(meta)) avatarCount++;
           // update used set: remove the replaced ordinary and add the foil card
           used.delete(picks[ordIdx].cardId);
           picks[ordIdx] = toBoosterCard(foil, meta);
