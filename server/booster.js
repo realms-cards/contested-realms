@@ -138,6 +138,40 @@ function pickUniqueFrom(pool, used, rng) {
   return choice(candidates, rng);
 }
 
+// Avatar-aware pick: prefer non-avatars once limit reached
+const MAX_AVATARS_PER_PACK = 2;
+
+function pickUniqueFromWithAvatarLimit(
+  pool,
+  used,
+  rng,
+  metaByCardId,
+  avatarCount
+) {
+  if (!pool || pool.length === 0) return null;
+  let candidates = pool.filter((v) => !used.has(v.cardId));
+  if (!candidates.length) return null;
+
+  // If at avatar limit, filter out avatars
+  if (avatarCount >= MAX_AVATARS_PER_PACK) {
+    const nonAvatars = candidates.filter((v) => {
+      const meta = metaByCardId.get(v.cardId);
+      const t = (meta?.type || "").toLowerCase();
+      return !t.includes("avatar");
+    });
+    if (nonAvatars.length > 0) {
+      candidates = nonAvatars;
+    }
+    // If only avatars left, fall through and pick one anyway
+  }
+
+  return choice(candidates, rng);
+}
+
+function isAvatar(meta) {
+  return (meta?.type || "").toLowerCase().includes("avatar");
+}
+
 async function generateBoosterDeterministic(
   setName,
   rng,
@@ -198,20 +232,40 @@ async function generateBoosterDeterministic(
 
   const picks = [];
   const used = new Set(); // track cardIds to prevent duplicates in a pack
+  let avatarCount = 0; // track avatars to limit per pack
 
   // Top rarity slot (Elite or Unique)
   const pickUnique = rng() < cfg.uniqueChance;
   const topPool = pickUnique ? stdByRarity["Unique"] : stdByRarity["Elite"];
   const topVariant =
-    pickUniqueFrom(topPool, used, rng) ||
-    pickUniqueFrom(stdByRarity["Elite"], used, rng) ||
-    pickUniqueFrom(stdByRarity["Unique"], used, rng);
+    pickUniqueFromWithAvatarLimit(
+      topPool,
+      used,
+      rng,
+      metaByCardId,
+      avatarCount
+    ) ||
+    pickUniqueFromWithAvatarLimit(
+      stdByRarity["Elite"],
+      used,
+      rng,
+      metaByCardId,
+      avatarCount
+    ) ||
+    pickUniqueFromWithAvatarLimit(
+      stdByRarity["Unique"],
+      used,
+      rng,
+      metaByCardId,
+      avatarCount
+    );
   if (topVariant) {
     const meta = metaByCardId.get(topVariant.cardId) || {
       rarity: "Elite",
       type: null,
       cost: null,
     };
+    if (isAvatar(meta)) avatarCount++;
     picks.push({
       variantId: topVariant.id,
       slug: topVariant.slug,
@@ -228,13 +282,20 @@ async function generateBoosterDeterministic(
 
   // Exceptional slots
   for (let i = 0; i < cfg.exceptionalCount; i++) {
-    const v = pickUniqueFrom(stdByRarity["Exceptional"], used, rng);
+    const v = pickUniqueFromWithAvatarLimit(
+      stdByRarity["Exceptional"],
+      used,
+      rng,
+      metaByCardId,
+      avatarCount
+    );
     if (!v) break;
     const meta = metaByCardId.get(v.cardId) || {
       rarity: "Exceptional",
       type: null,
       cost: null,
     };
+    if (isAvatar(meta)) avatarCount++;
     picks.push({
       variantId: v.id,
       slug: v.slug,
@@ -251,13 +312,20 @@ async function generateBoosterDeterministic(
 
   // Ordinary slots
   for (let i = 0; i < cfg.ordinaryCount; i++) {
-    const v = pickUniqueFrom(stdByRarity["Ordinary"], used, rng);
+    const v = pickUniqueFromWithAvatarLimit(
+      stdByRarity["Ordinary"],
+      used,
+      rng,
+      metaByCardId,
+      avatarCount
+    );
     if (!v) break;
     const meta = metaByCardId.get(v.cardId) || {
       rarity: "Ordinary",
       type: null,
       cost: null,
     };
+    if (isAvatar(meta)) avatarCount++;
     picks.push({
       variantId: v.id,
       slug: v.slug,
@@ -309,7 +377,14 @@ async function generateBoosterDeterministic(
       rng
     );
     const foilPool = foilRarity ? foilByRarity[foilRarity] : [];
-    const foil = pickUniqueFrom(foilPool, used, rng);
+    // Use avatar-limited pick for foil too
+    const foil = pickUniqueFromWithAvatarLimit(
+      foilPool,
+      used,
+      rng,
+      metaByCardId,
+      avatarCount
+    );
     if (foil) {
       // Find an ordinary index to replace
       const ordIdx = picks.findIndex((p) => p.rarity === "Ordinary");
@@ -319,6 +394,10 @@ async function generateBoosterDeterministic(
           type: null,
           cost: null,
         };
+        // Track avatar changes: subtract if replacing avatar, add if foil is avatar
+        const replacedMeta = metaByCardId.get(picks[ordIdx].cardId);
+        if (isAvatar(replacedMeta)) avatarCount--;
+        if (isAvatar(meta)) avatarCount++;
         // update used set: remove the replaced ordinary and add the foil card
         used.delete(picks[ordIdx].cardId);
         picks[ordIdx] = {
