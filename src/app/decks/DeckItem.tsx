@@ -351,9 +351,16 @@ export default function DeckItem({ deck, onDelete }: DeckItemProps) {
                 .sort((a, b) => a[0].localeCompare(b[0]))
                 .map(([name, n]) => `${n} ${name}`);
               const lines = [...avatarLines, ...otherLines];
-              await navigator.clipboard.writeText(lines.join("\n"));
-              setCopiedMsg("Copied list");
-              setTimeout(() => setCopiedMsg(null), 1200);
+              const textToCopy = lines.join("\n");
+              try {
+                await navigator.clipboard.writeText(textToCopy);
+                setCopiedMsg("Copied list");
+                setTimeout(() => setCopiedMsg(null), 1200);
+              } catch (clipboardErr) {
+                // Clipboard API failed - show fallback with selectable text
+                const msg = "Clipboard access denied. Select and copy the text below:\n\n" + textToCopy;
+                prompt("Copy this deck list:", textToCopy) || alert(msg);
+              }
             } catch (err) {
               alert(err instanceof Error ? err.message : String(err));
             } finally {
@@ -474,9 +481,15 @@ export default function DeckItem({ deck, onDelete }: DeckItemProps) {
                 lines.push("");
               }
               const text = lines.join("\n").trim();
-              await navigator.clipboard.writeText(text);
-              setCopiedMsg("Copied deck");
-              setTimeout(() => setCopiedMsg(null), 1200);
+              try {
+                await navigator.clipboard.writeText(text);
+                setCopiedMsg("Copied deck");
+                setTimeout(() => setCopiedMsg(null), 1200);
+              } catch (clipboardErr) {
+                // Clipboard API failed - show fallback with selectable text
+                const msg = "Clipboard access denied. Select and copy the text below:\n\n" + text;
+                prompt("Copy this deck:", text) || alert(msg);
+              }
             } catch (err) {
               alert(err instanceof Error ? err.message : String(err));
             } finally {
