@@ -113,7 +113,6 @@ interface ThresholdRowProps {
 }
 
 function ThresholdRow({ thresholds }: ThresholdRowProps) {
-  console.log("[ThresholdRow] thresholds:", thresholds);
   // Only show elements that have at least 1 threshold
   const activeElements = ELEMENTS.filter((el) => (thresholds[el.key] ?? 0) > 0);
 
@@ -250,19 +249,6 @@ export function PlayerResourceColumn({
       avatar,
       specialSiteState
     );
-    // DEBUG: Log explicit site data for threshold debugging
-    const siteEntries = Object.entries(boardSites ?? {});
-    console.log(`[PlayerResourceColumn] ${player} thresholds:`, result);
-    console.log(`[PlayerResourceColumn] ${player} site data:`, {
-      siteCount: siteEntries.length,
-      sites: siteEntries.map(([k, s]) => ({
-        key: k,
-        name: (s as { card?: { name?: string } })?.card?.name,
-        owner: (s as { owner?: number })?.owner,
-        thresholds: (s as { card?: { thresholds?: unknown } })?.card
-          ?.thresholds,
-      })),
-    });
     return result;
   }, [boardSize, boardSites, permanents, player, avatar, specialSiteState]);
   const getAvailableMana = useGameStore((s) => s.getAvailableMana);
@@ -318,7 +304,6 @@ export default function PlayerResourcePanels({
   readOnly = false,
   dragFromHand = false,
 }: PlayerResourcePanelsProps) {
-  console.log("[PlayerResourcePanels] Rendering, myPlayerKey:", myPlayerKey);
   // Suppress unused vars - kept for API compatibility
   void playerNames;
   void showYouLabels;
