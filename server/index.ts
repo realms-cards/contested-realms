@@ -1146,6 +1146,17 @@ async function finalizeMatch(
     typeof options?.reason === "string" && options.reason === "forfeit";
   const isRatedResult = !isForfeitReason || gameTurn >= 5;
 
+  // For early forfeits (< 5 turns), don't declare a winner - treat as no result
+  // This prevents abuse of win-trading or penalizing players for opponent disconnects
+  const isEarlyForfeit = isForfeitReason && gameTurn < 5;
+  if (isEarlyForfeit) {
+    console.log(
+      `[match] early forfeit at turn ${gameTurn} - no winner declared for match ${match.id}`
+    );
+    winnerId = null;
+    loserId = null;
+  }
+
   match.status = "ended";
   match.winnerId = winnerId || null;
   match.lastTs = now;

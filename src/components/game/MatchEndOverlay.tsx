@@ -56,8 +56,10 @@ export default function MatchEndOverlay({
   const isAbandonment = isForfeit;
   // Use ID-based check for forfeits, seat-based for normal gameplay wins
   const didIWin = isForfeit ? !!didIWinById : didIWinSeat;
-  // A draw only occurs when both players died simultaneously (winner is null AND no winnerId)
-  const isDraw = winner === null && !winnerId;
+  // Early forfeit = opponent left before turn 5, no winner declared
+  const isEarlyForfeit = isForfeit && !winnerId && rated === false;
+  // A draw only occurs when both players died simultaneously (winner is null AND no winnerId AND not a forfeit)
+  const isDraw = winner === null && !winnerId && !isForfeit;
   const isRatedForfeit = isForfeit ? rated !== false : false;
 
   const handleLeaveMatch = () => {
@@ -74,6 +76,8 @@ export default function MatchEndOverlay({
   // Title text
   const titleText = isDraw
     ? "Draw!"
+    : isEarlyForfeit
+    ? "Match Ended Early"
     : isForfeit || isAbandonment
     ? isSpectator
       ? winnerName
@@ -109,7 +113,7 @@ export default function MatchEndOverlay({
       >
         {/* Icon */}
         <div className="mb-6 flex justify-center">
-          {isDraw ? (
+          {isDraw || isEarlyForfeit ? (
             <Users className="w-16 h-16 text-yellow-400" />
           ) : isSpectator ? (
             <Trophy className="w-16 h-16 text-yellow-400" />
@@ -131,6 +135,8 @@ export default function MatchEndOverlay({
         <div className="text-lg opacity-90 mb-6">
           {isDraw ? (
             <p>Both players died simultaneously.</p>
+          ) : isEarlyForfeit ? (
+            <p>A player left before turn 5. No winner recorded.</p>
           ) : isForfeit || isAbandonment ? (
             isSpectator ? (
               isRatedForfeit ? (
