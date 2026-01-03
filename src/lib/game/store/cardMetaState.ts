@@ -8,6 +8,8 @@ type CardMetaEntry = {
   defence: number | null;
   cost: number | null;
   rarity: string | null;
+  type: string | null;
+  subTypes: string | null;
 };
 
 export const createCardMetaSlice: StateCreator<
@@ -40,6 +42,8 @@ export const createCardMetaSlice: StateCreator<
         attack: number | null;
         defence: number | null;
         rarity: string | null;
+        type: string | null;
+        subTypes: string | null;
       }>;
       const next = { ...(get().metaByCardId as Record<number, CardMetaEntry>) };
       for (const r of rows) {
@@ -48,6 +52,8 @@ export const createCardMetaSlice: StateCreator<
           defence: r.defence ?? null,
           cost: r.cost ?? null,
           rarity: r.rarity ?? null,
+          type: r.type ?? null,
+          subTypes: r.subTypes ?? null,
         };
       }
       set({ metaByCardId: next } as Partial<GameState> as GameState);

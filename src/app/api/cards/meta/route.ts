@@ -56,6 +56,7 @@ export async function GET(req: NextRequest) {
       type: string | null;
       rarity: string | null;
       setId: number;
+      card: { subTypes: string | null } | null;
     }>;
     if (set) {
       rows = await prisma.cardSetMetadata.findMany({
@@ -69,6 +70,7 @@ export async function GET(req: NextRequest) {
           type: true,
           rarity: true,
           setId: true,
+          card: { select: { subTypes: true } },
         },
       });
     } else {
@@ -84,6 +86,7 @@ export async function GET(req: NextRequest) {
           type: true,
           rarity: true,
           setId: true,
+          card: { select: { subTypes: true } },
         },
         orderBy: { setId: "desc" },
       });
@@ -103,6 +106,7 @@ export async function GET(req: NextRequest) {
       attack: m.attack ?? null,
       defence: m.defence ?? null,
       type: m.type ?? null,
+      subTypes: m.card?.subTypes ?? null,
       rarity: m.rarity ?? null,
     }));
 

@@ -122,16 +122,6 @@ export default function BrowseOverlay({}: BrowseOverlayProps) {
     cancelBrowse();
   }, [cancelBrowse]);
 
-  // Debug logging
-  console.log("[BrowseOverlay] render", {
-    pending: !!pending,
-    phase: pending?.phase,
-    actorKey,
-    casterSeat: pending?.casterSeat,
-    isCaster,
-    revealedCardsCount: pending?.revealedCards?.length,
-  });
-
   if (!pending) return null;
 
   const phase = pending.phase;

@@ -53,6 +53,7 @@ export default function CallToWarOverlay() {
         <div className="pointer-events-auto px-5 py-3 rounded-full bg-black/90 text-white ring-1 ring-red-500/50 shadow-lg text-lg md:text-xl flex items-center gap-3 select-none">
           <span className="text-red-400 font-fantaisie">⚔️ Call to War</span>
           <span className="opacity-80">
+            {phase === "loading" && "Searching spellbook..."}
             {phase === "selecting" &&
               (isCaster
                 ? "Select an Exceptional Mortal to put in your hand"
@@ -150,23 +151,23 @@ function CardDisplay({
         interactive
           ? "cursor-pointer hover:ring-2 hover:ring-red-400/50 hover:scale-105"
           : ""
-      } ${selected ? "ring-4 ring-red-500 scale-105 shadow-lg shadow-red-500/30" : ""}`}
+      } ${
+        selected
+          ? "ring-4 ring-red-500 scale-105 shadow-lg shadow-red-500/30"
+          : ""
+      }`}
     >
-      {card.slug ? (
-        <Image
-          src={`/images/cards/${card.slug}.avif`}
-          alt={card.name || "Card"}
-          fill
-          className="object-cover"
-          sizes="(max-width: 640px) 45vw, (max-width: 1024px) 30vw, 15vw"
-        />
-      ) : (
-        <div className="w-full h-full bg-gradient-to-br from-red-800 to-red-950 flex items-center justify-center p-2">
-          <span className="text-white text-xs text-center font-medium">
-            {card.name || "Unknown Card"}
-          </span>
-        </div>
-      )}
+      <Image
+        src={`/api/images/${card.slug || card.cardId}`}
+        alt={card.name || "Card"}
+        fill
+        className="object-cover"
+        unoptimized
+      />
+      {/* Card name overlay */}
+      <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/90 to-transparent p-2">
+        <p className="text-white text-xs text-center truncate">{card.name}</p>
+      </div>
       {selected && (
         <div className="absolute inset-0 bg-red-500/20 flex items-center justify-center">
           <span className="text-3xl">⚔️</span>

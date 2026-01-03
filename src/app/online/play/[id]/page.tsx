@@ -9,6 +9,7 @@ import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { useOnline } from "@/app/online/online-context";
 import UserBadge from "@/components/auth/UserBadge";
 import BrowseOverlay from "@/components/game/BrowseOverlay";
+import CallToWarOverlay from "@/components/game/CallToWarOverlay";
 import CardPreview from "@/components/game/CardPreview";
 import ChaosTwisterOverlay from "@/components/game/ChaosTwisterOverlay";
 import { ClientCanvas } from "@/components/game/ClientCanvas";
@@ -16,6 +17,7 @@ import CollectionButton from "@/components/game/CollectionButton";
 import CombatHudOverlay from "@/components/game/CombatHudOverlay";
 import CommonSenseOverlay from "@/components/game/CommonSenseOverlay";
 import EarthquakeOverlay from "@/components/game/EarthquakeOverlay";
+import SearingTruthOverlay from "@/components/game/SearingTruthOverlay";
 import ContextMenu from "@/components/game/ContextMenu";
 import { ElementChoiceOverlay } from "@/components/game/ElementChoiceOverlay";
 import EnhancedOnlineDraft3DScreen from "@/components/game/EnhancedOnlineDraft3DScreen";
@@ -3136,6 +3138,10 @@ export default function OnlineMatchPage() {
           <BrowseOverlay />
           {/* Common Sense Overlay (search for Ordinary card) */}
           <CommonSenseOverlay />
+          {/* Call to War Overlay (search for Exceptional Mortal) */}
+          <CallToWarOverlay />
+          {/* Searing Truth Overlay (reveal and damage) */}
+          <SearingTruthOverlay />
           {/* Unit hands overlay (Morgana, Omphalos) */}
           <UnitHandsOverlay />
           {/* Pith Imp stolen card notification */}
