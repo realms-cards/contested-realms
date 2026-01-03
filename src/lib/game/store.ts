@@ -1,4 +1,5 @@
 import { create, type StateCreator } from "zustand";
+import { createAnimistSlice } from "./store/animistState";
 import { createAvatarSlice } from "./store/avatarState";
 import { createBoardSlice, createInitialBoard } from "./store/boardState";
 import {
@@ -158,6 +159,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   ...createNecromancerSlice(set, get, storeApi),
   ...createDruidSlice(set, get, storeApi),
   ...createSpecialSiteSlice(set, get, storeApi),
+  ...createAnimistSlice(set, get, storeApi),
   cardScale: 1,
 
   // Multiplayer transport (injected by online play UI)
@@ -224,6 +226,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         morganaHands: [],
         omphalosHands: [],
         pendingPrivateHandCast: null,
+        pendingAnimistCast: null,
         portalState: null,
         seerState: null,
         imposterMasks: createInitialImposterMasks(),

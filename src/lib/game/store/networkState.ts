@@ -132,12 +132,30 @@ export const createNetworkSlice: StateCreator<
         replaceKeys.has("permanents");
 
       if (p.players !== undefined) {
+        // DEBUG: Log mana values before and after merge to track accumulation bug
+        try {
+          const patchPlayers = p.players as Record<string, { mana?: number }>;
+          console.log("[applyServerPatch] players patch:", {
+            isReplace: replaceKeys.has("players"),
+            stateManaP1: state.players?.p1?.mana,
+            stateManaP2: state.players?.p2?.mana,
+            patchManaP1: patchPlayers?.p1?.mana,
+            patchManaP2: patchPlayers?.p2?.mana,
+          });
+        } catch {}
         next.players = replaceKeys.has("players")
           ? (p.players as GameState["players"])
           : (deepMergeReplaceArrays(
               state.players,
               p.players
             ) as GameState["players"]);
+        // DEBUG: Log result
+        try {
+          console.log("[applyServerPatch] players result:", {
+            resultManaP1: next.players?.p1?.mana,
+            resultManaP2: next.players?.p2?.mana,
+          });
+        } catch {}
       }
       if (p.currentPlayer !== undefined) {
         next.currentPlayer = p.currentPlayer;

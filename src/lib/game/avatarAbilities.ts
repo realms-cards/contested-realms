@@ -19,6 +19,7 @@ export type AvatarAbility =
   | "imposter"
   | "necromancer"
   | "druid"
+  | "animist"
   | null;
 
 /**
@@ -102,6 +103,16 @@ export function isDruid(avatarName: string | null | undefined): boolean {
 }
 
 /**
+ * Check if an avatar name indicates Animist (Gothic expansion)
+ * Uses case-insensitive matching
+ * Animist: Can cast any magic as a spirit with its mana cost for power.
+ */
+export function isAnimist(avatarName: string | null | undefined): boolean {
+  if (!avatarName) return false;
+  return avatarName.toLowerCase().includes("animist");
+}
+
+/**
  * Get the primary ability type for an avatar by name
  * Returns null if no special ability detected
  */
@@ -119,6 +130,7 @@ export function getAvatarAbility(
   if (name.includes("imposter")) return "imposter";
   if (name.includes("necromancer")) return "necromancer";
   if (name.includes("druid")) return "druid";
+  if (name.includes("animist")) return "animist";
 
   return null;
 }

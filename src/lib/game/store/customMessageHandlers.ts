@@ -2582,4 +2582,94 @@ export function handleCustomMessage(
     } catch {}
     return;
   }
+
+  // --- Animist cast choice message handlers ---
+  if (t === "animistBegin") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const casterSeat = (msg as { casterSeat?: unknown }).casterSeat as
+      | PlayerKey
+      | undefined;
+    const card = (msg as { card?: unknown }).card as CardRef | undefined;
+    const manaCost = (msg as { manaCost?: unknown }).manaCost as
+      | number
+      | undefined;
+    const cellKey = (msg as { cellKey?: unknown }).cellKey as
+      | CellKey
+      | undefined;
+    const handIndex = (msg as { handIndex?: unknown }).handIndex as
+      | number
+      | undefined;
+
+    if (
+      !id ||
+      !casterSeat ||
+      !card ||
+      manaCost === undefined ||
+      !cellKey ||
+      handIndex === undefined
+    )
+      return;
+
+    // Opponent sees the Animist choosing how to cast
+    set({
+      pendingAnimistCast: {
+        id,
+        casterSeat,
+        card,
+        manaCost,
+        cellKey,
+        handIndex,
+        status: "choosing",
+        chosenMode: null,
+      },
+    } as Partial<GameState> as GameState);
+
+    try {
+      const playerNum = casterSeat === "p1" ? "1" : "2";
+      get().log(
+        `[p${playerNum}:PLAYER] is choosing how to cast [p${playerNum}card:${card.name}] (Magic or Spirit)...`
+      );
+    } catch {}
+    return;
+  }
+
+  if (t === "animistResolve") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const mode = (msg as { mode?: unknown }).mode as
+      | "magic"
+      | "spirit"
+      | undefined;
+
+    if (!id || !mode) return;
+
+    const pending = get().pendingAnimistCast;
+    if (!pending || pending.id !== id) return;
+
+    // Log the opponent's choice
+    try {
+      const playerNum = pending.casterSeat === "p1" ? "1" : "2";
+      const modeLabel =
+        mode === "spirit" ? `Spirit (Power: ${pending.manaCost})` : "Magic";
+      get().log(
+        `[p${playerNum}:PLAYER] cast [p${playerNum}card:${pending.card.name}] as ${modeLabel}`
+      );
+    } catch {}
+
+    // Clear the pending state - the actual card placement comes via server patch
+    set({ pendingAnimistCast: null } as Partial<GameState> as GameState);
+    return;
+  }
+
+  if (t === "animistCancel") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    set((s) => {
+      if (!s.pendingAnimistCast || (id && s.pendingAnimistCast.id !== id))
+        return s as GameState;
+      return { pendingAnimistCast: null } as Partial<GameState> as GameState;
+    });
+    try {
+      get().log("Animist cast cancelled");
+    } catch {}
+    return;
+  }
 }

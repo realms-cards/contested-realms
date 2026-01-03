@@ -5,6 +5,7 @@ import { useThree } from "@react-three/fiber";
 import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
+import { AnimistCastChoiceOverlay } from "@/components/game/AnimistCastChoiceOverlay";
 import BrowseOverlay from "@/components/game/BrowseOverlay";
 import CallToWarOverlay from "@/components/game/CallToWarOverlay";
 import CardPreview from "@/components/game/CardPreview";
@@ -857,6 +858,9 @@ export default function PlayPage() {
 
       {/* Element Choice Overlay (Valley of Delight, etc.) */}
       <ElementChoiceOverlay />
+
+      {/* Animist Cast Choice Overlay (magic or spirit) */}
+      <AnimistCastChoiceOverlay />
 
       {/* Browse Overlay (spell selection) */}
       <BrowseOverlay />
