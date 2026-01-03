@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { useOnline } from "@/app/online/online-context";
+import { AnimistCastChoiceOverlay } from "@/components/game/AnimistCastChoiceOverlay";
 import UserBadge from "@/components/auth/UserBadge";
 import BrowseOverlay from "@/components/game/BrowseOverlay";
 import CallToWarOverlay from "@/components/game/CallToWarOverlay";
@@ -3134,6 +3135,8 @@ export default function OnlineMatchPage() {
           <EarthquakeOverlay transport={transport} />
           {/* Element Choice Overlay (Valley of Delight, etc.) */}
           <ElementChoiceOverlay />
+          {/* Animist Cast Choice Overlay (magic or spirit) */}
+          <AnimistCastChoiceOverlay />
           {/* Browse Overlay (spell selection) */}
           <BrowseOverlay />
           {/* Common Sense Overlay (search for Ordinary card) */}

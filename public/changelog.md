@@ -1,5 +1,12 @@
 # Changelog
 
+## January 2026
+
+### Jan 3 — Stability & Offline Play
+
+- **Searing Truth, Call to War resolvers** added
+- **added Animist can cast Magics as spirits** to automatically circumvent magic resolvers and make it known to the other player
+
 ## December 2025
 
 ### Dec 30 - Engine improvements

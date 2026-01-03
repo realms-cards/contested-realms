@@ -162,6 +162,21 @@ export const IMPOSTER_MASK_COST = 3; // Mana cost to mask yourself
 // --- Necromancer Mana Cost --------------------------------
 export const NECROMANCER_SKELETON_COST = 1; // Mana cost to summon a Skeleton token
 
+// --- Animist Cast Choice --------------------------------
+// When Animist plays a magic card, they can choose to cast it as a magic or as a spirit
+export type AnimistCastMode = "magic" | "spirit";
+
+export type PendingAnimistCast = {
+  id: string;
+  casterSeat: PlayerKey;
+  card: CardRef;
+  manaCost: number; // The card's mana cost (used as power if cast as spirit)
+  cellKey: CellKey; // Where the card will be placed
+  handIndex: number; // Index in hand where card was selected
+  status: "choosing" | "resolved";
+  chosenMode: AnimistCastMode | null;
+};
+
 // --- Druid Flip State --------------------------------
 // Tracks when a Druid avatar has been flipped (one-way transformation)
 
@@ -909,6 +924,17 @@ export type GameState = {
   setTapPermanent: (at: CellKey, index: number, tapped: boolean) => void;
   // Magic casting flow (MVP)
   pendingMagic: PendingMagic | null;
+  // Animist cast choice (choose magic or spirit mode)
+  pendingAnimistCast: PendingAnimistCast | null;
+  beginAnimistCast: (input: {
+    card: CardRef;
+    manaCost: number;
+    cellKey: CellKey;
+    handIndex: number;
+    casterSeat: PlayerKey;
+  }) => void;
+  resolveAnimistCast: (mode: AnimistCastMode) => void;
+  cancelAnimistCast: () => void;
   // Chaos Twister minigame flow
   pendingChaosTwister: PendingChaosTwister | null;
   beginChaosTwister: (input: {
@@ -1650,5 +1676,6 @@ export type ServerPatchT = Partial<{
   cardScale: GameState["cardScale"];
   specialSiteState: GameState["specialSiteState"];
   pendingEarthquake: GameState["pendingEarthquake"];
+  pendingAnimistCast: GameState["pendingAnimistCast"];
   __replaceKeys: string[];
 }>;

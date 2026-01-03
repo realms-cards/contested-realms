@@ -1,4 +1,5 @@
 import type { StateCreator } from "zustand";
+import { isAnimist } from "@/lib/game/avatarAbilities";
 import {
   ELEMENT_CHOICE_SITES,
   GENESIS_BLOOM_SITES,
@@ -206,6 +207,41 @@ export const createPlayActionsSlice: StateCreator<
         get().log(`Cannot play '${card.name}' during ${state.phase} phase`);
         return state;
       }
+
+      // Check for Animist playing a magic card - trigger choice dialog
+      // Magic cards are spells that are not minions/creatures (no power stat)
+      const isMagicType = type.includes("magic");
+      if (isMagicType && !type.includes("token")) {
+        // Check if player is an Animist (or masked as one)
+        const avatar = state.avatars[who];
+        const avatarName = avatar?.card?.name;
+        const maskedState = state.imposterMasks[who];
+        const effectiveAvatarName = maskedState?.maskAvatar?.name ?? avatarName;
+
+        if (isAnimist(effectiveAvatarName)) {
+          // Get mana cost for the card
+          const manaCost = getManaCost(card, state.metaByCardId);
+          const cellKey = toCellKey(x, y);
+
+          // Trigger the Animist cast choice instead of proceeding
+          setTimeout(() => {
+            get().beginAnimistCast({
+              card,
+              manaCost,
+              cellKey,
+              handIndex: index,
+              casterSeat: who,
+            });
+          }, 0);
+
+          // Return state with card still selected, waiting for choice
+          return {
+            ...state,
+            selectedCard: sel, // Keep selection for visual feedback
+          } as GameState;
+        }
+      }
+
       get().pushHistory();
       const hand = [...state.zones[who].hand];
       hand.splice(index, 1);

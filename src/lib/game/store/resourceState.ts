@@ -47,11 +47,22 @@ export const createResourceSlice: StateCreator<
     const state = get();
     const owner = who === "p1" ? 1 : 2;
     let total = 0;
+    const siteKeys = Object.keys(state.board.sites);
     for (const site of Object.values(state.board.sites)) {
       if (!site) continue;
       if (site.owner === owner && siteProvidesMana(site.card ?? null)) {
         total++;
       }
+    }
+    // DEBUG: Log if base mana seems abnormally high (more than 20 sites is impossible)
+    if (total > 20) {
+      console.warn("[getBaseMana] Abnormal site count!", {
+        who,
+        owner,
+        total,
+        siteKeysCount: siteKeys.length,
+        siteKeys: siteKeys.slice(0, 30), // Log first 30 keys
+      });
     }
     return total;
   },
