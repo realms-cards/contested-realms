@@ -426,7 +426,7 @@ export type PendingCommonSense = {
 
 // --- Call to War Spell State ------------------------------------------------
 // "Search your spellbook for an Exceptional Mortal, reveal it, and put it into your hand. Shuffle your spellbook."
-export type CallToWarPhase = "selecting" | "resolving" | "complete";
+export type CallToWarPhase = "loading" | "selecting" | "resolving" | "complete";
 
 export type PendingCallToWar = {
   id: string;
@@ -759,6 +759,8 @@ export type GameState = {
       defence: number | null;
       cost: number | null;
       rarity: string | null;
+      type: string | null;
+      subTypes: string | null;
     }
   >;
   fetchCardMeta: (ids: number[]) => Promise<void>;

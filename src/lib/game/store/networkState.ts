@@ -547,21 +547,46 @@ export const createNetworkSlice: StateCreator<
           (prevAvatarP2 && !nextAvatarP2) ||
           (prevPermCount > 0 && nextPermCount === 0)
         ) {
-          console.error("[net] CRITICAL: State loss detected!", {
+          // Log each field separately to avoid object collapse
+          console.error("[net] CRITICAL: State loss detected!");
+          console.error(
+            "[net] Avatars - prev:",
             prevAvatarP1,
             prevAvatarP2,
+            "next:",
             nextAvatarP1,
-            nextAvatarP2,
+            nextAvatarP2
+          );
+          console.error(
+            "[net] Permanents - prev:",
             prevPermCount,
-            nextPermCount,
-            patchKeys: Object.keys(p),
-            nextKeys: Object.keys(next),
-            hasAvatarsInPatch: p.avatars !== undefined,
-            hasPermInPatch: p.permanents !== undefined,
-            replaceKeys: Array.from(replaceKeys),
-          });
+            "next:",
+            nextPermCount
+          );
+          console.error("[net] Patch keys:", Object.keys(p).join(", "));
+          console.error("[net] Next keys:", Object.keys(next).join(", "));
+          console.error(
+            "[net] Replace keys:",
+            Array.from(replaceKeys).join(", ")
+          );
+          console.error("[net] Has avatars in patch:", p.avatars !== undefined);
+          console.error(
+            "[net] Has permanents in patch:",
+            p.permanents !== undefined
+          );
+          // Log the actual patch for debugging
+          try {
+            console.error(
+              "[net] Patch content:",
+              JSON.stringify(p, null, 2).slice(0, 2000)
+            );
+          } catch {
+            console.error("[net] Could not stringify patch");
+          }
         }
-      } catch {}
+      } catch (err) {
+        console.error("[net] Error in state loss detection:", err);
+      }
       if (shouldClearSnapshots) {
         try {
           clearSnapshotsStorageFor(get().matchId ?? null);

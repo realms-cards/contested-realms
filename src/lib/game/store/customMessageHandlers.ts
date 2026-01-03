@@ -1321,14 +1321,8 @@ export function handleCustomMessage(
         );
       }
 
-      // Move spell to graveyard
-      try {
-        get().movePermanentToZone(
-          pending.spell.at,
-          pending.spell.index,
-          "graveyard"
-        );
-      } catch {}
+      // Note: Don't call movePermanentToZone here - the caster's patch handles it.
+      // Calling it here causes race conditions since messages arrive before patches.
     }
 
     set({ pendingChaosTwister: null } as Partial<GameState> as GameState);
@@ -1443,14 +1437,8 @@ export function handleCustomMessage(
     const pending = get().pendingBrowse;
     if (!pending || (id && pending.id !== id)) return;
 
-    // Move spell to graveyard (opponent side)
-    try {
-      get().movePermanentToZone(
-        pending.spell.at,
-        pending.spell.index,
-        "graveyard"
-      );
-    } catch {}
+    // Note: Don't call movePermanentToZone here - the caster's patch handles it.
+    // Calling it here causes race conditions since messages arrive before patches.
 
     set({ pendingBrowse: null } as Partial<GameState> as GameState);
     try {
@@ -1539,14 +1527,8 @@ export function handleCustomMessage(
     const pending = get().pendingCommonSense;
     if (!pending || (id && pending.id !== id)) return;
 
-    // Move spell to graveyard (opponent side)
-    try {
-      get().movePermanentToZone(
-        pending.spell.at,
-        pending.spell.index,
-        "graveyard"
-      );
-    } catch {}
+    // Note: Don't call movePermanentToZone here - the caster's patch handles it.
+    // Calling it here causes race conditions since messages arrive before patches.
 
     set({ pendingCommonSense: null } as Partial<GameState> as GameState);
     try {
@@ -1635,14 +1617,8 @@ export function handleCustomMessage(
     const pending = get().pendingCallToWar;
     if (!pending || (id && pending.id !== id)) return;
 
-    // Move spell to graveyard (opponent side)
-    try {
-      get().movePermanentToZone(
-        pending.spell.at,
-        pending.spell.index,
-        "graveyard"
-      );
-    } catch {}
+    // Note: Don't call movePermanentToZone here - the caster's patch handles it.
+    // Calling it here causes race conditions since messages arrive before patches.
 
     set({ pendingCallToWar: null } as Partial<GameState> as GameState);
     try {
@@ -1729,7 +1705,9 @@ export function handleCustomMessage(
     const cardNames = revealedCards.map((c) => c.name || "Unknown").join(", ");
     try {
       get().log(
-        `[${targetSeat.toUpperCase()}] reveals ${cardNames} - ${damageAmount ?? 0} damage incoming`
+        `[${targetSeat.toUpperCase()}] reveals ${cardNames} - ${
+          damageAmount ?? 0
+        } damage incoming`
       );
     } catch {}
     return;
@@ -1742,19 +1720,15 @@ export function handleCustomMessage(
     const pending = get().pendingSearingTruth;
     if (!pending || (id && pending.id !== id)) return;
 
-    // Move spell to graveyard (opponent side)
-    try {
-      get().movePermanentToZone(
-        pending.spell.at,
-        pending.spell.index,
-        "graveyard"
-      );
-    } catch {}
+    // Note: Don't call movePermanentToZone here - the caster's patch handles it.
+    // Calling it here causes race conditions since messages arrive before patches.
 
     set({ pendingSearingTruth: null } as Partial<GameState> as GameState);
     try {
       get().log(
-        `Searing Truth resolved: ${pending.targetSeat?.toUpperCase()} takes ${damageAmount ?? 0} damage`
+        `Searing Truth resolved: ${pending.targetSeat?.toUpperCase()} takes ${
+          damageAmount ?? 0
+        } damage`
       );
     } catch {}
     return;
@@ -1796,7 +1770,7 @@ export function handleCustomMessage(
     const zones = get().zones;
     const actorKey = get().actorKey;
     const isVictim = actorKey === victimSeat;
-    const revealedHand = isVictim ? (zones[victimSeat]?.hand || []) : [];
+    const revealedHand = isVictim ? zones[victimSeat]?.hand || [] : [];
 
     set({
       pendingAccusation: {
@@ -1865,19 +1839,15 @@ export function handleCustomMessage(
     const pending = get().pendingAccusation;
     if (!pending || (id && pending.id !== id)) return;
 
-    // Move spell to graveyard (opponent side)
-    try {
-      get().movePermanentToZone(
-        pending.spell.at,
-        pending.spell.index,
-        "graveyard"
-      );
-    } catch {}
+    // Note: Don't call movePermanentToZone here - the caster's patch handles it.
+    // Calling it here causes race conditions since messages arrive before patches.
 
     set({ pendingAccusation: null } as Partial<GameState> as GameState);
     try {
       get().log(
-        `Accusation resolved: ${selectedCardName ?? "a card"} banished from ${pending.victimSeat.toUpperCase()}'s hand`
+        `Accusation resolved: ${
+          selectedCardName ?? "a card"
+        } banished from ${pending.victimSeat.toUpperCase()}'s hand`
       );
     } catch {}
     return;
@@ -2585,14 +2555,8 @@ export function handleCustomMessage(
       }
     }
 
-    // Move spell to graveyard (opponent side)
-    try {
-      get().movePermanentToZone(
-        pending.spell.at,
-        pending.spell.index,
-        "graveyard"
-      );
-    } catch {}
+    // Note: Don't call movePermanentToZone here - the caster's patch handles it.
+    // Calling it here causes race conditions since messages arrive before patches.
 
     set({ pendingEarthquake: null } as Partial<GameState> as GameState);
     try {
