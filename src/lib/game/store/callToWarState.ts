@@ -15,7 +15,7 @@ function newCallToWarId() {
     .slice(2, 6)}`;
 }
 
-export type CallToWarPhase = "selecting" | "resolving" | "complete";
+export type CallToWarPhase = "loading" | "selecting" | "resolving" | "complete";
 
 export type PendingCallToWar = {
   id: string;
@@ -58,7 +58,20 @@ export const createCallToWarSlice: StateCreator<
     const zones = get().zones;
     const spellbook = zones[casterSeat]?.spellbook || [];
 
-    // First, fetch card meta for all spellbook cards to get rarity and type data
+    // Show loading state immediately
+    set({
+      pendingCallToWar: {
+        id,
+        spell: input.spell,
+        casterSeat,
+        phase: "loading",
+        eligibleCards: [],
+        selectedCardIndex: null,
+        createdAt: Date.now(),
+      },
+    } as Partial<GameState> as GameState);
+
+    // Fetch card meta for all spellbook cards to get rarity and type data
     const cardIds = spellbook
       .map((c) => c.cardId)
       .filter((cardId) => Number.isFinite(cardId) && cardId > 0);
@@ -74,11 +87,13 @@ export const createCallToWarSlice: StateCreator<
     // Find all Exceptional Mortal cards in spellbook
     // Rarity = "Exceptional", Type/subTypes includes "Mortal"
     const eligibleCards = spellbook.filter((card: CardRef) => {
-      const meta = metaByCardId[card.cardId] as {
-        rarity?: string;
-        type?: string;
-        subTypes?: string;
-      } | undefined;
+      const meta = metaByCardId[card.cardId] as
+        | {
+            rarity?: string;
+            type?: string;
+            subTypes?: string;
+          }
+        | undefined;
       const rarity = (meta?.rarity || "").toLowerCase();
       const type = (meta?.type || "").toLowerCase();
       const subTypes = (meta?.subTypes || "").toLowerCase();
@@ -94,22 +109,15 @@ export const createCallToWarSlice: StateCreator<
       const isMinion = type === "minion";
       const hasMortalSubtype = subTypes.includes("mortal");
 
-      console.log(
-        `[CallToWar] Card ${card.name} (id=${card.cardId}): rarity=${rarity}, type=${type}, subTypes=${subTypes}, isExceptional=${isExceptional}, isMortal=${isMortal || hasMortalSubtype}`
-      );
-
       return isExceptional && (isMinion ? hasMortalSubtype : isMortal);
     });
-
-    console.log(
-      `[CallToWar] Found ${eligibleCards.length} Exceptional Mortal cards in spellbook of ${spellbook.length} total`
-    );
 
     if (eligibleCards.length === 0) {
       get().log(
         `[${casterSeat.toUpperCase()}] Call to War: No Exceptional Mortal cards in spellbook`
       );
       // Move spell to graveyard since it resolves with no effect
+      set({ pendingCallToWar: null } as Partial<GameState> as GameState);
       try {
         get().movePermanentToZone(
           input.spell.at,
@@ -120,6 +128,7 @@ export const createCallToWarSlice: StateCreator<
       return;
     }
 
+    // Update with eligible cards
     set({
       pendingCallToWar: {
         id,
