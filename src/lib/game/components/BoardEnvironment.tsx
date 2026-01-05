@@ -79,6 +79,8 @@ function createFabricNormalMap(
   const texture = new DataTexture(data, size, size);
   texture.wrapS = RepeatWrapping;
   texture.wrapT = RepeatWrapping;
+  // Disable mipmap generation - DataTexture format doesn't support glGenerateMipmap
+  texture.generateMipmaps = false;
   texture.minFilter = LinearFilter;
   texture.magFilter = LinearFilter;
   texture.needsUpdate = true;

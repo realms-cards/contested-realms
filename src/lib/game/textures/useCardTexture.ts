@@ -108,7 +108,7 @@ function assertBlockAligned(tex: Texture, url: string) {
 // Ensure a canonical orientation each time we hand a texture to a consumer.
 function normalizeTexture(
   t: Texture,
-  _kind: "ktx2" | "raster",
+  kind: "ktx2" | "raster",
   gl?: WebGLRenderer
 ) {
   let changed = false;
@@ -152,18 +152,35 @@ function normalizeTexture(
     changed = true;
   }
 
+  // Handle mipmaps based on texture type:
+  // - KTX2 compressed textures: mipmaps are pre-baked, don't regenerate (causes WebGL errors)
+  // - Raster textures: can generate mipmaps at runtime
+  const isCompressedTexture = kind === "ktx2";
+
+  if (isCompressedTexture) {
+    // KTX2 textures have mipmaps baked in during compression.
+    // Do NOT set generateMipmaps=true as it triggers glGenerateMipmap which fails on compressed formats.
+    // Just use the mipmap filter to take advantage of pre-baked mipmaps.
+    if (t.generateMipmaps !== false) {
+      t.generateMipmaps = false;
+      changed = true;
+    }
+  } else {
+    // Raster textures: generate mipmaps for smooth filtering at various distances
+    if (!t.generateMipmaps) {
+      t.generateMipmaps = true;
+      changed = true;
+    }
+  }
+
   // Set proper texture filtering to prevent moire/ripple patterns
+  // Use mipmap filtering for both - KTX2 has pre-baked mipmaps, raster will generate them
   if (t.minFilter !== LinearMipmapLinearFilter) {
     t.minFilter = LinearMipmapLinearFilter;
     changed = true;
   }
   if (t.magFilter !== LinearFilter) {
     t.magFilter = LinearFilter;
-    changed = true;
-  }
-  // Generate mipmaps for smooth filtering at various distances
-  if (!t.generateMipmaps) {
-    t.generateMipmaps = true;
     changed = true;
   }
 
