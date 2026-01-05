@@ -8,6 +8,7 @@ import type {
   SiteTile,
   CardRef,
   MagicTarget,
+  ServerPatchT,
 } from "./types";
 import {
   getCellNumber,
@@ -1407,10 +1408,15 @@ export function handleCustomMessage(
     if (!id || cardIndex == null) return;
     set((s) => {
       if (!s.pendingBrowse || s.pendingBrowse.id !== id) return s as GameState;
+      // Build default bottom order (all cards except selected, in original order)
+      const bottomOrder = s.pendingBrowse.revealedCards
+        .map((_, i) => i)
+        .filter((i) => i !== cardIndex);
       return {
         pendingBrowse: {
           ...s.pendingBrowse,
           selectedCardIndex: cardIndex,
+          bottomOrder,
           phase: "ordering",
         },
       } as Partial<GameState> as GameState;
@@ -1764,6 +1770,11 @@ export function handleCustomMessage(
     const evilCardIndices = (msg as { evilCardIndices?: unknown })
       .evilCardIndices as number[] | undefined;
     if (!id || !spellAny || !casterSeat || !victimSeat) return;
+
+    // Skip if we already have this accusation (caster receiving their own broadcast)
+    const existing = get().pendingAccusation;
+    if (existing?.id === id) return;
+
     const rec = spellAny as Record<string, unknown>;
 
     // Get victim's hand (they can see their own cards)
@@ -2670,6 +2681,632 @@ export function handleCustomMessage(
     try {
       get().log("Animist cast cancelled");
     } catch {}
+    return;
+  }
+
+  // --- Highland Princess message handlers ---
+  if (t === "highlandPrincessBegin") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const minionAny = (msg as { minion?: unknown }).minion as unknown;
+    const ownerSeat = (msg as { ownerSeat?: unknown }).ownerSeat as
+      | PlayerKey
+      | undefined;
+    const eligibleCount = (msg as { eligibleCount?: unknown }).eligibleCount as
+      | number
+      | undefined;
+
+    if (!id || !minionAny || !ownerSeat) return;
+    const rec = minionAny as Record<string, unknown>;
+
+    set({
+      pendingHighlandPrincess: {
+        id,
+        minion: {
+          at: rec.at as CellKey,
+          index: Number(rec.index),
+          instanceId: (rec.instanceId as string | null) ?? null,
+          owner: Number(rec.owner) as 1 | 2,
+          card: rec.card as CardRef,
+        },
+        ownerSeat,
+        phase: "selecting",
+        eligibleCards: [], // Opponent doesn't see the cards
+        selectedCard: null,
+        createdAt: Date.now(),
+      },
+    } as Partial<GameState> as GameState);
+
+    try {
+      get().log(
+        `[${ownerSeat.toUpperCase()}] Highland Princess searches for an artifact (${
+          eligibleCount ?? "?"
+        } eligible)`
+      );
+    } catch {}
+    return;
+  }
+
+  if (t === "highlandPrincessResolve") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const selectedCardName = (msg as { selectedCardName?: unknown })
+      .selectedCardName as string | undefined;
+
+    const pending = get().pendingHighlandPrincess;
+    if (!pending || (id && pending.id !== id)) return;
+
+    set({
+      pendingHighlandPrincess: { ...pending, phase: "complete" },
+    } as Partial<GameState> as GameState);
+
+    try {
+      if (selectedCardName) {
+        get().log(
+          `[${pending.ownerSeat.toUpperCase()}] Highland Princess finds ${selectedCardName}`
+        );
+      }
+    } catch {}
+
+    setTimeout(() => {
+      set((state) => {
+        if (state.pendingHighlandPrincess?.id === pending.id) {
+          return { ...state, pendingHighlandPrincess: null } as GameState;
+        }
+        return state as GameState;
+      });
+    }, 500);
+    return;
+  }
+
+  if (t === "highlandPrincessCancel") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    set((s) => {
+      if (
+        !s.pendingHighlandPrincess ||
+        (id && s.pendingHighlandPrincess.id !== id)
+      )
+        return s as GameState;
+      return {
+        pendingHighlandPrincess: null,
+      } as Partial<GameState> as GameState;
+    });
+    try {
+      get().log("Highland Princess search cancelled");
+    } catch {}
+    return;
+  }
+
+  // --- Black Mass message handlers ---
+  if (t === "blackMassBegin") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const spellAny = (msg as { spell?: unknown }).spell as unknown;
+    const casterSeat = (msg as { casterSeat?: unknown }).casterSeat as
+      | PlayerKey
+      | undefined;
+    const topSevenCards = (msg as { topSevenCards?: unknown }).topSevenCards as
+      | CardRef[]
+      | undefined;
+    const eligibleIndices = (msg as { eligibleIndices?: unknown })
+      .eligibleIndices as number[] | undefined;
+    const allMinionIndices = (msg as { allMinionIndices?: unknown })
+      .allMinionIndices as number[] | undefined;
+
+    if (!id || !spellAny || !casterSeat) return;
+    const rec = spellAny as Record<string, unknown>;
+
+    set({
+      pendingBlackMass: {
+        id,
+        spell: {
+          at: rec.at as CellKey,
+          index: Number(rec.index),
+          instanceId: (rec.instanceId as string | null) ?? null,
+          owner: Number(rec.owner) as 1 | 2,
+          card: rec.card as CardRef,
+        },
+        casterSeat,
+        phase: "selecting",
+        topSevenCards: topSevenCards ?? [],
+        eligibleIndices: eligibleIndices ?? [],
+        allMinionIndices: allMinionIndices ?? eligibleIndices ?? [],
+        selectedIndices: [],
+        createdAt: Date.now(),
+      },
+    } as Partial<GameState> as GameState);
+
+    try {
+      get().log(
+        `[${casterSeat.toUpperCase()}] casts Black Mass - searching top spells`
+      );
+    } catch {}
+    return;
+  }
+
+  if (t === "blackMassResolve") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const selectedCardNames = (msg as { selectedCardNames?: unknown })
+      .selectedCardNames as string[] | undefined;
+
+    const pending = get().pendingBlackMass;
+    if (!pending || (id && pending.id !== id)) return;
+
+    set({
+      pendingBlackMass: { ...pending, phase: "complete" },
+    } as Partial<GameState> as GameState);
+
+    try {
+      if (selectedCardNames && selectedCardNames.length > 0) {
+        get().log(
+          `[${pending.casterSeat.toUpperCase()}] draws ${
+            selectedCardNames.length
+          } Evil minion(s)`
+        );
+      } else {
+        get().log(
+          `[${pending.casterSeat.toUpperCase()}] draws no cards from Black Mass`
+        );
+      }
+    } catch {}
+
+    setTimeout(() => {
+      set((state) => {
+        if (state.pendingBlackMass?.id === pending.id) {
+          return { ...state, pendingBlackMass: null } as GameState;
+        }
+        return state as GameState;
+      });
+    }, 500);
+    return;
+  }
+
+  if (t === "blackMassCancel") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    set((s) => {
+      if (!s.pendingBlackMass || (id && s.pendingBlackMass.id !== id))
+        return s as GameState;
+      return { pendingBlackMass: null } as Partial<GameState> as GameState;
+    });
+    try {
+      get().log("Black Mass cancelled");
+    } catch {}
+    return;
+  }
+
+  // --- Mother Nature message handlers ---
+  if (t === "motherNatureRevealBegin") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const motherNatureInstanceId = (msg as { motherNatureInstanceId?: unknown })
+      .motherNatureInstanceId as string | undefined;
+    const motherNatureLocation = (msg as { motherNatureLocation?: unknown })
+      .motherNatureLocation as string | undefined;
+    const ownerSeat = (msg as { ownerSeat?: unknown }).ownerSeat as
+      | PlayerKey
+      | undefined;
+    const revealedCard = (msg as { revealedCard?: unknown }).revealedCard as
+      | CardRef
+      | undefined;
+    const isMinion = (msg as { isMinion?: unknown }).isMinion as
+      | boolean
+      | undefined;
+
+    if (!id || !motherNatureInstanceId || !motherNatureLocation || !ownerSeat)
+      return;
+
+    set({
+      pendingMotherNatureReveal: {
+        id,
+        motherNatureInstanceId,
+        motherNatureLocation,
+        ownerSeat,
+        phase: isMinion ? "choosing" : "revealing",
+        revealedCard: revealedCard ?? null,
+        isMinion: isMinion ?? false,
+        createdAt: Date.now(),
+      },
+    } as Partial<GameState> as GameState);
+
+    try {
+      get().log(
+        `[${ownerSeat.toUpperCase()}] Mother Nature reveals ${
+          revealedCard?.name ?? "a card"
+        }`
+      );
+    } catch {}
+
+    // If not a minion, auto-complete after delay
+    if (!isMinion) {
+      setTimeout(() => {
+        set((state) => {
+          if (state.pendingMotherNatureReveal?.id === id) {
+            return {
+              ...state,
+              pendingMotherNatureReveal: {
+                ...state.pendingMotherNatureReveal,
+                phase: "complete",
+              },
+            } as GameState;
+          }
+          return state as GameState;
+        });
+        setTimeout(() => {
+          set((state) => {
+            if (state.pendingMotherNatureReveal?.id === id) {
+              return { ...state, pendingMotherNatureReveal: null } as GameState;
+            }
+            return state as GameState;
+          });
+        }, 1500);
+      }, 2000);
+    }
+    return;
+  }
+
+  if (t === "motherNatureRevealResolve") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const accepted = (msg as { accepted?: unknown }).accepted as
+      | boolean
+      | undefined;
+    const revealedCardName = (msg as { revealedCardName?: unknown })
+      .revealedCardName as string | undefined;
+
+    const pending = get().pendingMotherNatureReveal;
+    if (!pending || (id && pending.id !== id)) return;
+
+    set({
+      pendingMotherNatureReveal: { ...pending, phase: "complete" },
+    } as Partial<GameState> as GameState);
+
+    try {
+      if (accepted) {
+        get().log(
+          `[${pending.ownerSeat.toUpperCase()}] Mother Nature summons ${
+            revealedCardName ?? "a minion"
+          }!`
+        );
+      } else {
+        get().log(
+          `[${pending.ownerSeat.toUpperCase()}] declines to summon ${
+            revealedCardName ?? "the minion"
+          }`
+        );
+      }
+    } catch {}
+
+    setTimeout(() => {
+      set((state) => {
+        if (state.pendingMotherNatureReveal?.id === pending.id) {
+          return { ...state, pendingMotherNatureReveal: null } as GameState;
+        }
+        return state as GameState;
+      });
+    }, 1000);
+    return;
+  }
+
+  // --- Lilith message handlers ---
+  // Handle request from Lilith owner asking for our top card
+  if (t === "lilithRevealRequest") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const lilithInstanceId = (msg as { lilithInstanceId?: unknown })
+      .lilithInstanceId as string | undefined;
+    const lilithLocation = (msg as { lilithLocation?: unknown })
+      .lilithLocation as CellKey | undefined;
+    const lilithOwner = (msg as { lilithOwner?: unknown }).lilithOwner as
+      | PlayerKey
+      | undefined;
+
+    if (!id || !lilithInstanceId || !lilithLocation || !lilithOwner) return;
+
+    const actorKey = get().actorKey;
+    const zones = get().zones;
+
+    // Only respond if we are the opponent (not the Lilith owner)
+    if (actorKey && actorKey !== lilithOwner) {
+      const ourSpellbook = [...(zones[actorKey]?.spellbook || [])];
+      console.log("[Lilith] Received reveal request, sending our top card:", {
+        actorKey,
+        spellbookLength: ourSpellbook.length,
+        topCard: ourSpellbook[0]?.name || "none",
+      });
+
+      if (ourSpellbook.length === 0) {
+        // Send empty response
+        const transport = get().transport;
+        if (transport?.sendMessage) {
+          try {
+            transport.sendMessage({
+              type: "lilithRevealResponse",
+              id,
+              lilithInstanceId,
+              lilithLocation,
+              lilithOwner,
+              revealedCard: null,
+              isMinion: false,
+              isEmpty: true,
+              ts: Date.now(),
+            } as unknown as { type: string });
+          } catch {}
+        }
+        return;
+      }
+
+      const revealedCard = ourSpellbook[0];
+
+      // Determine if it's a minion
+      const metaByCardId = get().metaByCardId;
+      const meta = metaByCardId[revealedCard.cardId] as
+        | { type?: string }
+        | undefined;
+      const cardType = (meta?.type || revealedCard.type || "").toLowerCase();
+      const isMinion = cardType.includes("minion");
+
+      // Send our top card to the Lilith owner
+      const transport = get().transport;
+      if (transport?.sendMessage) {
+        try {
+          transport.sendMessage({
+            type: "lilithRevealResponse",
+            id,
+            lilithInstanceId,
+            lilithLocation,
+            lilithOwner,
+            revealedCard,
+            isMinion,
+            isEmpty: false,
+            ts: Date.now(),
+          } as unknown as { type: string });
+        } catch {}
+      }
+
+      // Show the reveal on our side too
+      set({
+        pendingLilithReveal: {
+          id,
+          lilithInstanceId,
+          lilithLocation,
+          lilithOwner,
+          phase: "revealing",
+          revealedCard,
+          isMinion,
+          createdAt: Date.now(),
+        },
+      } as Partial<GameState> as GameState);
+
+      try {
+        get().log(
+          `[${lilithOwner.toUpperCase()}] Lilith reveals ${
+            revealedCard.name
+          } from your spellbook`
+        );
+      } catch {}
+    }
+    return;
+  }
+
+  // Handle response from opponent with their top card
+  if (t === "lilithRevealResponse") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const lilithInstanceId = (msg as { lilithInstanceId?: unknown })
+      .lilithInstanceId as string | undefined;
+    const lilithLocation = (msg as { lilithLocation?: unknown })
+      .lilithLocation as CellKey | undefined;
+    const lilithOwner = (msg as { lilithOwner?: unknown }).lilithOwner as
+      | PlayerKey
+      | undefined;
+    const revealedCard = (msg as { revealedCard?: unknown }).revealedCard as
+      | CardRef
+      | null
+      | undefined;
+    const isMinion = (msg as { isMinion?: unknown }).isMinion as
+      | boolean
+      | undefined;
+    const isEmpty = (msg as { isEmpty?: unknown }).isEmpty as
+      | boolean
+      | undefined;
+
+    if (!id || !lilithInstanceId || !lilithLocation || !lilithOwner) return;
+
+    console.log("[Lilith] Received reveal response:", {
+      id,
+      revealedCard: revealedCard?.name || "none",
+      isMinion,
+      isEmpty,
+    });
+
+    if (isEmpty) {
+      // Opponent's spellbook is empty
+      set({ pendingLilithReveal: null } as Partial<GameState> as GameState);
+      try {
+        get().log(
+          `[${lilithOwner.toUpperCase()}] Lilith: Opponent's spellbook is empty`
+        );
+      } catch {}
+      return;
+    }
+
+    // Update the pending reveal with the actual card
+    set({
+      pendingLilithReveal: {
+        id,
+        lilithInstanceId,
+        lilithLocation,
+        lilithOwner,
+        phase: "revealing",
+        revealedCard: revealedCard ?? null,
+        isMinion: isMinion ?? false,
+        createdAt: Date.now(),
+      },
+    } as Partial<GameState> as GameState);
+
+    try {
+      get().log(
+        `[${lilithOwner.toUpperCase()}] Lilith reveals ${
+          revealedCard?.name ?? "a card"
+        } from opponent's spellbook`
+      );
+    } catch {}
+    return;
+  }
+
+  if (t === "lilithRevealBegin") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const lilithInstanceId = (msg as { lilithInstanceId?: unknown })
+      .lilithInstanceId as string | undefined;
+    const lilithLocation = (msg as { lilithLocation?: unknown })
+      .lilithLocation as CellKey | undefined;
+    const lilithOwner = (msg as { lilithOwner?: unknown }).lilithOwner as
+      | PlayerKey
+      | undefined;
+    const revealedCard = (msg as { revealedCard?: unknown }).revealedCard as
+      | CardRef
+      | undefined;
+    const isMinion = (msg as { isMinion?: unknown }).isMinion as
+      | boolean
+      | undefined;
+
+    if (!id || !lilithInstanceId || !lilithLocation || !lilithOwner) return;
+
+    set({
+      pendingLilithReveal: {
+        id,
+        lilithInstanceId,
+        lilithLocation,
+        lilithOwner,
+        phase: "revealing",
+        revealedCard: revealedCard ?? null,
+        isMinion: isMinion ?? false,
+        createdAt: Date.now(),
+      },
+    } as Partial<GameState> as GameState);
+
+    try {
+      get().log(
+        `[${lilithOwner.toUpperCase()}] Lilith reveals ${
+          revealedCard?.name ?? "a card"
+        } from opponent's spellbook`
+      );
+    } catch {}
+    return;
+  }
+
+  if (t === "lilithRevealResolve") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const isMinion = (msg as { isMinion?: unknown }).isMinion as
+      | boolean
+      | undefined;
+    const lilithOwner = (msg as { lilithOwner?: unknown }).lilithOwner as
+      | PlayerKey
+      | undefined;
+    const revealedCard = (msg as { revealedCard?: unknown }).revealedCard as
+      | CardRef
+      | undefined;
+    const revealedCardName = (msg as { revealedCardName?: unknown })
+      .revealedCardName as string | undefined;
+
+    const pending = get().pendingLilithReveal;
+    const actorKey = get().actorKey;
+
+    console.log("[Lilith] Received lilithRevealResolve:", {
+      id,
+      isMinion,
+      lilithOwner,
+      revealedCardName,
+      actorKey,
+      pendingId: pending?.id,
+      pendingPhase: pending?.phase,
+    });
+
+    if (!pending || (id && pending.id !== id)) {
+      console.log("[Lilith] Skipping resolve - no pending or ID mismatch");
+      return;
+    }
+
+    const effectiveLilithOwner = lilithOwner || pending.lilithOwner;
+
+    // If we are the opponent (not the Lilith owner), we need to modify our spellbook
+    if (actorKey && actorKey !== effectiveLilithOwner) {
+      console.log("[Lilith] We are opponent, modifying our spellbook");
+      const zones = get().zones;
+      const ourSpellbook = [...(zones[actorKey]?.spellbook || [])];
+
+      console.log("[Lilith] Spellbook before modification:", {
+        length: ourSpellbook.length,
+        topCard: ourSpellbook[0]?.name || "none",
+      });
+
+      if (ourSpellbook.length > 0) {
+        // Remove the top card
+        const removedCard = ourSpellbook.shift();
+        console.log("[Lilith] Removed top card:", removedCard?.name);
+
+        if (!isMinion && revealedCard) {
+          // Not a minion - put at bottom of our spellbook
+          ourSpellbook.push(revealedCard);
+          console.log("[Lilith] Added card to bottom:", revealedCard.name);
+        }
+
+        console.log("[Lilith] Spellbook after modification:", {
+          length: ourSpellbook.length,
+        });
+
+        // Update our zones
+        const zonesNext = {
+          ...zones,
+          [actorKey]: {
+            ...zones[actorKey],
+            spellbook: ourSpellbook,
+          },
+        };
+
+        set({
+          zones: zonesNext,
+          pendingLilithReveal: { ...pending, phase: "complete" },
+        } as Partial<GameState> as GameState);
+
+        // Send patch for our spellbook
+        console.log("[Lilith] Sending spellbook patch");
+        get().trySendPatch({
+          zones: {
+            [actorKey]: { spellbook: ourSpellbook },
+          },
+        } as unknown as ServerPatchT);
+      } else {
+        console.log("[Lilith] Spellbook empty, nothing to modify");
+        set({
+          pendingLilithReveal: { ...pending, phase: "complete" },
+        } as Partial<GameState> as GameState);
+      }
+    } else {
+      // We are the Lilith owner - just update phase (we already handled our part)
+      console.log("[Lilith] We are Lilith owner, just updating phase");
+      set({
+        pendingLilithReveal: { ...pending, phase: "complete" },
+      } as Partial<GameState> as GameState);
+    }
+
+    try {
+      if (isMinion) {
+        get().log(
+          `[${effectiveLilithOwner.toUpperCase()}] Lilith summons ${
+            revealedCardName ?? "a minion"
+          }!`
+        );
+      } else {
+        get().log(`${revealedCardName ?? "Card"} goes to bottom of spellbook`);
+      }
+    } catch {}
+
+    // Clear pending after a short delay
+    setTimeout(() => {
+      set((state) => {
+        if (state.pendingLilithReveal?.id === pending.id) {
+          return {
+            ...state,
+            pendingLilithReveal: null,
+          } as GameState;
+        }
+        return state as GameState;
+      });
+    }, 500);
     return;
   }
 }

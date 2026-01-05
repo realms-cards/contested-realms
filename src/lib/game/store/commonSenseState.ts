@@ -8,6 +8,7 @@ import type {
   ServerPatchT,
   Zones,
 } from "./types";
+import { getHaystackLimit } from "./utils/boardHelpers";
 
 function newCommonSenseId() {
   return `cs_${Date.now().toString(36)}_${Math.random()
@@ -56,7 +57,14 @@ export const createCommonSenseSlice: StateCreator<
     const id = newCommonSenseId();
     const casterSeat = input.casterSeat;
     const zones = get().zones;
-    const spellbook = zones[casterSeat]?.spellbook || [];
+    const fullSpellbook = zones[casterSeat]?.spellbook || [];
+
+    // Haystack limits opponent's searches to top 3
+    const board = get().board;
+    const haystackLimit = getHaystackLimit(casterSeat, board.sites || {});
+    const spellbook = haystackLimit
+      ? fullSpellbook.slice(0, haystackLimit)
+      : fullSpellbook;
 
     // First, fetch card meta for all spellbook cards to get rarity data
     const cardIds = spellbook
@@ -76,15 +84,8 @@ export const createCommonSenseSlice: StateCreator<
     const eligibleCards = spellbook.filter((card: CardRef) => {
       const meta = metaByCardId[card.cardId] as { rarity?: string } | undefined;
       const rarity = (meta?.rarity || "").toLowerCase();
-      console.log(
-        `[CommonSense] Card ${card.name} (id=${card.cardId}): rarity=${rarity}`
-      );
       return rarity === "ordinary";
     });
-
-    console.log(
-      `[CommonSense] Found ${eligibleCards.length} Ordinary cards in spellbook of ${spellbook.length} total`
-    );
 
     if (eligibleCards.length === 0) {
       get().log(

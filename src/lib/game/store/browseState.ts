@@ -1,6 +1,7 @@
 import type { StateCreator } from "zustand";
 import type { CustomMessage } from "@/lib/net/transport";
 import type { GameState, PlayerKey, ServerPatchT, Zones } from "./types";
+import { getHaystackLimit } from "./utils/boardHelpers";
 
 function newBrowseId() {
   return `browse_${Date.now().toString(36)}_${Math.random()
@@ -25,15 +26,17 @@ export const createBrowseSlice: StateCreator<GameState, [], [], BrowseSlice> = (
   pendingBrowse: null,
 
   beginBrowse: (input) => {
-    console.log("[Browse] beginBrowse called", { input });
     const id = newBrowseId();
     const casterSeat = input.casterSeat;
     const zones = get().zones;
     const spellbook = zones[casterSeat]?.spellbook || [];
-    console.log("[Browse] spellbook length:", spellbook.length);
 
     // Take up to 7 cards from the top of spellbook
-    const revealedCards = spellbook.slice(0, 7);
+    // Haystack limits opponent's searches to top 3
+    const board = get().board;
+    const haystackLimit = getHaystackLimit(casterSeat, board.sites || {});
+    const searchLimit = haystackLimit ?? 7;
+    const revealedCards = spellbook.slice(0, searchLimit);
 
     if (revealedCards.length === 0) {
       get().log(
@@ -123,36 +126,16 @@ export const createBrowseSlice: StateCreator<GameState, [], [], BrowseSlice> = (
 
   setBrowseBottomOrder: (order) => {
     const pending = get().pendingBrowse;
-    if (!pending || pending.phase !== "ordering") {
-      console.log(
-        "[Browse] setBrowseBottomOrder: invalid phase or no pending",
-        { phase: pending?.phase }
-      );
-      return;
-    }
+    if (!pending || pending.phase !== "ordering") return;
 
     // Validate order contains all indices except selectedCardIndex
     const expectedIndices = pending.revealedCards
       .map((_, i) => i)
       .filter((i) => i !== pending.selectedCardIndex);
 
-    if (order.length !== expectedIndices.length) {
-      console.log("[Browse] setBrowseBottomOrder: length mismatch", {
-        order,
-        expectedIndices,
-      });
-      return;
-    }
+    if (order.length !== expectedIndices.length) return;
     const orderSet = new Set(order);
-    if (!expectedIndices.every((i) => orderSet.has(i))) {
-      console.log("[Browse] setBrowseBottomOrder: indices mismatch", {
-        order,
-        expectedIndices,
-      });
-      return;
-    }
-
-    console.log("[Browse] setBrowseBottomOrder: updating order", { order });
+    if (!expectedIndices.every((i) => orderSet.has(i))) return;
     set({
       pendingBrowse: {
         ...pending,
@@ -199,10 +182,12 @@ export const createBrowseSlice: StateCreator<GameState, [], [], BrowseSlice> = (
     }
 
     // Put the rest on the bottom of spellbook in the specified order
+    // First in the order = top of bottom stack = pushed LAST (highest index = drawn last among bottom cards)
     const bottomCards = pending.bottomOrder.map(
       (i) => pending.revealedCards[i]
     );
-    spellbook.push(...bottomCards);
+    // Reverse so first in UI list ends up at top of bottom (lowest index among added cards)
+    spellbook.push(...bottomCards.reverse());
 
     // Update zones
     const zonesNext = {

@@ -157,6 +157,12 @@ export const createNetworkSlice: StateCreator<
           });
         } catch {}
       }
+
+      // Track if the turn is changing (for end-of-turn triggers like Lilith)
+      const prevCurrentPlayer = state.currentPlayer;
+      const turnChanging =
+        p.currentPlayer !== undefined && p.currentPlayer !== prevCurrentPlayer;
+
       if (p.currentPlayer !== undefined) {
         next.currentPlayer = p.currentPlayer;
       }
@@ -166,6 +172,56 @@ export const createNetworkSlice: StateCreator<
       if (p.phase !== undefined) {
         next.phase = p.phase;
       }
+
+      // If the turn is changing in online play, trigger turn-based effects
+      // Each effect has internal guards to only fire on the owner's client
+      if (turnChanging && prevCurrentPlayer !== undefined) {
+        const endingPlayerSeat = (
+          prevCurrentPlayer === 1 ? "p1" : "p2"
+        ) as PlayerKey;
+        const startingPlayerSeat = (
+          endingPlayerSeat === "p1" ? "p2" : "p1"
+        ) as PlayerKey;
+        const actorKey = get().actorKey;
+        console.log(
+          "[applyServerPatch] Turn changing:",
+          endingPlayerSeat,
+          "->",
+          startingPlayerSeat,
+          "(we are",
+          actorKey,
+          ")"
+        );
+
+        // End-of-turn effects (Lilith) - only trigger if WE are the ending player
+        // The Lilith trigger has its own guard but we can skip the call entirely
+        if (actorKey === endingPlayerSeat) {
+          setTimeout(() => {
+            try {
+              get().triggerLilithEndOfTurn(endingPlayerSeat);
+            } catch (e) {
+              console.error("[applyServerPatch] Error triggering Lilith:", e);
+            }
+          }, 0);
+        }
+
+        // Start-of-turn effects (Mother Nature) - only trigger if WE are the starting player
+        // The Mother Nature trigger has its own guard but we can skip the call entirely
+        if (actorKey === startingPlayerSeat) {
+          // Delay to ensure turn state is fully updated and any end-of-turn UI clears
+          setTimeout(() => {
+            try {
+              get().triggerMotherNatureStartOfTurn(startingPlayerSeat);
+            } catch (e) {
+              console.error(
+                "[applyServerPatch] Error triggering Mother Nature:",
+                e
+              );
+            }
+          }, 500);
+        }
+      }
+
       if (p.d20Rolls !== undefined) {
         next.d20Rolls = replaceKeys.has("d20Rolls")
           ? p.d20Rolls
@@ -339,6 +395,111 @@ export const createNetworkSlice: StateCreator<
         next.permanents = normalizePermanentsRecord(
           source as Permanents
         ) as GameState["permanents"];
+
+        // Detect Lilith/Mother Nature minions in permanents
+        // On snapshot replace, register ALL existing Lilith/Mother Nature
+        // On incremental patch, only register NEW ones
+        const prevPermanents = state.permanents || {};
+        const nextPermanents = next.permanents || {};
+        const isFullReplace = replaceKeys.has("permanents");
+
+        // Get already registered instance IDs to avoid duplicates
+        const registeredLiliths = new Set(
+          (state.lilithMinions || []).map((l) => l.instanceId)
+        );
+        const registeredMotherNatures = new Set(
+          (state.motherNatureMinions || []).map((m) => m.instanceId)
+        );
+
+        const prevInstanceIds = new Set<string>();
+        if (!isFullReplace) {
+          for (const cellKey of Object.keys(prevPermanents)) {
+            for (const perm of prevPermanents[cellKey] || []) {
+              if (perm.instanceId) prevInstanceIds.add(perm.instanceId);
+            }
+          }
+        }
+
+        // Schedule registration after state update
+        const newMinionsToRegister: Array<{
+          type: "lilith" | "motherNature";
+          instanceId: string;
+          location: string;
+          ownerSeat: PlayerKey;
+          cardName: string;
+        }> = [];
+
+        for (const cellKey of Object.keys(nextPermanents)) {
+          for (const perm of nextPermanents[cellKey] || []) {
+            if (!perm.instanceId) continue;
+            // Skip if already in prev (for incremental) or already registered
+            if (!isFullReplace && prevInstanceIds.has(perm.instanceId))
+              continue;
+
+            const cardName = (perm.card?.name || "").toLowerCase();
+            const cardType = (perm.card?.type || "").toLowerCase();
+            const ownerSeat = (perm.owner === 1 ? "p1" : "p2") as PlayerKey;
+
+            if (cardName === "lilith" && cardType.includes("minion")) {
+              if (!registeredLiliths.has(perm.instanceId)) {
+                newMinionsToRegister.push({
+                  type: "lilith",
+                  instanceId: perm.instanceId,
+                  location: cellKey,
+                  ownerSeat,
+                  cardName: perm.card?.name || "Lilith",
+                });
+              }
+            } else if (
+              cardName === "mother nature" &&
+              cardType.includes("minion")
+            ) {
+              if (!registeredMotherNatures.has(perm.instanceId)) {
+                newMinionsToRegister.push({
+                  type: "motherNature",
+                  instanceId: perm.instanceId,
+                  location: cellKey,
+                  ownerSeat,
+                  cardName: perm.card?.name || "Mother Nature",
+                });
+              }
+            }
+          }
+        }
+
+        if (newMinionsToRegister.length > 0) {
+          setTimeout(() => {
+            for (const minion of newMinionsToRegister) {
+              try {
+                if (minion.type === "lilith") {
+                  console.log(
+                    "[networkState] Registering Lilith from patch:",
+                    minion
+                  );
+                  get().registerLilith({
+                    instanceId: minion.instanceId,
+                    location: minion.location,
+                    ownerSeat: minion.ownerSeat,
+                    cardName: minion.cardName,
+                  });
+                } else if (minion.type === "motherNature") {
+                  console.log(
+                    "[networkState] Registering Mother Nature from patch:",
+                    minion
+                  );
+                  get().registerMotherNature({
+                    instanceId: minion.instanceId,
+                    location: minion.location,
+                    ownerSeat: minion.ownerSeat,
+                    cardName: minion.cardName,
+                  });
+                }
+              } catch (e) {
+                console.error("[networkState] Error registering minion:", e);
+              }
+            }
+          }, 0);
+        }
       }
       if (p.mulligans !== undefined) {
         next.mulligans = replaceKeys.has("mulligans")

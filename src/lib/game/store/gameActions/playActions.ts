@@ -444,6 +444,11 @@ export const createPlayActionsSlice: StateCreator<
       const isMorgana = cardNameLower.includes("morgana le fay");
       const isPithImp = cardNameLower.includes("pith imp");
       const isOmphalos = cardNameLower.includes("omphalos");
+      const isLilith = cardNameLower === "lilith";
+      const isMotherNature = cardNameLower === "mother nature";
+      const isBlackMass = cardNameLower === "black mass";
+      const isHighlandPrincess = cardNameLower === "highland princess";
+      const isAssortedAnimals = cardNameLower === "assorted animals";
       console.log("[playActions] Card played:", {
         cardName: card.name,
         cardNameLower,
@@ -456,7 +461,10 @@ export const createPlayActionsSlice: StateCreator<
         isMorgana,
         isPithImp,
         isOmphalos,
+        isLilith,
+        isMotherNature,
         type,
+        typeIncludesMinion: type.includes("minion"),
       });
 
       // If this is Chaos Twister, begin the dexterity minigame flow
@@ -564,6 +572,43 @@ export const createPlayActionsSlice: StateCreator<
           });
         } catch {}
       }
+      // If this is Black Mass, begin the Evil minion search flow
+      else if (isBlackMass && newest) {
+        try {
+          get().beginBlackMass({
+            spell: {
+              at: key,
+              index: arr.length - 1,
+              instanceId: newest.instanceId ?? null,
+              owner: newest.owner,
+              card: newest.card as CardRef,
+            },
+            casterSeat: who,
+          });
+        } catch {}
+      }
+      // If this is Assorted Animals (X-cost spell), begin the Beast search flow
+      // X value is the total mana spent minus the base cost (which is 0 for this spell)
+      else if (isAssortedAnimals && newest) {
+        try {
+          // For X spells, we need to determine X from the mana spent
+          // The card's cost is null/undefined for X spells, so X = mana spent
+          const manaCost =
+            (newest.card as CardRef & { cost?: number }).cost ?? 0;
+          const xValue = Math.max(0, manaCost); // X is the total cost paid
+          get().beginAssortedAnimals({
+            spell: {
+              at: key,
+              index: arr.length - 1,
+              instanceId: newest.instanceId ?? null,
+              owner: newest.owner,
+              card: newest.card as CardRef,
+            },
+            casterSeat: who,
+            xValue,
+          });
+        } catch {}
+      }
       // If this is Morgana le Fay (minion with Genesis), trigger her ability
       else if (isMorgana && newest && type.includes("minion")) {
         try {
@@ -621,6 +666,64 @@ export const createPlayActionsSlice: StateCreator<
           });
         } catch (e) {
           console.error("[playActions] Error registering Omphalos:", e);
+        }
+      }
+      // If this is Lilith minion, register for end-of-turn reveals
+      if (isLilith && newest && type.includes("minion")) {
+        console.log("[playActions] Registering Lilith:", {
+          at: key,
+          owner: newest.owner,
+          ownerSeat: who,
+        });
+        try {
+          get().registerLilith({
+            instanceId: newest.instanceId ?? `lilith_${Date.now()}`,
+            location: key,
+            ownerSeat: who,
+            cardName: card.name || "Lilith",
+          });
+        } catch (e) {
+          console.error("[playActions] Error registering Lilith:", e);
+        }
+      }
+      // If this is Mother Nature minion, register for start-of-turn reveals
+      if (isMotherNature && newest && type.includes("minion")) {
+        console.log("[playActions] Registering Mother Nature:", {
+          at: key,
+          owner: newest.owner,
+          ownerSeat: who,
+        });
+        try {
+          get().registerMotherNature({
+            instanceId: newest.instanceId ?? `mother_nature_${Date.now()}`,
+            location: key,
+            ownerSeat: who,
+            cardName: card.name || "Mother Nature",
+          });
+        } catch (e) {
+          console.error("[playActions] Error registering Mother Nature:", e);
+        }
+      }
+      // If this is Highland Princess minion, trigger Genesis (search for artifact ≤1)
+      if (isHighlandPrincess && newest && type.includes("minion")) {
+        console.log("[playActions] Triggering Highland Princess Genesis:", {
+          at: key,
+          owner: newest.owner,
+          ownerSeat: who,
+        });
+        try {
+          get().triggerHighlandPrincessGenesis({
+            minion: {
+              at: key,
+              index: arr.length - 1,
+              instanceId: newest.instanceId ?? null,
+              owner: newest.owner,
+              card: newest.card as CardRef,
+            },
+            ownerSeat: who,
+          });
+        } catch (e) {
+          console.error("[playActions] Error triggering Highland Princess:", e);
         }
       }
       // If this is a Magic card (but not one with special handling), begin the magic casting flow

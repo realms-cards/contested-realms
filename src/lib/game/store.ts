@@ -1,7 +1,10 @@
 import { create, type StateCreator } from "zustand";
 import { createAnimistSlice } from "./store/animistState";
 import { createAvatarSlice } from "./store/avatarState";
+import { createBlackMassSlice } from "./store/blackMassState";
 import { createBoardSlice, createInitialBoard } from "./store/boardState";
+import { createHighlandPrincessSlice } from "./store/highlandPrincessState";
+import { createAssortedAnimalsSlice } from "./store/assortedAnimalsState";
 import {
   createBoardUiSlice,
   createInitialBoardUiState,
@@ -40,7 +43,9 @@ import {
   createInitialImposterMasks,
 } from "./store/imposterMaskState";
 import { createInteractionSlice } from "./store/interactionState";
+import { createLilithSlice } from "./store/lilithState";
 import { createMagicSlice } from "./store/magicState";
+import { createMotherNatureSlice } from "./store/motherNatureState";
 import { createMorganaSlice } from "./store/morganaState";
 import {
   createNecromancerSlice,
@@ -145,6 +150,11 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   ...createPithImpSlice(set, get, storeApi),
   ...createMorganaSlice(set, get, storeApi),
   ...createOmphalosSlice(set, get, storeApi),
+  ...createLilithSlice(set, get, storeApi),
+  ...createMotherNatureSlice(set, get, storeApi),
+  ...createBlackMassSlice(set, get, storeApi),
+  ...createHighlandPrincessSlice(set, get, storeApi),
+  ...createAssortedAnimalsSlice(set, get, storeApi),
   ...createPreferenceSlice(set, get, storeApi),
   ...createCardMetaSlice(set, get, storeApi),
   ...createSessionSlice(set, get, storeApi),

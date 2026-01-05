@@ -184,25 +184,20 @@ function CardDisplay({
         interactive
           ? "cursor-pointer hover:ring-2 hover:ring-red-400/50 hover:scale-105"
           : ""
-      } ${selected ? "ring-4 ring-red-500 scale-105 shadow-lg shadow-red-500/30" : ""} ${
-        isEvil && !selected ? "ring-2 ring-purple-500/50" : ""
-      }`}
+      } ${
+        selected
+          ? "ring-4 ring-red-500 scale-105 shadow-lg shadow-red-500/30"
+          : ""
+      } ${isEvil && !selected ? "ring-2 ring-purple-500/50" : ""}`}
     >
-      {card.slug ? (
-        <Image
-          src={`/images/cards/${card.slug}.avif`}
-          alt={card.name || "Card"}
-          fill
-          className="object-cover"
-          sizes="(max-width: 640px) 45vw, (max-width: 1024px) 30vw, 15vw"
-        />
-      ) : (
-        <div className="w-full h-full bg-gradient-to-br from-red-800 to-red-950 flex items-center justify-center p-2">
-          <span className="text-white text-xs text-center font-medium">
-            {card.name || "Unknown Card"}
-          </span>
-        </div>
-      )}
+      <Image
+        src={`/api/images/${card.slug || card.cardId}`}
+        alt={card.name || "Card"}
+        fill
+        className="object-cover"
+        sizes="(max-width: 640px) 45vw, (max-width: 1024px) 30vw, 15vw"
+        unoptimized
+      />
       {isEvil && (
         <div className="absolute top-1 right-1 bg-purple-600 text-white text-xs px-1 rounded">
           Evil

@@ -2,6 +2,12 @@
 
 ## January 2026
 
+### Jan 5 - More card resolvers and more fixed
+
+- **fixes for toolbox** standard setting for peek/scry/draw is now 1 and we support player names
+- **special resolvers for Lilith, Mother Nature,Accusation, Black Mass, Highland Princess, Call to War, Assorted Animals added** as well as Haystack 😉
+- **fix WebGL errors** mipmaps are not regenerated needlessly
+
 ### Jan 3 — Stability & Offline Play
 
 - **Searing Truth, Call to War resolvers** added

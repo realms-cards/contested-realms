@@ -96,18 +96,24 @@ export const createAccusationSlice: StateCreator<
     }
 
     // Check for Evil cards in hand
+    // Evil minion types: Demons, Undead, Monsters
+    const EVIL_SUBTYPES = ["demon", "undead", "monster"];
+    const isEvilSubtype = (subTypes: string) => {
+      const lower = subTypes.toLowerCase();
+      return EVIL_SUBTYPES.some((evil) => lower.includes(evil));
+    };
+
     const metaByCardId = get().metaByCardId;
     const evilCardIndices: number[] = [];
     for (let i = 0; i < victimHand.length; i++) {
       const card = victimHand[i];
-      const meta = metaByCardId[card.cardId] as {
-        rulesText?: string;
-        subTypes?: string;
-      } | undefined;
-      const rulesText = (meta?.rulesText || "").toLowerCase();
-      const subTypes = (meta?.subTypes || "").toLowerCase();
-      // Check if card has "Evil" in its rules text or subtypes
-      if (rulesText.includes("evil") || subTypes.includes("evil")) {
+      const meta = metaByCardId[card.cardId] as
+        | {
+            subTypes?: string;
+          }
+        | undefined;
+      const subTypes = meta?.subTypes || card.subTypes || "";
+      if (isEvilSubtype(subTypes)) {
         evilCardIndices.push(i);
       }
     }
@@ -121,13 +127,13 @@ export const createAccusationSlice: StateCreator<
         if (perm.owner !== (victimSeat === "p1" ? 1 : 2)) continue;
         const type = (perm.card?.type || "").toLowerCase();
         if (!type.includes("minion")) continue;
-        const permMeta = metaByCardId[perm.card?.cardId ?? 0] as {
-          rulesText?: string;
-          subTypes?: string;
-        } | undefined;
-        const permRules = (permMeta?.rulesText || "").toLowerCase();
-        const permSubTypes = (permMeta?.subTypes || "").toLowerCase();
-        if (permRules.includes("evil") || permSubTypes.includes("evil")) {
+        const permMeta = metaByCardId[perm.card?.cardId ?? 0] as
+          | {
+              subTypes?: string;
+            }
+          | undefined;
+        const permSubTypes = permMeta?.subTypes || perm.card?.subTypes || "";
+        if (isEvilSubtype(permSubTypes)) {
           hasEvilAlly = true;
           break;
         }
@@ -302,7 +308,9 @@ export const createAccusationSlice: StateCreator<
     }
 
     get().log(
-      `Accusation resolved: ${selectedCard?.name || "card"} banished from ${victimSeat.toUpperCase()}'s hand`
+      `Accusation resolved: ${
+        selectedCard?.name || "card"
+      } banished from ${victimSeat.toUpperCase()}'s hand`
     );
   },
 
