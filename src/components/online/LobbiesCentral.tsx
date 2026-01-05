@@ -899,8 +899,13 @@ export default function LobbiesCentral({
         {showLobbies &&
           filtered.map((l) => {
             const isMine = joinedLobbyId === l.id; // Source of truth: joinedLobbyId
-            const host =
-              l.players.find((p) => p.id === l.hostId)?.displayName || "Host";
+            const hostPlayer = l.players.find((p) => p.id === l.hostId);
+            const opponentPlayer = l.players.find((p) => p.id !== l.hostId);
+            const host = hostPlayer?.displayName || "Host";
+            const playerDisplay =
+              l.status === "started" && opponentPlayer
+                ? `${host} vs ${opponentPlayer.displayName}`
+                : host;
             const open = l.status === "open";
             const full = l.players.length >= l.maxPlayers;
             return (
@@ -963,7 +968,7 @@ export default function LobbiesCentral({
                         🏆 {l.soatcLeagueMatch.tournamentName}
                       </span>
                     )}
-                    <span>{host}</span>
+                    <span>{playerDisplay}</span>
                     <span>•</span>
                     <span>
                       {l.players.length}/{l.maxPlayers}
