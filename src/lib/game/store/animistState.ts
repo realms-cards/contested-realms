@@ -338,20 +338,60 @@ export const createAnimistSlice: StateCreator<
         selectedCard: null,
       });
 
-      // Trigger the magic cast flow for targeting
+      // Trigger the appropriate magic cast flow based on card name
       const newest = arr[arr.length - 1];
       if (newest) {
+        const cardNameLower = (card.name || "").toLowerCase();
+        const spellInfo = {
+          at: cellKey as CellKey,
+          index: arr.length - 1,
+          instanceId: newest.instanceId ?? null,
+          owner: ownerNum as 1 | 2,
+          card: newest.card as CardRef,
+        };
+
+        // Check for cards with custom resolvers
+        const isChaosTwister = cardNameLower === "chaos twister";
+        const isBrowse = cardNameLower === "browse";
+        const isCommonSense = cardNameLower === "common sense";
+        const isCallToWar = cardNameLower === "call to war";
+        const isSearingTruth = cardNameLower === "searing truth";
+        const isAccusation = cardNameLower === "accusation";
+        const isEarthquake = cardNameLower === "earthquake";
+        const isBlackMass = cardNameLower === "black mass";
+        const isAssortedAnimals = cardNameLower === "assorted animals";
+
         try {
-          get().beginMagicCast({
-            tile: { x, y },
-            spell: {
-              at: cellKey as CellKey,
-              index: arr.length - 1,
-              instanceId: newest.instanceId ?? null,
-              owner: ownerNum as 1 | 2,
-              card: newest.card as CardRef,
-            },
-          });
+          if (isChaosTwister) {
+            get().beginChaosTwister({ spell: spellInfo, casterSeat: who });
+          } else if (isBrowse) {
+            get().beginBrowse({ spell: spellInfo, casterSeat: who });
+          } else if (isCommonSense) {
+            get().beginCommonSense({ spell: spellInfo, casterSeat: who });
+          } else if (isCallToWar) {
+            get().beginCallToWar({ spell: spellInfo, casterSeat: who });
+          } else if (isSearingTruth) {
+            get().beginSearingTruth({ spell: spellInfo, casterSeat: who });
+          } else if (isAccusation) {
+            get().beginAccusation({ spell: spellInfo, casterSeat: who });
+          } else if (isEarthquake) {
+            get().beginEarthquake({ spell: spellInfo, casterSeat: who });
+          } else if (isBlackMass) {
+            get().beginBlackMass({ spell: spellInfo, casterSeat: who });
+          } else if (isAssortedAnimals) {
+            // For X spells, X = mana cost paid
+            get().beginAssortedAnimals({
+              spell: spellInfo,
+              casterSeat: who,
+              xValue: manaCost,
+            });
+          } else {
+            // Default: generic magic cast flow for targeting
+            get().beginMagicCast({
+              tile: { x, y },
+              spell: spellInfo,
+            });
+          }
         } catch {}
       }
     }

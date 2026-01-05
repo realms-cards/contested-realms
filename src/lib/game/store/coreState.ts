@@ -417,6 +417,11 @@ export const createCoreSlice: StateCreator<
       get().triggerOmphalosEndOfTurn(endingPlayerSeat);
     } catch {}
 
+    // Trigger Lilith end-of-turn reveals for the ending player
+    try {
+      get().triggerLilithEndOfTurn(endingPlayerSeat);
+    } catch {}
+
     // Clear turn-based bonuses (bloom sites, genesis mana, etc.)
     try {
       get().clearTurnBonuses();
@@ -497,6 +502,11 @@ export const createCoreSlice: StateCreator<
     });
     try {
       get().clearAllDamageForSeat(nextKey);
+    } catch {}
+
+    // Trigger Mother Nature start-of-turn reveals for the starting player
+    try {
+      get().triggerMotherNatureStartOfTurn(nextKey);
     } catch {}
     // Snapshot creation is handled by GameToolbox.tsx useEffect
   },

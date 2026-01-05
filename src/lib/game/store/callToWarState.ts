@@ -8,6 +8,7 @@ import type {
   ServerPatchT,
   Zones,
 } from "./types";
+import { getHaystackLimit } from "./utils/boardHelpers";
 
 function newCallToWarId() {
   return `ctw_${Date.now().toString(36)}_${Math.random()
@@ -56,7 +57,14 @@ export const createCallToWarSlice: StateCreator<
     const id = newCallToWarId();
     const casterSeat = input.casterSeat;
     const zones = get().zones;
-    const spellbook = zones[casterSeat]?.spellbook || [];
+    const fullSpellbook = zones[casterSeat]?.spellbook || [];
+
+    // Haystack limits opponent's searches to top 3
+    const board = get().board;
+    const haystackLimit = getHaystackLimit(casterSeat, board.sites || {});
+    const spellbook = haystackLimit
+      ? fullSpellbook.slice(0, haystackLimit)
+      : fullSpellbook;
 
     // Show loading state immediately
     set({

@@ -3860,7 +3860,11 @@ io.on("connection", async (socket: SocketClient) => {
       type === "chaosTwisterCancel" ||
       type === "chaosTwisterSliderPosition" ||
       type === "pithImpSteal" ||
-      type === "pithImpReturn"
+      type === "pithImpReturn" ||
+      type === "accusationBegin" ||
+      type === "accusationSelectCard" ||
+      type === "accusationResolve" ||
+      type === "accusationCancel"
     ) {
       // Chaos Twister minigame and Pith Imp messages - broadcast to match room
       try {
@@ -3873,6 +3877,20 @@ io.on("connection", async (socket: SocketClient) => {
           playerKey,
           ts: Date.now(),
         };
+        io.to(room).emit("message", out);
+        try {
+          io.to(`spectate:${matchId}`).emit("message", out);
+        } catch {}
+      } catch {}
+    } else if (
+      type === "lilithRevealRequest" ||
+      type === "lilithRevealResponse" ||
+      type === "lilithRevealResolve"
+    ) {
+      // Relay Lilith reveal messages to the match room
+      try {
+        const room = `match:${matchId}`;
+        const out = { ...payload, ts: Date.now() };
         io.to(room).emit("message", out);
         try {
           io.to(`spectate:${matchId}`).emit("message", out);

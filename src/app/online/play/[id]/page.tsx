@@ -18,7 +18,13 @@ import CollectionButton from "@/components/game/CollectionButton";
 import CombatHudOverlay from "@/components/game/CombatHudOverlay";
 import CommonSenseOverlay from "@/components/game/CommonSenseOverlay";
 import EarthquakeOverlay from "@/components/game/EarthquakeOverlay";
+import LilithOverlay from "@/components/game/LilithOverlay";
+import MotherNatureOverlay from "@/components/game/MotherNatureOverlay";
 import SearingTruthOverlay from "@/components/game/SearingTruthOverlay";
+import AccusationOverlay from "@/components/game/AccusationOverlay";
+import BlackMassOverlay from "@/components/game/BlackMassOverlay";
+import HighlandPrincessOverlay from "@/components/game/HighlandPrincessOverlay";
+import AssortedAnimalsOverlay from "@/components/game/AssortedAnimalsOverlay";
 import ContextMenu from "@/components/game/ContextMenu";
 import { ElementChoiceOverlay } from "@/components/game/ElementChoiceOverlay";
 import EnhancedOnlineDraft3DScreen from "@/components/game/EnhancedOnlineDraft3DScreen";
@@ -3063,6 +3069,7 @@ export default function OnlineMatchPage() {
                 opponentPlayerId={opponentPlayerId}
                 opponentSeat={opponentSeat}
                 matchId={match?.id || null}
+                playerNames={playerNames}
               />
             </div>
           )}
@@ -3145,6 +3152,18 @@ export default function OnlineMatchPage() {
           <CallToWarOverlay />
           {/* Searing Truth Overlay (reveal and damage) */}
           <SearingTruthOverlay />
+          {/* Accusation Overlay (reveal opponent hand, banish) */}
+          <AccusationOverlay />
+          {/* Lilith Overlay (end of turn reveal) */}
+          <LilithOverlay />
+          {/* Mother Nature Overlay (start of turn reveal) */}
+          <MotherNatureOverlay />
+          {/* Black Mass Overlay (search for Evil minions) */}
+          <BlackMassOverlay />
+          {/* Highland Princess Overlay (search for artifact) */}
+          <HighlandPrincessOverlay />
+          {/* Assorted Animals Overlay (search for Beasts) */}
+          <AssortedAnimalsOverlay />
           {/* Unit hands overlay (Morgana, Omphalos) */}
           <UnitHandsOverlay />
           {/* Pith Imp stolen card notification */}

@@ -632,6 +632,124 @@ export type OmphalosHandEntry = {
   createdAt: number;
 };
 
+// --- Lilith State ------------------------------------------------
+// "At the end of your turn, reveal opponent's top spell. If it's a minion, summon it here. Otherwise, put it at the bottom of the deck."
+export type LilithRevealPhase = "revealing" | "resolving" | "complete";
+
+export type PendingLilithReveal = {
+  id: string;
+  lilithInstanceId: string;
+  lilithLocation: CellKey;
+  lilithOwner: PlayerKey;
+  phase: LilithRevealPhase;
+  revealedCard: CardRef | null;
+  isMinion: boolean;
+  createdAt: number;
+};
+
+export type LilithEntry = {
+  id: string;
+  instanceId: string;
+  location: CellKey;
+  ownerSeat: PlayerKey;
+  cardName: string;
+};
+
+// --- Mother Nature State ------------------------------------------------
+// "At the start of your turn, reveal your topmost spell. If it's a minion, you may summon it here."
+export type MotherNatureRevealPhase =
+  | "revealing"
+  | "choosing"
+  | "resolving"
+  | "complete";
+
+export type PendingMotherNatureReveal = {
+  id: string;
+  motherNatureInstanceId: string;
+  motherNatureLocation: string;
+  ownerSeat: PlayerKey;
+  phase: MotherNatureRevealPhase;
+  revealedCard: CardRef | null;
+  isMinion: boolean;
+  createdAt: number;
+};
+
+export type MotherNatureEntry = {
+  id: string;
+  instanceId: string;
+  location: string;
+  ownerSeat: PlayerKey;
+  cardName: string;
+};
+
+// --- Black Mass State ------------------------------------------------
+// "Search your top seven spells. You may reveal and draw three different Evil minions from among them. Put the rest at the bottom of your spellbook."
+export type BlackMassPhase = "loading" | "selecting" | "resolving" | "complete";
+
+export type PendingBlackMass = {
+  id: string;
+  spell: {
+    at: CellKey;
+    index: number;
+    instanceId: string | null;
+    owner: 1 | 2;
+    card: CardRef;
+  };
+  casterSeat: PlayerKey;
+  phase: BlackMassPhase;
+  topSevenCards: CardRef[];
+  eligibleIndices: number[]; // Evil minions only
+  allMinionIndices: number[]; // All minions (for checkbox toggle)
+  selectedIndices: number[];
+  createdAt: number;
+};
+
+// --- Highland Princess State ------------------------------------------------
+// Genesis → Search your spellbook for an artifact that costs ① or less, reveal it, and put it into your hand. Shuffle.
+export type HighlandPrincessPhase = "loading" | "selecting" | "complete";
+
+export type PendingHighlandPrincess = {
+  id: string;
+  minion: {
+    at: CellKey;
+    index: number;
+    instanceId: string | null;
+    owner: 1 | 2;
+    card: CardRef;
+  };
+  ownerSeat: PlayerKey;
+  phase: HighlandPrincessPhase;
+  eligibleCards: CardRef[];
+  selectedCard: CardRef | null;
+  createdAt: number;
+};
+
+// --- Assorted Animals State ------------------------------------------------
+// Search your spellbook for different Beasts with a combined mana cost of X or less, reveal them, and put them in your hand. Shuffle.
+export type AssortedAnimalsPhase =
+  | "choosing_x"
+  | "loading"
+  | "selecting"
+  | "complete";
+
+export type PendingAssortedAnimals = {
+  id: string;
+  spell: {
+    at: CellKey;
+    index: number;
+    instanceId: string | null;
+    owner: 1 | 2;
+    card: CardRef;
+  };
+  casterSeat: PlayerKey;
+  phase: AssortedAnimalsPhase;
+  maxMana: number; // Maximum mana available to spend on X
+  xValue: number;
+  eligibleCards: Array<CardRef & { cost: number }>;
+  selectedCards: Array<CardRef & { cost: number }>;
+  createdAt: number;
+};
+
 // Context menu targeting for click-driven actions
 export type ContextMenuTarget =
   | { kind: "site"; x: number; y: number }
@@ -1137,6 +1255,81 @@ export type GameState = {
     artifactInstanceId: string | null,
     artifactAt: CellKey
   ) => CardRef[];
+  // Lilith minions (end of turn: reveal opponent's top spell, summon if minion)
+  lilithMinions: LilithEntry[];
+  pendingLilithReveal: PendingLilithReveal | null;
+  registerLilith: (input: {
+    instanceId: string;
+    location: CellKey;
+    ownerSeat: PlayerKey;
+    cardName: string;
+  }) => void;
+  unregisterLilith: (instanceId: string) => void;
+  triggerLilithEndOfTurn: (endingPlayerSeat: PlayerKey) => Promise<void>;
+  resolveLilithReveal: () => void;
+  cancelLilithReveal: () => void;
+  // Mother Nature minions (start of turn: reveal your top spell, may summon if minion)
+  motherNatureMinions: MotherNatureEntry[];
+  pendingMotherNatureReveal: PendingMotherNatureReveal | null;
+  registerMotherNature: (input: {
+    instanceId: string;
+    location: string;
+    ownerSeat: PlayerKey;
+    cardName: string;
+  }) => void;
+  unregisterMotherNature: (instanceId: string) => void;
+  triggerMotherNatureStartOfTurn: (startingPlayerSeat: PlayerKey) => void;
+  acceptMotherNatureSummon: () => void;
+  declineMotherNatureSummon: () => void;
+  // Black Mass spell (search top 7, draw up to 3 Evil minions)
+  pendingBlackMass: PendingBlackMass | null;
+  beginBlackMass: (input: {
+    spell: {
+      at: CellKey;
+      index: number;
+      instanceId: string | null;
+      owner: 1 | 2;
+      card: CardRef;
+    };
+    casterSeat: PlayerKey;
+  }) => Promise<void>;
+  selectBlackMassCard: (index: number) => void;
+  deselectBlackMassCard: (index: number) => void;
+  resolveBlackMass: () => void;
+  cancelBlackMass: () => void;
+  // Highland Princess (Genesis: search artifact ≤1 cost)
+  pendingHighlandPrincess: PendingHighlandPrincess | null;
+  triggerHighlandPrincessGenesis: (input: {
+    minion: {
+      at: CellKey;
+      index: number;
+      instanceId: string | null;
+      owner: 1 | 2;
+      card: CardRef;
+    };
+    ownerSeat: PlayerKey;
+  }) => Promise<void>;
+  selectHighlandPrincessCard: (card: CardRef) => void;
+  resolveHighlandPrincess: () => void;
+  cancelHighlandPrincess: () => void;
+  // Assorted Animals (search Beasts with combined cost ≤ X)
+  pendingAssortedAnimals: PendingAssortedAnimals | null;
+  beginAssortedAnimals: (input: {
+    spell: {
+      at: CellKey;
+      index: number;
+      instanceId: string | null;
+      owner: 1 | 2;
+      card: CardRef;
+    };
+    casterSeat: PlayerKey;
+    xValue: number;
+  }) => Promise<void>;
+  setAssortedAnimalsX: (xValue: number) => Promise<void>;
+  selectAssortedAnimalsCard: (card: CardRef & { cost: number }) => void;
+  deselectAssortedAnimalsCard: (cardId: number) => void;
+  resolveAssortedAnimals: () => void;
+  cancelAssortedAnimals: () => void;
   // Pending cast from Morgana/Omphalos hands (for tile targeting)
   pendingPrivateHandCast: {
     kind: "morgana" | "omphalos";

@@ -194,7 +194,7 @@ export default function BrowseOverlay({}: BrowseOverlayProps) {
                   Arrange Bottom Order
                 </h2>
                 <p className="text-white/70 text-sm mb-4 text-center">
-                  Drag to reorder. First card will be on top (drawn last).
+                  Drag to reorder. Last card will be at the very bottom.
                 </p>
 
                 {/* Selected card display */}
@@ -216,7 +216,7 @@ export default function BrowseOverlay({}: BrowseOverlayProps) {
                 {/* Remaining cards to order */}
                 <div className="mb-6">
                   <p className="text-white/60 text-sm mb-2 text-center">
-                    Bottom of spellbook (first = top of bottom, drawn last):
+                    Going to bottom of spellbook:
                   </p>
                   <div className="flex flex-col gap-2">
                     {remainingCards.map(

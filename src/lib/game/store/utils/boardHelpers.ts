@@ -26,6 +26,40 @@ export const opponentSeat = (seat: PlayerKey): PlayerKey =>
 
 export const opponentOwner = (owner: 1 | 2): 1 | 2 => (owner === 1 ? 2 : 1);
 
+// Check if a player controls a site by name
+export const playerControlsSite = (
+  siteName: string,
+  playerSeat: PlayerKey,
+  sites: Record<
+    string,
+    { owner: 1 | 2; card?: { name?: string } | null } | undefined
+  >
+): boolean => {
+  const ownerNum = playerSeat === "p1" ? 1 : 2;
+  const lowerName = siteName.toLowerCase();
+  for (const site of Object.values(sites)) {
+    if (!site || site.owner !== ownerNum) continue;
+    const siteCardName = (site.card?.name || "").toLowerCase();
+    if (siteCardName.includes(lowerName)) return true;
+  }
+  return false;
+};
+
+// Haystack: Reduces opponent's spellbook searches to top 3 cards
+export const getHaystackLimit = (
+  searcherSeat: PlayerKey,
+  sites: Record<
+    string,
+    { owner: 1 | 2; card?: { name?: string } | null } | undefined
+  >
+): number | null => {
+  const opponentSeatKey = searcherSeat === "p1" ? "p2" : "p1";
+  if (playerControlsSite("haystack", opponentSeatKey, sites)) {
+    return 3; // Limit search to top 3
+  }
+  return null; // No limit
+};
+
 // Get all adjacent cell keys (orthogonal only: up, down, left, right)
 export const getAdjacentCells = (
   cellKey: CellKey,
