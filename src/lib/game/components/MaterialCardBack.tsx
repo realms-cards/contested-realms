@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo } from "react";
-import { CanvasTexture, RepeatWrapping } from "three";
+import { CanvasTexture, LinearFilter, RepeatWrapping } from "three";
 import { SLEEVE_PRESETS } from "@/lib/game/sleevePresets";
 
 interface MaterialCardBackProps {
@@ -49,6 +49,10 @@ function getNoiseTexture(): CanvasTexture {
   texture.wrapS = RepeatWrapping;
   texture.wrapT = RepeatWrapping;
   texture.repeat.set(2, 3); // Tile the noise for finer detail
+  // Disable mipmap generation - CanvasTexture format may not support glGenerateMipmap
+  texture.generateMipmaps = false;
+  texture.minFilter = LinearFilter;
+  texture.magFilter = LinearFilter;
   texture.needsUpdate = true;
 
   cachedNoiseTexture = texture;
