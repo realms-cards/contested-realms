@@ -26,6 +26,7 @@ export type GameToolboxProps = {
   opponentPlayerId?: string | null;
   opponentSeat?: PlayerKey | null;
   matchId?: string | null;
+  playerNames?: { p1: string; p2: string };
 };
 
 export default function GameToolbox({
@@ -34,6 +35,7 @@ export default function GameToolbox({
   opponentPlayerId = null,
   opponentSeat = null,
   matchId = null,
+  playerNames = { p1: "Player 1", p2: "Player 2" },
 }: GameToolboxProps) {
   const zones = useGameStore((s) => s.zones);
   const drawFrom = useGameStore((s) => s.drawFrom);
@@ -60,7 +62,7 @@ export default function GameToolbox({
 
   const [peekSeat, setPeekSeat] = useState<PlayerKey>(mySeat ?? "p1");
   const [peekPile, setPeekPile] = useState<"spellbook" | "atlas">("spellbook");
-  const [peekCount, setPeekCount] = useState<number>(3);
+  const [peekCount, setPeekCount] = useState<number>(1);
   const [peekFromWhere, setPeekFromWhere] = useState<"top" | "bottom">("top");
 
   const [scrySeat, setScrySeat] = useState<PlayerKey>(mySeat ?? "p1");
@@ -975,8 +977,8 @@ export default function GameToolbox({
                   }}
                   className="bg-white/10 rounded px-2 py-1"
                 >
-                  <option value="p1">P1</option>
-                  <option value="p2">P2</option>
+                  <option value="p1">{playerNames.p1}</option>
+                  <option value="p2">{playerNames.p2}</option>
                 </select>
                 <select
                   value={drawPile}
