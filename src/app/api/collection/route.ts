@@ -446,6 +446,12 @@ export async function DELETE() {
       );
     }
 
+    // Get total quantity before deleting (sum of all card quantities)
+    const totalQuantity = await prisma.collectionCard.aggregate({
+      where: { userId },
+      _sum: { quantity: true },
+    });
+
     // Delete all collection cards for this user
     const result = await prisma.collectionCard.deleteMany({
       where: { userId },
@@ -456,7 +462,11 @@ export async function DELETE() {
 
     logPerformance("DELETE /api/collection", performance.now() - startTime);
     return new Response(
-      JSON.stringify({ deleted: result.count, message: "Collection deleted" }),
+      JSON.stringify({
+        deleted: totalQuantity._sum.quantity ?? result.count,
+        entries: result.count,
+        message: "Collection deleted",
+      }),
       { status: 200, headers: { "content-type": "application/json" } }
     );
   } catch (e) {
