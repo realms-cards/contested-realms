@@ -5,6 +5,11 @@ import { createBlackMassSlice } from "./store/blackMassState";
 import { createBoardSlice, createInitialBoard } from "./store/boardState";
 import { createHighlandPrincessSlice } from "./store/highlandPrincessState";
 import { createAssortedAnimalsSlice } from "./store/assortedAnimalsState";
+import { createFrontierSettlersSlice } from "./store/frontierSettlersState";
+import { createPigsOfTheSounderSlice } from "./store/pigsOfTheSounderState";
+import { createDemonicContractSlice } from "./store/demonicContractState";
+import { createDholChantsSlice } from "./store/dholChantsState";
+import { createDoomsdayCultSlice } from "./store/doomsdayCultState";
 import {
   createBoardUiSlice,
   createInitialBoardUiState,
@@ -155,6 +160,11 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   ...createBlackMassSlice(set, get, storeApi),
   ...createHighlandPrincessSlice(set, get, storeApi),
   ...createAssortedAnimalsSlice(set, get, storeApi),
+  ...createFrontierSettlersSlice(set, get, storeApi),
+  ...createPigsOfTheSounderSlice(set, get, storeApi),
+  ...createDemonicContractSlice(set, get, storeApi),
+  ...createDholChantsSlice(set, get, storeApi),
+  ...createDoomsdayCultSlice(set, get, storeApi),
   ...createPreferenceSlice(set, get, storeApi),
   ...createCardMetaSlice(set, get, storeApi),
   ...createSessionSlice(set, get, storeApi),

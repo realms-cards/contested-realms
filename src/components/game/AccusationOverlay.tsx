@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useRef } from "react";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef } from "@/lib/game/store/types";
 
@@ -163,7 +163,7 @@ export default function AccusationOverlay() {
   );
 }
 
-// Card display component
+// Card display component with preview support
 function CardDisplay({
   card,
   onClick,
@@ -177,9 +177,29 @@ function CardDisplay({
   interactive: boolean;
   isEvil: boolean;
 }) {
+  const setPreviewCard = useGameStore((s) => s.setPreviewCard);
+  const hoverTimerRef = useRef<number | null>(null);
+
+  const handleMouseEnter = useCallback(() => {
+    if (hoverTimerRef.current) window.clearTimeout(hoverTimerRef.current);
+    hoverTimerRef.current = window.setTimeout(() => {
+      setPreviewCard(card);
+    }, 200);
+  }, [card, setPreviewCard]);
+
+  const handleMouseLeave = useCallback(() => {
+    if (hoverTimerRef.current) {
+      window.clearTimeout(hoverTimerRef.current);
+      hoverTimerRef.current = null;
+    }
+    setPreviewCard(null);
+  }, [setPreviewCard]);
+
   return (
     <div
       onClick={interactive ? onClick : undefined}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
       className={`relative aspect-[2.5/3.5] rounded-lg overflow-hidden transition-all ${
         interactive
           ? "cursor-pointer hover:ring-2 hover:ring-red-400/50 hover:scale-105"

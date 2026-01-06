@@ -1,8 +1,9 @@
 "use client";
 
 import Image from "next/image";
-import React, { useState } from "react";
+import React, { useState, useCallback, useRef } from "react";
 import { useGameStore } from "@/lib/game/store";
+import type { CardRef } from "@/lib/game/store/types";
 
 export default function BlackMassOverlay() {
   const pending = useGameStore((s) => s.pendingBlackMass);
@@ -84,8 +85,9 @@ export default function BlackMassOverlay() {
                 const isSelected = selectedIndices.includes(index);
 
                 return (
-                  <button
+                  <BlackMassCardDisplay
                     key={`${card.cardId}-${index}`}
+                    card={card}
                     onClick={() => {
                       if (isSelected) {
                         deselectCard(index);
@@ -94,34 +96,9 @@ export default function BlackMassOverlay() {
                       }
                     }}
                     disabled={!isEligible && !isSelected}
-                    className={`relative aspect-[2.5/3.5] rounded-lg overflow-hidden transition-all ${
-                      isSelected
-                        ? "ring-4 ring-purple-500 scale-105 shadow-lg shadow-purple-500/50"
-                        : isEligible
-                        ? "ring-2 ring-green-500/50 hover:ring-green-500 cursor-pointer"
-                        : "opacity-50 cursor-not-allowed grayscale"
-                    }`}
-                  >
-                    <Image
-                      src={`/api/images/${card.slug || card.cardId}`}
-                      alt={card.name || "Card"}
-                      fill
-                      className="object-cover"
-                      unoptimized
-                    />
-                    {isSelected && (
-                      <div className="absolute inset-0 bg-purple-500/30 flex items-center justify-center">
-                        <span className="text-white text-2xl font-bold bg-purple-600 rounded-full w-8 h-8 flex items-center justify-center">
-                          ✓
-                        </span>
-                      </div>
-                    )}
-                    {!isEligible && !isSelected && (
-                      <div className="absolute bottom-0 inset-x-0 bg-black/70 text-xs text-gray-400 py-1 text-center">
-                        Not a minion
-                      </div>
-                    )}
-                  </button>
+                    isSelected={isSelected}
+                    isEligible={isEligible}
+                  />
                 );
               })}
             </div>
@@ -168,5 +145,74 @@ export default function BlackMassOverlay() {
         </div>
       )}
     </div>
+  );
+}
+
+// Card display with preview support for Black Mass
+function BlackMassCardDisplay({
+  card,
+  onClick,
+  disabled,
+  isSelected,
+  isEligible,
+}: {
+  card: CardRef;
+  onClick: () => void;
+  disabled: boolean;
+  isSelected: boolean;
+  isEligible: boolean;
+}) {
+  const setPreviewCard = useGameStore((s) => s.setPreviewCard);
+  const hoverTimerRef = useRef<number | null>(null);
+
+  const handleMouseEnter = useCallback(() => {
+    if (hoverTimerRef.current) window.clearTimeout(hoverTimerRef.current);
+    hoverTimerRef.current = window.setTimeout(() => {
+      setPreviewCard(card);
+    }, 200);
+  }, [card, setPreviewCard]);
+
+  const handleMouseLeave = useCallback(() => {
+    if (hoverTimerRef.current) {
+      window.clearTimeout(hoverTimerRef.current);
+      hoverTimerRef.current = null;
+    }
+    setPreviewCard(null);
+  }, [setPreviewCard]);
+
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      className={`relative aspect-[2.5/3.5] rounded-lg overflow-hidden transition-all ${
+        isSelected
+          ? "ring-4 ring-purple-500 scale-105 shadow-lg shadow-purple-500/50"
+          : isEligible
+          ? "ring-2 ring-green-500/50 hover:ring-green-500 cursor-pointer"
+          : "opacity-50 cursor-not-allowed grayscale"
+      }`}
+    >
+      <Image
+        src={`/api/images/${card.slug || card.cardId}`}
+        alt={card.name || "Card"}
+        fill
+        className="object-cover"
+        unoptimized
+      />
+      {isSelected && (
+        <div className="absolute inset-0 bg-purple-500/30 flex items-center justify-center">
+          <span className="text-white text-2xl font-bold bg-purple-600 rounded-full w-8 h-8 flex items-center justify-center">
+            ✓
+          </span>
+        </div>
+      )}
+      {!isEligible && !isSelected && (
+        <div className="absolute bottom-0 inset-x-0 bg-black/70 text-xs text-gray-400 py-1 text-center">
+          Not a minion
+        </div>
+      )}
+    </button>
   );
 }

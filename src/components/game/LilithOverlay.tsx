@@ -1,8 +1,8 @@
 "use client";
 
-import Image from "next/image";
 import React from "react";
 import { useGameStore } from "@/lib/game/store";
+import CardWithPreview from "./CardWithPreview";
 
 export default function LilithOverlay() {
   const pending = useGameStore((s) => s.pendingLilithReveal);
@@ -49,17 +49,12 @@ export default function LilithOverlay() {
             {/* Revealed card or loading */}
             <div className="flex justify-center mb-4">
               {revealedCard ? (
-                <div className="relative aspect-[2.5/3.5] w-48 rounded-lg overflow-hidden ring-2 ring-purple-500 shadow-lg shadow-purple-500/30">
-                  <Image
-                    src={`/api/images/${
-                      revealedCard.slug || revealedCard.cardId
-                    }`}
-                    alt={revealedCard.name || "Card"}
-                    fill
-                    className="object-cover"
-                    unoptimized
-                  />
-                </div>
+                <CardWithPreview
+                  card={revealedCard}
+                  interactive={false}
+                  accentColor="purple"
+                  size="lg"
+                />
               ) : (
                 <div className="aspect-[2.5/3.5] w-48 rounded-lg bg-purple-900/30 ring-2 ring-purple-500/50 flex items-center justify-center">
                   <div className="animate-pulse text-purple-400">

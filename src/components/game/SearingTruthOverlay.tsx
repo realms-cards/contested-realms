@@ -1,9 +1,9 @@
 "use client";
 
-import Image from "next/image";
 import React, { useCallback, useEffect } from "react";
 import { useGameStore } from "@/lib/game/store";
-import type { CardRef, PlayerKey } from "@/lib/game/store/types";
+import type { PlayerKey } from "@/lib/game/store/types";
+import CardWithPreview from "./CardWithPreview";
 
 export default function SearingTruthOverlay() {
   const pending = useGameStore((s) => s.pendingSearingTruth);
@@ -60,7 +60,9 @@ export default function SearingTruthOverlay() {
       {/* Top bar with status */}
       <div className="fixed inset-x-0 top-6 z-[201] pointer-events-none flex justify-center">
         <div className="pointer-events-auto px-5 py-3 rounded-full bg-black/90 text-white ring-1 ring-orange-500/50 shadow-lg text-lg md:text-xl flex items-center gap-3 select-none">
-          <span className="text-orange-400 font-fantaisie">🔥 Searing Truth</span>
+          <span className="text-orange-400 font-fantaisie">
+            🔥 Searing Truth
+          </span>
           <span className="opacity-80">
             {phase === "selectingTarget" &&
               (isCaster
@@ -138,7 +140,13 @@ export default function SearingTruthOverlay() {
             {/* Revealed cards */}
             <div className="flex gap-4 justify-center mb-6">
               {revealedCards.map((card, index) => (
-                <CardDisplay key={index} card={card} />
+                <CardWithPreview
+                  key={index}
+                  card={card}
+                  interactive={false}
+                  accentColor="orange"
+                  size="lg"
+                />
               ))}
             </div>
 
@@ -173,29 +181,6 @@ export default function SearingTruthOverlay() {
             </span>{" "}
             is casting Searing Truth...
           </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Card display component
-function CardDisplay({ card }: { card: CardRef }) {
-  return (
-    <div className="relative aspect-[2.5/3.5] w-40 rounded-lg overflow-hidden ring-2 ring-orange-500/50 shadow-lg shadow-orange-500/20">
-      {card.slug ? (
-        <Image
-          src={`/images/cards/${card.slug}.avif`}
-          alt={card.name || "Card"}
-          fill
-          className="object-cover"
-          sizes="160px"
-        />
-      ) : (
-        <div className="w-full h-full bg-gradient-to-br from-orange-800 to-orange-950 flex items-center justify-center p-2">
-          <span className="text-white text-sm text-center font-medium">
-            {card.name || "Unknown Card"}
-          </span>
         </div>
       )}
     </div>

@@ -553,6 +553,27 @@ export const createPermanentMovementSlice: StateCreator<
         } catch {}
       }
 
+      // Deathrite triggers when going to graveyard:
+      // - "Pigs of the Sounder" → summons "Grand Old Boars"
+      // - "Squeakers" → summons "Pigs of the Sounder"
+      const deathriteCards = ["pigs of the sounder", "squeakers"];
+      if (
+        deathriteCards.includes(cardNameLower) &&
+        finalTarget === "graveyard"
+      ) {
+        const triggerName = item.card.name || cardNameLower;
+        // Trigger after state update with setTimeout to ensure state is committed
+        setTimeout(() => {
+          try {
+            get().triggerPigsDeathrite({
+              ownerSeat: owner,
+              deathLocation: at,
+              triggerCardName: triggerName,
+            });
+          } catch {}
+        }, 100);
+      }
+
       return {
         permanents: per,
         zones: zonesNext,

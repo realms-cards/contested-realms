@@ -1,9 +1,8 @@
 "use client";
 
-import Image from "next/image";
 import React, { useState, useCallback } from "react";
 import { useGameStore } from "@/lib/game/store";
-import type { CardRef } from "@/lib/game/store/types";
+import CardWithPreview, { CardGrid } from "./CardWithPreview";
 
 export default function CallToWarOverlay() {
   const pending = useGameStore((s) => s.pendingCallToWar);
@@ -85,17 +84,18 @@ export default function CallToWarOverlay() {
             </p>
 
             {/* Card grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 mb-6">
+            <CardGrid columns={6}>
               {eligibleCards.map((card, index) => (
-                <CardDisplay
+                <CardWithPreview
                   key={index}
                   card={card}
                   onClick={() => handleSelectCard(index)}
                   selected={selectedIndex === index}
                   interactive={true}
+                  accentColor="red"
                 />
               ))}
-            </div>
+            </CardGrid>
 
             {/* Action buttons */}
             <div className="flex gap-3 justify-center">
@@ -126,51 +126,6 @@ export default function CallToWarOverlay() {
             </span>{" "}
             is searching their spellbook for warriors...
           </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Card display component
-function CardDisplay({
-  card,
-  onClick,
-  selected,
-  interactive,
-}: {
-  card: CardRef;
-  onClick?: () => void;
-  selected: boolean;
-  interactive: boolean;
-}) {
-  return (
-    <div
-      onClick={interactive ? onClick : undefined}
-      className={`relative aspect-[2.5/3.5] rounded-lg overflow-hidden transition-all ${
-        interactive
-          ? "cursor-pointer hover:ring-2 hover:ring-red-400/50 hover:scale-105"
-          : ""
-      } ${
-        selected
-          ? "ring-4 ring-red-500 scale-105 shadow-lg shadow-red-500/30"
-          : ""
-      }`}
-    >
-      <Image
-        src={`/api/images/${card.slug || card.cardId}`}
-        alt={card.name || "Card"}
-        fill
-        className="object-cover"
-        unoptimized
-      />
-      {/* Card name overlay */}
-      <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/90 to-transparent p-2">
-        <p className="text-white text-xs text-center truncate">{card.name}</p>
-      </div>
-      {selected && (
-        <div className="absolute inset-0 bg-red-500/20 flex items-center justify-center">
-          <span className="text-3xl">⚔️</span>
         </div>
       )}
     </div>

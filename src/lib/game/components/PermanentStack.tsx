@@ -294,14 +294,14 @@ export function PermanentStack({
 
   // Sort items so burrowed/submerged cards render first (at bottom of stack)
   // Site stays on top, submerged card goes underneath
-  const [cellX, cellY] = key.split(",").map(Number);
   const sortedItems = [...items]
     .map((p, originalIdx) => ({ p, originalIdx }))
     .sort((a, b) => {
-      const aPermanentId = cellX * 100000 + cellY * 1000 + a.originalIdx;
-      const bPermanentId = cellX * 100000 + cellY * 1000 + b.originalIdx;
-      const aState = permanentPositions[aPermanentId]?.state;
-      const bState = permanentPositions[bPermanentId]?.state;
+      // Use instanceId for stable position state lookup (prevents state leakage on card movement)
+      const aInstanceId = a.p.instanceId ?? `perm:${key}:${a.originalIdx}`;
+      const bInstanceId = b.p.instanceId ?? `perm:${key}:${b.originalIdx}`;
+      const aState = permanentPositions[aInstanceId]?.state;
+      const bState = permanentPositions[bInstanceId]?.state;
       const aIsBurrowed = aState === "burrowed" || aState === "submerged";
       const bIsBurrowed = bState === "burrowed" || bState === "submerged";
       // Burrowed cards go first (bottom of stack)
@@ -358,23 +358,20 @@ export function PermanentStack({
         const offX = p.offset?.[0] ?? 0;
         const offZ = p.offset?.[1] ?? 0;
 
-        // Use cell position + original index as unique ID
-        const permanentId = cellX * 100000 + cellY * 1000 + idx;
-        const permanentPosition = permanentPositions[permanentId];
+        // Use instanceId for stable position state lookup (prevents state leakage on card movement)
+        const permId = (p.instanceId ?? `perm:${key}:${idx}`) as string;
+        const permanentPosition = permanentPositions[permId];
         const isBurrowed =
           permanentPosition?.state === "burrowed" ||
           permanentPosition?.state === "submerged";
 
-        const permId = (p.instanceId ?? `perm:${key}:${idx}`) as string;
         const isLastTouched = lastTouchedId === permId;
         // Count burrowed cards in this stack for elevation offset
-        const burrowedCount = sortedItems.filter(
-          ({ p: _sp, originalIdx: oi }) => {
-            const pid = cellX * 100000 + cellY * 1000 + oi;
-            const pstate = permanentPositions[pid]?.state;
-            return pstate === "burrowed" || pstate === "submerged";
-          }
-        ).length;
+        const burrowedCount = sortedItems.filter(({ p: sp }) => {
+          const spInstanceId = sp.instanceId ?? `perm:${key}:${idx}`;
+          const pstate = permanentPositions[spInstanceId]?.state;
+          return pstate === "burrowed" || pstate === "submerged";
+        }).length;
 
         // Burrowed cards at ground level, non-burrowed cards elevated above them
         const baseY = isBurrowed

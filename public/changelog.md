@@ -2,8 +2,15 @@
 
 ## January 2026
 
+### Jan 6 — Playmat hardening & preview control
+
+- **Custom playmat failsafe** added SafePlaymat + error boundary so broken/slow textures fall back to default instead of black/blue screens (helps Xbox browser)
+- **Grid fallback** when playmat fails to load for any reason, the grid overlay is shown automatically
+- **Card preview size slider** new User Settings slider (50–150%) to scale preview popups
+
 ### Jan 5 - More card resolvers and more fixed
 
+- **add Reveal to toolbox**
 - **fixes for toolbox** standard setting for peek/scry/draw is now 1 and we support player names
 - **special resolvers for Lilith, Mother Nature,Accusation, Black Mass, Highland Princess, Call to War, Assorted Animals added** as well as Haystack 😉
 - **fix WebGL errors** mipmaps are not regenerated needlessly

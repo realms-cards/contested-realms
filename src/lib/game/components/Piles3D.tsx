@@ -56,6 +56,11 @@ export default function Piles3D({
   const boardSize = useGameStore((s) => s.board.size);
   const cardbackUrls = useGameStore((s) => s.cardbackUrls);
   const setPreviewCard = useGameStore((s) => s.setPreviewCard);
+  // Subscribe to permanents to trigger re-render when Doomsday Cult enters/leaves
+  const _permanents = useGameStore((s) => s.permanents);
+  const isDoomsdayCultActive = useGameStore((s) => s.isDoomsdayCultActive);
+  // Compute whether Doomsday Cult is active (reveals spellbook tops)
+  const doomsdayCultActive = isDoomsdayCultActive();
   const dragFromHand = useGameStore((s) => s.dragFromHand);
   const setDragFromHand = useGameStore((s) => s.setDragFromHand);
   const setDragFromPile = useGameStore((s) => s.setDragFromPile);
@@ -464,29 +469,35 @@ export default function Piles3D({
                   </mesh>
 
                   {/* Visual card */}
-                  {presetId ? (
-                    <MaterialCardBack
-                      presetId={presetId}
-                      width={w}
-                      height={h}
-                      rotationZ={pileRotZ}
-                      depthWrite={true}
-                      interactive={false}
-                      elevation={topCardElevation}
-                    />
-                  ) : (
-                    <CardPlane
-                      slug={cards[0].slug || ""}
-                      textureUrl={cardbackUrl}
-                      forceTextureUrl={!isCemetery}
-                      width={w}
-                      height={h}
-                      rotationZ={pileRotZ}
-                      depthWrite={true}
-                      interactive={false}
-                      elevation={topCardElevation}
-                    />
-                  )}
+                  {/* Doomsday Cult reveals spellbook top - show card face instead of back */}
+                  {(() => {
+                    const isSpellbook = key === "spellbook";
+                    const showFace =
+                      isCemetery || (isSpellbook && doomsdayCultActive);
+                    return presetId && !showFace ? (
+                      <MaterialCardBack
+                        presetId={presetId}
+                        width={w}
+                        height={h}
+                        rotationZ={pileRotZ}
+                        depthWrite={true}
+                        interactive={false}
+                        elevation={topCardElevation}
+                      />
+                    ) : (
+                      <CardPlane
+                        slug={cards[0].slug || ""}
+                        textureUrl={showFace ? undefined : cardbackUrl}
+                        forceTextureUrl={!showFace}
+                        width={w}
+                        height={h}
+                        rotationZ={pileRotZ}
+                        depthWrite={true}
+                        interactive={false}
+                        elevation={topCardElevation}
+                      />
+                    );
+                  })()}
                 </group>
               </group>
             ) : // Empty pile placeholder - skip for cemetery (no visual indicator)

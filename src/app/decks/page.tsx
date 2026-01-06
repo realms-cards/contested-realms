@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSession } from "next-auth/react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import AuthButton from "@/components/auth/AuthButton";
 import OnlinePageShell from "@/components/online/OnlinePageShell";
 import DeckImportCuriosa from "./DeckImportCuriosa";
@@ -127,6 +127,27 @@ export default function DecksPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showImport, setShowImport] = useState(false);
+  const [sortBy, setSortBy] = useState<
+    "date-desc" | "date-asc" | "name-asc" | "name-desc" | "format"
+  >(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("sorcery:deckSort");
+      if (
+        saved === "date-desc" ||
+        saved === "date-asc" ||
+        saved === "name-asc" ||
+        saved === "name-desc" ||
+        saved === "format"
+      ) {
+        return saved;
+      }
+    }
+    return "date-desc";
+  });
+
+  useEffect(() => {
+    localStorage.setItem("sorcery:deckSort", sortBy);
+  }, [sortBy]);
 
   const fetchDecks = useCallback(async (force = false) => {
     try {
@@ -212,6 +233,43 @@ export default function DecksPage() {
     setMyDecks((prev) => prev.filter((d) => d.id !== deckId));
     setPublicDecks((prev) => prev.filter((d) => d.id !== deckId));
   }, []);
+
+  // Sorting logic
+  const sortDecks = useCallback(
+    <T extends { name: string; updatedAt: string; format: string }>(
+      decks: T[]
+    ): T[] => {
+      return [...decks].sort((a, b) => {
+        switch (sortBy) {
+          case "date-desc":
+            return (
+              new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+            );
+          case "date-asc":
+            return (
+              new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime()
+            );
+          case "name-asc":
+            return a.name.localeCompare(b.name);
+          case "name-desc":
+            return b.name.localeCompare(a.name);
+          case "format":
+            return (
+              a.format.localeCompare(b.format) || a.name.localeCompare(a.name)
+            );
+          default:
+            return 0;
+        }
+      });
+    },
+    [sortBy]
+  );
+
+  const sortedMyDecks = useMemo(() => sortDecks(myDecks), [myDecks, sortDecks]);
+  const sortedPublicDecks = useMemo(
+    () => sortDecks(publicDecks),
+    [publicDecks, sortDecks]
+  );
 
   if (!session) {
     return (
@@ -301,11 +359,35 @@ export default function DecksPage() {
               </div>
             ) : (
               <div className="space-y-3">
-                <h2 className="text-lg font-semibold uppercase tracking-wide text-slate-200">
-                  Your Decks
-                </h2>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h2 className="text-lg font-semibold uppercase tracking-wide text-slate-200">
+                    Your Decks
+                  </h2>
+                  <div className="flex items-center gap-2">
+                    <label
+                      htmlFor="sort-decks"
+                      className="text-xs text-slate-400"
+                    >
+                      Sort by:
+                    </label>
+                    <select
+                      id="sort-decks"
+                      value={sortBy}
+                      onChange={(e) =>
+                        setSortBy(e.target.value as typeof sortBy)
+                      }
+                      className="rounded-md bg-slate-800/80 border border-slate-700 px-2 py-1 text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    >
+                      <option value="date-desc">Newest First</option>
+                      <option value="date-asc">Oldest First</option>
+                      <option value="name-asc">Name A-Z</option>
+                      <option value="name-desc">Name Z-A</option>
+                      <option value="format">Format</option>
+                    </select>
+                  </div>
+                </div>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-sm">
-                  {myDecks.map((d) => (
+                  {sortedMyDecks.map((d) => (
                     <DeckItem
                       key={d.id}
                       deck={{
@@ -333,7 +415,7 @@ export default function DecksPage() {
                   Public Decks
                 </h2>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-sm">
-                  {publicDecks.map((d) => (
+                  {sortedPublicDecks.map((d) => (
                     <DeckItem
                       key={d.id}
                       deck={{

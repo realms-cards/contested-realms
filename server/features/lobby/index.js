@@ -871,6 +871,10 @@ function createLobbyFeature(deps) {
         let lastActivity = lobby.lastActive || 0;
         if (lobby.matchId) {
           const match = matches.get(lobby.matchId);
+          // Hide lobbies whose match has ended
+          if (match && (match.status === "ended" || match.status === "completed" || match._finalized)) {
+            continue;
+          }
           if (match && typeof match.lastTs === "number") {
             lastActivity = Math.max(lastActivity, match.lastTs);
           }
@@ -905,6 +909,10 @@ function createLobbyFeature(deps) {
         let lastActivity = lobby.lastActive || 0;
         if (lobby.matchId) {
           const match = matches.get(lobby.matchId);
+          // Hide lobbies whose match has ended
+          if (match && (match.status === "ended" || match.status === "completed" || match._finalized)) {
+            continue;
+          }
           if (match && typeof match.lastTs === "number") {
             lastActivity = Math.max(lastActivity, match.lastTs);
           }

@@ -21,6 +21,12 @@ export default function PileZones({
   const drawFrom = useGameStore((s) => s.drawFrom);
   const setDragFromPile = useGameStore((s) => s.setDragFromPile);
   const setDragFromHand = useGameStore((s) => s.setDragFromHand);
+  // Subscribe to permanents to trigger re-render when Doomsday Cult enters/leaves
+  const _permanents = useGameStore((s) => s.permanents);
+  const isDoomsdayCultActive = useGameStore((s) => s.isDoomsdayCultActive);
+
+  // Compute whether Doomsday Cult is active (depends on _permanents subscription)
+  const doomsdayCultActive = isDoomsdayCultActive();
 
   const playerNum = player === "p1" ? 1 : 2;
   const playerZones = zones[player];
@@ -49,20 +55,32 @@ export default function PileZones({
     const canDraw =
       currentPlayer === playerNum && (phase === "Draw" || phase === "Main");
 
+    // Spellbook shows card back unless Doomsday Cult reveals it
+    // Atlas and graveyard always show card face
+    const showCardFace =
+      pileType !== "spellbook" ||
+      (pileType === "spellbook" && doomsdayCultActive);
+
     return (
       <div className="col-span-1">
-        <div className="rounded-lg bg-white/10 ring-1 ring-white/10 p-2 text-center">
+        <div
+          className={`rounded-lg bg-white/10 ring-1 p-2 text-center ${
+            pileType === "spellbook" && doomsdayCultActive
+              ? "ring-orange-500/50"
+              : "ring-white/10"
+          }`}
+        >
           <div className="opacity-80">{displayName}</div>
           <div className="text-lg font-mono">{cards.length}</div>
 
           {cards.length > 0 && topCard && (
             <button
               className="mt-1 w-full rounded border border-white/15 bg-white/10 hover:bg-white/20 px-1 py-1"
-              title={topCard.name}
+              title={showCardFace ? topCard.name : "Spellbook"}
               onMouseDown={() => handleDragStart(pileType, topCard)}
               onDragStart={(e) => e.preventDefault()}
             >
-              {topCard?.slug ? (
+              {showCardFace && topCard?.slug ? (
                 <div className="relative aspect-[3/4] w-20 mx-auto rounded overflow-visible">
                   <Image
                     src={`/api/images/${topCard.slug}`}
@@ -75,8 +93,8 @@ export default function PileZones({
                   />
                 </div>
               ) : (
-                <div className="w-20 h-28 mx-auto grid place-items-center rounded bg-white/10 text-[10px] opacity-80">
-                  {topCard?.name || "Top card"}
+                <div className="w-20 h-28 mx-auto grid place-items-center rounded bg-gradient-to-br from-indigo-900 to-purple-900 text-[10px] opacity-80 ring-1 ring-white/20">
+                  <span className="text-white/60">🂠</span>
                 </div>
               )}
             </button>

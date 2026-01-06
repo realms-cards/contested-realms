@@ -22,28 +22,24 @@ export function TargetBullseye({
   useFrame((state) => {
     const time = state.clock.elapsedTime;
 
-    // Outer ring pulse
+    // Outer ring pulse - opacity only, no scale wobble
     if (outerRingRef.current) {
-      const scale = 1 + Math.sin(time * 2) * 0.2;
-      outerRingRef.current.scale.set(scale, 1, scale);
       if (outerRingRef.current.material instanceof THREE.MeshBasicMaterial) {
-        outerRingRef.current.material.opacity = 0.3 + Math.sin(time * 2) * 0.2;
+        outerRingRef.current.material.opacity = 0.4 + Math.sin(time * 3) * 0.25;
       }
     }
 
-    // Inner ring pulse (offset phase)
+    // Inner ring pulse (offset phase) - opacity only
     if (innerRingRef.current) {
-      const scale = 1 + Math.sin(time * 2 + Math.PI / 2) * 0.15;
-      innerRingRef.current.scale.set(scale, 1, scale);
       if (innerRingRef.current.material instanceof THREE.MeshBasicMaterial) {
-        innerRingRef.current.material.opacity = 0.5 + Math.sin(time * 2 + Math.PI / 2) * 0.2;
+        innerRingRef.current.material.opacity = 0.6 + Math.sin(time * 3 + Math.PI / 2) * 0.25;
       }
     }
 
     // Center dot pulse
     if (centerDotRef.current) {
       if (centerDotRef.current.material instanceof THREE.MeshBasicMaterial) {
-        centerDotRef.current.material.opacity = 0.7 + Math.sin(time * 4) * 0.3;
+        centerDotRef.current.material.opacity = 0.8 + Math.sin(time * 4) * 0.2;
       }
     }
   });

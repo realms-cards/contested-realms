@@ -3,7 +3,8 @@
 import Image from "next/image";
 import React, { useState, useCallback, useMemo } from "react";
 import { useGameStore } from "@/lib/game/store";
-import type { CardRef } from "@/lib/game/store/types";
+// CardRef type used by CardWithPreview internally
+import CardWithPreview, { CardGrid } from "./CardWithPreview";
 
 type BrowseOverlayProps = {
   // Optional transport prop for consistency with other overlays
@@ -174,17 +175,18 @@ export default function BrowseOverlay({}: BrowseOverlayProps) {
                 </p>
 
                 {/* Card grid */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3">
+                <CardGrid columns={7}>
                   {pending.revealedCards.map((card, index) => (
-                    <CardDisplay
+                    <CardWithPreview
                       key={index}
                       card={card}
                       onClick={() => handleSelectCard(index)}
                       selected={false}
                       interactive={true}
+                      accentColor="blue"
                     />
                   ))}
-                </div>
+                </CardGrid>
               </>
             )}
 
@@ -204,10 +206,11 @@ export default function BrowseOverlay({}: BrowseOverlayProps) {
                       Going to your hand:
                     </p>
                     <div className="flex justify-center">
-                      <CardDisplay
+                      <CardWithPreview
                         card={selectedCard}
                         selected={true}
                         interactive={false}
+                        accentColor="green"
                       />
                     </div>
                   </div>
@@ -315,42 +318,6 @@ export default function BrowseOverlay({}: BrowseOverlayProps) {
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-// Card display component
-function CardDisplay({
-  card,
-  onClick,
-  selected,
-  interactive,
-}: {
-  card: CardRef;
-  onClick?: () => void;
-  selected: boolean;
-  interactive: boolean;
-}) {
-  return (
-    <div
-      onClick={interactive ? onClick : undefined}
-      className={`relative aspect-[2.5/3.5] rounded-lg overflow-hidden transition-all ${
-        interactive
-          ? "cursor-pointer hover:scale-105 hover:ring-2 hover:ring-blue-400"
-          : ""
-      } ${selected ? "ring-2 ring-green-500" : ""}`}
-    >
-      <Image
-        src={`/api/images/${card.slug || card.cardId}`}
-        alt={card.name || "Card"}
-        fill
-        className="object-cover"
-        unoptimized
-      />
-      {/* Card name overlay */}
-      <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/90 to-transparent p-2">
-        <p className="text-white text-xs text-center truncate">{card.name}</p>
-      </div>
     </div>
   );
 }

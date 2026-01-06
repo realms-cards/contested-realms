@@ -1,9 +1,9 @@
 "use client";
 
-import Image from "next/image";
 import React, { useCallback, useState, useEffect } from "react";
 import { useGameStore } from "@/lib/game/store";
-import type { PithImpHandEntry } from "@/lib/game/store/types";
+import type { PithImpHandEntry, CardRef } from "@/lib/game/store/types";
+import CardWithPreview from "./CardWithPreview";
 
 type NotificationData = {
   stolenCard: PithImpHandEntry["hand"][0] | null;
@@ -83,22 +83,12 @@ export default function PithImpOverlay() {
         {/* Card display - both owner and victim see the card */}
         {hasCard && notification.stolenCard && (
           <div className="flex justify-center mb-4">
-            <div className="relative w-32 aspect-[2.5/3.5] rounded-lg overflow-hidden ring-2 ring-purple-400 shadow-lg">
-              <Image
-                src={`/api/images/${
-                  notification.stolenCard.slug || notification.stolenCard.cardId
-                }`}
-                alt={notification.stolenCard.name || "Stolen Card"}
-                fill
-                className="object-cover"
-                unoptimized
-              />
-              <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/90 to-transparent p-2">
-                <p className="text-white text-xs text-center font-medium truncate">
-                  {notification.stolenCard.name}
-                </p>
-              </div>
-            </div>
+            <CardWithPreview
+              card={notification.stolenCard as CardRef}
+              interactive={false}
+              accentColor="purple"
+              size="md"
+            />
           </div>
         )}
 

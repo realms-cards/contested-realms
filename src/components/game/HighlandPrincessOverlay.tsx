@@ -1,8 +1,8 @@
 "use client";
 
-import Image from "next/image";
 import React from "react";
 import { useGameStore } from "@/lib/game/store";
+import CardWithPreview, { CardGrid } from "./CardWithPreview";
 
 export default function HighlandPrincessOverlay() {
   const pending = useGameStore((s) => s.pendingHighlandPrincess);
@@ -49,38 +49,18 @@ export default function HighlandPrincessOverlay() {
             </p>
 
             {/* Card grid */}
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3 mb-6">
-              {eligibleCards.map((card, index) => {
-                const isSelected = selectedCard?.cardId === card.cardId;
-
-                return (
-                  <button
-                    key={`${card.cardId}-${index}`}
-                    onClick={() => selectCard(card)}
-                    className={`relative aspect-[2.5/3.5] rounded-lg overflow-hidden transition-all ${
-                      isSelected
-                        ? "ring-4 ring-cyan-500 scale-105 shadow-lg shadow-cyan-500/50"
-                        : "ring-2 ring-cyan-500/30 hover:ring-cyan-500 cursor-pointer"
-                    }`}
-                  >
-                    <Image
-                      src={`/api/images/${card.slug || card.cardId}`}
-                      alt={card.name || "Card"}
-                      fill
-                      className="object-cover"
-                      unoptimized
-                    />
-                    {isSelected && (
-                      <div className="absolute inset-0 bg-cyan-500/30 flex items-center justify-center">
-                        <span className="text-white text-2xl font-bold bg-cyan-600 rounded-full w-8 h-8 flex items-center justify-center">
-                          ✓
-                        </span>
-                      </div>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
+            <CardGrid columns={5}>
+              {eligibleCards.map((card, index) => (
+                <CardWithPreview
+                  key={`${card.cardId}-${index}`}
+                  card={card}
+                  onClick={() => selectCard(card)}
+                  selected={selectedCard?.cardId === card.cardId}
+                  interactive={true}
+                  accentColor="cyan"
+                />
+              ))}
+            </CardGrid>
 
             {/* Action buttons */}
             <div className="flex justify-center gap-4">

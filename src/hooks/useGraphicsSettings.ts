@@ -9,6 +9,8 @@ export interface GraphicsSettings {
   lightingIntensity: number;
   /** Show the 3D table model underneath the playmat */
   showTable: boolean;
+  /** Scale multiplier for card preview size (0.5 - 1.5, default 1.0) */
+  cardPreviewScale: number;
 }
 
 const STORAGE_KEY = "sorcery-graphics-settings";
@@ -17,6 +19,7 @@ const DEFAULT_SETTINGS: GraphicsSettings = {
   enhanced3DCards: true,
   lightingIntensity: 1.0,
   showTable: true,
+  cardPreviewScale: 1.0,
 };
 
 function loadSettings(): GraphicsSettings {
@@ -108,6 +111,15 @@ export function useGraphicsSettings() {
     setSettings({ showTable: !settings.showTable });
   }, [settings.showTable, setSettings]);
 
+  const setCardPreviewScale = useCallback(
+    (scale: number) => {
+      setSettings({
+        cardPreviewScale: Math.max(0.5, Math.min(1.5, scale)),
+      });
+    },
+    [setSettings]
+  );
+
   return {
     settings,
     isLoaded,
@@ -115,6 +127,7 @@ export function useGraphicsSettings() {
     toggleEnhanced3DCards,
     setLightingIntensity,
     toggleShowTable,
+    setCardPreviewScale,
   };
 }
 

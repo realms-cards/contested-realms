@@ -7,6 +7,7 @@ import type {
   ServerPatchT,
 } from "./types";
 import type { PlayerPositionReference } from "../types";
+import { createInitialPlayers } from "./coreState";
 import { filterEchoPatchIfAny } from "./transportState";
 import { normalizeAvatars } from "./utils/avatarHelpers";
 import { mergeEvents } from "./utils/eventHelpers";
@@ -155,6 +156,15 @@ export const createNetworkSlice: StateCreator<
             resultManaP1: next.players?.p1?.mana,
             resultManaP2: next.players?.p2?.mana,
           });
+        } catch {}
+      } else if (replaceKeys.has("players")) {
+        // Server snapshot requested players replacement but didn't include players data
+        // Reset to initial state to ensure consistent mana tracking
+        next.players = createInitialPlayers();
+        try {
+          console.log(
+            "[applyServerPatch] players reset to initial (replaceKeys had players but patch did not)"
+          );
         } catch {}
       }
 
@@ -338,6 +348,74 @@ export const createNetworkSlice: StateCreator<
             }
             zonesCandidate = filteredZones;
           }
+        }
+
+        // CRITICAL: Filter out Morgana private hand cards from incoming spellbook patches
+        // Server doesn't know about morganaHands, so it may re-add drawn cards during turn transitions
+        const morganaHands = state.morganaHands || [];
+        if (morganaHands.length > 0 && zonesCandidate) {
+          const morganaCardIdsBySeat: Record<PlayerKey, Set<number>> = {
+            p1: new Set(),
+            p2: new Set(),
+          };
+          for (const morganaEntry of morganaHands) {
+            for (const card of morganaEntry.hand) {
+              morganaCardIdsBySeat[morganaEntry.ownerSeat].add(card.cardId);
+            }
+          }
+          const filteredZones = { ...zonesCandidate } as Record<
+            PlayerKey,
+            GameState["zones"][PlayerKey]
+          >;
+          for (const seat of ["p1", "p2"] as PlayerKey[]) {
+            const cardIds = morganaCardIdsBySeat[seat];
+            if (cardIds.size > 0) {
+              const seatZones = filteredZones[seat];
+              if (seatZones && Array.isArray(seatZones.spellbook)) {
+                filteredZones[seat] = {
+                  ...seatZones,
+                  spellbook: seatZones.spellbook.filter(
+                    (c) => !cardIds.has(c.cardId)
+                  ),
+                };
+              }
+            }
+          }
+          zonesCandidate = filteredZones;
+        }
+
+        // CRITICAL: Filter out Omphalos private hand cards from incoming spellbook patches
+        // Server doesn't know about omphalosHands, so it may re-add drawn cards during turn transitions
+        const omphalosHands = state.omphalosHands || [];
+        if (omphalosHands.length > 0 && zonesCandidate) {
+          const omphalosCardIdsBySeat: Record<PlayerKey, Set<number>> = {
+            p1: new Set(),
+            p2: new Set(),
+          };
+          for (const omphalosEntry of omphalosHands) {
+            for (const card of omphalosEntry.hand) {
+              omphalosCardIdsBySeat[omphalosEntry.ownerSeat].add(card.cardId);
+            }
+          }
+          const filteredZones = { ...zonesCandidate } as Record<
+            PlayerKey,
+            GameState["zones"][PlayerKey]
+          >;
+          for (const seat of ["p1", "p2"] as PlayerKey[]) {
+            const cardIds = omphalosCardIdsBySeat[seat];
+            if (cardIds.size > 0) {
+              const seatZones = filteredZones[seat];
+              if (seatZones && Array.isArray(seatZones.spellbook)) {
+                filteredZones[seat] = {
+                  ...seatZones,
+                  spellbook: seatZones.spellbook.filter(
+                    (c) => !cardIds.has(c.cardId)
+                  ),
+                };
+              }
+            }
+          }
+          zonesCandidate = filteredZones;
         }
 
         next.zones = normalizeZones(
@@ -679,6 +757,7 @@ export const createNetworkSlice: StateCreator<
               hand: (next.zones ?? state.zones)?.p1?.hand?.length ?? 0,
               spellbook:
                 (next.zones ?? state.zones)?.p1?.spellbook?.length ?? 0,
+              atlas: (next.zones ?? state.zones)?.p1?.atlas?.length ?? 0,
               graveyard:
                 (next.zones ?? state.zones)?.p1?.graveyard?.length ?? 0,
             },
@@ -686,6 +765,7 @@ export const createNetworkSlice: StateCreator<
               hand: (next.zones ?? state.zones)?.p2?.hand?.length ?? 0,
               spellbook:
                 (next.zones ?? state.zones)?.p2?.spellbook?.length ?? 0,
+              atlas: (next.zones ?? state.zones)?.p2?.atlas?.length ?? 0,
               graveyard:
                 (next.zones ?? state.zones)?.p2?.graveyard?.length ?? 0,
             },
@@ -792,6 +872,8 @@ export const createNetworkSlice: StateCreator<
               state.players,
               p.players
             ) as GameState["players"]);
+      } else if (replaceKeys.has("players")) {
+        next.players = createInitialPlayers();
       }
       if (p.currentPlayer !== undefined) {
         next.currentPlayer = p.currentPlayer;
