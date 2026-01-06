@@ -73,6 +73,8 @@ export default function Hand3D({
   );
   const avatars = useGameStore((s) => s.avatars);
   const cardbackUrls = useGameStore((s) => s.cardbackUrls);
+  const handVisibilityMode = useGameStore((s) => s.handVisibilityMode);
+  const setHandVisibilityMode = useGameStore((s) => s.setHandVisibilityMode);
   const { playCardSelect } = useSound();
 
   const hand = useMemo(() => zones?.[owner]?.hand ?? [], [zones, owner]);
@@ -354,16 +356,36 @@ export default function Hand3D({
     const topY = worldH / 2 - margin - CARD_LONG * 0.5 * HAND_CARD_SCALE; // Top overlay baseline
 
     // Reveal logic: edge hands always visible; overlay hands show on interaction
-    let targetShown = isEdgePlacement
-      ? 1
-      : overCardsArea || mouseInZone
-      ? 1
-      : 0;
-    if (!showCardBacks && isCoarsePointer) {
-      if (dragFromHand && selected && selected.who === owner) {
+    // handVisibilityMode: null = default hover, "hidden" = force hide, "visible" = force show (spread)
+    let targetShown: number;
+    if (!showCardBacks && handVisibilityMode === "hidden") {
+      // Force hidden via Space key - completely hide for more board space
+      targetShown = 0;
+    } else if (!showCardBacks && handVisibilityMode === "visible") {
+      // Force visible via Space key - fully extended and spread
+      // Auto-reset to default when cursor leaves the hand zone
+      if (!overCardsArea && !mouseInZone) {
+        setHandVisibilityMode(null);
+        targetShown = 0; // Hide as cursor left
+      } else {
+        targetShown = 1;
+      }
+    } else if (isEdgePlacement) {
+      // Opponent hand (edge placement): always visible
+      targetShown = 1;
+    } else {
+      // Default: hover behavior (show when cursor in zone, hide when leaves)
+      targetShown = overCardsArea || mouseInZone ? 1 : 0;
+    }
+    // Handle dragging - hide hand when dragging out (including from "visible" mode)
+    if (!showCardBacks && dragFromHand && selected && selected.who === owner) {
+      if (isCoarsePointer) {
         const hScr = window.innerHeight || 1;
         const inReturnZone = lastMousePosRef.current.y >= hScr * 0.7;
         targetShown = inReturnZone ? 1 : 0;
+      } else {
+        // Desktop: hide hand when dragging out
+        targetShown = 0;
       }
     }
 
@@ -374,16 +396,21 @@ export default function Hand3D({
       revealLerp.current = targetShown;
 
     // Smooth hand spread animation
+    // Spread when: edge placement, hovering, OR in "visible" mode
     const handShouldBeSpread = isEdgePlacement
       ? true // Edge hands always spread for visibility
-      : overCardsArea || mouseInZone; // Overlay hand spreads when interacted with
+      : overCardsArea || mouseInZone || handVisibilityMode === "visible"; // Overlay hand spreads when interacted with or forced visible
     const spreadTarget = handShouldBeSpread ? 1 : 0;
     const spreadK = 0.25; // Smooth easing for hand spread
     handSpreadLerp.current += (spreadTarget - handSpreadLerp.current) * spreadK;
     if (Math.abs(spreadTarget - handSpreadLerp.current) < 0.005)
       handSpreadLerp.current = spreadTarget;
 
-    const hiddenOffset = -CARD_LONG * HAND_CARD_SCALE * 0.8;
+    // When force hidden via Space, push hand much further off-screen for more board space
+    const normalHiddenOffset = -CARD_LONG * HAND_CARD_SCALE * 0.8;
+    const forceHiddenOffset = -CARD_LONG * HAND_CARD_SCALE * 1.5; // Completely off screen
+    const hiddenOffset =
+      handVisibilityMode === "hidden" ? forceHiddenOffset : normalHiddenOffset;
     const yOffset = hiddenOffset * (1 - revealLerp.current);
 
     if (isEdgePlacement) {

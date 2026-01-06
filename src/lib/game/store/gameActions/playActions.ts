@@ -144,12 +144,12 @@ export const createPlayActionsSlice: StateCreator<
         !typeEarly.includes("token") &&
         !typeEarly.includes("site")
       ) {
+        // Log warning but allow operation for game repair purposes
         get().log(
-          `Cannot play '${
+          `[Warning] Playing '${
             card.name
-          }': ${who.toUpperCase()} is not the current player`
+          }' out of turn: ${who.toUpperCase()} is not the current player`
         );
-        return state;
       }
       const type = typeEarly;
       if (!type.includes("site")) {
@@ -449,6 +449,7 @@ export const createPlayActionsSlice: StateCreator<
       const isBlackMass = cardNameLower === "black mass";
       const isHighlandPrincess = cardNameLower === "highland princess";
       const isAssortedAnimals = cardNameLower === "assorted animals";
+      const isDholChants = cardNameLower === "dhol chants";
       console.log("[playActions] Card played:", {
         cardName: card.name,
         cardNameLower,
@@ -726,6 +727,23 @@ export const createPlayActionsSlice: StateCreator<
           console.error("[playActions] Error triggering Highland Princess:", e);
         }
       }
+      // If this is Dhol Chants, begin the ally tap selection flow
+      else if (isDholChants && newest) {
+        try {
+          get().beginDholChants({
+            spell: {
+              at: key,
+              index: arr.length - 1,
+              instanceId: newest.instanceId ?? null,
+              owner: newest.owner,
+              card: newest.card as CardRef,
+            },
+            casterSeat: who,
+          });
+        } catch (e) {
+          console.error("[playActions] Error triggering Dhol Chants:", e);
+        }
+      }
       // If this is a Magic card (but not one with special handling), begin the magic casting flow
       else if (type.includes("magic") && newest) {
         try {
@@ -788,15 +806,12 @@ export const createPlayActionsSlice: StateCreator<
         !type.includes("token") &&
         !type.includes("site")
       ) {
+        // Log warning but allow operation for game repair purposes
         get().log(
-          `Cannot play '${
+          `[Warning] Playing '${
             card.name
-          }' from ${from}: ${who.toUpperCase()} is not the current player`
+          }' from ${from} out of turn: ${who.toUpperCase()} is not the current player`
         );
-        return {
-          dragFromPile: null,
-          dragFromHand: false,
-        } as Partial<GameState> as GameState;
       }
       // Guard: Must draw a card before playing during Start/Draw phase
       // Exception: Playing a site from atlas IS the draw action (counts as free draw)
@@ -1134,12 +1149,12 @@ export const createPlayActionsSlice: StateCreator<
       }
       const isCurrent = (who === "p1" ? 1 : 2) === state.currentPlayer;
       if (!isCurrent) {
+        // Log warning but allow operation for game repair purposes
         get().log(
-          `Cannot draw '${
+          `[Warning] Drawing '${
             card.name
-          }' from ${from}: ${who.toUpperCase()} is not the current player`
+          }' from ${from} out of turn: ${who.toUpperCase()} is not the current player`
         );
-        return { dragFromPile: null } as Partial<GameState> as GameState;
       }
       // Collection-to-hand moves are only legal during the controlling player's own Main phase.
       // However, since phase tracking is not strictly enforced in this implementation,
@@ -1152,12 +1167,25 @@ export const createPlayActionsSlice: StateCreator<
         return { dragFromPile: null } as Partial<GameState> as GameState;
       }
 
-      // Drawing from atlas is always allowed - card effects can grant draws from atlas
-      // Avatar tapping is only required when PLAYING a site from atlas, not drawing
       // Track if this is the free draw at start of turn
       const isFreeDraw =
         (state.phase === "Start" || state.phase === "Draw") &&
         !state.hasDrawnThisTurn;
+
+      // Drawing from atlas requires tapping the avatar (avatar ability: "Tap → Play or draw a site")
+      // UNLESS it's the free draw at start of turn
+      const shouldTapAvatar = from === "atlas" && !isFreeDraw;
+
+      // Check if avatar is already tapped when we need to tap it
+      if (shouldTapAvatar) {
+        const avatar = state.avatars[who];
+        if (avatar?.tapped) {
+          get().log(
+            `Cannot draw from Atlas: ${who.toUpperCase()}'s Avatar is already tapped`
+          );
+          return { dragFromPile: null } as Partial<GameState> as GameState;
+        }
+      }
 
       get().pushHistory();
       const z = { ...state.zones[who] };
@@ -1217,6 +1245,17 @@ export const createPlayActionsSlice: StateCreator<
         [who]: { ...z, [pileName]: pile, hand },
       } as GameState["zones"];
 
+      // Build avatar update if we need to tap
+      let avatarsNext = state.avatars;
+      if (shouldTapAvatar) {
+        avatarsNext = {
+          ...state.avatars,
+          [who]: { ...state.avatars[who], tapped: true },
+        } as GameState["avatars"];
+        const tapLogNum = who === "p1" ? "1" : "2";
+        get().log(`[p${tapLogNum}:PLAYER] taps Avatar to draw from Atlas`);
+      }
+
       // Mark that player has drawn this turn (for Draw phase enforcement)
       // This applies when it's the free draw (Start/Draw phase, not yet drawn)
       const shouldMarkDrawn = isFreeDraw;
@@ -1227,6 +1266,11 @@ export const createPlayActionsSlice: StateCreator<
         const zonePatch = createZonesPatchFor(zonesNext, who);
         if (zonePatch) {
           patch.zones = zonePatch.zones;
+        }
+        if (shouldTapAvatar) {
+          patch.avatars = {
+            [who]: { tapped: true },
+          } as GameState["avatars"];
         }
         if (shouldMarkDrawn) {
           patch.hasDrawnThisTurn = true;
@@ -1239,6 +1283,7 @@ export const createPlayActionsSlice: StateCreator<
 
       return {
         zones: zonesNext,
+        avatars: avatarsNext,
         dragFromPile: null,
         ...(shouldMarkDrawn
           ? { hasDrawnThisTurn: true, phase: "Main" as const }
@@ -1249,12 +1294,12 @@ export const createPlayActionsSlice: StateCreator<
     set((state) => {
       const selectedCard = state.selectedCard;
       if (!selectedCard || selectedCard.who !== who) return state;
+      // Log warning but allow operation for game repair purposes
       const isCurrent = (who === "p1" ? 1 : 2) === state.currentPlayer;
       if (!isCurrent) {
         get().log(
-          `Cannot move card to ${pile}: ${who.toUpperCase()} is not the current player`
+          `[Warning] Moving card to ${pile} out of turn: ${who.toUpperCase()} is not the current player`
         );
-        return state;
       }
       get().pushHistory();
       const zones = { ...state.zones[who] };

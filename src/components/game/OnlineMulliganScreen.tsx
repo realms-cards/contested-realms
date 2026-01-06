@@ -297,16 +297,18 @@ export default function OnlineMulliganScreen({
         )}
       </div>
 
-      {/* Hide hand section when seer UI is shown to reduce clutter */}
-      {!showSeerUI && (
-        <div className="bg-black/30 rounded-xl p-4 ring-1 ring-white/10">
-          <div className="flex items-center justify-between mb-2">
-            <div className="font-semibold">Your Hand</div>
+      {/* Always show hand - players need to see their cards during seer phase */}
+      <div className="bg-black/30 rounded-xl p-4 ring-1 ring-white/10">
+        <div className="flex items-center justify-between mb-2">
+          <div className="font-semibold">Your Hand</div>
+          {!showSeerUI && (
             <div className="text-xs opacity-80">
               Mulligans remaining: {myMulligans}
             </div>
-          </div>
+          )}
+        </div>
 
+        {!showSeerUI && (
           <div className="text-xs opacity-80 mb-3">
             {!done && myMulligans > 0
               ? "Click cards to select for mulligan (max 3)."
@@ -314,70 +316,70 @@ export default function OnlineMulliganScreen({
               ? "Mulligan used. Ready to start game."
               : "Mulligan complete."}
           </div>
+        )}
 
-          {myHand.length > 0 ? (
-            <div className="flex items-center gap-2 overflow-x-auto overflow-y-visible pb-2 pt-10 sm:pt-16 min-h-[160px] sm:min-h-[200px]">
-              {myHand.map((card, i) => {
-                const isSite = (card.type || "").toLowerCase().includes("site");
-                const isSelected = selected.includes(i);
-                // Use card slug if available, otherwise build a fallback
-                const cardSlug = card.slug || buildCardSlug(card.name, null);
+        {myHand.length > 0 ? (
+          <div className="flex items-center gap-2 overflow-x-auto overflow-y-visible pb-2 pt-10 sm:pt-16 min-h-[160px] sm:min-h-[200px]">
+            {myHand.map((card, i) => {
+              const isSite = (card.type || "").toLowerCase().includes("site");
+              const isSelected = selected.includes(i);
+              // Use card slug if available, otherwise build a fallback
+              const cardSlug = card.slug || buildCardSlug(card.name, null);
 
-                return (
-                  <button
-                    key={i}
-                    className={`relative flex-shrink-0 transition-all duration-200 ${
-                      !done && myMulligans > 0
-                        ? "hover:scale-105 hover:-translate-y-4"
-                        : ""
-                    } ${
-                      isSelected ? "ring-2 ring-red-400 -translate-y-2" : ""
-                    } ${
-                      done || myMulligans === 0
-                        ? "cursor-default"
-                        : "cursor-pointer"
-                    }`}
-                    onClick={() => handleCardClick(i)}
-                    onMouseEnter={() => setPreviewCard(card)}
-                    onMouseLeave={() => setPreviewCard(null)}
+              return (
+                <button
+                  key={i}
+                  className={`relative flex-shrink-0 transition-all duration-200 ${
+                    !done && myMulligans > 0 && !showSeerUI
+                      ? "hover:scale-105 hover:-translate-y-4"
+                      : ""
+                  } ${
+                    isSelected && !showSeerUI
+                      ? "ring-2 ring-red-400 -translate-y-2"
+                      : ""
+                  } ${
+                    done || myMulligans === 0 || showSeerUI
+                      ? "cursor-default"
+                      : "cursor-pointer"
+                  }`}
+                  onClick={() => !showSeerUI && handleCardClick(i)}
+                  onMouseEnter={() => setPreviewCard(card)}
+                  onMouseLeave={() => setPreviewCard(null)}
+                >
+                  <div
+                    className={`relative ${
+                      isSite
+                        ? "aspect-[4/3] w-24 sm:w-32"
+                        : "aspect-[3/4] w-20 sm:w-24"
+                    } rounded-lg overflow-hidden ring-1 ring-white/20 shadow-lg ${
+                      isSelected && !showSeerUI ? "opacity-70" : ""
+                    } ${done || myMulligans === 0 ? "opacity-60" : ""}`}
                   >
-                    <div
-                      className={`relative ${
-                        isSite
-                          ? "aspect-[4/3] w-24 sm:w-32"
-                          : "aspect-[3/4] w-20 sm:w-24"
-                      } rounded-lg overflow-hidden ring-1 ring-white/20 shadow-lg ${
-                        isSelected ? "opacity-70" : ""
-                      } ${done || myMulligans === 0 ? "opacity-60" : ""}`}
-                    >
-                      <Image
-                        src={`/api/images/${cardSlug}`}
-                        alt={card.name}
-                        fill
-                        sizes="(max-width: 640px) 96px, 120px"
-                        className={`object-contain ${
-                          isSite ? "rotate-90" : ""
-                        }`}
-                        unoptimized
-                      />
-                      {isSelected && (
-                        <div className="absolute inset-0 bg-red-500/30 flex items-center justify-center">
-                          <div className="text-white text-xs font-bold bg-red-600 rounded px-2 py-1">
-                            MULLIGAN
-                          </div>
+                    <Image
+                      src={`/api/images/${cardSlug}`}
+                      alt={card.name}
+                      fill
+                      sizes="(max-width: 640px) 96px, 120px"
+                      className={`object-contain ${isSite ? "rotate-90" : ""}`}
+                      unoptimized
+                    />
+                    {isSelected && !showSeerUI && (
+                      <div className="absolute inset-0 bg-red-500/30 flex items-center justify-center">
+                        <div className="text-white text-xs font-bold bg-red-600 rounded px-2 py-1">
+                          MULLIGAN
                         </div>
-                      )}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="text-center py-8 text-gray-400">
-              No cards in hand
-            </div>
-          )}
+                      </div>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="text-center py-8 text-gray-400">No cards in hand</div>
+        )}
 
+        {!showSeerUI && (
           <div className="flex justify-between items-center mt-4">
             <div className="text-xs opacity-70">
               {selected.length > 0 &&
@@ -397,7 +399,7 @@ export default function OnlineMulliganScreen({
               )}
 
               {/* Show finalize button only when seer phase is complete (or not needed) */}
-              {(done || myMulligans === 0) && !showSeerUI && (
+              {(done || myMulligans === 0) && (
                 <button
                   className={`rounded px-3 py-2 sm:px-4 text-sm font-medium transition-colors ${
                     submitted
@@ -417,8 +419,8 @@ export default function OnlineMulliganScreen({
               )}
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Second Player Seer Phase - shown after mulligan is done */}
       {showSeerUI && (

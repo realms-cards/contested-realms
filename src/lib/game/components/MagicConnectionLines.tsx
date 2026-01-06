@@ -9,85 +9,175 @@ import { seatFromOwner } from "@/lib/game/store/utils/boardHelpers";
 type MagicConnectionLinesProps = {
   pendingMagic: NonNullable<GameState["pendingMagic"]>;
   avatars: GameState["avatars"];
+  permanents: GameState["permanents"];
   boardOffset: { x: number; y: number };
 };
 
+// Card offset from tile center based on owner (cards pushed toward their owner's side)
+// Matches the zBase calculation in PermanentStack.tsx
+const CARD_MARGIN_Z = TILE_SIZE * 0.1;
+const getCardZOffset = (owner: 1 | 2): number => {
+  return owner === 1
+    ? -TILE_SIZE * 0.5 + CARD_MARGIN_Z // Cards pushed toward p1 (negative Z)
+    : TILE_SIZE * 0.5 - CARD_MARGIN_Z;  // Cards pushed toward p2 (positive Z)
+};
+
 /**
- * Component to render a line between two 3D points using a thin cylinder with animated pulse.
- * This ensures the line is visible and properly oriented in 3D space.
+ * Creates a simple hollow chevron ">" shape
+ * Sized for visibility on the game board
  */
-function ConnectionLine({
+function createChevronGeometry(): THREE.BufferGeometry {
+  const shape = new THREE.Shape();
+
+  // Chevron pointing along +X axis (will be rotated to point toward target)
+  const w = 0.07; // width (tip to back) - larger
+  const h = 0.10; // height (top to bottom) - larger
+  const t = 0.025; // thickness of the chevron arms - fatter
+
+  // Outer path
+  shape.moveTo(-w, h / 2); // Back top
+  shape.lineTo(0, 0); // Tip (pointing right)
+  shape.lineTo(-w, -h / 2); // Back bottom
+
+  // Inner path (creates hollow)
+  shape.lineTo(-w + t, -h / 2 + t * 1.0);
+  shape.lineTo(-t * 0.8, 0);
+  shape.lineTo(-w + t, h / 2 - t * 1.0);
+  shape.closePath();
+
+  const geometry = new THREE.ShapeGeometry(shape);
+  // Rotate to lay flat on XZ plane (Y is up), chevron points along +X
+  geometry.rotateX(-Math.PI / 2);
+
+  return geometry;
+}
+
+// Shared geometry instance for all chevrons
+const sharedChevronGeometry = createChevronGeometry();
+
+/**
+ * Single chevron that points toward target
+ */
+function Chevron({
+  position,
+  rotation,
+  color,
+  opacity,
+}: {
+  position: [number, number, number];
+  rotation: number;
+  color: string;
+  opacity: number;
+}) {
+  return (
+    <mesh
+      position={position}
+      rotation={[0, rotation, 0]}
+      geometry={sharedChevronGeometry}
+      renderOrder={10500}
+    >
+      <meshBasicMaterial
+        color={color}
+        transparent
+        opacity={opacity}
+        side={THREE.DoubleSide}
+        depthTest={false}
+      />
+    </mesh>
+  );
+}
+
+/**
+ * Animated chevron strip between two 3D points.
+ * Creates a flowing ">>>" effect from start toward end (target).
+ */
+function ChevronStrip({
   start,
   end,
   color,
-  pulseSpeed = 2.0,
+  animationSpeed = 3.0,
 }: {
   start: [number, number, number];
   end: [number, number, number];
   color: string;
-  pulseSpeed?: number;
+  animationSpeed?: number;
 }) {
-  const materialRef = useRef<THREE.MeshBasicMaterial>(null);
+  const groupRef = useRef<THREE.Group>(null);
 
-  // Animate the pulse effect
-  useFrame((state) => {
-    if (materialRef.current) {
-      const pulse = Math.sin(state.clock.elapsedTime * pulseSpeed) * 0.5 + 0.5;
-      materialRef.current.opacity = 0.4 + pulse * 0.5; // Oscillate between 0.4 and 0.9
-    }
-  });
-  const { position, rotation, length } = useMemo(() => {
+  const { positions, rotation, chevronCount } = useMemo(() => {
     const startVec = new THREE.Vector3(...start);
     const endVec = new THREE.Vector3(...end);
+    const direction = new THREE.Vector3().subVectors(endVec, startVec);
+    const lineLength = direction.length();
+    direction.normalize();
 
-    // Calculate midpoint
-    const midpoint = new THREE.Vector3()
-      .addVectors(startVec, endVec)
-      .multiplyScalar(0.5);
+    // Calculate rotation angle around Y axis
+    // The chevron geometry points along +X, so we need to rotate from +X to our direction
+    const angle = -Math.atan2(direction.z, direction.x);
 
-    // Calculate length
-    const lineLength = startVec.distanceTo(endVec);
+    // Spacing between chevrons (0.08 units apart for larger chevrons)
+    const spacing = 0.08;
+    const count = Math.max(3, Math.floor(lineLength / spacing));
 
-    // Calculate rotation to align cylinder with line
-    const direction = new THREE.Vector3()
-      .subVectors(endVec, startVec)
-      .normalize();
+    // Calculate positions for each chevron along the line
+    // Interpolate between start and end (which should already be at card height)
+    const chevronPositions: [number, number, number][] = [];
 
-    // Cylinder is oriented along Y axis by default, we need to rotate it
-    // to point in the direction of our line
-    const quaternion = new THREE.Quaternion();
-
-    // Create a rotation from the default up vector (0,1,0) to our direction
-    // But first we need to project direction onto XZ plane for horizontal line
-    const up = new THREE.Vector3(0, 1, 0);
-
-    // For a line in 3D space, we rotate from Y axis to the direction vector
-    quaternion.setFromUnitVectors(up, direction);
-
-    const euler = new THREE.Euler().setFromQuaternion(quaternion);
+    for (let i = 0; i < count; i++) {
+      const t = (i + 0.5) / count;
+      const pos = new THREE.Vector3().lerpVectors(startVec, endVec, t);
+      chevronPositions.push([pos.x, pos.y, pos.z]);
+    }
 
     return {
-      position: [midpoint.x, midpoint.y, midpoint.z] as [
-        number,
-        number,
-        number
-      ],
-      rotation: [euler.x, euler.y, euler.z] as [number, number, number],
-      length: lineLength,
+      positions: chevronPositions,
+      rotation: angle,
+      chevronCount: count,
     };
   }, [start, end]);
 
+  // Animate opacity wave flowing from start to end (toward target)
+  useFrame((state) => {
+    if (!groupRef.current) return;
+
+    const time = state.clock.elapsedTime * animationSpeed;
+
+    groupRef.current.children.forEach((child, i) => {
+      const mesh = child as THREE.Mesh;
+      if (mesh.material && "opacity" in mesh.material) {
+        // Wave flows from start (i=0) toward end (i=max)
+        const wavePosition = (time % chevronCount) - i;
+
+        // Create a smooth traveling wave
+        let opacity: number;
+        if (wavePosition >= 0 && wavePosition < 2) {
+          // Bright part of wave
+          opacity = 0.95 - Math.abs(wavePosition - 1) * 0.35;
+        } else if (wavePosition >= -1.5 && wavePosition < 0) {
+          // Leading edge fading in
+          opacity = 0.5 + (wavePosition + 1.5) * 0.2;
+        } else {
+          // Dim base state
+          opacity = 0.4;
+        }
+
+        (mesh.material as THREE.MeshBasicMaterial).opacity = opacity;
+      }
+    });
+  });
+
   return (
-    <mesh position={position} rotation={rotation} renderOrder={10500}>
-      <cylinderGeometry args={[0.04, 0.04, length, 8]} />
-      <meshBasicMaterial
-        ref={materialRef}
-        color={color}
-        transparent
-        opacity={0.8}
-        depthTest={false}
-      />
-    </mesh>
+    <group ref={groupRef}>
+      {positions.map((pos, i) => (
+        <Chevron
+          key={i}
+          position={pos}
+          rotation={rotation}
+          color={color}
+          opacity={0.5}
+        />
+      ))}
+    </group>
   );
 }
 
@@ -99,17 +189,19 @@ function ConnectionLine({
 export function MagicConnectionLines({
   pendingMagic,
   avatars,
+  permanents,
   boardOffset,
 }: MagicConnectionLinesProps) {
   const { spell, caster, target, tile } = pendingMagic;
 
-  // Calculate world positions for all entities
+  // Calculate world positions for all entities (card centers, not tile centers)
   const positions = useMemo(() => {
-    const elevation = 0.05; // Slightly above board surface to avoid z-fighting
+    const elevation = 0.25; // At card level (cards are raised above the board)
 
-    // Spell tile position (always available)
+    // Spell card position (at tile center + owner offset)
     const spellX = boardOffset.x + tile.x * TILE_SIZE;
-    const spellZ = boardOffset.y + tile.y * TILE_SIZE;
+    const spellZOffset = getCardZOffset(spell.owner);
+    const spellZ = boardOffset.y + tile.y * TILE_SIZE + spellZOffset;
     const spellPos: [number, number, number] = [spellX, elevation, spellZ];
 
     // Caster position (if selected)
@@ -128,7 +220,8 @@ export function MagicConnectionLines({
         const [px, py] = String(caster.at).split(",").map(Number);
         if (Number.isFinite(px) && Number.isFinite(py)) {
           const cx = boardOffset.x + px * TILE_SIZE;
-          const cz = boardOffset.y + py * TILE_SIZE;
+          const czOffset = getCardZOffset(caster.owner);
+          const cz = boardOffset.y + py * TILE_SIZE + czOffset;
           casterPos = [cx, elevation, cz];
         }
       }
@@ -158,8 +251,13 @@ export function MagicConnectionLines({
       } else if (target.kind === "permanent") {
         const [tx, ty] = String(target.at).split(",").map(Number);
         if (Number.isFinite(tx) && Number.isFinite(ty)) {
+          // Look up permanent owner from permanents data
+          const cellItems = permanents[target.at];
+          const targetPerm = cellItems?.[target.index];
+          const targetOwner = targetPerm?.owner ?? spell.owner; // Fallback to spell owner
           const worldX = boardOffset.x + tx * TILE_SIZE;
-          const worldZ = boardOffset.y + ty * TILE_SIZE;
+          const zOffset = getCardZOffset(targetOwner);
+          const worldZ = boardOffset.y + ty * TILE_SIZE + zOffset;
           targetPos = [worldX, elevation, worldZ];
         }
       } else if (target.kind === "avatar") {
@@ -179,8 +277,14 @@ export function MagicConnectionLines({
           if ("at" in hitTarget) {
             const [tx, ty] = String(hitTarget.at).split(",").map(Number);
             if (Number.isFinite(tx) && Number.isFinite(ty)) {
+              // Look up permanent owner from permanents data
+              const cellItems = permanents[hitTarget.at];
+              const hitIndex = hitTarget.index ?? 0;
+              const hitPerm = cellItems?.[hitIndex];
+              const hitOwner = hitPerm?.owner ?? spell.owner; // Fallback to spell owner
               const worldX = boardOffset.x + tx * TILE_SIZE;
-              const worldZ = boardOffset.y + ty * TILE_SIZE;
+              const zOffset = hitTarget.kind === "permanent" ? getCardZOffset(hitOwner) : 0;
+              const worldZ = boardOffset.y + ty * TILE_SIZE + zOffset;
               targetPos = [worldX, elevation, worldZ];
             }
           } else if ("seat" in hitTarget) {
@@ -199,7 +303,7 @@ export function MagicConnectionLines({
     }
 
     return { spellPos, casterPos, targetPos };
-  }, [avatars, boardOffset, tile, spell, caster, target]);
+  }, [avatars, permanents, boardOffset, tile, spell, caster, target]);
 
   // Don't render if we don't have necessary positions
   if (!positions.casterPos && !positions.targetPos) {
@@ -212,31 +316,36 @@ export function MagicConnectionLines({
 
   return (
     <group>
-      {/* Line from spell to caster */}
+      {/* Chevron strip from spell to caster */}
       {positions.casterPos && (
-        <ConnectionLine
+        <ChevronStrip
           start={positions.spellPos}
           end={positions.casterPos}
           color={playerColor}
-          pulseSpeed={3.0}
+          animationSpeed={4.0}
         />
       )}
 
-      {/* Line from caster to target */}
+      {/* Chevron strip from caster to target */}
       {positions.casterPos && positions.targetPos && (
-        <ConnectionLine
+        <ChevronStrip
           start={positions.casterPos}
           end={positions.targetPos}
           color={playerColor}
-          pulseSpeed={2.5}
+          animationSpeed={3.5}
         />
       )}
 
       {/* Caster indicator - glowing dot */}
       {positions.casterPos && (
-        <mesh position={positions.casterPos}>
-          <sphereGeometry args={[0.1, 16, 16]} />
-          <meshBasicMaterial color={playerColor} transparent opacity={0.7} />
+        <mesh position={positions.casterPos} renderOrder={10501}>
+          <sphereGeometry args={[0.08, 16, 16]} />
+          <meshBasicMaterial
+            color={playerColor}
+            transparent
+            opacity={0.9}
+            depthTest={false}
+          />
         </mesh>
       )}
 

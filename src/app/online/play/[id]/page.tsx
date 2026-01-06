@@ -25,6 +25,11 @@ import AccusationOverlay from "@/components/game/AccusationOverlay";
 import BlackMassOverlay from "@/components/game/BlackMassOverlay";
 import HighlandPrincessOverlay from "@/components/game/HighlandPrincessOverlay";
 import AssortedAnimalsOverlay from "@/components/game/AssortedAnimalsOverlay";
+import FrontierSettlersOverlay from "@/components/game/FrontierSettlersOverlay";
+import PigsOfTheSounderOverlay from "@/components/game/PigsOfTheSounderOverlay";
+import DemonicContractOverlay from "@/components/game/DemonicContractOverlay";
+import DholChantsOverlay from "@/components/game/DholChantsOverlay";
+import DoomsdayCultOverlay from "@/components/game/DoomsdayCultOverlay";
 import ContextMenu from "@/components/game/ContextMenu";
 import { ElementChoiceOverlay } from "@/components/game/ElementChoiceOverlay";
 import EnhancedOnlineDraft3DScreen from "@/components/game/EnhancedOnlineDraft3DScreen";
@@ -2126,6 +2131,29 @@ export default function OnlineMatchPage() {
   const selectedPermanent = useGameStore((s) => s.selectedPermanent);
   const selectedAvatar = useGameStore((s) => s.selectedAvatar);
   const boardSize = useGameStore((s) => s.board.size);
+  const toggleHandVisibility = useGameStore((s) => s.toggleHandVisibility);
+
+  // Space key to toggle hand visibility
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.repeat) return;
+      if (e.code !== "Space" && e.key !== " " && e.key !== "Spacebar") return;
+      const ae = document.activeElement as HTMLElement | null;
+      if (
+        ae &&
+        (ae.tagName === "INPUT" ||
+          ae.tagName === "TEXTAREA" ||
+          ae.isContentEditable)
+      ) {
+        return;
+      }
+      e.preventDefault();
+      toggleHandVisibility();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [toggleHandVisibility]);
+
   // Compute playmat extents for camera baselines and clamps
   const baseGridW = boardSize.w * BASE_TILE_SIZE;
   const baseGridH = boardSize.h * BASE_TILE_SIZE;
@@ -3164,6 +3192,16 @@ export default function OnlineMatchPage() {
           <HighlandPrincessOverlay />
           {/* Assorted Animals Overlay (search for Beasts) */}
           <AssortedAnimalsOverlay />
+          {/* Frontier Settlers Overlay (tap: place site) */}
+          <FrontierSettlersOverlay />
+          {/* Pigs of the Sounder Overlay (Deathrite) */}
+          <PigsOfTheSounderOverlay />
+          {/* Demonic Contract Overlay */}
+          <DemonicContractOverlay />
+          {/* Dhol Chants Overlay */}
+          <DholChantsOverlay />
+          {/* Doomsday Cult Overlay (continuous reveal) */}
+          <DoomsdayCultOverlay />
           {/* Unit hands overlay (Morgana, Omphalos) */}
           <UnitHandsOverlay />
           {/* Pith Imp stolen card notification */}

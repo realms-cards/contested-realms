@@ -750,6 +750,128 @@ export type PendingAssortedAnimals = {
   createdAt: number;
 };
 
+// --- Frontier Settlers State ------------------------------------------------
+// Tap → Reveal and play your topmost site to an adjacent void or Rubble. Frontier Settlers move there and lose this ability.
+export type FrontierSettlersPhase =
+  | "revealing"
+  | "selecting_target"
+  | "complete";
+
+export type PendingFrontierSettlers = {
+  id: string;
+  minion: {
+    at: CellKey;
+    index: number;
+    instanceId: string | null;
+    owner: 1 | 2;
+    card: CardRef;
+  };
+  ownerSeat: PlayerKey;
+  phase: FrontierSettlersPhase;
+  revealedSite: CardRef | null;
+  validTargets: CellKey[];
+  selectedTarget: CellKey | null;
+  createdAt: number;
+};
+
+// --- Pigs of the Sounder / Squeakers State ------------------------------------
+// Deathrite abilities that reveal 5 spells and summon matching cards:
+// - "Pigs of the Sounder" → summons "Grand Old Boars"
+// - "Squeakers" → summons "Pigs of the Sounder"
+export type PigsOfTheSounderPhase = "revealing" | "summoning" | "complete";
+
+export type PendingPigsOfTheSounder = {
+  id: string;
+  ownerSeat: PlayerKey;
+  deathLocation: CellKey;
+  triggerCardName: string; // Card that triggered the Deathrite
+  targetCardName: string; // Card to search for and summon
+  phase: PigsOfTheSounderPhase;
+  revealedCards: CardRef[];
+  pigsToSummon: CardRef[]; // Cards matching targetCardName
+  cardsToBottom: CardRef[];
+  createdAt: number;
+};
+
+// --- Demonic Contract State ------------------------------------------------
+// Search spellbook with rarity limited by highest Demon controlled; pay 4 life or sacrifice token
+export type DemonicContractPhase =
+  | "choosing_cost"
+  | "choosing_sacrifice"
+  | "loading"
+  | "selecting"
+  | "complete";
+
+export type DemonicContractCostType = "life" | "sacrifice";
+
+export type PendingDemonicContract = {
+  id: string;
+  spell: {
+    at: CellKey;
+    index: number;
+    instanceId: string | null;
+    owner: 1 | 2;
+    card: CardRef;
+  };
+  casterSeat: PlayerKey;
+  phase: DemonicContractPhase;
+  maxRarity: number;
+  highestDemonName: string | null;
+  costType: DemonicContractCostType | null;
+  sacrificeOptions: Array<{
+    at: CellKey;
+    index: number;
+    name: string;
+    instanceId: string | null;
+  }>;
+  selectedSacrifice: { at: CellKey; index: number } | null;
+  eligibleCards: CardRef[];
+  selectedCard: CardRef | null;
+  createdAt: number;
+};
+
+// --- Doomsday Cult State ----------------------------------------------
+// Continuous effect: reveal top spellbook, allow Evil casting from spellbook
+export type DoomsdayCultInfo = {
+  at: CellKey;
+  owner: PlayerKey;
+  index: number;
+};
+
+// --- Dhol Chants State ------------------------------------------------
+// Tap N allies to reveal N spells, cast one for free, put rest at bottom
+export type DholChantsPhase =
+  | "selecting_allies"
+  | "revealing"
+  | "selecting_spell"
+  | "complete";
+
+export type DholChantsAlly = {
+  at: CellKey;
+  index: number;
+  instanceId: string | null;
+  name: string;
+  tapped: boolean;
+};
+
+export type PendingDholChants = {
+  id: string;
+  spell: {
+    at: CellKey;
+    index: number;
+    instanceId: string | null;
+    owner: 1 | 2;
+    card: CardRef;
+  };
+  casterSeat: PlayerKey;
+  phase: DholChantsPhase;
+  nearbyAllies: DholChantsAlly[];
+  selectedAllies: Array<{ at: CellKey; index: number }>;
+  revealedSpells: CardRef[];
+  selectedSpell: CardRef | null;
+  createdAt: number;
+};
+
 // Context menu targeting for click-driven actions
 export type ContextMenuTarget =
   | { kind: "site"; x: number; y: number }
@@ -1330,6 +1452,78 @@ export type GameState = {
   deselectAssortedAnimalsCard: (cardId: number) => void;
   resolveAssortedAnimals: () => void;
   cancelAssortedAnimals: () => void;
+  // Frontier Settlers (tap: reveal/play top site to adjacent void/rubble)
+  pendingFrontierSettlers: PendingFrontierSettlers | null;
+  frontierSettlersUsed: Set<string>;
+  triggerFrontierSettlersAbility: (input: {
+    minion: {
+      at: CellKey;
+      index: number;
+      instanceId: string | null;
+      owner: 1 | 2;
+      card: CardRef;
+    };
+    ownerSeat: PlayerKey;
+  }) => void;
+  selectFrontierSettlersTarget: (targetCell: CellKey) => void;
+  resolveFrontierSettlers: () => void;
+  cancelFrontierSettlers: () => void;
+  hasFrontierSettlersAbility: (instanceId: string) => boolean;
+  // Pigs of the Sounder / Squeakers (Deathrite: reveal 5, summon matching cards)
+  pendingPigsOfTheSounder: PendingPigsOfTheSounder | null;
+  triggerPigsDeathrite: (input: {
+    ownerSeat: PlayerKey;
+    deathLocation: CellKey;
+    triggerCardName?: string; // Optional: defaults to "Pigs of the Sounder"
+  }) => void;
+  resolvePigsOfTheSounder: () => void;
+  cancelPigsOfTheSounder: () => void;
+  // Demonic Contract (search with Demon rarity limit, pay life or sacrifice)
+  pendingDemonicContract: PendingDemonicContract | null;
+  beginDemonicContract: (input: {
+    spell: {
+      at: CellKey;
+      index: number;
+      instanceId: string | null;
+      owner: 1 | 2;
+      card: CardRef;
+    };
+    casterSeat: PlayerKey;
+  }) => Promise<void>;
+  chooseDemonicContractCost: (costType: "life" | "sacrifice") => Promise<void>;
+  selectDemonicContractSacrifice: (at: CellKey, index: number) => Promise<void>;
+  selectDemonicContractCard: (card: CardRef) => void;
+  resolveDemonicContract: () => void;
+  cancelDemonicContract: () => void;
+  // Dhol Chants (tap N allies, reveal N spells, cast one free)
+  pendingDholChants: PendingDholChants | null;
+  beginDholChants: (input: {
+    spell: {
+      at: CellKey;
+      index: number;
+      instanceId: string | null;
+      owner: 1 | 2;
+      card: CardRef;
+    };
+    casterSeat: PlayerKey;
+  }) => void;
+  toggleDholChantsAlly: (at: CellKey, index: number) => void;
+  confirmDholChantsAllies: () => void;
+  selectDholChantsSpell: (card: CardRef) => void;
+  resolveDholChants: () => void;
+  cancelDholChants: () => void;
+  // Doomsday Cult (continuous: reveal top spellbook, cast Evil from spellbook)
+  getActiveDoomsdayCults: () => DoomsdayCultInfo[];
+  isDoomsdayCultActive: () => boolean;
+  getRevealedSpellbookTop: (playerKey: PlayerKey) => CardRef | null;
+  canCastFromSpellbookTop: (
+    playerKey: PlayerKey,
+    targetCell: CellKey
+  ) => { canCast: boolean; reason?: string; card?: CardRef };
+  castFromSpellbookTop: (
+    playerKey: PlayerKey,
+    targetCell: CellKey
+  ) => CardRef | false;
   // Pending cast from Morgana/Omphalos hands (for tile targeting)
   pendingPrivateHandCast: {
     kind: "morgana" | "omphalos";
@@ -1487,8 +1681,12 @@ export type GameState = {
   // Hand visibility state
   mouseInHandZone: boolean;
   handHoverCount: number;
+  // null = default hover, "hidden" = force hidden, "visible" = force fully visible
+  handVisibilityMode: "hidden" | "visible" | null;
   setMouseInHandZone: (inZone: boolean) => void;
   setHandHoverCount: (count: number) => void;
+  setHandVisibilityMode: (mode: "hidden" | "visible" | null) => void;
+  toggleHandVisibility: () => void;
   selectHandCard: (who: PlayerKey, index: number) => void;
   selectAvatar: (who: PlayerKey) => void;
   clearSelection: () => void;
@@ -1789,21 +1987,21 @@ export type GameState = {
   hydrateSnapshotsFromStorage: () => void;
 
   // Permanent Position Management (Burrow/Submerge)
-  permanentPositions: Record<number, PermanentPosition>; // permanentId -> position
-  permanentAbilities: Record<number, BurrowAbility>; // permanentId -> ability
+  permanentPositions: Record<string, PermanentPosition>; // instanceId -> position
+  permanentAbilities: Record<string, BurrowAbility>; // instanceId -> ability
   sitePositions: Record<number, SitePositionData>; // siteId -> position data
   playerPositions: Record<PlayerKey, PlayerPositionReference>; // player -> position
 
   // Position Actions
   setPermanentPosition: (
-    permanentId: number,
+    permanentId: string,
     position: PermanentPosition
   ) => void;
   updatePermanentState: (
-    permanentId: number,
+    permanentId: string,
     newState: PermanentPositionState
   ) => void;
-  setPermanentAbility: (permanentId: number, ability: BurrowAbility) => void;
+  setPermanentAbility: (permanentId: string, ability: BurrowAbility) => void;
   setSitePosition: (siteId: number, positionData: SitePositionData) => void;
   setPlayerPosition: (
     playerId: PlayerKey,
@@ -1812,10 +2010,10 @@ export type GameState = {
 
   // Validation and Utilities
   canTransitionState: (
-    permanentId: number,
+    permanentId: string,
     targetState: PermanentPositionState
   ) => boolean;
-  getAvailableActions: (permanentId: number) => ContextMenuAction[];
+  getAvailableActions: (permanentId: string) => ContextMenuAction[];
   calculateEdgePosition: (
     tileCoords: { x: number; z: number },
     playerPos: { x: number; z: number }

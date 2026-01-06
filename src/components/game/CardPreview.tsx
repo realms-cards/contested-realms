@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
+import { useGraphicsSettings } from "@/hooks/useGraphicsSettings";
 import type { CardPreviewData } from "@/lib/game/card-preview.types";
 import { TOKEN_BY_KEY, tokenTextureUrl } from "@/lib/game/tokens";
 
@@ -141,6 +142,10 @@ export default function CardPreview({
 
   const isSite = isRegularSite || isSiteReplacementToken;
 
+  // Get card preview scale from user settings
+  const { settings: graphicsSettings } = useGraphicsSettings();
+  const previewScale = graphicsSettings.cardPreviewScale;
+
   // Compute layout synchronously on first render to avoid "blow up" effect
   const initialLayout = useMemo(() => computeLayout(isSite), [isSite]);
   const [layout, setLayout] = useState<LayoutState>(initialLayout);
@@ -161,7 +166,10 @@ export default function CardPreview({
     };
   }, [isSite]);
 
-  const { width, isShort, preferBottom } = layout;
+  const { width: baseWidth, isShort, preferBottom } = layout;
+
+  // Apply user's preview scale preference
+  const width = baseWidth * previewScale;
 
   if (!slug) return null;
 

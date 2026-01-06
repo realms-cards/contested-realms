@@ -1,9 +1,8 @@
 "use client";
 
-import Image from "next/image";
 import React, { useState, useCallback } from "react";
 import { useGameStore } from "@/lib/game/store";
-import type { CardRef } from "@/lib/game/store/types";
+import CardWithPreview, { CardGrid } from "./CardWithPreview";
 
 export default function CommonSenseOverlay() {
   const pending = useGameStore((s) => s.pendingCommonSense);
@@ -84,17 +83,18 @@ export default function CommonSenseOverlay() {
             </p>
 
             {/* Card grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 mb-6">
+            <CardGrid columns={6}>
               {eligibleCards.map((card, index) => (
-                <CardDisplay
+                <CardWithPreview
                   key={index}
                   card={card}
                   onClick={() => handleSelectCard(index)}
                   selected={selectedIndex === index}
                   interactive={true}
+                  accentColor="orange"
                 />
               ))}
-            </div>
+            </CardGrid>
 
             {/* Action buttons */}
             <div className="flex gap-3 justify-center">
@@ -124,50 +124,6 @@ export default function CommonSenseOverlay() {
               {pending.casterSeat.toUpperCase()}
             </span>{" "}
             is searching their spellbook...
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Card display component
-function CardDisplay({
-  card,
-  onClick,
-  selected,
-  interactive,
-}: {
-  card: CardRef;
-  onClick?: () => void;
-  selected: boolean;
-  interactive: boolean;
-}) {
-  return (
-    <div
-      onClick={interactive ? onClick : undefined}
-      className={`relative aspect-[2.5/3.5] rounded-lg overflow-hidden transition-all ${
-        interactive
-          ? "cursor-pointer hover:scale-105 hover:ring-2 hover:ring-amber-400"
-          : ""
-      } ${selected ? "ring-2 ring-amber-500 scale-105" : ""}`}
-    >
-      <Image
-        src={`/api/images/${card.slug || card.cardId}`}
-        alt={card.name || "Card"}
-        fill
-        className="object-cover"
-        unoptimized
-      />
-      {/* Card name overlay */}
-      <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/90 to-transparent p-2">
-        <p className="text-white text-xs text-center truncate">{card.name}</p>
-      </div>
-      {/* Selected indicator */}
-      {selected && (
-        <div className="absolute inset-0 bg-amber-500/20 flex items-center justify-center">
-          <div className="bg-amber-500 text-black font-bold px-2 py-1 rounded text-xs">
-            SELECTED
           </div>
         </div>
       )}

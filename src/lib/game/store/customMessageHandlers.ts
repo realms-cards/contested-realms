@@ -54,6 +54,26 @@ export function handleCustomMessage(
     });
     return;
   }
+  if (t === "revealCards") {
+    // Opponent revealed cards from a pile - show them in peek dialog
+    const payload = msg as {
+      title?: string;
+      cards?: CardRef[];
+      source?: { seat?: PlayerKey; pile?: string; from?: string };
+    };
+    if (Array.isArray(payload.cards)) {
+      get().openPeekDialog(
+        typeof payload.title === "string" ? payload.title : "Revealed",
+        payload.cards,
+        payload.source as {
+          seat: PlayerKey;
+          pile: "spellbook" | "atlas" | "hand";
+          from: "top" | "bottom";
+        }
+      );
+    }
+    return;
+  }
   if (t === "guidePref") {
     const seatRaw = (msg as { seat?: unknown }).seat as unknown;
     const seat =
@@ -3307,6 +3327,134 @@ export function handleCustomMessage(
         return state as GameState;
       });
     }, 500);
+    return;
+  }
+
+  // --- Pigs of the Sounder / Squeakers Deathrite message handlers ---
+  if (t === "pigsDeathrite") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const ownerSeat = (msg as { ownerSeat?: unknown }).ownerSeat as
+      | PlayerKey
+      | undefined;
+    const deathLocation = (msg as { deathLocation?: unknown }).deathLocation as
+      | CellKey
+      | undefined;
+    const triggerCardName = (msg as { triggerCardName?: unknown })
+      .triggerCardName as string | undefined;
+    const targetCardName = (msg as { targetCardName?: unknown })
+      .targetCardName as string | undefined;
+    const revealedCardNames = (msg as { revealedCards?: unknown })
+      .revealedCards as string[] | undefined;
+    // pigsCount used for logging
+    const _pigsCount = (msg as { pigsCount?: unknown }).pigsCount as
+      | number
+      | undefined;
+
+    if (!id || !ownerSeat || !deathLocation) return;
+
+    // Skip if we're the owner - we already handled it locally
+    const actorKey = get().actorKey;
+    if (actorKey === ownerSeat) {
+      console.log(
+        "[Pigs] pigsDeathrite: Skipping - we are the owner, already handled locally"
+      );
+      return;
+    }
+
+    // Create pending state for opponent to see the reveal
+    // Note: We don't have the full CardRef objects, just names for display
+    const revealedCards: CardRef[] = (revealedCardNames || []).map(
+      (name, idx) => ({
+        cardId: -1 - idx, // Placeholder ID
+        name,
+        slug: "",
+        type: "", // Placeholder type for display purposes
+      })
+    );
+
+    const pendingPigs = {
+      id,
+      ownerSeat,
+      deathLocation,
+      triggerCardName: triggerCardName || "Pigs of the Sounder",
+      targetCardName: targetCardName || "grand old boar",
+      phase: "revealing" as const,
+      revealedCards,
+      pigsToSummon: [], // Opponent doesn't need to track these
+      cardsToBottom: [],
+      createdAt: Date.now(),
+    };
+
+    set({
+      pendingPigsOfTheSounder: pendingPigs,
+    } as Partial<GameState> as GameState);
+
+    try {
+      get().log(
+        `[${ownerSeat.toUpperCase()}] ${
+          triggerCardName || "Pigs of the Sounder"
+        } Deathrite reveals ${revealedCards.length} cards`
+      );
+    } catch {}
+    return;
+  }
+
+  if (t === "pigsDeathResolve") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const ownerSeat = (msg as { ownerSeat?: unknown }).ownerSeat as
+      | PlayerKey
+      | undefined;
+    const summonedCount = (msg as { summonedCount?: unknown }).summonedCount as
+      | number
+      | undefined;
+
+    if (!id) return;
+
+    // Skip if we're the owner - we already handled it locally
+    const actorKey = get().actorKey;
+    if (actorKey === ownerSeat) {
+      console.log(
+        "[Pigs] pigsDeathResolve: Skipping - we are the owner, already handled locally"
+      );
+      return;
+    }
+
+    const pending = get().pendingPigsOfTheSounder;
+    if (pending?.id === id) {
+      // Update phase to complete, then clear after a short delay
+      set({
+        pendingPigsOfTheSounder: { ...pending, phase: "complete" },
+      } as Partial<GameState> as GameState);
+
+      try {
+        if ((summonedCount ?? 0) > 0) {
+          get().log(
+            `[${ownerSeat?.toUpperCase() || "??"}] ${
+              pending.triggerCardName
+            } summons ${summonedCount} ${pending.targetCardName}!`
+          );
+        } else {
+          get().log(
+            `[${ownerSeat?.toUpperCase() || "??"}] ${
+              pending.triggerCardName
+            } finds no ${pending.targetCardName}`
+          );
+        }
+      } catch {}
+
+      // Clear pending after a short delay
+      setTimeout(() => {
+        set((state) => {
+          if (state.pendingPigsOfTheSounder?.id === id) {
+            return {
+              ...state,
+              pendingPigsOfTheSounder: null,
+            } as GameState;
+          }
+          return state as GameState;
+        });
+      }, 1500);
+    }
     return;
   }
 }

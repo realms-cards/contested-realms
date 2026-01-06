@@ -65,6 +65,15 @@ export default function GameToolbox({
   const [peekCount, setPeekCount] = useState<number>(1);
   const [peekFromWhere, setPeekFromWhere] = useState<"top" | "bottom">("top");
 
+  const [revealSeat, setRevealSeat] = useState<PlayerKey>(mySeat ?? "p1");
+  const [revealPile, setRevealPile] = useState<"spellbook" | "atlas">(
+    "spellbook"
+  );
+  const [revealCount, setRevealCount] = useState<number>(1);
+  const [revealFromWhere, setRevealFromWhere] = useState<"top" | "bottom">(
+    "top"
+  );
+
   const [scrySeat, setScrySeat] = useState<PlayerKey>(mySeat ?? "p1");
   const [scryPile, setScryPile] = useState<"spellbook" | "atlas">("spellbook");
   const [scryCount, setScryCount] = useState<number>(1);
@@ -72,9 +81,9 @@ export default function GameToolbox({
   const [scryCards, setScryCards] = useState<CardRef[]>([]);
   const [scryBottom, setScryBottom] = useState<Record<number, boolean>>({});
 
-  const [actionType, setActionType] = useState<"draw" | "peek" | "scry">(
-    "draw"
-  );
+  const [actionType, setActionType] = useState<
+    "draw" | "peek" | "reveal" | "scry"
+  >("draw");
   const [fixOpen, setFixOpen] = useState<boolean>(false);
   const [unbanishSeat, setUnbanishSeat] = useState<PlayerKey>(mySeat ?? "p1");
   const [unbanishTarget, setUnbanishTarget] = useState<"hand" | "graveyard">(
@@ -507,6 +516,39 @@ export default function GameToolbox({
       );
   };
 
+  const handleReveal = () => {
+    const seat = revealSeat;
+    const pile = revealPile;
+    const cnt = Math.max(1, Math.floor(revealCount));
+    const from = revealFromWhere;
+    const cards =
+      pile === "spellbook"
+        ? zones[seat]?.spellbook || []
+        : zones[seat]?.atlas || [];
+    const slice =
+      from === "top"
+        ? cards.slice(0, cnt)
+        : cards.slice(Math.max(0, cards.length - cnt));
+    const title = `${seat.toUpperCase()} ${
+      pile === "spellbook" ? "Spellbook" : "Atlas"
+    } (${from}) - REVEALED`;
+
+    // Open locally
+    useGameStore.getState().openPeekDialog(title, slice, { seat, pile, from });
+
+    // Broadcast to opponent so they see it too
+    if (transport?.sendMessage) {
+      try {
+        transport.sendMessage({
+          type: "revealCards",
+          title,
+          cards: slice,
+          source: { seat, pile, from },
+        });
+      } catch {}
+    }
+  };
+
   const handleInspectOpponentHand = () => {
     if (!opponentSeat) {
       // Offline: show the other seat from mySeat else default to p2
@@ -555,9 +597,9 @@ export default function GameToolbox({
     const seat: PlayerKey = seatFromOwner((owner ?? 1) as 1 | 2);
 
     const apply = () => {
-      // Use cell position + index as unique ID to avoid linking multiple copies of the same card
-      const [cellX, cellY] = sel.at.split(",").map(Number);
-      const permanentId = cellX * 100000 + cellY * 1000 + sel.index;
+      // Use instanceId for stable identification (prevents state leakage on card movement)
+      const item = permanents[sel.at]?.[sel.index];
+      const permanentId = item?.instanceId ?? `perm:${sel.at}:${sel.index}`;
       setPermanentAbility(permanentId, {
         permanentId,
         canBurrow: true,
@@ -965,6 +1007,7 @@ export default function GameToolbox({
                 >
                   <option value="draw">Draw</option>
                   <option value="peek">Peek</option>
+                  <option value="reveal">Reveal</option>
                   <option value="scry">Scry</option>
                 </select>
                 <select
@@ -973,6 +1016,7 @@ export default function GameToolbox({
                     const v = e.target.value as PlayerKey;
                     setDrawSeat(v);
                     setPeekSeat(v);
+                    setRevealSeat(v);
                     setScrySeat(v);
                   }}
                   className="bg-white/10 rounded px-2 py-1"
@@ -986,6 +1030,7 @@ export default function GameToolbox({
                     const v = e.target.value as "spellbook" | "atlas";
                     setDrawPile(v);
                     setPeekPile(v);
+                    setRevealPile(v);
                     setScryPile(v);
                   }}
                   className="bg-white/10 rounded px-2 py-1"
@@ -999,6 +1044,7 @@ export default function GameToolbox({
                     const v = e.target.value as "top" | "bottom";
                     setDrawFromWhere(v);
                     setPeekFromWhere(v);
+                    setRevealFromWhere(v);
                   }}
                   className={`bg-white/10 rounded px-2 py-1 ${
                     actionType === "scry"
@@ -1018,6 +1064,7 @@ export default function GameToolbox({
                     const n = Number(e.target.value);
                     setDrawCount(n);
                     setPeekCount(n);
+                    setRevealCount(n);
                     setScryCount(n);
                   }}
                   className="w-12 sm:w-14 bg-white/10 rounded px-2 py-1"
@@ -1032,6 +1079,7 @@ export default function GameToolbox({
                 onClick={() => {
                   if (actionType === "draw") return handleDraw();
                   if (actionType === "peek") return handlePeekPile();
+                  if (actionType === "reveal") return handleReveal();
                   return handleOpenScry();
                 }}
                 disabled={
@@ -1050,6 +1098,8 @@ export default function GameToolbox({
                   ? `Draw • ${drawSeat.toUpperCase()} • ${drawPile} • ${drawFromWhere} • x${drawCount}`
                   : actionType === "peek"
                   ? `Peek • ${peekSeat.toUpperCase()} • ${peekPile} • ${peekFromWhere} • x${peekCount}`
+                  : actionType === "reveal"
+                  ? `Reveal • ${revealSeat.toUpperCase()} • ${revealPile} • ${revealFromWhere} • x${revealCount}`
                   : `Scry • ${scrySeat.toUpperCase()} • ${scryPile} • x${scryCount}`}
               </button>
 

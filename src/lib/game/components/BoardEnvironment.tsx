@@ -1,6 +1,6 @@
 import { Environment, useGLTF, useTexture } from "@react-three/drei";
 import { RigidBody, CuboidCollider } from "@react-three/rapier";
-import { Suspense, useMemo } from "react";
+import { Suspense, useMemo, useState, useCallback } from "react";
 import * as THREE from "three";
 import {
   SRGBColorSpace,
@@ -11,6 +11,8 @@ import {
   type Object3D,
   type Raycaster,
 } from "three";
+import { TextureErrorBoundary } from "@/components/game/TextureErrorBoundary";
+import { SafePlaymat } from "@/lib/game/components/SafePlaymat";
 import {
   EDGE_MARGIN,
   GROUND_HALF_THICK,
@@ -43,7 +45,7 @@ function createFabricNormalMap(
       // Combine for a crosshatch weave effect
       // Add some variation based on position
       const crossover = Math.sin(wx) * Math.sin(wy);
-      const bump = hThread + vThread + crossover * 0.3;
+      const _bump = hThread + vThread + crossover * 0.3;
 
       // Add fine noise for fabric texture
       const noise =
@@ -90,7 +92,7 @@ function createFabricNormalMap(
 
 // Cached fabric normal map (created once)
 let cachedFabricNormalMap: DataTexture | null = null;
-function getFabricNormalMap(): DataTexture {
+function _getFabricNormalMap(): DataTexture {
   if (!cachedFabricNormalMap) {
     cachedFabricNormalMap = createFabricNormalMap(256, 12);
   }
@@ -116,7 +118,7 @@ function noopRaycast(
 }
 
 // Table surface height offset - playmat Y position relative to table top
-const TABLE_SURFACE_Y = 0.02;
+const _TABLE_SURFACE_Y = 0.02;
 
 function MahoganyTable({ scale = 1 }: { scale?: number }) {
   const { scene } = useGLTF("/3dmodels/tables/mahogany_table.glb");
@@ -147,67 +149,9 @@ function MahoganyTable({ scale = 1 }: { scale?: number }) {
 useGLTF.preload("/3dmodels/tables/mahogany_table.glb");
 
 // Playmat thickness in world units (1.5mm = 0.0015m, but scaled for visibility)
-const PLAYMAT_THICKNESS = 0.015;
+const _PLAYMAT_THICKNESS = 0.015;
 
-function Playmat({
-  matW,
-  matH,
-  url,
-}: {
-  matW: number;
-  matH: number;
-  url: string;
-}) {
-  const tex = useTexture(url);
-  tex.colorSpace = SRGBColorSpace;
-
-  // No texture rotation needed - box is already oriented correctly
-  const rotatedTex = tex;
-
-  // Create materials for the box (no mesh rotation needed)
-  // Box args: [width (X), thickness (Y), depth (Z)]
-  // Face order: [+X, -X, +Y (top), -Y (bottom), +Z, -Z]
-  const materials = useMemo(() => {
-    // Get fabric normal map and set up tiling based on playmat size
-    const fabricNormal = getFabricNormalMap();
-    // Tile the fabric texture across the playmat (roughly 20 repeats across width)
-    const repeatX = Math.max(1, Math.round(matW * 8));
-    const repeatY = Math.max(1, Math.round(matH * 8));
-    fabricNormal.repeat.set(repeatX, repeatY);
-
-    const edgeMat = new THREE.MeshStandardMaterial({
-      color: "#2a2a2a",
-      roughness: 0.9,
-      metalness: 0,
-    });
-    const topMat = new THREE.MeshStandardMaterial({
-      map: rotatedTex,
-      normalMap: fabricNormal,
-      normalScale: new THREE.Vector2(0.15, 0.15), // Subtle fabric texture
-      toneMapped: false,
-      roughness: 0.92, // Slightly less rough for cloth sheen
-      metalness: 0,
-    });
-    const bottomMat = new THREE.MeshStandardMaterial({
-      color: "#1a1a1a",
-      roughness: 0.95,
-      metalness: 0,
-    });
-    // +Y (index 2) is the top face
-    return [edgeMat, edgeMat, topMat, bottomMat, edgeMat, edgeMat];
-  }, [rotatedTex, matW, matH]);
-
-  return (
-    <mesh
-      position={[0, -PLAYMAT_THICKNESS / 2, 0]}
-      receiveShadow
-      raycast={noopRaycast}
-      material={materials}
-    >
-      <boxGeometry args={[matW, PLAYMAT_THICKNESS, matH]} />
-    </mesh>
-  );
-}
+// Playmat component moved to SafePlaymat.tsx for better error handling
 
 function PlaymatOverlay({ matW, matH }: { matW: number; matH: number }) {
   const tex = useTexture("/playmat-overlay.png");
@@ -240,8 +184,17 @@ export function BoardEnvironment({
   showTable = true,
 }: BoardEnvironmentProps) {
   // Memoize the URL to prevent unnecessary texture reloads
-  // Use null while loading to avoid showing default then switching
   const stableUrl = useMemo(() => playmatUrl ?? null, [playmatUrl]);
+
+  // Track if playmat failed to load - if so, always show overlay as fallback
+  const [playmatFailed, setPlaymatFailed] = useState(false);
+
+  const handlePlaymatError = useCallback(() => {
+    setPlaymatFailed(true);
+  }, []);
+
+  // Always show overlay if playmat failed or if explicitly requested
+  const shouldShowOverlay = showOverlay || playmatFailed;
 
   return (
     <>
@@ -258,12 +211,31 @@ export function BoardEnvironment({
           <MahoganyTable scale={0.95} />
         </Suspense>
       )}
-      {showPlaymat && stableUrl && (
+      {showPlaymat && (
         <Suspense fallback={null}>
-          <Playmat matW={matW} matH={matH} url={stableUrl} />
+          <TextureErrorBoundary
+            fallback={null}
+            onError={(err) => {
+              if (process.env.NODE_ENV !== "production") {
+                console.warn(
+                  "[BoardEnvironment] Playmat texture error:",
+                  err.message
+                );
+              }
+              handlePlaymatError();
+            }}
+          >
+            <SafePlaymat
+              matW={matW}
+              matH={matH}
+              url={stableUrl}
+              onLoadError={() => handlePlaymatError()}
+            />
+          </TextureErrorBoundary>
         </Suspense>
       )}
-      {showOverlay && (
+      {/* Always show overlay (grid) as fallback when playmat fails */}
+      {shouldShowOverlay && (
         <Suspense fallback={null}>
           <PlaymatOverlay matW={matW} matH={matH} />
         </Suspense>

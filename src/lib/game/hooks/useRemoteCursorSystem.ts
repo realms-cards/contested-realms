@@ -663,29 +663,6 @@ export function useRemoteCursorSystem({
     [isSpectator, resolvedStoreApi]
   );
 
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.repeat) return;
-      if (e.code === "Space" || e.key === " " || e.key === "Spacebar") {
-        const ae = (document.activeElement as HTMLElement | null) || null;
-        if (
-          ae &&
-          (ae.tagName === "INPUT" ||
-            ae.tagName === "TEXTAREA" ||
-            ae.isContentEditable)
-        ) {
-          return;
-        }
-        if (isSpectator) return;
-        e.preventDefault();
-        const { lastPointerWorldPos } = resolvedStoreApi.getState();
-        emitBoardPing(lastPointerWorldPos);
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [emitBoardPing, isSpectator, resolvedStoreApi]);
-
   return {
     remotePermanentDrags,
     remotePermanentDragLookup,

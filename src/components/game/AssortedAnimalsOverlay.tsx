@@ -1,8 +1,9 @@
 "use client";
 
 import Image from "next/image";
-import React, { useState } from "react";
+import React, { useState, useCallback, useRef } from "react";
 import { useGameStore } from "@/lib/game/store";
+import type { CardRef } from "@/lib/game/store/types";
 
 export default function AssortedAnimalsOverlay() {
   const pending = useGameStore((s) => s.pendingAssortedAnimals);
@@ -123,8 +124,9 @@ export default function AssortedAnimalsOverlay() {
                 const canSelect = !isSelected && !isDuplicate && isAffordable;
 
                 return (
-                  <button
+                  <CardDisplayWithCost
                     key={`${card.cardId}-${index}`}
+                    card={card}
                     onClick={() => {
                       if (isSelected) {
                         deselectCard(card.cardId);
@@ -133,38 +135,10 @@ export default function AssortedAnimalsOverlay() {
                       }
                     }}
                     disabled={!isSelected && !canSelect}
-                    className={`relative aspect-[2.5/3.5] rounded-lg overflow-hidden transition-all ${
-                      isSelected
-                        ? "ring-4 ring-amber-500 scale-105 shadow-lg shadow-amber-500/50"
-                        : canSelect
-                        ? "ring-2 ring-amber-500/30 hover:ring-amber-500 cursor-pointer"
-                        : "opacity-50 cursor-not-allowed grayscale"
-                    }`}
-                  >
-                    <Image
-                      src={`/api/images/${card.slug || card.cardId}`}
-                      alt={card.name || "Card"}
-                      fill
-                      className="object-cover"
-                      unoptimized
-                    />
-                    {/* Cost badge */}
-                    <div className="absolute top-1 right-1 bg-black/80 text-amber-400 text-xs px-1.5 py-0.5 rounded font-bold">
-                      {card.cost}
-                    </div>
-                    {isSelected && (
-                      <div className="absolute inset-0 bg-amber-500/30 flex items-center justify-center">
-                        <span className="text-white text-2xl font-bold bg-amber-600 rounded-full w-8 h-8 flex items-center justify-center">
-                          ✓
-                        </span>
-                      </div>
-                    )}
-                    {isDuplicate && (
-                      <div className="absolute bottom-0 inset-x-0 bg-black/70 text-xs text-gray-400 py-1 text-center">
-                        Already selected
-                      </div>
-                    )}
-                  </button>
+                    isSelected={isSelected}
+                    canSelect={canSelect}
+                    isDuplicate={isDuplicate}
+                  />
                 );
               })}
             </div>
@@ -211,5 +185,80 @@ export default function AssortedAnimalsOverlay() {
         </div>
       )}
     </div>
+  );
+}
+
+// Card display with cost badge and preview support
+function CardDisplayWithCost({
+  card,
+  onClick,
+  disabled,
+  isSelected,
+  canSelect,
+  isDuplicate,
+}: {
+  card: CardRef & { cost: number };
+  onClick: () => void;
+  disabled: boolean;
+  isSelected: boolean;
+  canSelect: boolean;
+  isDuplicate: boolean;
+}) {
+  const setPreviewCard = useGameStore((s) => s.setPreviewCard);
+  const hoverTimerRef = useRef<number | null>(null);
+
+  const handleMouseEnter = useCallback(() => {
+    if (hoverTimerRef.current) window.clearTimeout(hoverTimerRef.current);
+    hoverTimerRef.current = window.setTimeout(() => {
+      setPreviewCard(card);
+    }, 200);
+  }, [card, setPreviewCard]);
+
+  const handleMouseLeave = useCallback(() => {
+    if (hoverTimerRef.current) {
+      window.clearTimeout(hoverTimerRef.current);
+      hoverTimerRef.current = null;
+    }
+    setPreviewCard(null);
+  }, [setPreviewCard]);
+
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      className={`relative aspect-[2.5/3.5] rounded-lg overflow-hidden transition-all ${
+        isSelected
+          ? "ring-4 ring-amber-500 scale-105 shadow-lg shadow-amber-500/50"
+          : canSelect
+          ? "ring-2 ring-amber-500/30 hover:ring-amber-500 cursor-pointer"
+          : "opacity-50 cursor-not-allowed grayscale"
+      }`}
+    >
+      <Image
+        src={`/api/images/${card.slug || card.cardId}`}
+        alt={card.name || "Card"}
+        fill
+        className="object-cover"
+        unoptimized
+      />
+      {/* Cost badge */}
+      <div className="absolute top-1 right-1 bg-black/80 text-amber-400 text-xs px-1.5 py-0.5 rounded font-bold">
+        {card.cost}
+      </div>
+      {isSelected && (
+        <div className="absolute inset-0 bg-amber-500/30 flex items-center justify-center">
+          <span className="text-white text-2xl font-bold bg-amber-600 rounded-full w-8 h-8 flex items-center justify-center">
+            ✓
+          </span>
+        </div>
+      )}
+      {isDuplicate && (
+        <div className="absolute bottom-0 inset-x-0 bg-black/70 text-xs text-gray-400 py-1 text-center">
+          Already selected
+        </div>
+      )}
+    </button>
   );
 }

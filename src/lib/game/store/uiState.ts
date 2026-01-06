@@ -64,6 +64,7 @@ export type UiSlice = Pick<
   | "selectedAvatar"
   | "mouseInHandZone"
   | "handHoverCount"
+  | "handVisibilityMode"
   | "dragFromHand"
   | "dragFromPile"
   | "hoverCell"
@@ -76,6 +77,8 @@ export type UiSlice = Pick<
   | "clearSelection"
   | "setMouseInHandZone"
   | "setHandHoverCount"
+  | "setHandVisibilityMode"
+  | "toggleHandVisibility"
   | "setDragFromHand"
   | "setDragFromPile"
   | "setHoverCell"
@@ -96,6 +99,7 @@ type UiStateDefaults = Pick<
   | "selectedAvatar"
   | "mouseInHandZone"
   | "handHoverCount"
+  | "handVisibilityMode"
   | "dragFromHand"
   | "dragFromPile"
   | "hoverCell"
@@ -111,6 +115,7 @@ export const createInitialUiState = (): UiStateDefaults => ({
   selectedAvatar: null,
   mouseInHandZone: false,
   handHoverCount: 0,
+  handVisibilityMode: null,
   dragFromHand: false,
   dragFromPile: null,
   hoverCell: null,
@@ -161,6 +166,16 @@ export const createUiSlice: StateCreator<GameState, [], [], UiSlice> = (
 
   setMouseInHandZone: (inZone: boolean) => set({ mouseInHandZone: inZone }),
   setHandHoverCount: (count: number) => set({ handHoverCount: count }),
+  setHandVisibilityMode: (mode: "hidden" | "visible" | null) =>
+    set({ handVisibilityMode: mode }),
+  toggleHandVisibility: () =>
+    set((state) => {
+      // Cycle: null (default) -> "hidden" -> "visible" (auto-resets to null when cursor leaves)
+      const current = state.handVisibilityMode;
+      const next =
+        current === null ? "hidden" : current === "hidden" ? "visible" : null;
+      return { handVisibilityMode: next };
+    }),
 
   setDragFromHand: (on: boolean) => set({ dragFromHand: on }),
   setDragFromPile: (

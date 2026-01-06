@@ -1229,6 +1229,7 @@ export default function Board({
         <MagicConnectionLines
           pendingMagic={pendingMagic}
           avatars={avatars}
+          permanents={permanents}
           boardOffset={{ x: offsetX, y: offsetY }}
         />
       )}

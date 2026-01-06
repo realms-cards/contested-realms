@@ -227,13 +227,21 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
   drawFromBottom: (who, from, count = 1) =>
     set((state) => {
       const isCurrent = (who === "p1" ? 1 : 2) === state.currentPlayer;
+      // Log warning but allow operation for game repair purposes
+      if (!isCurrent) {
+        get().log(
+          `[Warning] Drawing from bottom of ${from} out of turn: ${who.toUpperCase()} is not the current player`
+        );
+      }
       if (
-        !isCurrent ||
-        (state.phase !== "Draw" &&
-          state.phase !== "Main" &&
-          state.phase !== "Start")
-      )
-        return state;
+        state.phase !== "Draw" &&
+        state.phase !== "Main" &&
+        state.phase !== "Start"
+      ) {
+        get().log(
+          `[Warning] Drawing from bottom of ${from} during ${state.phase} phase`
+        );
+      }
 
       // Drawing from atlas is always allowed - card effects can grant draws from atlas
       // Avatar tapping is only required when PLAYING a site from atlas, not drawing
@@ -515,16 +523,14 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
         get().log(`Cannot draw from opponent's ${from}`);
         return { dragFromPile: null } as Partial<GameState> as GameState;
       }
-      // Graveyard retrieval is allowed anytime (for card effects like recursion)
-      // Other piles require it to be your turn
+      // Log warning but allow operation for game repair purposes
       const isCurrent = (who === "p1" ? 1 : 2) === state.currentPlayer;
-      if (!isCurrent && from !== "graveyard") {
+      if (!isCurrent) {
         get().log(
-          `Cannot draw '${
+          `[Warning] Drawing '${
             card.name
-          }' from ${from}: ${who.toUpperCase()} is not the current player`
+          }' from ${from} out of turn: ${who.toUpperCase()} is not the current player`
         );
-        return { dragFromPile: null } as Partial<GameState> as GameState;
       }
 
       // Drawing from atlas is always allowed - card effects can grant draws from atlas
@@ -591,12 +597,12 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
       const selectedCard = state.selectedCard;
       if (!selectedCard || selectedCard.who !== who) return state;
 
+      // Log warning but allow operation for game repair purposes
       const isCurrent = (who === "p1" ? 1 : 2) === state.currentPlayer;
       if (!isCurrent) {
         get().log(
-          `Cannot move card to ${pile}: ${who.toUpperCase()} is not the current player`
+          `[Warning] Moving card to ${pile} out of turn: ${who.toUpperCase()} is not the current player`
         );
-        return state;
       }
 
       get().pushHistory();

@@ -90,6 +90,12 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   const druidFlipped = useGameStore((s) => s.druidFlipped);
   const flipDruid = useGameStore((s) => s.flipDruid);
   const getAvailableMana = useGameStore((s) => s.getAvailableMana);
+  const triggerFrontierSettlersAbility = useGameStore(
+    (s) => s.triggerFrontierSettlersAbility
+  );
+  const hasFrontierSettlersAbility = useGameStore(
+    (s) => s.hasFrontierSettlersAbility
+  );
 
   // Permanent position management (burrow/submerge)
   const getAvailableActions = useGameStore((s) => s.getAvailableActions);
@@ -160,9 +166,8 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     if (t.kind === "permanent") {
       const item = permanents[t.at]?.[t.index];
       if (item?.card) {
-        // Use cell position + index as unique ID to avoid linking multiple copies of the same card
-        const [cellX, cellY] = t.at.split(",").map(Number);
-        const permanentId = cellX * 100000 + cellY * 1000 + t.index;
+        // Use instanceId for stable identification (prevents state leakage on card movement)
+        const permanentId = item.instanceId ?? `perm:${t.at}:${t.index}`;
 
         // Fetch abilities asynchronously from API
         (async () => {
@@ -477,7 +482,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         actionId: "__switch_site_position__",
         displayText: "Switch Position",
         isEnabled: true,
-        targetPermanentId: 0,
+        targetPermanentId: "",
         description:
           "Click another tile to move this site there (swap or move to void). All minions and avatars move with the site.",
       });
@@ -843,7 +848,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
           displayText:
             siteHereEnemy && !unitsHere ? "Attack site here" : "Attack here",
           isEnabled: true,
-          targetPermanentId: 0,
+          targetPermanentId: "",
           description: "Start an attack on this tile",
         });
       }
@@ -855,11 +860,28 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
             actionId: `__attack_adj_${p.x}_${p.y}__`,
             displayText: `Ranged attack T${cellNo}`,
             isEnabled: true,
-            targetPermanentId: 0,
+            targetPermanentId: "",
             description: "Start a ranged attack to an adjacent tile",
           });
         }
       }
+
+      // Frontier Settlers tap ability - DISABLED: easier to resolve manually by dragging from atlas
+      // const isFrontierSettlers =
+      //   (item?.card?.name || "").toLowerCase() === "frontier settlers";
+      // if (isFrontierSettlers && isMine && item?.instanceId) {
+      //   const hasAbility = hasFrontierSettlersAbility(item.instanceId);
+      //   const canUse = hasAbility && !tapped;
+      //   extraActions.push({
+      //     actionId: "__frontier_settlers_ability__",
+      //     displayText: `Play Top Site${!hasAbility ? " ✓" : ""}`,
+      //     isEnabled: canUse,
+      //     targetPermanentId: "",
+      //     description: hasAbility
+      //       ? "Tap to reveal and play your topmost site to an adjacent void or Rubble"
+      //       : "Ability already used",
+      //   });
+      // }
     } catch {}
   } else if (t.kind === "avatar") {
     const a = avatars[t.who];
@@ -898,7 +920,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         actionId: "__unmask__",
         displayText: `Unmask (was ${maskState?.maskAvatar?.name || "masked"})`,
         isEnabled: true,
-        targetPermanentId: 0,
+        targetPermanentId: "",
         description:
           "Remove mask and reveal original Imposter avatar. The mask is banished.",
       });
@@ -933,7 +955,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
           hasAlreadyUsed ? " ✓" : ""
         }`,
         isEnabled: canSummon,
-        targetPermanentId: 0,
+        targetPermanentId: "",
         description,
       });
     }
@@ -954,7 +976,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         actionId: "__flip_druid__",
         displayText: `Flip Druid${hasAlreadyFlipped ? " ✓" : ""}`,
         isEnabled: canFlip,
-        targetPermanentId: 0,
+        targetPermanentId: "",
         description: flipDescription,
       });
     }
@@ -1680,6 +1702,44 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                           onClick={() => {
                             if (t.kind === "avatar" && action.isEnabled) {
                               flipDruid(t.who);
+                            }
+                            onClose();
+                          }}
+                        >
+                          {action.displayText}
+                        </button>
+                      );
+                    }
+                    // Frontier Settlers tap ability
+                    if (action.actionId === "__frontier_settlers_ability__") {
+                      return (
+                        <button
+                          key={action.actionId}
+                          className={`w-full text-left rounded px-3 py-1 ${
+                            action.isEnabled
+                              ? "bg-green-600/20 hover:bg-green-600/30 text-green-200"
+                              : "bg-gray-600/20 text-gray-400 cursor-not-allowed"
+                          }`}
+                          title={action.description}
+                          disabled={!action.isEnabled}
+                          onClick={() => {
+                            if (t.kind === "permanent" && action.isEnabled) {
+                              const at = t.at;
+                              const idx = t.index;
+                              const itm = (permanents[at] || [])[idx];
+                              if (itm) {
+                                const ownerSeat = seatFromOwner(itm.owner);
+                                triggerFrontierSettlersAbility({
+                                  minion: {
+                                    at,
+                                    index: idx,
+                                    instanceId: itm.instanceId ?? null,
+                                    owner: itm.owner as 1 | 2,
+                                    card: itm.card,
+                                  },
+                                  ownerSeat,
+                                });
+                              }
                             }
                             onClose();
                           }}

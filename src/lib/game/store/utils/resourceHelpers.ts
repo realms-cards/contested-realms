@@ -234,7 +234,16 @@ export const computeThresholdTotals = (
         if (!p || p.owner !== owner) continue;
         const nm = String(p.card?.name || "").toLowerCase();
         const grant = THRESHOLD_GRANT_BY_NAME[nm];
-        if (grant) accumulateThresholds(totals, grant as Partial<Thresholds>);
+        if (grant) {
+          // Artifacts (like cores) only provide threshold when attached (being carried)
+          const cardType = String(p.card?.type || "").toLowerCase();
+          const isArtifact = cardType.includes("artifact");
+          if (isArtifact && !p.attachedTo) {
+            // Artifact not attached - does not provide threshold
+            continue;
+          }
+          accumulateThresholds(totals, grant as Partial<Thresholds>);
+        }
       } catch {}
     }
   }
@@ -425,13 +434,22 @@ export const computeAvailableMana = (
       try {
         if (!p || p.owner !== owner) continue;
         const nm = String(p.card?.name || "").toLowerCase();
+        const cardType = String(p.card?.type || "").toLowerCase();
+        const isArtifact = cardType.includes("artifact");
         // Check for void mana providers (e.g., Ether Core)
+        // Ether Core provides mana in void regardless of attachment
         if (isVoidCell && VOID_MANA_PROVIDERS[nm]) {
           mana += VOID_MANA_PROVIDERS[nm];
           continue;
         }
-        // Regular mana providers
-        if (MANA_PROVIDER_BY_NAME.has(nm)) mana += 1;
+        // Regular mana providers - artifacts only provide mana when attached
+        if (MANA_PROVIDER_BY_NAME.has(nm)) {
+          if (isArtifact && !p.attachedTo) {
+            // Artifact not attached - does not provide mana
+            continue;
+          }
+          mana += 1;
+        }
       } catch {}
     }
   }

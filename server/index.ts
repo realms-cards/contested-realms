@@ -4159,12 +4159,19 @@ io.on("connection", async (socket: SocketClient) => {
             : enrichedGameRaw;
           snap.t = typeof match.lastTs === "number" ? match.lastTs : Date.now();
           try {
-            console.log("[resync] sending game state with d20Rolls:", {
+            const gameRaw = match.game as Record<string, unknown> | undefined;
+            const playersRaw = gameRaw?.players as
+              | Record<string, { mana?: number }>
+              | undefined;
+            console.log("[resync] sending game state:", {
               matchId: match.id,
               d20Rolls: match.game?.d20Rolls,
               setupWinner: match.game?.setupWinner,
               phase: match.game?.phase,
               hasMeaningfulGame,
+              hasPlayers: !!playersRaw,
+              p1Mana: playersRaw?.p1?.mana,
+              p2Mana: playersRaw?.p2?.mana,
             });
           } catch {}
         } else {

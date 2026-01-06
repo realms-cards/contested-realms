@@ -30,7 +30,7 @@ const COMMON_SHORTCUTS: ShortcutItem[] = [
 const GAME_SHORTCUTS: ShortcutItem[] = [
   { keys: ["T"], description: "Tap/untap selected card" },
   { keys: ["Enter"], description: "End turn" },
-  { keys: ["Space"], description: "Board ping (while hovering)" },
+  { keys: ["Space"], description: "Toggle hand: hide ↔ show (spread)" },
 ];
 
 const DRAFT_SHORTCUTS: ShortcutItem[] = [

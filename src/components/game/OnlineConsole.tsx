@@ -132,14 +132,28 @@ export default function OnlineConsole({
   }, [hideChat, activeTab]);
 
   // Format event text (same logic as offline console)
+  // IMPORTANT: Hide opponent's drawn card names from the event log
   function formatEventText(text: string): string {
     const t0 = text || "";
     const seat = actorKey;
     if (seat !== "p1" && seat !== "p2") return t0;
 
-    const opp = seat === "p1" ? "P2" : "P1";
+    // oppLower is "p1" or "p2" (used in markup like [p2:PLAYER], [p2card:Name])
+    const oppLower = seat === "p1" ? "p2" : "p1";
+    const opp = oppLower.toUpperCase(); // "P1" or "P2" for display
     let t = t0;
 
+    // Match markup format: [p2:PLAYER] draws [p2card:CardName] from spellbook to hand
+    // This hides the specific card name the opponent drew
+    t = t.replace(
+      new RegExp(
+        `^\\[${oppLower}:PLAYER\\] draws \\[${oppLower}card:[^\\]]+\\] from (spellbook|atlas) to hand$`,
+        "i"
+      ),
+      (_m, pile) => `[${oppLower}:PLAYER] just drew from ${pile}`
+    );
+
+    // Legacy format (if any): "P2 draws 'CardName' from spellbook to hand"
     t = t.replace(
       new RegExp(
         `^(${opp} draws )'[^']+' from (spellbook|atlas) to hand$`,
@@ -148,16 +162,37 @@ export default function OnlineConsole({
       (_m, _prefix, pile) => `${opp} just drew from ${pile}`
     );
 
+    // Hide bulk draws from bottom (markup format)
+    t = t.replace(
+      new RegExp(
+        `^\\[${oppLower}:PLAYER\\] draws (\\d+) from bottom of (Spellbook|Atlas)$`,
+        "i"
+      ),
+      (_m, _n, pile) => `[${oppLower}:PLAYER] just drew from ${pile}`
+    );
+
+    // Hide bulk draws (markup format)
+    t = t.replace(
+      new RegExp(
+        `^\\[${oppLower}:PLAYER\\] draws (\\d+) from (Spellbook|Atlas)$`,
+        "i"
+      ),
+      (_m, _n, pile) => `[${oppLower}:PLAYER] just drew from ${pile}`
+    );
+
+    // Legacy format: bulk draws from bottom
     t = t.replace(
       new RegExp(`^${opp} draws (\\d+) from bottom of (spellbook|atlas)$`, "i"),
       (_m, _n, pile) => `${opp} just drew from ${pile}`
     );
 
+    // Legacy format: bulk draws
     t = t.replace(
       new RegExp(`^${opp} draws (\\d+) from (spellbook|atlas)$`, "i"),
       (_m, _n, pile) => `${opp} just drew from ${pile}`
     );
 
+    // Hide card names in "Cannot draw" errors for opponent
     t = t.replace(
       new RegExp(
         `^Cannot draw '.*?'( from .+: ${opp} is not the current player)$`,
