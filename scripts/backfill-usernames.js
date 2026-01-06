@@ -36,7 +36,50 @@ async function main() {
     process.exit(1);
   }
 
-  const redis = new Redis(redisUrl);
+  console.log(
+    `Connecting to Redis: ${redisUrl.replace(
+      /\/\/[^:]+:[^@]+@/,
+      "//***:***@"
+    )}...`
+  );
+
+  const redis = new Redis(redisUrl, {
+    maxRetriesPerRequest: 3,
+    retryStrategy: (times) => {
+      if (times > 3) {
+        return null; // Stop retrying
+      }
+      return Math.min(times * 200, 1000);
+    },
+  });
+
+  // Handle connection errors
+  redis.on("error", (err) => {
+    console.error("Redis connection error:", err.message);
+  });
+
+  // Wait for connection
+  try {
+    await redis.ping();
+    console.log("Redis connected successfully");
+  } catch (err) {
+    console.error("");
+    console.error("Failed to connect to Redis:", err.message);
+    console.error("");
+    console.error(
+      "Make sure you're running this script where Redis is accessible:"
+    );
+    console.error("  - On the production server (via SSH)");
+    console.error(
+      "  - Or with REDIS_URL pointing to an accessible Redis instance"
+    );
+    console.error("");
+    console.error(
+      "Example: REDIS_URL=redis://localhost:6379 node scripts/backfill-usernames.js --dry-run"
+    );
+    await redis.quit();
+    process.exit(1);
+  }
 
   try {
     // Scan for all player:* keys in Redis
