@@ -252,7 +252,7 @@ export default function DeckItem({ deck, onDelete }: DeckItemProps) {
           onClick={(e: MouseEvent) => {
             e.preventDefault();
             e.stopPropagation();
-            router.push(`/decks/${deck.id}/edit`);
+            router.push(`/decks/editor-3d?id=${encodeURIComponent(deck.id)}`);
           }}
           className="inline-flex items-center justify-center h-10 px-3 gap-1.5 rounded-lg bg-gradient-to-r from-amber-600 to-amber-500 ring-1 ring-amber-400/60 hover:from-amber-500 hover:to-amber-400 text-white font-medium shadow-md shadow-amber-500/20 transition-all hover:scale-105"
         >
