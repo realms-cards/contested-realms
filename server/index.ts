@@ -2202,6 +2202,25 @@ io.on("connection", async (socket: SocketClient) => {
       } catch {}
     }
 
+    // Persist displayName to User.name in database for authenticated users
+    // This ensures admin panel and patron marquee show correct names
+    if (tokenId && displayName && displayName !== "Player") {
+      try {
+        await prisma.user.update({
+          where: { id: tokenId },
+          data: { name: displayName },
+        });
+      } catch (err) {
+        // Log but don't fail - user might not exist yet or DB might be unavailable
+        try {
+          console.warn(
+            `[auth] Failed to persist displayName for ${tokenId}:`,
+            safeErrorMessage(err)
+          );
+        } catch {}
+      }
+    }
+
     // Always join player-specific room for cross-instance messaging
     try {
       await socket.join(`player:${playerId}`);
