@@ -349,7 +349,7 @@ export default function OnlineMulliganScreen({
                   <div
                     className={`relative ${
                       isSite
-                        ? "aspect-[4/3] w-24 sm:w-32"
+                        ? "aspect-[4/3] w-32 sm:w-40 md:w-48"
                         : "aspect-[3/4] w-20 sm:w-24"
                     } rounded-lg overflow-hidden ring-1 ring-white/20 shadow-lg ${
                       isSelected && !showSeerUI ? "opacity-70" : ""
@@ -359,8 +359,8 @@ export default function OnlineMulliganScreen({
                       src={`/api/images/${cardSlug}`}
                       alt={card.name}
                       fill
-                      sizes="(max-width: 640px) 96px, 120px"
-                      className={`object-contain ${isSite ? "rotate-90" : ""}`}
+                      sizes={isSite ? "(max-width: 640px) 192px, 256px" : "(max-width: 640px) 96px, 120px"}
+                      className={`${isSite ? "object-cover scale-[1.35] rotate-90 origin-center" : "object-contain"}`}
                       unoptimized
                     />
                     {isSelected && !showSeerUI && (
@@ -527,7 +527,7 @@ export default function OnlineMulliganScreen({
                       <div
                         className={`relative ${
                           (topCard.type || "").toLowerCase().includes("site")
-                            ? "w-32 h-24"
+                            ? "aspect-[4/3] w-40 sm:w-48"
                             : "w-24 h-32"
                         }`}
                       >
@@ -535,11 +535,11 @@ export default function OnlineMulliganScreen({
                           src={`/api/images/${topCard.slug}`}
                           alt={topCard.name}
                           fill
-                          sizes="128px"
-                          className={`object-contain ${
+                          sizes={(topCard.type || "").toLowerCase().includes("site") ? "192px" : "128px"}
+                          className={`${
                             (topCard.type || "").toLowerCase().includes("site")
-                              ? "rotate-90"
-                              : ""
+                              ? "object-cover scale-[1.35] rotate-90 origin-center"
+                              : "object-contain"
                           }`}
                           unoptimized
                         />

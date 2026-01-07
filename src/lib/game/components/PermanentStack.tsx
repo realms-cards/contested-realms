@@ -1,10 +1,9 @@
-import { Html as Html3D } from "@react-three/drei";
+import { Text } from "@react-three/drei";
 import type { ThreeEvent } from "@react-three/fiber";
 import { CuboidCollider, RigidBody } from "@react-three/rapier";
-import type { Dispatch, MutableRefObject, SetStateAction } from "react";
+import { useState, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import { flushSync } from "react-dom";
 import { Group } from "three";
-import { NumberBadge, type Digit } from "@/components/game/manacost";
 import { BodyApi } from "@/lib/game/boardShared";
 import { detectSpellcasterSync } from "@/lib/game/cardAbilities";
 import CardOutline from "@/lib/game/components/CardOutline";
@@ -177,6 +176,105 @@ export type PermanentStackProps = {
   cardScale: number;
   stolenCards: GameState["stolenCards"];
 };
+
+/** Counter badge with +/- buttons that appear on hover */
+function CounterBadge3D({
+  count,
+  playerColor,
+  rotZ,
+  onIncrement,
+  onDecrement,
+}: {
+  count: number;
+  playerColor: string;
+  rotZ: number;
+  onIncrement: () => void;
+  onDecrement: () => void;
+}) {
+  const [hovered, setHovered] = useState(false);
+  const badgeRadius = 0.06;
+  const outlineWidth = 0.008;
+  const buttonRadius = 0.025;
+  const buttonSpacing = badgeRadius + buttonRadius + 0.01;
+  const leftEdgeX = -CARD_SHORT * 0.5 + badgeRadius;
+  const innerRadius = badgeRadius - outlineWidth;
+
+  return (
+    <group
+      position={[leftEdgeX, 0.006, 0]}
+      rotation-x={-Math.PI / 2}
+      rotation-z={rotZ}
+      onPointerEnter={() => setHovered(true)}
+      onPointerLeave={() => setHovered(false)}
+    >
+      {/* Increment button (above) - visible on hover */}
+      <group position={[0, buttonSpacing, 0]} visible={hovered}>
+        <mesh
+          onPointerDown={(e) => {
+            e.stopPropagation();
+            onIncrement();
+          }}
+        >
+          <circleGeometry args={[buttonRadius, 16]} />
+          <meshBasicMaterial color="#166534" transparent opacity={0.9} />
+        </mesh>
+        <Text
+          position={[0, 0, 0.001]}
+          fontSize={buttonRadius * 1.6}
+          color="#4ade80"
+          anchorX="center"
+          anchorY="middle"
+          fontWeight={700}
+        >
+          +
+        </Text>
+      </group>
+      {/* Outline ring in player color */}
+      <mesh position={[0, 0, -0.001]}>
+        <ringGeometry args={[innerRadius, badgeRadius, 32]} />
+        <meshBasicMaterial color={playerColor} />
+      </mesh>
+      {/* Background circle */}
+      <mesh>
+        <circleGeometry args={[innerRadius, 32]} />
+        <meshBasicMaterial color="#000000" transparent opacity={0.9} />
+      </mesh>
+      {/* Counter text */}
+      <Text
+        position={[0, 0, 0.001]}
+        fontSize={badgeRadius * 1.3}
+        color="#ffffff"
+        anchorX="center"
+        anchorY="middle"
+        fontWeight={700}
+      >
+        {count}
+      </Text>
+      {/* Decrement button (below) - visible on hover */}
+      <group position={[0, -buttonSpacing, 0]} visible={hovered}>
+        <mesh
+          onPointerDown={(e) => {
+            e.stopPropagation();
+            onDecrement();
+          }}
+        >
+          <circleGeometry args={[buttonRadius, 16]} />
+          <meshBasicMaterial color="#991b1b" transparent opacity={0.9} />
+        </mesh>
+        <Text
+          position={[0, 0, 0.001]}
+          fontSize={buttonRadius * 1.6}
+          color="#f87171"
+          anchorX="center"
+          anchorY="middle"
+          fontWeight={700}
+        >
+          −
+        </Text>
+      </group>
+    </group>
+  );
+}
 
 export function PermanentStack({
   tileKey,
@@ -1138,68 +1236,16 @@ export function PermanentStack({
                     }
                   />
                 )}
-                {(() => {
-                  const count = Math.max(0, Number(p.counters || 0));
-                  if (count <= 0) return null;
-                  const digits = Math.floor(count)
-                    .toString()
-                    .split("")
-                    .map((d) => Number(d) as Digit);
-                  const leftEdgeX = -CARD_SHORT * 0.5;
-                  const centerZ = 0;
-                  return (
-                    <Html3D
-                      position={[leftEdgeX, 0.004, centerZ]}
-                      transform
-                      rotation-x={-Math.PI / 2}
-                      rotation-z={rotZ}
-                      zIndexRange={[0, 0]}
-                    >
-                      <div className="pointer-events-auto select-none">
-                        <div className="relative inline-flex group">
-                          <div className="flex items-center gap-0.5">
-                            {digits.map((d, i) => (
-                              <NumberBadge
-                                key={i}
-                                value={d}
-                                size={8}
-                                strokeWidth={2}
-                                backgroundOpacity={0.5}
-                                textAsSvg
-                              />
-                            ))}
-                          </div>
-                          <div className="absolute inset-0 flex flex-col opacity-80">
-                            <button
-                              type="button"
-                              aria-label="Increment counter"
-                              title="Increment counter"
-                              onClick={(evt) => {
-                                evt.stopPropagation();
-                                increment(key, idx);
-                              }}
-                              className="flex-1 transition-opacity rounded-t-sm cursor-pointer opacity-0 group-hover:opacity-100 bg-transparent group-hover:bg-emerald-500/20 hover:bg-emerald-500/30"
-                            >
-                              <span className="sr-only">+</span>
-                            </button>
-                            <button
-                              type="button"
-                              aria-label="Decrement counter"
-                              title="Decrement counter"
-                              onClick={(evt) => {
-                                evt.stopPropagation();
-                                decrement(key, idx);
-                              }}
-                              className="flex-1 transition-opacity rounded-b-sm cursor-pointer opacity-0 group-hover:opacity-100 bg-transparent group-hover:bg-rose-500/20 hover:bg-rose-500/30"
-                            >
-                              <span className="sr-only">-</span>
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </Html3D>
-                  );
-                })()}
+                {/* Counter badge - shows +/- buttons on hover */}
+                {Number(p.counters || 0) > 0 && (
+                  <CounterBadge3D
+                    count={Math.max(0, Number(p.counters || 0))}
+                    playerColor={PLAYER_COLORS[ownerSeat]}
+                    rotZ={rotZ}
+                    onIncrement={() => increment(key, idx)}
+                    onDecrement={() => decrement(key, idx)}
+                  />
+                )}
                 {/* Stolen cards are now rendered as attached permanents with cardback */}
                 {(() => {
                   const attachedTokens = items.filter(

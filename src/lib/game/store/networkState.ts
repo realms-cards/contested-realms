@@ -1,6 +1,7 @@
 import type { StateCreator } from "zustand";
 import type {
   AvatarState,
+  CardRef,
   GameState,
   Permanents,
   PlayerKey,
@@ -435,6 +436,95 @@ export const createNetworkSlice: StateCreator<
                   ),
                 };
               }
+            }
+          }
+          zonesCandidate = filteredZones;
+        }
+
+        // CRITICAL: Filter out Searing Truth drawn cards from incoming spellbook patches
+        // and ensure they're in the target's hand. Server doesn't know about local Searing Truth state.
+        const pendingSearingTruth = state.pendingSearingTruth;
+        console.log("[SearingTruth] applyServerPatch filter check:", {
+          hasPending: !!pendingSearingTruth,
+          phase: pendingSearingTruth?.phase,
+          targetSeat: pendingSearingTruth?.targetSeat,
+          revealedCount: pendingSearingTruth?.revealedCards?.length,
+        });
+        // Filter whenever we have revealed cards, regardless of phase
+        // (the pendingSearingTruth is kept for a few seconds after resolve to protect zones)
+        if (
+          pendingSearingTruth &&
+          pendingSearingTruth.targetSeat &&
+          pendingSearingTruth.revealedCards.length > 0 &&
+          zonesCandidate
+        ) {
+          console.log(
+            "[SearingTruth] Filter ACTIVE - filtering cards from spellbook"
+          );
+          const targetSeat = pendingSearingTruth.targetSeat;
+          // Track counts instead of using Set to handle duplicate cardIds
+          const revealedCardCounts = new Map<number, number>();
+          for (const c of pendingSearingTruth.revealedCards) {
+            revealedCardCounts.set(
+              c.cardId,
+              (revealedCardCounts.get(c.cardId) || 0) + 1
+            );
+          }
+          console.log(
+            "[SearingTruth] Filter cardIds:",
+            Array.from(revealedCardCounts.entries())
+          );
+          const filteredZones = { ...zonesCandidate } as Record<
+            PlayerKey,
+            GameState["zones"][PlayerKey]
+          >;
+          const seatZones = filteredZones[targetSeat];
+          if (seatZones) {
+            // Filter revealed cards from spellbook
+            if (Array.isArray(seatZones.spellbook)) {
+              console.log(
+                "[SearingTruth] Spellbook BEFORE filter:",
+                seatZones.spellbook.length
+              );
+              const movedCards: CardRef[] = [];
+              const updatedSpellbook = seatZones.spellbook.filter((c) => {
+                const remaining = revealedCardCounts.get(c.cardId) || 0;
+                if (
+                  remaining > 0 &&
+                  movedCards.length < pendingSearingTruth.revealedCards.length
+                ) {
+                  movedCards.push(c);
+                  revealedCardCounts.set(c.cardId, remaining - 1);
+                  return false;
+                }
+                return true;
+              });
+
+              console.log(
+                "[SearingTruth] Spellbook AFTER filter:",
+                updatedSpellbook.length,
+                "movedCards:",
+                movedCards.length
+              );
+
+              // Ensure revealed cards are in hand (add if not present)
+              const currentHand = [...(seatZones.hand || [])];
+              const handCardIds = new Set(currentHand.map((c) => c.cardId));
+              for (const card of movedCards) {
+                if (!handCardIds.has(card.cardId)) {
+                  currentHand.push(card);
+                }
+              }
+              console.log(
+                "[SearingTruth] Hand AFTER filter:",
+                currentHand.length
+              );
+
+              filteredZones[targetSeat] = {
+                ...seatZones,
+                spellbook: updatedSpellbook,
+                hand: currentHand,
+              };
             }
           }
           zonesCandidate = filteredZones;

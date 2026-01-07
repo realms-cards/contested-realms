@@ -77,7 +77,34 @@ Added ultra-aggressive `Cache-Control` headers:
 
 **Note:** All polling is already disabled when WebSocket is connected, so this only affects fallback scenarios.
 
-### 4. Existing Optimizations (Already in place)
+### 4. Tournament Polling Optimization (MASSIVE Impact)
+
+**Problem:** Tournament API was being polled every 15s on ALL pages, even when no tournaments exist.
+
+**Changes implemented:**
+
+- ✅ Route-based guards: Only poll on `/tournaments` and `/tournaments/[id]` pages
+- ✅ Removed polling from `/online/lobby` and `/online/play` pages
+- ✅ Increased fallback polling interval: 15s → 45s (when WebSocket disconnected)
+- ✅ Added WebSocket event listeners for `tournament:created` and `tournament:list-changed`
+- ✅ Event-driven updates: Server announces tournaments instead of client polling
+
+**Expected Impact:** 90-95% reduction in tournament API calls
+
+**Before:**
+
+- Polling every 15s on 4+ routes
+- 100 users × 240 requests/hour = 24,000 requests/hour
+- Most requests return empty arrays (no tournaments)
+
+**After:**
+
+- Polling only on `/tournaments` page when WebSocket disconnected
+- Event-driven updates when WebSocket connected
+- 100 users × 10-20 requests/hour = 1,000-2,000 requests/hour
+- **Savings: ~22,000 requests/hour (~530,000 requests/day)**
+
+### 5. Existing Optimizations (Already in place)
 
 - ✅ CDN redirects for images (308 permanent redirect with immutable cache)
 - ✅ Redis caching for card metadata (5-minute TTL)

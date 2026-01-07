@@ -14,7 +14,7 @@ import {
 } from "./utils/permanentHelpers";
 
 // Card names for detection
-const HEADLESS_HAUNT_NAMES = ["headless haunt", "haunless head"];
+const HEADLESS_HAUNT_NAMES = ["headless haunt", "hauntless head"];
 const KYTHERA_MECHANISM_NAME = "kythera mechanism";
 
 // Track last trigger to prevent duplicate triggers within the same turn

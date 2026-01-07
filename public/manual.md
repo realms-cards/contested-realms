@@ -3,6 +3,7 @@
 Video tutorials:
 ["Play a match"](https://youtu.be/fAOK3DupT0Y)
 ["Draft/sealed and the deck editor"](https://youtu.be/R6ojYa93nk4)
+["Custom Card Resolvers and Playing tips"](https://youtu.be/jqIOwwqn-7k)
 
 This manual documents keyboard shortcuts and core interaction flows for the Realms.cards simulator. All shortcuts are ignored while typing in inputs (chat/search/etc.) and when blocking overlays are open.
 
