@@ -185,25 +185,23 @@ export function SafePlaymat({
     const img = new Image();
     img.crossOrigin = "anonymous";
 
-    let timeoutId: ReturnType<typeof setTimeout> | undefined;
     let cancelled = false;
 
-    const cleanup = () => {
+    img.onload = () => {
+      if (cancelled) return;
       cancelled = true;
       clearTimeout(timeoutId);
       img.onload = null;
       img.onerror = null;
-    };
-
-    img.onload = () => {
-      if (cancelled) return;
-      cleanup();
       setCustomValidated(true);
     };
 
     img.onerror = () => {
       if (cancelled) return;
-      cleanup();
+      cancelled = true;
+      clearTimeout(timeoutId);
+      img.onload = null;
+      img.onerror = null;
       if (process.env.NODE_ENV !== "production") {
         console.warn(
           "[SafePlaymat] Failed to load custom playmat, using default:",
@@ -215,9 +213,11 @@ export function SafePlaymat({
     };
 
     // Set a timeout for slow connections
-    timeoutId = setTimeout(() => {
+    const timeoutId = setTimeout(() => {
       if (cancelled) return;
-      cleanup();
+      cancelled = true;
+      img.onload = null;
+      img.onerror = null;
       if (process.env.NODE_ENV !== "production") {
         console.warn(
           "[SafePlaymat] Timeout loading custom playmat, using default:",
@@ -230,7 +230,12 @@ export function SafePlaymat({
 
     img.src = url;
 
-    return cleanup;
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+      img.onload = null;
+      img.onerror = null;
+    };
   }, [url, isCustom, validationAttempted, onLoadError]);
 
   // Determine final URL to render
