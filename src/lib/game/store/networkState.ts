@@ -290,22 +290,27 @@ export const createNetworkSlice: StateCreator<
       if (p.zones !== undefined) {
         // DEBUG: Log zone patch details
         try {
-          const pZones = p.zones as Record<string, unknown>;
+          const pZones = p.zones as Record<
+            string,
+            { hand?: unknown[]; graveyard?: unknown[]; banished?: unknown[] }
+          >;
           console.log("[net] zones patch received", {
             patchKeys: Object.keys(pZones || {}),
             hasP1: !!pZones?.p1,
             hasP2: !!pZones?.p2,
+            patchP1Hand: pZones?.p1?.hand?.length,
+            patchP2Hand: pZones?.p2?.hand?.length,
+            patchP1Graveyard: pZones?.p1?.graveyard?.length,
+            patchP2Graveyard: pZones?.p2?.graveyard?.length,
+            patchP1Banished: (pZones?.p1 as { banished?: unknown[] })?.banished
+              ?.length,
+            patchP2Banished: (pZones?.p2 as { banished?: unknown[] })?.banished
+              ?.length,
             replaceZones: replaceKeys.has("zones"),
             stateP1Hand: state.zones?.p1?.hand?.length,
             stateP2Hand: state.zones?.p2?.hand?.length,
             stateP1Graveyard: state.zones?.p1?.graveyard?.length,
             stateP2Graveyard: state.zones?.p2?.graveyard?.length,
-            stateAvatarsP1: !!state.avatars?.p1?.card,
-            stateAvatarsP2: !!state.avatars?.p2?.card,
-            statePermanentsCount: Object.values(state.permanents || {}).reduce(
-              (a, v) => a + (Array.isArray(v) ? v.length : 0),
-              0
-            ),
           });
         } catch {}
         let zonesCandidate = replaceKeys.has("zones")

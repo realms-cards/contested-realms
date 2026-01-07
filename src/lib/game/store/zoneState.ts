@@ -1016,10 +1016,18 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
       } as Partial<GameState> as GameState;
     }),
 
-  handlePeekedCard: (who, pile, cardIndex, action) =>
+  handlePeekedCard: (who, pile, instanceId, action) =>
     set((state) => {
       get().pushHistory();
-      if (state.transport && state.actorKey && state.actorKey !== who) {
+      // Allow hand peek actions (user has consent to view opponent's hand)
+      // Block only spellbook/atlas modifications without being the owner
+      const isHandPeek = pile === "hand";
+      if (
+        state.transport &&
+        state.actorKey &&
+        state.actorKey !== who &&
+        !isHandPeek
+      ) {
         get().log("Cannot modify opponent pile without consent");
         return state;
       }
@@ -1030,7 +1038,33 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
           : pile === "atlas"
           ? [...state.zones[who].atlas]
           : [...state.zones[who].hand];
-      if (cardIndex < 0 || cardIndex >= sourcePile.length) return state;
+
+      // Find card by instanceId first, then try cardId as fallback
+      let cardIndex = sourcePile.findIndex((c) => c.instanceId === instanceId);
+      if (cardIndex === -1) {
+        // Try matching by cardId (instanceId might be stringified cardId)
+        const numericId = parseInt(instanceId, 10);
+        if (!isNaN(numericId)) {
+          cardIndex = sourcePile.findIndex((c) => c.cardId === numericId);
+        }
+      }
+      if (cardIndex === -1) {
+        console.log(
+          "[handlePeekedCard] Card not found by instanceId:",
+          instanceId,
+          "pile length:",
+          sourcePile.length
+        );
+        console.log(
+          "[handlePeekedCard] Available instanceIds:",
+          sourcePile.map((c) => c.instanceId)
+        );
+        console.log(
+          "[handlePeekedCard] Available cardIds:",
+          sourcePile.map((c) => c.cardId)
+        );
+        return state;
+      }
       const card = sourcePile[cardIndex];
       if (!card) return state;
 
@@ -1067,6 +1101,14 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
           : pile === "atlas"
           ? "Atlas"
           : "Hand";
+      // For steal action, we need the actor's seat (the viewer)
+      const actorKey = state.actorKey;
+      const otherSeat: PlayerKey = who === "p1" ? "p2" : "p1";
+      const viewerSeat = actorKey || otherSeat;
+
+      // Track which seats need patches
+      const affectedSeats: PlayerKey[] = [who];
+
       switch (action) {
         case "top":
           // Put back on top (re-insert at same position or front) - only for piles
@@ -1098,19 +1140,71 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
           seatZones.banished = [preparedCard, ...(seatZones.banished || [])];
           actionDesc = "banished";
           break;
+        case "steal":
+          // Move card from opponent's hand to viewer's hand
+          if (pile === "hand" && viewerSeat !== who) {
+            const viewerZones: Zones = {
+              spellbook: [...state.zones[viewerSeat].spellbook],
+              atlas: [...state.zones[viewerSeat].atlas],
+              hand: [...state.zones[viewerSeat].hand],
+              graveyard: [...state.zones[viewerSeat].graveyard],
+              battlefield: [...state.zones[viewerSeat].battlefield],
+              collection: [...state.zones[viewerSeat].collection],
+              banished: [...(state.zones[viewerSeat].banished || [])],
+            };
+            const stolenCard = prepareCardForSeat(card, viewerSeat);
+            viewerZones.hand = [...viewerZones.hand, stolenCard];
+            zonesNext[viewerSeat] = viewerZones;
+            affectedSeats.push(viewerSeat);
+            actionDesc = `taken by ${viewerSeat.toUpperCase()}`;
+          }
+          break;
       }
 
+      // Update owner's zones (card removed from source pile)
       zonesNext[who] = seatZones;
       get().log(
         `${who.toUpperCase()} peeked '${
           card.name
         }' from ${pileName} → ${actionDesc}`
       );
+      // Send single combined patch for all affected seats
       const zonePatch = createZonesPatchFor(
         zonesNext as GameState["zones"],
-        who
+        affectedSeats
       );
-      if (zonePatch) get().trySendPatch(zonePatch);
+      console.log(
+        "[handlePeekedCard] action:",
+        action,
+        "who:",
+        who,
+        "affectedSeats:",
+        affectedSeats
+      );
+      console.log(
+        "[handlePeekedCard] seatZones.hand length:",
+        seatZones.hand.length
+      );
+      console.log(
+        "[handlePeekedCard] seatZones.graveyard length:",
+        seatZones.graveyard.length
+      );
+      console.log(
+        "[handlePeekedCard] seatZones.banished length:",
+        seatZones.banished?.length
+      );
+      // Send zones patch - use __replaceKeys to force full replacement on receiver
+      if (zonePatch) {
+        const patchWithReplace = {
+          ...zonePatch,
+          __replaceKeys: ["zones"],
+        };
+        console.log(
+          "[handlePeekedCard] Sending zones patch with __replaceKeys for:",
+          affectedSeats
+        );
+        get().trySendPatch(patchWithReplace);
+      }
       return {
         zones: zonesNext as GameState["zones"],
       } as Partial<GameState> as GameState;
