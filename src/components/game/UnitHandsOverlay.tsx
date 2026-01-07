@@ -3,6 +3,7 @@
 import Image from "next/image";
 import React, { useCallback, useRef, useState } from "react";
 import { useGameStore } from "@/lib/game/store";
+import { useTouchDevice } from "@/lib/hooks/useTouchDevice";
 import type {
   CardRef,
   MorganaHandEntry,
@@ -23,6 +24,7 @@ export default function UnitHandsOverlay({
   const morganaHands = useGameStore((s) => s.morganaHands);
   const omphalosHands = useGameStore((s) => s.omphalosHands);
   const actorKey = useGameStore((s) => s.actorKey);
+  const isTouchDevice = useTouchDevice();
   const setPendingPrivateHandCast = useGameStore(
     (s) => s.setPendingPrivateHandCast
   );
@@ -92,8 +94,13 @@ export default function UnitHandsOverlay({
 
   if (allHands.length === 0) return null;
 
+  // On mobile, keep same position but ensure it's under the mana/threshold display
+  const positionClass = isTouchDevice
+    ? "fixed bottom-20 right-4 z-[15] pointer-events-auto flex flex-col gap-1 items-end"
+    : "fixed bottom-32 right-4 z-[15] pointer-events-auto flex flex-col gap-1 items-end";
+
   return (
-    <div className="fixed bottom-32 right-4 z-[15] pointer-events-auto flex flex-col gap-1 items-end">
+    <div className={positionClass}>
       {allHands.map((unitHand) => {
         const id =
           unitHand.kind === "morgana" ? unitHand.entry.id : unitHand.entry.id;

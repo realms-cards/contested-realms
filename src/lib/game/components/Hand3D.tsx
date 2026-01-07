@@ -65,6 +65,7 @@ export default function Hand3D({
   const selectedPermanent = useGameStore((s) => s.selectedPermanent);
   const selectedAvatar = useGameStore((s) => s.selectedAvatar);
   const selectHandCard = useGameStore((s) => s.selectHandCard);
+  const clearSelection = useGameStore((s) => s.clearSelection);
   const setPreviewCard = useGameStore((s) => s.setPreviewCard);
   const dragFromHand = useGameStore((s) => s.dragFromHand);
   const setDragFromHand = useGameStore((s) => s.setDragFromHand);
@@ -258,10 +259,32 @@ export default function Hand3D({
     HAND_ZONE_LEFT_FRAC,
     HAND_ZONE_RIGHT_FRAC,
   ]);
-  // Clear local hand drag start when mouse is released anywhere
+  // Clear local hand drag start when mouse/touch is released anywhere
   useEffect(() => {
-    const onUp = () => {
+    const onUp = (e: MouseEvent | TouchEvent) => {
       handDragStart.current = null;
+
+      // On mobile: if released in return zone, cancel the drag and return card to hand
+      if (
+        isCoarsePointer &&
+        dragFromHand &&
+        selected &&
+        selected.who === owner
+      ) {
+        const clientY =
+          e instanceof TouchEvent
+            ? e.changedTouches?.[0]?.clientY ?? lastMousePosRef.current.y
+            : e.clientY;
+        const hScr = window.innerHeight || 1;
+        const inReturnZone = clientY >= hScr - 20;
+
+        if (inReturnZone) {
+          // Cancel the drag - card returns to hand
+          clearSelection();
+          setDragFromHand(false);
+          return;
+        }
+      }
 
       // Emergency cleanup for sticky drags - give Board a chance to handle the drop first
       setTimeout(() => {
@@ -275,8 +298,19 @@ export default function Hand3D({
       }, 50); // Short delay to let Board handle legitimate drops first
     };
     window.addEventListener("mouseup", onUp);
-    return () => window.removeEventListener("mouseup", onUp);
-  }, [dragFromHand, selected, owner, setDragFromHand]);
+    window.addEventListener("touchend", onUp);
+    return () => {
+      window.removeEventListener("mouseup", onUp);
+      window.removeEventListener("touchend", onUp);
+    };
+  }, [
+    dragFromHand,
+    selected,
+    owner,
+    setDragFromHand,
+    clearSelection,
+    isCoarsePointer,
+  ]);
 
   // Auto-reset "visible" mode when cursor leaves hand area
   useEffect(() => {
@@ -381,7 +415,8 @@ export default function Hand3D({
     if (!showCardBacks && isCoarsePointer) {
       if (dragFromHand && selected && selected.who === owner) {
         const hScr = window.innerHeight || 1;
-        const inReturnZone = lastMousePosRef.current.y >= hScr * 0.7;
+        // Return zone is just the bottom 20px for easier card placement
+        const inReturnZone = lastMousePosRef.current.y >= hScr - 20;
         targetShown = inReturnZone ? 1 : 0;
       }
     }
@@ -402,11 +437,15 @@ export default function Hand3D({
     if (Math.abs(spreadTarget - handSpreadLerp.current) < 0.005)
       handSpreadLerp.current = spreadTarget;
 
-    // Push hand further off-screen when force hidden via Space
+    // Push hand further off-screen when force hidden via Space or dragging on mobile
     const normalHiddenOffset = -CARD_LONG * HAND_CARD_SCALE * 0.8;
     const forceHiddenOffset = -CARD_LONG * HAND_CARD_SCALE * 1.5;
+    const isDraggingOnMobile =
+      isCoarsePointer && dragFromHand && selected && selected.who === owner;
     const hiddenOffset =
-      handVisibilityMode === "hidden" ? forceHiddenOffset : normalHiddenOffset;
+      handVisibilityMode === "hidden" || isDraggingOnMobile
+        ? forceHiddenOffset
+        : normalHiddenOffset;
     const yOffset = hiddenOffset * (1 - revealLerp.current);
 
     if (isEdgePlacement) {
