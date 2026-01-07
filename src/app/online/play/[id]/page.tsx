@@ -91,6 +91,7 @@ import {
 } from "@/lib/game/store/portalState";
 import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
 import { useSoatcPlayers } from "@/lib/hooks/useSoatcStatus";
+import { useTouchDevice } from "@/lib/hooks/useTouchDevice";
 import { useZoomKeyboardShortcuts } from "@/lib/hooks/useZoomKeyboardShortcuts";
 import { LegacySeatVideo3D } from "@/lib/rtc/SeatVideo3D";
 import { generateClientLeagueMatchResult } from "@/lib/soatc/clientResult";
@@ -2138,6 +2139,9 @@ export default function OnlineMatchPage() {
   const selectedAvatar = useGameStore((s) => s.selectedAvatar);
   const boardSize = useGameStore((s) => s.board.size);
   const toggleHandVisibility = useGameStore((s) => s.toggleHandVisibility);
+  const handVisibilityMode = useGameStore((s) => s.handVisibilityMode);
+  const setHandVisibilityMode = useGameStore((s) => s.setHandVisibilityMode);
+  const isTouchDevice = useTouchDevice();
 
   // Space key to toggle hand visibility
   useEffect(() => {
@@ -2789,6 +2793,51 @@ export default function OnlineMatchPage() {
           >
             3D
           </button>
+          {/* Mobile hand toggle - only show on touch devices */}
+          {isTouchDevice && (
+            <button
+              className={`ml-2 p-2 rounded ${
+                handVisibilityMode === "visible"
+                  ? "bg-cyan-500/50"
+                  : handVisibilityMode === "hidden"
+                  ? "bg-red-500/30"
+                  : "bg-transparent hover:bg-white/10"
+              }`}
+              onClick={() => {
+                // Toggle: null -> visible, visible -> hidden, hidden -> null
+                if (handVisibilityMode === null) {
+                  setHandVisibilityMode("visible");
+                } else if (handVisibilityMode === "visible") {
+                  setHandVisibilityMode("hidden");
+                } else {
+                  setHandVisibilityMode(null);
+                }
+              }}
+              title={
+                handVisibilityMode === "visible"
+                  ? "Hand shown (tap to hide)"
+                  : handVisibilityMode === "hidden"
+                  ? "Hand hidden (tap for auto)"
+                  : "Hand auto (tap to show)"
+              }
+            >
+              {/* Hand icon */}
+              <svg
+                className="w-4 h-4"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0" />
+                <path d="M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v2" />
+                <path d="M10 10.5V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v8" />
+                <path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15" />
+              </svg>
+            </button>
+          )}
         </div>
       </div>
       {!inThisMatch && (
