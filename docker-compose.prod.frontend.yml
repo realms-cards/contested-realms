@@ -1,0 +1,196 @@
+# docker-compose.prod.frontend.yml
+# Full production stack with self-hosted Next.js frontend
+# Usage: docker-compose -f docker-compose.prod.frontend.yml up -d --build
+
+services:
+  # One-off migration runner against Managed Postgres
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    container_name: sorcery-migrate
+    restart: "no"
+    env_file:
+      - .env.production
+    command: ["npx", "prisma", "migrate", "deploy"]
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Self-hosted Redis for Socket.IO adapter and shared state
+  redis:
+    image: redis:7-alpine
+    container_name: sorcery-redis
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    command: >
+      sh -c "redis-server --appendonly yes --requirepass \"$$REDIS_PASSWORD\" --maxmemory 512mb --maxmemory-policy allkeys-lru"
+    # No longer expose Redis externally - frontend is local now
+    expose:
+      - "6379"
+    healthcheck:
+      test: ["CMD", "sh", "-c", 'redis-cli -a "$$REDIS_PASSWORD" ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - redisdata:/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Next.js Frontend (self-hosted)
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        NEXT_PUBLIC_SOCKET_URL: https://ws.realms.cards
+        NEXT_PUBLIC_BASE_URL: https://realms.cards
+        NEXTAUTH_URL: https://realms.cards
+    container_name: sorcery-frontend
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      # Override Redis URL to use internal Docker network
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+    expose:
+      - "3000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+    # Resource limits - frontend is lighter than you'd think with standalone
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+
+  # Socket.IO server instances (horizontal scaling via Redis adapter)
+  server1:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    container_name: sorcery-server-1
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      INSTANCE_ID: server1
+      PORT: 3010
+      # Use internal Redis URL
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    expose:
+      - "3010"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'node -e ''http=require("http");http.get("http://127.0.0.1:3010/healthz",res=>{process.exit(res.statusCode===200?0:1)}).on("error",()=>process.exit(1))''',
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  server2:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    container_name: sorcery-server-2
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      INSTANCE_ID: server2
+      PORT: 3010
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    expose:
+      - "3010"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'node -e ''http=require("http");http.get("http://127.0.0.1:3010/healthz",res=>{process.exit(res.statusCode===200?0:1)}).on("error",()=>process.exit(1))''',
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # Public entrypoint: TLS + reverse-proxy/load-balancer
+  caddy:
+    image: caddy:2-alpine
+    container_name: sorcery-caddy
+    user: root
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      METRICS_IP_ALLOWLIST: ${METRICS_IP_ALLOWLIST:-}
+      ADMIN_IP_ACCESSLIST: ${ADMIN_IP_ACCESSLIST:-}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile.prod.frontend:/etc/caddy/Caddyfile:ro
+      - /var/log/caddy:/var/log/caddy
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      frontend:
+        condition: service_healthy
+      server1:
+        condition: service_healthy
+      server2:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+volumes:
+  redisdata:
+  caddy_data:
+  caddy_config:
