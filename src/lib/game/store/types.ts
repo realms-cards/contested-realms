@@ -1743,11 +1743,12 @@ export type GameState = {
   moveFromGraveyardToBanished: (who: PlayerKey, instanceId: string) => void;
   banishEntireGraveyard: (who: PlayerKey) => void;
   // Handle peeked card action (from peek dialog)
+  // instanceId: unique string identifier for the card instance
   handlePeekedCard: (
     who: PlayerKey,
     pile: "spellbook" | "atlas" | "hand",
-    cardIndex: number,
-    action: "top" | "bottom" | "hand" | "graveyard" | "banish"
+    instanceId: string,
+    action: "top" | "bottom" | "hand" | "graveyard" | "banish" | "steal"
   ) => void;
   // Transfer control
   transferPermanentControl: (at: CellKey, index: number, to?: 1 | 2) => void;
