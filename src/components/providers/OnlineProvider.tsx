@@ -1221,15 +1221,16 @@ export default function OnlineProvider({
         // Apply full game snapshot if provided and allowed
         if (allowApplyGame && snap?.game) {
           try {
-            // Apply server snapshot - use __replaceKeys only for keys that are safe to fully replace
-            // Do NOT use __replaceKeys for zones/avatars/permanents as they may be partial
-            // and would wipe out the other player's data
+            // Apply server snapshot - for a full resync, REPLACE all game state keys
+            // This is a full snapshot from the server (not a partial patch), so we should
+            // replace rather than merge to avoid duplicate permanents causing mana/threshold accumulation
             console.log(
-              "[game] Applying server snapshot with selective replacement"
+              "[game] Applying server snapshot with full replacement"
             );
             const gameSnapshot = snap.game as Record<string, unknown>;
 
-            // Keys that are safe to fully replace (scalar values or complete objects)
+            // Keys that should be fully replaced during resync (this is a complete snapshot)
+            // Note: For incremental patches we don't use __replaceKeys, but for resync we need full replacement
             const safeToReplaceKeys = [
               "phase",
               "currentPlayer",
@@ -1243,6 +1244,13 @@ export default function OnlineProvider({
               "playerPositions",
               "events",
               "eventSeq",
+              // Full resync should replace these to avoid duplicate permanents/mana accumulation
+              "permanents",
+              "board",
+              "zones",
+              "avatars",
+              "mulligans",
+              "mulliganDrawn",
             ];
 
             // Only include keys that exist in the snapshot AND are safe to replace

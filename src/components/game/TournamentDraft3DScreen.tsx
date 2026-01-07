@@ -584,7 +584,7 @@ export default function TournamentDraft3DScreen({
 
     const start = () => {
       if (!shouldPoll() || pollInterval) return;
-      pollInterval = setInterval(pollDraftState, 5000); // Increased from 2.5s to 5s
+      pollInterval = setInterval(pollDraftState, 10000); // Increased to 10s for cost savings
       void pollDraftState();
     };
     const stop = () => {

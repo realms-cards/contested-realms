@@ -38,6 +38,7 @@ import MatchEndOverlay from "@/components/game/MatchEndOverlay";
 import MatchInfoPopup from "@/components/game/MatchInfoPopup";
 import MobileHandHint from "@/components/game/MobileHandHint";
 import MotherNatureOverlay from "@/components/game/MotherNatureOverlay";
+import HeadlessHauntOverlay from "@/components/game/HeadlessHauntOverlay";
 import OnlineConsole from "@/components/game/OnlineConsole";
 import OnlineD20Screen from "@/components/game/OnlineD20Screen";
 import OnlineDeckSelector from "@/components/game/OnlineDeckSelector";
@@ -2991,6 +2992,9 @@ export default function OnlineMatchPage() {
             dragFromHand={dragFromHand}
             myPlayerKey={viewPlayerKey}
             playerNames={playerNames}
+            myPlayerId={myPlayerId}
+            opponentPlayerId={opponentPlayerId}
+            matchId={matchId}
             showYouLabels={!isSpectatorView}
             readOnly={isSpectatorView}
             spectatorMode={isSpectatorView}
@@ -3191,6 +3195,8 @@ export default function OnlineMatchPage() {
           <LilithOverlay />
           {/* Mother Nature Overlay (start of turn reveal) */}
           <MotherNatureOverlay />
+          {/* Headless Haunt Overlay (start of turn movement - Kythera Mechanism) */}
+          <HeadlessHauntOverlay />
           {/* Black Mass Overlay (search for Evil minions) */}
           <BlackMassOverlay />
           {/* Highland Princess Overlay (search for artifact) */}

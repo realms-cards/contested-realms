@@ -2,6 +2,7 @@
 
 import { Eye, EyeOff, Grid3X3, Star } from "lucide-react";
 import AudioControls from "@/components/game/AudioControls";
+import { EndTurnConfirmDialog } from "@/components/game/EndTurnConfirmDialog";
 import { FEATURE_UNDO } from "@/lib/config/features";
 import { useColorBlind } from "@/lib/contexts/ColorBlindContext";
 import { useGameStore } from "@/lib/game/store";
@@ -13,7 +14,7 @@ interface StatusBarProps {
 export default function StatusBar({ dragFromHand }: StatusBarProps) {
   const currentPlayer = useGameStore((s) => s.currentPlayer);
   const phase = useGameStore((s) => s.phase);
-  const endTurn = useGameStore((s) => s.endTurn);
+  const requestEndTurn = useGameStore((s) => s.requestEndTurn);
   const undo = useGameStore((s) => s.undo);
   const history = useGameStore((s) => s.history);
   // D20 Setup phase
@@ -126,7 +127,7 @@ export default function StatusBar({ dragFromHand }: StatusBarProps) {
 
             <button
               className={primaryActionButtonClass}
-              onClick={() => endTurn()}
+              onClick={() => requestEndTurn()}
               onContextMenu={(e) => e.preventDefault()}
             >
               End Turn
@@ -149,6 +150,9 @@ export default function StatusBar({ dragFromHand }: StatusBarProps) {
         <div className="w-px h-4 bg-white/20" />
         <AudioControls enableMusic />
       </div>
+
+      {/* End Turn Confirmation Dialog */}
+      <EndTurnConfirmDialog />
     </div>
   );
 }

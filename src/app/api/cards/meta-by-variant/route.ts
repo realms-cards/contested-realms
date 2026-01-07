@@ -5,10 +5,10 @@ import { getCached, setCached } from "@/lib/cache/redis-cache";
 import { prisma } from "@/lib/prisma";
 
 // ─── In-memory cache for card metadata ───────────────────────────────────────
-// Card stats rarely change (only on ingestion), so caching is safe
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
-const REDIS_CACHE_TTL_SECONDS = 300; // 5 minutes for Redis
-const MAX_CACHE_ENTRIES = 500;
+// Card stats rarely change (only on set releases ~2x/year), so we can cache aggressively
+const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 1 week
+const REDIS_CACHE_TTL_SECONDS = 604800; // 1 week for Redis
+const MAX_CACHE_ENTRIES = 2000; // Increased for longer cache duration
 
 interface CacheEntry<T> {
   data: T;
@@ -85,7 +85,11 @@ export async function GET(req: NextRequest) {
       }
       return new Response(JSON.stringify(memCached), {
         status: 200,
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          "Cache-Control":
+            "public, max-age=604800, s-maxage=604800, stale-while-revalidate=2592000, immutable",
+        },
       });
     }
 
@@ -100,7 +104,11 @@ export async function GET(req: NextRequest) {
       }
       return new Response(JSON.stringify(redisCached), {
         status: 200,
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          "Cache-Control":
+            "public, max-age=604800, s-maxage=604800, stale-while-revalidate=2592000, immutable",
+        },
       });
     }
 
@@ -203,7 +211,11 @@ export async function GET(req: NextRequest) {
 
     return new Response(JSON.stringify(out), {
       status: 200,
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        "Cache-Control":
+          "public, max-age=604800, s-maxage=604800, stale-while-revalidate=2592000, immutable",
+      },
     });
   } catch (e: unknown) {
     const message =

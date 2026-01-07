@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 
-// ISR: Sets rarely change (only on ingestion), revalidate every hour
-export const revalidate = 3600; // 1 hour
+// ISR: Sets rarely change (only on new set releases ~2x/year), revalidate every week
+export const revalidate = 604800; // 1 week
 
 // GET /api/cards/sets
 // Returns all available sets for filtering
@@ -15,7 +15,14 @@ export async function GET() {
       orderBy: { name: "asc" },
     });
 
-    return Response.json(sets);
+    return new Response(JSON.stringify(sets), {
+      status: 200,
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control":
+          "public, max-age=604800, s-maxage=604800, stale-while-revalidate=2592000, immutable",
+      },
+    });
   } catch (e) {
     console.error("Sets API error:", e);
     return Response.json(

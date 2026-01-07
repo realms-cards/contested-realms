@@ -229,6 +229,23 @@ export const createNetworkSlice: StateCreator<
               );
             }
           }, 500);
+
+          // Headless Haunt start-of-turn movement (slightly delayed after Mother Nature)
+          // Only trigger if we ARE the starting player (the one whose haunts should move)
+          // The coreState.endTurn() triggers for the OTHER player, so we need this for online sync
+          const myActorKey = get().actorKey;
+          if (myActorKey === startingPlayerSeat) {
+            setTimeout(() => {
+              try {
+                get().triggerHeadlessHauntStartOfTurn(startingPlayerSeat);
+              } catch (e) {
+                console.error(
+                  "[applyServerPatch] Error triggering Headless Haunt:",
+                  e
+                );
+              }
+            }, 700);
+          }
         }
       }
 
@@ -421,6 +438,64 @@ export const createNetworkSlice: StateCreator<
             }
           }
           zonesCandidate = filteredZones;
+        }
+
+        // CRITICAL: Filter out cards from hand that are already on the board (as permanents)
+        // This prevents duplication when server has stale zone data after card was played
+        if (zonesCandidate) {
+          // Collect all cardIds that are currently on the board as permanents
+          const permanentsSource =
+            p.permanents !== undefined
+              ? replaceKeys.has("permanents")
+                ? (p.permanents as Permanents)
+                : mergePermanentsMap(state.permanents, p.permanents)
+              : state.permanents;
+          const onBoardCardIds = new Set<number>();
+          for (const cellPermanents of Object.values(permanentsSource || {})) {
+            for (const perm of cellPermanents || []) {
+              if (perm?.card?.cardId) {
+                onBoardCardIds.add(perm.card.cardId);
+              }
+            }
+          }
+          // Also include cards on sites
+          const sitesSource = p.board?.sites ?? state.board?.sites;
+          for (const site of Object.values(sitesSource || {})) {
+            if (site?.card?.cardId) {
+              onBoardCardIds.add(site.card.cardId);
+            }
+          }
+          if (onBoardCardIds.size > 0) {
+            const filteredZones = { ...zonesCandidate } as Record<
+              PlayerKey,
+              GameState["zones"][PlayerKey]
+            >;
+            for (const seat of ["p1", "p2"] as PlayerKey[]) {
+              const seatZones = filteredZones[seat];
+              if (seatZones && Array.isArray(seatZones.hand)) {
+                const originalCount = seatZones.hand.length;
+                const filteredHand = seatZones.hand.filter(
+                  (c) => !onBoardCardIds.has(c.cardId)
+                );
+                if (filteredHand.length !== originalCount) {
+                  console.log(
+                    "[applyServerPatch] Filtered cards from hand that are on board:",
+                    {
+                      seat,
+                      originalCount,
+                      filteredCount: filteredHand.length,
+                      removedCount: originalCount - filteredHand.length,
+                    }
+                  );
+                  filteredZones[seat] = {
+                    ...seatZones,
+                    hand: filteredHand,
+                  };
+                }
+              }
+            }
+            zonesCandidate = filteredZones;
+          }
         }
 
         next.zones = normalizeZones(

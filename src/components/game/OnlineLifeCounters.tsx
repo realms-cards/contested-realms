@@ -69,10 +69,12 @@ function LifeCounter({
   showNameAbove,
   showYou,
   spectatorMode,
+  isHotseatMode,
 }: LifeCounterProps & {
   showNameAbove: boolean;
   showYou: boolean;
   spectatorMode?: boolean;
+  isHotseatMode?: boolean;
 }) {
   const playerState = useGameStore((s) => s.players[player]);
   const addLife = useGameStore((s) => s.addLife);
@@ -82,8 +84,8 @@ function LifeCounter({
   const { life, lifeState } = playerState;
   const lifeDisplay = formatLifeDisplay(life, lifeState);
   const colorClass = getLifeStateColor(lifeState);
-  // Only allow modifying your own life
-  const canModifyThisPlayer = canModify && isMe;
+  // In hotseat mode, allow modifying both players. In online mode, only your own life
+  const canModifyThisPlayer = canModify && (isHotseatMode ? true : isMe);
   const canIncrease = canModifyThisPlayer && lifeState !== "dead" && life < 20;
   const canDecrease = canModifyThisPlayer && lifeState !== "dead";
 
@@ -264,6 +266,7 @@ export default function OnlineLifeCounters({
 }: OnlineLifeCountersProps) {
   // In online multiplayer, both players can modify life totals
   const matchEnded = useGameStore((s) => s.matchEnded);
+  const isHotseatMode = !myPlayerId && !opponentPlayerId && !matchId;
   const canModifyLife = !readOnly && !!myPlayerKey && !matchEnded;
   const p1LifeState = useGameStore((s) => s.players.p1.lifeState);
   const p2LifeState = useGameStore((s) => s.players.p2.lifeState);
@@ -343,6 +346,7 @@ export default function OnlineLifeCounters({
         showNameAbove={true}
         showYou={showYouLabels}
         spectatorMode={readOnly}
+        isHotseatMode={isHotseatMode}
       />
 
       {/* P2 Life - name below */}
@@ -355,6 +359,7 @@ export default function OnlineLifeCounters({
         showNameAbove={false}
         showYou={showYouLabels}
         spectatorMode={readOnly}
+        isHotseatMode={isHotseatMode}
       />
 
       {/* Gamepad hint - show when gamepad connected and can modify life */}

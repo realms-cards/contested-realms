@@ -35,6 +35,7 @@ import {
 import { createEarthquakeSlice } from "./store/earthquakeState";
 import { createEventSlice } from "./store/eventState";
 import { createFrontierSettlersSlice } from "./store/frontierSettlersState";
+import { createHeadlessHauntSlice } from "./store/headlessHauntState";
 import { createGameActionsSlice } from "./store/gameActions";
 import { createHighlandPrincessSlice } from "./store/highlandPrincessState";
 import {
@@ -183,6 +184,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   ...createDruidSlice(set, get, storeApi),
   ...createSpecialSiteSlice(set, get, storeApi),
   ...createAnimistSlice(set, get, storeApi),
+  ...createHeadlessHauntSlice(set, get, storeApi),
   cardScale: 1,
 
   // Multiplayer transport (injected by online play UI)
@@ -272,6 +274,8 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         necromancerSkeletonUsed: createInitialNecromancerSkeletonUsed(),
         druidFlipped: createInitialDruidFlipped(),
         specialSiteState: getEmptySpecialSiteState(),
+        headlessHaunts: [],
+        pendingHeadlessHauntMove: null,
       };
       return reset as GameState;
     }),
