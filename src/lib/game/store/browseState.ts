@@ -182,12 +182,11 @@ export const createBrowseSlice: StateCreator<GameState, [], [], BrowseSlice> = (
     }
 
     // Put the rest on the bottom of spellbook in the specified order
-    // First in the order = top of bottom stack = pushed LAST (highest index = drawn last among bottom cards)
+    // Last in the UI order = very bottom of spellbook (drawn last among bottom cards)
     const bottomCards = pending.bottomOrder.map(
       (i) => pending.revealedCards[i]
     );
-    // Reverse so first in UI list ends up at top of bottom (lowest index among added cards)
-    spellbook.push(...bottomCards.reverse());
+    spellbook.push(...bottomCards);
 
     // Update zones
     const zonesNext = {

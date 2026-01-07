@@ -232,11 +232,9 @@ export default function CardPreview({
             alt={card?.name || "Card preview"}
             fill
             className={`${
-              isSite
-                ? "object-cover scale-[1.35] rotate-90 origin-center"
-                : "object-cover"
+              isSite ? "object-contain rotate-90 origin-center" : "object-contain"
             } object-center`}
-            sizes={isSite ? `${Math.round(width * 1.5)}px` : `${Math.round(width)}px`}
+            sizes={`${Math.round(width)}px`}
             priority
             unoptimized
           />
