@@ -82,7 +82,7 @@ export default function MulliganScreen({ onStartGame }: MulliganScreenProps) {
                     <div
                       className={`relative ${
                         isSite
-                          ? "aspect-[4/3] w-24 sm:w-32"
+                          ? "aspect-[4/3] w-28 sm:w-36"
                           : "aspect-[3/4] w-20 sm:w-24"
                       } rounded-lg overflow-hidden ring-1 ring-white/20 shadow-lg ${
                         picked ? "opacity-70" : ""
@@ -92,9 +92,9 @@ export default function MulliganScreen({ onStartGame }: MulliganScreenProps) {
                         src={`/api/images/${c.slug}`}
                         alt={c.name}
                         fill
-                        sizes={isSite ? "(max-width: 640px) 96px, 128px" : "(max-width: 640px) 96px, 120px"}
+                        sizes={isSite ? "(max-width: 640px) 112px, 144px" : "(max-width: 640px) 96px, 120px"}
                         className={`${
-                          isSite ? "object-contain rotate-90 origin-center" : "object-contain"
+                          isSite ? "object-contain rotate-90 scale-[1.333] origin-center" : "object-contain"
                         }`}
                         unoptimized
                       />
@@ -163,7 +163,7 @@ export default function MulliganScreen({ onStartGame }: MulliganScreenProps) {
                             fill
                             sizes={isSite ? "(max-width: 640px) 80px, 112px" : "(max-width: 640px) 80px, 100px"}
                             className={`${
-                              isSite ? "object-contain rotate-90 origin-center" : "object-contain"
+                              isSite ? "object-contain rotate-90 scale-[1.333] origin-center" : "object-contain"
                             }`}
                             unoptimized
                           />
@@ -231,7 +231,7 @@ export default function MulliganScreen({ onStartGame }: MulliganScreenProps) {
                     <div
                       className={`relative ${
                         isSite
-                          ? "aspect-[4/3] w-24 sm:w-32"
+                          ? "aspect-[4/3] w-28 sm:w-36"
                           : "aspect-[3/4] w-20 sm:w-24"
                       } rounded-lg overflow-hidden ring-1 ring-white/20 shadow-lg ${
                         picked ? "opacity-70" : ""
@@ -241,9 +241,9 @@ export default function MulliganScreen({ onStartGame }: MulliganScreenProps) {
                         src={`/api/images/${c.slug}`}
                         alt={c.name}
                         fill
-                        sizes={isSite ? "(max-width: 640px) 96px, 128px" : "(max-width: 640px) 96px, 120px"}
+                        sizes={isSite ? "(max-width: 640px) 112px, 144px" : "(max-width: 640px) 96px, 120px"}
                         className={`${
-                          isSite ? "object-contain rotate-90 origin-center" : "object-contain"
+                          isSite ? "object-contain rotate-90 scale-[1.333] origin-center" : "object-contain"
                         }`}
                         unoptimized
                       />
@@ -312,7 +312,7 @@ export default function MulliganScreen({ onStartGame }: MulliganScreenProps) {
                             fill
                             sizes={isSite ? "(max-width: 640px) 80px, 112px" : "(max-width: 640px) 80px, 100px"}
                             className={`${
-                              isSite ? "object-contain rotate-90 origin-center" : "object-contain"
+                              isSite ? "object-contain rotate-90 scale-[1.333] origin-center" : "object-contain"
                             }`}
                             unoptimized
                           />

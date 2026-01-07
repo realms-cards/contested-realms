@@ -9,7 +9,7 @@ import {
 import type { CardPreviewData } from "@/lib/game/card-preview.types";
 import { TOKEN_BY_KEY, tokenTextureUrl } from "@/lib/game/tokens";
 
-const SITE_SIZE_MULTIPLIER = 1.15;
+const SITE_SIZE_MULTIPLIER = 1.5;
 
 type LayoutState = {
   width: number;
@@ -232,7 +232,9 @@ export default function CardPreview({
             alt={card?.name || "Card preview"}
             fill
             className={`${
-              isSite ? "object-contain rotate-90 origin-center" : "object-contain"
+              isSite
+                ? "object-contain rotate-90 scale-[1.333] origin-center"
+                : "object-contain"
             } object-center`}
             sizes={`${Math.round(width)}px`}
             priority
