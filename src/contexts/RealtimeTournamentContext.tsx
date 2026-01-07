@@ -134,11 +134,11 @@ export function RealtimeTournamentProvider({
   const pathname = usePathname();
   const { data: sessionData } = useSession();
 
-  // Only actively fetch tournaments when on tournament-related pages
+  // Only actively fetch tournaments when on actual tournament pages
+  // Exclude /online/lobby and /online/play to reduce unnecessary polling
   const isOnTournamentPage =
-    pathname?.startsWith("/tournaments") ||
-    pathname?.startsWith("/online/draft") ||
-    pathname?.startsWith("/online/lobby") ||
+    pathname === "/tournaments" ||
+    pathname?.startsWith("/tournaments/") ||
     false;
   const currentUserId = sessionData?.user?.id ?? null;
   const [tournaments, setTournaments] = useState<TournamentInfo[]>([]);
@@ -1057,6 +1057,40 @@ export function RealtimeTournamentProvider({
       socket.off("connect", sendHello);
     };
   }, [socket, sessionData?.user?.id, sessionData?.user?.name]);
+
+  // Listen for tournament list changes (event-driven updates)
+  // Server broadcasts these events when tournaments are created/updated/completed
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleTournamentListChanged = (data: {
+      action: string;
+      tournamentId?: string;
+    }) => {
+      console.log("[RealtimeTournamentContext] Tournament list changed:", data);
+      // Refresh tournament list when server announces changes
+      refreshTournamentsDebounced(500);
+    };
+
+    const handleTournamentCreated = (data: {
+      id: string;
+      name: string;
+      format: string;
+    }) => {
+      console.log("[RealtimeTournamentContext] New tournament created:", data);
+      // Immediately refresh to show new tournament
+      refreshTournamentsDebounced(200);
+    };
+
+    socket.on("tournament:list-changed", handleTournamentListChanged);
+    socket.on("tournament:created", handleTournamentCreated);
+
+    return () => {
+      socket.off("tournament:list-changed", handleTournamentListChanged);
+      socket.off("tournament:created", handleTournamentCreated);
+    };
+  }, [socket, refreshTournamentsDebounced]);
+
   const preparation = useTournamentPreparation(preparationId, { isConnected });
   const statistics = useTournamentStatistics(preparationId, { isConnected });
   const phases = useTournamentPhases(preparationId, currentTournament?.status, {
@@ -1093,6 +1127,7 @@ export function RealtimeTournamentProvider({
 
   // Fallback polling: keep list fresh even if socket events are missed
   // Only poll when the realtime socket is disconnected AND user is on a tournament page
+  // Increased to 45s since WebSocket provides real-time updates when connected
   useEffect(() => {
     if (isConnected) return;
     if (!isOnTournamentPage) return;
@@ -1103,7 +1138,7 @@ export function RealtimeTournamentProvider({
       )
         return;
       void refreshTournaments();
-    }, 15000);
+    }, 45000); // 45s for cost savings - WebSocket is primary mechanism
     return () => clearInterval(id);
   }, [isConnected, isOnTournamentPage, refreshTournaments]);
 
@@ -1426,9 +1461,7 @@ export function RealtimeTournamentProvider({
 
         if (!response.ok) {
           const error = await response.json();
-          throw new Error(
-            error.error || "Failed to update registration lock"
-          );
+          throw new Error(error.error || "Failed to update registration lock");
         }
 
         if (!isConnected) {

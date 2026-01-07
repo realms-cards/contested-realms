@@ -1715,12 +1715,103 @@ export function handleCustomMessage(
     const revealedCards = Array.isArray(revealedCardsAny)
       ? (revealedCardsAny as CardRef[])
       : [];
+
+    // IMPORTANT: The caster's trySendPatch only sends their own seat's zones,
+    // so when targeting the opponent, we need to update the target's zones here.
+    // Draw the revealed cards from spellbook to hand for the target player.
+    console.log("[SearingTruth] Handler received:", {
+      id,
+      targetSeat,
+      revealedCardIds: revealedCards.map((c) => c.cardId),
+      actorKey: get().actorKey,
+    });
     set((s) => {
-      if (!s.pendingSearingTruth || s.pendingSearingTruth.id !== id)
-        return s as GameState;
+      // Initialize pendingSearingTruth if not exists (message might arrive before begin)
+      const currentPending = s.pendingSearingTruth;
+      if (currentPending && currentPending.id !== id) return s as GameState;
+
+      // Only update zones if we're the target (the caster already updated locally)
+      const actorKey = s.actorKey;
+      const isTarget = actorKey === targetSeat;
+      console.log(
+        "[SearingTruth] set() isTarget:",
+        isTarget,
+        "actorKey:",
+        actorKey,
+        "targetSeat:",
+        targetSeat
+      );
+
+      let zonesUpdate = {};
+      if (isTarget && revealedCards.length > 0) {
+        const zones = s.zones;
+        const spellbook = [...(zones[targetSeat]?.spellbook || [])];
+        const hand = [...(zones[targetSeat]?.hand || [])];
+
+        // Find and move the actual cards from spellbook to hand
+        // Use cardIds from message to identify which cards to move
+        // Track counts instead of using Set to handle duplicate cardIds
+        const drawnCardCounts = new Map<number, number>();
+        for (const c of revealedCards) {
+          drawnCardCounts.set(
+            c.cardId,
+            (drawnCardCounts.get(c.cardId) || 0) + 1
+          );
+        }
+        const movedCards: CardRef[] = [];
+        const updatedSpellbook = spellbook.filter((card) => {
+          const remaining = drawnCardCounts.get(card.cardId) || 0;
+          if (remaining > 0 && movedCards.length < revealedCards.length) {
+            movedCards.push(card); // Keep full card data from local spellbook
+            drawnCardCounts.set(card.cardId, remaining - 1); // Decrement count
+            return false;
+          }
+          return true;
+        });
+
+        // Add the actual cards (with full data) to hand
+        for (const card of movedCards) {
+          hand.push(card);
+        }
+
+        console.log(
+          "[SearingTruth] Updating zones - movedCards:",
+          movedCards.length,
+          "updatedSpellbook:",
+          updatedSpellbook.length,
+          "hand:",
+          hand.length
+        );
+
+        zonesUpdate = {
+          zones: {
+            ...zones,
+            [targetSeat]: {
+              ...zones[targetSeat],
+              spellbook: updatedSpellbook,
+              hand,
+            },
+          },
+        };
+      }
+
+      // Use movedCards for revealedCards if we're the target (full card data)
+      // Otherwise use the cards from the message
       return {
+        ...zonesUpdate,
         pendingSearingTruth: {
-          ...s.pendingSearingTruth,
+          ...(currentPending || {
+            id,
+            spell: {
+              at: "0,0" as CellKey,
+              index: 0,
+              instanceId: null,
+              owner: 1,
+              card: {} as CardRef,
+            },
+            casterSeat: targetSeat === "p1" ? "p2" : "p1",
+            createdAt: Date.now(),
+          }),
           phase: "revealing",
           targetSeat,
           revealedCards,
@@ -1749,7 +1840,15 @@ export function handleCustomMessage(
     // Note: Don't call movePermanentToZone here - the caster's patch handles it.
     // Calling it here causes race conditions since messages arrive before patches.
 
-    set({ pendingSearingTruth: null } as Partial<GameState> as GameState);
+    // IMPORTANT: Delay clearing pendingSearingTruth to allow the filter in applyServerPatch
+    // to protect the zones from being overwritten by stale server patches.
+    // The filter uses pendingSearingTruth.revealedCards to know which cards to keep in hand.
+    setTimeout(() => {
+      const currentPending = get().pendingSearingTruth;
+      if (currentPending && currentPending.id === id) {
+        set({ pendingSearingTruth: null } as Partial<GameState> as GameState);
+      }
+    }, 3000); // Keep protection for 3 seconds
     try {
       get().log(
         `Searing Truth resolved: ${pending.targetSeat?.toUpperCase()} takes ${

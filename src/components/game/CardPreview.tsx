@@ -233,10 +233,10 @@ export default function CardPreview({
             fill
             className={`${
               isSite
-                ? "object-contain scale-150 rotate-90 origin-center"
+                ? "object-cover scale-[1.35] rotate-90 origin-center"
                 : "object-cover"
             } object-center`}
-            sizes={`${Math.round(width)}px`}
+            sizes={isSite ? `${Math.round(width * 1.5)}px` : `${Math.round(width)}px`}
             priority
             unoptimized
           />

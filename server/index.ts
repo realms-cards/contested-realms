@@ -4068,6 +4068,28 @@ io.on("connection", async (socket: SocketClient) => {
         incrementMetric("cursorSentTotal");
         debugLog(`[cursor] sent for player ${player.id} in room ${room}`);
       } catch {}
+    } else if (
+      type === "searingTruthBegin" ||
+      type === "searingTruthTarget" ||
+      type === "searingTruthResolve" ||
+      type === "searingTruthCancel"
+    ) {
+      // Searing Truth spell: relay message to all players in the match
+      try {
+        const match = await getOrLoadMatch(matchId);
+        const room = `match:${matchId}`;
+        const playerKey = getSeatForPlayer(match, player.id) || "p1";
+        const out = {
+          ...payload,
+          type,
+          playerKey,
+          ts: Date.now(),
+        };
+        io.to(room).emit("message", out);
+        try {
+          io.to(`spectate:${matchId}`).emit("message", out);
+        } catch {}
+      } catch {}
     }
   });
 
