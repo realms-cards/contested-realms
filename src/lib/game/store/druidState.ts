@@ -1,4 +1,10 @@
 import type { StateCreator } from "zustand";
+import { isDruid } from "@/lib/game/avatarAbilities";
+import {
+  TOKEN_BY_NAME,
+  newTokenInstanceId,
+  tokenSlug,
+} from "@/lib/game/tokens";
 import type {
   CellKey,
   GameState,
@@ -6,12 +12,6 @@ import type {
   PlayerKey,
   ServerPatchT,
 } from "./types";
-import { isDruid } from "@/lib/game/avatarAbilities";
-import {
-  TOKEN_BY_NAME,
-  newTokenInstanceId,
-  tokenSlug,
-} from "@/lib/game/tokens";
 import { toCellKey } from "./utils/boardHelpers";
 import { prepareCardForSeat } from "./utils/cardHelpers";
 import { newPermanentInstanceId } from "./utils/idHelpers";

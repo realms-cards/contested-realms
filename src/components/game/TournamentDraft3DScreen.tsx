@@ -89,6 +89,7 @@ export default function TournamentDraft3DScreen({
 
   useEffect(() => {
     useGameStore.getState().resetGameState();
+    useGameStore.getState().clearSnapshotsForNewMatch();
   }, []);
 
   const myPlayerIndex = mySeatNumber - 1; // seatNumber is 1-based, array index is 0-based

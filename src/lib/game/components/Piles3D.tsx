@@ -201,7 +201,7 @@ export default function Piles3D({
   }, []);
 
   return (
-    <group position={[0, 0.001, 0]}>
+    <group position={[0, 0, 0]}>
       {piles.map(({ key, x, z, cards }) => {
         // Orientation: Atlas landscape, Spellbook/Cemetery portrait regardless of contents
         const isAtlas = key === "atlas";
@@ -240,29 +240,28 @@ export default function Piles3D({
                 {/* Bottom cards for stack depth (non-interactive) */}
                 {cards
                   .slice(1)
-                  .filter((card) => card.slug) // Only render cards with valid slugs
                   .map((card, stackIndex) =>
                     presetId ? (
                       <MaterialCardBack
-                        key={`stack-${card.slug}-${stackIndex}`}
+                        key={`stack-${stackIndex}-${card.slug || "card"}`}
                         presetId={presetId}
                         width={w}
                         height={h}
                         rotationZ={pileRotZ}
-                        depthWrite={false}
+                        depthWrite={true}
                         interactive={false}
                         elevation={stackIndex * stackSpacing}
                       />
                     ) : (
                       <CardPlane
-                        key={`stack-${card.slug}-${stackIndex}`}
+                        key={`stack-${stackIndex}-${card.slug || "card"}`}
                         slug={card.slug || ""}
                         textureUrl={cardbackUrl}
                         forceTextureUrl={!isCemetery}
                         width={w}
                         height={h}
                         rotationZ={pileRotZ}
-                        depthWrite={false}
+                        depthWrite={true}
                         interactive={false}
                         elevation={stackIndex * stackSpacing}
                       />
@@ -505,7 +504,7 @@ export default function Piles3D({
               <mesh
                 rotation-x={-Math.PI / 2}
                 rotation-z={pileRotZ}
-                position={[0, 0.001, 0]}
+                position={[0, 0, 0]}
                 raycast={noRaycast ? () => [] : undefined}
                 onContextMenu={(e: ThreeEvent<PointerEvent>) => {
                   // Right click: open context menu for empty pile

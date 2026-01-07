@@ -1,5 +1,6 @@
 "use client";
 
+import { Grid3X3, List } from "lucide-react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -134,6 +135,19 @@ export default function DecksPage() {
   const [filterSource, setFilterSource] = useState<
     "all" | "imported" | "created"
   >("all");
+
+  // View mode (grid/list)
+  const [viewMode, setViewMode] = useState<"grid" | "list">(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("sorcery:deckViewMode");
+      if (saved === "grid" || saved === "list") return saved;
+    }
+    return "grid";
+  });
+
+  useEffect(() => {
+    localStorage.setItem("sorcery:deckViewMode", viewMode);
+  }, [viewMode]);
 
   const [sortBy, setSortBy] = useState<
     "date-desc" | "date-asc" | "name-asc" | "name-desc" | "format"
@@ -445,27 +459,57 @@ export default function DecksPage() {
                         {hasActiveFilters ? ` of ${myDecks.length}` : ""})
                       </span>
                     </h2>
-                    <div className="flex items-center gap-2">
-                      <label
-                        htmlFor="sort-decks"
-                        className="text-xs text-slate-400"
-                      >
-                        Sort:
-                      </label>
-                      <select
-                        id="sort-decks"
-                        value={sortBy}
-                        onChange={(e) =>
-                          setSortBy(e.target.value as typeof sortBy)
-                        }
-                        className="rounded-md bg-slate-800/80 border border-slate-700 px-2 py-1 text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                      >
-                        <option value="date-desc">Newest</option>
-                        <option value="date-asc">Oldest</option>
-                        <option value="name-asc">A-Z</option>
-                        <option value="name-desc">Z-A</option>
-                        <option value="format">Format</option>
-                      </select>
+                    <div className="flex items-center gap-3">
+                      {/* View mode toggle */}
+                      <div className="flex items-center rounded-md bg-slate-800/60 p-0.5">
+                        <button
+                          onClick={() => setViewMode("grid")}
+                          className={`p-1.5 rounded transition-colors ${
+                            viewMode === "grid"
+                              ? "bg-slate-700 text-slate-100"
+                              : "text-slate-400 hover:text-slate-200"
+                          }`}
+                          aria-label="Grid view"
+                          title="Grid view"
+                        >
+                          <Grid3X3 className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => setViewMode("list")}
+                          className={`p-1.5 rounded transition-colors ${
+                            viewMode === "list"
+                              ? "bg-slate-700 text-slate-100"
+                              : "text-slate-400 hover:text-slate-200"
+                          }`}
+                          aria-label="List view"
+                          title="List view"
+                        >
+                          <List className="h-4 w-4" />
+                        </button>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <label
+                          htmlFor="sort-decks"
+                          className="text-xs text-slate-400"
+                        >
+                          Sort:
+                        </label>
+                        <select
+                          id="sort-decks"
+                          value={sortBy}
+                          onChange={(e) =>
+                            setSortBy(e.target.value as typeof sortBy)
+                          }
+                          className="rounded-md bg-slate-800/80 border border-slate-700 px-2 py-1 text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        >
+                          <option value="date-desc">Newest</option>
+                          <option value="date-asc">Oldest</option>
+                          <option value="name-asc">A-Z</option>
+                          <option value="name-desc">Z-A</option>
+                          <option value="format">Format</option>
+                        </select>
+                      </div>
                     </div>
                   </div>
 
@@ -521,7 +565,13 @@ export default function DecksPage() {
                     )}
                   </div>
                 </div>
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-sm">
+                <div
+                  className={
+                    viewMode === "grid"
+                      ? "grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-sm"
+                      : "flex flex-col gap-2 text-sm"
+                  }
+                >
                   {sortedMyDecks.map((d) => (
                     <DeckItem
                       key={d.id}
@@ -538,6 +588,7 @@ export default function DecksPage() {
                         isPending: d.isPending,
                       }}
                       onDelete={handleDeleteDeck}
+                      variant={viewMode}
                     />
                   ))}
                 </div>
@@ -549,7 +600,13 @@ export default function DecksPage() {
                 <h2 className="text-lg font-semibold uppercase tracking-wide text-slate-200">
                   Public Decks
                 </h2>
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-sm">
+                <div
+                  className={
+                    viewMode === "grid"
+                      ? "grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-sm"
+                      : "flex flex-col gap-2 text-sm"
+                  }
+                >
                   {sortedPublicDecks.map((d) => (
                     <DeckItem
                       key={d.id}
@@ -565,6 +622,7 @@ export default function DecksPage() {
                         isPublic: Boolean(d.isPublic),
                         isOwner: false,
                       }}
+                      variant={viewMode}
                     />
                   ))}
                 </div>

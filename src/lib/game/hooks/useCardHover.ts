@@ -66,7 +66,20 @@ export function useCardHover(callbacks: HoverStateCallbacks) {
       currentHoverCardRef.current = null;
       onHide();
       clearHoverTimerRef.current = null;
-    }, 40); // 400ms delay matches draft-3d behavior
+    }, 400); // 400ms delay matches draft-3d behavior
+  }, [onHide]);
+
+  /**
+   * Hide card preview immediately without delay
+   * Use for cases where we know the user has left the hover area
+   */
+  const hideCardPreviewImmediate = useCallback(() => {
+    if (clearHoverTimerRef.current) {
+      window.clearTimeout(clearHoverTimerRef.current);
+      clearHoverTimerRef.current = null;
+    }
+    currentHoverCardRef.current = null;
+    onHide();
   }, [onHide]);
 
   /**
@@ -98,6 +111,7 @@ export function useCardHover(callbacks: HoverStateCallbacks) {
   return {
     showCardPreview,
     hideCardPreview,
+    hideCardPreviewImmediate,
     clearHoverTimers,
     getCurrentHoverCard,
     hasActiveTimers,

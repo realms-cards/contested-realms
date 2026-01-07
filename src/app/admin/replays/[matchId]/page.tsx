@@ -62,6 +62,7 @@ export default function AdminBotReplayViewerPage() {
         // Initialize game state and set grid view for replays (no custom playmats)
         const store = useGameStore.getState();
         store.resetGameState();
+        store.clearSnapshotsForNewMatch();
         // Use grid overlay instead of playmat for spectator/replay view
         useGameStore.setState({ showPlaymat: false, showPlaymatOverlay: true });
         setLoading(false);

@@ -39,6 +39,7 @@ export default function EditorCanvas({
 
   useEffect(() => {
     storeApi.getState().resetGameState();
+    storeApi.getState().clearSnapshotsForNewMatch();
   }, [storeApi]);
 
   // Notify parent of store availability

@@ -11,6 +11,11 @@ import {
   type WebGLRenderer,
 } from "three";
 import { KTX2Loader } from "three/examples/jsm/loaders/KTX2Loader.js";
+import {
+  getCardImageCdnUrl,
+  getAssetUrl,
+  isCdnEnabled,
+} from "@/lib/utils/cdnUrl";
 import { exposeTextureCache } from "./textureMonitoring";
 
 export interface UseCardTextureOptions {
@@ -347,10 +352,19 @@ export function useCardTexture({
       // Special-case token slugs: token:<fileBase>
       if (slug.startsWith("token:")) {
         const base = slug.slice("token:".length);
-        // Raster fallback (TextureLoader) must NOT request ktx2 variants.
-        // The KTX2 attempt is handled separately via ktx2Url below.
+        // Try CDN first for tokens, fall back to API
+        if (isCdnEnabled()) {
+          return getAssetUrl(`tokens/${base}.png`);
+        }
         return `/api/assets/tokens/${base}.png`;
       }
+      // Try CDN direct URL first (bypasses serverless function)
+      // preferRaster mode uses webp, otherwise we'll try ktx2 in ktx2Url
+      const cdnUrl = getCardImageCdnUrl(slug, false); // webp for base
+      if (cdnUrl) {
+        return cdnUrl;
+      }
+      // Fall back to API route
       return `/api/images/${slug}`;
     }
     return "";
@@ -359,6 +373,15 @@ export function useCardTexture({
   const ktx2Url = useMemo(() => {
     if (!baseUrl) return "";
     if (preferRaster) return ""; // Explicitly skip KTX2 when requested
+
+    // If we have a slug, try direct CDN URL for KTX2 first
+    if (slug && !slug.startsWith("token:") && isCdnEnabled()) {
+      const cdnKtx2 = getCardImageCdnUrl(slug, true); // ktx2
+      if (cdnKtx2) {
+        return cdnKtx2;
+      }
+    }
+
     try {
       const u = new URL(
         baseUrl,
@@ -414,7 +437,7 @@ export function useCardTexture({
     } catch {
       return "";
     }
-  }, [baseUrl, preferRaster]);
+  }, [baseUrl, preferRaster, slug]);
 
   // Acquire and release textures with caching and robust fallback.
   useEffect(() => {

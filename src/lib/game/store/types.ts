@@ -1852,7 +1852,9 @@ export type GameState = {
   mulliganWithSelection: (who: PlayerKey, indices: number[]) => void;
   mulliganDrawn: Record<PlayerKey, CardRef[]>;
   finalizeMulligan: () => void;
-  // Reset all game state to initial values (for new matches)
+  // Clear snapshots for a truly new match (not rejoin/reload)
+  clearSnapshotsForNewMatch: () => void;
+  // Reset all game state to initial values (preserves snapshots for rejoins)
   resetGameState: () => void;
   // Events / console
   events: GameEvent[];

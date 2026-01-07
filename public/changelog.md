@@ -4,6 +4,10 @@
 
 ### Jan 7 — Gameplay fixes
 
+- **pretty piles and cards** optimized 3d objects used for cards
+- **optimizations around auth requests and remove lock down mode** should reduce overall queries
+- **be able to set font size for console & toolbox**
+- **fix snapshot persistence**
 - **allow more actions when not on the turn**
 - **add follow up actions to inspect hand**
 - **Resolver polish & hardening**: add preview controls to resolver overlays, tightened mulligan flow, fixed carryable artifacts miscounting mana thresholds, and patched Submerge

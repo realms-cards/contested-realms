@@ -1,6 +1,5 @@
 import type { StateCreator } from "zustand";
 import type { CustomMessage } from "@/lib/net/transport";
-import { getHaystackLimit } from "./utils/boardHelpers";
 import type {
   CardRef,
   CellKey,
@@ -8,6 +7,7 @@ import type {
   PlayerKey,
   ServerPatchT,
 } from "./types";
+import { getHaystackLimit } from "./utils/boardHelpers";
 
 function newBlackMassId() {
   return `black_mass_${Date.now().toString(36)}_${Math.random()

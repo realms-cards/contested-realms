@@ -81,6 +81,7 @@ export default function UserBadge({
     toggleEnhanced3DCards,
     toggleShowTable,
     setCardPreviewScale,
+    setUiTextScale,
   } = useGraphicsSettings();
   const [showOpponentPlaymat, setShowOpponentPlaymat] = useState(true);
   const [playmatPrefLoading, setPlaymatPrefLoading] = useState(false);
@@ -972,31 +973,51 @@ export default function UserBadge({
                 </button>
               </div>
 
-              {/* Card Preview Scale slider */}
-              <div className="mt-3 px-1">
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-xs text-slate-200 font-medium">
-                    Card Preview Size
-                  </span>
-                  <span className="text-[10px] text-slate-400">
-                    {Math.round(graphicsSettings.cardPreviewScale * 100)}%
-                  </span>
+              {/* Scale sliders - Card Preview and Text Size */}
+              <div className="mt-3 px-1 grid grid-cols-2 gap-3">
+                {/* Card Preview Size */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[11px] text-slate-200 font-medium">
+                      Card Preview
+                    </span>
+                    <span className="text-[10px] text-slate-400">
+                      {Math.round(graphicsSettings.cardPreviewScale * 100)}%
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="50"
+                    max="150"
+                    step="10"
+                    value={graphicsSettings.cardPreviewScale * 100}
+                    onChange={(e) =>
+                      setCardPreviewScale(Number(e.target.value) / 100)
+                    }
+                    className="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                  />
                 </div>
-                <input
-                  type="range"
-                  min="50"
-                  max="150"
-                  step="10"
-                  value={graphicsSettings.cardPreviewScale * 100}
-                  onChange={(e) =>
-                    setCardPreviewScale(Number(e.target.value) / 100)
-                  }
-                  className="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-purple-500"
-                />
-                <div className="flex justify-between text-[9px] text-slate-500 mt-0.5">
-                  <span>Small</span>
-                  <span>Default</span>
-                  <span>Large</span>
+                {/* Text Size */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[11px] text-slate-200 font-medium">
+                      Text Size
+                    </span>
+                    <span className="text-[10px] text-slate-400">
+                      {Math.round(graphicsSettings.uiTextScale * 100)}%
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="50"
+                    max="150"
+                    step="10"
+                    value={graphicsSettings.uiTextScale * 100}
+                    onChange={(e) =>
+                      setUiTextScale(Number(e.target.value) / 100)
+                    }
+                    className="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                  />
                 </div>
               </div>
 

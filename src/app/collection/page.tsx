@@ -34,7 +34,7 @@ export default function CollectionPage() {
   // View controls - initialize with defaults, then hydrate from localStorage
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [zoom, setZoom] = useState(100);
-  const [viewHydrated, setViewHydrated] = useState(false);
+  const [, setViewHydrated] = useState(false);
 
   // Hydrate view preferences from localStorage after mount (avoids SSR mismatch)
   useEffect(() => {
@@ -356,7 +356,7 @@ export default function CollectionPage() {
                               result.error || "Failed to delete collection"
                             );
                           }
-                        } catch (e) {
+                        } catch {
                           alert("Failed to delete collection");
                         } finally {
                           setIsDeleting(false);

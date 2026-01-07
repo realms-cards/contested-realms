@@ -17,8 +17,8 @@ import { CARD_THICK } from "@/lib/game/constants";
 import { useCardTexture } from "@/lib/game/textures/useCardTexture";
 import { useCardGeometry } from "./useCardGeometry";
 
-// Card edge color (dark gray to simulate card stock)
-const EDGE_COLOR = "#2a2a2a";
+// Card edge color (ivory to simulate card stock)
+const EDGE_COLOR = "#e8e0d0";
 
 function noopRaycast(
   this: Object3D,
@@ -103,14 +103,14 @@ function createBoxMaterials(
   // Front face material (card art) - semi-gloss finish
   const frontMaterial = lit
     ? new MeshStandardMaterial({
-        map: frontMap ?? undefined,
+        ...(frontMap ? { map: frontMap } : {}),
         roughness: CARD_ROUGHNESS,
         metalness: CARD_METALNESS,
         envMapIntensity: envIntensity,
         ...materialProps,
       })
     : new MeshBasicMaterial({
-        map: frontMap ?? undefined,
+        ...(frontMap ? { map: frontMap } : {}),
         toneMapped: false,
         ...materialProps,
       });
@@ -118,14 +118,14 @@ function createBoxMaterials(
   // Back face material (card back) - semi-gloss finish
   const backMaterial = lit
     ? new MeshStandardMaterial({
-        map: backMap ?? undefined,
+        ...(backMap ? { map: backMap } : {}),
         roughness: CARD_ROUGHNESS,
         metalness: CARD_METALNESS,
         envMapIntensity: envIntensity,
         ...materialProps,
       })
     : new MeshBasicMaterial({
-        map: backMap ?? undefined,
+        ...(backMap ? { map: backMap } : {}),
         toneMapped: false,
         ...materialProps,
       });
@@ -190,14 +190,14 @@ function createObjMaterials(
   // Front face material (card art) - semi-gloss finish
   const frontMaterial = lit
     ? new MeshStandardMaterial({
-        map: frontMap ?? undefined,
+        ...(frontMap ? { map: frontMap } : {}),
         roughness: CARD_ROUGHNESS,
         metalness: CARD_METALNESS,
         envMapIntensity: envIntensity,
         ...materialProps,
       })
     : new MeshBasicMaterial({
-        map: frontMap ?? undefined,
+        ...(frontMap ? { map: frontMap } : {}),
         toneMapped: false,
         ...materialProps,
       });
@@ -205,14 +205,14 @@ function createObjMaterials(
   // Back face material (card back) - semi-gloss finish
   const backMaterial = lit
     ? new MeshStandardMaterial({
-        map: adjustedBackMap ?? undefined,
+        ...(adjustedBackMap ? { map: adjustedBackMap } : {}),
         roughness: CARD_ROUGHNESS,
         metalness: CARD_METALNESS,
         envMapIntensity: envIntensity,
         ...materialProps,
       })
     : new MeshBasicMaterial({
-        map: adjustedBackMap ?? undefined,
+        ...(adjustedBackMap ? { map: adjustedBackMap } : {}),
         toneMapped: false,
         ...materialProps,
       });
@@ -267,7 +267,7 @@ function CardFallback({
     }
   }, [interactive]);
 
-  // Solid gray fallback material
+  // Solid ivory fallback material (opaque card stock appearance)
   const materials = useMemo(() => {
     const props = {
       depthWrite,
@@ -277,13 +277,13 @@ function CardFallback({
     };
     const mat = lit
       ? new MeshStandardMaterial({
-          color: "#4a5568",
+          color: "#f5f0e6",
           roughness: 0.8,
           metalness: 0,
           ...props,
         })
       : new MeshBasicMaterial({
-          color: "#4a5568",
+          color: "#f5f0e6",
           toneMapped: false,
           ...props,
         });

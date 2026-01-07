@@ -1,15 +1,10 @@
 import { create, type StateCreator } from "zustand";
+import { createAccusationSlice } from "./store/accusationState";
 import { createAnimistSlice } from "./store/animistState";
+import { createAssortedAnimalsSlice } from "./store/assortedAnimalsState";
 import { createAvatarSlice } from "./store/avatarState";
 import { createBlackMassSlice } from "./store/blackMassState";
 import { createBoardSlice, createInitialBoard } from "./store/boardState";
-import { createHighlandPrincessSlice } from "./store/highlandPrincessState";
-import { createAssortedAnimalsSlice } from "./store/assortedAnimalsState";
-import { createFrontierSettlersSlice } from "./store/frontierSettlersState";
-import { createPigsOfTheSounderSlice } from "./store/pigsOfTheSounderState";
-import { createDemonicContractSlice } from "./store/demonicContractState";
-import { createDholChantsSlice } from "./store/dholChantsState";
-import { createDoomsdayCultSlice } from "./store/doomsdayCultState";
 import {
   createBoardUiSlice,
   createInitialBoardUiState,
@@ -17,28 +12,31 @@ import {
 import { createBrowseSlice } from "./store/browseState";
 import { createCallToWarSlice } from "./store/callToWarState";
 import { createCardMetaSlice } from "./store/cardMetaState";
-import { createSearingTruthSlice } from "./store/searingTruthState";
-import { createAccusationSlice } from "./store/accusationState";
 import { createChaosTwisterSlice } from "./store/chaosTwisterState";
 import { createCombatSlice } from "./store/combatState";
 import { createCommonSenseSlice } from "./store/commonSenseState";
 import {
   createCoreSlice,
-  createInitialPlayers,
   createInitialD20Rolls,
+  createInitialPlayers,
 } from "./store/coreState";
 import { handleCustomMessage } from "./store/customMessageHandlers";
+import { createDemonicContractSlice } from "./store/demonicContractState";
+import { createDholChantsSlice } from "./store/dholChantsState";
 import {
   createDialogSlice,
   createInitialDialogState,
 } from "./store/dialogState";
+import { createDoomsdayCultSlice } from "./store/doomsdayCultState";
 import {
   createDruidSlice,
   createInitialDruidFlipped,
 } from "./store/druidState";
 import { createEarthquakeSlice } from "./store/earthquakeState";
 import { createEventSlice } from "./store/eventState";
+import { createFrontierSettlersSlice } from "./store/frontierSettlersState";
 import { createGameActionsSlice } from "./store/gameActions";
+import { createHighlandPrincessSlice } from "./store/highlandPrincessState";
 import {
   createHistorySlice,
   createInitialHistoryState,
@@ -50,8 +48,8 @@ import {
 import { createInteractionSlice } from "./store/interactionState";
 import { createLilithSlice } from "./store/lilithState";
 import { createMagicSlice } from "./store/magicState";
-import { createMotherNatureSlice } from "./store/motherNatureState";
 import { createMorganaSlice } from "./store/morganaState";
+import { createMotherNatureSlice } from "./store/motherNatureState";
 import {
   createNecromancerSlice,
   createInitialNecromancerSkeletonUsed,
@@ -59,12 +57,14 @@ import {
 import { createNetworkSlice } from "./store/networkState";
 import { createOmphalosSlice } from "./store/omphalosState";
 import { createPermanentSlice } from "./store/permanentState";
+import { createPigsOfTheSounderSlice } from "./store/pigsOfTheSounderState";
 import { createPithImpSlice } from "./store/pithImpState";
 import { createPortalSlice } from "./store/portalState";
 import { createPositionSlice } from "./store/positionState";
 import { createPreferenceSlice } from "./store/preferenceState";
 import { createRemoteCursorSlice } from "./store/remoteCursorState";
 import { createResourceSlice } from "./store/resourceState";
+import { createSearingTruthSlice } from "./store/searingTruthState";
 import { createSeerSlice } from "./store/seerState";
 import { createSessionSlice } from "./store/sessionState";
 import {
@@ -83,7 +83,10 @@ import type { GameState } from "./store/types";
 import { createUiSlice, createInitialUiState } from "./store/uiState";
 import { createDefaultAvatars } from "./store/utils/avatarHelpers";
 import { createDefaultPlayerPositions } from "./store/utils/positionHelpers";
-import { clearSnapshotsStorageFor } from "./store/utils/snapshotHelpers";
+import {
+  clearSnapshotsStorageFor,
+  loadSnapshotsFromStorageFor,
+} from "./store/utils/snapshotHelpers";
 import { createEmptyZonesRecord } from "./store/utils/zoneHelpers";
 import {
   createZoneSlice,
@@ -185,12 +188,28 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   // Multiplayer transport (injected by online play UI)
   receiveCustomMessage: (msg) => handleCustomMessage(msg, set, get),
 
-  // Reset all game state to initial values (for new matches)
+  // Clear snapshots for a truly new match (not rejoin/reload)
+  clearSnapshotsForNewMatch: () => {
+    const matchId = get().matchId ?? null;
+    console.log("[game] Clearing snapshots for new match", { matchId });
+    try {
+      clearSnapshotsStorageFor(matchId);
+    } catch {}
+    set({ snapshots: createEmptySnapshots() });
+  },
+
+  // Reset all game state to initial values (preserves snapshots for rejoins)
   resetGameState: () =>
     set((state) => {
-      console.log("[game] Resetting game state for new match");
+      console.log("[game] Resetting game state (preserving snapshots)");
+      // Reload snapshots from storage instead of clearing them
+      const matchId = state.matchId ?? null;
+      let preservedSnapshots = state.snapshots;
       try {
-        clearSnapshotsStorageFor(get().matchId ?? null);
+        const stored = loadSnapshotsFromStorageFor(matchId);
+        if (Array.isArray(stored) && stored.length > 0) {
+          preservedSnapshots = stored;
+        }
       } catch {}
       const reset: Partial<GameState> = {
         players: createInitialPlayers(),
@@ -233,7 +252,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         magicGuideSeatPrefs: { p1: false, p2: false },
         combatGuidesActive: false,
         magicGuidesActive: false,
-        snapshots: createEmptySnapshots(),
+        snapshots: preservedSnapshots,
         pendingMagic: null,
         pendingChaosTwister: null,
         pendingBrowse: null,

@@ -298,7 +298,8 @@ export default function CollectionListView({
                     isSite ? "w-96 aspect-[4/3]" : "w-72 aspect-[2.5/3.5]"
                   }`}
                 >
-                  <img
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
                     src={`/api/images/${previewCard.slug}`}
                     alt={previewCard.name}
                     className={`w-full h-full ${
@@ -384,8 +385,8 @@ export default function CollectionListView({
         <table className="w-full">
           <thead className="bg-gray-900">
             <tr>
-              <th className="w-10 px-3 py-3"></th>
-              <th className="w-16 px-3 py-3"></th>
+              <th className="w-10 px-3 py-3" />
+              <th className="w-16 px-3 py-3" />
               <th className="px-3 py-3 text-left text-sm font-medium text-gray-400">
                 Name
               </th>

@@ -2,7 +2,10 @@
 
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
-import { useGraphicsSettings } from "@/hooks/useGraphicsSettings";
+import {
+  useGraphicsSettings,
+  getGraphicsSettings,
+} from "@/hooks/useGraphicsSettings";
 import type { CardPreviewData } from "@/lib/game/card-preview.types";
 import { TOKEN_BY_KEY, tokenTextureUrl } from "@/lib/game/tokens";
 
@@ -143,8 +146,13 @@ export default function CardPreview({
   const isSite = isRegularSite || isSiteReplacementToken;
 
   // Get card preview scale from user settings
+  // Use synchronous read for initial render to avoid flash/jump when settings load
+  const initialScale = useMemo(
+    () => getGraphicsSettings().cardPreviewScale,
+    []
+  );
   const { settings: graphicsSettings } = useGraphicsSettings();
-  const previewScale = graphicsSettings.cardPreviewScale;
+  const previewScale = graphicsSettings.cardPreviewScale || initialScale;
 
   // Compute layout synchronously on first render to avoid "blow up" effect
   const initialLayout = useMemo(() => computeLayout(isSite), [isSite]);

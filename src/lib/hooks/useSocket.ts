@@ -5,6 +5,10 @@
 
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { io, Socket } from "socket.io-client";
+import {
+  fetchSocketToken,
+  getCachedTokenSync,
+} from "@/lib/net/socketTokenCache";
 
 interface UseSocketOptions {
   url?: string;
@@ -64,9 +68,7 @@ const DEFAULT_OPTIONS: UseSocketOptions = (() => {
 let globalSocket: Socket | null = null;
 let globalSocketRefCount = 0;
 
-// Token cache - prevents excessive token requests
-let cachedToken: { token: string; expiresAt: number } | null = null;
-const TOKEN_CACHE_DURATION = 4 * 60 * 1000; // 4 minutes (80% of 5min TTL)
+// Token caching is handled by socketTokenCache.ts (shared with SocketTransport)
 
 // Auth failure tracking - uses exponential backoff instead of hard stop
 let authFailureCount = 0;
@@ -108,13 +110,15 @@ function shouldDelayReconnection(): boolean {
 /**
  * Record an auth failure and return the backoff delay
  */
-function recordAuthFailure(): number {
+function _recordAuthFailure(): number {
   authFailureCount++;
   lastAuthFailureTime = Date.now();
   const delay = getAuthBackoffDelay();
   if (authFailureCount > 2) {
     console.warn(
-      `[useSocket] Auth failure #${authFailureCount}, backing off for ${delay / 1000}s`
+      `[useSocket] Auth failure #${authFailureCount}, backing off for ${
+        delay / 1000
+      }s`
     );
   }
   return delay;
@@ -129,49 +133,6 @@ function resetAuthFailures(): void {
   }
   authFailureCount = 0;
   lastAuthFailureTime = 0;
-}
-
-/**
- * Fetch socket token with caching to prevent excessive requests
- * @param forceRefresh - Force fetching a new token even if cached one is valid
- * @returns The socket token or undefined if fetch fails
- */
-async function fetchSocketToken(
-  forceRefresh = false
-): Promise<string | undefined> {
-  // Return cached token if still valid
-  if (!forceRefresh && cachedToken && Date.now() < cachedToken.expiresAt) {
-    console.log("[useSocket] Using cached token");
-    return cachedToken.token;
-  }
-
-  try {
-    console.log("[useSocket] Fetching new socket token");
-    const res = await fetch("/api/socket-token", {
-      credentials: "include",
-    });
-    if (res.ok) {
-      const j = await res.json();
-      const token = j?.token as string | undefined;
-      if (token) {
-        // Cache the token
-        cachedToken = {
-          token,
-          expiresAt: Date.now() + TOKEN_CACHE_DURATION,
-        };
-        return token;
-      }
-    } else if (res.status === 401) {
-      // User is not authenticated - clear cache and record failure
-      console.warn("[useSocket] Token fetch returned 401 - user not authenticated");
-      cachedToken = null;
-      recordAuthFailure();
-      return undefined;
-    }
-  } catch (error) {
-    console.warn("[useSocket] Failed to fetch token:", error);
-  }
-  return undefined;
 }
 
 /**
@@ -193,20 +154,28 @@ export function useSocket(options: UseSocketOptions = {}): Socket | null {
 
       // Check if we have a socket but it's disconnected
       if (globalSocket && !globalSocket.connected) {
-        console.log("[useSocket] Tab became visible, socket disconnected - attempting reconnect");
+        console.log(
+          "[useSocket] Tab became visible, socket disconnected - attempting reconnect"
+        );
 
         // Refresh token before reconnecting
         try {
           const token = await fetchSocketToken(true); // Force refresh
           if (token) {
-            type ManagerWithOpts = { opts: { auth?: Record<string, unknown> }; reconnection: boolean };
+            type ManagerWithOpts = {
+              opts: { auth?: Record<string, unknown> };
+              reconnection: boolean;
+            };
             const mgr = globalSocket.io as unknown as ManagerWithOpts;
             mgr.opts.auth = { token };
             mgr.reconnection = true;
             globalSocket.connect();
           }
         } catch (e) {
-          console.warn("[useSocket] Failed to refresh token on visibility change:", e);
+          console.warn(
+            "[useSocket] Failed to refresh token on visibility change:",
+            e
+          );
           // Still try to reconnect with existing auth
           globalSocket.connect();
         }
@@ -304,7 +273,9 @@ export function useSocket(options: UseSocketOptions = {}): Socket | null {
         // Check if we should wait before trying again (exponential backoff)
         if (shouldDelayReconnection()) {
           const delay = getAuthBackoffDelay();
-          console.log(`[useSocket] Backing off for ${delay / 1000}s before retry`);
+          console.log(
+            `[useSocket] Backing off for ${delay / 1000}s before retry`
+          );
           setTimeout(() => {
             mgr.reconnection = true;
             if (!socketInstance.connected) socketInstance.connect();
@@ -323,7 +294,11 @@ export function useSocket(options: UseSocketOptions = {}): Socket | null {
           } else {
             // Token fetch failed (401) - back off before trying again
             const delay = getAuthBackoffDelay();
-            console.log(`[useSocket] Token refresh failed, backing off for ${delay / 1000}s`);
+            console.log(
+              `[useSocket] Token refresh failed, backing off for ${
+                delay / 1000
+              }s`
+            );
             setTimeout(() => {
               mgr.reconnection = true;
               if (!socketInstance.connected) socketInstance.connect();
@@ -359,15 +334,37 @@ export function useSocket(options: UseSocketOptions = {}): Socket | null {
       socketInstance.on("reconnect_error", handleReconnectError);
       socketInstance.on("reconnect_failed", handleReconnectFailed);
 
-      // Refresh token before reconnect attempts (use cached token if valid)
-      type ManagerWithOpts = { opts: { auth?: Record<string, unknown> } };
+      // Refresh token before reconnect attempts
+      // CRITICAL: Use synchronous token check first to prevent stale token reconnection
+      type ManagerWithOpts = {
+        opts: { auth?: Record<string, unknown> };
+        reconnection: boolean;
+      };
       socketInstance.io.on("reconnect_attempt", async () => {
-        // Only refresh token if it's about to expire (use cached if valid)
+        const mgr = socketInstance.io as unknown as ManagerWithOpts;
+
+        // First, try to use cached token synchronously (updates opts.auth before reconnect)
+        const cachedToken = getCachedTokenSync();
+        if (cachedToken) {
+          mgr.opts.auth = { token: cachedToken };
+          return; // Let reconnection proceed with cached token
+        }
+
+        // No valid cached token - disable reconnection until we get a fresh one
+        console.log(
+          "[useSocket] No valid cached token for reconnect, fetching fresh..."
+        );
+        mgr.reconnection = false;
+
         try {
-          const token = await fetchSocketToken(false); // Don't force refresh
+          const token = await fetchSocketToken();
           if (token) {
-            const mgr = socketInstance.io as unknown as ManagerWithOpts;
             mgr.opts.auth = { token };
+            mgr.reconnection = true;
+            // Manually trigger reconnect since we disabled it
+            if (!socketInstance.connected) {
+              socketInstance.connect();
+            }
           }
         } catch {}
       });

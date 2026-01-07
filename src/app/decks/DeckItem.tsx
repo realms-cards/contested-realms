@@ -22,6 +22,7 @@ type DeckItemProps = {
     isPending?: boolean; // True while loading after import
   };
   onDelete?: (deckId: string) => void; // Optimistic delete callback
+  variant?: "grid" | "list"; // Display mode
 };
 
 type TagTone = "default" | "public" | "private" | "info" | "warning" | "error";
@@ -60,7 +61,11 @@ function normalizeFormatLabel(format: string | undefined) {
   return lower.charAt(0).toUpperCase() + lower.slice(1);
 }
 
-export default function DeckItem({ deck, onDelete }: DeckItemProps) {
+export default function DeckItem({
+  deck,
+  onDelete,
+  variant = "grid",
+}: DeckItemProps) {
   const router = useRouter();
   const [deleting, setDeleting] = useState(false);
   const [updatingPublic, setUpdatingPublic] = useState(false);
@@ -215,6 +220,352 @@ export default function DeckItem({ deck, onDelete }: DeckItemProps) {
     return null;
   }, [deck.avatarCard, deck.avatarState, deck.isPending]);
 
+  // List view - compact single row with full actions
+  if (variant === "list") {
+    return (
+      <Link
+        href={`/decks/editor-3d?id=${encodeURIComponent(deck.id)}`}
+        className="border rounded px-3 py-2 hover:bg-muted/60 relative group flex items-center gap-3"
+      >
+        {copiedMsg && (
+          <div
+            className="absolute top-1 left-1/2 -translate-x-1/2 rounded bg-black/90 text-white text-xs px-2 py-1 ring-1 ring-white/20 z-20"
+            aria-live="polite"
+          >
+            {copiedMsg}
+          </div>
+        )}
+
+        {/* Small avatar thumbnail */}
+        {deck.avatarState === "single" && deck.avatarCard?.slug && (
+          <div className="flex-shrink-0 w-8 h-12 relative overflow-hidden rounded-sm ring-1 ring-white/10">
+            <Image
+              src={`/api/images/${deck.avatarCard.slug}`}
+              alt={deck.avatarCard.name || "Avatar"}
+              fill
+              sizes="32px"
+              className="object-cover"
+              unoptimized
+            />
+          </div>
+        )}
+        {deck.isPending && (
+          <div className="flex-shrink-0 w-8 h-12 flex items-center justify-center bg-black/30 rounded-sm ring-1 ring-white/10">
+            <div className="w-4 h-4 border border-blue-400 border-t-transparent rounded-full animate-spin" />
+          </div>
+        )}
+
+        {/* Name - allow more space */}
+        <span className="font-medium truncate min-w-[120px] flex-1">
+          {deck.name}
+        </span>
+
+        {/* Tags */}
+        <div className="flex items-center gap-1 flex-shrink-0">
+          {formatLabel && <Tag tone="default">{formatLabel}</Tag>}
+          {(isOwner || typeof deck.isPublic === "boolean") && (
+            <Tag tone={effectiveIsPublic ? "public" : "private"}>
+              {effectiveIsPublic ? "Public" : "Private"}
+            </Tag>
+          )}
+          {deck.imported && <Tag tone="info">Imported</Tag>}
+          {deck.avatarState === "multiple" && <Tag tone="warning">WIP</Tag>}
+          {deck.avatarState === "none" && !deck.isPending && (
+            <Tag tone="error">No Avatar</Tag>
+          )}
+        </div>
+
+        {/* Date */}
+        <div className="flex-shrink-0 text-xs text-slate-400 hidden sm:block w-28 text-right">
+          {deck.userName && <span>{deck.userName} • </span>}
+          {new Date(deck.updatedAt).toLocaleDateString()}
+        </div>
+
+        {/* All actions on hover */}
+        <div className="flex-shrink-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          {/* Edit */}
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              router.push(`/decks/editor-3d?id=${encodeURIComponent(deck.id)}`);
+            }}
+            className="p-1.5 rounded bg-amber-600/80 hover:bg-amber-500 text-white"
+            aria-label="Edit"
+            title="Edit Deck"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+
+          {/* TTS Export */}
+          <button
+            aria-label="TTS Export"
+            title="Download TTS JSON"
+            onClick={async (e: MouseEvent) => {
+              e.preventDefault();
+              e.stopPropagation();
+              try {
+                const ttsUrl = `/api/decks/${encodeURIComponent(deck.id)}/tts`;
+                const res = await fetch(ttsUrl);
+                if (!res.ok) {
+                  const err = await res.json().catch(() => ({}));
+                  throw new Error(err.error || "Failed to fetch TTS data");
+                }
+                const ttsJson = await res.json();
+                const blob = new Blob([JSON.stringify(ttsJson, null, 2)], {
+                  type: "application/json",
+                });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `${deck.name.replace(
+                  /[^a-zA-Z0-9]/g,
+                  "_"
+                )}_TTS.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                setCopiedMsg("TTS downloaded!");
+                setTimeout(() => setCopiedMsg(null), 1500);
+              } catch (err) {
+                alert(
+                  err instanceof Error ? err.message : "Failed to export TTS"
+                );
+              }
+            }}
+            className="p-1.5 rounded bg-zinc-700/80 ring-1 ring-purple-500/50 hover:bg-purple-600/70 text-purple-300 hover:text-white"
+          >
+            <span className="text-[10px] font-bold leading-none">TTS</span>
+          </button>
+
+          {/* Quick Export (simple list) */}
+          <button
+            aria-label="Quick Export"
+            title="Copy card list"
+            onClick={async (e: MouseEvent) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (exportingText) return;
+              try {
+                setExportingText(true);
+                const res = await fetch(
+                  `/api/decks/${encodeURIComponent(deck.id)}`,
+                  { cache: "no-store" }
+                );
+                if (!res.ok) throw new Error("Failed to load deck");
+                const data = await res.json();
+                const allCards = [
+                  ...(Array.isArray(data?.spellbook) ? data.spellbook : []),
+                  ...(Array.isArray(data?.atlas) ? data.atlas : []),
+                  ...(Array.isArray(data?.sideboard) ? data.sideboard : []),
+                  ...(Array.isArray(data?.collection) ? data.collection : []),
+                ];
+                const avatarCounts = new Map<string, number>();
+                const otherCounts = new Map<string, number>();
+                for (const c of allCards) {
+                  const nm = typeof c.name === "string" ? c.name.trim() : "";
+                  if (!nm) continue;
+                  const t =
+                    typeof c.type === "string" ? c.type.toLowerCase() : "";
+                  if (t.includes("avatar"))
+                    avatarCounts.set(nm, (avatarCounts.get(nm) || 0) + 1);
+                  else otherCounts.set(nm, (otherCounts.get(nm) || 0) + 1);
+                }
+                const avatarLines = Array.from(avatarCounts.entries())
+                  .sort((a, b) => a[0].localeCompare(b[0]))
+                  .map(([name, n]) => `${n} ${name}`);
+                const otherLines = Array.from(otherCounts.entries())
+                  .sort((a, b) => a[0].localeCompare(b[0]))
+                  .map(([name, n]) => `${n} ${name}`);
+                const textToCopy = [...avatarLines, ...otherLines].join("\n");
+                await navigator.clipboard.writeText(textToCopy);
+                setCopiedMsg("Copied list");
+                setTimeout(() => setCopiedMsg(null), 1200);
+              } catch (err) {
+                alert(err instanceof Error ? err.message : String(err));
+              } finally {
+                setExportingText(false);
+              }
+            }}
+            disabled={exportingText}
+            className="p-1.5 rounded bg-zinc-700/80 ring-1 ring-zinc-500/50 hover:bg-zinc-600/80 text-zinc-300 hover:text-white"
+          >
+            <List className="h-3.5 w-3.5" />
+          </button>
+
+          {/* Full Export */}
+          <button
+            aria-label="Export Deck"
+            title="Copy formatted deck"
+            onClick={async (e: MouseEvent) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (exportingText) return;
+              try {
+                setExportingText(true);
+                const res = await fetch(
+                  `/api/decks/${encodeURIComponent(deck.id)}`,
+                  { cache: "no-store" }
+                );
+                if (!res.ok) throw new Error("Failed to load deck");
+                const data = await res.json();
+                const spellbook = Array.isArray(data?.spellbook)
+                  ? data.spellbook
+                  : [];
+                const atlas = Array.isArray(data?.atlas) ? data.atlas : [];
+                const sideboard = [
+                  ...(Array.isArray(data?.sideboard) ? data.sideboard : []),
+                  ...(Array.isArray(data?.collection) ? data.collection : []),
+                ];
+                type Cat =
+                  | "Avatar"
+                  | "Aura"
+                  | "Artifact"
+                  | "Minion"
+                  | "Magic"
+                  | "Site"
+                  | "Collection";
+                const cats: Record<Cat, Map<string, number>> = {
+                  Avatar: new Map(),
+                  Aura: new Map(),
+                  Artifact: new Map(),
+                  Minion: new Map(),
+                  Magic: new Map(),
+                  Site: new Map(),
+                  Collection: new Map(),
+                };
+                let avatarFound = false;
+                const add = (c: Record<string, unknown>) => {
+                  const nm = typeof c.name === "string" ? c.name.trim() : "";
+                  if (!nm) return;
+                  const t =
+                    typeof c.type === "string" ? c.type.toLowerCase() : "";
+                  let cat: Cat;
+                  if (t.includes("avatar")) {
+                    cat = "Avatar";
+                    avatarFound = true;
+                  } else if (t.includes("site")) cat = "Site";
+                  else if (t.includes("aura")) cat = "Aura";
+                  else if (t.includes("artifact")) cat = "Artifact";
+                  else if (t.includes("minion") || t.includes("creature"))
+                    cat = "Minion";
+                  else cat = "Magic";
+                  cats[cat].set(nm, (cats[cat].get(nm) || 0) + 1);
+                };
+                for (const c of [...spellbook, ...atlas]) add(c);
+                for (const o of sideboard) {
+                  const nm = typeof o.name === "string" ? o.name.trim() : "";
+                  const t =
+                    typeof o.type === "string" ? o.type.toLowerCase() : "";
+                  if (!nm) continue;
+                  if (t.includes("avatar")) {
+                    if (!avatarFound) {
+                      cats.Avatar.set(nm, (cats.Avatar.get(nm) || 0) + 1);
+                      avatarFound = true;
+                    }
+                  } else
+                    cats.Collection.set(nm, (cats.Collection.get(nm) || 0) + 1);
+                }
+                const order: Cat[] = [
+                  "Avatar",
+                  "Aura",
+                  "Artifact",
+                  "Minion",
+                  "Magic",
+                  "Site",
+                  "Collection",
+                ];
+                const lines: string[] = [];
+                for (const cat of order) {
+                  const entries = Array.from(cats[cat].entries()).sort((a, b) =>
+                    a[0].localeCompare(b[0])
+                  );
+                  if (!entries.length) continue;
+                  const total = entries.reduce((sum, [, n]) => sum + n, 0);
+                  lines.push(`${cat} (${total})`);
+                  for (const [name, n] of entries) lines.push(`${n} ${name}`);
+                  lines.push("");
+                }
+                await navigator.clipboard.writeText(lines.join("\n").trim());
+                setCopiedMsg("Copied deck");
+                setTimeout(() => setCopiedMsg(null), 1200);
+              } catch (err) {
+                alert(err instanceof Error ? err.message : String(err));
+              } finally {
+                setExportingText(false);
+              }
+            }}
+            disabled={exportingText}
+            className="p-1.5 rounded bg-zinc-700/80 ring-1 ring-zinc-500/50 hover:bg-zinc-600/80 text-zinc-300 hover:text-white"
+          >
+            <FileText className="h-3.5 w-3.5" />
+          </button>
+
+          {/* Toggle Public/Private */}
+          {isOwner && (
+            <button
+              aria-label="Toggle public/private"
+              title={effectiveIsPublic ? "Make private" : "Make public"}
+              onClick={async (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (updatingPublic) return;
+                try {
+                  setUpdatingPublic(true);
+                  const res = await fetch(
+                    `/api/decks/${encodeURIComponent(deck.id)}`,
+                    {
+                      method: "PUT",
+                      headers: { "content-type": "application/json" },
+                      body: JSON.stringify({ isPublic: !effectiveIsPublic }),
+                    }
+                  );
+                  if (!res.ok) throw new Error("Failed to update visibility");
+                  setIsPublicState((prev) => !prev);
+                  try {
+                    window.dispatchEvent(new Event("decks:refresh"));
+                  } catch {}
+                  router.refresh();
+                } catch (err) {
+                  alert(err instanceof Error ? err.message : String(err));
+                } finally {
+                  setUpdatingPublic(false);
+                }
+              }}
+              disabled={updatingPublic}
+              className={`p-1.5 rounded ring-1 transition-colors ${
+                effectiveIsPublic
+                  ? "bg-green-700/60 text-green-300 ring-green-500/50 hover:bg-green-600/80 hover:text-white"
+                  : "bg-zinc-700/80 text-zinc-400 ring-zinc-500/50 hover:bg-zinc-600/80 hover:text-white"
+              }`}
+            >
+              {effectiveIsPublic ? (
+                <Globe className="h-3.5 w-3.5" />
+              ) : (
+                <Lock className="h-3.5 w-3.5" />
+              )}
+            </button>
+          )}
+
+          {/* Delete */}
+          {isOwner && (
+            <button
+              onClick={handleDelete}
+              disabled={deleting}
+              className="p-1.5 rounded bg-zinc-700/80 ring-1 ring-red-500/50 hover:bg-red-600/70 text-red-400 hover:text-white"
+              aria-label="Delete"
+              title="Delete deck"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+      </Link>
+    );
+  }
+
+  // Grid view - card with full hover overlay
   return (
     <Link
       href={`/decks/editor-3d?id=${encodeURIComponent(deck.id)}`}
@@ -356,10 +707,12 @@ export default function DeckItem({ deck, onDelete }: DeckItemProps) {
                 await navigator.clipboard.writeText(textToCopy);
                 setCopiedMsg("Copied list");
                 setTimeout(() => setCopiedMsg(null), 1200);
-              } catch (clipboardErr) {
+              } catch {
                 // Clipboard API failed - show fallback with selectable text
-                const msg = "Clipboard access denied. Select and copy the text below:\n\n" + textToCopy;
-                prompt("Copy this deck list:", textToCopy) || alert(msg);
+                const msg =
+                  "Clipboard access denied. Select and copy the text below:\n\n" +
+                  textToCopy;
+                if (!prompt("Copy this deck list:", textToCopy)) alert(msg);
               }
             } catch (err) {
               alert(err instanceof Error ? err.message : String(err));
@@ -485,10 +838,12 @@ export default function DeckItem({ deck, onDelete }: DeckItemProps) {
                 await navigator.clipboard.writeText(text);
                 setCopiedMsg("Copied deck");
                 setTimeout(() => setCopiedMsg(null), 1200);
-              } catch (clipboardErr) {
+              } catch {
                 // Clipboard API failed - show fallback with selectable text
-                const msg = "Clipboard access denied. Select and copy the text below:\n\n" + text;
-                prompt("Copy this deck:", text) || alert(msg);
+                const msg =
+                  "Clipboard access denied. Select and copy the text below:\n\n" +
+                  text;
+                if (!prompt("Copy this deck:", text)) alert(msg);
               }
             } catch (err) {
               alert(err instanceof Error ? err.message : String(err));
