@@ -2,14 +2,12 @@
 
 ## January 2026
 
-### Jan 7 — Latest commits
+### Jan 7 — Gameplay fixes
 
-- **allow more actions when not on the turn** you can
+- **allow more actions when not on the turn**
 - **add follow up actions to inspect hand**
 - **Resolver polish & hardening**: add preview controls to resolver overlays, tightened mulligan flow, fixed carryable artifacts miscounting mana thresholds, and patched Submerge
 - **pressing space now hides the hand** in matches
-- **Card support**: More custom resolvers plus an Animist exception; collection bulk-delete now keeps card counts correct.
-- **UI/UX fixes**: Lobby shows opponent name correctly; toolbox consistency cleanup; graphics glitches smoothed out.
 
 ### Jan 6 — Playmat hardening & preview control
 

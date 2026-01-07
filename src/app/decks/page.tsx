@@ -127,6 +127,14 @@ export default function DecksPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showImport, setShowImport] = useState(false);
+
+  // Filter state
+  const [filterFormat, setFilterFormat] = useState<string>("all");
+  const [filterAvatar, setFilterAvatar] = useState<string>("all");
+  const [filterSource, setFilterSource] = useState<
+    "all" | "imported" | "created"
+  >("all");
+
   const [sortBy, setSortBy] = useState<
     "date-desc" | "date-asc" | "name-asc" | "name-desc" | "format"
   >(() => {
@@ -265,11 +273,80 @@ export default function DecksPage() {
     [sortBy]
   );
 
-  const sortedMyDecks = useMemo(() => sortDecks(myDecks), [myDecks, sortDecks]);
-  const sortedPublicDecks = useMemo(
-    () => sortDecks(publicDecks),
-    [publicDecks, sortDecks]
+  // Extract unique formats and avatars for filter dropdowns
+  const uniqueFormats = useMemo(() => {
+    const formats = new Set<string>();
+    myDecks.forEach((d) => formats.add(d.format));
+    publicDecks.forEach((d) => formats.add(d.format));
+    return Array.from(formats).sort();
+  }, [myDecks, publicDecks]);
+
+  const uniqueAvatars = useMemo(() => {
+    const avatars = new Set<string>();
+    myDecks.forEach((d) => {
+      if (d.avatarCard?.name) avatars.add(d.avatarCard.name);
+    });
+    publicDecks.forEach((d) => {
+      if (d.avatarCard?.name) avatars.add(d.avatarCard.name);
+    });
+    return Array.from(avatars).sort();
+  }, [myDecks, publicDecks]);
+
+  // Filter logic
+  const filterDecks = useCallback(
+    <
+      T extends {
+        format: string;
+        imported?: boolean;
+        avatarCard?: { name: string } | null;
+      }
+    >(
+      decks: T[]
+    ): T[] => {
+      return decks.filter((d) => {
+        // Format filter
+        if (filterFormat !== "all" && d.format !== filterFormat) return false;
+        // Avatar filter
+        if (filterAvatar !== "all") {
+          if (!d.avatarCard?.name || d.avatarCard.name !== filterAvatar)
+            return false;
+        }
+        // Source filter
+        if (filterSource === "imported" && !d.imported) return false;
+        if (filterSource === "created" && d.imported) return false;
+        return true;
+      });
+    },
+    [filterFormat, filterAvatar, filterSource]
   );
+
+  const filteredMyDecks = useMemo(
+    () => filterDecks(myDecks),
+    [myDecks, filterDecks]
+  );
+  const filteredPublicDecks = useMemo(
+    () => filterDecks(publicDecks),
+    [publicDecks, filterDecks]
+  );
+
+  const sortedMyDecks = useMemo(
+    () => sortDecks(filteredMyDecks),
+    [filteredMyDecks, sortDecks]
+  );
+  const sortedPublicDecks = useMemo(
+    () => sortDecks(filteredPublicDecks),
+    [filteredPublicDecks, sortDecks]
+  );
+
+  // Check if any filters are active
+  const hasActiveFilters =
+    filterFormat !== "all" || filterAvatar !== "all" || filterSource !== "all";
+
+  const clearFilters = useCallback(() => {
+    setFilterFormat("all");
+    setFilterAvatar("all");
+    setFilterSource("all");
+  }, []);
 
   if (!session) {
     return (
@@ -359,31 +436,89 @@ export default function DecksPage() {
               </div>
             ) : (
               <div className="space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h2 className="text-lg font-semibold uppercase tracking-wide text-slate-200">
-                    Your Decks
-                  </h2>
-                  <div className="flex items-center gap-2">
-                    <label
-                      htmlFor="sort-decks"
-                      className="text-xs text-slate-400"
-                    >
-                      Sort by:
-                    </label>
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h2 className="text-lg font-semibold uppercase tracking-wide text-slate-200">
+                      Your Decks
+                      <span className="ml-2 text-sm font-normal text-slate-400">
+                        ({sortedMyDecks.length}
+                        {hasActiveFilters ? ` of ${myDecks.length}` : ""})
+                      </span>
+                    </h2>
+                    <div className="flex items-center gap-2">
+                      <label
+                        htmlFor="sort-decks"
+                        className="text-xs text-slate-400"
+                      >
+                        Sort:
+                      </label>
+                      <select
+                        id="sort-decks"
+                        value={sortBy}
+                        onChange={(e) =>
+                          setSortBy(e.target.value as typeof sortBy)
+                        }
+                        className="rounded-md bg-slate-800/80 border border-slate-700 px-2 py-1 text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      >
+                        <option value="date-desc">Newest</option>
+                        <option value="date-asc">Oldest</option>
+                        <option value="name-asc">A-Z</option>
+                        <option value="name-desc">Z-A</option>
+                        <option value="format">Format</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Filter bar */}
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <span className="text-slate-400">Filter:</span>
+
                     <select
-                      id="sort-decks"
-                      value={sortBy}
-                      onChange={(e) =>
-                        setSortBy(e.target.value as typeof sortBy)
-                      }
-                      className="rounded-md bg-slate-800/80 border border-slate-700 px-2 py-1 text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      value={filterFormat}
+                      onChange={(e) => setFilterFormat(e.target.value)}
+                      className="rounded-md bg-slate-800/80 border border-slate-700 px-2 py-1 text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
                     >
-                      <option value="date-desc">Newest First</option>
-                      <option value="date-asc">Oldest First</option>
-                      <option value="name-asc">Name A-Z</option>
-                      <option value="name-desc">Name Z-A</option>
-                      <option value="format">Format</option>
+                      <option value="all">All Formats</option>
+                      {uniqueFormats.map((f) => (
+                        <option key={f} value={f}>
+                          {f}
+                        </option>
+                      ))}
                     </select>
+
+                    <select
+                      value={filterAvatar}
+                      onChange={(e) => setFilterAvatar(e.target.value)}
+                      className="rounded-md bg-slate-800/80 border border-slate-700 px-2 py-1 text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500 max-w-[140px]"
+                    >
+                      <option value="all">All Avatars</option>
+                      {uniqueAvatars.map((a) => (
+                        <option key={a} value={a}>
+                          {a}
+                        </option>
+                      ))}
+                    </select>
+
+                    <select
+                      value={filterSource}
+                      onChange={(e) =>
+                        setFilterSource(e.target.value as typeof filterSource)
+                      }
+                      className="rounded-md bg-slate-800/80 border border-slate-700 px-2 py-1 text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    >
+                      <option value="all">All Sources</option>
+                      <option value="imported">Imported</option>
+                      <option value="created">Created</option>
+                    </select>
+
+                    {hasActiveFilters && (
+                      <button
+                        onClick={clearFilters}
+                        className="text-slate-400 hover:text-slate-200 underline"
+                      >
+                        Clear
+                      </button>
+                    )}
                   </div>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-sm">

@@ -137,6 +137,13 @@ export const createPermanentMovementSlice: StateCreator<
           finalPer,
           state.permanents
         );
+        // Include permanentPositions for moved permanent to preserve burrowed/submerged state
+        const movedInstanceId = ensurePermanentInstanceId(exists);
+        if (movedInstanceId && state.permanentPositions[movedInstanceId]) {
+          (patch as ServerPatchT).permanentPositions = {
+            [movedInstanceId]: state.permanentPositions[movedInstanceId],
+          };
+        }
         get().trySendPatch(patch);
       }
       return {
@@ -209,6 +216,13 @@ export const createPermanentMovementSlice: StateCreator<
           finalPer,
           state.permanents
         );
+        // Include permanentPositions for moved permanent to preserve burrowed/submerged state
+        const movedInstanceId = ensurePermanentInstanceId(exists);
+        if (movedInstanceId && state.permanentPositions[movedInstanceId]) {
+          (patch as ServerPatchT).permanentPositions = {
+            [movedInstanceId]: state.permanentPositions[movedInstanceId],
+          };
+        }
         get().trySendPatch(patch);
       }
       return {
