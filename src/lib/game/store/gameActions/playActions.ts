@@ -763,8 +763,20 @@ export const createPlayActionsSlice: StateCreator<
         state,
         consumeInstantId
       );
+      // IMPORTANT: Merge zone changes from multiple sources:
+      // - zonesNext[who].hand: the hand update (card removed from hand)
+      // - get().zones: any Genesis ability changes (e.g., Morgana's spellbook draw)
+      // We use get().zones as base and override hand to preserve both updates
+      const latestZones = get().zones;
+      const mergedZones = {
+        ...latestZones,
+        [who]: {
+          ...latestZones[who],
+          hand: zonesNext[who].hand, // Preserve the hand update (played card removed)
+        },
+      } as GameState["zones"];
       return {
-        zones: zonesNext,
+        zones: mergedZones,
         permanents: per,
         selectedCard: null,
         selectedPermanent: null,

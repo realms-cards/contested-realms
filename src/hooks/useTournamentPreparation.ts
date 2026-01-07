@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect } from "react";
 
 export interface SealedPreparationData {
   packs: Array<{ id: string; contents: unknown[] }>;
@@ -32,7 +32,7 @@ export interface ConstructedPreparationData {
 }
 
 export interface PreparationState {
-  status: 'notStarted' | 'inProgress' | 'completed';
+  status: "notStarted" | "inProgress" | "completed";
   sealed?: SealedPreparationData;
   draft?: DraftPreparationData;
   constructed?: ConstructedPreparationData;
@@ -46,8 +46,10 @@ export type PreparationDataPayload = {
   constructed?: Partial<ConstructedPreparationData>;
 };
 
-export type PreparationResponse<T extends Record<string, unknown> = Record<string, never>> = T & {
-  preparationStatus?: PreparationState['status'];
+export type PreparationResponse<
+  T extends Record<string, unknown> = Record<string, never>
+> = T & {
+  preparationStatus?: PreparationState["status"];
   preparationData?: PreparationDataPayload;
 };
 
@@ -57,7 +59,7 @@ export const createDefaultSealed = (): SealedPreparationData => ({
   cardPool: [],
   deckBuilt: false,
   deckList: [],
-  openedPackIds: []
+  openedPackIds: [],
 });
 
 export const createDefaultDraft = (): DraftPreparationData => ({
@@ -66,14 +68,14 @@ export const createDefaultDraft = (): DraftPreparationData => ({
   draftCompleted: false,
   pickHistory: [],
   deckBuilt: false,
-  deckList: []
+  deckList: [],
 });
 
 export const createDefaultConstructed = (): ConstructedPreparationData => ({
   availableDecks: [],
   selectedDeckId: null,
   deckSelected: false,
-  deckValidated: false
+  deckValidated: false,
 });
 
 export const mergeSealed = (
@@ -90,8 +92,10 @@ export const mergeSealed = (
     cardPool: overrides?.cardPool ?? update?.cardPool ?? base.cardPool,
     deckList: overrides?.deckList ?? update?.deckList ?? base.deckList,
     deckBuilt: overrides?.deckBuilt ?? update?.deckBuilt ?? base.deckBuilt,
-    packsOpened: overrides?.packsOpened ?? update?.packsOpened ?? base.packsOpened,
-    openedPackIds: overrides?.openedPackIds ?? update?.openedPackIds ?? base.openedPackIds
+    packsOpened:
+      overrides?.packsOpened ?? update?.packsOpened ?? base.packsOpened,
+    openedPackIds:
+      overrides?.openedPackIds ?? update?.openedPackIds ?? base.openedPackIds,
   };
 };
 
@@ -105,12 +109,19 @@ export const mergeDraft = (
     ...base,
     ...update,
     ...overrides,
-    draftSessionId: overrides?.draftSessionId ?? update?.draftSessionId ?? base.draftSessionId,
+    draftSessionId:
+      overrides?.draftSessionId ??
+      update?.draftSessionId ??
+      base.draftSessionId,
     joinedAt: overrides?.joinedAt ?? update?.joinedAt ?? base.joinedAt,
-    draftCompleted: overrides?.draftCompleted ?? update?.draftCompleted ?? base.draftCompleted,
-    pickHistory: overrides?.pickHistory ?? update?.pickHistory ?? base.pickHistory,
+    draftCompleted:
+      overrides?.draftCompleted ??
+      update?.draftCompleted ??
+      base.draftCompleted,
+    pickHistory:
+      overrides?.pickHistory ?? update?.pickHistory ?? base.pickHistory,
     deckBuilt: overrides?.deckBuilt ?? update?.deckBuilt ?? base.deckBuilt,
-    deckList: overrides?.deckList ?? update?.deckList ?? base.deckList
+    deckList: overrides?.deckList ?? update?.deckList ?? base.deckList,
   };
 };
 
@@ -124,10 +135,18 @@ export const mergeConstructed = (
     ...base,
     ...update,
     ...overrides,
-    availableDecks: overrides?.availableDecks ?? update?.availableDecks ?? base.availableDecks,
-    selectedDeckId: overrides?.selectedDeckId ?? update?.selectedDeckId ?? base.selectedDeckId,
-    deckSelected: overrides?.deckSelected ?? update?.deckSelected ?? base.deckSelected,
-    deckValidated: overrides?.deckValidated ?? update?.deckValidated ?? base.deckValidated
+    availableDecks:
+      overrides?.availableDecks ??
+      update?.availableDecks ??
+      base.availableDecks,
+    selectedDeckId:
+      overrides?.selectedDeckId ??
+      update?.selectedDeckId ??
+      base.selectedDeckId,
+    deckSelected:
+      overrides?.deckSelected ?? update?.deckSelected ?? base.deckSelected,
+    deckValidated:
+      overrides?.deckValidated ?? update?.deckValidated ?? base.deckValidated,
   };
 };
 
@@ -136,30 +155,33 @@ export function useTournamentPreparation(
   options?: { isConnected?: boolean; pollIntervalMs?: number }
 ) {
   const [state, setState] = useState<PreparationState>({
-    status: 'notStarted',
+    status: "notStarted",
     loading: false,
-    error: null
+    error: null,
   });
 
   const startPreparation = useCallback(async () => {
-    setState(prev => ({ ...prev, loading: true, error: null }));
+    setState((prev) => ({ ...prev, loading: true, error: null }));
 
     try {
-      const response = await fetch(`/api/tournaments/${tournamentId}/preparation/start`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      });
+      const response = await fetch(
+        `/api/tournaments/${tournamentId}/preparation/start`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        }
+      );
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || 'Failed to start preparation');
+        throw new Error(error.error || "Failed to start preparation");
       }
 
-      const result = await response.json() as PreparationResponse;
+      const result = (await response.json()) as PreparationResponse;
 
-      setState(prev => ({
+      setState((prev) => ({
         ...prev,
-        status: result.preparationStatus ?? 'inProgress',
+        status: result.preparationStatus ?? "inProgress",
         sealed: result.preparationData?.sealed
           ? mergeSealed(prev.sealed, result.preparationData.sealed)
           : prev.sealed,
@@ -167,15 +189,19 @@ export function useTournamentPreparation(
           ? mergeDraft(prev.draft, result.preparationData.draft)
           : prev.draft,
         constructed: result.preparationData?.constructed
-          ? mergeConstructed(prev.constructed, result.preparationData.constructed)
+          ? mergeConstructed(
+              prev.constructed,
+              result.preparationData.constructed
+            )
           : prev.constructed,
-        loading: false
+        loading: false,
       }));
     } catch (err) {
-      setState(prev => ({
+      setState((prev) => ({
         ...prev,
-        error: err instanceof Error ? err.message : 'Failed to start preparation',
-        loading: false
+        error:
+          err instanceof Error ? err.message : "Failed to start preparation",
+        loading: false,
       }));
     }
   }, [tournamentId]);
@@ -185,19 +211,21 @@ export function useTournamentPreparation(
       return;
     }
 
-    setState(prev => ({ ...prev, loading: true, error: null }));
+    setState((prev) => ({ ...prev, loading: true, error: null }));
 
     try {
-      const response = await fetch(`/api/tournaments/${tournamentId}/preparation/status`);
+      const response = await fetch(
+        `/api/tournaments/${tournamentId}/preparation/status`
+      );
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || 'Failed to get preparation status');
+        throw new Error(error.error || "Failed to get preparation status");
       }
 
-      const result = await response.json() as PreparationResponse;
+      const result = (await response.json()) as PreparationResponse;
 
-      setState(prev => ({
+      setState((prev) => ({
         ...prev,
         status: result.preparationStatus ?? prev.status,
         sealed: result.preparationData?.sealed
@@ -207,72 +235,89 @@ export function useTournamentPreparation(
           ? mergeDraft(prev.draft, result.preparationData.draft)
           : prev.draft,
         constructed: result.preparationData?.constructed
-          ? mergeConstructed(prev.constructed, result.preparationData.constructed)
+          ? mergeConstructed(
+              prev.constructed,
+              result.preparationData.constructed
+            )
           : prev.constructed,
-        loading: false
+        loading: false,
       }));
     } catch (err) {
-      setState(prev => ({
+      setState((prev) => ({
         ...prev,
-        error: err instanceof Error ? err.message : 'Failed to get preparation status',
-        loading: false
+        error:
+          err instanceof Error
+            ? err.message
+            : "Failed to get preparation status",
+        loading: false,
       }));
     }
   }, [tournamentId]);
 
-  const openSealedPacks = useCallback(async (packIds: string[]) => {
-    setState(prev => ({ ...prev, loading: true, error: null }));
+  const openSealedPacks = useCallback(
+    async (packIds: string[]) => {
+      setState((prev) => ({ ...prev, loading: true, error: null }));
 
-    try {
-      const response = await fetch(`/api/tournaments/${tournamentId}/preparation/sealed/packs`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ packIds })
-      });
+      try {
+        const response = await fetch(
+          `/api/tournaments/${tournamentId}/preparation/sealed/packs`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ packIds }),
+          }
+        );
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to open sealed packs');
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || "Failed to open sealed packs");
+        }
+
+        const result = (await response.json()) as PreparationResponse<{
+          cardPool?: unknown[];
+          openedPackIds?: string[];
+        }>;
+
+        setState((prev) => ({
+          ...prev,
+          sealed: mergeSealed(prev.sealed, result.preparationData?.sealed, {
+            packsOpened: true,
+            cardPool:
+              result.preparationData?.sealed?.cardPool ?? result.cardPool,
+            openedPackIds: result.openedPackIds,
+          }),
+          loading: false,
+        }));
+      } catch (err) {
+        setState((prev) => ({
+          ...prev,
+          error:
+            err instanceof Error ? err.message : "Failed to open sealed packs",
+          loading: false,
+        }));
       }
-
-      const result = await response.json() as PreparationResponse<{
-        cardPool?: unknown[];
-        openedPackIds?: string[];
-      }>;
-
-      setState(prev => ({
-        ...prev,
-        sealed: mergeSealed(prev.sealed, result.preparationData?.sealed, {
-          packsOpened: true,
-          cardPool: result.preparationData?.sealed?.cardPool ?? result.cardPool,
-          openedPackIds: result.openedPackIds
-        }),
-        loading: false
-      }));
-    } catch (err) {
-      setState(prev => ({
-        ...prev,
-        error: err instanceof Error ? err.message : 'Failed to open sealed packs',
-        loading: false
-      }));
-    }
-  }, [tournamentId]);
+    },
+    [tournamentId]
+  );
 
   const joinDraftSession = useCallback(async () => {
-    setState(prev => ({ ...prev, loading: true, error: null }));
+    setState((prev) => ({ ...prev, loading: true, error: null }));
 
     try {
-      const response = await fetch(`/api/tournaments/${tournamentId}/preparation/draft/join`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      });
+      const response = await fetch(
+        `/api/tournaments/${tournamentId}/preparation/draft/join`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        }
+      );
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || 'Failed to join draft session');
+        throw new Error(error.error || "Failed to join draft session");
       }
 
-      const result = await response.json() as PreparationResponse<{
+      const result = (await response.json()) as PreparationResponse<{
         draftSession?: { id: string | null };
       }>;
 
@@ -282,152 +327,204 @@ export function useTournamentPreparation(
         overrides.joinedAt = new Date().toISOString();
       }
 
-      setState(prev => ({
+      setState((prev) => ({
         ...prev,
         draft: mergeDraft(prev.draft, result.preparationData?.draft, overrides),
-        loading: false
+        loading: false,
       }));
     } catch (err) {
-      setState(prev => ({
+      setState((prev) => ({
         ...prev,
-        error: err instanceof Error ? err.message : 'Failed to join draft session',
-        loading: false
+        error:
+          err instanceof Error ? err.message : "Failed to join draft session",
+        loading: false,
       }));
     }
   }, [tournamentId]);
 
   const getAvailableDecks = useCallback(async () => {
-    setState(prev => ({ ...prev, loading: true, error: null }));
+    setState((prev) => ({ ...prev, loading: true, error: null }));
 
     try {
-      const response = await fetch(`/api/tournaments/${tournamentId}/preparation/constructed/decks`);
+      const response = await fetch(
+        `/api/tournaments/${tournamentId}/preparation/constructed/decks`
+      );
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || 'Failed to get available decks');
+        throw new Error(error.error || "Failed to get available decks");
       }
 
-      const result = await response.json() as PreparationResponse<{
-        availableDecks?: ConstructedPreparationData['availableDecks'];
+      const result = (await response.json()) as PreparationResponse<{
+        availableDecks?: ConstructedPreparationData["availableDecks"];
         selectedDeckId?: string | null;
       }>;
 
-      setState(prev => ({
+      setState((prev) => ({
         ...prev,
-        constructed: mergeConstructed(prev.constructed, result.preparationData?.constructed, {
-          availableDecks: result.availableDecks,
-          selectedDeckId: result.selectedDeckId
-        }),
-        loading: false
+        constructed: mergeConstructed(
+          prev.constructed,
+          result.preparationData?.constructed,
+          {
+            availableDecks: result.availableDecks,
+            selectedDeckId: result.selectedDeckId,
+          }
+        ),
+        loading: false,
       }));
     } catch (err) {
-      setState(prev => ({
+      setState((prev) => ({
         ...prev,
-        error: err instanceof Error ? err.message : 'Failed to get available decks',
-        loading: false
+        error:
+          err instanceof Error ? err.message : "Failed to get available decks",
+        loading: false,
       }));
     }
   }, [tournamentId]);
 
-  const selectDeck = useCallback(async (deckId: string) => {
-    setState(prev => ({ ...prev, loading: true, error: null }));
+  const selectDeck = useCallback(
+    async (deckId: string) => {
+      setState((prev) => ({ ...prev, loading: true, error: null }));
 
-    try {
-      const response = await fetch(`/api/tournaments/${tournamentId}/preparation/constructed/decks`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ deckId })
-      });
+      try {
+        const response = await fetch(
+          `/api/tournaments/${tournamentId}/preparation/constructed/decks`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ deckId }),
+          }
+        );
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to select deck');
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || "Failed to select deck");
+        }
+
+        const result = (await response.json()) as PreparationResponse;
+
+        setState((prev) => ({
+          ...prev,
+          status: result.preparationStatus ?? "completed",
+          constructed: mergeConstructed(
+            prev.constructed,
+            result.preparationData?.constructed,
+            {
+              selectedDeckId:
+                result.preparationData?.constructed?.selectedDeckId ?? deckId,
+              deckSelected:
+                result.preparationData?.constructed?.deckSelected ?? true,
+              deckValidated:
+                result.preparationData?.constructed?.deckValidated ?? true,
+            }
+          ),
+          loading: false,
+        }));
+      } catch (err) {
+        setState((prev) => ({
+          ...prev,
+          error: err instanceof Error ? err.message : "Failed to select deck",
+          loading: false,
+        }));
       }
+    },
+    [tournamentId]
+  );
 
-      const result = await response.json() as PreparationResponse;
+  const submitPreparation = useCallback(
+    async (preparationData: {
+      sealed?: Partial<SealedPreparationData>;
+      draft?: Partial<DraftPreparationData>;
+      constructed?: Partial<ConstructedPreparationData>;
+    }) => {
+      setState((prev) => ({ ...prev, loading: true, error: null }));
 
-      setState(prev => ({
-        ...prev,
-        status: result.preparationStatus ?? 'completed',
-        constructed: mergeConstructed(prev.constructed, result.preparationData?.constructed, {
-          selectedDeckId: result.preparationData?.constructed?.selectedDeckId ?? deckId,
-          deckSelected: result.preparationData?.constructed?.deckSelected ?? true,
-          deckValidated: result.preparationData?.constructed?.deckValidated ?? true
-        }),
-        loading: false
-      }));
-    } catch (err) {
-      setState(prev => ({
-        ...prev,
-        error: err instanceof Error ? err.message : 'Failed to select deck',
-        loading: false
-      }));
-    }
-  }, [tournamentId]);
+      try {
+        const response = await fetch(
+          `/api/tournaments/${tournamentId}/preparation/submit`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ preparationData }),
+          }
+        );
 
-  const submitPreparation = useCallback(async (preparationData: {
-    sealed?: Partial<SealedPreparationData>;
-    draft?: Partial<DraftPreparationData>;
-    constructed?: Partial<ConstructedPreparationData>;
-  }) => {
-    setState(prev => ({ ...prev, loading: true, error: null }));
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || "Failed to submit preparation");
+        }
 
-    try {
-      const response = await fetch(`/api/tournaments/${tournamentId}/preparation/submit`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ preparationData })
-      });
+        const result = (await response.json()) as PreparationResponse;
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to submit preparation');
+        setState((prev) => ({
+          ...prev,
+          status: result.preparationStatus ?? prev.status,
+          sealed: result.preparationData?.sealed
+            ? mergeSealed(prev.sealed, result.preparationData.sealed)
+            : prev.sealed,
+          draft: result.preparationData?.draft
+            ? mergeDraft(prev.draft, result.preparationData.draft)
+            : prev.draft,
+          constructed: result.preparationData?.constructed
+            ? mergeConstructed(
+                prev.constructed,
+                result.preparationData.constructed
+              )
+            : prev.constructed,
+          loading: false,
+        }));
+      } catch (err) {
+        setState((prev) => ({
+          ...prev,
+          error:
+            err instanceof Error ? err.message : "Failed to submit preparation",
+          loading: false,
+        }));
       }
-
-      const result = await response.json() as PreparationResponse;
-
-      setState(prev => ({
-        ...prev,
-        status: result.preparationStatus ?? prev.status,
-        sealed: result.preparationData?.sealed
-          ? mergeSealed(prev.sealed, result.preparationData.sealed)
-          : prev.sealed,
-        draft: result.preparationData?.draft
-          ? mergeDraft(prev.draft, result.preparationData.draft)
-          : prev.draft,
-        constructed: result.preparationData?.constructed
-          ? mergeConstructed(prev.constructed, result.preparationData.constructed)
-          : prev.constructed,
-        loading: false
-      }));
-    } catch (err) {
-      setState(prev => ({
-        ...prev,
-        error: err instanceof Error ? err.message : 'Failed to submit preparation',
-        loading: false
-      }));
-    }
-  }, [tournamentId]);
+    },
+    [tournamentId]
+  );
 
   // Auto-refresh preparation status (backup). Prefer sockets; poll only when not connected and tab is visible
   useEffect(() => {
     refreshStatus();
-    const pollMs = options?.pollIntervalMs ?? 15000; // back off to 15s
+    const pollMs = options?.pollIntervalMs ?? 30000; // back off to 30s for cost savings
     let interval: number | null = null;
     const start = () => {
       if (options?.isConnected) return; // don't poll when socket is connected
-      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+      if (
+        typeof document !== "undefined" &&
+        document.visibilityState !== "visible"
+      )
+        return;
       if (interval != null) return;
       interval = window.setInterval(() => {
-        if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+        if (
+          typeof document !== "undefined" &&
+          document.visibilityState !== "visible"
+        )
+          return;
         void refreshStatus();
       }, pollMs);
     };
-    const stop = () => { if (interval != null) { clearInterval(interval); interval = null; } };
+    const stop = () => {
+      if (interval != null) {
+        clearInterval(interval);
+        interval = null;
+      }
+    };
     start();
-    const onVis = () => { stop(); start(); };
-    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVis);
-    return () => { stop(); if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVis); };
+    const onVis = () => {
+      stop();
+      start();
+    };
+    if (typeof document !== "undefined")
+      document.addEventListener("visibilitychange", onVis);
+    return () => {
+      stop();
+      if (typeof document !== "undefined")
+        document.removeEventListener("visibilitychange", onVis);
+    };
   }, [refreshStatus, options?.isConnected, options?.pollIntervalMs]);
 
   return {
@@ -439,7 +536,7 @@ export function useTournamentPreparation(
       joinDraftSession,
       getAvailableDecks,
       selectDeck,
-      submitPreparation
-    }
+      submitPreparation,
+    },
   };
 }

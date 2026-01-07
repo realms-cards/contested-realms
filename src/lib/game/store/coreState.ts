@@ -508,6 +508,11 @@ export const createCoreSlice: StateCreator<
     try {
       get().triggerMotherNatureStartOfTurn(nextKey);
     } catch {}
+
+    // Trigger Headless Haunt start-of-turn movement for the starting player
+    try {
+      get().triggerHeadlessHauntStartOfTurn(nextKey);
+    } catch {}
     // Snapshot creation is handled by GameToolbox.tsx useEffect
   },
 });

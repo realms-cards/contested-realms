@@ -3,15 +3,27 @@
  * Implements cache-first strategy for card images with background updates
  */
 
-const CACHE_VERSION = "v3";
+const CACHE_VERSION = "v4";
 const CARD_CACHE_NAME = `realms-cards-${CACHE_VERSION}`;
 const STATIC_CACHE_NAME = `realms-static-${CACHE_VERSION}`;
+const API_CACHE_NAME = `realms-api-${CACHE_VERSION}`;
 
 // Patterns for card images to cache
 const CARD_IMAGE_PATTERNS = [
   /\/api\/images\//,
   /\/api\/assets\//,
   /cdn\.realms\.cards.*\.(webp|png|jpg|jpeg|ktx2)$/i,
+];
+
+// Patterns for API routes to cache (card data that rarely changes)
+const API_CACHE_PATTERNS = [
+  /\/api\/cards\/meta-by-variant/,
+  /\/api\/cards\/search/,
+  /\/api\/cards\/lookup/,
+  /\/api\/cards\/by-id/,
+  /\/api\/cards\/sets/,
+  /\/api\/cards\/slugs/,
+  /\/api\/codex/,
 ];
 
 // Static assets to pre-cache on install
@@ -31,6 +43,12 @@ function isCardImageRequest(request) {
 function isStaticAsset(request) {
   const url = new URL(request.url);
   return STATIC_ASSETS.some((path) => url.pathname === path);
+}
+
+// Check if a request is for cacheable API data
+function isApiCacheRequest(request) {
+  const url = request.url;
+  return API_CACHE_PATTERNS.some((pattern) => pattern.test(url));
 }
 
 // Install event - pre-cache static assets
@@ -68,9 +86,11 @@ self.addEventListener("activate", (event) => {
               // Delete old versions of our caches
               return (
                 (name.startsWith("realms-cards-") ||
-                  name.startsWith("realms-static-")) &&
+                  name.startsWith("realms-static-") ||
+                  name.startsWith("realms-api-")) &&
                 name !== CARD_CACHE_NAME &&
-                name !== STATIC_CACHE_NAME
+                name !== STATIC_CACHE_NAME &&
+                name !== API_CACHE_NAME
               );
             })
             .map((name) => {
@@ -106,6 +126,14 @@ self.addEventListener("fetch", (event) => {
   // Static assets: Cache-first
   if (isStaticAsset(request)) {
     event.respondWith(cacheFirst(request, STATIC_CACHE_NAME));
+    return;
+  }
+
+  // API routes: Cache-first with 1 week TTL (card data only changes on set releases ~2x/year)
+  if (isApiCacheRequest(request)) {
+    event.respondWith(
+      cacheFirstWithTTL(request, API_CACHE_NAME, 604800000) // 1 week
+    );
     return;
   }
 
@@ -191,6 +219,51 @@ async function updateCache(request, cache) {
 }
 
 /**
+ * Cache-first with TTL for API routes
+ * Respects Cache-Control headers and adds timestamp for TTL checking
+ */
+async function cacheFirstWithTTL(request, cacheName, ttlMs) {
+  const cache = await caches.open(cacheName);
+  const cachedResponse = await cache.match(request);
+
+  if (cachedResponse) {
+    // Check if cache is still fresh based on Cache-Control or our TTL
+    const dateHeader = cachedResponse.headers.get("Date");
+
+    if (dateHeader) {
+      const cacheAge = Date.now() - new Date(dateHeader).getTime();
+      // If cache is stale (older than TTL), fetch fresh data in background
+      if (cacheAge > ttlMs) {
+        // Return stale data immediately, update in background
+        fetch(request)
+          .then((networkResponse) => {
+            if (networkResponse.ok) {
+              cache.put(request, networkResponse);
+            }
+          })
+          .catch(() => {});
+      }
+    }
+
+    return cachedResponse;
+  }
+
+  // No cache - fetch from network and cache
+  try {
+    const networkResponse = await fetch(request);
+    if (networkResponse.ok) {
+      cache.put(request, networkResponse.clone());
+    }
+    return networkResponse;
+  } catch (_error) {
+    return new Response(JSON.stringify({ error: "Network error" }), {
+      status: 503,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+}
+
+/**
  * Notify all clients about an event
  */
 async function notifyClients(message) {
@@ -216,6 +289,15 @@ self.addEventListener("message", (event) => {
         event.source.postMessage({
           type: "CACHE_CLEARED",
           payload: { cacheName: CARD_CACHE_NAME },
+        });
+      });
+      break;
+
+    case "CLEAR_API_CACHE":
+      clearCache(API_CACHE_NAME).then(() => {
+        event.source.postMessage({
+          type: "CACHE_CLEARED",
+          payload: { cacheName: API_CACHE_NAME },
         });
       });
       break;
@@ -250,13 +332,16 @@ self.addEventListener("message", (event) => {
 async function getCacheStats() {
   const cardCache = await caches.open(CARD_CACHE_NAME);
   const staticCache = await caches.open(STATIC_CACHE_NAME);
+  const apiCache = await caches.open(API_CACHE_NAME);
 
   const cardKeys = await cardCache.keys();
   const staticKeys = await staticCache.keys();
+  const apiKeys = await apiCache.keys();
 
   // Estimate storage usage
   let cardCacheSize = 0;
   let staticCacheSize = 0;
+  let apiCacheSize = 0;
 
   // Get size estimates from cached responses
   for (const request of cardKeys) {
@@ -275,12 +360,22 @@ async function getCacheStats() {
     }
   }
 
+  for (const request of apiKeys) {
+    const response = await apiCache.match(request);
+    if (response) {
+      const blob = await response.clone().blob();
+      apiCacheSize += blob.size;
+    }
+  }
+
   return {
     cardCount: cardKeys.length,
     cardCacheSize,
     staticCount: staticKeys.length,
     staticCacheSize,
-    totalSize: cardCacheSize + staticCacheSize,
+    apiCount: apiKeys.length,
+    apiCacheSize,
+    totalSize: cardCacheSize + staticCacheSize + apiCacheSize,
     version: CACHE_VERSION,
   };
 }

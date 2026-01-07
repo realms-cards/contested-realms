@@ -86,6 +86,7 @@ export default function Piles3D({
   );
 
   const playerZones = zones?.[owner] ?? emptyPlayerZones;
+
   // Seat mapping: p1 at TOP, p2 at BOTTOM
   const isBottom = owner === "p2";
 

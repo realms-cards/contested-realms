@@ -2135,8 +2135,8 @@ export function handleCustomMessage(
     const drawnCount = (msg as { drawnCount?: unknown }).drawnCount as
       | number
       | undefined;
-    const drawnCardsAny = (msg as { drawnCards?: unknown })
-      .drawnCards as unknown;
+    const _drawnCardsAny = (msg as { drawnCards?: unknown })
+      .drawnCards as unknown; // Unused - state comes from zone patch
     if (!id || !minionAny || !ownerSeat) return;
 
     // Skip if we're the owner - we already handled it locally via triggerMorganaGenesis
@@ -2149,11 +2149,11 @@ export function handleCustomMessage(
     }
 
     const minionRec = minionAny as Record<string, unknown>;
-    const drawnCards = Array.isArray(drawnCardsAny)
-      ? (drawnCardsAny as CardRef[])
+    const drawnCards = Array.isArray(_drawnCardsAny)
+      ? (_drawnCardsAny as CardRef[])
       : [];
 
-    // Create Morgana's private hand entry
+    // Create Morgana's private hand entry (fallback if patch doesn't arrive)
     const newMorganaHand = {
       id,
       minion: {
@@ -2168,13 +2168,31 @@ export function handleCustomMessage(
       createdAt: Date.now(),
     };
 
-    // Remove drawn cards from spellbook (opponent side sync)
-    const drawCount = drawnCards.length;
+    // Get the drawn cardIds for filtering spellbook
+    const drawnCardIds = new Set(drawnCards.map((c) => c.cardId));
+
+    // Always update zones to filter spellbook, and add morganaHand if not exists
     set((s) => {
+      // Filter out drawn cards from spellbook (they're now in Morgana's hand)
       const currentSpellbook = s.zones[ownerSeat]?.spellbook || [];
-      const updatedSpellbook = currentSpellbook.slice(drawCount); // Remove from top
+      let cardsToRemove = drawnCards.length;
+      const updatedSpellbook = currentSpellbook.filter((card) => {
+        // Remove cards matching drawn cardIds, up to the count drawn
+        if (cardsToRemove > 0 && drawnCardIds.has(card.cardId)) {
+          cardsToRemove--;
+          return false;
+        }
+        return true;
+      });
+
+      // Only add morganaHand if not already present (from patch)
+      const existingEntry = s.morganaHands.find((m) => m.id === id);
+      const updatedMorganaHands = existingEntry
+        ? s.morganaHands
+        : [...s.morganaHands, newMorganaHand];
+
       return {
-        morganaHands: [...s.morganaHands, newMorganaHand],
+        morganaHands: updatedMorganaHands,
         zones: {
           ...s.zones,
           [ownerSeat]: {
@@ -2322,24 +2340,36 @@ export function handleCustomMessage(
 
     const drawnCard = drawnCardAny as CardRef | undefined;
 
-    // Find the Omphalos entry to get owner seat
-    const omphalosEntry = get().omphalosHands.find((o) => o.id === omphalosId);
-    const ownerSeat = omphalosEntry?.ownerSeat;
+    // Find the Omphalos entry
+    const entry = get().omphalosHands.find((o) => o.id === omphalosId);
+    const ownerSeat = entry?.ownerSeat;
 
-    // Update Omphalos's hand and remove card from spellbook (opponent side sync)
-    set((s) => {
-      const updatedOmphalosHands = s.omphalosHands.map((o) => {
-        if (o.id !== omphalosId) return o;
-        const newHand = drawnCard ? [...o.hand, drawnCard] : o.hand;
-        return { ...o, hand: newHand };
-      });
-
-      // Also remove 1 card from top of owner's spellbook
-      if (ownerSeat && drawnCard) {
+    // Always update zones to filter spellbook, and add card to omphalosHand if not exists
+    if (entry && drawnCard && ownerSeat) {
+      set((s) => {
+        // Filter out drawn card from spellbook
         const currentSpellbook = s.zones[ownerSeat]?.spellbook || [];
-        const updatedSpellbook = currentSpellbook.slice(1); // Remove 1 from top
+        let removed = false;
+        const updatedSpellbook = currentSpellbook.filter((card) => {
+          if (!removed && card.cardId === drawnCard.cardId) {
+            removed = true;
+            return false;
+          }
+          return true;
+        });
+
+        // Only add card if not already in hand (from patch)
+        const currentEntry = s.omphalosHands.find((o) => o.id === omphalosId);
+        const alreadyHasCard = currentEntry?.hand.some(
+          (c) => c.cardId === drawnCard.cardId
+        );
+
         return {
-          omphalosHands: updatedOmphalosHands,
+          omphalosHands: s.omphalosHands.map((o) => {
+            if (o.id !== omphalosId) return o;
+            if (alreadyHasCard) return o;
+            return { ...o, hand: [...o.hand, drawnCard] };
+          }),
           zones: {
             ...s.zones,
             [ownerSeat]: {
@@ -2348,19 +2378,17 @@ export function handleCustomMessage(
             },
           },
         };
-      }
+      }) as unknown as void;
+    }
 
-      return { omphalosHands: updatedOmphalosHands };
-    }) as unknown as void;
-
-    // Find the Omphalos entry to log
-    const entry = get().omphalosHands.find((o) => o.id === omphalosId);
-    if (entry) {
+    // Re-fetch entry after potential update for logging
+    const updatedEntry = get().omphalosHands.find((o) => o.id === omphalosId);
+    if (updatedEntry) {
       try {
         get().log(
-          `[${entry.ownerSeat.toUpperCase()}] ${
-            entry.artifact.card.name
-          } draws a spell (now has ${newHandSize ?? entry.hand.length})`
+          `[${updatedEntry.ownerSeat.toUpperCase()}] ${
+            updatedEntry.artifact.card.name
+          } draws a spell (now has ${newHandSize ?? updatedEntry.hand.length})`
         );
       } catch {}
     }
@@ -3455,6 +3483,206 @@ export function handleCustomMessage(
         });
       }, 1500);
     }
+    return;
+  }
+
+  // --- Headless Haunt message handlers ---
+  // Broadcast when Headless Haunt start-of-turn movement begins
+  if (t === "headlessHauntBegin") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const ownerSeat = (msg as { ownerSeat?: unknown }).ownerSeat as
+      | PlayerKey
+      | undefined;
+    const haunts = (msg as { haunts?: unknown }).haunts as
+      | Array<{
+          instanceId: string;
+          location: CellKey;
+          ownerSeat: PlayerKey;
+          cardName: string;
+          permanentIndex: number;
+        }>
+      | undefined;
+    const hasKythera = (msg as { hasKythera?: unknown }).hasKythera as
+      | boolean
+      | undefined;
+
+    if (!id || !ownerSeat || !haunts) return;
+
+    // Skip if we're the owner - we already set the state locally
+    const actorKey = get().actorKey;
+    if (actorKey === ownerSeat) return;
+
+    set({
+      pendingHeadlessHauntMove: {
+        id,
+        ownerSeat,
+        haunts,
+        currentIndex: 0,
+        phase: hasKythera ? "choosing" : "pending",
+        hasKythera: hasKythera ?? false,
+        selectedTile: null,
+        createdAt: Date.now(),
+      },
+    } as Partial<GameState> as GameState);
+
+    try {
+      if (hasKythera) {
+        get().log(
+          `[${ownerSeat.toUpperCase()}] Kythera Mechanism allows choosing haunt movement`
+        );
+      }
+    } catch {}
+    return;
+  }
+
+  // Handle partial resolution (one haunt moved, more to go - Kythera mode only)
+  if (t === "headlessHauntPartialResolve") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const hauntIndex = (msg as { hauntIndex?: unknown }).hauntIndex as
+      | number
+      | undefined;
+    const movedTo = (msg as { movedTo?: unknown }).movedTo as
+      | CellKey
+      | undefined;
+
+    if (!id) return;
+
+    const pending = get().pendingHeadlessHauntMove;
+    if (!pending || pending.id !== id) return;
+
+    // Skip if we're the owner - we already handled it locally
+    const actorKey = get().actorKey;
+    if (actorKey === pending.ownerSeat) return;
+
+    // Move to next haunt
+    set({
+      pendingHeadlessHauntMove: {
+        ...pending,
+        currentIndex: (hauntIndex ?? 0) + 1,
+        selectedTile: null,
+        phase: "choosing",
+      },
+    } as Partial<GameState> as GameState);
+
+    if (movedTo && hauntIndex !== undefined && pending.haunts[hauntIndex]) {
+      try {
+        const haunt = pending.haunts[hauntIndex];
+        get().log(
+          `[${pending.ownerSeat.toUpperCase()}] ${
+            haunt.cardName
+          } moves (Kythera Mechanism)`
+        );
+      } catch {}
+    }
+    return;
+  }
+
+  // Handle skip (Kythera mode - player chose not to move)
+  if (t === "headlessHauntSkip") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const hauntIndex = (msg as { hauntIndex?: unknown }).hauntIndex as
+      | number
+      | undefined;
+
+    if (!id) return;
+
+    const pending = get().pendingHeadlessHauntMove;
+    if (!pending || pending.id !== id) return;
+
+    // Skip if we're the owner - we already handled it locally
+    const actorKey = get().actorKey;
+    if (actorKey === pending.ownerSeat) return;
+
+    const nextIndex = (hauntIndex ?? 0) + 1;
+    if (nextIndex >= pending.haunts.length) {
+      // All done
+      set({
+        pendingHeadlessHauntMove: { ...pending, phase: "complete" },
+      } as Partial<GameState> as GameState);
+
+      setTimeout(() => {
+        set((state) => {
+          if (state.pendingHeadlessHauntMove?.id === id) {
+            return { ...state, pendingHeadlessHauntMove: null } as GameState;
+          }
+          return state as GameState;
+        });
+      }, 500);
+    } else {
+      // Move to next haunt
+      set({
+        pendingHeadlessHauntMove: {
+          ...pending,
+          currentIndex: nextIndex,
+          selectedTile: null,
+        },
+      } as Partial<GameState> as GameState);
+    }
+
+    if (hauntIndex !== undefined && pending.haunts[hauntIndex]) {
+      try {
+        const haunt = pending.haunts[hauntIndex];
+        get().log(
+          `[${pending.ownerSeat.toUpperCase()}] chooses not to move ${
+            haunt.cardName
+          }`
+        );
+      } catch {}
+    }
+    return;
+  }
+
+  // Handle full resolution (all haunts processed)
+  if (t === "headlessHauntResolve") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const movedHaunts = (msg as { movedHaunts?: unknown }).movedHaunts as
+      | Array<{ cardName: string; from: CellKey; to: CellKey }>
+      | undefined;
+    const hasKythera = (msg as { hasKythera?: unknown }).hasKythera as
+      | boolean
+      | undefined;
+
+    if (!id) return;
+
+    const pending = get().pendingHeadlessHauntMove;
+    if (!pending || pending.id !== id) return;
+
+    // Skip if we're the owner - we already handled it locally
+    const actorKey = get().actorKey;
+    if (actorKey === pending.ownerSeat) return;
+
+    set({
+      pendingHeadlessHauntMove: { ...pending, phase: "complete" },
+    } as Partial<GameState> as GameState);
+
+    // Log moves
+    try {
+      const boardWidth = get().board.size.w;
+      const playerNum = pending.ownerSeat === "p1" ? "1" : "2";
+      for (const move of movedHaunts ?? []) {
+        const [toX, toY] = move.to.split(",").map(Number);
+        const cellNo = toY * boardWidth + toX + 1;
+        if (hasKythera) {
+          get().log(
+            `[p${playerNum}card:${move.cardName}] moves to #${cellNo} (Kythera Mechanism)`
+          );
+        } else {
+          get().log(
+            `[p${playerNum}card:${move.cardName}] wanders to #${cellNo}`
+          );
+        }
+      }
+    } catch {}
+
+    // Clear after delay
+    setTimeout(() => {
+      set((state) => {
+        if (state.pendingHeadlessHauntMove?.id === id) {
+          return { ...state, pendingHeadlessHauntMove: null } as GameState;
+        }
+        return state as GameState;
+      });
+    }, 1500);
     return;
   }
 }

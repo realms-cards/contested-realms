@@ -9,6 +9,7 @@ import {
   Users,
 } from "lucide-react";
 import AudioControls from "@/components/game/AudioControls";
+import { EndTurnConfirmDialog } from "@/components/game/EndTurnConfirmDialog";
 import { FEATURE_UNDO } from "@/lib/config/features";
 import { useColorBlind } from "@/lib/contexts/ColorBlindContext";
 import { useGameStore } from "@/lib/game/store";
@@ -40,7 +41,7 @@ export default function OnlineStatusBar({
   myPlayerKey = null,
 }: OnlineStatusBarProps) {
   const currentPlayer = useGameStore((s) => s.currentPlayer);
-  const endTurn = useGameStore((s) => s.endTurn);
+  const requestEndTurn = useGameStore((s) => s.requestEndTurn);
   const undo = useGameStore((s) => s.undo);
   const history = useGameStore((s) => s.history);
   const matchEnded = useGameStore((s) => s.matchEnded);
@@ -133,7 +134,7 @@ export default function OnlineStatusBar({
         {canControlTurn && (
           <button
             className={endTurnButtonClass}
-            onClick={() => endTurn()}
+            onClick={() => requestEndTurn()}
             onContextMenu={(e) => e.preventDefault()}
           >
             End Turn
@@ -204,6 +205,9 @@ export default function OnlineStatusBar({
         <div className="w-px h-4 bg-white/20" />
         <AudioControls enableMusic={!inDraftMode} />
       </div>
+
+      {/* End Turn Confirmation Dialog */}
+      <EndTurnConfirmDialog />
     </div>
   );
 }

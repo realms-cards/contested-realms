@@ -4,6 +4,10 @@
 
 ### Jan 7 — Gameplay fixes
 
+- **allow modifying both players health in hotseat only**
+- **let headless haunt and hauntless head go to random location on turn start** with support for Kythera Mechanism to choose their location
+- **support Doomsday cult natively**
+- **alert player when they end their turn with avatar untapped**
 - **pretty piles and cards** optimized 3d objects used for cards
 - **optimizations around auth requests and remove lock down mode** should reduce overall queries
 - **be able to set font size for console & toolbox**

@@ -872,6 +872,30 @@ export type PendingDholChants = {
   createdAt: number;
 };
 
+// --- Headless Haunt State ------------------------------------------------
+// At start of turn, Headless Haunt/Haunless Head move to random tile
+// Exception: If Kythera Mechanism attached to avatar, player chooses (can skip)
+export type HeadlessHauntPhase = "pending" | "choosing" | "complete";
+
+export type HeadlessHauntEntry = {
+  instanceId: string;
+  location: CellKey;
+  ownerSeat: PlayerKey;
+  cardName: string;
+  permanentIndex: number;
+};
+
+export type PendingHeadlessHauntMove = {
+  id: string;
+  ownerSeat: PlayerKey;
+  haunts: HeadlessHauntEntry[];
+  currentIndex: number; // Which haunt we're processing
+  phase: HeadlessHauntPhase;
+  hasKythera: boolean; // Whether player has Kythera Mechanism
+  selectedTile: CellKey | null; // Player's chosen tile (Kythera only)
+  createdAt: number;
+};
+
 // Context menu targeting for click-driven actions
 export type ContextMenuTarget =
   | { kind: "site"; x: number; y: number }
@@ -1586,6 +1610,11 @@ export type GameState = {
   ) => void;
   nextPhase: () => void; // legacy manual stepping
   endTurn: () => void; // auto-resolve to next player's Main
+  // End turn confirmation (when avatar is untapped)
+  showEndTurnConfirm: boolean;
+  requestEndTurn: () => void; // checks avatar state, shows confirm or ends turn
+  confirmEndTurn: () => void; // force end turn after confirmation
+  dismissEndTurnConfirm: () => void; // cancel the confirmation dialog
   // Board
   board: BoardState;
   showGridOverlay: boolean;
@@ -1813,6 +1842,16 @@ export type GameState = {
   flipDruid: (who: PlayerKey) => boolean;
   // Special Site State (Valley of Delight, Bloom sites, etc.)
   specialSiteState: SpecialSiteState;
+  // Headless Haunt State (Gothic expansion)
+  // Tracks Headless Haunt/Haunless Head minions for start-of-turn movement
+  headlessHaunts: HeadlessHauntEntry[];
+  pendingHeadlessHauntMove: PendingHeadlessHauntMove | null;
+  registerHeadlessHaunt: (entry: HeadlessHauntEntry) => void;
+  unregisterHeadlessHaunt: (instanceId: string) => void;
+  triggerHeadlessHauntStartOfTurn: (startingPlayerSeat: PlayerKey) => void;
+  selectHeadlessHauntTile: (tileKey: CellKey) => void;
+  skipHeadlessHauntMove: () => void;
+  resolveHeadlessHauntMove: () => void;
   // Trigger element choice for Valley of Delight (shows overlay)
   triggerElementChoice: (
     cellKey: CellKey,

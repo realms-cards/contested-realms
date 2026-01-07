@@ -89,6 +89,10 @@ export type UiSlice = Pick<
   | "toggleCameraMode"
   | "switchSiteSource"
   | "setSwitchSiteSource"
+  | "showEndTurnConfirm"
+  | "requestEndTurn"
+  | "confirmEndTurn"
+  | "dismissEndTurnConfirm"
 >;
 
 type UiStateDefaults = Pick<
@@ -106,6 +110,7 @@ type UiStateDefaults = Pick<
   | "previewCard"
   | "cardPreviewsEnabled"
   | "switchSiteSource"
+  | "showEndTurnConfirm"
 >;
 
 export const createInitialUiState = (): UiStateDefaults => ({
@@ -122,10 +127,12 @@ export const createInitialUiState = (): UiStateDefaults => ({
   previewCard: null,
   cardPreviewsEnabled: loadCardPreviewsEnabled(),
   switchSiteSource: null,
+  showEndTurnConfirm: false,
 });
 
 export const createUiSlice: StateCreator<GameState, [], [], UiSlice> = (
-  set
+  set,
+  get
 ) => ({
   ...createInitialUiState(),
 
@@ -215,4 +222,30 @@ export const createUiSlice: StateCreator<GameState, [], [], UiSlice> = (
       saveCardPreviewsEnabled(newEnabled);
       return { cardPreviewsEnabled: newEnabled };
     }),
+
+  // End turn confirmation actions
+  requestEndTurn: () => {
+    const state = get();
+    // Get the current player's seat key
+    const currentSeat = state.currentPlayer === 1 ? "p1" : "p2";
+    // Check if the current player's avatar is tapped
+    const avatarTapped = state.avatars[currentSeat]?.tapped ?? false;
+
+    if (avatarTapped) {
+      // Avatar is tapped, end turn immediately
+      state.endTurn();
+    } else {
+      // Avatar is untapped, show confirmation dialog
+      set({ showEndTurnConfirm: true });
+    }
+  },
+
+  confirmEndTurn: () => {
+    set({ showEndTurnConfirm: false });
+    get().endTurn();
+  },
+
+  dismissEndTurnConfirm: () => {
+    set({ showEndTurnConfirm: false });
+  },
 });

@@ -31,6 +31,7 @@ import { InteractionConsentDialog } from "@/components/game/InteractionConsentDi
 import LilithOverlay from "@/components/game/LilithOverlay";
 import MobileHandHint from "@/components/game/MobileHandHint";
 import MotherNatureOverlay from "@/components/game/MotherNatureOverlay";
+import HeadlessHauntOverlay from "@/components/game/HeadlessHauntOverlay";
 import OfflineMulliganScreen from "@/components/game/OfflineMulliganScreen";
 import OnlineLifeCounters from "@/components/game/OnlineLifeCounters";
 import PigsOfTheSounderOverlay from "@/components/game/PigsOfTheSounderOverlay";
@@ -916,6 +917,9 @@ export default function PlayPage() {
 
       {/* Mother Nature Overlay (start of turn reveal) */}
       <MotherNatureOverlay />
+
+      {/* Headless Haunt Overlay (start of turn movement - Kythera Mechanism) */}
+      <HeadlessHauntOverlay />
 
       {/* Black Mass Overlay (search for Evil minions) */}
       <BlackMassOverlay />

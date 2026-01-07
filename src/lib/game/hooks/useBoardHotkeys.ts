@@ -140,7 +140,7 @@ export function useBoardHotkeys({
       }
       if (isSpectator || overlayBlocking) return;
 
-      const { matchEnded, phase, actorKey, currentPlayer, endTurn } =
+      const { matchEnded, phase, actorKey, currentPlayer, requestEndTurn } =
         store.getState();
       if (matchEnded || phase === "Setup") return;
       const seat = actorKey === "p1" ? 1 : actorKey === "p2" ? 2 : null;
@@ -148,7 +148,7 @@ export function useBoardHotkeys({
 
       event.preventDefault();
       try {
-        endTurn();
+        requestEndTurn();
       } catch (err) {
         if (process.env.NODE_ENV !== "production") {
           console.warn("[board] Failed to end turn via keyboard:", err);

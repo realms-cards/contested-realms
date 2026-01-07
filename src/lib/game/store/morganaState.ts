@@ -49,7 +49,7 @@ export const createMorganaSlice: StateCreator<
   [],
   [],
   MorganaSlice
-> = (set, get) => ({
+> = (set, get, storeApi) => ({
   morganaHands: [],
 
   triggerMorganaGenesis: (input: {
@@ -96,10 +96,15 @@ export const createMorganaSlice: StateCreator<
       createdAt: Date.now(),
     };
 
-    set((state) => ({
+    // Capture current morganaHands before set
+    const currentMorganaHands = get().morganaHands;
+
+    // Use storeApi.setState() directly to ensure proper subscriber notification
+    // This bypasses any potential batching issues with the slice's set()
+    storeApi.setState({
       zones: zonesNext,
-      morganaHands: [...state.morganaHands, newMorganaHand],
-    })) as unknown as void;
+      morganaHands: [...currentMorganaHands, newMorganaHand],
+    });
 
     // Send zone patch
     const zonePatch: ServerPatchT = {

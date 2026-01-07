@@ -184,13 +184,17 @@ export async function GET(req: NextRequest) {
 
         return formattedResults;
       },
-      { ttl: 300 } // 5 minute cache for card search - card data is stable
+      { ttl: 604800 } // 1 week cache for card search - card data only changes on set releases (~2x/year)
     );
 
     logPerformance("GET /api/cards/search", performance.now() - startTime);
     return new Response(JSON.stringify(out), {
       status: 200,
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        "Cache-Control":
+          "public, max-age=604800, s-maxage=604800, stale-while-revalidate=2592000, immutable",
+      },
     });
   } catch (e: unknown) {
     logPerformance("GET /api/cards/search", performance.now() - startTime);
