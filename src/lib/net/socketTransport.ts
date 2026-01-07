@@ -28,6 +28,11 @@ import type {
   StackInteractionEvent,
   UIUpdateEvent,
 } from "@/types/draft-3d-events";
+import {
+  fetchSocketToken,
+  clearSocketTokenCache,
+  getCachedTokenSync,
+} from "./socketTokenCache";
 
 const RECONNECT_ATTEMPTS_ENV = Number(
   process.env.NEXT_PUBLIC_WS_RECONNECT_ATTEMPTS
@@ -273,6 +278,8 @@ function normalizeResyncResponsePayload(payload: unknown): unknown {
 const AUTH_FAILURE_RESET_MS = 300000; // Reset failure count after 5 minutes
 const AUTH_BACKOFF_DELAYS = [2000, 5000, 10000, 30000, 60000]; // 2s, 5s, 10s, 30s, 60s
 
+// Token caching handled by socketTokenCache.ts
+
 export class SocketTransport implements GameTransport {
   private handlers: Partial<
     Record<TransportEvent, Set<(payload: unknown) => void>>
@@ -304,7 +311,8 @@ export class SocketTransport implements GameTransport {
 
   // Visibility change handler for reconnection on tab focus
   private visibilityHandler: (() => void) | null = null;
-  private connectionOpts: { playerId?: string; displayName: string } | null = null;
+  private connectionOpts: { playerId?: string; displayName: string } | null =
+    null;
 
   private static getMessageType(m: unknown): string {
     if (
@@ -349,7 +357,9 @@ export class SocketTransport implements GameTransport {
     const delay = this.getAuthBackoffDelay();
     if (this.authFailureCount > 2) {
       console.warn(
-        `[Transport] Auth failure #${this.authFailureCount}, backing off for ${delay / 1000}s`
+        `[Transport] Auth failure #${this.authFailureCount}, backing off for ${
+          delay / 1000
+        }s`
       );
     }
     return delay;
@@ -357,7 +367,9 @@ export class SocketTransport implements GameTransport {
 
   private resetAuthFailures(): void {
     if (this.authFailureCount > 0) {
-      console.log("[Transport] Auth failures reset after successful connection");
+      console.log(
+        "[Transport] Auth failures reset after successful connection"
+      );
     }
     this.authFailureCount = 0;
     this.lastAuthFailureTime = 0;
@@ -371,27 +383,34 @@ export class SocketTransport implements GameTransport {
       if (document.visibilityState !== "visible") return;
 
       // Check if socket exists but is disconnected
-      if (this.socket && !this.socket.connected && !this.isIntentionalDisconnect) {
-        console.log("[Transport] Tab became visible, socket disconnected - attempting reconnect");
+      if (
+        this.socket &&
+        !this.socket.connected &&
+        !this.isIntentionalDisconnect
+      ) {
+        console.log(
+          "[Transport] Tab became visible, socket disconnected - attempting reconnect"
+        );
 
-        // Refresh token before reconnecting
+        // Refresh token before reconnecting (rate-limited)
         try {
-          const res = await fetch("/api/socket-token", { credentials: "include" });
-          if (res.ok) {
-            const j = await res.json();
-            type ManagerWithOpts = { opts: { auth?: Record<string, unknown> }; reconnection: boolean };
-            const mgr = this.socket.io as unknown as ManagerWithOpts;
-            mgr.opts.auth = { token: j?.token as string };
-            mgr.reconnection = true;
-            this.connectionState = "reconnecting";
-            this.socket.connect();
-          } else {
-            // Still try to reconnect with existing auth
-            this.connectionState = "reconnecting";
-            this.socket.connect();
+          const token = await fetchSocketToken();
+          type ManagerWithOpts = {
+            opts: { auth?: Record<string, unknown> };
+            reconnection: boolean;
+          };
+          const mgr = this.socket.io as unknown as ManagerWithOpts;
+          if (token) {
+            mgr.opts.auth = { token };
           }
+          mgr.reconnection = true;
+          this.connectionState = "reconnecting";
+          this.socket.connect();
         } catch (e) {
-          console.warn("[Transport] Failed to refresh token on visibility change:", e);
+          console.warn(
+            "[Transport] Failed to refresh token on visibility change:",
+            e
+          );
           // Still try to reconnect with existing auth
           this.connectionState = "reconnecting";
           this.socket.connect();
@@ -451,14 +470,8 @@ export class SocketTransport implements GameTransport {
       }`
     );
     // Fetch short-lived auth token from app API (signed by NEXTAUTH_SECRET)
-    let token: string | undefined = undefined;
-    try {
-      const res = await fetch("/api/socket-token", { credentials: "include" });
-      if (res.ok) {
-        const j = await res.json();
-        token = j?.token as string | undefined;
-      }
-    } catch {}
+    // Uses rate-limited helper to prevent spam during rapid reconnection cycles
+    const token = await fetchSocketToken();
 
     const socket = io(url, {
       transports: transportsEnv.length
@@ -766,18 +779,39 @@ export class SocketTransport implements GameTransport {
     });
 
     // Refresh token prior to reconnection attempts
-    type ManagerWithOpts = { opts: { auth?: Record<string, unknown> } };
+    // CRITICAL: Use synchronous token check first to prevent stale token reconnection
+    type ManagerWithOpts = {
+      opts: { auth?: Record<string, unknown> };
+      reconnection: boolean;
+    };
     (this.socket as Socket).io.on("reconnect_attempt", async () => {
-      try {
-        const res = await fetch("/api/socket-token", {
-          credentials: "include",
-        });
-        if (res.ok) {
-          const j = await res.json();
-          const mgr = (this.socket as Socket).io as unknown as ManagerWithOpts;
-          mgr.opts.auth = { token: j?.token as string };
+      const mgr = (this.socket as Socket).io as unknown as ManagerWithOpts;
+
+      // First, try to use cached token synchronously (this actually updates opts.auth before reconnect)
+      const cachedToken = getCachedTokenSync();
+      if (cachedToken) {
+        mgr.opts.auth = { token: cachedToken };
+        return; // Let reconnection proceed with cached token
+      }
+
+      // No valid cached token - disable reconnection until we get a fresh one
+      console.log(
+        "[Transport] No valid cached token for reconnect, fetching fresh..."
+      );
+      mgr.reconnection = false;
+
+      const token = await fetchSocketToken();
+      if (token) {
+        mgr.opts.auth = { token };
+        mgr.reconnection = true;
+        // Manually trigger reconnect since we disabled it
+        if (
+          !(this.socket as Socket).connected &&
+          !this.isIntentionalDisconnect
+        ) {
+          (this.socket as Socket).connect();
         }
-      } catch {}
+      }
     });
   }
 
@@ -1274,7 +1308,9 @@ export class SocketTransport implements GameTransport {
       // Check if we should wait before trying again (exponential backoff)
       if (this.shouldDelayReconnection()) {
         const delay = this.getAuthBackoffDelay();
-        console.log(`[Transport] Backing off for ${delay / 1000}s before retry`);
+        console.log(
+          `[Transport] Backing off for ${delay / 1000}s before retry`
+        );
         setTimeout(() => {
           mgr.reconnection = true;
           if (!socket.connected && !this.isIntentionalDisconnect) {
@@ -1284,22 +1320,25 @@ export class SocketTransport implements GameTransport {
         return;
       }
 
+      // Clear cached token on auth error - we need a fresh one
+      clearSocketTokenCache();
+
       try {
-        const res = await fetch("/api/socket-token", {
-          credentials: "include",
-        });
-        if (res.ok) {
-          const j = await res.json();
-          mgr.opts.auth = { token: j?.token as string };
+        // Force refresh to bypass cache since we got an auth error
+        const token = await fetchSocketToken(true);
+        if (token) {
+          mgr.opts.auth = { token };
           console.log("[Transport] Token refreshed, reconnecting...");
           // Re-enable reconnection and connect
           mgr.reconnection = true;
           if (!socket.connected && !this.isIntentionalDisconnect) {
             socket.connect();
           }
-        } else if (res.status === 401) {
-          // User is not authenticated - record failure and back off
-          console.warn("[Transport] Token fetch returned 401 - user not authenticated");
+        } else {
+          // Token fetch failed (likely 401) - record failure and back off
+          console.warn(
+            "[Transport] Token fetch failed - user may not be authenticated"
+          );
           this.recordAuthFailure();
           const delay = this.getAuthBackoffDelay();
           console.log(`[Transport] Backing off for ${delay / 1000}s`);
@@ -1309,9 +1348,6 @@ export class SocketTransport implements GameTransport {
               socket.connect();
             }
           }, delay);
-        } else {
-          // Other error - re-enable reconnection
-          mgr.reconnection = true;
         }
       } catch (tokenError) {
         console.warn("[Transport] Failed to refresh token:", tokenError);

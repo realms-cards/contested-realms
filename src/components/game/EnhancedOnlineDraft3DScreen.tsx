@@ -90,6 +90,7 @@ export default function EnhancedOnlineDraft3DScreen({
 
   useEffect(() => {
     useGameStore.getState().resetGameState();
+    useGameStore.getState().clearSnapshotsForNewMatch();
   }, []);
 
   // Enhanced 3D Draft UI state (ported from single-player)

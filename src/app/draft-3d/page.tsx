@@ -45,11 +45,15 @@ export default function Draft3DPage() {
   const router = useRouter();
   const { status } = useSession();
   const resetGameState = useGameStore((s) => s.resetGameState);
+  const clearSnapshotsForNewMatch = useGameStore(
+    (s) => s.clearSnapshotsForNewMatch
+  );
 
   // Reset game state on mount to clear any previous board state
   useEffect(() => {
     resetGameState();
-  }, [resetGameState]);
+    clearSnapshotsForNewMatch();
+  }, [resetGameState, clearSnapshotsForNewMatch]);
 
   // --- Draft state (mirrors /draft 2D page) ---
   // Multi-set support: choose a set per pack column

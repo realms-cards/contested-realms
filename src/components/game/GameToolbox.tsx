@@ -6,6 +6,7 @@ import Image from "next/image";
 import { useEffect, useRef, useState, useMemo } from "react";
 import CardSearchDialog from "@/components/game/CardSearchDialog";
 import HandPeekDialog from "@/components/game/HandPeekDialog";
+import { useGraphicsSettings } from "@/hooks/useGraphicsSettings";
 import D20Dice from "@/lib/game/components/D20Dice";
 import D6Dice from "@/lib/game/components/D6Dice";
 import {
@@ -50,6 +51,15 @@ export default function GameToolbox({
 
   const isOnline =
     !!myPlayerId && !!matchId && !!opponentPlayerId && !!opponentSeat;
+
+  // Graphics settings for font scaling
+  const { settings: graphicsSettings } = useGraphicsSettings();
+
+  // Calculate font size based on uiTextScale (0.5-1.5 maps to 10px-16px)
+  // Base size is 12px (text-xs), scaled with min 10px and max 16px
+  const baseFontSize = 12;
+  const scaledFontSize = Math.max(10, Math.min(16, Math.round(baseFontSize * graphicsSettings.uiTextScale)));
+  const fontStyle = { fontSize: `${scaledFontSize}px` };
 
   // UI state
   const [open, setOpen] = useState(false);
@@ -972,9 +982,10 @@ export default function GameToolbox({
           <div
             className={`flex items-center justify-between ${headerPaddingClass} border-b border-white/10`}
           >
-            <div className="text-xs sm:text-sm font-semibold">Toolbox</div>
+            <div className="font-semibold" style={fontStyle}>Toolbox</div>
             <button
-              className={`text-xs rounded bg-white/10 hover:bg-white/20 ${toggleBtnPaddingClass}`}
+              className={`rounded bg-white/10 hover:bg-white/20 ${toggleBtnPaddingClass}`}
+              style={fontStyle}
               onClick={() => setOpen(false)}
               aria-label="Hide toolbox"
               title="Hide"
@@ -982,7 +993,7 @@ export default function GameToolbox({
               Hide
             </button>
           </div>
-          <div className="p-2 sm:p-3 space-y-3 text-xs sm:text-sm">
+          <div className="p-2 sm:p-3 space-y-3" style={fontStyle}>
             {/* Instant Spell (request when not your turn) */}
             {showInstantRequest && (
               <div>

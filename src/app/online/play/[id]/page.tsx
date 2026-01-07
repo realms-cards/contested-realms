@@ -7,8 +7,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { useOnline } from "@/app/online/online-context";
-import { AnimistCastChoiceOverlay } from "@/components/game/AnimistCastChoiceOverlay";
 import UserBadge from "@/components/auth/UserBadge";
+import AccusationOverlay from "@/components/game/AccusationOverlay";
+import { AnimistCastChoiceOverlay } from "@/components/game/AnimistCastChoiceOverlay";
+import AssortedAnimalsOverlay from "@/components/game/AssortedAnimalsOverlay";
+import BlackMassOverlay from "@/components/game/BlackMassOverlay";
 import BrowseOverlay from "@/components/game/BrowseOverlay";
 import CallToWarOverlay from "@/components/game/CallToWarOverlay";
 import CardPreview from "@/components/game/CardPreview";
@@ -17,30 +20,24 @@ import { ClientCanvas } from "@/components/game/ClientCanvas";
 import CollectionButton from "@/components/game/CollectionButton";
 import CombatHudOverlay from "@/components/game/CombatHudOverlay";
 import CommonSenseOverlay from "@/components/game/CommonSenseOverlay";
-import EarthquakeOverlay from "@/components/game/EarthquakeOverlay";
-import LilithOverlay from "@/components/game/LilithOverlay";
-import MotherNatureOverlay from "@/components/game/MotherNatureOverlay";
-import SearingTruthOverlay from "@/components/game/SearingTruthOverlay";
-import AccusationOverlay from "@/components/game/AccusationOverlay";
-import BlackMassOverlay from "@/components/game/BlackMassOverlay";
-import HighlandPrincessOverlay from "@/components/game/HighlandPrincessOverlay";
-import AssortedAnimalsOverlay from "@/components/game/AssortedAnimalsOverlay";
-import FrontierSettlersOverlay from "@/components/game/FrontierSettlersOverlay";
-import PigsOfTheSounderOverlay from "@/components/game/PigsOfTheSounderOverlay";
+import ContextMenu from "@/components/game/ContextMenu";
 import DemonicContractOverlay from "@/components/game/DemonicContractOverlay";
 import DholChantsOverlay from "@/components/game/DholChantsOverlay";
 import DoomsdayCultOverlay from "@/components/game/DoomsdayCultOverlay";
-import ContextMenu from "@/components/game/ContextMenu";
+import EarthquakeOverlay from "@/components/game/EarthquakeOverlay";
 import { ElementChoiceOverlay } from "@/components/game/ElementChoiceOverlay";
 import EnhancedOnlineDraft3DScreen from "@/components/game/EnhancedOnlineDraft3DScreen";
+import FrontierSettlersOverlay from "@/components/game/FrontierSettlersOverlay";
 import GameToolbox from "@/components/game/GameToolbox";
 import HarbingerPortalScreen from "@/components/game/HarbingerPortalScreen";
+import HighlandPrincessOverlay from "@/components/game/HighlandPrincessOverlay";
 import { InteractionConsentDialog } from "@/components/game/InteractionConsentDialog";
+import LilithOverlay from "@/components/game/LilithOverlay";
 import MagicHudOverlay from "@/components/game/MagicHudOverlay";
 import MatchEndOverlay from "@/components/game/MatchEndOverlay";
 import MatchInfoPopup from "@/components/game/MatchInfoPopup";
 import MobileHandHint from "@/components/game/MobileHandHint";
-import UnitHandsOverlay from "@/components/game/UnitHandsOverlay";
+import MotherNatureOverlay from "@/components/game/MotherNatureOverlay";
 import OnlineConsole from "@/components/game/OnlineConsole";
 import OnlineD20Screen from "@/components/game/OnlineD20Screen";
 import OnlineDeckSelector from "@/components/game/OnlineDeckSelector";
@@ -49,13 +46,16 @@ import OnlineLifeCounters from "@/components/game/OnlineLifeCounters";
 import OnlineMulliganScreen from "@/components/game/OnlineMulliganScreen";
 import OnlineSealedDeckLoader from "@/components/game/OnlineSealedDeckLoader";
 import OnlineStatusBar from "@/components/game/OnlineStatusBar";
+import PigsOfTheSounderOverlay from "@/components/game/PigsOfTheSounderOverlay";
 import PileSearchDialog from "@/components/game/PileSearchDialog";
 import PithImpOverlay from "@/components/game/PithImpOverlay";
 import PlacementDialog from "@/components/game/PlacementDialog";
 import PlayerResourcePanels from "@/components/game/PlayerResourcePanel";
 import PrivateHandTargetingOverlay from "@/components/game/PrivateHandTargetingOverlay";
+import SearingTruthOverlay from "@/components/game/SearingTruthOverlay";
 // SeerScreen is now integrated into OnlineMulliganScreen
 import SwitchSiteHudOverlay from "@/components/game/SwitchSiteHudOverlay";
+import UnitHandsOverlay from "@/components/game/UnitHandsOverlay";
 import {
   DynamicBoard as Board,
   DynamicHand3D as Hand3D,
@@ -122,7 +122,12 @@ export default function OnlineMatchPage() {
   const [hoverPreview, setHoverPreview] = useState<CardPreviewData | null>(
     null
   );
-  const { showCardPreview, hideCardPreview, clearHoverTimers } = useCardHover({
+  const {
+    showCardPreview,
+    hideCardPreview,
+    hideCardPreviewImmediate,
+    clearHoverTimers,
+  } = useCardHover({
     onShow: (card: CardPreviewData) => {
       setHoverPreview(card);
     },
@@ -3322,6 +3327,7 @@ export default function OnlineMatchPage() {
                     flatCards={isSpectatorView}
                     showCardPreview={showCardPreview}
                     hideCardPreview={hideCardPreview}
+                    hideCardPreviewImmediate={hideCardPreviewImmediate}
                   />
                 )}
                 {/* Opponent hand with card backs (players) or face-up (commentator spectators only) */}
@@ -3343,6 +3349,7 @@ export default function OnlineMatchPage() {
                         flatCards={isSpectatorView}
                         showCardPreview={showCardPreview}
                         hideCardPreview={hideCardPreview}
+                        hideCardPreviewImmediate={hideCardPreviewImmediate}
                       />
                     );
                   })()}

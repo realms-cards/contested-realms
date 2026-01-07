@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useGraphicsSettings } from "@/hooks/useGraphicsSettings";
 import { type MatchEvent, formatMatchEvent } from "@/hooks/useMatchEvents";
 import { PLAYER_COLORS } from "@/lib/game/constants";
 import { useGameStore } from "@/lib/game/store";
@@ -52,6 +53,14 @@ export default function OnlineConsole({
   playerNames,
 }: OnlineConsoleProps) {
   const router = useRouter();
+  const { settings: graphicsSettings } = useGraphicsSettings();
+
+  // Calculate font size based on uiTextScale (0.5-1.5 maps to 10px-16px)
+  // Base size is 12px (text-xs), scaled with min 10px and max 16px
+  const baseFontSize = 12;
+  const scaledFontSize = Math.max(10, Math.min(16, Math.round(baseFontSize * graphicsSettings.uiTextScale)));
+  const fontStyle = { fontSize: `${scaledFontSize}px` };
+
   const [consoleOpen, setConsoleOpen] = useState<boolean>(defaultOpen);
   const [activeTab, setActiveTab] = useState<TabType>("events");
   const [showToast, setShowToast] = useState<boolean>(false);
@@ -436,7 +445,8 @@ export default function OnlineConsole({
               <div
                 ref={eventsRef}
                 data-allow-wheel="true"
-                className="flex-1 overflow-y-scroll thin-scrollbar px-3 py-3 text-xs space-y-1 min-h-0"
+                className="flex-1 overflow-y-scroll thin-scrollbar px-3 py-3 space-y-1 min-h-0"
+                style={fontStyle}
               >
                 {combinedEvents.length === 0 && (
                   <div className="opacity-60">No events yet</div>
@@ -513,7 +523,8 @@ export default function OnlineConsole({
                 <div
                   ref={chatRef}
                   data-allow-wheel="true"
-                  className="flex-1 overflow-y-scroll thin-scrollbar px-3 py-3 text-xs space-y-1 min-h-0"
+                  className="flex-1 overflow-y-scroll thin-scrollbar px-3 py-3 space-y-1 min-h-0"
+                  style={fontStyle}
                 >
                   {matchChat.length === 0 && (
                     <div className="opacity-60">No messages</div>
@@ -534,7 +545,8 @@ export default function OnlineConsole({
                   onContextMenu={(e) => e.preventDefault()}
                 >
                   <input
-                    className="flex-1 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-xs"
+                    className="flex-1 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1"
+                    style={fontStyle}
                     placeholder="Type a message..."
                     value={chatInput}
                     onChange={(e) => setChatInput(e.target.value)}
@@ -547,7 +559,8 @@ export default function OnlineConsole({
                     onContextMenu={(e) => e.preventDefault()}
                   />
                   <button
-                    className="rounded bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed px-3 py-1 text-xs transition-colors"
+                    className="rounded bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed px-3 py-1 transition-colors"
+                    style={fontStyle}
                     onClick={handleSendChat}
                     disabled={!connected || !chatInput.trim()}
                     onContextMenu={(e) => e.preventDefault()}

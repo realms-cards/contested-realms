@@ -230,9 +230,16 @@ export async function middleware(req: NextRequest) {
   return setLockdown(NextResponse.redirect(url), "redirect");
 }
 
-// Apply to all routes except static/image optimizer/favicon/robots/sitemap
+// COST OPTIMIZATION: Only run middleware on routes that actually need it.
+// Basic auth is disabled, so we only need middleware for:
+// - Admin routes (IP allowlist protection)
+//
+// All other routes skip middleware entirely to minimize Vercel edge function costs.
+// Re-enable broader matching if basic auth is needed again.
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml).*)",
+    // Admin routes need IP allowlist checking
+    "/admin/:path*",
+    "/api/admin/:path*",
   ],
 };

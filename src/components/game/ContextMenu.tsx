@@ -93,7 +93,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   const triggerFrontierSettlersAbility = useGameStore(
     (s) => s.triggerFrontierSettlersAbility
   );
-  const hasFrontierSettlersAbility = useGameStore(
+  const _hasFrontierSettlersAbility = useGameStore(
     (s) => s.hasFrontierSettlersAbility
   );
 

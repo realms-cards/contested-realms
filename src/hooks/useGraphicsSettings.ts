@@ -11,6 +11,8 @@ export interface GraphicsSettings {
   showTable: boolean;
   /** Scale multiplier for card preview size (0.5 - 1.5, default 1.0) */
   cardPreviewScale: number;
+  /** Scale multiplier for console/toolbox text size (0.5 - 1.5, default 1.0) */
+  uiTextScale: number;
 }
 
 const STORAGE_KEY = "sorcery-graphics-settings";
@@ -20,6 +22,7 @@ const DEFAULT_SETTINGS: GraphicsSettings = {
   lightingIntensity: 1.0,
   showTable: true,
   cardPreviewScale: 1.0,
+  uiTextScale: 1.0,
 };
 
 function loadSettings(): GraphicsSettings {
@@ -89,7 +92,10 @@ export function useGraphicsSettings() {
       const next = { ...prev, ...updates };
       saveSettings(next);
       // Dispatch custom event to sync other hook instances in the same tab
-      window.dispatchEvent(new CustomEvent("graphics-settings-changed"));
+      // Use queueMicrotask to avoid setState during render of other components
+      queueMicrotask(() => {
+        window.dispatchEvent(new CustomEvent("graphics-settings-changed"));
+      });
       return next;
     });
   }, []);
@@ -120,6 +126,15 @@ export function useGraphicsSettings() {
     [setSettings]
   );
 
+  const setUiTextScale = useCallback(
+    (scale: number) => {
+      setSettings({
+        uiTextScale: Math.max(0.5, Math.min(1.5, scale)),
+      });
+    },
+    [setSettings]
+  );
+
   return {
     settings,
     isLoaded,
@@ -128,6 +143,7 @@ export function useGraphicsSettings() {
     setLightingIntensity,
     toggleShowTable,
     setCardPreviewScale,
+    setUiTextScale,
   };
 }
 

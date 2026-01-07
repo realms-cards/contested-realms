@@ -61,6 +61,7 @@ function LocalReplayContent() {
         const parsed = JSON.parse(stored) as MatchRecording;
         setRecording(parsed);
         useGameStore.getState().resetGameState();
+        useGameStore.getState().clearSnapshotsForNewMatch();
         // Use grid overlay instead of playmat for spectator/replay view
         useGameStore.setState({ showPlaymat: false, showPlaymatOverlay: true });
       } else {

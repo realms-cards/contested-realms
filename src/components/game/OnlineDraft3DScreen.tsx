@@ -311,6 +311,7 @@ export default function OnlineDraft3DScreen({
 
   useEffect(() => {
     useGameStore.getState().resetGameState();
+    useGameStore.getState().clearSnapshotsForNewMatch();
   }, []);
 
   // Keyboard shortcuts help overlay

@@ -1,4 +1,8 @@
 import type { NextRequest } from "next/server";
+
+// NOTE: This route is now rarely hit in production because clients resolve
+// CDN URLs directly via src/lib/utils/cdnUrl.ts. This route serves as fallback
+// for older clients or when CDN env vars aren't configured.
 export const dynamic = "force-dynamic";
 
 const SETS_WITH_SUFFIX_DIRS = new Set(["alpha", "beta", "arthurian_legends"]);

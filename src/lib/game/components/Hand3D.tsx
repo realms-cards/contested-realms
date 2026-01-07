@@ -41,6 +41,7 @@ export interface Hand3DProps {
   // Enhanced preview functions (optional for compatibility)
   showCardPreview?: (card: CardPreviewData) => void;
   hideCardPreview?: () => void;
+  hideCardPreviewImmediate?: () => void;
 }
 
 export default function Hand3D({
@@ -52,11 +53,13 @@ export default function Hand3D({
   placement,
   flatCards = false,
   showCardPreview,
-  hideCardPreview,
+  hideCardPreview: _hideCardPreview,
+  hideCardPreviewImmediate,
 }: Hand3DProps) {
   // Intentionally unused after layout refactor; keep signature stable
   void _matW;
   void _matH;
+  void _hideCardPreview; // Debounced version not used - we use immediate for snappy clear
   const zones = useGameStore((s) => s.zones);
   const selected = useGameStore((s) => s.selectedCard);
   const selectedPermanent = useGameStore((s) => s.selectedPermanent);
@@ -274,6 +277,14 @@ export default function Hand3D({
     window.addEventListener("mouseup", onUp);
     return () => window.removeEventListener("mouseup", onUp);
   }, [dragFromHand, selected, owner, setDragFromHand]);
+
+  // Auto-reset "visible" mode when cursor leaves hand area
+  useEffect(() => {
+    if (handVisibilityMode === "visible" && !overCardsArea && !mouseInZone) {
+      setHandVisibilityMode(null);
+    }
+  }, [handVisibilityMode, overCardsArea, mouseInZone, setHandVisibilityMode]);
+
   // Keep the hand anchored to the camera with less frequent updates
   const boardSize = useGameStore((s) => s.board.size);
   const lastUpdateRef = useRef({ reveal: 0, spread: 0, focus: 0, hover: 0 });
@@ -356,36 +367,22 @@ export default function Hand3D({
     const topY = worldH / 2 - margin - CARD_LONG * 0.5 * HAND_CARD_SCALE; // Top overlay baseline
 
     // Reveal logic: edge hands always visible; overlay hands show on interaction
-    // handVisibilityMode: null = default hover, "hidden" = force hide, "visible" = force show (spread)
+    // handVisibilityMode: null = default, "hidden" = force hide, "visible" = force show
     let targetShown: number;
     if (!showCardBacks && handVisibilityMode === "hidden") {
-      // Force hidden via Space key - completely hide for more board space
       targetShown = 0;
     } else if (!showCardBacks && handVisibilityMode === "visible") {
-      // Force visible via Space key - fully extended and spread
-      // Auto-reset to default when cursor leaves the hand zone
-      if (!overCardsArea && !mouseInZone) {
-        setHandVisibilityMode(null);
-        targetShown = 0; // Hide as cursor left
-      } else {
-        targetShown = 1;
-      }
+      targetShown = 1;
     } else if (isEdgePlacement) {
-      // Opponent hand (edge placement): always visible
       targetShown = 1;
     } else {
-      // Default: hover behavior (show when cursor in zone, hide when leaves)
       targetShown = overCardsArea || mouseInZone ? 1 : 0;
     }
-    // Handle dragging - hide hand when dragging out (including from "visible" mode)
-    if (!showCardBacks && dragFromHand && selected && selected.who === owner) {
-      if (isCoarsePointer) {
+    if (!showCardBacks && isCoarsePointer) {
+      if (dragFromHand && selected && selected.who === owner) {
         const hScr = window.innerHeight || 1;
         const inReturnZone = lastMousePosRef.current.y >= hScr * 0.7;
         targetShown = inReturnZone ? 1 : 0;
-      } else {
-        // Desktop: hide hand when dragging out
-        targetShown = 0;
       }
     }
 
@@ -395,20 +392,19 @@ export default function Hand3D({
     if (Math.abs(targetShown - revealLerp.current) < 0.005)
       revealLerp.current = targetShown;
 
-    // Smooth hand spread animation
-    // Spread when: edge placement, hovering, OR in "visible" mode
+    // Smooth hand spread animation (also spread when in "visible" mode)
     const handShouldBeSpread = isEdgePlacement
       ? true // Edge hands always spread for visibility
-      : overCardsArea || mouseInZone || handVisibilityMode === "visible"; // Overlay hand spreads when interacted with or forced visible
+      : overCardsArea || mouseInZone || handVisibilityMode === "visible";
     const spreadTarget = handShouldBeSpread ? 1 : 0;
     const spreadK = 0.25; // Smooth easing for hand spread
     handSpreadLerp.current += (spreadTarget - handSpreadLerp.current) * spreadK;
     if (Math.abs(spreadTarget - handSpreadLerp.current) < 0.005)
       handSpreadLerp.current = spreadTarget;
 
-    // When force hidden via Space, push hand much further off-screen for more board space
+    // Push hand further off-screen when force hidden via Space
     const normalHiddenOffset = -CARD_LONG * HAND_CARD_SCALE * 0.8;
-    const forceHiddenOffset = -CARD_LONG * HAND_CARD_SCALE * 1.5; // Completely off screen
+    const forceHiddenOffset = -CARD_LONG * HAND_CARD_SCALE * 1.5;
     const hiddenOffset =
       handVisibilityMode === "hidden" ? forceHiddenOffset : normalHiddenOffset;
     const yOffset = hiddenOffset * (1 - revealLerp.current);
@@ -704,22 +700,21 @@ export default function Hand3D({
         }
       }
 
-      // Fallback to legacy preview system when enhanced preview unavailable or conversion failed
-      hoverTimer.current = window.setTimeout(() => setPreviewCard(card), 400);
+      // Fallback to legacy preview system - show immediately for responsive feel
+      setPreviewCard(card);
     },
     [setPreviewCard, HAND_PREVIEW_ENABLED, showCardPreview]
   );
   const clearHoverPreview = useCallback(() => {
     if (hoverTimer.current) window.clearTimeout(hoverTimer.current);
     hoverTimer.current = null;
-
-    // Use enhanced preview if available, otherwise fall back to legacy
-    if (hideCardPreview) {
-      hideCardPreview();
+    // Use immediate hide if enhanced preview is active, otherwise legacy clear
+    if (hideCardPreviewImmediate) {
+      hideCardPreviewImmediate();
     } else {
       setPreviewCard(null);
     }
-  }, [setPreviewCard, hideCardPreview]);
+  }, [setPreviewCard, hideCardPreviewImmediate]);
 
   // Clear preview when any selection changes
   useEffect(() => {
@@ -1066,15 +1061,15 @@ export default function Hand3D({
                   }, 30); // Reduced to 30ms delay for more responsive transitions
 
                   // Debounce leaving the overall cards area so moving between cards doesn't hide the hand
+                  // Also debounce clearing the preview to avoid spurious clears from camera movement
                   if (handAreaLeaveTimeoutRef.current) {
                     window.clearTimeout(handAreaLeaveTimeoutRef.current);
                   }
                   handAreaLeaveTimeoutRef.current = window.setTimeout(() => {
                     setOverCardsArea(false);
+                    clearHoverPreview();
                     handAreaLeaveTimeoutRef.current = null;
-                  }, 80); // Quick hiding timeout for snappy response
-
-                  clearHoverPreview();
+                  }, 30); // Short debounce - onPointerMove keeps it alive while hovering
                 }}
                 onPointerDown={(e) => {
                   if (isDragging) return; // don't start another drag
@@ -1113,15 +1108,13 @@ export default function Hand3D({
                   const dx = e.clientX - s.x;
                   const dy = e.clientY - s.y;
                   const dist = Math.hypot(dx, dy);
-                  const PIX_THRESH = isCoarsePointer ? 12 : 6; // Higher threshold for touch
+                  const PIX_THRESH = isCoarsePointer ? 12 : 6;
                   if (held >= DRAG_HOLD_MS && dist > PIX_THRESH) {
-                    // Select the card only when drag actually starts
                     selectHandCard(owner, originalIndex);
                     try {
                       playCardSelect();
                     } catch {}
                     setDragFromHand(true);
-                    // Clear preview and touch selection when drag starts
                     clearHoverPreview();
                     setTouchSelectedIndex(null);
                     tapStartRef.current = null;

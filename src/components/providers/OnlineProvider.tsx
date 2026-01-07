@@ -33,6 +33,7 @@ import type {
   MatchmakingPreferences,
   MatchmakingUpdatePayloadT,
 } from "@/lib/net/protocol";
+import { fetchSocketToken } from "@/lib/net/socketTokenCache";
 import { SocketTransport } from "@/lib/net/socketTransport";
 import type { StartMatchConfig } from "@/lib/net/transport";
 import { useMatchWebRTC } from "@/lib/rtc/useMatchWebRTC";
@@ -131,7 +132,7 @@ export default function OnlineProvider({
     sort?: "recent" | "alphabetical";
   } | null>(null);
   // Cache a short-lived auth token for prioritization (JWT signed by NextAuth)
-  const availableAuthRef = useRef<{ token: string; ts: number } | null>(null);
+  const _availableAuthRef = useRef<{ token: string; ts: number } | null>(null);
   const [invites, setInvites] = useState<LobbyInvitePayloadT[]>([]);
   const [availablePlayersError, setAvailablePlayersError] = useState<
     string | null
@@ -1473,26 +1474,14 @@ export default function OnlineProvider({
           if (sort) url.searchParams.set("sort", sort);
           if (cursor) url.searchParams.set("cursor", cursor);
           url.searchParams.set("limit", "100");
-          // Build headers including Authorization Bearer from /api/socket-token (cached ~60s)
+          // Build headers including Authorization Bearer from shared token cache
           const headers: HeadersInit = { accept: "application/json" };
           try {
-            const now = Date.now();
-            if (
-              !availableAuthRef.current ||
-              now - availableAuthRef.current.ts > 60_000
-            ) {
-              const tokRes = await fetch("/api/socket-token");
-              if (tokRes.ok) {
-                const tokJson = await tokRes.json();
-                if (tokJson && typeof tokJson.token === "string") {
-                  availableAuthRef.current = { token: tokJson.token, ts: now };
-                }
-              }
-            }
-            if (availableAuthRef.current?.token) {
+            const token = await fetchSocketToken();
+            if (token) {
               (
                 headers as Record<string, string>
-              ).Authorization = `Bearer ${availableAuthRef.current.token}`;
+              ).Authorization = `Bearer ${token}`;
             }
           } catch {}
           const res = await fetch(url.toString(), {
