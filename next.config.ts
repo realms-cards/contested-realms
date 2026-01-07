@@ -1,17 +1,22 @@
-import bundleAnalyzer from '@next/bundle-analyzer';
+import bundleAnalyzer from "@next/bundle-analyzer";
 import type { NextConfig } from "next";
 
 // Bundle analyzer configuration (run with ANALYZE=true npm run build)
 const withBundleAnalyzer = bundleAnalyzer({
-  enabled: process.env.ANALYZE === 'true',
+  enabled: process.env.ANALYZE === "true",
 });
 
 const nextConfig: NextConfig = {
   /* config options here */
+  output: "standalone", // Required for Docker deployment
   reactStrictMode: true,
   images: {
     remotePatterns: [
-      { protocol: "https", hostname: "cdn.discordapp.com", pathname: "/avatars/**" },
+      {
+        protocol: "https",
+        hostname: "cdn.discordapp.com",
+        pathname: "/avatars/**",
+      },
       { protocol: "https", hostname: "cdn.realms.cards", pathname: "/**" },
     ],
   },
@@ -19,10 +24,10 @@ const nextConfig: NextConfig = {
   // Exclude Three.js and React Three Fiber packages from server-side bundling
   // This prevents @react-three/drei's Html component from being confused with next/document Html
   serverExternalPackages: [
-    'three',
-    '@react-three/fiber',
-    '@react-three/drei',
-    '@react-three/rapier',
+    "three",
+    "@react-three/fiber",
+    "@react-three/drei",
+    "@react-three/rapier",
   ],
 
   // Performance optimizations
@@ -30,8 +35,8 @@ const nextConfig: NextConfig = {
     // Tree-shake large dependencies for smaller bundles
     // Note: three.js packages are in serverExternalPackages, so they're excluded here
     optimizePackageImports: [
-      'lucide-react',
-      '@tanstack/react-virtual', // Virtual scrolling library
+      "lucide-react",
+      "@tanstack/react-virtual", // Virtual scrolling library
     ],
   },
 
@@ -48,15 +53,15 @@ const nextConfig: NextConfig = {
             // Separate Three.js into its own chunk (large library ~600KB)
             three: {
               test: /[\\/]node_modules[\\/](three|@react-three)[\\/]/,
-              name: 'three',
-              chunks: 'all',
+              name: "three",
+              chunks: "all",
               priority: 10,
             },
             // Separate React into its own chunk for better caching
             react: {
               test: /[\\/]node_modules[\\/](react|react-dom)[\\/]/,
-              name: 'react',
-              chunks: 'all',
+              name: "react",
+              chunks: "all",
               priority: 20,
             },
           },

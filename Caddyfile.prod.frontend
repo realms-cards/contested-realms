@@ -1,0 +1,154 @@
+{
+    email kingofthe@realms.cards
+}
+
+# Admin route gating shared snippet
+(admin-ip-guard) {
+    @admin path /admin* /api/admin/*
+    @admin-allowlist {
+        path /admin* /api/admin/*
+        remote_ip 127.0.0.1/32 {$ADMIN_IP_ACCESSLIST}
+    }
+}
+
+# Main frontend: realms.cards
+realms.cards {
+    log {
+        output file /var/log/caddy/frontend-access.log
+        format json
+    }
+
+    # Security headers
+    header {
+        -Server
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "SAMEORIGIN"
+        Referrer-Policy "strict-origin-when-cross-origin"
+    }
+
+    # Admin IP restriction
+    import admin-ip-guard
+
+    # Serve static assets with aggressive caching
+    @static {
+        path /_next/static/* /icons/* *.ico *.png *.jpg *.webp *.svg *.woff2 *.ttf
+    }
+    handle @static {
+        header Cache-Control "public, max-age=31536000, immutable"
+        reverse_proxy frontend:3000
+    }
+
+    # API routes - pass through with minimal caching interference
+    @api path /api/*
+    handle @api {
+        reverse_proxy frontend:3000
+    }
+
+    # Main route handling with admin protection
+    route {
+        # Block non-whitelisted admin access
+        handle @admin-allowlist {
+            reverse_proxy frontend:3000
+        }
+        handle @admin {
+            respond "forbidden" 403
+        }
+        # All other requests
+        handle {
+            reverse_proxy frontend:3000
+        }
+    }
+}
+
+# WebSocket server: ws.realms.cards
+ws.realms.cards {
+    log {
+        output file /var/log/caddy/ws-access.log
+        format json
+    }
+
+    header {
+        -Server
+        Access-Control-Allow-Origin "https://realms.cards"
+        Access-Control-Allow-Methods "GET, POST, OPTIONS"
+        Access-Control-Allow-Headers "Origin, X-Requested-With, Content-Type, Accept, Authorization"
+        Access-Control-Allow-Credentials false
+    }
+
+    @preflight {
+        method OPTIONS
+        path /socket.io/*
+    }
+    respond @preflight 204
+
+    # Metrics endpoint protection
+    @metrics {
+        path /metrics /metrics.json
+    }
+    @metrics-allowlist {
+        path /metrics /metrics.json
+        remote_ip 127.0.0.1/32 {$METRICS_IP_ALLOWLIST}
+    }
+
+    route {
+        handle @metrics-allowlist {
+            reverse_proxy {
+                to server1:3010
+                to server2:3010
+                lb_policy ip_hash
+                transport http {
+                    read_timeout 30s
+                    write_timeout 30s
+                }
+                health_uri /healthz
+                health_interval 5s
+            }
+        }
+        handle @metrics {
+            respond "forbidden" 403
+        }
+        # WebSocket traffic
+        handle {
+            reverse_proxy {
+                to server1:3010
+                to server2:3010
+                lb_policy ip_hash
+                transport http {
+                    read_timeout 3m
+                    write_timeout 3m
+                }
+                health_uri /healthz
+                health_interval 5s
+                health_timeout 3s
+                flush_interval -1
+            }
+        }
+    }
+}
+
+# Staging frontend for testing before DNS cutover
+# Point staging.realms.cards to your droplet IP first
+staging.realms.cards {
+    log {
+        output file /var/log/caddy/staging-access.log
+        format json
+    }
+
+    header {
+        -Server
+        X-Robots-Tag "noindex, nofollow"
+    }
+
+    # Same routing as production
+    @static {
+        path /_next/static/* /icons/* *.ico *.png *.jpg *.webp *.svg *.woff2 *.ttf
+    }
+    handle @static {
+        header Cache-Control "public, max-age=31536000, immutable"
+        reverse_proxy frontend:3000
+    }
+
+    handle {
+        reverse_proxy frontend:3000
+    }
+}
