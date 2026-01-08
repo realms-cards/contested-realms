@@ -610,13 +610,53 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
   }
 
   // --- Spectator patch broadcasting ---
+  // Create a face-down card placeholder that the client will accept
+  // Uses cardId: 0 as a sentinel value for hidden cards
+  function createFaceDownPlaceholder(index: number): unknown {
+    return {
+      cardId: 0,
+      faceDown: true,
+      instanceId: `hidden-${Date.now()}-${index}`,
+      name: "",
+    };
+  }
+
+  // Sanitize a single player's zones for spectators:
+  // - Hide hand card details (show as face-down placeholders with just count)
+  // - Hide deck contents (spellbook/atlas) but keep count
+  // - Keep graveyard, banished, collection visible (they're public/face-up)
+  function sanitizePlayerZonesForSpectator(
+    zones: PlayerZones | undefined
+  ): PlayerZones | undefined {
+    if (!zones) return undefined;
+    const out: PlayerZones = { ...zones };
+    // Hand: replace with face-down placeholders (preserve count, hide card data)
+    if (Array.isArray(out.hand)) {
+      out.hand = out.hand.map((_, i) => createFaceDownPlaceholder(i));
+    }
+    // Spellbook/Atlas: replace with face-down placeholders (preserve count)
+    if (Array.isArray(out.spellbook)) {
+      out.spellbook = out.spellbook.map((_, i) => createFaceDownPlaceholder(i));
+    }
+    if (Array.isArray(out.atlas)) {
+      out.atlas = out.atlas.map((_, i) => createFaceDownPlaceholder(i));
+    }
+    // Graveyard, banished, collection, battlefield are public - keep as-is
+    return out;
+  }
+
   function sanitizePatchForSpectator(
     patch: MatchPatch | null | undefined
   ): MatchPatch | null {
     if (!patch || typeof patch !== "object") return patch ?? null;
     const out = { ...(patch as Record<string, unknown>) };
+    // Sanitize zones instead of deleting them entirely
     if (out.zones && typeof out.zones === "object") {
-      delete out.zones;
+      const zones = out.zones as ZonesState;
+      out.zones = {
+        p1: sanitizePlayerZonesForSpectator(zones.p1),
+        p2: sanitizePlayerZonesForSpectator(zones.p2),
+      };
     }
     return out as MatchPatch;
   }
@@ -1851,9 +1891,40 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
     if (!Array.isArray(match.playerIds)) {
       match.playerIds = [];
     }
+
+    // SECURITY: For in-progress matches, only allow existing players to rejoin
+    // This prevents spectators from joining as players after navigating away
+    const isExistingPlayer = match.playerIds.includes(playerId);
+    if (!isExistingPlayer && match.status === "in_progress") {
+      console.warn(
+        "[joinMatch] Rejected: cannot join in-progress match as new player",
+        {
+          matchId,
+          playerId,
+          status: match.status,
+          existingPlayers: match.playerIds,
+        }
+      );
+      // Emit error to the player so client can handle appropriately
+      try {
+        emitToPlayer(
+          playerId,
+          "match:error",
+          {
+            matchId,
+            code: "not_a_player",
+            message:
+              "You are not a player in this match. Use spectate mode to watch.",
+          },
+          socketId
+        );
+      } catch {}
+      return;
+    }
+
     // Only allow joining if player is already in the roster OR there's room (max 2 players)
     // This prevents spectators or extra players from being added to playerIds
-    if (!match.playerIds.includes(playerId)) {
+    if (!isExistingPlayer) {
       if (match.playerIds.length >= 2) {
         console.warn("[joinMatch] Rejected: match already has 2 players", {
           matchId,

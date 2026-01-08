@@ -969,8 +969,23 @@ function LobbyPageContent({
     }
   }, [match?.id]);
 
+  // Check if current user is actually a player in the match (not a spectator who happened to watch it)
+  const isPlayerInMatch = useMemo(() => {
+    if (!match || !me?.id) return false;
+    // Check playerIds array (preferred)
+    if (Array.isArray(match.playerIds) && match.playerIds.includes(me.id)) {
+      return true;
+    }
+    // Fallback: check players array
+    if (Array.isArray(match.players)) {
+      return match.players.some((p) => p.id === me.id);
+    }
+    return false;
+  }, [match, me?.id]);
+
   const matchCta = useMemo(() => {
-    if (!match) return { label: "", disabled: true } as const;
+    if (!match || !isPlayerInMatch)
+      return { label: "", disabled: true } as const;
     if (match.status === "ended")
       return { label: "Match Ended", disabled: true } as const;
 
@@ -1009,7 +1024,7 @@ function LobbyPageContent({
 
     // Fallback
     return { label: "Join Match", disabled: false } as const;
-  }, [match, hasSubmittedForMatch]);
+  }, [match, hasSubmittedForMatch, isPlayerInMatch]);
 
   // Auto-start logic: once the host has confirmed setup at least once for
   // this lobby, automatically start the match as soon as there are at least
@@ -1127,15 +1142,15 @@ function LobbyPageContent({
   return (
     <OnlinePageShell>
       <div className="space-y-6">
-        {/* Quick Play / Matchmaking - show when not in a lobby or match */}
-        {!lobby && !match && (
+        {/* Quick Play / Matchmaking - show when not in a lobby, and either no match or user is not a player in the match (spectators should still see this) */}
+        {!lobby && (!match || !isPlayerInMatch) && (
           <MatchmakingPanel
             onCreateMatch={() => setCreateMatchOverlayOpen(true)}
           />
         )}
 
-        {/* Match Controls - show when a match exists in context */}
-        {match && (
+        {/* Match Controls - show only when user is actually a player in the match (not spectator) */}
+        {match && isPlayerInMatch && (
           <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="text-sm font-semibold opacity-90">
               Match Controls
