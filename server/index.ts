@@ -2459,6 +2459,30 @@ io.on("connection", async (socket: SocketClient) => {
     if (!matchId) return;
     const player = getPlayerBySocket(socket);
     if (!player) return;
+
+    // SECURITY: Prevent spectator sockets from joining as players
+    // This catches cases where a spectator socket tries to call joinMatch
+    const isSpectatorSocket = Boolean(
+      (socket as unknown as { data?: { isSpectator?: boolean } | undefined })
+        .data?.isSpectator
+    );
+    if (isSpectatorSocket) {
+      console.warn("[joinMatch] Rejected: socket is marked as spectator", {
+        matchId,
+        playerId: player.id,
+        socketId: socket.id,
+      });
+      try {
+        socket.emit("match:error", {
+          matchId,
+          code: "spectator_cannot_join",
+          message:
+            "Spectators cannot join as players. Leave spectate mode first.",
+        });
+      } catch {}
+      return;
+    }
+
     const matchSnapshot = matches.get(matchId);
     if (matchSnapshot && matchSnapshot.status === "ended") {
       try {
