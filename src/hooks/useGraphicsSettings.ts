@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 
+export type HandSortOrder = "sitesFirst" | "spellsFirst";
+
 export interface GraphicsSettings {
   /** Use 3D cards with thickness and lighting (true) or flat planes (false) */
   enhanced3DCards: boolean;
@@ -13,6 +15,8 @@ export interface GraphicsSettings {
   cardPreviewScale: number;
   /** Scale multiplier for console/toolbox text size (0.5 - 1.5, default 1.0) */
   uiTextScale: number;
+  /** Hand card sort order: sites first (default) or spells first */
+  handSortOrder: HandSortOrder;
 }
 
 const STORAGE_KEY = "sorcery-graphics-settings";
@@ -23,6 +27,7 @@ const DEFAULT_SETTINGS: GraphicsSettings = {
   showTable: true,
   cardPreviewScale: 1.0,
   uiTextScale: 1.0,
+  handSortOrder: "sitesFirst",
 };
 
 function loadSettings(): GraphicsSettings {
@@ -135,6 +140,13 @@ export function useGraphicsSettings() {
     [setSettings]
   );
 
+  const toggleHandSortOrder = useCallback(() => {
+    setSettings({
+      handSortOrder:
+        settings.handSortOrder === "sitesFirst" ? "spellsFirst" : "sitesFirst",
+    });
+  }, [settings.handSortOrder, setSettings]);
+
   return {
     settings,
     isLoaded,
@@ -144,6 +156,7 @@ export function useGraphicsSettings() {
     toggleShowTable,
     setCardPreviewScale,
     setUiTextScale,
+    toggleHandSortOrder,
   };
 }
 

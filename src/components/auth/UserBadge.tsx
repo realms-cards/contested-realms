@@ -82,6 +82,7 @@ export default function UserBadge({
     toggleShowTable,
     setCardPreviewScale,
     setUiTextScale,
+    toggleHandSortOrder,
   } = useGraphicsSettings();
   const [showOpponentPlaymat, setShowOpponentPlaymat] = useState(true);
   const [playmatPrefLoading, setPlaymatPrefLoading] = useState(false);
@@ -967,6 +968,35 @@ export default function UserBadge({
                     className={`shrink-0 w-2.5 h-2.5 rounded-full ${
                       graphicsSettings.showTable
                         ? "bg-amber-300"
+                        : "bg-slate-500"
+                    }`}
+                  />
+                </button>
+
+                {/* Hand sort order */}
+                <button
+                  type="button"
+                  onClick={toggleHandSortOrder}
+                  className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg ring-1 transition-colors text-left ${
+                    graphicsSettings.handSortOrder === "spellsFirst"
+                      ? "bg-rose-500/20 ring-rose-500/40"
+                      : "bg-slate-800 ring-slate-600"
+                  }`}
+                >
+                  <div className="min-w-0">
+                    <div className="text-xs text-slate-200 font-medium">
+                      Hand sort
+                    </div>
+                    <div className="text-[10px] text-slate-400 truncate">
+                      {graphicsSettings.handSortOrder === "spellsFirst"
+                        ? "Spells first"
+                        : "Sites first"}
+                    </div>
+                  </div>
+                  <span
+                    className={`shrink-0 w-2.5 h-2.5 rounded-full ${
+                      graphicsSettings.handSortOrder === "spellsFirst"
+                        ? "bg-rose-300"
                         : "bg-slate-500"
                     }`}
                   />
