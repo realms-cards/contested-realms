@@ -310,7 +310,7 @@ export function AvatarCard({
     lastAvatarCardsRef.current[seat] = avatar.card;
   }
   const rotZ =
-    (seat === "p1" ? 0 : Math.PI) + (avatar.tapped ? Math.PI / 2 : 0);
+    (seat === "p1" ? 0 : Math.PI) + (avatar.tapped ? -Math.PI / 2 : 0);
   const highlight = resolveHighlight();
 
   function resolveHighlight(): string | null {

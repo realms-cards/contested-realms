@@ -1,7 +1,12 @@
 import { Text } from "@react-three/drei";
 import type { ThreeEvent } from "@react-three/fiber";
 import { CuboidCollider, RigidBody } from "@react-three/rapier";
-import { useState, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
+import {
+  useState,
+  type Dispatch,
+  type MutableRefObject,
+  type SetStateAction,
+} from "react";
 import { flushSync } from "react-dom";
 import { Group } from "three";
 import { BodyApi } from "@/lib/game/boardShared";
@@ -451,7 +456,7 @@ export function PermanentStack({
         const rotZ =
           (owner === 1 ? 0 : Math.PI) +
           (tokenSiteReplace ? -Math.PI / 2 : 0) +
-          (p.tapped ? Math.PI / 2 : 0) +
+          (p.tapped ? -Math.PI / 2 : 0) +
           (p.tilt || 0);
         const offX = p.offset?.[0] ?? 0;
         const offZ = p.offset?.[1] ?? 0;

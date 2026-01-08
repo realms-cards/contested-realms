@@ -2,16 +2,8 @@ import type { MutableRefObject } from "react";
 import { Group } from "three";
 import CardOutline from "@/lib/game/components/CardOutline";
 import CardPlane from "@/lib/game/components/CardPlane";
-import {
-  CARD_LONG,
-  CARD_SHORT,
-  PLAYER_COLORS,
-} from "@/lib/game/constants";
-import type {
-  GameState,
-  Permanents,
-  PlayerKey,
-} from "@/lib/game/store/types";
+import { CARD_LONG, CARD_SHORT, PLAYER_COLORS } from "@/lib/game/constants";
+import type { GameState, Permanents, PlayerKey } from "@/lib/game/store/types";
 import { TOKEN_BY_NAME, tokenTextureUrl } from "@/lib/game/tokens";
 
 type DragState = { from: string; index: number } | null;
@@ -53,7 +45,7 @@ export function BoardDragGhost({
     const slug = avatar?.card?.slug || "";
     if (!slug) return null;
     const rotZ =
-      (dragAvatar === "p1" ? 0 : Math.PI) + (avatar?.tapped ? Math.PI / 2 : 0);
+      (dragAvatar === "p1" ? 0 : Math.PI) + (avatar?.tapped ? -Math.PI / 2 : 0);
     return (
       <>
         <CardOutline
@@ -94,7 +86,7 @@ export function BoardDragGhost({
     const rotZ =
       ownerRot +
       (tokenDef?.siteReplacement ? -Math.PI / 2 : 0) +
-      (p.tapped ? Math.PI / 2 : 0) +
+      (p.tapped ? -Math.PI / 2 : 0) +
       (p.tilt || 0);
     const slug = isToken ? "" : p.card.slug || "";
     const textureUrl =
