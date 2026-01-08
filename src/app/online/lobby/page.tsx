@@ -2537,16 +2537,7 @@ function LobbyPageContent({
             rel="noopener noreferrer"
             className="underline hover:text-slate-300"
           >
-            Discord
-          </a>
-          <span>·</span>
-          <a
-            href="https://github.com/realms-cards/issues/issues"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline hover:text-slate-300"
-          >
-            Issues
+            Official Discord
           </a>
           <span>·</span>
           <a

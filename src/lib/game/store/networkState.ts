@@ -340,20 +340,23 @@ export const createNetworkSlice: StateCreator<
         // CRITICAL: Filter out stolen cards from incoming zones patches
         // Server doesn't know about pithImpHands, so it may re-add stolen cards during turn transitions
         // EXCEPT: Don't filter cards that are being returned (tracked in processedPithImpReturns)
+        // IMPORTANT: Use instanceId (unique per card) to avoid filtering duplicate copies
         const pithImpHands = state.pithImpHands || [];
         const processedReturns =
           state.processedPithImpReturns || new Set<string>();
         if (pithImpHands.length > 0 && zonesCandidate) {
-          const stolenCardIds = new Set<number>();
+          const stolenInstanceIds = new Set<string>();
           for (const pithImpEntry of pithImpHands) {
             // Skip entries that are being returned (race condition: set() hasn't flushed yet)
             if (!processedReturns.has(pithImpEntry.id)) {
               for (const card of pithImpEntry.hand) {
-                stolenCardIds.add(card.cardId);
+                if (card.instanceId) {
+                  stolenInstanceIds.add(card.instanceId);
+                }
               }
             }
           }
-          if (stolenCardIds.size > 0) {
+          if (stolenInstanceIds.size > 0) {
             const filteredZones = { ...zonesCandidate } as Record<
               PlayerKey,
               GameState["zones"][PlayerKey]
@@ -364,7 +367,7 @@ export const createNetworkSlice: StateCreator<
                 filteredZones[seat] = {
                   ...seatZones,
                   hand: seatZones.hand.filter(
-                    (c) => !stolenCardIds.has(c.cardId)
+                    (c) => !c.instanceId || !stolenInstanceIds.has(c.instanceId)
                   ),
                 };
               }
@@ -375,15 +378,20 @@ export const createNetworkSlice: StateCreator<
 
         // CRITICAL: Filter out Morgana private hand cards from incoming spellbook patches
         // Server doesn't know about morganaHands, so it may re-add drawn cards during turn transitions
+        // IMPORTANT: Use instanceId (unique per card) to avoid filtering duplicate copies
         const morganaHands = state.morganaHands || [];
         if (morganaHands.length > 0 && zonesCandidate) {
-          const morganaCardIdsBySeat: Record<PlayerKey, Set<number>> = {
+          const morganaInstanceIdsBySeat: Record<PlayerKey, Set<string>> = {
             p1: new Set(),
             p2: new Set(),
           };
           for (const morganaEntry of morganaHands) {
             for (const card of morganaEntry.hand) {
-              morganaCardIdsBySeat[morganaEntry.ownerSeat].add(card.cardId);
+              if (card.instanceId) {
+                morganaInstanceIdsBySeat[morganaEntry.ownerSeat].add(
+                  card.instanceId
+                );
+              }
             }
           }
           const filteredZones = { ...zonesCandidate } as Record<
@@ -391,14 +399,14 @@ export const createNetworkSlice: StateCreator<
             GameState["zones"][PlayerKey]
           >;
           for (const seat of ["p1", "p2"] as PlayerKey[]) {
-            const cardIds = morganaCardIdsBySeat[seat];
-            if (cardIds.size > 0) {
+            const instanceIds = morganaInstanceIdsBySeat[seat];
+            if (instanceIds.size > 0) {
               const seatZones = filteredZones[seat];
               if (seatZones && Array.isArray(seatZones.spellbook)) {
                 filteredZones[seat] = {
                   ...seatZones,
                   spellbook: seatZones.spellbook.filter(
-                    (c) => !cardIds.has(c.cardId)
+                    (c) => !c.instanceId || !instanceIds.has(c.instanceId)
                   ),
                 };
               }
@@ -409,15 +417,20 @@ export const createNetworkSlice: StateCreator<
 
         // CRITICAL: Filter out Omphalos private hand cards from incoming spellbook patches
         // Server doesn't know about omphalosHands, so it may re-add drawn cards during turn transitions
+        // IMPORTANT: Use instanceId (unique per card) to avoid filtering duplicate copies
         const omphalosHands = state.omphalosHands || [];
         if (omphalosHands.length > 0 && zonesCandidate) {
-          const omphalosCardIdsBySeat: Record<PlayerKey, Set<number>> = {
+          const omphalosInstanceIdsBySeat: Record<PlayerKey, Set<string>> = {
             p1: new Set(),
             p2: new Set(),
           };
           for (const omphalosEntry of omphalosHands) {
             for (const card of omphalosEntry.hand) {
-              omphalosCardIdsBySeat[omphalosEntry.ownerSeat].add(card.cardId);
+              if (card.instanceId) {
+                omphalosInstanceIdsBySeat[omphalosEntry.ownerSeat].add(
+                  card.instanceId
+                );
+              }
             }
           }
           const filteredZones = { ...zonesCandidate } as Record<
@@ -425,14 +438,14 @@ export const createNetworkSlice: StateCreator<
             GameState["zones"][PlayerKey]
           >;
           for (const seat of ["p1", "p2"] as PlayerKey[]) {
-            const cardIds = omphalosCardIdsBySeat[seat];
-            if (cardIds.size > 0) {
+            const instanceIds = omphalosInstanceIdsBySeat[seat];
+            if (instanceIds.size > 0) {
               const seatZones = filteredZones[seat];
               if (seatZones && Array.isArray(seatZones.spellbook)) {
                 filteredZones[seat] = {
                   ...seatZones,
                   spellbook: seatZones.spellbook.filter(
-                    (c) => !cardIds.has(c.cardId)
+                    (c) => !c.instanceId || !instanceIds.has(c.instanceId)
                   ),
                 };
               }
@@ -532,30 +545,34 @@ export const createNetworkSlice: StateCreator<
 
         // CRITICAL: Filter out cards from hand that are already on the board (as permanents)
         // This prevents duplication when server has stale zone data after card was played
+        // IMPORTANT: Use instanceId (unique per card copy) NOT cardId (shared between copies)
         if (zonesCandidate) {
-          // Collect all cardIds that are currently on the board as permanents
+          // Collect all instanceIds that are currently on the board as permanents
           const permanentsSource =
             p.permanents !== undefined
               ? replaceKeys.has("permanents")
                 ? (p.permanents as Permanents)
                 : mergePermanentsMap(state.permanents, p.permanents)
               : state.permanents;
-          const onBoardCardIds = new Set<number>();
+          const onBoardInstanceIds = new Set<string>();
           for (const cellPermanents of Object.values(permanentsSource || {})) {
             for (const perm of cellPermanents || []) {
-              if (perm?.card?.cardId) {
-                onBoardCardIds.add(perm.card.cardId);
+              // Use instanceId if available, otherwise card.instanceId
+              const instId = perm?.instanceId || perm?.card?.instanceId;
+              if (instId && typeof instId === "string") {
+                onBoardInstanceIds.add(instId);
               }
             }
           }
-          // Also include cards on sites
+          // Also include cards on sites (use instanceId)
           const sitesSource = p.board?.sites ?? state.board?.sites;
           for (const site of Object.values(sitesSource || {})) {
-            if (site?.card?.cardId) {
-              onBoardCardIds.add(site.card.cardId);
+            const instId = site?.card?.instanceId;
+            if (instId && typeof instId === "string") {
+              onBoardInstanceIds.add(instId);
             }
           }
-          if (onBoardCardIds.size > 0) {
+          if (onBoardInstanceIds.size > 0) {
             const filteredZones = { ...zonesCandidate } as Record<
               PlayerKey,
               GameState["zones"][PlayerKey]
@@ -565,7 +582,7 @@ export const createNetworkSlice: StateCreator<
               if (seatZones && Array.isArray(seatZones.hand)) {
                 const originalCount = seatZones.hand.length;
                 const filteredHand = seatZones.hand.filter(
-                  (c) => !onBoardCardIds.has(c.cardId)
+                  (c) => !c.instanceId || !onBoardInstanceIds.has(c.instanceId)
                 );
                 if (filteredHand.length !== originalCount) {
                   console.log(

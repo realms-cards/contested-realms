@@ -73,6 +73,18 @@ function makePermanentFallbackKey(record: PermanentRecord): string | null {
       ? `id:${record.instanceId}`
       : null;
   }
+  // CRITICAL: Use instanceId as the primary identifier when available
+  // This prevents duplicate cards (same cardId) from being incorrectly merged
+  // Only fall back to cardId+position for legacy data without instanceIds
+  const cardInstanceId =
+    typeof card.instanceId === "string" && card.instanceId.length > 0
+      ? card.instanceId
+      : null;
+  if (cardInstanceId) {
+    return `inst:${cardInstanceId}`;
+  }
+  // Legacy fallback: use cardId + owner + attachment info
+  // This is only used when instanceId is not available
   const cardId =
     card.cardId ?? card.slug ?? card.name ?? record.instanceId ?? "unknown";
   const attached = record.attachedTo as
@@ -81,7 +93,12 @@ function makePermanentFallbackKey(record: PermanentRecord): string | null {
   const attachedKey = attached
     ? `${attached.at ?? ""}|${attached.index ?? ""}`
     : "none";
-  return `${owner ?? ""}|${cardId}|${attachedKey}`;
+  // Include offset/tilt for additional uniqueness when cards share cardId
+  const offset = record.offset as [number, number] | null | undefined;
+  const offsetKey = offset
+    ? `${offset[0].toFixed(3)},${offset[1].toFixed(3)}`
+    : "nooff";
+  return `${owner ?? ""}|${cardId}|${attachedKey}|${offsetKey}`;
 }
 
 export function mergeArrayByInstanceId(

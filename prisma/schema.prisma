@@ -239,6 +239,8 @@ model User {
   showOpponentPlaymat     Boolean                  @default(true)
   soatcAutoDetect         Boolean                  @default(false)
   soatcUuid               String?
+  discordId               String?                  @unique
+  discordUsername         String?
   accounts                Account[]
   cardLists               CardList[]
   collectionCards         CollectionCard[]
@@ -826,6 +828,48 @@ enum ParticipantStatus {
 }
 
 enum InvitationStatus {
+  pending
+  accepted
+  declined
+  expired
+}
+
+model DiscordLinkToken {
+  id          String   @id @default(cuid())
+  token       String   @unique
+  discordId   String
+  discordTag  String
+  guildId     String?
+  expiresAt   DateTime
+  usedAt      DateTime?
+  userId      String?
+  createdAt   DateTime @default(now())
+
+  @@index([token])
+  @@index([discordId])
+  @@index([expiresAt])
+}
+
+model DiscordChallenge {
+  id            String                 @id @default(cuid())
+  challengerId  String
+  challengeeId  String
+  format        GameFormat             @default(constructed)
+  guildId       String?
+  channelId     String?
+  status        DiscordChallengeStatus @default(pending)
+  matchId       String?
+  expiresAt     DateTime
+  createdAt     DateTime               @default(now())
+  respondedAt   DateTime?
+
+  @@index([challengerId])
+  @@index([challengeeId])
+  @@index([status])
+  @@index([expiresAt])
+}
+
+enum DiscordChallengeStatus {
   pending
   accepted
   declined

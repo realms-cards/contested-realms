@@ -108,6 +108,32 @@ services:
         max-size: "50m"
         max-file: "5"
 
+  # Discord Bot - SINGLE INSTANCE ONLY
+  # Uses Redis leader lock to ensure only one bot connects to Discord
+  discord-bot:
+    build:
+      context: ./discord-bot
+      dockerfile: Dockerfile
+    container_name: sorcery-discord-bot
+    restart: unless-stopped
+    deploy:
+      replicas: 1 # MUST be 1 - do not scale, Discord only allows one bot connection
+    env_file:
+      - .env.production
+    environment:
+      - REALMS_API_URL=http://server1:3010
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+      server1:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   # Public entrypoint: TLS + reverse-proxy/load-balancer
   caddy:
     image: caddy:2-alpine
