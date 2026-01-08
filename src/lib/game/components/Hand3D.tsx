@@ -26,6 +26,7 @@ import { DRAG_HOLD_MS } from "@/lib/game/constants";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef, PlayerKey } from "@/lib/game/store";
 import { useTouchDevice } from "@/lib/hooks/useTouchDevice";
+import { useGraphicsSettings } from "@/hooks/useGraphicsSettings";
 
 export interface Hand3DProps {
   matW: number;
@@ -82,6 +83,7 @@ export default function Hand3D({
   const { playCardSelect } = useSound();
 
   const hand = useMemo(() => zones?.[owner]?.hand ?? [], [zones, owner]);
+  const { settings: graphicsSettings } = useGraphicsSettings();
 
   // Get cardback config for this hand's owner (hand cards always use preset)
   const ownerCardbacks = cardbackUrls[owner];
@@ -93,17 +95,23 @@ export default function Hand3D({
     [avatars, owner]
   );
 
-  // Sort hand with sites first, then spells
+  // Sort hand based on user preference (sites first or spells first)
   const sortedHand = useMemo(() => {
+    const sitesFirst = graphicsSettings.handSortOrder !== "spellsFirst";
     return [...hand].sort((a, b) => {
       const aIsSite = (a.type || "").toLowerCase().includes("site");
       const bIsSite = (b.type || "").toLowerCase().includes("site");
 
-      if (aIsSite && !bIsSite) return -1; // a (site) comes before b (spell)
-      if (!aIsSite && bIsSite) return 1; // b (site) comes before a (spell)
+      if (sitesFirst) {
+        if (aIsSite && !bIsSite) return -1; // a (site) comes before b (spell)
+        if (!aIsSite && bIsSite) return 1; // b (site) comes before a (spell)
+      } else {
+        if (aIsSite && !bIsSite) return 1; // a (site) comes after b (spell)
+        if (!aIsSite && bIsSite) return -1; // b (site) comes after a (spell)
+      }
       return 0; // maintain relative order within same type
     });
-  }, [hand]);
+  }, [hand, graphicsSettings.handSortOrder]);
   const rootRef = useRef<Group | null>(null);
   const { camera } = useThree();
   // Get mouse zone state from store
@@ -271,10 +279,11 @@ export default function Hand3D({
         selected &&
         selected.who === owner
       ) {
-        const clientY =
-          e instanceof TouchEvent
-            ? e.changedTouches?.[0]?.clientY ?? lastMousePosRef.current.y
-            : e.clientY;
+        // Safe touch event check
+        const isTouchEvent = "changedTouches" in e;
+        const clientY = isTouchEvent
+          ? (e as TouchEvent).changedTouches?.[0]?.clientY ?? lastMousePosRef.current.y
+          : (e as MouseEvent).clientY;
         const hScr = window.innerHeight || 1;
         const inReturnZone = clientY >= hScr - 20;
 
@@ -583,7 +592,7 @@ export default function Hand3D({
       const angle = startAngle + i * stepAngle;
       const rot = angle; // Positive for upward fan
 
-      // X position centered for the whole fan (do not slide the entire fan)
+      // X position centered for the whole fan
       const x = i * baseSpacing - ((n - 1) * baseSpacing) / 2;
 
       // Y position: smooth interpolated arc + hover pop-up
@@ -615,7 +624,7 @@ export default function Hand3D({
         hoverWeight,
       };
     });
-  }, [sortedHand, hand, selected, owner, focusLerp, hoverLerp]);
+  }, [sortedHand, hand, selected, owner, focusLerp, hoverLerp, dragFromHand]);
 
   // Clamp focus to hand size changes
   useEffect(() => {
@@ -1148,7 +1157,9 @@ export default function Hand3D({
                   const dy = e.clientY - s.y;
                   const dist = Math.hypot(dx, dy);
                   const PIX_THRESH = isCoarsePointer ? 12 : 6;
+
                   if (held >= DRAG_HOLD_MS && dist > PIX_THRESH) {
+                    // Start drag - reordering vs playing is determined by where it's dropped
                     selectHandCard(owner, originalIndex);
                     try {
                       playCardSelect();
