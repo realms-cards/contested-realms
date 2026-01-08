@@ -13,7 +13,7 @@ export function DraggingSiteGhost({ draggingSite }: DraggingSiteGhostProps) {
   const rotZ =
     -Math.PI / 2 +
     (site.owner === 1 ? 0 : Math.PI) +
-    (site.tapped ? Math.PI / 2 : 0);
+    (site.tapped ? -Math.PI / 2 : 0);
 
   return (
     <group position={[worldPos.x, 0.15, worldPos.z]}>

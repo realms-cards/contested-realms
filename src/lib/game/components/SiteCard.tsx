@@ -124,7 +124,7 @@ export function SiteCard({
   const rotZ =
     -Math.PI / 2 +
     (site.owner === 1 ? 0 : Math.PI) +
-    (site.tapped ? Math.PI / 2 : 0);
+    (site.tapped ? -Math.PI / 2 : 0);
   const ownerSeat = seatFromOwner(site.owner);
   const playerPos = playerPositions[ownerSeat];
   const edgeOffset = calculateEdgePosition(

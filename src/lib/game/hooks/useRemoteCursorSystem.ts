@@ -164,7 +164,7 @@ export function useRemoteCursorSystem({
         const rotZ =
           ownerRot +
           (tokenDef?.siteReplacement ? -Math.PI / 2 : 0) +
-          (p.tapped ? Math.PI / 2 : 0) +
+          (p.tapped ? -Math.PI / 2 : 0) +
           (p.tilt || 0);
         const color =
           entry.playerKey === "p1"
@@ -369,7 +369,7 @@ export function useRemoteCursorSystem({
             ? PLAYER_COLORS.p2
             : PLAYER_COLORS.spectator;
         const rotZ =
-          (who === "p1" ? 0 : Math.PI) + (avatar?.tapped ? Math.PI / 2 : 0);
+          (who === "p1" ? 0 : Math.PI) + (avatar?.tapped ? -Math.PI / 2 : 0);
         const slug = avatar?.card?.slug || "";
         if (!slug) continue;
         dragging.add(who);
