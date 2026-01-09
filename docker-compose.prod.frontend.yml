@@ -68,7 +68,11 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:3000/api/health || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          "wget -q --spider http://localhost:3000/api/health || exit 1",
+        ]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -123,40 +127,71 @@ services:
         max-size: "50m"
         max-file: "5"
 
-  server2:
+  # Discord Bot - SINGLE INSTANCE ONLY
+  # Uses Redis leader lock to ensure only one bot connects to Discord
+  discord-bot:
     build:
-      context: .
-      dockerfile: Dockerfile.server
-    container_name: sorcery-server-2
+      context: ./discord-bot
+      dockerfile: Dockerfile
+    container_name: sorcery-discord-bot
     restart: unless-stopped
+    deploy:
+      replicas: 1 # MUST be 1 - do not scale, Discord only allows one bot connection
     env_file:
       - .env.production
     environment:
-      INSTANCE_ID: server2
-      PORT: 3010
-      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      - REALMS_API_URL=http://server1:3010
     depends_on:
-      migrate:
-        condition: service_completed_successfully
       redis:
         condition: service_healthy
-    expose:
-      - "3010"
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          'node -e ''http=require("http");http.get("http://127.0.0.1:3010/healthz",res=>{process.exit(res.statusCode===200?0:1)}).on("error",()=>process.exit(1))''',
-        ]
-      interval: 5s
-      timeout: 3s
-      retries: 20
-      start_period: 10s
+      server1:
+        condition: service_healthy
     logging:
       driver: json-file
       options:
-        max-size: "50m"
-        max-file: "5"
+        max-size: "10m"
+        max-file: "3"
+
+  # TURN server for WebRTC NAT traversal
+  turn:
+    image: instrumentisto/coturn:latest
+    container_name: sorcery-turn
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    ports:
+      - "3478:3478/udp"
+      - "3478:3478/tcp"
+      - "5349:5349/tcp"
+      - "49160-49200:49160-49200/udp"
+    volumes:
+      - caddy_data:/data:ro
+      - caddy_config:/config:ro
+    depends_on:
+      - caddy
+    entrypoint:
+      - /bin/sh
+      - -lc
+      - >-
+        REALM="$${TURN_REALM:-turn.realms.cards}"; 
+        USERNAME="$${TURN_USERNAME:-turnuser}"; 
+        PASSWORD="$${TURN_PASSWORD:-turnpass}"; 
+        CERT_FILE=$(find /data/caddy/certificates -type f -name "$${REALM}.crt" | head -n1); 
+        KEY_FILE=$(find /data/caddy/certificates -type f -name "$${REALM}.key" | head -n1); 
+        set -- $(hostname -i); PRIV_IP=$1; 
+        if [ -n "$${PUBLIC_IP}" ]; then EXT="--external-ip=$${PUBLIC_IP}/$${PRIV_IP}"; else EXT=""; fi; 
+        if [ -z "$${CERT_FILE}" ] || [ -z "$${KEY_FILE}" ]; then 
+          echo "[turn] TLS cert not found, starting without TLS (3478 only)"; 
+          exec turnserver --listening-port=3478 --fingerprint --lt-cred-mech --user="$${USERNAME}:$${PASSWORD}" --realm="$${REALM}" --min-port=49160 --max-port=49200 --no-tls --no-dtls --no-cli --log-file=stdout --verbose $${EXT}; 
+        else 
+          echo "[turn] Using TLS certificate at $${CERT_FILE}"; 
+          exec turnserver --listening-port=3478 --tls-listening-port=5349 --fingerprint --lt-cred-mech --user="$${USERNAME}:$${PASSWORD}" --realm="$${REALM}" --min-port=49160 --max-port=49200 --cert="$${CERT_FILE}" --pkey="$${KEY_FILE}" --no-cli --log-file=stdout --verbose $${EXT}; 
+        fi
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   # Public entrypoint: TLS + reverse-proxy/load-balancer
   caddy:
@@ -181,8 +216,6 @@ services:
       frontend:
         condition: service_healthy
       server1:
-        condition: service_healthy
-      server2:
         condition: service_healthy
     logging:
       driver: json-file
