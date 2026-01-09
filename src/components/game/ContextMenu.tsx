@@ -1325,6 +1325,9 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                       const isLance = tokenName === "lance";
                       const isStealth = tokenName === "stealth";
                       const isDisabled = tokenName === "disabled";
+                      const isWard = tokenName === "ward";
+                      const isConditionToken =
+                        isStealth || isDisabled || isWard;
 
                       // Check if this is a carryable artifact
                       const tokenType = (token.type || "").toLowerCase();
@@ -1402,8 +1405,8 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                             </button>
                           </div>
                         );
-                      } else if (isStealth || isDisabled) {
-                        // Stealth/Disabled: banish when detached - only if we own the parent
+                      } else if (isConditionToken) {
+                        // Condition tokens (Stealth/Disabled/Ward): banish directly - only if we own the parent
                         if (!isMine) {
                           return (
                             <div
@@ -1450,7 +1453,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                               onClose();
                             }}
                           >
-                            Remove {token.name}
+                            Banish {token.name}
                           </button>
                         );
                       } else {
