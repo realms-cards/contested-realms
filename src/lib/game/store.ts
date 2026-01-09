@@ -227,6 +227,8 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         matchEnded: false,
         winner: null,
         resolversDisabled: false,
+        goldfishMode: false,
+        goldfishHandSize: 5,
         board: createInitialBoard(),
         zones: createEmptyZonesRecord(),
         ...createInitialUiState(),

@@ -56,6 +56,11 @@ type CoreStateSlice = Pick<
   | "tieGame"
   | "resolversDisabled"
   | "setResolversDisabled"
+  | "goldfishMode"
+  | "goldfishHandSize"
+  | "setGoldfishMode"
+  | "setGoldfishHandSize"
+  | "triggerGoldfishShuffle"
   | "addLife"
   | "nextPhase"
   | "endTurn"
@@ -247,6 +252,113 @@ export const createCoreSlice: StateCreator<
         ? "Card resolvers DISABLED for this match"
         : "Card resolvers ENABLED for this match"
     );
+  },
+
+  // Goldfish mode (hotseat only): shuffle hands back to piles at start of each turn
+  goldfishMode: false,
+  goldfishHandSize: 5,
+  setGoldfishMode: (enabled: boolean) => {
+    set({ goldfishMode: enabled });
+    get().log(
+      enabled
+        ? "Goldfish mode ENABLED: hands will shuffle back at turn start"
+        : "Goldfish mode DISABLED"
+    );
+  },
+  setGoldfishHandSize: (size: number) => {
+    const clamped = Math.max(1, Math.min(10, Math.floor(size)));
+    set({ goldfishHandSize: clamped });
+    get().log(`Goldfish hand size set to ${clamped}`);
+  },
+  triggerGoldfishShuffle: (who: PlayerKey) => {
+    const state = get();
+    if (!state.goldfishMode) return;
+
+    console.log("[goldfish] Triggering shuffle for", who);
+    const hand = state.zones[who]?.hand || [];
+    if (hand.length === 0) return;
+
+    const spellbook = [...(state.zones[who]?.spellbook || [])];
+    const atlas = [...(state.zones[who]?.atlas || [])];
+
+    // Sort cards back to their respective piles
+    for (const card of hand) {
+      const isSite = (card.type || "").toLowerCase().includes("site");
+      if (isSite) {
+        atlas.push(card);
+      } else {
+        spellbook.push(card);
+      }
+    }
+
+    // Shuffle both piles
+    for (let i = spellbook.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [spellbook[i], spellbook[j]] = [spellbook[j], spellbook[i]];
+    }
+    for (let i = atlas.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [atlas[i], atlas[j]] = [atlas[j], atlas[i]];
+    }
+
+    // Update zones with shuffled piles and empty hand
+    const zonesNext = {
+      ...state.zones,
+      [who]: {
+        ...state.zones[who],
+        hand: [],
+        spellbook,
+        atlas,
+      },
+    } as GameState["zones"];
+
+    set({ zones: zonesNext });
+
+    const playerNum = who === "p1" ? "1" : "2";
+    get().log(
+      `[p${playerNum}:PLAYER] shuffles hand back into piles (Goldfish)`
+    );
+
+    // Draw fresh hand (respecting goldfishHandSize)
+    const handSize = state.goldfishHandSize;
+    // Draw from spellbook first, then atlas if needed
+    const drawn: typeof hand = [];
+    const spellbookMut = [...zonesNext[who].spellbook];
+    const atlasMut = [...zonesNext[who].atlas];
+
+    // Try to draw mostly spells with some sites (similar to opening hand)
+    const sitesToDraw = Math.min(2, atlasMut.length);
+    const spellsToDrawCount = Math.min(
+      handSize - sitesToDraw,
+      spellbookMut.length
+    );
+
+    for (let i = 0; i < spellsToDrawCount; i++) {
+      const card = spellbookMut.shift();
+      if (card) drawn.push(card);
+    }
+    for (let i = 0; i < sitesToDraw && drawn.length < handSize; i++) {
+      const card = atlasMut.shift();
+      if (card) drawn.push(card);
+    }
+    // Fill remaining from spellbook if atlas was short
+    while (drawn.length < handSize && spellbookMut.length > 0) {
+      const card = spellbookMut.shift();
+      if (card) drawn.push(card);
+    }
+
+    const finalZones = {
+      ...zonesNext,
+      [who]: {
+        ...zonesNext[who],
+        hand: drawn,
+        spellbook: spellbookMut,
+        atlas: atlasMut,
+      },
+    } as GameState["zones"];
+
+    set({ zones: finalZones });
+    get().log(`[p${playerNum}:PLAYER] draws ${drawn.length} cards (Goldfish)`);
   },
 
   addLife: (who, delta) =>
@@ -527,6 +639,14 @@ export const createCoreSlice: StateCreator<
     try {
       get().triggerHeadlessHauntStartOfTurn(nextKey);
     } catch {}
+
+    // Goldfish mode: shuffle hand back to piles and draw fresh hand (hotseat only)
+    // In hotseat, actorKey is null; in online play, actorKey is set
+    if (state.goldfishMode && !state.actorKey) {
+      try {
+        get().triggerGoldfishShuffle(nextKey);
+      } catch {}
+    }
     // Snapshot creation is handled by GameToolbox.tsx useEffect
   },
 });

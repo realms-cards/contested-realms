@@ -994,6 +994,12 @@ export type GameState = {
   // Disable all custom card resolvers for the match (match-wide setting)
   resolversDisabled: boolean;
   setResolversDisabled: (disabled: boolean) => void;
+  // Goldfish mode (hotseat only): shuffle hands back to piles at start of each turn
+  goldfishMode: boolean;
+  goldfishHandSize: number; // Cards to draw after shuffling (default 5)
+  setGoldfishMode: (enabled: boolean) => void;
+  setGoldfishHandSize: (size: number) => void;
+  triggerGoldfishShuffle: (who: PlayerKey) => void;
   // Cross-turn interactions
   interactionLog: InteractionStateMap;
   pendingInteractionId: string | null;
