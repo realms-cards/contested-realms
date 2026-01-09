@@ -58,7 +58,10 @@ export default function GameToolbox({
   // Calculate font size based on uiTextScale (0.5-1.5 maps to 10px-16px)
   // Base size is 12px (text-xs), scaled with min 10px and max 16px
   const baseFontSize = 12;
-  const scaledFontSize = Math.max(10, Math.min(16, Math.round(baseFontSize * graphicsSettings.uiTextScale)));
+  const scaledFontSize = Math.max(
+    10,
+    Math.min(16, Math.round(baseFontSize * graphicsSettings.uiTextScale))
+  );
   const fontStyle = { fontSize: `${scaledFontSize}px` };
 
   // UI state
@@ -136,6 +139,10 @@ export default function GameToolbox({
   const cardScale = useGameStore((s) => s.cardScale);
   const setCardScale = useGameStore((s) => s.setCardScale);
 
+  // Resolvers toggle (match-wide)
+  const resolversDisabled = useGameStore((s) => s.resolversDisabled);
+  const setResolversDisabled = useGameStore((s) => s.setResolversDisabled);
+
   // Peek dialog from central store (populated by interaction:result)
   const peekDialog = useGameStore((s) => s.peekDialog);
   const closePeekDialog = useGameStore((s) => s.closePeekDialog);
@@ -189,6 +196,39 @@ export default function GameToolbox({
       } catch {}
     };
   }, [transport]);
+
+  // Keyboard shortcuts for dice rolling: "2" for D20, "6" for D6
+  useEffect(() => {
+    const isTextInput = (element: HTMLElement | null): boolean => {
+      if (!element) return false;
+      const tag = element.tagName;
+      return (
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        element.isContentEditable === true
+      );
+    };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.repeat) return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (isTextInput(document.activeElement as HTMLElement | null)) return;
+      // Don't trigger if dice overlay is already open
+      if (d20Open || d6Open) return;
+
+      if (event.key === "2") {
+        event.preventDefault();
+        startToolboxRoll();
+      } else if (event.key === "6") {
+        event.preventDefault();
+        startD6Roll();
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [d20Open, d6Open, isOnline, transport]);
 
   const disabledOnlineOpponentScry =
     isOnline && mySeat != null && scrySeat !== mySeat;
@@ -982,7 +1022,9 @@ export default function GameToolbox({
           <div
             className={`flex items-center justify-between ${headerPaddingClass} border-b border-white/10`}
           >
-            <div className="font-semibold" style={fontStyle}>Toolbox</div>
+            <div className="font-semibold" style={fontStyle}>
+              Toolbox
+            </div>
             <button
               className={`rounded bg-white/10 hover:bg-white/20 ${toggleBtnPaddingClass}`}
               style={fontStyle}
@@ -1271,6 +1313,15 @@ export default function GameToolbox({
                   className="w-4 h-4 rounded bg-white/10 border-white/20 text-sky-500 focus:ring-sky-500/50"
                 />
                 <span className="text-xs">Show ownership highlight</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={resolversDisabled}
+                  onChange={(e) => setResolversDisabled(e.target.checked)}
+                  className="w-4 h-4 rounded bg-white/10 border-white/20 text-red-500 focus:ring-red-500/50"
+                />
+                <span className="text-xs">Disable all card resolvers</span>
               </label>
               {/* Card Scale slider */}
               <div className="flex items-center gap-2">

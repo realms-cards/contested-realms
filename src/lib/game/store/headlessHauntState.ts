@@ -144,6 +144,12 @@ export const createHeadlessHauntSlice: StateCreator<
   },
 
   triggerHeadlessHauntStartOfTurn: (startingPlayerSeat: PlayerKey) => {
+    // Guard: skip if resolvers are disabled
+    if (get().resolversDisabled) {
+      console.log("[HeadlessHaunt] Skipping trigger - resolvers disabled");
+      return;
+    }
+
     // Guard: don't trigger if there's already a pending haunt move
     const existingPending = get().pendingHeadlessHauntMove;
     if (existingPending) {

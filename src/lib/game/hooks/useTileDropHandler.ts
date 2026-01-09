@@ -1,5 +1,5 @@
 import type { ThreeEvent } from "@react-three/fiber";
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import {
   clampOffset,
   STACK_MARGIN_Z,
@@ -49,6 +49,7 @@ type TileDropHandlerOptions = {
     pileInfo?: AttachmentPileInfo | null;
   }) => void;
   setDragFromHand: GameState["setDragFromHand"];
+  setDragFaceDown: GameState["setDragFaceDown"];
   setDragFromPile: GameState["setDragFromPile"];
   dragFromHand: boolean;
   dragFromPile: GameState["dragFromPile"];
@@ -95,6 +96,7 @@ export function useTileDropHandler({
   playSelectedTo,
   openAttachmentDialog,
   setDragFromHand,
+  setDragFaceDown,
   setDragFromPile,
   dragFromHand,
   dragFromPile,
@@ -130,12 +132,39 @@ export function useTileDropHandler({
     lastDropAt,
   } = dragContext;
 
+  // Track if 'F' key is held for face-down play
+  const fKeyHeldRef = useRef(false);
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "f" || e.key === "F") {
+        fKeyHeldRef.current = true;
+      }
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key === "f" || e.key === "F") {
+        fKeyHeldRef.current = false;
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+    };
+  }, []);
+
   return useCallback(
     ({ event, tileX, tileY, tileWorldPosition }: HandleTilePointerUpArgs) => {
       const e = event;
-      if (e.button !== 0) return;
+      // Accept left-click (0) or right-click (2) - right-click triggers face-down play
+      const isRightClick = e.button === 2;
+      if (e.button !== 0 && e.button !== 2) return;
       if (isSpectator) return;
       e.stopPropagation();
+      // Prevent context menu for right-click drops
+      if (isRightClick && e.nativeEvent) {
+        e.nativeEvent.preventDefault();
+      }
 
       // Handle site drag drop
       if (draggingSite) {
@@ -532,6 +561,10 @@ export function useTileDropHandler({
 
         if (dragFromPile?.card) {
           const type = (dragFromPile.card.type || "").toLowerCase();
+          // If F key is held or right-click release, play the card face-down (except sites)
+          if ((fKeyHeldRef.current || isRightClick) && !type.includes("site")) {
+            setDragFaceDown(true);
+          }
           playFromPileTo(tileX, tileY);
           try {
             playCardPlay();
@@ -548,6 +581,10 @@ export function useTileDropHandler({
             setPermanentOffset(dropKey, newIndex, [offX, offZ]);
           }
         } else if (selectedCard) {
+          // If F key is held or right-click release, play the card face-down
+          if (fKeyHeldRef.current || isRightClick) {
+            setDragFaceDown(true);
+          }
           playSelectedTo(tileX, tileY);
           try {
             playCardPlay();
@@ -593,6 +630,7 @@ export function useTileDropHandler({
       setAttackChoice,
       setDragAvatar,
       setDragFromHand,
+      setDragFaceDown,
       setDragFromPile,
       setDragging,
       setGhost,

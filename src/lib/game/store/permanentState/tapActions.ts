@@ -71,6 +71,7 @@ export const createTapActionsSlice: StateCreator<
         const ownerKey = seatFromOwner(cur.owner);
         if (state.actorKey !== ownerKey) return state as GameState;
       }
+      const wasFaceDown = !!cur.faceDown;
       const newFaceDown = !cur.faceDown;
       const next = bumpPermanentVersion({
         ...cur,
@@ -90,6 +91,50 @@ export const createTapActionsSlice: StateCreator<
       ]);
       if (deltaPatch) get().trySendPatch(deltaPatch);
       else get().trySendPatch(createPermanentsPatch(per, at));
+
+      // When flipping a face-down card UP, show toast/log as if it was just played
+      if (wasFaceDown && !newFaceDown && cur.card) {
+        const ownerSeat = seatFromOwner(cur.owner);
+        const playerNum = ownerSeat === "p1" ? "1" : "2";
+        // Parse cell number from "x,y" format
+        const [xStr, yStr] = at.split(",");
+        const x = parseInt(xStr, 10);
+        const y = parseInt(yStr, 10);
+        const boardW = state.board?.size?.w || 5;
+        const cellNo = y * boardW + x + 1;
+        const cardName = cur.card.name || "Unknown";
+
+        // Log the reveal
+        get().log(
+          `[p${playerNum}:PLAYER] reveals [p${playerNum}card:${cardName}] at #${cellNo}`
+        );
+
+        // Broadcast toast
+        const toastMessage = `[p${playerNum}:PLAYER] reveals [p${playerNum}card:${cardName}] at #${cellNo}`;
+        const tr = state.transport;
+        if (tr?.sendMessage) {
+          try {
+            tr.sendMessage({
+              type: "toast",
+              text: toastMessage,
+              cellKey: at,
+              seat: ownerSeat,
+            } as never);
+          } catch {}
+        } else {
+          // Offline: show local toast
+          try {
+            if (typeof window !== "undefined") {
+              window.dispatchEvent(
+                new CustomEvent("app:toast", {
+                  detail: { message: toastMessage, cellKey: at },
+                })
+              );
+            }
+          } catch {}
+        }
+      }
+
       return { permanents: per } as Partial<GameState> as GameState;
     }),
 

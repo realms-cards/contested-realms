@@ -795,9 +795,14 @@ export function PermanentStack({
                   clearTouchTimers();
                   const cx = e.clientX;
                   const cy = e.clientY;
-                  touchPreviewTimerRef.current = window.setTimeout(() => {
-                    beginHoverPreview(p.card, hoverKey);
-                  }, 180) as unknown as number;
+                  // Don't show preview to opponents for face-down cards
+                  const isOwner = actorKey === ownerSeat;
+                  const canShowPreview = !p.faceDown || isOwner || isSpectator;
+                  if (canShowPreview) {
+                    touchPreviewTimerRef.current = window.setTimeout(() => {
+                      beginHoverPreview(p.card, hoverKey);
+                    }, 180) as unknown as number;
+                  }
                   touchContextTimerRef.current = window.setTimeout(() => {
                     selectPermanent(key, idx);
                     setLastTouchedId(permId);
@@ -852,6 +857,11 @@ export function PermanentStack({
                   return;
                 }
                 e.stopPropagation();
+                // Don't show preview to opponents for face-down cards
+                const isOwner = actorKey === ownerSeat;
+                if (p.faceDown && !isOwner && !isSpectator) {
+                  return;
+                }
                 beginHoverPreview(p.card, hoverKey);
               }}
               onPointerOut={(e) => {
