@@ -19,7 +19,25 @@ let isConnected = false;
 function getRedis(): Redis {
   if (!redis) {
     const url = process.env.REDIS_URL || "redis://localhost:6379";
-    redis = new Redis(url, {
+
+    // Parse Redis URL to extract password if present
+    let redisConfig: any = url;
+    try {
+      const parsedUrl = new URL(url);
+      if (parsedUrl.password) {
+        // Use object config instead of URL string to handle special chars in password
+        redisConfig = {
+          host: parsedUrl.hostname,
+          port: parseInt(parsedUrl.port || "6379"),
+          password: parsedUrl.password,
+        };
+      }
+    } catch (err) {
+      // If URL parsing fails, fall back to string URL
+      console.warn("[leader-lock] Failed to parse REDIS_URL, using as-is");
+    }
+
+    redis = new Redis(redisConfig, {
       maxRetriesPerRequest: 3,
       retryStrategy: (times: number) => {
         if (times > 5) {
