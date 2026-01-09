@@ -527,9 +527,7 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
       const isCurrent = (who === "p1" ? 1 : 2) === state.currentPlayer;
       if (!isCurrent) {
         get().log(
-          `[Warning] Drawing '${
-            card.name
-          }' from ${from} out of turn: ${who.toUpperCase()} is not the current player`
+          `[Warning] Drawing from ${from} out of turn: ${who.toUpperCase()} is not the current player`
         );
       }
 
@@ -565,9 +563,7 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
       const hand = [...z.hand, ensured];
 
       const playerNum = who === "p1" ? "1" : "2";
-      get().log(
-        `[p${playerNum}:PLAYER] draws [p${playerNum}card:${card.name}] from ${from} to hand`
-      );
+      get().log(`[p${playerNum}:PLAYER] draws a card from ${from} to hand`);
 
       const zonesNext = {
         ...state.zones,

@@ -54,6 +54,8 @@ type CoreStateSlice = Pick<
   | "winner"
   | "checkMatchEnd"
   | "tieGame"
+  | "resolversDisabled"
+  | "setResolversDisabled"
   | "addLife"
   | "nextPhase"
   | "endTurn"
@@ -234,6 +236,18 @@ export const createCoreSlice: StateCreator<
       setTimeout(() => get().checkMatchEnd(), 0);
       return { players: nextPlayers } as Partial<GameState> as GameState;
     }),
+
+  resolversDisabled: false,
+  setResolversDisabled: (disabled: boolean) => {
+    set({ resolversDisabled: disabled });
+    const patch = { resolversDisabled: disabled };
+    get().trySendPatch(patch);
+    get().log(
+      disabled
+        ? "Card resolvers DISABLED for this match"
+        : "Card resolvers ENABLED for this match"
+    );
+  },
 
   addLife: (who, delta) =>
     set((state) => {

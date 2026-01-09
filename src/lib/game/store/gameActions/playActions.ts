@@ -347,6 +347,7 @@ export const createPlayActionsSlice: StateCreator<
       const per: Permanents = { ...state.permanents };
       const arr = [...(per[key] || [])];
       const cardWithId = prepareCardForSeat(card, who);
+      const isFaceDown = state.dragFaceDown;
       arr.push({
         owner: ownerFromSeat(who),
         card: cardWithId,
@@ -356,15 +357,25 @@ export const createPlayActionsSlice: StateCreator<
         tapped: false,
         version: 0,
         instanceId: cardWithId.instanceId ?? newPermanentInstanceId(),
+        faceDown: isFaceDown || undefined,
       });
+      // Reset dragFaceDown after use
+      if (isFaceDown) {
+        setTimeout(() => get().setDragFaceDown(false), 0);
+      }
       per[key] = arr;
       const logPlayerNum = who === "p1" ? "1" : "2";
-      get().log(
-        `[p${logPlayerNum}:PLAYER] plays [p${logPlayerNum}card:${card.name}] at #${cellNo}`
-      );
+      // When played face-down, don't reveal card name to opponent
+      const logCardName = isFaceDown
+        ? "a card face-down"
+        : `[p${logPlayerNum}card:${card.name}]`;
+      get().log(`[p${logPlayerNum}:PLAYER] plays ${logCardName} at #${cellNo}`);
       // Broadcast toast to both players with player color and cell for highlighting
       const playerNum = who === "p1" ? "1" : "2";
-      const toastMessage = `[p${playerNum}:PLAYER] played [p${playerNum}card:${card.name}] at #${cellNo}`;
+      const toastCardName = isFaceDown
+        ? "a card face-down"
+        : `[p${playerNum}card:${card.name}]`;
+      const toastMessage = `[p${playerNum}:PLAYER] played ${toastCardName} at #${cellNo}`;
       const tr = get().transport;
       if (tr?.sendMessage) {
         try {
@@ -467,6 +478,45 @@ export const createPlayActionsSlice: StateCreator<
         type,
         typeIncludesMinion: type.includes("minion"),
       });
+
+      // Check if resolvers are disabled - if so, skip all custom card logic
+      const resolversDisabled = get().resolversDisabled;
+      if (resolversDisabled) {
+        console.log(
+          "[playActions] Resolvers disabled - skipping custom card logic"
+        );
+        // Still trigger generic magic cast for Magic cards so they can be resolved manually
+        if (type.includes("magic") && newest) {
+          try {
+            get().beginMagicCast({
+              tile: { x, y },
+              spell: {
+                at: key,
+                index: arr.length - 1,
+                instanceId: newest.instanceId ?? null,
+                owner: newest.owner,
+                card: newest.card as CardRef,
+              },
+            });
+          } catch {}
+        }
+        // Return the updated state without triggering custom resolvers
+        const latestZones = get().zones;
+        const mergedZones = {
+          ...latestZones,
+          [who]: {
+            ...latestZones[who],
+            hand: zonesNext[who].hand,
+          },
+        } as GameState["zones"];
+        return {
+          zones: mergedZones,
+          permanents: per,
+          selectedCard: null,
+          selectedPermanent: null,
+          ...(playersNext ? { players: playersNext } : {}),
+        } as GameState;
+      }
 
       // If this is Chaos Twister, begin the dexterity minigame flow
       if (isChaosTwister && newest) {
@@ -1055,6 +1105,7 @@ export const createPlayActionsSlice: StateCreator<
       const per: Permanents = { ...state.permanents };
       const arr = [...(per[key] || [])];
       const cardWithId = prepareCardForSeat(card, who);
+      const isFaceDown = state.dragFaceDown;
       arr.push({
         owner: ownerFromSeat(who),
         card: cardWithId,
@@ -1064,16 +1115,28 @@ export const createPlayActionsSlice: StateCreator<
         tapped: false,
         version: 0,
         instanceId: cardWithId.instanceId ?? newPermanentInstanceId(),
+        faceDown: isFaceDown || undefined,
       });
+      // Reset dragFaceDown after use
+      if (isFaceDown) {
+        setTimeout(() => get().setDragFaceDown(false), 0);
+      }
       per[key] = arr;
       const logPlayerNum2 = who === "p1" ? "1" : "2";
+      // When played face-down, don't reveal card name to opponent
+      const logCardName2 = isFaceDown
+        ? "a card face-down"
+        : `[p${logPlayerNum2}card:${card.name}]`;
       get().log(
-        `[p${logPlayerNum2}:PLAYER] plays [p${logPlayerNum2}card:${card.name}] from ${from} at #${cellNo}`
+        `[p${logPlayerNum2}:PLAYER] plays ${logCardName2} from ${from} at #${cellNo}`
       );
       // Broadcast toast to both players with player color and cell for highlighting (skip tokens)
       if (!type.includes("token")) {
         const playerNum = who === "p1" ? "1" : "2";
-        const toastMessage = `[p${playerNum}:PLAYER] played [p${playerNum}card:${card.name}] at #${cellNo}`;
+        const toastCardName = isFaceDown
+          ? "a card face-down"
+          : `[p${playerNum}card:${card.name}]`;
+        const toastMessage = `[p${playerNum}:PLAYER] played ${toastCardName} at #${cellNo}`;
         const toastTr = get().transport;
         if (toastTr?.sendMessage) {
           try {
@@ -1163,9 +1226,7 @@ export const createPlayActionsSlice: StateCreator<
       if (!isCurrent) {
         // Log warning but allow operation for game repair purposes
         get().log(
-          `[Warning] Drawing '${
-            card.name
-          }' from ${from} out of turn: ${who.toUpperCase()} is not the current player`
+          `[Warning] Drawing from ${from} out of turn: ${who.toUpperCase()} is not the current player`
         );
       }
       // Collection-to-hand moves are only legal during the controlling player's own Main phase.
@@ -1173,9 +1234,7 @@ export const createPlayActionsSlice: StateCreator<
       // we allow collection draws during Main, Start, or Draw phases (essentially any active gameplay).
       // Setup phase is still blocked as the game hasn't started yet.
       if (from === "collection" && state.phase === "Setup") {
-        get().log(
-          `Cannot draw '${card.name}' from Collection during ${state.phase} phase`
-        );
+        get().log(`Cannot draw from Collection during ${state.phase} phase`);
         return { dragFromPile: null } as Partial<GameState> as GameState;
       }
 
@@ -1227,9 +1286,7 @@ export const createPlayActionsSlice: StateCreator<
       const hand = [...z.hand, ensured];
 
       const logPlayerNum = who === "p1" ? "1" : "2";
-      get().log(
-        `[p${logPlayerNum}:PLAYER] draws [p${logPlayerNum}card:${card.name}] from ${from} to hand`
-      );
+      get().log(`[p${logPlayerNum}:PLAYER] draws a card from ${from} to hand`);
 
       // Show toast for draw action (skip graveyard)
       if (from !== "graveyard") {

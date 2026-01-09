@@ -66,6 +66,7 @@ export type UiSlice = Pick<
   | "handHoverCount"
   | "handVisibilityMode"
   | "dragFromHand"
+  | "dragFaceDown"
   | "dragFromPile"
   | "hoverCell"
   | "previewCard"
@@ -80,6 +81,7 @@ export type UiSlice = Pick<
   | "setHandVisibilityMode"
   | "toggleHandVisibility"
   | "setDragFromHand"
+  | "setDragFaceDown"
   | "setDragFromPile"
   | "setHoverCell"
   | "clearHoverCell"
@@ -105,6 +107,7 @@ type UiStateDefaults = Pick<
   | "handHoverCount"
   | "handVisibilityMode"
   | "dragFromHand"
+  | "dragFaceDown"
   | "dragFromPile"
   | "hoverCell"
   | "previewCard"
@@ -122,6 +125,7 @@ export const createInitialUiState = (): UiStateDefaults => ({
   handHoverCount: 0,
   handVisibilityMode: null,
   dragFromHand: false,
+  dragFaceDown: false,
   dragFromPile: null,
   hoverCell: null,
   previewCard: null,
@@ -185,6 +189,7 @@ export const createUiSlice: StateCreator<GameState, [], [], UiSlice> = (
     }),
 
   setDragFromHand: (on: boolean) => set({ dragFromHand: on }),
+  setDragFaceDown: (on: boolean) => set({ dragFaceDown: on }),
   setDragFromPile: (
     info: {
       who: PlayerKey;

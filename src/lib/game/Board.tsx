@@ -201,6 +201,7 @@ export default function Board({
   const openContextMenu = useScopedStore((s) => s.openContextMenu);
   const selected = useScopedStore((s) => s.selectedCard);
   const selectedPermanent = useScopedStore((s) => s.selectedPermanent);
+  const toggleFaceDown = useScopedStore((s) => s.toggleFaceDown);
   const permanents = useScopedStore((s) => s.permanents);
   const permanentPositions = useScopedStore((s) => s.permanentPositions);
   const draggingSite = useScopedStore((s) => s.draggingSite);
@@ -216,6 +217,7 @@ export default function Board({
   const [lastTouchedId, setLastTouchedId] = useState<string | null>(null);
   const isHandVisible = mouseInHandZone || handHoverCount > 0;
   const setDragFromHand = useScopedStore((s) => s.setDragFromHand);
+  const setDragFaceDown = useScopedStore((s) => s.setDragFaceDown);
   const setPreviewCard = useScopedStore((s) => s.setPreviewCard);
   const dragFromPile = useScopedStore((s) => s.dragFromPile);
   const setLastPointerWorldPos = useScopedStore(
@@ -614,6 +616,27 @@ export default function Board({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [switchSiteSource, setSwitchSiteSource, log]);
 
+  // Flip selected permanent with 'F' key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.key === "f" || e.key === "F") && selectedPermanent) {
+        // Check if the permanent is owned by the player
+        const item =
+          permanents[selectedPermanent.at]?.[selectedPermanent.index];
+        if (!item) return;
+        const ownerSeat = item.owner === 1 ? "p1" : "p2";
+        if (actorKey && actorKey === ownerSeat) {
+          toggleFaceDown(selectedPermanent.at, selectedPermanent.index);
+          try {
+            playCardFlip();
+          } catch {}
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedPermanent, permanents, actorKey, toggleFaceDown, playCardFlip]);
+
   // Attack chooser state moved to store so HUD can render at layout level
   const attackTargetChoice = useScopedStore((s) => s.attackTargetChoice);
   const setAttackChoice = useScopedStore((s) => s.setAttackChoice);
@@ -977,6 +1000,7 @@ export default function Board({
     playSelectedTo,
     openAttachmentDialog,
     setDragFromHand,
+    setDragFaceDown,
     setDragFromPile,
     dragFromHand,
     dragFromPile,

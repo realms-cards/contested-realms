@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
-import { useSession, signIn } from "next-auth/react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { useSession, signIn } from "next-auth/react";
+import { useCallback, useEffect, useState } from "react";
 
 type LinkStatus =
   | "loading"
@@ -16,34 +16,14 @@ type LinkStatus =
 
 export default function DiscordLinkPage() {
   const searchParams = useSearchParams();
-  const router = useRouter();
   const { data: session, status: sessionStatus } = useSession();
   const [linkStatus, setLinkStatus] = useState<LinkStatus>("loading");
   const [discordTag, setDiscordTag] = useState<string>("");
   const [error, setError] = useState<string>("");
 
-  const token = searchParams.get("token");
+  const token = searchParams?.get("token") ?? null;
 
-  useEffect(() => {
-    if (!token) {
-      setLinkStatus("invalid");
-      return;
-    }
-
-    if (sessionStatus === "loading") {
-      return;
-    }
-
-    if (sessionStatus === "unauthenticated") {
-      setLinkStatus("not-signed-in");
-      return;
-    }
-
-    // User is authenticated, attempt to link
-    linkAccount();
-  }, [token, sessionStatus]);
-
-  async function linkAccount() {
+  const linkAccount = useCallback(async () => {
     if (!token || !session?.user) return;
 
     try {
@@ -75,7 +55,26 @@ export default function DiscordLinkPage() {
       setLinkStatus("error");
       setError("Failed to connect to server");
     }
-  }
+  }, [token, session?.user]);
+
+  useEffect(() => {
+    if (!token) {
+      setLinkStatus("invalid");
+      return;
+    }
+
+    if (sessionStatus === "loading") {
+      return;
+    }
+
+    if (sessionStatus === "unauthenticated") {
+      setLinkStatus("not-signed-in");
+      return;
+    }
+
+    // User is authenticated, attempt to link
+    linkAccount();
+  }, [token, sessionStatus, linkAccount]);
 
   function handleSignIn() {
     // Sign in and return to this page

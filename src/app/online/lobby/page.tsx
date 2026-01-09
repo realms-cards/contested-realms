@@ -2532,7 +2532,7 @@ function LobbyPageContent({
         <div className="mt-8 text-center text-xs text-slate-500 space-x-3">
           <span>Info & Support:</span>
           <a
-            href="https://discord.gg/HywTjqkU"
+            href="https://discord.gg/UE2Gfbxjym"
             target="_blank"
             rel="noopener noreferrer"
             className="underline hover:text-slate-300"

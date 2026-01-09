@@ -70,6 +70,7 @@ export default function Hand3D({
   const setPreviewCard = useGameStore((s) => s.setPreviewCard);
   const dragFromHand = useGameStore((s) => s.dragFromHand);
   const setDragFromHand = useGameStore((s) => s.setDragFromHand);
+  const setDragFaceDown = useGameStore((s) => s.setDragFaceDown);
   const dragFromPile = useGameStore((s) => s.dragFromPile);
   const setMouseInHandZone = useGameStore((s) => s.setMouseInHandZone);
   const setHandHoverCount = useGameStore((s) => s.setHandHoverCount);
@@ -161,8 +162,11 @@ export default function Hand3D({
     y: number;
     time: number;
     index: number;
+    faceDown?: boolean; // Right-click or two-finger drag = play face-down
   } | null>(null);
   const revealLerp = useRef(1); // 0 hidden .. 1 shown
+  // Track touch count for two-finger face-down gesture
+  const activeTouchCountRef = useRef(0);
 
   // Timeout ref for delayed hover cleanup
   const hoverCleanupTimeoutRef = useRef<number | null>(null);
@@ -269,6 +273,25 @@ export default function Hand3D({
     HAND_ZONE_LEFT_FRAC,
     HAND_ZONE_RIGHT_FRAC,
   ]);
+
+  // Track active touch count for two-finger face-down gesture
+  useEffect(() => {
+    const onTouchStart = (e: TouchEvent) => {
+      activeTouchCountRef.current = e.touches.length;
+    };
+    const onTouchEnd = (e: TouchEvent) => {
+      activeTouchCountRef.current = e.touches.length;
+    };
+    window.addEventListener("touchstart", onTouchStart, { passive: true });
+    window.addEventListener("touchend", onTouchEnd, { passive: true });
+    window.addEventListener("touchcancel", onTouchEnd, { passive: true });
+    return () => {
+      window.removeEventListener("touchstart", onTouchStart);
+      window.removeEventListener("touchend", onTouchEnd);
+      window.removeEventListener("touchcancel", onTouchEnd);
+    };
+  }, []);
+
   // Clear local hand drag start when mouse/touch is released anywhere
   useEffect(() => {
     const onUp = (e: MouseEvent | TouchEvent) => {
@@ -294,6 +317,7 @@ export default function Hand3D({
           // Cancel the drag - card returns to hand
           clearSelection();
           setDragFromHand(false);
+          setDragFaceDown(false);
           return;
         }
       }
@@ -315,6 +339,7 @@ export default function Hand3D({
       window.removeEventListener("mouseup", onUp);
       window.removeEventListener("touchend", onUp);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- setDragFaceDown is a stable Zustand action
   }, [
     dragFromHand,
     selected,
@@ -1122,11 +1147,22 @@ export default function Hand3D({
                 }}
                 onPointerDown={(e) => {
                   if (isDragging) return; // don't start another drag
-                  if (e.button !== 0) return;
+                  // Accept left-click (0) or right-click (2) for face-down play
+                  const isRightClick = e.button === 2;
+                  if (e.button !== 0 && e.button !== 2) return;
                   e.stopPropagation();
+                  // Prevent browser context menu for right-click
+                  if (isRightClick && e.nativeEvent) {
+                    e.nativeEvent.preventDefault();
+                  }
 
-                  // On touch devices, track for tap detection
-                  if (isCoarsePointer) {
+                  // Check for two-finger touch (face-down gesture)
+                  const isTwoFingerTouch =
+                    isCoarsePointer && activeTouchCountRef.current >= 2;
+                  const shouldPlayFaceDown = isRightClick || isTwoFingerTouch;
+
+                  // On touch devices, track for tap detection (only for single touch)
+                  if (isCoarsePointer && !isTwoFingerTouch) {
                     tapStartRef.current = {
                       x: e.clientX,
                       y: e.clientY,
@@ -1140,12 +1176,13 @@ export default function Hand3D({
                   // Clear preview when starting potential drag
                   clearHoverPreview();
 
-                  // Record potential drag start (no selection needed)
+                  // Record potential drag start with face-down flag
                   handDragStart.current = {
                     x: e.clientX,
                     y: e.clientY,
                     time: Date.now(),
                     index: originalIndex,
+                    faceDown: shouldPlayFaceDown,
                   };
                 }}
                 onPointerMove={(e) => {
@@ -1165,6 +1202,10 @@ export default function Hand3D({
                     try {
                       playCardSelect();
                     } catch {}
+                    // Set face-down flag if right-click or two-finger drag
+                    if (s.faceDown) {
+                      setDragFaceDown(true);
+                    }
                     setDragFromHand(true);
                     clearHoverPreview();
                     setTouchSelectedIndex(null);
