@@ -88,7 +88,6 @@ services:
       - .env.production
     environment:
       - REALMS_API_URL=http://server1:3010
-      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
     depends_on:
       redis:
         condition: service_healthy
