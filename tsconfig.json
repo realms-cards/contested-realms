@@ -14,7 +14,7 @@
     "isolatedModules": true,
     "jsx": "preserve",
     "incremental": true,
-    
+
     // Enhanced strict settings to prevent type safety regressions
     "noImplicitAny": true,
     "noImplicitReturns": true,
@@ -25,7 +25,7 @@
     "noImplicitOverride": true,
     "noPropertyAccessFromIndexSignature": false, // Keep off for object access patterns
     "useUnknownInCatchVariables": true,
-    
+
     "plugins": [
       {
         "name": "next"
@@ -35,6 +35,12 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["next-env.d.ts", "src/types/next-auth.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules", "tests/**"]
+  "include": [
+    "next-env.d.ts",
+    "src/types/next-auth.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts"
+  ],
+  "exclude": ["node_modules", "tests/**", "discord-bot/**"]
 }
