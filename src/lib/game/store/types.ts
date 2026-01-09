@@ -991,6 +991,9 @@ export type GameState = {
   checkMatchEnd: () => void;
   // Manual tie declaration when both players are at Death's Door
   tieGame: () => void;
+  // Disable all custom card resolvers for the match (match-wide setting)
+  resolversDisabled: boolean;
+  setResolversDisabled: (disabled: boolean) => void;
   // Cross-turn interactions
   interactionLog: InteractionStateMap;
   pendingInteractionId: string | null;
@@ -1906,12 +1909,14 @@ export type GameState = {
   setLastPointerWorldPos: (pos: { x: number; z: number } | null) => void;
   // UI cross-surface drag state
   dragFromHand: boolean;
+  dragFaceDown: boolean; // When true, card will be placed face-down on the board
   dragFromPile: {
     who: PlayerKey;
     from: "spellbook" | "atlas" | "graveyard" | "collection" | "tokens";
     card: CardRef | null;
   } | null;
   setDragFromHand: (on: boolean) => void;
+  setDragFaceDown: (on: boolean) => void;
   setDragFromPile: (
     info: {
       who: PlayerKey;
@@ -2110,5 +2115,6 @@ export type ServerPatchT = Partial<{
   specialSiteState: GameState["specialSiteState"];
   pendingEarthquake: GameState["pendingEarthquake"];
   pendingAnimistCast: GameState["pendingAnimistCast"];
+  resolversDisabled: GameState["resolversDisabled"];
   __replaceKeys: string[];
 }>;
