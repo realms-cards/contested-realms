@@ -138,6 +138,10 @@ jobs:
           # $COMPOSE -f docker-compose.prod.single.yml up -d --no-deps --force-recreate server2
           # wait_healthy sorcery-server-2
 
+          # Deploy Discord bot (single instance)
+          $COMPOSE -f docker-compose.prod.single.yml up -d --no-deps --force-recreate discord-bot
+          echo "Discord bot deployed"
+
           # Basic health check
           sleep 5 || true
           if [ -n "${WS_HEALTH_URL:-}" ]; then
