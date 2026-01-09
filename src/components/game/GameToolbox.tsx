@@ -143,6 +143,12 @@ export default function GameToolbox({
   const resolversDisabled = useGameStore((s) => s.resolversDisabled);
   const setResolversDisabled = useGameStore((s) => s.setResolversDisabled);
 
+  // Goldfish mode (hotseat only)
+  const goldfishMode = useGameStore((s) => s.goldfishMode);
+  const setGoldfishMode = useGameStore((s) => s.setGoldfishMode);
+  const goldfishHandSize = useGameStore((s) => s.goldfishHandSize);
+  const setGoldfishHandSize = useGameStore((s) => s.setGoldfishHandSize);
+
   // Peek dialog from central store (populated by interaction:result)
   const peekDialog = useGameStore((s) => s.peekDialog);
   const closePeekDialog = useGameStore((s) => s.closePeekDialog);
@@ -1323,6 +1329,38 @@ export default function GameToolbox({
                 />
                 <span className="text-xs">Disable all card resolvers</span>
               </label>
+              {/* Goldfish Mode (hotseat only) */}
+              {!isOnline && (
+                <div className="border-t border-white/10 pt-2 mt-1">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={goldfishMode}
+                      onChange={(e) => setGoldfishMode(e.target.checked)}
+                      className="w-4 h-4 rounded bg-white/10 border-white/20 text-amber-500 focus:ring-amber-500/50"
+                    />
+                    <span className="text-xs">Goldfish Mode</span>
+                  </label>
+                  {goldfishMode && (
+                    <div className="flex items-center gap-2 mt-1 ml-6">
+                      <span className="text-xs opacity-70">Hand size:</span>
+                      <input
+                        type="number"
+                        min={1}
+                        max={10}
+                        value={goldfishHandSize}
+                        onChange={(e) =>
+                          setGoldfishHandSize(parseInt(e.target.value) || 5)
+                        }
+                        className="w-12 bg-white/10 rounded px-1 py-0.5 text-xs text-center"
+                      />
+                    </div>
+                  )}
+                  <div className="text-xs opacity-50 mt-1 ml-6">
+                    Shuffles hands back at turn start
+                  </div>
+                </div>
+              )}
               {/* Card Scale slider */}
               <div className="flex items-center gap-2">
                 <span className="text-xs whitespace-nowrap">Card Size</span>
