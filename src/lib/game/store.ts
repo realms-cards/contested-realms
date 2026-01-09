@@ -226,6 +226,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         actorKey: state.actorKey, // Preserve actorKey during reset
         matchEnded: false,
         winner: null,
+        resolversDisabled: false,
         board: createInitialBoard(),
         zones: createEmptyZonesRecord(),
         ...createInitialUiState(),
