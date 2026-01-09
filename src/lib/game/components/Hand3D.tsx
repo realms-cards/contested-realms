@@ -172,12 +172,14 @@ export default function Hand3D({
   // Hand zone: portion of the screen height from the bottom that counts as "in hand zone"
   // Higher value = smaller zone (cursor must be closer to bottom)
   // On touch devices, use a larger trigger zone for easier access
-  const HAND_ZONE_TOP_FRAC = isCoarsePointer ? 0.75 : 0.85; // Mobile: bottom 25%, Desktop: bottom 15%
+  // RELAXED: Much larger zone so hand is less finicky to reveal
+  const HAND_ZONE_TOP_FRAC = isCoarsePointer ? 0.65 : 0.7; // Mobile: bottom 35%, Desktop: bottom 30%
   const HAND_ZONE_BOTTOM_FRAC = 1.0; // Allow touching very edge on mobile
   // Horizontal zone: center portion of screen width that triggers hand reveal
   // On touch devices, use wider zone for easier access
-  const HAND_ZONE_LEFT_FRAC = isCoarsePointer ? 0.25 : 0.42; // Mobile: 25%, Desktop: 42%
-  const HAND_ZONE_RIGHT_FRAC = isCoarsePointer ? 0.75 : 0.58; // Mobile: 75%, Desktop: 58%
+  // RELAXED: Much wider zone for easier access
+  const HAND_ZONE_LEFT_FRAC = isCoarsePointer ? 0.15 : 0.25; // Mobile: 15%, Desktop: 25%
+  const HAND_ZONE_RIGHT_FRAC = isCoarsePointer ? 0.85 : 0.75; // Mobile: 85%, Desktop: 75%
 
   useEffect(() => {
     function onMove(e: MouseEvent) {
@@ -282,7 +284,8 @@ export default function Hand3D({
         // Safe touch event check
         const isTouchEvent = "changedTouches" in e;
         const clientY = isTouchEvent
-          ? (e as TouchEvent).changedTouches?.[0]?.clientY ?? lastMousePosRef.current.y
+          ? (e as TouchEvent).changedTouches?.[0]?.clientY ??
+            lastMousePosRef.current.y
           : (e as MouseEvent).clientY;
         const hScr = window.innerHeight || 1;
         const inReturnZone = clientY >= hScr - 20;
@@ -321,11 +324,26 @@ export default function Hand3D({
     isCoarsePointer,
   ]);
 
-  // Auto-reset "visible" mode when cursor leaves hand area
+  // Auto-reset "visible" mode when cursor leaves hand area - with delay
+  const hideDelayRef = useRef<number | null>(null);
   useEffect(() => {
     if (handVisibilityMode === "visible" && !overCardsArea && !mouseInZone) {
-      setHandVisibilityMode(null);
+      // Add delay before hiding to prevent finicky behavior
+      if (hideDelayRef.current) window.clearTimeout(hideDelayRef.current);
+      hideDelayRef.current = window.setTimeout(() => {
+        setHandVisibilityMode(null);
+        hideDelayRef.current = null;
+      }, 400); // 400ms delay before hiding
+    } else if (overCardsArea || mouseInZone) {
+      // Cancel pending hide if cursor returns
+      if (hideDelayRef.current) {
+        window.clearTimeout(hideDelayRef.current);
+        hideDelayRef.current = null;
+      }
     }
+    return () => {
+      if (hideDelayRef.current) window.clearTimeout(hideDelayRef.current);
+    };
   }, [handVisibilityMode, overCardsArea, mouseInZone, setHandVisibilityMode]);
 
   // Keep the hand anchored to the camera with less frequent updates
@@ -421,30 +439,25 @@ export default function Hand3D({
     } else {
       targetShown = overCardsArea || mouseInZone ? 1 : 0;
     }
-    if (!showCardBacks && isCoarsePointer) {
-      if (dragFromHand && selected && selected.who === owner) {
-        const hScr = window.innerHeight || 1;
-        // Return zone is just the bottom 20px for easier card placement
-        const inReturnZone = lastMousePosRef.current.y >= hScr - 20;
-        targetShown = inReturnZone ? 1 : 0;
-      }
+    // When dragging from hand, only show hand in a small return zone (100px from bottom)
+    // This applies to both desktop and mobile
+    if (!showCardBacks && dragFromHand && selected && selected.who === owner) {
+      const hScr = window.innerHeight || 1;
+      const DRAG_RETURN_ZONE_PX = 100; // Small zone at very bottom for returning cards
+      const inReturnZone =
+        lastMousePosRef.current.y >= hScr - DRAG_RETURN_ZONE_PX;
+      targetShown = inReturnZone ? 1 : 0;
     }
 
-    // Always use smooth reveal logic - allow hand to stay visible during drags for card returns
-    const k = 0.35; // Increased from 0.25 for even more responsive hand reveal animation
+    // Smooth reveal animation - slower for a more relaxed feel
+    const k = 0.12; // Slower animation for smoother, less jarring transitions
     revealLerp.current += (targetShown - revealLerp.current) * k;
     if (Math.abs(targetShown - revealLerp.current) < 0.005)
       revealLerp.current = targetShown;
 
-    // Smooth hand spread animation (also spread when in "visible" mode)
-    const handShouldBeSpread = isEdgePlacement
-      ? true // Edge hands always spread for visibility
-      : overCardsArea || mouseInZone || handVisibilityMode === "visible";
-    const spreadTarget = handShouldBeSpread ? 1 : 0;
-    const spreadK = 0.25; // Smooth easing for hand spread
-    handSpreadLerp.current += (spreadTarget - handSpreadLerp.current) * spreadK;
-    if (Math.abs(spreadTarget - handSpreadLerp.current) < 0.005)
-      handSpreadLerp.current = spreadTarget;
+    // Always keep hand fanned out - no cramped/compact state
+    // This removes the finicky "compressed to fanned" transition
+    handSpreadLerp.current = 1; // Always spread
 
     // Push hand further off-screen when force hidden via Space or dragging on mobile
     const normalHiddenOffset = -CARD_LONG * HAND_CARD_SCALE * 0.8;
@@ -545,7 +558,7 @@ export default function Hand3D({
     return map;
   }, [sortedHand, hand]);
 
-  // Unified hand fan layout: all cards in arc
+  // Unified hand fan layout: all cards in arc - always fanned out
   const handLayout = useMemo(() => {
     const n = sortedHand.length;
     if (n === 0)
@@ -558,25 +571,20 @@ export default function Hand3D({
         hoverWeight: number;
       }[];
 
-    // Much gentler fan angle for wider spread
-    const maxAngleWhenShown = Math.min(
+    // Always use full fan angle (no compact state)
+    const maxAngle = Math.min(
       HAND_MAX_TOTAL_ANGLE * 0.4,
       n * HAND_STEP_MAX * 0.3
     );
-    const maxAngleWhenHidden = Math.min(
-      HAND_MAX_TOTAL_ANGLE * 0.2,
-      n * HAND_STEP_MAX * 0.15
-    );
-    const maxAngle =
-      maxAngleWhenHidden +
-      (maxAngleWhenShown - maxAngleWhenHidden) * handSpreadLerp.current;
 
-    // Much wider spacing for proper fan
-    const baseSpacingWhenShown = CARD_SHORT * 0.8;
-    const baseSpacingWhenHidden = CARD_SHORT * 0.25; // Tighter overlap when hidden so less is visible
-    const baseSpacing =
-      baseSpacingWhenHidden +
-      (baseSpacingWhenShown - baseSpacingWhenHidden) * handSpreadLerp.current;
+    // Dynamic spacing: show more of each card when few cards, compress when many
+    // With 1-4 cards: very wide spacing (almost full card visible)
+    // With 5-7 cards: moderate spacing
+    // With 8+ cards: tighter spacing but still readable
+    const maxSpacing = CARD_SHORT * 1.1; // Almost full card width visible
+    const minSpacing = CARD_SHORT * 0.5; // Tighter for large hands
+    const spacingFactor = Math.max(0, Math.min(1, (8 - n) / 5)); // 1 at n≤3, 0 at n≥8
+    const baseSpacing = minSpacing + (maxSpacing - minSpacing) * spacingFactor;
 
     const stepAngle = n > 1 ? maxAngle / (n - 1) : 0;
     const startAngle = -maxAngle / 2;
@@ -595,14 +603,8 @@ export default function Hand3D({
       // X position centered for the whole fan
       const x = i * baseSpacing - ((n - 1) * baseSpacing) / 2;
 
-      // Y position: smooth interpolated arc + hover pop-up
-      const arcMultiplierWhenShown = 1.5;
-      const arcMultiplierWhenHidden = 1.0;
-      const arcMultiplier =
-        arcMultiplierWhenHidden +
-        (arcMultiplierWhenShown - arcMultiplierWhenHidden) *
-          handSpreadLerp.current;
-      const arcY = -Math.abs(Math.sin(angle)) * HAND_FAN_ARC_Y * arcMultiplier;
+      // Y position: arc + hover pop-up
+      const arcY = -Math.abs(Math.sin(angle)) * HAND_FAN_ARC_Y * 1.5;
       // Focus-based lift without sliding the fan
       const w = Math.max(0, 1 - Math.abs(i - focusLerp)); // 0..1 focus weight
       const liftFromFocus = CARD_LONG * 0.06 * w;
@@ -981,14 +983,14 @@ export default function Hand3D({
           dragFromHand &&
           selected.who === owner;
         if (isDraggedCard) {
-          // Use a slightly more generous zone for dragged card reappearance than for hand visibility
+          // Use the same small return zone for dragged card visibility
           const h = window.innerHeight || 1;
-          const dragReturnZone = 0.7; // More generous than HAND_ZONE_TOP_FRAC (0.75) but not too much
+          const DRAG_RETURN_ZONE_PX = 100;
           const inDragReturnZone =
-            lastMousePosRef.current.y >= h * dragReturnZone;
+            lastMousePosRef.current.y >= h - DRAG_RETURN_ZONE_PX;
 
-          // Show the dragged card when mouse is in return zone or over cards area
-          if (!inDragReturnZone && !overCardsArea) {
+          // Show the dragged card only when mouse is in return zone
+          if (!inDragReturnZone) {
             return null;
           }
         }
@@ -1067,7 +1069,7 @@ export default function Hand3D({
             {/* Invisible larger interaction box to ensure cards are always clickable */}
             {!showCardBacks && !isDraggedCard && (
               <mesh
-                position={[0, 0, 0.01]}
+                position={[0, 0, 0.05]}
                 onPointerOver={(e) => {
                   // Skip hover handling on touch devices - use tap instead
                   if (isCoarsePointer) return;
@@ -1106,10 +1108,9 @@ export default function Hand3D({
                     setHoveredCard((prev) =>
                       prev === originalIndex ? null : prev
                     );
-                  }, 30); // Reduced to 30ms delay for more responsive transitions
+                  }, 30); // Small delay for smooth card-to-card transitions
 
                   // Debounce leaving the overall cards area so moving between cards doesn't hide the hand
-                  // Also debounce clearing the preview to avoid spurious clears from camera movement
                   if (handAreaLeaveTimeoutRef.current) {
                     window.clearTimeout(handAreaLeaveTimeoutRef.current);
                   }
@@ -1117,7 +1118,7 @@ export default function Hand3D({
                     setOverCardsArea(false);
                     clearHoverPreview();
                     handAreaLeaveTimeoutRef.current = null;
-                  }, 30); // Short debounce - onPointerMove keeps it alive while hovering
+                  }, 30); // Short debounce - onPointerOver cancels this when moving between cards
                 }}
                 onPointerDown={(e) => {
                   if (isDragging) return; // don't start another drag
