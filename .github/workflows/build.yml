@@ -64,8 +64,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: "20"
+          cache: "npm"
 
       - name: Install dependencies
         run: npm ci
@@ -136,5 +136,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build
+      - name: Build Next.js app
+        run: npm run build
+
+      - name: Install Discord bot dependencies
+        working-directory: discord-bot
+        run: npm ci
+
+      - name: Build Discord bot
+        working-directory: discord-bot
         run: npm run build
