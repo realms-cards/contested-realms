@@ -600,11 +600,13 @@ export const createTransportSlice: StateCreator<
       }
     }
 
-    // Queue seat-specific patches if actorKey not yet set
+    // Queue seat-specific patches if actorKey not yet set (online mode only)
+    // Local/offline transports don't need actorKey validation - they handle both seats locally
+    const isLocalTransport = tr?.isLocal === true;
     const touchesSeatFields =
       (patchObj.avatars && typeof patchObj.avatars === "object") ||
       (patchObj.zones && typeof patchObj.zones === "object");
-    if (!actorKey && touchesSeatFields) {
+    if (!actorKey && touchesSeatFields && !isLocalTransport) {
       set((s) => {
         const queue = Array.isArray(s.pendingPatches) ? s.pendingPatches : [];
         return {
@@ -620,36 +622,41 @@ export const createTransportSlice: StateCreator<
       return false;
     }
 
-    // Sanitize: only include actor's own seat data
+    // Sanitize: only include actor's own seat data (online mode only)
+    // Local transports send full patches since both players are controlled locally
     const sanitized: ServerPatchT = { ...patchObj };
-    try {
-      if (sanitized.avatars && typeof sanitized.avatars === "object") {
-        const keys = Object.keys(sanitized.avatars).filter(
-          (k) => k === "p1" || k === "p2"
-        ) as PlayerKey[];
-        const out: Partial<GameState["avatars"]> = {};
-        if (actorKey && keys.includes(actorKey)) {
-          out[actorKey] = (sanitized.avatars as GameState["avatars"])[actorKey];
+    if (!isLocalTransport) {
+      try {
+        if (sanitized.avatars && typeof sanitized.avatars === "object") {
+          const keys = Object.keys(sanitized.avatars).filter(
+            (k) => k === "p1" || k === "p2"
+          ) as PlayerKey[];
+          const out: Partial<GameState["avatars"]> = {};
+          if (actorKey && keys.includes(actorKey)) {
+            out[actorKey] = (sanitized.avatars as GameState["avatars"])[
+              actorKey
+            ];
+          }
+          if (Object.keys(out).length > 0) {
+            sanitized.avatars = out as GameState["avatars"];
+          } else {
+            delete (sanitized as unknown as { avatars?: unknown }).avatars;
+          }
         }
-        if (Object.keys(out).length > 0) {
-          sanitized.avatars = out as GameState["avatars"];
-        } else {
-          delete (sanitized as unknown as { avatars?: unknown }).avatars;
+        if (sanitized.zones && typeof sanitized.zones === "object") {
+          const z = sanitized.zones as Partial<Record<PlayerKey, Zones>>;
+          const outZ: Partial<Record<PlayerKey, Zones>> = {};
+          if (actorKey && z[actorKey]) {
+            outZ[actorKey] = z[actorKey] as Zones;
+          }
+          if (Object.keys(outZ).length > 0) {
+            sanitized.zones = outZ as GameState["zones"];
+          } else {
+            delete (sanitized as unknown as { zones?: unknown }).zones;
+          }
         }
-      }
-      if (sanitized.zones && typeof sanitized.zones === "object") {
-        const z = sanitized.zones as Partial<Record<PlayerKey, Zones>>;
-        const outZ: Partial<Record<PlayerKey, Zones>> = {};
-        if (actorKey && z[actorKey]) {
-          outZ[actorKey] = z[actorKey] as Zones;
-        }
-        if (Object.keys(outZ).length > 0) {
-          sanitized.zones = outZ as GameState["zones"];
-        } else {
-          delete (sanitized as unknown as { zones?: unknown }).zones;
-        }
-      }
-    } catch {}
+      } catch {}
+    }
 
     if (process.env.NODE_ENV !== "production") {
       try {
