@@ -126,6 +126,9 @@ export type StartMatchConfig = {
 };
 
 export interface GameTransport {
+  /** True if this is a local/offline transport (no server, no seat validation needed) */
+  readonly isLocal?: boolean;
+
   connect(opts: { displayName: string; playerId?: string }): Promise<void>;
   disconnect(): void;
 

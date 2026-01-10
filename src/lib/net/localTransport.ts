@@ -19,16 +19,25 @@ import type {
 // Local, in-memory transport that simulates a server by immediately
 // echoing actions as state patches and providing minimal lobby/match shims.
 export class LocalTransport implements GameTransport {
-  private handlers: Partial<Record<TransportEvent, Set<(payload: unknown) => void>>> = {};
+  /** Identifies this as a local/offline transport - no server, no seat validation needed */
+  readonly isLocal = true;
+
+  private handlers: Partial<
+    Record<TransportEvent, Set<(payload: unknown) => void>>
+  > = {};
   private connected = false;
   private lobbyId: string | null = null;
   private matchId: string | null = null;
   private you: { id: string; displayName: string } | null = null;
   private pendingStartConfig?: StartMatchConfig;
 
-  async connect(opts: { displayName: string; playerId?: string }): Promise<void> {
+  async connect(opts: {
+    displayName: string;
+    playerId?: string;
+  }): Promise<void> {
     this.connected = true;
-    const pid = opts.playerId || `local_${Math.random().toString(36).slice(2, 10)}`;
+    const pid =
+      opts.playerId || `local_${Math.random().toString(36).slice(2, 10)}`;
     this.you = { id: pid, displayName: opts.displayName };
     // Immediately emit a welcome event
     this.dispatch("welcome", Protocol.WelcomePayload.parse({ you: this.you }));
@@ -40,7 +49,10 @@ export class LocalTransport implements GameTransport {
     this.matchId = null;
   }
 
-  async createLobby(options?: { visibility?: LobbyVisibility; maxPlayers?: number }): Promise<{ lobbyId: string }> {
+  async createLobby(options?: {
+    visibility?: LobbyVisibility;
+    maxPlayers?: number;
+  }): Promise<{ lobbyId: string }> {
     const id = `local-lobby-${Date.now()}`;
     this.lobbyId = id;
     const lobby = {
@@ -51,7 +63,10 @@ export class LocalTransport implements GameTransport {
       maxPlayers: options?.maxPlayers ?? 2,
       visibility: options?.visibility ?? "private",
     };
-    this.dispatch("lobbyUpdated", Protocol.LobbyUpdatedPayload.parse({ lobby }));
+    this.dispatch(
+      "lobbyUpdated",
+      Protocol.LobbyUpdatedPayload.parse({ lobby })
+    );
     return { lobbyId: id };
   }
 
@@ -67,7 +82,10 @@ export class LocalTransport implements GameTransport {
       visibility: "private" as const,
     };
     // Mirror SocketTransport semantics: emit lobbyUpdated on join
-    this.dispatch("lobbyUpdated", Protocol.LobbyUpdatedPayload.parse({ lobby }));
+    this.dispatch(
+      "lobbyUpdated",
+      Protocol.LobbyUpdatedPayload.parse({ lobby })
+    );
     return { lobbyId: id };
   }
 
@@ -77,17 +95,18 @@ export class LocalTransport implements GameTransport {
     this.pendingStartConfig = undefined;
     const isSealed = cfg?.matchType === "sealed" && !!cfg?.sealedConfig;
     const sealedCfg = cfg?.sealedConfig;
-    const sealedConfig = isSealed && sealedCfg
-      ? {
-          packCount: sealedCfg.packCount,
-          setMix: sealedCfg.setMix,
-          timeLimit: sealedCfg.timeLimit,
-          // Preserve extended optional fields
-          packCounts: sealedCfg.packCounts,
-          replaceAvatars: sealedCfg.replaceAvatars,
-          // constructionStartTime optional; omit unless needed
-        }
-      : undefined;
+    const sealedConfig =
+      isSealed && sealedCfg
+        ? {
+            packCount: sealedCfg.packCount,
+            setMix: sealedCfg.setMix,
+            timeLimit: sealedCfg.timeLimit,
+            // Preserve extended optional fields
+            packCounts: sealedCfg.packCounts,
+            replaceAvatars: sealedCfg.replaceAvatars,
+            // constructionStartTime optional; omit unless needed
+          }
+        : undefined;
     const match = {
       id: this.matchId,
       lobbyId: this.lobbyId ?? undefined,
@@ -97,7 +116,10 @@ export class LocalTransport implements GameTransport {
       matchType: cfg?.matchType,
       sealedConfig,
     };
-    this.dispatch("matchStarted", Protocol.MatchStartedPayload.parse({ match }));
+    this.dispatch(
+      "matchStarted",
+      Protocol.MatchStartedPayload.parse({ match })
+    );
   }
 
   leaveMatch(): void {
@@ -125,7 +147,10 @@ export class LocalTransport implements GameTransport {
     if (!this.connected) return;
     const t = Date.now();
     // Echo the patch immediately as if the server validated/broadcasted it
-    this.dispatch("statePatch", Protocol.StatePatchPayload.parse({ patch: action, t }));
+    this.dispatch(
+      "statePatch",
+      Protocol.StatePatchPayload.parse({ patch: action, t })
+    );
   }
 
   // Explicit mulligan completion signal (per-player)
@@ -169,17 +194,23 @@ export class LocalTransport implements GameTransport {
   }
 
   requestLobbies(): void {
-    const lobbies = this.lobbyId && this.you
-      ? [{
-          id: this.lobbyId,
-          hostId: this.you.id,
-          players: [this.you],
-          status: "open" as const,
-          maxPlayers: 2,
-          visibility: "private" as const,
-        }]
-      : [];
-    this.dispatch("lobbiesUpdated", Protocol.LobbiesUpdatedPayload.parse({ lobbies }));
+    const lobbies =
+      this.lobbyId && this.you
+        ? [
+            {
+              id: this.lobbyId,
+              hostId: this.you.id,
+              players: [this.you],
+              status: "open" as const,
+              maxPlayers: 2,
+              visibility: "private" as const,
+            },
+          ]
+        : [];
+    this.dispatch(
+      "lobbiesUpdated",
+      Protocol.LobbiesUpdatedPayload.parse({ lobbies })
+    );
   }
 
   requestPlayers(): void {
@@ -197,7 +228,10 @@ export class LocalTransport implements GameTransport {
       maxPlayers: 2,
       visibility,
     };
-    this.dispatch("lobbyUpdated", Protocol.LobbyUpdatedPayload.parse({ lobby }));
+    this.dispatch(
+      "lobbyUpdated",
+      Protocol.LobbyUpdatedPayload.parse({ lobby })
+    );
   }
 
   inviteToLobby(_targetPlayerId: string, _lobbyId?: string): void {
@@ -206,14 +240,21 @@ export class LocalTransport implements GameTransport {
     void _lobbyId;
   }
 
-  on<E extends TransportEvent>(event: E, handler: TransportHandler<E>): () => void {
+  on<E extends TransportEvent>(
+    event: E,
+    handler: TransportHandler<E>
+  ): () => void {
     const set = (this.handlers[event] ??= new Set());
-    const wrapper: (payload: unknown) => void = (payload) => handler(payload as TransportEventMap[E]);
+    const wrapper: (payload: unknown) => void = (payload) =>
+      handler(payload as TransportEventMap[E]);
     set.add(wrapper);
     return () => set.delete(wrapper);
   }
 
-  private dispatch<E extends TransportEvent>(event: E, payload: TransportEventMap[E]) {
+  private dispatch<E extends TransportEvent>(
+    event: E,
+    payload: TransportEventMap[E]
+  ) {
     const set = this.handlers[event];
     if (!set) return;
     for (const h of Array.from(set)) {

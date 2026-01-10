@@ -5,6 +5,7 @@ import { useEffect, useCallback } from "react";
 import { useSound } from "@/lib/contexts/SoundContext";
 import { useGameStore } from "@/lib/game/store";
 import type { PlayerKey } from "@/lib/game/store";
+import { cardbackSpellbookUrl, cardbackAtlasUrl } from "@/lib/assets";
 
 interface SeerScreenProps {
   myPlayerKey: PlayerKey;
@@ -145,7 +146,7 @@ export default function SeerScreen({
           >
             <div className="relative w-16 h-24 rounded overflow-hidden">
               <Image
-                src="/cardback-spellbook.png"
+                src={cardbackSpellbookUrl()}
                 alt="Spellbook"
                 fill
                 sizes="64px"
@@ -169,7 +170,7 @@ export default function SeerScreen({
           >
             <div className="relative w-24 h-16 rounded overflow-hidden">
               <Image
-                src="/cardback-atlas.png"
+                src={cardbackAtlasUrl()}
                 alt="Atlas"
                 fill
                 sizes="96px"

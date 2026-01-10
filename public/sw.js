@@ -174,7 +174,7 @@ async function cacheFirstWithBackgroundUpdate(request, cacheName, fetchEvent) {
       // Notify clients about cache update
       notifyClients({
         type: "CARD_CACHED",
-        url: request.url,
+        payload: { url: request.url },
       });
     }
 
