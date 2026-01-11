@@ -2066,9 +2066,7 @@ io.use((socket: SocketClient, next: (err?: Error) => void) => {
   const clientVersion = handshakeAuth?.clientVersion ?? 0;
 
   if (clientVersion < MIN_CLIENT_VERSION) {
-    console.log(
-      `[auth] Rejecting old client (version ${clientVersion}, min ${MIN_CLIENT_VERSION})`
-    );
+    // Silently reject - don't log to avoid spam from old clients in background tabs
     return next(new Error("version_outdated"));
   }
 
