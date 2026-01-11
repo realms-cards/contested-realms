@@ -1455,6 +1455,10 @@ export default function OnlineProvider({
     };
   }, [transport, session, sessionStatus, queueServerPatch]);
 
+  // Rate limiting for available players fetcher - minimum 10 seconds between requests
+  const lastAvailablePlayersRequestRef = useRef<number>(0);
+  const AVAILABLE_PLAYERS_MIN_INTERVAL_MS = 10000; // 10 seconds
+
   // HTTP available players fetcher
   const requestAvailablePlayers = useCallback(
     (opts?: {
@@ -1463,6 +1467,22 @@ export default function OnlineProvider({
       cursor?: string | null;
       reset?: boolean;
     }) => {
+      // Rate limit: skip if last request was too recent (unless it's a pagination request)
+      const now = Date.now();
+      const timeSinceLastRequest = now - lastAvailablePlayersRequestRef.current;
+      if (
+        !opts?.cursor &&
+        timeSinceLastRequest < AVAILABLE_PLAYERS_MIN_INTERVAL_MS
+      ) {
+        console.log(
+          `[online] requestPlayers rate limited (${Math.round(
+            timeSinceLastRequest / 1000
+          )}s since last)`
+        );
+        return;
+      }
+      lastAvailablePlayersRequestRef.current = now;
+
       const origin = getSocketHttpOrigin();
       const q = opts?.q ?? availableQueryRef.current?.q ?? "";
       const sort: "recent" | "alphabetical" = (opts?.sort ??
