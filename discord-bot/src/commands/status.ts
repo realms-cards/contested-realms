@@ -17,7 +17,7 @@ export const statusCommand = {
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
     const { realmsApi } = getServices();
 
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: 64 }); // Ephemeral
 
     // Check if user is linked
     const user = await realmsApi.getUserByDiscordId(interaction.user.id);
