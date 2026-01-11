@@ -1,18 +1,16 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
 import {
   createContext,
   useCallback,
   useContext,
   useEffect,
-  useRef,
   useState,
 } from "react";
+import { useOnline } from "@/app/online/online-context";
 import InviteToast from "@/components/online/InviteToast";
 import type { LobbyInvitePayloadT, PlayerLocation } from "@/lib/net/protocol";
-import { SocketTransport } from "@/lib/net/socketTransport";
 
 interface PresenceContextValue {
   connected: boolean;
@@ -47,40 +45,43 @@ interface PresenceProviderProps {
 
 /**
  * Lightweight presence provider for non-lobby pages (collection, decks, etc.)
- * Connects to the socket server to appear online and receive invites.
+ * Uses the existing OnlineProvider's transport instead of creating a new socket.
+ * This eliminates duplicate socket connections.
  */
 export function PresenceProvider({
   children,
   location: initialLocation,
 }: PresenceProviderProps) {
-  const { data: session, status } = useSession();
   const router = useRouter();
-  const transportRef = useRef<SocketTransport | null>(null);
+  // Use the existing transport from OnlineProvider (in root layout)
+  const {
+    transport,
+    connected: onlineConnected,
+    invites: onlineInvites,
+  } = useOnline();
 
-  const [connected, setConnected] = useState(false);
   const [location, setLocationState] =
     useState<PlayerLocation>(initialLocation);
-  const [invites, setInvites] = useState<LobbyInvitePayloadT[]>([]);
+  const [localInvites, setLocalInvites] = useState<LobbyInvitePayloadT[]>([]);
 
-  // Connect to socket when session is available
+  // Merge invites from OnlineProvider with any local state
+  const invites = onlineInvites.length > 0 ? onlineInvites : localInvites;
+  const connected = onlineConnected;
+
+  // Set initial location when transport becomes available
   useEffect(() => {
-    if (status !== "authenticated" || !session?.user?.id) return;
-
-    const transport = new SocketTransport();
-    transportRef.current = transport;
-
-    // Setup event listeners
-    const unsubWelcome = transport.on("welcome", () => {
-      console.log("[Presence] Connected to server");
-      setConnected(true);
-      // Set initial location
+    if (transport && connected) {
       transport.setLocation?.(initialLocation);
-    });
+    }
+  }, [transport, connected, initialLocation]);
+
+  // Listen for invites on the shared transport
+  useEffect(() => {
+    if (!transport) return;
 
     const unsubInvite = transport.on("lobbyInvite", (invite) => {
       console.log("[Presence] Received invite from", invite.from.displayName);
-      setInvites((prev) => {
-        // De-dup by lobbyId + from.id
+      setLocalInvites((prev) => {
         const key = `${invite.lobbyId}:${invite.from.id}`;
         const exists = prev.some(
           (inv) => `${inv.lobbyId}:${inv.from.id}` === key
@@ -90,51 +91,29 @@ export function PresenceProvider({
       });
     });
 
-    const unsubError = transport.on("error", (err) => {
-      console.warn("[Presence] Socket error:", err.message);
-    });
-
-    // Connect
-    const displayName =
-      session.user.name || `Player ${session.user.id.slice(-4)}`;
-    transport
-      .connect({
-        displayName,
-        playerId: session.user.id,
-      })
-      .catch((err) => {
-        console.warn("[Presence] Failed to connect:", err);
-      });
-
     return () => {
-      unsubWelcome();
       unsubInvite();
-      unsubError();
-      transport.disconnect();
-      transportRef.current = null;
-      setConnected(false);
     };
-  }, [session?.user?.id, session?.user?.name, status, initialLocation]);
+  }, [transport]);
 
   // Update location when it changes
   const setLocation = useCallback(
     (newLocation: PlayerLocation) => {
       setLocationState(newLocation);
-      if (transportRef.current && connected) {
-        transportRef.current.setLocation?.(newLocation);
+      if (transport && connected) {
+        transport.setLocation?.(newLocation);
       }
     },
-    [connected]
+    [transport, connected]
   );
 
   const dismissInvite = useCallback((lobbyId: string) => {
-    setInvites((prev) => prev.filter((inv) => inv.lobbyId !== lobbyId));
+    setLocalInvites((prev) => prev.filter((inv) => inv.lobbyId !== lobbyId));
   }, []);
 
   const handleAcceptInvite = useCallback(
     (invite: LobbyInvitePayloadT) => {
       dismissInvite(invite.lobbyId);
-      // Navigate to the lobby
       router.push(`/online/lobby?join=${invite.lobbyId}`);
     },
     [dismissInvite, router]
@@ -142,22 +121,22 @@ export function PresenceProvider({
 
   const handleDeclineInvite = useCallback(
     (invite: LobbyInvitePayloadT) => {
-      if (transportRef.current) {
-        transportRef.current.respondToInvite?.(invite.lobbyId, "declined");
+      if (transport) {
+        transport.respondToInvite?.(invite.lobbyId, "declined");
       }
       dismissInvite(invite.lobbyId);
     },
-    [dismissInvite]
+    [transport, dismissInvite]
   );
 
   const handlePostponeInvite = useCallback(
     (invite: LobbyInvitePayloadT) => {
-      if (transportRef.current) {
-        transportRef.current.respondToInvite?.(invite.lobbyId, "postponed");
+      if (transport) {
+        transport.respondToInvite?.(invite.lobbyId, "postponed");
       }
       dismissInvite(invite.lobbyId);
     },
-    [dismissInvite]
+    [transport, dismissInvite]
   );
 
   const value: PresenceContextValue = {
