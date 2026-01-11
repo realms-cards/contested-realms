@@ -274,9 +274,14 @@ function normalizeResyncResponsePayload(payload: unknown): unknown {
   }
 }
 
-// Auth failure tracking - uses exponential backoff instead of hard stop
+// Auth failure tracking - uses exponential backoff AND hard stop after max failures
 const AUTH_FAILURE_RESET_MS = 300000; // Reset failure count after 5 minutes
 const AUTH_BACKOFF_DELAYS = [2000, 5000, 10000, 30000, 60000]; // 2s, 5s, 10s, 30s, 60s
+const MAX_AUTH_FAILURES = 10; // Stop reconnecting entirely after this many auth failures
+
+// Client version for server compatibility check
+// Increment this when making breaking changes that require client refresh
+export const CLIENT_PROTOCOL_VERSION = 2;
 
 // Token caching handled by socketTokenCache.ts
 
@@ -357,12 +362,16 @@ export class SocketTransport implements GameTransport {
     const delay = this.getAuthBackoffDelay();
     if (this.authFailureCount > 2) {
       console.warn(
-        `[Transport] Auth failure #${this.authFailureCount}, backing off for ${
-          delay / 1000
-        }s`
+        `[Transport] Auth failure #${
+          this.authFailureCount
+        }/${MAX_AUTH_FAILURES}, backing off for ${delay / 1000}s`
       );
     }
     return delay;
+  }
+
+  private hasExceededMaxAuthFailures(): boolean {
+    return this.authFailureCount >= MAX_AUTH_FAILURES;
   }
 
   private resetAuthFailures(): void {
@@ -533,7 +542,7 @@ export class SocketTransport implements GameTransport {
           ? WS_TIMEOUT_ENV
           : 45000,
       withCredentials: true,
-      auth: token ? { token } : undefined,
+      auth: { token, clientVersion: CLIENT_PROTOCOL_VERSION },
     }) as Socket;
 
     if (this.socket) {
@@ -1321,11 +1330,33 @@ export class SocketTransport implements GameTransport {
 
     socket.on("connect_error", async (error: Error) => {
       const msg = error?.message?.toLowerCase() || "";
+
+      // CRITICAL: If server says client is outdated, force page refresh immediately
+      if (msg.includes("version_outdated") || msg.includes("client_outdated")) {
+        console.error(
+          "[Transport] Client version outdated - forcing page refresh"
+        );
+        if (typeof window !== "undefined") {
+          // Force hard refresh to get new client code
+          window.location.reload();
+        }
+        return;
+      }
+
       const isAuthError =
         msg.includes("token") ||
         msg.includes("jwt") ||
         msg.includes("unauthor") ||
-        msg.includes("invalid");
+        msg.includes("invalid") ||
+        msg.includes("rate_limited");
+
+      // CRITICAL: If we've exceeded max auth failures, stop immediately
+      if (isAuthError && this.hasExceededMaxAuthFailures()) {
+        console.error(
+          "[Transport] Max auth failures already reached - ignoring connect_error"
+        );
+        return;
+      }
 
       // Only log non-auth errors at warn level (auth errors are expected during token refresh)
       if (isAuthError) {
@@ -1383,6 +1414,17 @@ export class SocketTransport implements GameTransport {
             "[Transport] Token fetch failed - user may not be authenticated"
           );
           this.recordAuthFailure();
+
+          // CRITICAL: Stop trying after too many auth failures to prevent infinite loops
+          if (this.hasExceededMaxAuthFailures()) {
+            console.error(
+              `[Transport] Max auth failures (${MAX_AUTH_FAILURES}) reached - stopping reconnection. User must refresh page.`
+            );
+            this.connectionState = "disconnected";
+            mgr.reconnection = false;
+            return; // Stop - don't schedule another retry
+          }
+
           const delay = this.getAuthBackoffDelay();
           console.log(`[Transport] Backing off for ${delay / 1000}s`);
           setTimeout(() => {

@@ -2053,12 +2053,26 @@ function shouldLogAuthRejection(socket: SocketClient): boolean {
   return false;
 }
 
+// Minimum client version required - increment when deploying breaking changes
+// This forces old clients to refresh and get the new code
+const MIN_CLIENT_VERSION = 2;
+
 // Enforce NextAuth-signed JWT at connect time
 io.use((socket: SocketClient, next: (err?: Error) => void) => {
+  // Check client version first - reject old clients immediately
+  const handshakeAuth = socket.handshake?.auth as
+    | { token?: string; clientVersion?: number }
+    | undefined;
+  const clientVersion = handshakeAuth?.clientVersion ?? 0;
+
+  if (clientVersion < MIN_CLIENT_VERSION) {
+    console.log(
+      `[auth] Rejecting old client (version ${clientVersion}, min ${MIN_CLIENT_VERSION})`
+    );
+    return next(new Error("version_outdated"));
+  }
+
   try {
-    const handshakeAuth = socket.handshake?.auth as
-      | { token?: string }
-      | undefined;
     const token = handshakeAuth?.token ?? null;
     if (token && process.env.NEXTAUTH_SECRET) {
       const payload = jwt.verify(
