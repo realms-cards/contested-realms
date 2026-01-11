@@ -29,6 +29,9 @@ export const linkCommand = {
     const { realmsApi } = getServices();
     const subcommand = interaction.options.getSubcommand();
 
+    // Defer reply immediately to prevent timeout
+    await interaction.deferReply({ flags: 64 }); // Ephemeral
+
     if (subcommand === "start") {
       // Check if already linked
       const existing = await realmsApi.getUserByDiscordId(interaction.user.id);
@@ -46,7 +49,7 @@ export const linkCommand = {
             value: "Use `/link unlink` to disconnect your accounts.",
           });
 
-        await interaction.reply({ embeds: [embed], ephemeral: true });
+        await interaction.editReply({ embeds: [embed] });
         return;
       }
 
@@ -80,19 +83,17 @@ export const linkCommand = {
         // Send as DM for privacy
         try {
           await interaction.user.send({ embeds: [embed] });
-          await interaction.reply({
+          await interaction.editReply({
             content: "📬 Check your DMs for the link!",
-            ephemeral: true,
           });
         } catch {
           // DMs disabled, reply in channel
-          await interaction.reply({ embeds: [embed], ephemeral: true });
+          await interaction.editReply({ embeds: [embed] });
         }
       } catch (err) {
         console.error("[link] Create token failed:", err);
-        await interaction.reply({
+        await interaction.editReply({
           content: "❌ Failed to create link. Please try again.",
-          ephemeral: true,
         });
       }
     } else if (subcommand === "status") {
@@ -116,7 +117,7 @@ export const linkCommand = {
           embed.setThumbnail(user.image);
         }
 
-        await interaction.reply({ embeds: [embed], ephemeral: true });
+        await interaction.editReply({ embeds: [embed] });
       } else {
         const embed = new EmbedBuilder()
           .setColor(0xef4444)
@@ -127,15 +128,14 @@ export const linkCommand = {
             value: "Use `/link start` to link your accounts.",
           });
 
-        await interaction.reply({ embeds: [embed], ephemeral: true });
+        await interaction.editReply({ embeds: [embed] });
       }
     } else if (subcommand === "unlink") {
       const user = await realmsApi.getUserByDiscordId(interaction.user.id);
 
       if (!user) {
-        await interaction.reply({
+        await interaction.editReply({
           content: "❌ Your Discord is not linked to any Realms.cards account.",
-          ephemeral: true,
         });
         return;
       }
