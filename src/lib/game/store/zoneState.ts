@@ -1189,17 +1189,16 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
         "[handlePeekedCard] seatZones.banished length:",
         seatZones.banished?.length
       );
-      // Send zones patch - use __replaceKeys to force full replacement on receiver
+      // Send zones patch - DO NOT use __replaceKeys here!
+      // The patch only contains partial zones (affected seats), so using __replaceKeys
+      // would wipe the other player's zones. The client's deepMergeReplaceArrays
+      // will correctly merge partial zone updates.
       if (zonePatch) {
-        const patchWithReplace = {
-          ...zonePatch,
-          __replaceKeys: ["zones"],
-        };
         console.log(
-          "[handlePeekedCard] Sending zones patch with __replaceKeys for:",
+          "[handlePeekedCard] Sending zones patch (no __replaceKeys) for:",
           affectedSeats
         );
-        get().trySendPatch(patchWithReplace);
+        get().trySendPatch(zonePatch);
       }
       return {
         zones: zonesNext as GameState["zones"],
