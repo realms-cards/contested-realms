@@ -441,15 +441,49 @@ export class SocketTransport implements GameTransport {
     return this.connectionState === "connected";
   }
 
+  // Track if we're in the middle of connecting to prevent duplicate connections
+  private connectingPromise: Promise<void> | null = null;
+
   async connect(opts: {
     playerId?: string;
     displayName: string;
   }): Promise<void> {
+    // Already connected - return immediately
     if (this.socket && this.socket.connected) return;
+
+    // Already connecting - wait for the existing connection attempt
+    if (this.connectingPromise) {
+      console.log("[Transport] Connection already in progress, waiting...");
+      return this.connectingPromise;
+    }
+
+    // Socket exists but disconnected - try to reconnect existing socket first
+    if (
+      this.socket &&
+      !this.socket.connected &&
+      !this.isIntentionalDisconnect
+    ) {
+      console.log("[Transport] Reconnecting existing socket...");
+      this.socket.connect();
+      return;
+    }
 
     this.connectionState = "connecting";
     this.isIntentionalDisconnect = false;
 
+    // Wrap the entire connection in a tracked promise
+    this.connectingPromise = this.doConnect(opts);
+    try {
+      await this.connectingPromise;
+    } finally {
+      this.connectingPromise = null;
+    }
+  }
+
+  private async doConnect(opts: {
+    playerId?: string;
+    displayName: string;
+  }): Promise<void> {
     // Prefer explicit env; otherwise use the standard local Socket.IO dev port (3010)
     // Client runs on 3000/3002; signaling server on 3010.
     const defaultUrl = "http://localhost:3010";
