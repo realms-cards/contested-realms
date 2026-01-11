@@ -87,11 +87,11 @@ services:
     env_file:
       - .env.production
     environment:
-      - REALMS_API_URL=http://server1:3010
+      # Bot API routes are on Next.js (Vercel), not Socket.IO server
+      # Use NEXTAUTH_URL from .env.production or override here
+      - REALMS_API_URL=${NEXTAUTH_URL:-https://realms.cards}
     depends_on:
       redis:
-        condition: service_healthy
-      server1:
         condition: service_healthy
     logging:
       driver: json-file
