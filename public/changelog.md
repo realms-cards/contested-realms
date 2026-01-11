@@ -4,6 +4,7 @@
 
 ### Jan 11 - Smooth hands and board dragging
 
+- **allow Magician to put sites back into spellbook**
 - **optimize playing cards from hand** especially playing to backrow is much smoother as any card drags now completely hide the hand while dragging
 - **fix actor seat for hotseat** there were some problems because hotseat fundamentally works differently than online mode
 - **fix spectator permissions** they no longer can see Morgana and Omphalos hands and can not end the match
