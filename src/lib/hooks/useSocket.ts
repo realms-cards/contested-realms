@@ -158,9 +158,10 @@ export function useSocket(options: UseSocketOptions = {}): Socket | null {
           "[useSocket] Tab became visible, socket disconnected - attempting reconnect"
         );
 
-        // Refresh token before reconnecting
+        // Use cached token - no need to force refresh just because tab became visible
+        // The cached token is valid for 23 hours (24h - 1h buffer)
         try {
-          const token = await fetchSocketToken(true); // Force refresh
+          const token = await fetchSocketToken(); // Use cached token
           if (token) {
             type ManagerWithOpts = {
               opts: { auth?: Record<string, unknown> };
@@ -173,7 +174,7 @@ export function useSocket(options: UseSocketOptions = {}): Socket | null {
           }
         } catch (e) {
           console.warn(
-            "[useSocket] Failed to refresh token on visibility change:",
+            "[useSocket] Failed to get token on visibility change:",
             e
           );
           // Still try to reconnect with existing auth

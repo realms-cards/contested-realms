@@ -10,14 +10,8 @@ export async function GET() {
   try {
     const session = await getServerAuthSession();
 
-    console.log("[socket-token] Session check:", {
-      hasSession: !!session,
-      hasUser: !!session?.user,
-      userId: session?.user?.id,
-    });
-
     if (!session?.user) {
-      console.log("[socket-token] No session/user, returning 401");
+      // Don't log 401s - they're expected for unauthenticated requests
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { "content-type": "application/json" },
@@ -61,11 +55,7 @@ export async function GET() {
       { expiresIn: "24h" }
     );
 
-    console.log(
-      "[socket-token] Token generated successfully for user:",
-      userId
-    );
-
+    // Success - no logging needed for normal flow
     return new Response(JSON.stringify({ token }), {
       status: 200,
       headers: { "content-type": "application/json" },
