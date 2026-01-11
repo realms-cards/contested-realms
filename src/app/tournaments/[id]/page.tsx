@@ -2885,12 +2885,15 @@ export default function TournamentDetailsPage() {
                         {new Date(round.completedAt).toLocaleString()}
                       </div>
                     )}
-                    <div className="mt-2">
-                      Matches resolved: {round.statistics.resolvedMatches}/
-                      {round.statistics.totalMatches} • Pending:{" "}
-                      {round.statistics.pendingMatches} • Active:{" "}
-                      {round.statistics.activeMatches}
-                    </div>
+                    {round.statistics && (
+                      <div className="mt-2">
+                        Matches resolved:{" "}
+                        {round.statistics.resolvedMatches ?? 0}/
+                        {round.statistics.totalMatches ?? 0} • Pending:{" "}
+                        {round.statistics.pendingMatches ?? 0} • Active:{" "}
+                        {round.statistics.activeMatches ?? 0}
+                      </div>
+                    )}
                   </div>
 
                   {Array.isArray(round.matches) && round.matches.length > 0 && (
