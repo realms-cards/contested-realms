@@ -14,10 +14,10 @@ import {
   DynamicHand3D as Hand3D,
   DynamicPiles3D as Piles3D,
 } from "@/components/game/dynamic-3d";
+import { useOnline } from "@/app/online/online-context";
 import TextureCache from "@/lib/game/components/TextureCache";
 import { Physics } from "@/lib/game/physics";
 import { useGameStore } from "@/lib/game/store";
-import { SocketTransport } from "@/lib/net/socketTransport";
 
 interface MatchRecording {
   matchId: string;
@@ -42,8 +42,9 @@ export default function ReplayViewerPage() {
   const router = useRouter();
   const matchId = params?.id as string;
 
-  const [transport, setTransport] = useState<SocketTransport | null>(null);
-  const [connected, setConnected] = useState(false);
+  // Use shared transport from OnlineProvider instead of creating a new socket
+  const { transport: onlineTransport, connected } = useOnline();
+  const transport = onlineTransport;
   const { data: session } = useSession();
 
   const [recording, setRecording] = useState<MatchRecording | null>(null);
@@ -58,59 +59,8 @@ export default function ReplayViewerPage() {
   const previewCard = useGameStore((s) => s.previewCard);
   const contextMenu = useGameStore((s) => s.contextMenu);
 
-  // Setup socket connection
-  useEffect(() => {
-    let isMounted = true;
-
-    const socketTransport = new SocketTransport();
-    setTransport(socketTransport);
-
-    const handleConnect = () => {
-      // Do not mark as connected here to avoid race with server auth (hello/welcome).
-      // We'll flip `connected` to true once connect() resolves after 'welcome'.
-    };
-    const handleDisconnect = () => {
-      if (!isMounted) return;
-      setConnected(false);
-    };
-
-    socketTransport.onGeneric("connect", handleConnect);
-    socketTransport.onGeneric("disconnect", handleDisconnect);
-
-    const displayName =
-      (session?.user?.name && String(session.user.name).trim()) ||
-      `Replay_${Date.now()}`;
-    const playerId =
-      (session?.user && (session.user as { id?: string }).id) ||
-      `replay_viewer_${Date.now()}`;
-
-    socketTransport
-      .connect({
-        displayName,
-        playerId,
-      })
-      .then(() => {
-        if (!isMounted) return;
-        setConnected(true);
-      })
-      .catch((error) => {
-        if (!isMounted) return;
-        console.error("Failed to connect to replay server:", error);
-        setLoading(false);
-        setError("Failed to connect to server");
-      });
-
-    return () => {
-      isMounted = false;
-      try {
-        socketTransport.offGeneric("connect", handleConnect);
-        socketTransport.offGeneric("disconnect", handleDisconnect);
-        socketTransport.disconnect();
-      } catch {
-        // Ignore cleanup errors
-      }
-    };
-  }, [session]);
+  // Note: Using shared transport from OnlineProvider instead of creating a new socket.
+  // The OnlineProvider handles connection, auth, and welcome - no setup needed here.
 
   // Load the recording
   useEffect(() => {

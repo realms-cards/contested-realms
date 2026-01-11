@@ -3,8 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useState, useEffect, useRef } from "react";
+import { useOnline } from "@/app/online/online-context";
 import OnlinePageShell from "@/components/online/OnlinePageShell";
-import { SocketTransport } from "@/lib/net/socketTransport";
 
 const LOCAL_REPLAY_STORAGE_KEY = "sorcery:localReplay";
 
@@ -26,9 +26,10 @@ export default function ReplayListPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
-  const [transport, setTransport] = useState<SocketTransport | null>(null);
-  const [connected, setConnected] = useState(false);
-  const [socketReady, setSocketReady] = useState(false);
+  // Use shared transport from OnlineProvider instead of creating a new socket
+  const { transport: onlineTransport, connected } = useOnline();
+  const transport = onlineTransport;
+  const socketReady = connected; // OnlineProvider handles welcome/auth
   const [currentPlayerId, setCurrentPlayerId] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [showOwnOnly, setShowOwnOnly] = useState(false);
@@ -80,10 +81,8 @@ export default function ReplayListPage() {
     }
   };
 
+  // Get current player ID from session or localStorage
   useEffect(() => {
-    let isMounted = true;
-
-    // Get current player ID from session or localStorage if available
     try {
       const fromSession = (session?.user &&
         (session.user as { id?: string }).id) as string | undefined;
@@ -92,61 +91,10 @@ export default function ReplayListPage() {
     } catch {
       // Ignore localStorage errors
     }
-
-    const socketTransport = new SocketTransport();
-    setTransport(socketTransport);
-
-    const handleConnect = () => {
-      if (!isMounted) return;
-      setConnected(true);
-    };
-    const handleDisconnect = () => {
-      if (!isMounted) return;
-      setConnected(false);
-      setSocketReady(false);
-    };
-
-    socketTransport.onGeneric("connect", handleConnect);
-    socketTransport.onGeneric("disconnect", handleDisconnect);
-
-    const displayName =
-      (session?.user?.name && String(session.user.name).trim()) ||
-      `Replay_${Date.now()}`;
-    const playerId =
-      (session?.user && (session.user as { id?: string }).id) ||
-      `replay_viewer_${Date.now()}`;
-    socketTransport
-      .connect({
-        displayName,
-        playerId,
-      })
-      .catch((error) => {
-        if (!isMounted) return;
-        console.error("Failed to connect to replay server:", error);
-        setLoading(false);
-      });
-
-    return () => {
-      isMounted = false;
-      try {
-        socketTransport.offGeneric("connect", handleConnect);
-        socketTransport.offGeneric("disconnect", handleDisconnect);
-        socketTransport.disconnect();
-      } catch {
-        // Ignore cleanup errors
-      }
-    };
   }, [session]);
 
-  // Mark socket ready on 'welcome' (post-hello auth); request recordings then
-  useEffect(() => {
-    if (!transport) return;
-    const onWelcome = () => setSocketReady(true);
-    transport.onGeneric("welcome", onWelcome);
-    return () => {
-      transport.offGeneric("welcome", onWelcome);
-    };
-  }, [transport]);
+  // Note: socketReady is now derived from OnlineProvider's connected state
+  // No need for separate welcome listener - OnlineProvider handles auth
 
   useEffect(() => {
     if (!socketReady || !transport) return;

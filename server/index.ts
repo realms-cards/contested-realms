@@ -19,6 +19,8 @@ import {
   getRateLimitsForSocket,
   tryConsume,
   cleanupRateLimits,
+  checkUserConnectionLimit,
+  cleanupUserConnectionLimits,
 } from "./rateLimiter";
 
 // JS modules (CommonJS) - use default import pattern
@@ -2013,14 +2015,17 @@ const authRejectionLogCache = new Map<
 const AUTH_LOG_COOLDOWN_MS = 60000; // Only log once per minute per source
 const AUTH_LOG_CACHE_CLEANUP_INTERVAL = 300000; // Clean cache every 5 minutes
 
-// Periodically clean up stale entries
+// Periodically clean up stale entries (auth log cache + user connection limits)
 setInterval(() => {
   const now = Date.now();
+  // Clean auth rejection log cache
   for (const [key, value] of authRejectionLogCache.entries()) {
     if (now - value.lastLogTime > AUTH_LOG_COOLDOWN_MS * 2) {
       authRejectionLogCache.delete(key);
     }
   }
+  // Clean up user connection rate limits for inactive users
+  cleanupUserConnectionLimits();
 }, AUTH_LOG_CACHE_CLEANUP_INTERVAL);
 
 function shouldLogAuthRejection(socket: SocketClient): boolean {
@@ -2167,6 +2172,18 @@ io.on("connection", async (socket: SocketClient) => {
       payload && payload.playerId ? String(payload.playerId) : null;
     const tokenId = authUser && authUser.id ? String(authUser.id) : null;
     const playerId = tokenId || providedId || rid("p");
+
+    // Per-user connection rate limiting - prevents outlier users from spamming
+    const connLimit = checkUserConnectionLimit(playerId);
+    if (!connLimit.allowed) {
+      try {
+        socket.emit("error", {
+          message: "rate_limited",
+          retryAfterMs: connLimit.waitMs,
+        });
+      } catch {}
+      return; // Don't process hello, just drop it
+    }
 
     let player: PlayerState;
 
