@@ -72,6 +72,8 @@ export default function Hand3D({
   const setDragFromHand = useGameStore((s) => s.setDragFromHand);
   const setDragFaceDown = useGameStore((s) => s.setDragFaceDown);
   const dragFromPile = useGameStore((s) => s.dragFromPile);
+  const boardDragActive = useGameStore((s) => s.boardDragActive);
+  const draggingSite = useGameStore((s) => s.draggingSite);
   const setMouseInHandZone = useGameStore((s) => s.setMouseInHandZone);
   const setHandHoverCount = useGameStore((s) => s.setHandHoverCount);
   const getRemoteHighlightColor = useGameStore(
@@ -464,14 +466,17 @@ export default function Hand3D({
     } else {
       targetShown = overCardsArea || mouseInZone ? 1 : 0;
     }
-    // When dragging from hand, only show hand in a small return zone (100px from bottom)
-    // This applies to both desktop and mobile
+    // When dragging from hand, only show hand in a small return zone
     if (!showCardBacks && dragFromHand && selected && selected.who === owner) {
       const hScr = window.innerHeight || 1;
-      const DRAG_RETURN_ZONE_PX = 100; // Small zone at very bottom for returning cards
+      const DRAG_RETURN_ZONE_PX = 20; // Tiny zone at bottom edge for returning cards
       const inReturnZone =
         lastMousePosRef.current.y >= hScr - DRAG_RETURN_ZONE_PX;
       targetShown = inReturnZone ? 1 : 0;
+    }
+    // Hide hand completely during any other board drag (permanents, avatars, sites)
+    if (!showCardBacks && (boardDragActive || draggingSite)) {
+      targetShown = 0;
     }
 
     // Smooth reveal animation - slower for a more relaxed feel
@@ -484,13 +489,16 @@ export default function Hand3D({
     // This removes the finicky "compressed to fanned" transition
     handSpreadLerp.current = 1; // Always spread
 
-    // Push hand further off-screen when force hidden via Space or dragging on mobile
+    // Push hand further off-screen when force hidden via Space or any dragging
     const normalHiddenOffset = -CARD_LONG * HAND_CARD_SCALE * 0.8;
-    const forceHiddenOffset = -CARD_LONG * HAND_CARD_SCALE * 1.5;
-    const isDraggingOnMobile =
-      isCoarsePointer && dragFromHand && selected && selected.who === owner;
+    const forceHiddenOffset = -CARD_LONG * HAND_CARD_SCALE * 1.8; // Almost completely off-screen
+    const isDraggingFromHand =
+      dragFromHand && selected && selected.who === owner;
+    // Hide hand during any board drag (permanents, avatars, sites, or from hand)
+    const anyDragActive =
+      isDraggingFromHand || boardDragActive || Boolean(draggingSite);
     const hiddenOffset =
-      handVisibilityMode === "hidden" || isDraggingOnMobile
+      handVisibilityMode === "hidden" || anyDragActive
         ? forceHiddenOffset
         : normalHiddenOffset;
     const yOffset = hiddenOffset * (1 - revealLerp.current);
@@ -1001,16 +1009,27 @@ export default function Hand3D({
         const layoutInfo = handLayout[i];
         if (!layoutInfo) return null;
 
+        // Check if we're currently dragging from hand
+        const isHandDragActive =
+          dragFromHand && selected && selected.who === owner;
+
         // Handle dragged card visibility for hand returns
         const isDraggedCard =
           selected &&
           selected.card.cardId === c.cardId &&
           dragFromHand &&
           selected.who === owner;
+
+        // When dragging, only render the dragged card (and only in return zone)
+        // Skip all other cards to prevent blocking board placement
+        if (isHandDragActive && !isDraggedCard) {
+          return null; // Don't render non-dragged cards during drag
+        }
+
         if (isDraggedCard) {
-          // Use the same small return zone for dragged card visibility
+          // Use the same tiny return zone for dragged card visibility
           const h = window.innerHeight || 1;
-          const DRAG_RETURN_ZONE_PX = 100;
+          const DRAG_RETURN_ZONE_PX = 20; // Match the hand visibility zone
           const inDragReturnZone =
             lastMousePosRef.current.y >= h - DRAG_RETURN_ZONE_PX;
 
@@ -1092,7 +1111,8 @@ export default function Hand3D({
               />
             )}
             {/* Invisible larger interaction box to ensure cards are always clickable */}
-            {!showCardBacks && !isDraggedCard && (
+            {/* Disable during drag to prevent blocking board placement */}
+            {!showCardBacks && !isDraggedCard && !isDragging && (
               <mesh
                 position={[0, 0, 0.05]}
                 onPointerOver={(e) => {

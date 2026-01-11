@@ -47,6 +47,7 @@ import {
   createInitialImposterMasks,
 } from "./store/imposterMaskState";
 import { createInteractionSlice } from "./store/interactionState";
+import { createInterrogatorSlice } from "./store/interrogatorState";
 import { createLilithSlice } from "./store/lilithState";
 import { createMagicSlice } from "./store/magicState";
 import { createMorganaSlice } from "./store/morganaState";
@@ -185,6 +186,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   ...createSpecialSiteSlice(set, get, storeApi),
   ...createAnimistSlice(set, get, storeApi),
   ...createHeadlessHauntSlice(set, get, storeApi),
+  ...createInterrogatorSlice(set, get, storeApi),
   cardScale: 1,
 
   // Multiplayer transport (injected by online play UI)
@@ -271,6 +273,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         omphalosHands: [],
         pendingPrivateHandCast: null,
         pendingAnimistCast: null,
+        pendingInterrogatorChoice: null,
         portalState: null,
         seerState: null,
         imposterMasks: createInitialImposterMasks(),

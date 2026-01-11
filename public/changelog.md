@@ -2,6 +2,23 @@
 
 ## January 2026
 
+### Jan 11 - Smooth hands and board dragging
+
+- **optimize playing cards from hand** especially playing to backrow is much smoother as any card drags now completely hide the hand while dragging
+- **fix actor seat for hotseat** there were some problems because hotseat fundamentally works differently than online mode
+- **fix spectator permissions** they no longer can see Morgana and Omphalos hands and can not end the match
+- **card can not be dragged outside the playmat zone anymore**
+- **implement bug report button** its located in toolbox, next to the "Toolbox" title
+
+### Jan 9 - Optimize and fix
+
+- **much much better feeling hands**
+- **turn off all custom resolvers from toolbox** (kinda TTS mode)
+- **add face down play from hand and spellbook** (when dropping the card to the board keep “f” pressed or the right mouse button)
+- **tokens are now banishable** with right-click, only lance can be dropped
+- **D20 can now be rolled by pressing “2” and D6 by pressing “6”**
+- **add goldfish mode to hotseat games toolbox** (every start of turn the acting players old cards are shuffled back and a full new hand is drawn, )
+
 ### Jan 7 — Gameplay fixes
 
 - **allow modifying both players health in hotseat only**

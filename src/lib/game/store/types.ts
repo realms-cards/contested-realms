@@ -162,6 +162,27 @@ export const IMPOSTER_MASK_COST = 3; // Mana cost to mask yourself
 // --- Necromancer Mana Cost --------------------------------
 export const NECROMANCER_SKELETON_COST = 1; // Mana cost to summon a Skeleton token
 
+// --- Interrogator Ability --------------------------------
+// Whenever an ally strikes an enemy Avatar, draw a spell unless they pay 3 life.
+export const INTERROGATOR_LIFE_COST = 3; // Life cost to prevent the spell draw
+
+export type InterrogatorChoicePhase = "pending" | "resolved";
+
+export type PendingInterrogatorChoice = {
+  id: string;
+  // The Interrogator player who gets the draw if opponent doesn't pay
+  interrogatorSeat: PlayerKey;
+  // The opponent who must choose to pay or allow draw
+  victimSeat: PlayerKey;
+  // Name of the attacker minion that struck the avatar
+  attackerName: string;
+  // Current phase
+  phase: InterrogatorChoicePhase;
+  // The choice made by the victim (null if not yet decided)
+  choice: "pay" | "allow" | null;
+  createdAt: number;
+};
+
 // --- Animist Cast Choice --------------------------------
 // When Animist plays a magic card, they can choose to cast it as a magic or as a spirit
 export type AnimistCastMode = "magic" | "spirit";
@@ -1208,6 +1229,15 @@ export type GameState = {
   }) => void;
   resolveAnimistCast: (mode: AnimistCastMode) => void;
   cancelAnimistCast: () => void;
+  // Interrogator avatar ability (Gothic expansion)
+  // Whenever an ally strikes an enemy Avatar, draw a spell unless they pay 3 life
+  pendingInterrogatorChoice: PendingInterrogatorChoice | null;
+  triggerInterrogatorChoice: (
+    interrogatorSeat: PlayerKey,
+    victimSeat: PlayerKey,
+    attackerName: string
+  ) => void;
+  resolveInterrogatorChoice: (choice: "pay" | "allow") => void;
   // Chaos Twister minigame flow
   pendingChaosTwister: PendingChaosTwister | null;
   beginChaosTwister: (input: {
@@ -1916,6 +1946,7 @@ export type GameState = {
   // UI cross-surface drag state
   dragFromHand: boolean;
   dragFaceDown: boolean; // When true, card will be placed face-down on the board
+  boardDragActive: boolean; // True when dragging permanents/avatars on board
   dragFromPile: {
     who: PlayerKey;
     from: "spellbook" | "atlas" | "graveyard" | "collection" | "tokens";
@@ -1923,6 +1954,7 @@ export type GameState = {
   } | null;
   setDragFromHand: (on: boolean) => void;
   setDragFaceDown: (on: boolean) => void;
+  setBoardDragActive: (on: boolean) => void;
   setDragFromPile: (
     info: {
       who: PlayerKey;
@@ -2121,6 +2153,7 @@ export type ServerPatchT = Partial<{
   specialSiteState: GameState["specialSiteState"];
   pendingEarthquake: GameState["pendingEarthquake"];
   pendingAnimistCast: GameState["pendingAnimistCast"];
+  pendingInterrogatorChoice: GameState["pendingInterrogatorChoice"];
   resolversDisabled: GameState["resolversDisabled"];
   __replaceKeys: string[];
 }>;

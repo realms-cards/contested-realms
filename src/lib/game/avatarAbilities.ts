@@ -20,6 +20,7 @@ export type AvatarAbility =
   | "necromancer"
   | "druid"
   | "animist"
+  | "interrogator"
   | null;
 
 /**
@@ -113,6 +114,16 @@ export function isAnimist(avatarName: string | null | undefined): boolean {
 }
 
 /**
+ * Check if an avatar name indicates Interrogator (Gothic expansion)
+ * Uses case-insensitive matching
+ * Interrogator: Whenever an ally strikes an enemy Avatar, draw a spell unless they pay 3 life.
+ */
+export function isInterrogator(avatarName: string | null | undefined): boolean {
+  if (!avatarName) return false;
+  return avatarName.toLowerCase().includes("interrogator");
+}
+
+/**
  * Get the primary ability type for an avatar by name
  * Returns null if no special ability detected
  */
@@ -131,6 +142,7 @@ export function getAvatarAbility(
   if (name.includes("necromancer")) return "necromancer";
   if (name.includes("druid")) return "druid";
   if (name.includes("animist")) return "animist";
+  if (name.includes("interrogator")) return "interrogator";
 
   return null;
 }

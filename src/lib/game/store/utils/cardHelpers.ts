@@ -107,9 +107,36 @@ export function normalizeCardRefList(
 ): CardRef[] {
   const source = Array.isArray(candidate) ? candidate : fallback;
   const normalized: CardRef[] = [];
+  let failedCount = 0;
   for (const entry of source) {
     const ensured = normalizeCardRefEntry(entry);
-    if (ensured) normalized.push(ensured);
+    if (ensured) {
+      normalized.push(ensured);
+    } else {
+      failedCount++;
+      // Log failed card for debugging zone loss issues
+      if (process.env.NODE_ENV !== "production") {
+        try {
+          console.warn("[CARD_VALIDATION_FAIL] Card failed normalization:", {
+            entry:
+              typeof entry === "object"
+                ? JSON.stringify(entry).slice(0, 200)
+                : entry,
+          });
+        } catch {}
+      }
+    }
+  }
+  // Warn if significant number of cards failed validation
+  if (failedCount > 0 && source.length > 0) {
+    const failRate = failedCount / source.length;
+    if (failRate > 0.5 || failedCount >= 3) {
+      console.error(
+        `[CARD_VALIDATION_BULK_FAIL] ${failedCount}/${
+          source.length
+        } cards failed validation (${Math.round(failRate * 100)}%)`
+      );
+    }
   }
   return normalized;
 }

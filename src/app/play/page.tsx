@@ -32,6 +32,7 @@ import LilithOverlay from "@/components/game/LilithOverlay";
 import MobileHandHint from "@/components/game/MobileHandHint";
 import MotherNatureOverlay from "@/components/game/MotherNatureOverlay";
 import HeadlessHauntOverlay from "@/components/game/HeadlessHauntOverlay";
+import InterrogatorChoiceOverlay from "@/components/game/InterrogatorChoiceOverlay";
 import OfflineMulliganScreen from "@/components/game/OfflineMulliganScreen";
 import OnlineLifeCounters from "@/components/game/OnlineLifeCounters";
 import PigsOfTheSounderOverlay from "@/components/game/PigsOfTheSounderOverlay";
@@ -920,6 +921,9 @@ export default function PlayPage() {
 
       {/* Headless Haunt Overlay (start of turn movement - Kythera Mechanism) */}
       <HeadlessHauntOverlay />
+
+      {/* Interrogator Choice Overlay (pay life or allow spell draw) */}
+      <InterrogatorChoiceOverlay />
 
       {/* Black Mass Overlay (search for Evil minions) */}
       <BlackMassOverlay />

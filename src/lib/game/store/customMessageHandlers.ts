@@ -3784,4 +3784,108 @@ export function handleCustomMessage(
     }, 1500);
     return;
   }
+
+  // --- Interrogator Avatar Ability (Gothic expansion) ---
+  // Triggered when an ally strikes an enemy avatar
+  if (t === "interrogatorTrigger") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const interrogatorSeat = (msg as { interrogatorSeat?: unknown })
+      .interrogatorSeat as PlayerKey | undefined;
+    const victimSeat = (msg as { victimSeat?: unknown }).victimSeat as
+      | PlayerKey
+      | undefined;
+    const attackerName = (msg as { attackerName?: unknown }).attackerName as
+      | string
+      | undefined;
+
+    if (!id || !interrogatorSeat || !victimSeat) return;
+
+    // Skip if we're the interrogator - we already have the state
+    const actorKey = get().actorKey;
+    if (actorKey === interrogatorSeat) return;
+
+    set({
+      pendingInterrogatorChoice: {
+        id,
+        interrogatorSeat,
+        victimSeat,
+        attackerName: attackerName ?? "Minion",
+        phase: "pending",
+        choice: null,
+        createdAt: Date.now(),
+      },
+    } as Partial<GameState> as GameState);
+
+    try {
+      const interrogatorAvatarName =
+        get().avatars?.[interrogatorSeat]?.card?.name || "Interrogator";
+      get().log(
+        `[p${
+          interrogatorSeat === "p1" ? "1" : "2"
+        }:${interrogatorAvatarName}] ability triggers: ${victimSeat.toUpperCase()} must pay 3 life or allow a spell draw`
+      );
+    } catch {}
+    return;
+  }
+
+  if (t === "interrogatorResolve") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const choice = (msg as { choice?: unknown }).choice as
+      | "pay"
+      | "allow"
+      | undefined;
+
+    if (!id || !choice) return;
+
+    const pending = get().pendingInterrogatorChoice;
+    if (!pending || pending.id !== id) return;
+
+    // Skip if we're the victim - we already handled it locally
+    const actorKey = get().actorKey;
+    if (actorKey === pending.victimSeat) return;
+
+    const { interrogatorSeat, victimSeat } = pending;
+
+    if (choice === "pay") {
+      // Victim pays 3 life
+      try {
+        get().addLife(victimSeat, -3);
+      } catch {}
+      try {
+        get().log(
+          `${victimSeat.toUpperCase()} pays 3 life to prevent Interrogator's draw`
+        );
+      } catch {}
+    } else {
+      // Interrogator draws a spell from spellbook
+      try {
+        get().drawFrom(interrogatorSeat, "spellbook");
+      } catch {}
+      try {
+        get().log(
+          `${victimSeat.toUpperCase()} allows Interrogator's draw - ${interrogatorSeat.toUpperCase()} draws a spell`
+        );
+      } catch {}
+    }
+
+    // Update state to resolved
+    set({
+      pendingInterrogatorChoice: {
+        ...pending,
+        phase: "resolved",
+        choice,
+      },
+    } as Partial<GameState> as GameState);
+
+    // Clear after delay
+    setTimeout(() => {
+      set((state) => {
+        if (state.pendingInterrogatorChoice?.id === id) {
+          return { ...state, pendingInterrogatorChoice: null } as GameState;
+        }
+        return state as GameState;
+      });
+    }, 500);
+    return;
+  }
 }
