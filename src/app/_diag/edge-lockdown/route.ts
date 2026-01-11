@@ -1,5 +1,3 @@
-export const runtime = 'edge';
-
 export async function GET() {
   const enabledRaw = (process.env.BASIC_AUTH_ENABLED || process.env.LOCKDOWN_ENABLED || '').toString();
   const enabled = ['1', 'true', 'yes', 'on'].includes(enabledRaw.toLowerCase());
@@ -8,7 +6,7 @@ export async function GET() {
 
   return new Response(
     JSON.stringify({
-      runtime: 'edge',
+      runtime: 'nodejs',
       enabledRaw,
       enabled,
       haveUser,
