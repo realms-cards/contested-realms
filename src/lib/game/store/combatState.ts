@@ -14,6 +14,7 @@ import {
   seatFromOwner,
   toCellKey,
 } from "./utils/boardHelpers";
+import { isInterrogator } from "@/lib/game/avatarAbilities";
 
 type CombatSlice = Pick<
   GameState,
@@ -1173,6 +1174,37 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
           } catch {
             // ignore
           }
+        }
+
+        // --- Interrogator Avatar Ability (Gothic expansion) ---
+        // Trigger: Whenever an ally strikes an enemy Avatar
+        // Effect: Draw a spell unless they pay 3 life
+        // Triggers for both minions AND the Interrogator's own avatar striking
+        try {
+          const attackerAvatarName =
+            get().avatars?.[attackerSeat]?.card?.name ?? null;
+          if (isInterrogator(attackerAvatarName)) {
+            // Get attacker name for the UI
+            let attackerName: string;
+            if (pending.attacker.isAvatar) {
+              // Avatar itself is attacking
+              attackerName = attackerAvatarName ?? "Avatar";
+            } else {
+              // Minion is attacking
+              const attackerPermanent = (get().permanents as Permanents)[
+                pending.attacker.at
+              ]?.[pending.attacker.index];
+              attackerName = attackerPermanent?.card?.name ?? "Minion";
+            }
+
+            // Trigger the Interrogator choice for the victim
+            get().triggerInterrogatorChoice(attackerSeat, seat, attackerName);
+          }
+        } catch (error) {
+          console.error(
+            "[autoResolveCombat] Error triggering Interrogator ability:",
+            error
+          );
         }
       }
     }

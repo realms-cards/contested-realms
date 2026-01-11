@@ -1,9 +1,10 @@
 "use client";
 
 import { Canvas } from "@react-three/fiber";
-import { Wrench, Eye, Search } from "lucide-react";
+import { Wrench, Eye, Search, AlertTriangle } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useRef, useState, useMemo } from "react";
+import BugReportModal from "@/components/game/BugReportModal";
 import CardSearchDialog from "@/components/game/CardSearchDialog";
 import HandPeekDialog from "@/components/game/HandPeekDialog";
 import { useGraphicsSettings } from "@/hooks/useGraphicsSettings";
@@ -119,6 +120,9 @@ export default function GameToolbox({
 
   // Card search state
   const [cardSearchOpen, setCardSearchOpen] = useState(false);
+
+  // Bug report modal state
+  const [bugReportOpen, setBugReportOpen] = useState(false);
 
   // Burrow/Submerge (forced)
   const selectedPermanent = useGameStore((s) => s.selectedPermanent);
@@ -1028,8 +1032,18 @@ export default function GameToolbox({
           <div
             className={`flex items-center justify-between ${headerPaddingClass} border-b border-white/10`}
           >
-            <div className="font-semibold" style={fontStyle}>
-              Toolbox
+            <div className="flex items-center gap-2">
+              <span className="font-semibold" style={fontStyle}>
+                Toolbox
+              </span>
+              <button
+                className="p-1 rounded bg-amber-600/80 hover:bg-amber-500 text-white"
+                onClick={() => setBugReportOpen(true)}
+                aria-label="Report bug"
+                title="Report Bug"
+              >
+                <AlertTriangle className="w-3.5 h-3.5" />
+              </button>
             </div>
             <button
               className={`rounded bg-white/10 hover:bg-white/20 ${toggleBtnPaddingClass}`}
@@ -1633,6 +1647,12 @@ export default function GameToolbox({
           onClose={() => setCardSearchOpen(false)}
         />
       )}
+      <BugReportModal
+        isOpen={bugReportOpen}
+        onClose={() => setBugReportOpen(false)}
+        matchId={matchId}
+        userId={myPlayerId}
+      />
     </div>
   );
 }

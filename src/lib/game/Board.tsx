@@ -224,6 +224,7 @@ export default function Board({
     (s) => s.setLastPointerWorldPos
   );
   const setDragFromPile = useScopedStore((s) => s.setDragFromPile);
+  const setBoardDragActive = useScopedStore((s) => s.setBoardDragActive);
   const playFromPileTo = useScopedStore((s) => s.playFromPileTo);
   const selectedAvatar = useScopedStore((s) => s.selectedAvatar);
   const selectAvatar = useScopedStore((s) => s.selectAvatar);
@@ -444,6 +445,19 @@ export default function Board({
     return () => controller.abort();
   }, [setCardbackUrls]);
 
+  // Calculate playmat bounds for drag clamping (same logic as matW/matH below)
+  const matBounds = useMemo(() => {
+    const baseGridW = board.size.w * BASE_TILE_SIZE;
+    const baseGridH = board.size.h * BASE_TILE_SIZE;
+    let matW = baseGridW;
+    let matH = baseGridW / MAT_RATIO;
+    if (matH < baseGridH) {
+      matH = baseGridH;
+      matW = baseGridH * MAT_RATIO;
+    }
+    return { halfW: matW / 2, halfH: matH / 2 };
+  }, [board.size.w, board.size.h]);
+
   const boardDragControls = useBoardDragControls({
     currentPlayer,
     playTurnGong,
@@ -452,8 +466,10 @@ export default function Board({
     selectedCard: selected,
     setDragFromHand,
     setDragFromPile,
+    setBoardDragActive,
     handlePointerMoveRef,
     enableSnap: ENABLE_SNAP,
+    matBounds,
   });
 
   const {

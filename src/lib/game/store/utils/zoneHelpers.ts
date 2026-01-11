@@ -1,4 +1,10 @@
-import type { GameState, PlayerKey, ServerPatchT, Zones } from "../types";
+import type {
+  CardRef,
+  GameState,
+  PlayerKey,
+  ServerPatchT,
+  Zones,
+} from "../types";
 import { normalizeCardRefList, prepareCardForSeat } from "./cardHelpers";
 
 const ZONE_PILES: Array<keyof Zones> = [
@@ -41,14 +47,93 @@ export function ensurePlayerZones(
   const graveyard = candidate?.graveyard;
   const battlefield = candidate?.battlefield;
   const banished = candidate?.banished;
+
+  // HARDENING: Normalize each zone, but preserve fallback data if candidate zone
+  // would result in empty when fallback has cards (prevents accidental wipes)
+  const normalizedSpellbook = normalizeCardRefList(spellbook, base.spellbook);
+  const normalizedAtlas = normalizeCardRefList(atlas, base.atlas);
+  const normalizedHand = normalizeCardRefList(hand, base.hand);
+  const normalizedGraveyard = normalizeCardRefList(graveyard, base.graveyard);
+  const normalizedBattlefield = normalizeCardRefList(
+    battlefield,
+    base.battlefield
+  );
+  const normalizedCollection = normalizeCardRefList(
+    candidate?.collection,
+    base.collection
+  );
+  const normalizedBanished = normalizeCardRefList(banished, base.banished);
+
+  // CRITICAL: Detect potential zone wipes and warn + preserve
+  // Only applies when candidate explicitly provides an empty array for a zone
+  // that had data in fallback (indicates potential bug, not intentional clear)
+  const warnAndPreserve = (
+    name: string,
+    normalized: CardRef[],
+    candidateVal: unknown,
+    fallbackArr: CardRef[]
+  ): CardRef[] => {
+    // If candidate was undefined, we already fell back correctly
+    if (candidateVal === undefined) return normalized;
+    // If candidate was an empty array but fallback had cards, this is suspicious
+    if (
+      Array.isArray(candidateVal) &&
+      candidateVal.length === 0 &&
+      fallbackArr.length > 0
+    ) {
+      console.warn(
+        `[ZONE_HARDENING] Prevented ${name} wipe: patch had [] but fallback had ${fallbackArr.length} cards`
+      );
+      return fallbackArr;
+    }
+    // If normalization resulted in empty but both candidate and fallback had cards,
+    // all cards failed validation - this is a data corruption issue
+    if (
+      normalized.length === 0 &&
+      Array.isArray(candidateVal) &&
+      candidateVal.length > 0
+    ) {
+      console.error(
+        `[ZONE_HARDENING] All ${candidateVal.length} cards in ${name} failed validation! Preserving fallback.`
+      );
+      return fallbackArr.length > 0 ? fallbackArr : normalized;
+    }
+    return normalized;
+  };
+
   return {
-    spellbook: normalizeCardRefList(spellbook, base.spellbook),
-    atlas: normalizeCardRefList(atlas, base.atlas),
-    hand: normalizeCardRefList(hand, base.hand),
-    graveyard: normalizeCardRefList(graveyard, base.graveyard),
-    battlefield: normalizeCardRefList(battlefield, base.battlefield),
-    collection: normalizeCardRefList(candidate?.collection, base.collection),
-    banished: normalizeCardRefList(banished, base.banished),
+    spellbook: warnAndPreserve(
+      "spellbook",
+      normalizedSpellbook,
+      spellbook,
+      base.spellbook
+    ),
+    atlas: warnAndPreserve("atlas", normalizedAtlas, atlas, base.atlas),
+    hand: warnAndPreserve("hand", normalizedHand, hand, base.hand),
+    graveyard: warnAndPreserve(
+      "graveyard",
+      normalizedGraveyard,
+      graveyard,
+      base.graveyard
+    ),
+    battlefield: warnAndPreserve(
+      "battlefield",
+      normalizedBattlefield,
+      battlefield,
+      base.battlefield
+    ),
+    collection: warnAndPreserve(
+      "collection",
+      normalizedCollection,
+      candidate?.collection,
+      base.collection
+    ),
+    banished: warnAndPreserve(
+      "banished",
+      normalizedBanished,
+      banished,
+      base.banished
+    ),
   };
 }
 

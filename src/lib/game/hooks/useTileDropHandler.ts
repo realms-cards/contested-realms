@@ -400,12 +400,9 @@ export function useTileDropHandler({
       }
 
       if (dragFromHand) {
-        if (mouseInHandZone) {
-          setDragFromHand(false);
-          setGhost(null);
-          lastDropAt.current = Date.now();
-          return;
-        }
+        // Note: We no longer cancel drops based on mouseInHandZone here.
+        // If the user clicked on a tile, they want to place the card there.
+        // Hand return is handled by dropping outside the board (onPointerMissed).
         const wx = e.point.x;
         const wz = e.point.z;
         const toItems = permanents[dropKey] || [];

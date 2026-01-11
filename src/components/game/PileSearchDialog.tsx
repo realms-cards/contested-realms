@@ -155,7 +155,7 @@ export default function PileSearchDialog({
               {filteredCards.map((card, index) => (
                 <div
                   key={`${card.slug}-${index}`}
-                  className="bg-zinc-800/50 hover:bg-zinc-700/50 rounded-lg p-3 transition-colors"
+                  className="bg-zinc-800/50 hover:bg-zinc-700/50 rounded-lg p-3 transition-colors flex gap-3"
                   onMouseEnter={() => {
                     if (card.slug) {
                       showCardPreview({
@@ -169,58 +169,77 @@ export default function PileSearchDialog({
                     hideCardPreview();
                   }}
                 >
-                  <div className="font-medium text-white mb-1">
-                    {card.name || "Unknown Card"}
+                  {/* Card thumbnail */}
+                  <div className="flex-shrink-0 w-12 h-[67px] rounded overflow-hidden bg-zinc-700/50">
+                    {card.slug ? (
+                      <img
+                        src={`/api/images/${card.slug}`}
+                        alt=""
+                        className="w-full h-full object-cover"
+                        loading="lazy"
+                        draggable={false}
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-zinc-500 text-xs">
+                        ?
+                      </div>
+                    )}
                   </div>
-                  {card.type && (
-                    <div className="text-xs text-zinc-400 mb-2">
-                      {card.type}
+                  {/* Card info and actions */}
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-white mb-1 truncate">
+                      {card.name || "Unknown Card"}
                     </div>
-                  )}
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => {
-                        try {
-                          playCardSelect();
-                        } catch {}
-                        onSelectCard(card);
-                      }}
-                      className="flex-1 text-xs bg-blue-600/80 hover:bg-blue-500 rounded px-2 py-1 transition-colors"
-                    >
-                      To Hand
-                    </button>
-                    {onMaskCard && canMask?.(card) && (
+                    {card.type && (
+                      <div className="text-xs text-zinc-400 mb-2">
+                        {card.type}
+                      </div>
+                    )}
+                    <div className="flex gap-2">
                       <button
                         onClick={() => {
                           try {
                             playCardSelect();
                           } catch {}
-                          onMaskCard(card);
+                          onSelectCard(card);
                         }}
-                        className="flex-1 text-xs bg-purple-600/80 hover:bg-purple-500 rounded px-2 py-1 transition-colors"
-                        title="Imposter: Mask yourself as this avatar (3 mana)"
+                        className="flex-1 text-xs bg-blue-600/80 hover:bg-blue-500 rounded px-2 py-1 transition-colors"
                       >
-                        Mask (3💧)
+                        To Hand
                       </button>
-                    )}
-                    {onBanishCard && (
-                      <button
-                        onClick={() => {
-                          try {
-                            playCardSelect();
-                          } catch {}
-                          onBanishCard(card);
-                        }}
-                        className="flex-1 text-xs bg-red-600/80 hover:bg-red-500 rounded px-2 py-1 transition-colors"
-                        title={
-                          banishRequiresConsent
-                            ? "Requires opponent consent"
-                            : undefined
-                        }
-                      >
-                        Banish{banishRequiresConsent ? " ⚠" : ""}
-                      </button>
-                    )}
+                      {onMaskCard && canMask?.(card) && (
+                        <button
+                          onClick={() => {
+                            try {
+                              playCardSelect();
+                            } catch {}
+                            onMaskCard(card);
+                          }}
+                          className="flex-1 text-xs bg-purple-600/80 hover:bg-purple-500 rounded px-2 py-1 transition-colors"
+                          title="Imposter: Mask yourself as this avatar (3 mana)"
+                        >
+                          Mask (3💧)
+                        </button>
+                      )}
+                      {onBanishCard && (
+                        <button
+                          onClick={() => {
+                            try {
+                              playCardSelect();
+                            } catch {}
+                            onBanishCard(card);
+                          }}
+                          className="flex-1 text-xs bg-red-600/80 hover:bg-red-500 rounded px-2 py-1 transition-colors"
+                          title={
+                            banishRequiresConsent
+                              ? "Requires opponent consent"
+                              : undefined
+                          }
+                        >
+                          Banish{banishRequiresConsent ? " ⚠" : ""}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))}

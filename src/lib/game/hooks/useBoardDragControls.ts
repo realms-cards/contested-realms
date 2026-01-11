@@ -32,8 +32,11 @@ type UseBoardDragControlsOptions = {
   selectedCard: GameState["selectedCard"];
   setDragFromHand: GameState["setDragFromHand"];
   setDragFromPile: GameState["setDragFromPile"];
+  setBoardDragActive: GameState["setBoardDragActive"];
   handlePointerMoveRef: MutableRefObject<(x: number, z: number) => void>;
   enableSnap: boolean;
+  // Playmat bounds for clamping drag positions
+  matBounds: { halfW: number; halfH: number };
 };
 
 export type BoardDragControls = {
@@ -70,8 +73,10 @@ export function useBoardDragControls({
   selectedCard,
   setDragFromHand,
   setDragFromPile,
+  setBoardDragActive,
   handlePointerMoveRef,
   enableSnap,
+  matBounds,
 }: UseBoardDragControlsOptions): BoardDragControls {
   const [dragging, setDragging] = useState<DragState>(null);
   const [dragAvatar, setDragAvatar] = useState<PlayerKey | null>(null);
@@ -106,6 +111,12 @@ export function useBoardDragControls({
     draggingRef.current = dragging;
   }, [dragging]);
 
+  // Sync board drag state to store for Hand3D visibility
+  useEffect(() => {
+    const isActive = Boolean(dragging || dragAvatar);
+    setBoardDragActive(isActive);
+  }, [dragging, dragAvatar, setBoardDragActive]);
+
   useEffect(() => {
     const seat = currentPlayer;
     if (lastTurnPlayerRef.current == null) {
@@ -120,12 +131,9 @@ export function useBoardDragControls({
     }
   }, [currentPlayer, playTurnGong]);
 
-  const moveDraggedBody = useCallback(
-    (x: number, z: number, lift = true) => {
-      dragTarget.current = { x, z, lift };
-    },
-    []
-  );
+  const moveDraggedBody = useCallback((x: number, z: number, lift = true) => {
+    dragTarget.current = { x, z, lift };
+  }, []);
 
   const snapBodyTo = useCallback(
     (id: string, x: number, z: number) => {
@@ -268,8 +276,15 @@ export function useBoardDragControls({
         const dy = direction.y;
         if (Math.abs(dy) > 1e-6) {
           const t = -origin.y / dy;
-          const px = origin.x + direction.x * t;
-          const pz = origin.z + direction.z * t;
+          // Clamp to playmat bounds
+          const px = Math.max(
+            -matBounds.halfW,
+            Math.min(matBounds.halfW, origin.x + direction.x * t)
+          );
+          const pz = Math.max(
+            -matBounds.halfH,
+            Math.min(matBounds.halfH, origin.z + direction.z * t)
+          );
           const k = 0.3;
           lastGhostPosRef.current.x += (px - lastGhostPosRef.current.x) * k;
           lastGhostPosRef.current.z += (pz - lastGhostPosRef.current.z) * k;
@@ -298,8 +313,15 @@ export function useBoardDragControls({
         const dy = direction.y;
         if (Math.abs(dy) > 1e-6) {
           const t = -origin.y / dy;
-          const px = origin.x + direction.x * t;
-          const pz = origin.z + direction.z * t;
+          // Clamp to playmat bounds
+          const px = Math.max(
+            -matBounds.halfW,
+            Math.min(matBounds.halfW, origin.x + direction.x * t)
+          );
+          const pz = Math.max(
+            -matBounds.halfH,
+            Math.min(matBounds.halfH, origin.z + direction.z * t)
+          );
           handlePointerMoveRef.current(px, pz);
           const k2 = 0.4;
           lastBoardGhostPosRef.current.x +=
@@ -336,7 +358,8 @@ export function useBoardDragControls({
     const onPointerCancel = () => resetState("pointercancel");
     const onBlur = () => resetState("blur");
     const onVisibility = () => {
-      if (document.visibilityState !== "visible") resetState("visibilitychange");
+      if (document.visibilityState !== "visible")
+        resetState("visibilitychange");
     };
     const onPageHide = () => resetState("pagehide");
 

@@ -39,6 +39,7 @@ import MatchInfoPopup from "@/components/game/MatchInfoPopup";
 import MobileHandHint from "@/components/game/MobileHandHint";
 import MotherNatureOverlay from "@/components/game/MotherNatureOverlay";
 import HeadlessHauntOverlay from "@/components/game/HeadlessHauntOverlay";
+import InterrogatorChoiceOverlay from "@/components/game/InterrogatorChoiceOverlay";
 import OnlineConsole from "@/components/game/OnlineConsole";
 import OnlineD20Screen from "@/components/game/OnlineD20Screen";
 import OnlineDeckSelector from "@/components/game/OnlineDeckSelector";
@@ -3071,6 +3072,7 @@ export default function OnlineMatchPage() {
               connected={connected}
               myPlayerId={myPlayerId}
               hideChat={isSpectatorView}
+              hideLeaveButton={isSpectatorView}
               playerNames={playerNames}
             />
           )}
@@ -3246,6 +3248,8 @@ export default function OnlineMatchPage() {
           <MotherNatureOverlay />
           {/* Headless Haunt Overlay (start of turn movement - Kythera Mechanism) */}
           <HeadlessHauntOverlay />
+          {/* Interrogator Choice Overlay (pay life or allow spell draw) */}
+          <InterrogatorChoiceOverlay />
           {/* Black Mass Overlay (search for Evil minions) */}
           <BlackMassOverlay />
           {/* Highland Princess Overlay (search for artifact) */}
@@ -3262,8 +3266,8 @@ export default function OnlineMatchPage() {
           <DholChantsOverlay />
           {/* Doomsday Cult Overlay (continuous reveal) */}
           <DoomsdayCultOverlay />
-          {/* Unit hands overlay (Morgana, Omphalos) */}
-          <UnitHandsOverlay />
+          {/* Unit hands overlay (Morgana, Omphalos) - hidden for spectators */}
+          {!isSpectatorView && <UnitHandsOverlay />}
           {/* Pith Imp stolen card notification */}
           <PithImpOverlay />
           {/* Private hand targeting overlay (Morgana/Omphalos) */}

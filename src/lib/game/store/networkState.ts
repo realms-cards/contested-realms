@@ -6,6 +6,7 @@ import type {
   Permanents,
   PlayerKey,
   ServerPatchT,
+  Zones,
 } from "./types";
 import type { PlayerPositionReference } from "../types";
 import { createInitialPlayers } from "./coreState";
@@ -605,10 +606,88 @@ export const createNetworkSlice: StateCreator<
           }
         }
 
-        next.zones = normalizeZones(
-          zonesCandidate,
-          replaceKeys.has("zones") ? undefined : state.zones
-        );
+        // HARDENING: Post-filter sanity check - restore zones if filtering removed too many cards
+        // This prevents catastrophic data loss from buggy filter logic
+        try {
+          const candidateZones = zonesCandidate as Record<
+            PlayerKey,
+            Partial<Zones>
+          > | null;
+          for (const seat of ["p1", "p2"] as PlayerKey[]) {
+            const stateZones = state.zones?.[seat];
+            const candidateSeatZones = candidateZones?.[seat];
+            for (const zoneName of [
+              "spellbook",
+              "atlas",
+              "hand",
+            ] as (keyof Zones)[]) {
+              const stateArr = stateZones?.[zoneName] as CardRef[] | undefined;
+              const candidateArr = candidateSeatZones?.[zoneName] as
+                | CardRef[]
+                | undefined;
+              const stateCount = stateArr?.length ?? 0;
+              const candidateCount = Array.isArray(candidateArr)
+                ? candidateArr.length
+                : stateCount;
+              // If filtering removed >80% of cards from a critical zone, restore from state
+              // This is a safety valve for buggy filter logic
+              if (
+                stateCount > 5 &&
+                candidateCount === 0 &&
+                Array.isArray(candidateArr)
+              ) {
+                console.error(
+                  `[FILTER_CATASTROPHE] ${seat}.${zoneName}: filtering wiped ${stateCount} cards to 0! Restoring.`
+                );
+                if (candidateZones && candidateSeatZones) {
+                  (candidateSeatZones as Record<string, CardRef[]>)[zoneName] =
+                    stateArr ?? [];
+                }
+              }
+            }
+          }
+          zonesCandidate = candidateZones as GameState["zones"];
+        } catch (e) {
+          console.error("[FILTER_SANITY_CHECK] Error:", e);
+        }
+
+        // HARDENING: Always pass state.zones as fallback to preserve data
+        // The hardening in normalizeZones/ensurePlayerZones will prevent accidental wipes
+        // when patch has empty arrays but state has cards
+        // Pre-check for potential data loss
+        try {
+          const patchZones = zonesCandidate as Record<
+            string,
+            Record<string, unknown[]>
+          > | null;
+          for (const seat of ["p1", "p2"] as PlayerKey[]) {
+            const stateZones = state.zones?.[seat];
+            const patchSeatZones = patchZones?.[seat] as Record<
+              string,
+              unknown[]
+            > | null;
+            for (const zoneName of [
+              "spellbook",
+              "atlas",
+              "hand",
+            ] as (keyof Zones)[]) {
+              const stateCount =
+                (stateZones?.[zoneName] as unknown[] | undefined)?.length ?? 0;
+              const patchVal = patchSeatZones?.[zoneName];
+              // Warn if patch would wipe a zone that has cards
+              if (
+                stateCount > 0 &&
+                Array.isArray(patchVal) &&
+                patchVal.length === 0
+              ) {
+                console.warn(
+                  `[ZONE_WIPE_DETECT] ${seat}.${zoneName}: patch has [] but state has ${stateCount} cards`
+                );
+              }
+            }
+          }
+        } catch {}
+        next.zones = normalizeZones(zonesCandidate, state.zones);
       }
       if (p.avatars !== undefined) {
         const candidate = replaceKeys.has("avatars")
