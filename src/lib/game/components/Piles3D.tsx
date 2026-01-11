@@ -4,6 +4,7 @@ import type { ThreeEvent } from "@react-three/fiber";
 import { useMemo, useRef, useEffect } from "react";
 import { cardbackAtlasUrl, cardbackSpellbookUrl } from "@/lib/assets";
 import { useSound } from "@/lib/contexts/SoundContext";
+import { isMagician } from "@/lib/game/avatarAbilities";
 import { cardRefToPreview } from "@/lib/game/card-preview.types";
 import type { CardPreviewData } from "@/lib/game/card-preview.types";
 import CardPlane from "@/lib/game/components/CardPlane";
@@ -65,6 +66,7 @@ export default function Piles3D({
   const setDragFromHand = useGameStore((s) => s.setDragFromHand);
   const setDragFromPile = useGameStore((s) => s.setDragFromPile);
   const dragFromPile = useGameStore((s) => s.dragFromPile);
+  const avatars = useGameStore((s) => s.avatars);
   const openContextMenu = useGameStore((s) => s.openContextMenu);
   const openPlacementDialog = useGameStore((s) => s.openPlacementDialog);
   const { playCardFlip, playCardSelect } = useSound();
@@ -411,8 +413,16 @@ export default function Piles3D({
                         const typeLc = String(
                           card.card?.type || ""
                         ).toLowerCase();
-                        // Non-site cards go to Spellbook
-                        if (key === "spellbook" && !typeLc.includes("site")) {
+                        // Check if owner is Magician (Magician has no atlas, sites go to spellbook)
+                        const ownerAvatar = avatars[owner];
+                        const ownerIsMagician = isMagician(
+                          ownerAvatar?.card?.name
+                        );
+                        // Non-site cards go to Spellbook; Magician can also put sites in Spellbook
+                        if (
+                          key === "spellbook" &&
+                          (!typeLc.includes("site") || ownerIsMagician)
+                        ) {
                           const pileName = "Spellbook";
                           openPlacementDialog(
                             card.card?.name || "Card",
