@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { useSocket } from "@/lib/hooks/useSocket";
+import { useOnline } from "@/app/online/online-context";
 
 interface TournamentInviteData {
   tournamentId: string;
@@ -26,7 +26,8 @@ interface InviteToast {
  * Should be placed in the root layout.
  */
 export default function TournamentInviteListener() {
-  const socket = useSocket();
+  const { transport } = useOnline();
+  const socket = transport?.getSocket() ?? null;
   const [toasts, setToasts] = useState<InviteToast[]>([]);
   const [mounted, setMounted] = useState(false);
 

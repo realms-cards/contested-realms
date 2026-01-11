@@ -3,8 +3,8 @@
 import Image from "next/image";
 import { useSession } from "next-auth/react";
 import { useState, useEffect } from "react";
+import { useOnline } from "@/app/online/online-context";
 import { Modal } from "@/components/ui/Modal";
-import { useSocket } from "@/lib/hooks/useSocket";
 
 interface Player {
   id: string;
@@ -29,7 +29,8 @@ export default function TournamentInviteModal({
   onInvitesSent,
 }: TournamentInviteModalProps) {
   const { data: session } = useSession();
-  const socket = useSocket();
+  const { transport } = useOnline();
+  const socket = transport?.getSocket() ?? null;
   const [players, setPlayers] = useState<Player[]>([]);
   const [selectedPlayers, setSelectedPlayers] = useState<Set<string>>(
     new Set()

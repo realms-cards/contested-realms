@@ -1,73 +1,81 @@
-import { useEffect, useCallback, useRef, useState } from 'react';
-import type { Socket } from 'socket.io-client';
-import { useSocket } from '@/lib/hooks/useSocket';
-import { TOURNAMENT_SOCKET_EVENTS } from '@/lib/tournament/constants';
+import { useEffect, useCallback, useRef, useState } from "react";
+import type { Socket } from "socket.io-client";
+import { useOnline } from "@/app/online/online-context";
+import { TOURNAMENT_SOCKET_EVENTS } from "@/lib/tournament/constants";
 
 const SERVER_EVENT_ALIASES: Partial<Record<string, string[]>> = {
-  [TOURNAMENT_SOCKET_EVENTS.TOURNAMENT_UPDATED]: ['TOURNAMENT_UPDATED'],
-  [TOURNAMENT_SOCKET_EVENTS.PHASE_CHANGED]: ['PHASE_CHANGED'],
-  [TOURNAMENT_SOCKET_EVENTS.PLAYER_JOINED]: ['PLAYER_JOINED'],
-  [TOURNAMENT_SOCKET_EVENTS.PLAYER_LEFT]: ['PLAYER_LEFT'],
-  [TOURNAMENT_SOCKET_EVENTS.ROUND_STARTED]: ['ROUND_STARTED'],
-  [TOURNAMENT_SOCKET_EVENTS.MATCH_ASSIGNED]: ['MATCH_ASSIGNED'],
-  [TOURNAMENT_SOCKET_EVENTS.STATISTICS_UPDATED]: ['STATISTICS_UPDATED'],
-  [TOURNAMENT_SOCKET_EVENTS.UPDATE_PREPARATION]: ['UPDATE_PREPARATION'],
-  [TOURNAMENT_SOCKET_EVENTS.DRAFT_READY]: ['DRAFT_READY'],
-  [TOURNAMENT_SOCKET_EVENTS.PRESENCE_UPDATED]: ['PRESENCE_UPDATED'],
-  [TOURNAMENT_SOCKET_EVENTS.ERROR]: ['TOURNAMENT_ERROR'],
+  [TOURNAMENT_SOCKET_EVENTS.TOURNAMENT_UPDATED]: ["TOURNAMENT_UPDATED"],
+  [TOURNAMENT_SOCKET_EVENTS.PHASE_CHANGED]: ["PHASE_CHANGED"],
+  [TOURNAMENT_SOCKET_EVENTS.PLAYER_JOINED]: ["PLAYER_JOINED"],
+  [TOURNAMENT_SOCKET_EVENTS.PLAYER_LEFT]: ["PLAYER_LEFT"],
+  [TOURNAMENT_SOCKET_EVENTS.ROUND_STARTED]: ["ROUND_STARTED"],
+  [TOURNAMENT_SOCKET_EVENTS.MATCH_ASSIGNED]: ["MATCH_ASSIGNED"],
+  [TOURNAMENT_SOCKET_EVENTS.STATISTICS_UPDATED]: ["STATISTICS_UPDATED"],
+  [TOURNAMENT_SOCKET_EVENTS.UPDATE_PREPARATION]: ["UPDATE_PREPARATION"],
+  [TOURNAMENT_SOCKET_EVENTS.DRAFT_READY]: ["DRAFT_READY"],
+  [TOURNAMENT_SOCKET_EVENTS.PRESENCE_UPDATED]: ["PRESENCE_UPDATED"],
+  [TOURNAMENT_SOCKET_EVENTS.ERROR]: ["TOURNAMENT_ERROR"],
 };
 
 interface TournamentSocketEvents {
   // Tournament events
-  onTournamentUpdated?: (data: { id: string; name?: string; status?: string; [key: string]: unknown }) => void;
-  onPhaseChanged?: (data: { 
-    tournamentId: string; 
-    newPhase: string; 
-    newStatus: string; 
-    timestamp: string; 
+  onTournamentUpdated?: (data: {
+    id: string;
+    name?: string;
+    status?: string;
+    [key: string]: unknown;
   }) => void;
-  onPlayerJoined?: (data: { 
+  onPhaseChanged?: (data: {
     tournamentId: string;
-    playerId: string; 
-    playerName: string; 
-    currentPlayerCount: number; 
+    newPhase: string;
+    newStatus: string;
+    timestamp: string;
   }) => void;
-  onPlayerLeft?: (data: { 
+  onPlayerJoined?: (data: {
     tournamentId: string;
-    playerId: string; 
-    playerName: string; 
-    currentPlayerCount: number; 
+    playerId: string;
+    playerName: string;
+    currentPlayerCount: number;
   }) => void;
-  
+  onPlayerLeft?: (data: {
+    tournamentId: string;
+    playerId: string;
+    playerName: string;
+    currentPlayerCount: number;
+  }) => void;
+
   // Match events
-  onRoundStarted?: (data: { 
-    tournamentId: string; 
-    roundNumber: number; 
+  onRoundStarted?: (data: {
+    tournamentId: string;
+    roundNumber: number;
     matches: Array<{
       id: string;
       player1Id: string;
       player1Name: string;
       player2Id: string | null;
       player2Name: string | null;
-    }>; 
+    }>;
   }) => void;
-  onMatchAssigned?: (data: { 
-    tournamentId: string; 
-    matchId: string; 
-    opponentId: string | null; 
-    opponentName: string | null; 
-    lobbyName: string; 
+  onMatchAssigned?: (data: {
+    tournamentId: string;
+    matchId: string;
+    opponentId: string | null;
+    opponentName: string | null;
+    lobbyName: string;
   }) => void;
-  onStatisticsUpdated?: (data: { tournamentId: string; [key: string]: unknown }) => void;
-  
+  onStatisticsUpdated?: (data: {
+    tournamentId: string;
+    [key: string]: unknown;
+  }) => void;
+
   // Preparation events
-  onPreparationUpdate?: (data: { 
-    tournamentId: string; 
-    playerId: string; 
-    preparationStatus: string; 
-    deckSubmitted: boolean; 
-    readyPlayerCount: number; 
-    totalPlayerCount: number; 
+  onPreparationUpdate?: (data: {
+    tournamentId: string;
+    playerId: string;
+    preparationStatus: string;
+    deckSubmitted: boolean;
+    readyPlayerCount: number;
+    totalPlayerCount: number;
   }) => void;
   onDraftReady?: (data: {
     tournamentId: string;
@@ -77,14 +85,19 @@ interface TournamentSocketEvents {
   // Presence events
   onPresenceUpdated?: (data: {
     tournamentId: string;
-    players: Array<{ playerId: string; playerName: string; isConnected: boolean; lastActivity: number }>;
+    players: Array<{
+      playerId: string;
+      playerName: string;
+      isConnected: boolean;
+      lastActivity: number;
+    }>;
   }) => void;
-  
+
   // Error handling
-  onError?: (error: { 
-    code: string; 
-    message: string; 
-    details?: string; 
+  onError?: (error: {
+    code: string;
+    message: string;
+    details?: string;
   }) => void;
 }
 
@@ -93,23 +106,24 @@ interface UseTournamentSocketReturn {
   isConnected: boolean;
   joinTournament: (tournamentId: string) => void;
   leaveTournament: (tournamentId: string) => void;
-  updatePreparation: (tournamentId: string, preparationData: Record<string, unknown>) => void;
+  updatePreparation: (
+    tournamentId: string,
+    preparationData: Record<string, unknown>
+  ) => void;
   submitMatchResult: (matchId: string, result: Record<string, unknown>) => void;
   currentTournament: string | null;
 }
 
-export function useTournamentSocket(events: TournamentSocketEvents = {}): UseTournamentSocketReturn {
-  // Use the exact same Socket.IO server configuration as matches
-  // The useSocket hook will use NEXT_PUBLIC_WS_URL and NEXT_PUBLIC_WS_PATH from env
-  const socket = useSocket({
-    autoConnect: true,
-    reconnection: true,
-    reconnectionDelay: 1000,
-    reconnectionAttempts: 5
-  });
+export function useTournamentSocket(
+  events: TournamentSocketEvents = {}
+): UseTournamentSocketReturn {
+  // Use the shared transport from OnlineProvider instead of creating a separate socket
+  // This prevents duplicate socket connections
+  const { transport, connected } = useOnline();
+  const socket = transport?.getSocket() ?? null;
 
   const currentTournamentRef = useRef<string | null>(null);
-  const [isConnected, setIsConnected] = useState<boolean>(socket?.connected ?? false);
+  const [isConnected, setIsConnected] = useState<boolean>(connected);
   const eventsRef = useRef(events);
   // T024: Event deduplication - track last 100 event IDs
   const lastEventIds = useRef<Set<string>>(new Set());
@@ -122,7 +136,7 @@ export function useTournamentSocket(events: TournamentSocketEvents = {}): UseTou
   // T024: Helper to check for duplicate events and track them
   const isDuplicateEvent = useCallback((eventId: string): boolean => {
     if (lastEventIds.current.has(eventId)) {
-      console.debug('[useTournamentSocket] Ignoring duplicate event:', eventId);
+      console.debug("[useTournamentSocket] Ignoring duplicate event:", eventId);
       return true;
     }
 
@@ -142,10 +156,14 @@ export function useTournamentSocket(events: TournamentSocketEvents = {}): UseTou
   useEffect(() => {
     if (!socket) return;
 
-    type Listener = Parameters<Socket['on']>[1];
-    const registerEvent = (eventName: string, handler: (...args: unknown[]) => void) => {
+    type Listener = Parameters<Socket["on"]>[1];
+    const registerEvent = (
+      eventName: string,
+      handler: (...args: unknown[]) => void
+    ) => {
       // Wrap to satisfy socket's listener type without using explicit 'any'
-      const wrapped = ((...args: unknown[]) => handler(...args)) as unknown as Listener;
+      const wrapped = ((...args: unknown[]) =>
+        handler(...args)) as unknown as Listener;
       const aliases = SERVER_EVENT_ALIASES[eventName] ?? [];
       const eventNames = [eventName, ...aliases];
       eventNames.forEach((name) => socket.on(name, wrapped));
@@ -155,7 +173,12 @@ export function useTournamentSocket(events: TournamentSocketEvents = {}): UseTou
     };
 
     // Tournament events
-    const handleTournamentUpdated = (data: { id: string; name?: string; status?: string; [key: string]: unknown }) => {
+    const handleTournamentUpdated = (data: {
+      id: string;
+      name?: string;
+      status?: string;
+      [key: string]: unknown;
+    }) => {
       eventsRef.current.onTournamentUpdated?.(data);
     };
 
@@ -172,20 +195,20 @@ export function useTournamentSocket(events: TournamentSocketEvents = {}): UseTou
       eventsRef.current.onPhaseChanged?.(data);
     };
 
-    const handlePlayerJoined = (data: { 
+    const handlePlayerJoined = (data: {
       tournamentId: string;
-      playerId: string; 
-      playerName: string; 
-      currentPlayerCount: number; 
+      playerId: string;
+      playerName: string;
+      currentPlayerCount: number;
     }) => {
       eventsRef.current.onPlayerJoined?.(data);
     };
 
-    const handlePlayerLeft = (data: { 
+    const handlePlayerLeft = (data: {
       tournamentId: string;
-      playerId: string; 
-      playerName: string; 
-      currentPlayerCount: number; 
+      playerId: string;
+      playerName: string;
+      currentPlayerCount: number;
     }) => {
       eventsRef.current.onPlayerLeft?.(data);
     };
@@ -209,28 +232,31 @@ export function useTournamentSocket(events: TournamentSocketEvents = {}): UseTou
       eventsRef.current.onRoundStarted?.(data);
     };
 
-    const handleMatchAssigned = (data: { 
-      tournamentId: string; 
-      matchId: string; 
-      opponentId: string | null; 
-      opponentName: string | null; 
-      lobbyName: string; 
+    const handleMatchAssigned = (data: {
+      tournamentId: string;
+      matchId: string;
+      opponentId: string | null;
+      opponentName: string | null;
+      lobbyName: string;
     }) => {
       eventsRef.current.onMatchAssigned?.(data);
     };
 
-    const handleStatisticsUpdated = (data: { tournamentId: string; [key: string]: unknown }) => {
+    const handleStatisticsUpdated = (data: {
+      tournamentId: string;
+      [key: string]: unknown;
+    }) => {
       eventsRef.current.onStatisticsUpdated?.(data);
     };
 
     // Preparation events
-    const handlePreparationUpdate = (data: { 
-      tournamentId: string; 
-      playerId: string; 
-      preparationStatus: string; 
-      deckSubmitted: boolean; 
-      readyPlayerCount: number; 
-      totalPlayerCount: number; 
+    const handlePreparationUpdate = (data: {
+      tournamentId: string;
+      playerId: string;
+      preparationStatus: string;
+      deckSubmitted: boolean;
+      readyPlayerCount: number;
+      totalPlayerCount: number;
     }) => {
       eventsRef.current.onPreparationUpdate?.(data);
     };
@@ -249,18 +275,23 @@ export function useTournamentSocket(events: TournamentSocketEvents = {}): UseTou
 
     const handlePresenceUpdated = (data: {
       tournamentId: string;
-      players: Array<{ playerId: string; playerName: string; isConnected: boolean; lastActivity: number }>;
+      players: Array<{
+        playerId: string;
+        playerName: string;
+        isConnected: boolean;
+        lastActivity: number;
+      }>;
     }) => {
       eventsRef.current.onPresenceUpdated?.(data);
     };
 
     // Error handling
-    const handleError = (error: { 
-      code: string; 
-      message: string; 
-      details?: string; 
+    const handleError = (error: {
+      code: string;
+      message: string;
+      details?: string;
     }) => {
-      console.error('Tournament socket error:', error);
+      console.error("Tournament socket error:", error);
       eventsRef.current.onError?.(error);
     };
 
@@ -268,7 +299,7 @@ export function useTournamentSocket(events: TournamentSocketEvents = {}): UseTou
       const tournamentId = data?.tournamentId;
       if (!tournamentId) return;
       currentTournamentRef.current = tournamentId;
-      console.log('[useTournamentSocket] Joined tournament room', tournamentId);
+      console.log("[useTournamentSocket] Joined tournament room", tournamentId);
     };
 
     const handleLeftAck = (data: { tournamentId?: string }) => {
@@ -277,60 +308,183 @@ export function useTournamentSocket(events: TournamentSocketEvents = {}): UseTou
       if (currentTournamentRef.current === tournamentId) {
         currentTournamentRef.current = null;
       }
-      console.log('[useTournamentSocket] Left tournament room', tournamentId);
+      console.log("[useTournamentSocket] Left tournament room", tournamentId);
     };
 
     // Register event listeners (with uppercase fallbacks for legacy server broadcasts)
     const cleanups = [
-      registerEvent(TOURNAMENT_SOCKET_EVENTS.TOURNAMENT_UPDATED, (data: unknown) => handleTournamentUpdated(data as { id: string; name?: string; status?: string; [key: string]: unknown })),
-      registerEvent(TOURNAMENT_SOCKET_EVENTS.PHASE_CHANGED, (data: unknown) => handlePhaseChanged(data as { tournamentId: string; newPhase: string; newStatus: string; timestamp: string })),
-      registerEvent(TOURNAMENT_SOCKET_EVENTS.PLAYER_JOINED, (data: unknown) => handlePlayerJoined(data as { tournamentId: string; playerId: string; playerName: string; currentPlayerCount: number })),
-      registerEvent(TOURNAMENT_SOCKET_EVENTS.PLAYER_LEFT, (data: unknown) => handlePlayerLeft(data as { tournamentId: string; playerId: string; playerName: string; currentPlayerCount: number })),
-      registerEvent(TOURNAMENT_SOCKET_EVENTS.ROUND_STARTED, (data: unknown) => handleRoundStarted(data as { tournamentId: string; roundNumber: number; matches: Array<{ id: string; player1Id: string; player1Name: string; player2Id: string | null; player2Name: string | null; }> })),
-      registerEvent(TOURNAMENT_SOCKET_EVENTS.MATCH_ASSIGNED, (data: unknown) => handleMatchAssigned(data as { tournamentId: string; matchId: string; opponentId: string | null; opponentName: string | null; lobbyName: string })),
-      registerEvent(TOURNAMENT_SOCKET_EVENTS.STATISTICS_UPDATED, (data: unknown) => handleStatisticsUpdated(data as { tournamentId: string; [key: string]: unknown })),
-      registerEvent(TOURNAMENT_SOCKET_EVENTS.UPDATE_PREPARATION, (data: unknown) => handlePreparationUpdate(data as { tournamentId: string; playerId: string; preparationStatus: string; deckSubmitted: boolean; readyPlayerCount: number; totalPlayerCount: number })),
-      registerEvent(TOURNAMENT_SOCKET_EVENTS.DRAFT_READY, (data: unknown) => handleDraftReady(data as { tournamentId: string; draftSessionId: string; totalPlayers?: number })),
-      registerEvent(TOURNAMENT_SOCKET_EVENTS.PRESENCE_UPDATED, (data: unknown) => handlePresenceUpdated(data as { tournamentId: string; players: Array<{ playerId: string; playerName: string; isConnected: boolean; lastActivity: number }>; })),
+      registerEvent(
+        TOURNAMENT_SOCKET_EVENTS.TOURNAMENT_UPDATED,
+        (data: unknown) =>
+          handleTournamentUpdated(
+            data as {
+              id: string;
+              name?: string;
+              status?: string;
+              [key: string]: unknown;
+            }
+          )
+      ),
+      registerEvent(TOURNAMENT_SOCKET_EVENTS.PHASE_CHANGED, (data: unknown) =>
+        handlePhaseChanged(
+          data as {
+            tournamentId: string;
+            newPhase: string;
+            newStatus: string;
+            timestamp: string;
+          }
+        )
+      ),
+      registerEvent(TOURNAMENT_SOCKET_EVENTS.PLAYER_JOINED, (data: unknown) =>
+        handlePlayerJoined(
+          data as {
+            tournamentId: string;
+            playerId: string;
+            playerName: string;
+            currentPlayerCount: number;
+          }
+        )
+      ),
+      registerEvent(TOURNAMENT_SOCKET_EVENTS.PLAYER_LEFT, (data: unknown) =>
+        handlePlayerLeft(
+          data as {
+            tournamentId: string;
+            playerId: string;
+            playerName: string;
+            currentPlayerCount: number;
+          }
+        )
+      ),
+      registerEvent(TOURNAMENT_SOCKET_EVENTS.ROUND_STARTED, (data: unknown) =>
+        handleRoundStarted(
+          data as {
+            tournamentId: string;
+            roundNumber: number;
+            matches: Array<{
+              id: string;
+              player1Id: string;
+              player1Name: string;
+              player2Id: string | null;
+              player2Name: string | null;
+            }>;
+          }
+        )
+      ),
+      registerEvent(TOURNAMENT_SOCKET_EVENTS.MATCH_ASSIGNED, (data: unknown) =>
+        handleMatchAssigned(
+          data as {
+            tournamentId: string;
+            matchId: string;
+            opponentId: string | null;
+            opponentName: string | null;
+            lobbyName: string;
+          }
+        )
+      ),
+      registerEvent(
+        TOURNAMENT_SOCKET_EVENTS.STATISTICS_UPDATED,
+        (data: unknown) =>
+          handleStatisticsUpdated(
+            data as { tournamentId: string; [key: string]: unknown }
+          )
+      ),
+      registerEvent(
+        TOURNAMENT_SOCKET_EVENTS.UPDATE_PREPARATION,
+        (data: unknown) =>
+          handlePreparationUpdate(
+            data as {
+              tournamentId: string;
+              playerId: string;
+              preparationStatus: string;
+              deckSubmitted: boolean;
+              readyPlayerCount: number;
+              totalPlayerCount: number;
+            }
+          )
+      ),
+      registerEvent(TOURNAMENT_SOCKET_EVENTS.DRAFT_READY, (data: unknown) =>
+        handleDraftReady(
+          data as {
+            tournamentId: string;
+            draftSessionId: string;
+            totalPlayers?: number;
+          }
+        )
+      ),
+      registerEvent(
+        TOURNAMENT_SOCKET_EVENTS.PRESENCE_UPDATED,
+        (data: unknown) =>
+          handlePresenceUpdated(
+            data as {
+              tournamentId: string;
+              players: Array<{
+                playerId: string;
+                playerName: string;
+                isConnected: boolean;
+                lastActivity: number;
+              }>;
+            }
+          )
+      ),
       // Also listen to legacy/lowercase server event used by our Socket.IO server
-      registerEvent('tournament:presence', (data: unknown) => handlePresenceUpdated(data as { tournamentId: string; players: Array<{ playerId: string; playerName: string; isConnected: boolean; lastActivity: number }>; })),
-      registerEvent('tournament:joined', (data: unknown) => handleJoinedAck(data as { tournamentId?: string })),
-      registerEvent('tournament:left', (data: unknown) => handleLeftAck(data as { tournamentId?: string })),
-      registerEvent(TOURNAMENT_SOCKET_EVENTS.ERROR, (error: unknown) => handleError(error as { code: string; message: string; details?: string })),
+      registerEvent("tournament:presence", (data: unknown) =>
+        handlePresenceUpdated(
+          data as {
+            tournamentId: string;
+            players: Array<{
+              playerId: string;
+              playerName: string;
+              isConnected: boolean;
+              lastActivity: number;
+            }>;
+          }
+        )
+      ),
+      registerEvent("tournament:joined", (data: unknown) =>
+        handleJoinedAck(data as { tournamentId?: string })
+      ),
+      registerEvent("tournament:left", (data: unknown) =>
+        handleLeftAck(data as { tournamentId?: string })
+      ),
+      registerEvent(TOURNAMENT_SOCKET_EVENTS.ERROR, (error: unknown) =>
+        handleError(
+          error as { code: string; message: string; details?: string }
+        )
+      ),
     ];
 
     // Connection events
-    socket.on('connect', () => {
+    socket.on("connect", () => {
       setIsConnected(true);
-      console.log('Tournament socket connected');
+      console.log("Tournament socket connected");
       // Rejoin current tournament if we were in one
       if (currentTournamentRef.current) {
         socket.emit(TOURNAMENT_SOCKET_EVENTS.JOIN_TOURNAMENT, {
-          tournamentId: currentTournamentRef.current
+          tournamentId: currentTournamentRef.current,
         });
       }
     });
 
-    socket.on('disconnect', () => {
+    socket.on("disconnect", () => {
       setIsConnected(false);
-      console.log('Tournament socket disconnected');
+      console.log("Tournament socket disconnected");
     });
 
-    socket.on('connect_error', (error) => {
-      console.error('Tournament socket connection error:', error);
+    socket.on("connect_error", (error) => {
+      console.error("Tournament socket connection error:", error);
       eventsRef.current.onError?.({
-        code: 'CONNECTION_ERROR',
-        message: 'Failed to connect to tournament server',
-        details: error.message
+        code: "CONNECTION_ERROR",
+        message: "Failed to connect to tournament server",
+        details: error.message,
       });
     });
 
     // Cleanup
     return () => {
       cleanups.forEach((cleanup) => cleanup());
-      socket.off('connect');
-      socket.off('disconnect');
-      socket.off('connect_error');
+      socket.off("connect");
+      socket.off("disconnect");
+      socket.off("connect_error");
     };
     // Note: isDuplicateEvent is intentionally excluded from deps to prevent effect re-runs
     // It only uses lastEventIds.current (ref) which doesn't require re-initialization
@@ -346,47 +500,58 @@ export function useTournamentSocket(events: TournamentSocketEvents = {}): UseTou
   }, [socket]);
 
   // Tournament actions
-  const joinTournament = useCallback((tournamentId: string) => {
-    if (!socket) {
-      console.warn('[useTournamentSocket] Cannot join tournament - socket not connected');
-      return;
-    }
+  const joinTournament = useCallback(
+    (tournamentId: string) => {
+      if (!socket) {
+        console.warn(
+          "[useTournamentSocket] Cannot join tournament - socket not connected"
+        );
+        return;
+      }
 
-    console.log('[useTournamentSocket] Joining tournament room:', tournamentId);
-    currentTournamentRef.current = tournamentId;
-    socket.emit(TOURNAMENT_SOCKET_EVENTS.JOIN_TOURNAMENT, { tournamentId });
-  }, [socket]);
+      console.log(
+        "[useTournamentSocket] Joining tournament room:",
+        tournamentId
+      );
+      currentTournamentRef.current = tournamentId;
+      socket.emit(TOURNAMENT_SOCKET_EVENTS.JOIN_TOURNAMENT, { tournamentId });
+    },
+    [socket]
+  );
 
-  const leaveTournament = useCallback((tournamentId: string) => {
-    if (!socket) return;
+  const leaveTournament = useCallback(
+    (tournamentId: string) => {
+      if (!socket) return;
 
-    currentTournamentRef.current = null;
-    socket.emit(TOURNAMENT_SOCKET_EVENTS.LEAVE_TOURNAMENT, { tournamentId });
-  }, [socket]);
+      currentTournamentRef.current = null;
+      socket.emit(TOURNAMENT_SOCKET_EVENTS.LEAVE_TOURNAMENT, { tournamentId });
+    },
+    [socket]
+  );
 
-  const updatePreparation = useCallback((
-    tournamentId: string, 
-    preparationData: Record<string, unknown>
-  ) => {
-    if (!socket) return;
+  const updatePreparation = useCallback(
+    (tournamentId: string, preparationData: Record<string, unknown>) => {
+      if (!socket) return;
 
-    socket.emit(TOURNAMENT_SOCKET_EVENTS.UPDATE_PREPARATION, {
-      tournamentId,
-      preparationData
-    });
-  }, [socket]);
+      socket.emit(TOURNAMENT_SOCKET_EVENTS.UPDATE_PREPARATION, {
+        tournamentId,
+        preparationData,
+      });
+    },
+    [socket]
+  );
 
-  const submitMatchResult = useCallback((
-    matchId: string, 
-    result: Record<string, unknown>
-  ) => {
-    if (!socket) return;
+  const submitMatchResult = useCallback(
+    (matchId: string, result: Record<string, unknown>) => {
+      if (!socket) return;
 
-    socket.emit(TOURNAMENT_SOCKET_EVENTS.SUBMIT_MATCH_RESULT, {
-      matchId,
-      result
-    });
-  }, [socket]);
+      socket.emit(TOURNAMENT_SOCKET_EVENTS.SUBMIT_MATCH_RESULT, {
+        matchId,
+        result,
+      });
+    },
+    [socket]
+  );
 
   return {
     socket,
@@ -395,6 +560,6 @@ export function useTournamentSocket(events: TournamentSocketEvents = {}): UseTou
     leaveTournament,
     updatePreparation,
     submitMatchResult,
-    currentTournament: currentTournamentRef.current
+    currentTournament: currentTournamentRef.current,
   };
 }

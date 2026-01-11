@@ -441,6 +441,15 @@ export class SocketTransport implements GameTransport {
     return this.connectionState === "connected";
   }
 
+  /**
+   * Get the underlying socket.io Socket instance
+   * Use this to share the socket with other hooks (e.g., useTournamentSocket)
+   * instead of creating duplicate connections
+   */
+  getSocket(): Socket | null {
+    return this.socket ?? null;
+  }
+
   // Track if we're in the middle of connecting to prevent duplicate connections
   private connectingPromise: Promise<void> | null = null;
 
