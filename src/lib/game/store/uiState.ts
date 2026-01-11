@@ -68,6 +68,7 @@ export type UiSlice = Pick<
   | "dragFromHand"
   | "dragFaceDown"
   | "dragFromPile"
+  | "boardDragActive"
   | "hoverCell"
   | "previewCard"
   | "cardPreviewsEnabled"
