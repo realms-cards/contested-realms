@@ -2187,6 +2187,25 @@ io.on("connection", async (socket: SocketClient) => {
 
     let player: PlayerState;
 
+    // Disconnect any existing sockets for this player to prevent duplicates
+    // This handles cases where a user has multiple tabs or reconnects without proper cleanup
+    const existingSocketId = playerIdBySocket.get(playerId)
+      ? Array.from(playerIdBySocket.entries()).find(
+          ([, pid]) => pid === playerId
+        )?.[0]
+      : null;
+
+    if (existingSocketId && existingSocketId !== socket.id) {
+      const existingSocket = io.sockets.sockets.get(existingSocketId);
+      if (existingSocket) {
+        console.log(
+          `[auth] Disconnecting old socket ${existingSocketId} for ${displayName} (new: ${socket.id})`
+        );
+        existingSocket.disconnect(true);
+      }
+      playerIdBySocket.delete(existingSocketId);
+    }
+
     // Use player registry for Redis-backed state when enabled
     if (REDIS_STATE_ENABLED) {
       player = await playerRegistry.registerPlayer(
