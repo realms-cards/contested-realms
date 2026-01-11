@@ -1038,25 +1038,8 @@ export function RealtimeTournamentProvider({
     onDraftReady: handleDraftReady,
     onError: handleSocketError,
   });
-  // Ensure tournament socket identifies the user for presence mapping
-  useEffect(() => {
-    if (!socket) return;
-    const sendHello = () => {
-      const playerId = sessionData?.user?.id || null;
-      const displayName = ((sessionData?.user?.name ?? "") || "Player").slice(
-        0,
-        40
-      );
-      try {
-        socket.emit("hello", { displayName, playerId });
-      } catch {}
-    };
-    socket.on("connect", sendHello);
-    if (socket.connected) sendHello();
-    return () => {
-      socket.off("connect", sendHello);
-    };
-  }, [socket, sessionData?.user?.id, sessionData?.user?.name]);
+  // NOTE: hello message is already sent by OnlineProvider via SocketTransport.connect()
+  // No need to send it again here - that was causing duplicate hello messages
 
   // Listen for tournament list changes (event-driven updates)
   // Server broadcasts these events when tournaments are created/updated/completed
