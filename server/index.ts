@@ -110,8 +110,9 @@ type ServerResponse = import("http").ServerResponse;
 type PlayersMap = Map<string, PlayerState>;
 type MatchMap = Map<string, ServerMatchState>;
 interface NextAuthJwtPayload {
-  uid?: string;
-  sub?: string;
+  userId?: string; // socket-token API format
+  uid?: string; // NextAuth format
+  sub?: string; // Standard JWT format
   name?: string;
 }
 
@@ -2061,7 +2062,8 @@ io.use((socket: SocketClient, next: (err?: Error) => void) => {
       ) as NextAuthJwtPayload;
       socket.data = socket.data || {};
       socket.data.authUser = {
-        id: payload?.uid || payload?.sub || null,
+        // Support multiple JWT formats: socket-token API uses userId, NextAuth uses uid/sub
+        id: payload?.userId || payload?.uid || payload?.sub || null,
         name: payload?.name,
       };
       return next();

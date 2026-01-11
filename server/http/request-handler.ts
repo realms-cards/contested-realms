@@ -82,8 +82,9 @@ export interface RequestHandlerDeps {
 }
 
 interface NextAuthJwtPayload {
-  uid?: string;
-  sub?: string;
+  userId?: string; // socket-token API format
+  uid?: string; // NextAuth format
+  sub?: string; // Standard JWT format
 }
 
 export function createRequestHandler(deps: RequestHandlerDeps) {
@@ -213,8 +214,7 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
             // Try to claim/check lobby leader status
             try {
               const leader = await redisState.claimLobbyLeader();
-              lobbyLeaderStatus =
-                leader === instanceId ? "leader" : "follower";
+              lobbyLeaderStatus = leader === instanceId ? "leader" : "follower";
             } catch {
               lobbyLeaderStatus = "unknown";
             }
@@ -338,6 +338,7 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
               process.env.NEXTAUTH_SECRET
             ) as NextAuthJwtPayload;
             requesterId =
+              (payload && payload.userId && String(payload.userId)) ||
               (payload && payload.uid && String(payload.uid)) ||
               (payload && payload.sub && String(payload.sub)) ||
               null;
