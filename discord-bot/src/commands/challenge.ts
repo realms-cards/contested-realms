@@ -154,6 +154,20 @@ export const challengeCommand = {
           try {
             const match = await challengeManager.acceptChallenge(challengeId);
 
+            // Try to create voice channel for the match
+            const { voiceCoordinator } = getServices();
+            let voiceInfo: { channelId: string; inviteUrl: string } | null =
+              null;
+            try {
+              voiceInfo = await voiceCoordinator.requestVoiceChannel(
+                match.matchId,
+                match.challenger.id,
+                match.challengee.id
+              );
+            } catch (err) {
+              console.log("[challenge] Voice channel creation skipped:", err);
+            }
+
             const acceptEmbed = new EmbedBuilder()
               .setColor(0x22c55e)
               .setTitle("✅ Challenge Accepted!")
@@ -173,6 +187,15 @@ export const challengeCommand = {
                 }
               );
 
+            // Add voice channel info if created
+            if (voiceInfo) {
+              acceptEmbed.addFields({
+                name: "🎤 Voice Channel",
+                value: `[Join Voice](${voiceInfo.inviteUrl})`,
+                inline: false,
+              });
+            }
+
             await buttonInteraction.update({
               embeds: [acceptEmbed],
               components: [],
@@ -180,12 +203,16 @@ export const challengeCommand = {
 
             // DM both players their personal links
             try {
-              await interaction.user.send({
-                content: `🎮 Your match against **${opponent.displayName}** is ready!\n${match.joinUrlP1}`,
-              });
-              await opponent.send({
-                content: `🎮 Your match against **${interaction.user.displayName}** is ready!\n${match.joinUrlP2}`,
-              });
+              let p1Message = `🎮 Your match against **${opponent.displayName}** is ready!\n${match.joinUrlP1}`;
+              let p2Message = `🎮 Your match against **${interaction.user.displayName}** is ready!\n${match.joinUrlP2}`;
+
+              if (voiceInfo) {
+                p1Message += `\n🎤 Voice: ${voiceInfo.inviteUrl}`;
+                p2Message += `\n🎤 Voice: ${voiceInfo.inviteUrl}`;
+              }
+
+              await interaction.user.send({ content: p1Message });
+              await opponent.send({ content: p2Message });
             } catch {
               // DMs might be disabled, that's okay
             }

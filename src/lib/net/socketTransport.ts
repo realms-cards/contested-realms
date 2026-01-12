@@ -375,11 +375,7 @@ export class SocketTransport implements GameTransport {
   }
 
   private resetAuthFailures(): void {
-    if (this.authFailureCount > 0) {
-      console.log(
-        "[Transport] Auth failures reset after successful connection"
-      );
-    }
+    // Auth failures reset silently
     this.authFailureCount = 0;
     this.lastAuthFailureTime = 0;
   }
@@ -397,9 +393,7 @@ export class SocketTransport implements GameTransport {
         !this.socket.connected &&
         !this.isIntentionalDisconnect
       ) {
-        console.log(
-          "[Transport] Tab became visible, socket disconnected - attempting reconnect"
-        );
+        // Tab visible - reconnecting silently
 
         // Refresh token before reconnecting (rate-limited)
         try {
@@ -471,7 +465,7 @@ export class SocketTransport implements GameTransport {
 
     // Already connecting - wait for the existing connection attempt
     if (this.connectingPromise) {
-      console.log("[Transport] Connection already in progress, waiting...");
+      // Connection already in progress
       return this.connectingPromise;
     }
 
@@ -481,7 +475,7 @@ export class SocketTransport implements GameTransport {
       !this.socket.connected &&
       !this.isIntentionalDisconnect
     ) {
-      console.log("[Transport] Reconnecting existing socket...");
+      // Reconnecting existing socket
       this.socket.connect();
       return;
     }
@@ -516,11 +510,7 @@ export class SocketTransport implements GameTransport {
     // Sanitize and fallback the display name to avoid validation issues
     const trimmed = (opts.displayName ?? "").trim();
     const finalName = (trimmed || "Player").slice(0, 40);
-    console.log(
-      `[Transport] Connecting to ${url} as ${finalName}${
-        opts.playerId ? ` (${opts.playerId})` : ""
-      }`
-    );
+    // Connection initiated silently - errors will be logged
     // Fetch short-lived auth token from app API (signed by NEXTAUTH_SECRET)
     // Uses rate-limited helper to prevent spam during rapid reconnection cycles
     const token = await fetchSocketToken();
@@ -641,7 +631,7 @@ export class SocketTransport implements GameTransport {
           roll: number | null;
           t: number;
         };
-        console.log("[Transport] d20Ack received:", p);
+        // d20Ack received silently
         this.dispatch("d20Ack", p);
       });
       // Draft updates (server-emitted, custom payload)
@@ -718,7 +708,7 @@ export class SocketTransport implements GameTransport {
         const m = payload as TransportEventMap["message"];
         const t = SocketTransport.getMessageType(m);
         if (t !== "boardCursor") {
-          console.log(`[Transport] message <= type=${t}`);
+          // Incoming message logged only in debug mode
         }
         this.dispatch("message", m);
       });
@@ -847,9 +837,7 @@ export class SocketTransport implements GameTransport {
       }
 
       // No valid cached token - disable reconnection until we get a fresh one
-      console.log(
-        "[Transport] No valid cached token for reconnect, fetching fresh..."
-      );
+      // Fetching fresh token for reconnect
       mgr.reconnection = false;
 
       const token = await fetchSocketToken();
@@ -1046,7 +1034,7 @@ export class SocketTransport implements GameTransport {
   sendMessage(msg: CustomMessage): void {
     const t = SocketTransport.getMessageType(msg);
     if (t !== "boardCursor") {
-      console.log(`[Transport] message -> type=${t}`);
+      // Outgoing message logged only in debug mode
     }
     this.requireSocket().emit("message", msg);
   }
@@ -1313,7 +1301,7 @@ export class SocketTransport implements GameTransport {
     opts: { playerId?: string; displayName: string }
   ): void {
     socket.on("disconnect", (reason: string) => {
-      console.log(`[Transport] Disconnected: ${reason}`);
+      // Disconnect reason logged only for debugging
       this.connectionState = "disconnected";
 
       if (!this.isIntentionalDisconnect) {
@@ -1360,7 +1348,7 @@ export class SocketTransport implements GameTransport {
 
       // Only log non-auth errors at warn level (auth errors are expected during token refresh)
       if (isAuthError) {
-        console.log("[Transport] Auth error, refreshing token...");
+        // Auth error - refreshing token silently
       } else {
         console.warn("[Transport] Connect error:", error);
         if (!this.isIntentionalDisconnect) {
@@ -1382,9 +1370,7 @@ export class SocketTransport implements GameTransport {
       // Check if we should wait before trying again (exponential backoff)
       if (this.shouldDelayReconnection()) {
         const delay = this.getAuthBackoffDelay();
-        console.log(
-          `[Transport] Backing off for ${delay / 1000}s before retry`
-        );
+        // Backing off before retry
         setTimeout(() => {
           mgr.reconnection = true;
           if (!socket.connected && !this.isIntentionalDisconnect) {
@@ -1402,7 +1388,7 @@ export class SocketTransport implements GameTransport {
         const token = await fetchSocketToken(true);
         if (token) {
           mgr.opts.auth = { token };
-          console.log("[Transport] Token refreshed, reconnecting...");
+          // Token refreshed - reconnecting
           // Re-enable reconnection and connect
           mgr.reconnection = true;
           if (!socket.connected && !this.isIntentionalDisconnect) {
@@ -1426,7 +1412,7 @@ export class SocketTransport implements GameTransport {
           }
 
           const delay = this.getAuthBackoffDelay();
-          console.log(`[Transport] Backing off for ${delay / 1000}s`);
+          // Backing off silently
           setTimeout(() => {
             mgr.reconnection = true;
             if (!socket.connected && !this.isIntentionalDisconnect) {
@@ -1444,8 +1430,8 @@ export class SocketTransport implements GameTransport {
       }
     });
 
-    socket.on("reconnect", (attemptNumber: number) => {
-      console.log(`[Transport] Reconnected after ${attemptNumber} attempts`);
+    socket.on("reconnect", (_attemptNumber: number) => {
+      // Reconnected successfully
       this.connectionState = "connected";
       this.reconnectionAttempts = 0;
       this.resetAuthFailures(); // Reset auth failure tracking on successful reconnection
@@ -1486,12 +1472,7 @@ export class SocketTransport implements GameTransport {
     this.connectionState = "reconnecting";
     this.reconnectionAttempts++;
 
-    const maxLabel = Number.isFinite(this.maxReconnectionAttempts)
-      ? this.maxReconnectionAttempts
-      : "∞";
-    console.log(
-      `[Transport] Attempting reconnection ${this.reconnectionAttempts}/${maxLabel} in ${this.reconnectionDelay}ms`
-    );
+    // Reconnection attempt in progress
 
     setTimeout(() => {
       if (

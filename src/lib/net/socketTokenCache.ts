@@ -73,7 +73,7 @@ export function clearSocketTokenCache(): void {
     localStorage.removeItem(SOCKET_TOKEN_STORAGE_KEY);
     // Reset rate limit timer to allow immediate fresh fetch after auth error
     lastFetchAttemptTime = 0;
-    console.log("[SocketTokenCache] Cache cleared (rate limit reset)");
+    // Cache cleared silently
   } catch {}
 }
 
@@ -149,7 +149,7 @@ export async function fetchSocketToken(
 
   // If not forcing refresh, return cached token if valid
   if (!forceRefresh && cached) {
-    console.log("[SocketTokenCache] HIT - using cached token");
+    // Cached token found - no log needed
     return cached.token;
   }
 

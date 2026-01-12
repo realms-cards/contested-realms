@@ -5,6 +5,7 @@ import { handleInteraction } from "./events/interactionCreate.js";
 import { handleVoiceStateUpdate } from "./events/voiceStateUpdate.js";
 import { RealmsApiClient } from "./services/realms-api.js";
 import { VoiceChannelManager } from "./services/voice-manager.js";
+import { VoiceCoordinator } from "./services/voice-coordinator.js";
 import { ChallengeManager } from "./services/challenge-manager.js";
 import { setContext } from "./services/context.js";
 import { acquireBotLock, releaseBotLock } from "./services/leader-lock.js";
@@ -33,6 +34,7 @@ const client = new Client({
 
 // Services (initialized after client ready)
 let voiceManager: VoiceChannelManager;
+let voiceCoordinator: VoiceCoordinator;
 
 client.once(Events.ClientReady, async (readyClient) => {
   console.log(`[bot] Logged in as ${readyClient.user.tag}`);
@@ -43,6 +45,7 @@ client.once(Events.ClientReady, async (readyClient) => {
     process.env.REALMS_BOT_SECRET!
   );
   voiceManager = new VoiceChannelManager(readyClient);
+  voiceCoordinator = new VoiceCoordinator(realmsApi, voiceManager);
   const challengeManager = new ChallengeManager(realmsApi);
 
   // Set context for command handlers
@@ -50,6 +53,7 @@ client.once(Events.ClientReady, async (readyClient) => {
     client: readyClient,
     realmsApi,
     voiceManager,
+    voiceCoordinator,
     challengeManager,
   });
 
@@ -71,6 +75,10 @@ async function shutdown(signal: string) {
   console.log(`[bot] Received ${signal}, shutting down...`);
 
   try {
+    // Cleanup voice channels
+    if (voiceCoordinator) {
+      await voiceCoordinator.cleanup();
+    }
     await releaseBotLock();
     client.destroy();
     console.log("[bot] Disconnected from Discord");
