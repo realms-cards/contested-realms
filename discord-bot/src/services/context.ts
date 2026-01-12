@@ -6,12 +6,14 @@
 import type { Client } from "discord.js";
 import type { RealmsApiClient } from "./realms-api.js";
 import type { VoiceChannelManager } from "./voice-manager.js";
+import type { VoiceCoordinator } from "./voice-coordinator.js";
 import type { ChallengeManager } from "./challenge-manager.js";
 
 export interface BotContext {
   client: Client;
   realmsApi: RealmsApiClient;
   voiceManager: VoiceChannelManager;
+  voiceCoordinator: VoiceCoordinator;
   challengeManager: ChallengeManager;
 }
 

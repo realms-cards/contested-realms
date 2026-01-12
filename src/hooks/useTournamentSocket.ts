@@ -456,7 +456,7 @@ export function useTournamentSocket(
     // Connection events
     socket.on("connect", () => {
       setIsConnected(true);
-      console.log("Tournament socket connected");
+      // Tournament socket uses shared transport - no separate log needed
       // Rejoin current tournament if we were in one
       if (currentTournamentRef.current) {
         socket.emit(TOURNAMENT_SOCKET_EVENTS.JOIN_TOURNAMENT, {
@@ -467,7 +467,7 @@ export function useTournamentSocket(
 
     socket.on("disconnect", () => {
       setIsConnected(false);
-      console.log("Tournament socket disconnected");
+      // Handled by Transport logs
     });
 
     socket.on("connect_error", (error) => {

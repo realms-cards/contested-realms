@@ -19,6 +19,17 @@ const MatchCreatedSchema = z.object({
   joinTokenP2: z.string(),
   joinUrlP1: z.string(),
   joinUrlP2: z.string(),
+  format: z.string(),
+  challenger: z.object({
+    id: z.string(),
+    name: z.string().nullable(),
+    shortId: z.string().nullable(),
+  }),
+  challengee: z.object({
+    id: z.string(),
+    name: z.string().nullable(),
+    shortId: z.string().nullable(),
+  }),
 });
 
 const ChallengeSchema = z.object({
@@ -177,18 +188,28 @@ export class RealmsApiClient {
   }
 
   /**
-   * Request a Discord voice channel for a match.
+   * Get player info for voice channel creation.
    */
-  async requestVoiceChannel(
+  async getVoiceChannelPlayers(
     matchId: string,
-    requesterId: string
+    player1Id: string,
+    player2Id: string
   ): Promise<{
-    approved: boolean;
-    player1DiscordId?: string;
-    player2DiscordId?: string;
+    matchId: string;
+    player1: { id: string; name: string; discordId: string };
+    player2: { id: string; name: string; discordId: string };
   }> {
-    return this.request("POST", `/api/bot/matches/${matchId}/voice`, {
-      requesterId,
+    return this.request("POST", `/api/bot/voice/create`, {
+      matchId,
+      player1Id,
+      player2Id,
     });
+  }
+
+  /**
+   * Notify API that voice channel is being deleted.
+   */
+  async notifyVoiceChannelDeleted(matchId: string): Promise<void> {
+    await this.request("POST", `/api/bot/voice/delete`, { matchId });
   }
 }
