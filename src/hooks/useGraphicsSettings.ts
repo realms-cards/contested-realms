@@ -17,6 +17,8 @@ export interface GraphicsSettings {
   uiTextScale: number;
   /** Hand card sort order: sites first (default) or spells first */
   handSortOrder: HandSortOrder;
+  /** Enable gamepad shoulder buttons (LB/RB) for life adjustment */
+  gamepadLifeControls: boolean;
 }
 
 const STORAGE_KEY = "sorcery-graphics-settings";
@@ -28,6 +30,7 @@ const DEFAULT_SETTINGS: GraphicsSettings = {
   cardPreviewScale: 1.0,
   uiTextScale: 1.0,
   handSortOrder: "sitesFirst",
+  gamepadLifeControls: false,
 };
 
 function loadSettings(): GraphicsSettings {
@@ -147,6 +150,10 @@ export function useGraphicsSettings() {
     });
   }, [settings.handSortOrder, setSettings]);
 
+  const toggleGamepadLifeControls = useCallback(() => {
+    setSettings({ gamepadLifeControls: !settings.gamepadLifeControls });
+  }, [settings.gamepadLifeControls, setSettings]);
+
   return {
     settings,
     isLoaded,
@@ -157,6 +164,7 @@ export function useGraphicsSettings() {
     setCardPreviewScale,
     setUiTextScale,
     toggleHandSortOrder,
+    toggleGamepadLifeControls,
   };
 }
 

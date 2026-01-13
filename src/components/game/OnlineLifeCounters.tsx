@@ -3,6 +3,7 @@
 import { Skull, AlertTriangle, Users } from "lucide-react";
 import { useState } from "react";
 import { createPortal } from "react-dom";
+import { useGraphicsSettings } from "@/hooks/useGraphicsSettings";
 import { useGameStore } from "@/lib/game/store";
 import type { LifeState, PlayerKey } from "@/lib/game/store";
 import { useGamepadControls } from "@/lib/hooks/useGamepadControls";
@@ -280,8 +281,11 @@ export default function OnlineLifeCounters({
   const tieGame = useGameStore((s) => s.tieGame);
   const sendInteractionRequest = useGameStore((s) => s.sendInteractionRequest);
   const hasGamepad = useGamepadConnected();
+  const { settings: graphicsSettings } = useGraphicsSettings();
+  const gamepadLifeEnabled = graphicsSettings.gamepadLifeControls;
 
   // Gamepad controls: LB = decrease life, RB = increase life
+  // Only active when the setting is enabled
   useGamepadControls(
     {
       onLB: () => {
@@ -302,7 +306,7 @@ export default function OnlineLifeCounters({
         }
       },
     },
-    canModifyLife
+    canModifyLife && gamepadLifeEnabled
   );
 
   const isOnline = !!myPlayerId && !!opponentPlayerId && !!matchId;
@@ -362,8 +366,8 @@ export default function OnlineLifeCounters({
         isHotseatMode={isHotseatMode}
       />
 
-      {/* Gamepad hint - show when gamepad connected and can modify life */}
-      {hasGamepad && canModifyLife && (
+      {/* Gamepad hint - show when gamepad connected, setting enabled, and can modify life */}
+      {hasGamepad && gamepadLifeEnabled && canModifyLife && (
         <div
           className="text-[10px] text-gray-400 text-center px-1"
           title="Use gamepad shoulder buttons to adjust your life"
