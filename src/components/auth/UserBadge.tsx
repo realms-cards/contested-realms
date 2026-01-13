@@ -83,6 +83,7 @@ export default function UserBadge({
     setCardPreviewScale,
     setUiTextScale,
     toggleHandSortOrder,
+    toggleGamepadLifeControls,
   } = useGraphicsSettings();
   const [showOpponentPlaymat, setShowOpponentPlaymat] = useState(true);
   const [playmatPrefLoading, setPlaymatPrefLoading] = useState(false);
@@ -997,6 +998,33 @@ export default function UserBadge({
                     className={`shrink-0 w-2.5 h-2.5 rounded-full ${
                       graphicsSettings.handSortOrder === "spellsFirst"
                         ? "bg-rose-300"
+                        : "bg-slate-500"
+                    }`}
+                  />
+                </button>
+
+                {/* Gamepad life controls */}
+                <button
+                  type="button"
+                  onClick={toggleGamepadLifeControls}
+                  className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg ring-1 transition-colors text-left ${
+                    graphicsSettings.gamepadLifeControls
+                      ? "bg-cyan-500/20 ring-cyan-500/40"
+                      : "bg-slate-800 ring-slate-600"
+                  }`}
+                >
+                  <div className="min-w-0">
+                    <div className="text-xs text-slate-200 font-medium">
+                      Gamepad life
+                    </div>
+                    <div className="text-[10px] text-slate-400 truncate">
+                      LB/RB for ±life
+                    </div>
+                  </div>
+                  <span
+                    className={`shrink-0 w-2.5 h-2.5 rounded-full ${
+                      graphicsSettings.gamepadLifeControls
+                        ? "bg-cyan-300"
                         : "bg-slate-500"
                     }`}
                   />
