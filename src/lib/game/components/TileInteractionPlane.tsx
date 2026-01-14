@@ -43,6 +43,9 @@ export type TileInteractionPlaneProps = {
   // Mephistopheles summon target selection support
   pendingMephistophelesSummon?: GameState["pendingMephistophelesSummon"];
   selectMephistophelesSummonTarget?: GameState["selectMephistophelesSummonTarget"];
+  // Pathfinder target selection support
+  pendingPathfinderPlay?: GameState["pendingPathfinderPlay"];
+  selectPathfinderTarget?: GameState["selectPathfinderTarget"];
 };
 
 export function TileInteractionPlane({
@@ -74,6 +77,8 @@ export function TileInteractionPlane({
   selectAtlanteanFateCorner,
   pendingMephistophelesSummon,
   selectMephistophelesSummonTarget,
+  pendingPathfinderPlay,
+  selectPathfinderTarget,
 }: TileInteractionPlaneProps) {
   const { dragAvatar, dragging, setGhost, draggedBody, moveDraggedBody } =
     dragContext;
@@ -167,6 +172,20 @@ export function TileInteractionPlane({
           if (pendingMephistophelesSummon.validTargets.includes(cellKey)) {
             e.stopPropagation();
             selectMephistophelesSummonTarget(cellKey);
+            return;
+          }
+        }
+        // Pathfinder target selection - click on valid target tiles (void or Rubble)
+        if (
+          pendingPathfinderPlay &&
+          pendingPathfinderPlay.phase === "selectingTarget" &&
+          (pendingPathfinderPlay.ownerSeat === actorKey || !actorKey) &&
+          selectPathfinderTarget
+        ) {
+          const cellKey = `${tileX},${tileY}`;
+          if (pendingPathfinderPlay.validTargets.includes(cellKey)) {
+            e.stopPropagation();
+            selectPathfinderTarget(cellKey);
             return;
           }
         }

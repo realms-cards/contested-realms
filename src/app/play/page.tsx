@@ -36,6 +36,7 @@ import InterrogatorChoiceOverlay from "@/components/game/InterrogatorChoiceOverl
 import AtlanteanFateOverlay from "@/components/game/AtlanteanFateOverlay";
 import MephistophelesOverlay from "@/components/game/MephistophelesOverlay";
 import MephistophelesSummonOverlay from "@/components/game/MephistophelesSummonOverlay";
+import PathfinderPlayOverlay from "@/components/game/PathfinderPlayOverlay";
 import OfflineMulliganScreen from "@/components/game/OfflineMulliganScreen";
 import OnlineLifeCounters from "@/components/game/OnlineLifeCounters";
 import PigsOfTheSounderOverlay from "@/components/game/PigsOfTheSounderOverlay";
@@ -936,6 +937,9 @@ export default function PlayPage() {
 
       {/* Mephistopheles Summon Overlay (Evil minion summoning) */}
       <MephistophelesSummonOverlay />
+
+      {/* Pathfinder Play Overlay (reveal and play site) */}
+      <PathfinderPlayOverlay />
 
       {/* Black Mass Overlay (search for Evil minions) */}
       <BlackMassOverlay />

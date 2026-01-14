@@ -4150,4 +4150,83 @@ export function handleCustomMessage(
     } catch {}
     return;
   }
+
+  // --- Pathfinder message handlers ---
+  if (t === "pathfinderBegin") {
+    const pending = (msg as { pending?: unknown }).pending as
+      | {
+          id: string;
+          ownerSeat: PlayerKey;
+          phase: "selectingTarget";
+          topSite: CardRef | null;
+          validTargets: CellKey[];
+          createdAt: number;
+        }
+      | undefined;
+
+    if (!pending) return;
+
+    // Skip if we're the owner - we already set the state locally
+    const actorKey = get().actorKey;
+    if (actorKey === pending.ownerSeat) return;
+
+    set({ pendingPathfinderPlay: pending } as Partial<GameState> as GameState);
+
+    try {
+      get().log(
+        `[${pending.ownerSeat.toUpperCase()}] Pathfinder selecting target for ${
+          pending.topSite?.name
+        }`
+      );
+    } catch {}
+    return;
+  }
+
+  if (t === "pathfinderResolve") {
+    const targetCell = (msg as { targetCell?: unknown }).targetCell as
+      | CellKey
+      | undefined;
+    const topSite = (msg as { topSite?: unknown }).topSite as
+      | CardRef
+      | undefined;
+
+    if (!targetCell || !topSite) return;
+
+    // Clear the pending state for opponent
+    const pending = get().pendingPathfinderPlay;
+    if (!pending) return;
+
+    // Skip if we're the owner - we already have the state
+    const actorKey = get().actorKey;
+    if (actorKey === pending.ownerSeat) return;
+
+    set({ pendingPathfinderPlay: null } as Partial<GameState> as GameState);
+
+    try {
+      get().log(
+        `[${pending.ownerSeat.toUpperCase()}] Pathfinder plays ${
+          topSite.name
+        } and moves there`
+      );
+    } catch {}
+    return;
+  }
+
+  if (t === "pathfinderCancel") {
+    const pending = get().pendingPathfinderPlay;
+    if (!pending) return;
+
+    // Skip if we're the owner - we already have the state
+    const actorKey = get().actorKey;
+    if (actorKey === pending.ownerSeat) return;
+
+    set({ pendingPathfinderPlay: null } as Partial<GameState> as GameState);
+
+    try {
+      get().log(
+        `[${pending.ownerSeat.toUpperCase()}] Pathfinder play cancelled`
+      );
+    } catch {}
+    return;
+  }
 }
