@@ -1,6 +1,7 @@
 import { create, type StateCreator } from "zustand";
 import { createAccusationSlice } from "./store/accusationState";
 import { createAnimistSlice } from "./store/animistState";
+import { createAtlanteanFateSlice } from "./store/atlanteanFateState";
 import { createAssortedAnimalsSlice } from "./store/assortedAnimalsState";
 import { createAvatarSlice } from "./store/avatarState";
 import { createBlackMassSlice } from "./store/blackMassState";
@@ -187,6 +188,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   ...createAnimistSlice(set, get, storeApi),
   ...createHeadlessHauntSlice(set, get, storeApi),
   ...createInterrogatorSlice(set, get, storeApi),
+  ...createAtlanteanFateSlice(set, get, storeApi),
   cardScale: 1,
 
   // Multiplayer transport (injected by online play UI)
@@ -274,6 +276,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         pendingPrivateHandCast: null,
         pendingAnimistCast: null,
         pendingInterrogatorChoice: null,
+        pendingAtlanteanFate: null,
         portalState: null,
         seerState: null,
         imposterMasks: createInitialImposterMasks(),

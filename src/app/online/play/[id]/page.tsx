@@ -40,6 +40,7 @@ import MobileHandHint from "@/components/game/MobileHandHint";
 import MotherNatureOverlay from "@/components/game/MotherNatureOverlay";
 import HeadlessHauntOverlay from "@/components/game/HeadlessHauntOverlay";
 import InterrogatorChoiceOverlay from "@/components/game/InterrogatorChoiceOverlay";
+import AtlanteanFateOverlay from "@/components/game/AtlanteanFateOverlay";
 import OnlineConsole from "@/components/game/OnlineConsole";
 import OnlineD20Screen from "@/components/game/OnlineD20Screen";
 import OnlineDeckSelector from "@/components/game/OnlineDeckSelector";
@@ -3250,6 +3251,8 @@ export default function OnlineMatchPage() {
           <HeadlessHauntOverlay />
           {/* Interrogator Choice Overlay (pay life or allow spell draw) */}
           <InterrogatorChoiceOverlay />
+          {/* Atlantean Fate Overlay (4x4 area selection for flood aura) */}
+          <AtlanteanFateOverlay />
           {/* Black Mass Overlay (search for Evil minions) */}
           <BlackMassOverlay />
           {/* Highland Princess Overlay (search for artifact) */}
@@ -3441,6 +3444,7 @@ export default function OnlineMatchPage() {
                   dampingFactor={isSpectatorView ? 0.08 : 0}
                   screenSpacePanning={isSpectatorView}
                   panSpeed={isSpectatorView ? 1.2 : 1}
+                  zoomSpeed={0.6}
                   onChange={clampControls}
                   minDistance={minDist}
                   maxDistance={maxDist}

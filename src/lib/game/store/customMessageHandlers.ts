@@ -3888,4 +3888,156 @@ export function handleCustomMessage(
     }, 500);
     return;
   }
+
+  // --- Atlantean Fate (4x4 area Aura) ---
+  if (t === "atlanteanFateBegin") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const casterSeat = (msg as { casterSeat?: unknown }).casterSeat as
+      | PlayerKey
+      | undefined;
+    const spellAny = (msg as { spell?: unknown }).spell as unknown;
+
+    if (!id || !casterSeat || typeof spellAny !== "object") return;
+
+    // Skip if we're the caster - we already have the state
+    const actorKey = get().actorKey;
+    if (actorKey === casterSeat) return;
+
+    const rec = spellAny as Record<string, unknown>;
+    set({
+      pendingAtlanteanFate: {
+        id,
+        spell: {
+          at: rec.at as CellKey,
+          index: Number(rec.index),
+          instanceId: (rec.instanceId as string | null) ?? null,
+          owner: Number(rec.owner) as 1 | 2,
+          card: rec.card as GameState["pendingAtlanteanFate"] extends {
+            spell: { card: infer C };
+          }
+            ? C
+            : never,
+        },
+        casterSeat,
+        phase: "selectingCorner",
+        previewCorner: null,
+        selectedCorner: null,
+        createdAt: Date.now(),
+      },
+    } as Partial<GameState> as GameState);
+
+    try {
+      get().log(
+        `[${casterSeat.toUpperCase()}] casts Atlantean Fate - selecting 4×4 area`
+      );
+    } catch {}
+    return;
+  }
+
+  if (t === "atlanteanFatePreview") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const cornerCell = (msg as { cornerCell?: unknown }).cornerCell as
+      | CellKey
+      | null
+      | undefined;
+
+    if (!id) return;
+
+    const pending = get().pendingAtlanteanFate;
+    if (!pending || pending.id !== id) return;
+
+    // Skip if we're the caster - we already have the state
+    const actorKey = get().actorKey;
+    if (actorKey === pending.casterSeat) return;
+
+    set({
+      pendingAtlanteanFate: {
+        ...pending,
+        previewCorner: cornerCell ?? null,
+      },
+    } as Partial<GameState> as GameState);
+    return;
+  }
+
+  if (t === "atlanteanFateSelect") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const cornerCell = (msg as { cornerCell?: unknown }).cornerCell as
+      | CellKey
+      | undefined;
+
+    if (!id || !cornerCell) return;
+
+    const pending = get().pendingAtlanteanFate;
+    if (!pending || pending.id !== id) return;
+
+    // Skip if we're the caster - we already have the state
+    const actorKey = get().actorKey;
+    if (actorKey === pending.casterSeat) return;
+
+    set({
+      pendingAtlanteanFate: {
+        ...pending,
+        selectedCorner: cornerCell,
+        phase: "confirming",
+      },
+    } as Partial<GameState> as GameState);
+    return;
+  }
+
+  if (t === "atlanteanFateResolve") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const auraAny = (msg as { aura?: unknown }).aura as unknown;
+
+    if (!id || typeof auraAny !== "object") return;
+
+    const pending = get().pendingAtlanteanFate;
+    if (!pending || pending.id !== id) return;
+
+    // Skip if we're the caster - we already have the state
+    const actorKey = get().actorKey;
+    if (actorKey === pending.casterSeat) return;
+
+    const aura =
+      auraAny as GameState["specialSiteState"]["atlanteanFateAuras"][0];
+
+    // Update special site state with the new aura
+    const currentState = get().specialSiteState;
+    set({
+      specialSiteState: {
+        ...currentState,
+        atlanteanFateAuras: [...currentState.atlanteanFateAuras, aura],
+      },
+      pendingAtlanteanFate: null,
+    } as Partial<GameState> as GameState);
+
+    try {
+      const floodCount = aura.floodedSites?.length || 0;
+      get().log(
+        `Atlantean Fate resolved! ${floodCount} site${
+          floodCount !== 1 ? "s" : ""
+        } flooded`
+      );
+    } catch {}
+    return;
+  }
+
+  if (t === "atlanteanFateCancel") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+
+    if (!id) return;
+
+    const pending = get().pendingAtlanteanFate;
+    if (!pending || pending.id !== id) return;
+
+    // Skip if we're the caster - we already have the state
+    const actorKey = get().actorKey;
+    if (actorKey === pending.casterSeat) return;
+
+    set({ pendingAtlanteanFate: null } as Partial<GameState> as GameState);
+
+    try {
+      get().log("Atlantean Fate cancelled");
+    } catch {}
+    return;
+  }
 }

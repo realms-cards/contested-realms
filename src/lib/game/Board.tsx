@@ -697,6 +697,15 @@ export default function Board({
   const selectEarthquakeArea = useScopedStore((s) => s.selectEarthquakeArea);
   const performEarthquakeSwap = useScopedStore((s) => s.performEarthquakeSwap);
 
+  // Atlantean Fate spell flow (4x4 area selection)
+  const pendingAtlanteanFate = useScopedStore((s) => s.pendingAtlanteanFate);
+  const setAtlanteanFatePreview = useScopedStore(
+    (s) => s.setAtlanteanFatePreview
+  );
+  const selectAtlanteanFateCorner = useScopedStore(
+    (s) => s.selectAtlanteanFateCorner
+  );
+
   // Helper to check if a token can be attached
   const isAttachableToken = (tokenName: string): boolean => {
     const name = tokenName.toLowerCase();
@@ -985,6 +994,14 @@ export default function Board({
     }),
     [pendingEarthquake, selectEarthquakeArea, performEarthquakeSwap]
   );
+  const atlanteanFateContext = useMemo(
+    () => ({
+      pendingAtlanteanFate,
+      setAtlanteanFatePreview,
+      selectAtlanteanFateCorner,
+    }),
+    [pendingAtlanteanFate, setAtlanteanFatePreview, selectAtlanteanFateCorner]
+  );
   const counterHandlers = useMemo(
     () => ({
       increment: incrementPermanentCounter,
@@ -1218,6 +1235,7 @@ export default function Board({
               magicContext={magicContext}
               chaosTwisterContext={chaosTwisterContext}
               earthquakeContext={earthquakeContext}
+              atlanteanFateContext={atlanteanFateContext}
               counterHandlers={counterHandlers}
               movementHandlers={movementHandlers}
               handlePointerMove={handlePointerMove}
@@ -1253,6 +1271,7 @@ export default function Board({
               showOwnershipOverlay={showOwnershipOverlay}
               cardScale={cardScale}
               stolenCards={stolenCards}
+              metaByCardId={metaByCardId}
             />
           );
         })}

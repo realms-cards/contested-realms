@@ -50,17 +50,19 @@ export default function MatchEndOverlay({
     typeof winnerId === "string" &&
     typeof myPlayerId === "string" &&
     winnerId === myPlayerId;
+  // "forfeit" = explicit player action (always rated), "disconnect" = player didn't reconnect
   const isForfeit = reason === "forfeit";
-  // isAbandonment is only true for forfeits (opponent left) - never for normal gameplay wins
-  // The server always sets reason="forfeit" when someone leaves, so we rely on that
-  const isAbandonment = isForfeit;
-  // Use ID-based check for forfeits, seat-based for normal gameplay wins
-  const didIWin = isForfeit ? !!didIWinById : didIWinSeat;
-  // Early forfeit = opponent left before turn 5, no winner declared
-  const isEarlyForfeit = isForfeit && !winnerId && rated === false;
-  // A draw only occurs when both players died simultaneously (winner is null AND no winnerId AND not a forfeit)
-  const isDraw = winner === null && !winnerId && !isForfeit;
-  const isRatedForfeit = isForfeit ? rated !== false : false;
+  const isDisconnect = reason === "disconnect";
+  const isForfeitOrDisconnect = isForfeit || isDisconnect;
+  // isAbandonment is true for both forfeits and disconnects - opponent left the match
+  const isAbandonment = isForfeitOrDisconnect;
+  // Use ID-based check for forfeits/disconnects, seat-based for normal gameplay wins
+  const didIWin = isForfeitOrDisconnect ? !!didIWinById : didIWinSeat;
+  // Early disconnect = opponent disconnected before turn 5, no winner declared
+  const isEarlyForfeit = isDisconnect && !winnerId && rated === false;
+  // A draw only occurs when both players died simultaneously (winner is null AND no winnerId AND not a forfeit/disconnect)
+  const isDraw = winner === null && !winnerId && !isForfeitOrDisconnect;
+  const isRatedForfeit = isForfeitOrDisconnect ? rated !== false : false;
 
   const handleLeaveMatch = () => {
     if (onLeave) {
@@ -78,7 +80,7 @@ export default function MatchEndOverlay({
     ? "Draw!"
     : isEarlyForfeit
     ? "Match Ended Early"
-    : isForfeit || isAbandonment
+    : isForfeitOrDisconnect
     ? isSpectator
       ? winnerName
         ? isRatedForfeit
@@ -92,7 +94,7 @@ export default function MatchEndOverlay({
         ? "Opponent forfeited"
         : "Opponent left"
       : isRatedForfeit
-      ? "You left the match"
+      ? "You forfeited the match"
       : "You left early"
     : isSpectator
     ? winnerName

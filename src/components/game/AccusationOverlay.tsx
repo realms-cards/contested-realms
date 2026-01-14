@@ -101,8 +101,9 @@ export default function AccusationOverlay() {
                 in hand
               </p>
               {casterHasChoice && (
-                <p className="text-red-400 text-sm mb-6 text-center font-medium">
-                  🔥 Evil detected - Caster chooses the card to banish
+                <p className="text-red-400 text-sm mb-6 text-center font-medium flex items-center justify-center gap-1">
+                  <img src="/fire.png" alt="fire" className="w-4 h-4" /> Evil
+                  detected - Caster chooses the card to banish
                 </p>
               )}
               {!casterHasChoice && (

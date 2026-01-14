@@ -397,7 +397,7 @@ export function AvatarCard({
       e.stopPropagation();
       return;
     }
-    if (dragFromHand || dragFromPile) return;
+    if (draggingPermanent || dragFromHand || dragFromPile) return;
     if (handleMagicClick(e)) {
       return;
     }
@@ -752,18 +752,18 @@ export function AvatarCard({
         );
       }
 
-      // Render artifacts
+      // Render artifacts - carryable artifacts render ON TOP of their parent card
       if (isArtifact && p.card.slug) {
         const artifactW = CARD_SHORT * 0.6;
         const artifactH = CARD_LONG * 0.6;
         const artifactHoverKey = `artifact:avatar:${seat}:${uniqueKey}`;
-        const artifactRenderOrder = avatarRenderOrder - 10 - attachIdx;
+        const artifactRenderOrder = avatarRenderOrder + 10 + attachIdx;
         return (
           <group
             key={`avatar-attached-${uniqueKey}`}
             position={[
               offsetX,
-              BASE_CARD_ELEVATION - CARD_THICK * 0.05,
+              BASE_CARD_ELEVATION + CARD_THICK * 0.15,
               offsetZ,
             ]}
           >
@@ -772,9 +772,9 @@ export function AvatarCard({
               width={artifactW}
               height={artifactH}
               rotationZ={rotZ}
-              elevation={-0.001}
+              elevation={0.002}
               renderOrder={artifactRenderOrder}
-              depthWrite={false}
+              depthWrite
               onPointerOver={(e) => {
                 e.stopPropagation();
                 beginHoverPreview(p.card, artifactHoverKey);

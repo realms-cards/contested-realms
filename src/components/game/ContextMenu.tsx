@@ -2,7 +2,11 @@
 
 import { useLayoutEffect, useRef, useState, useEffect } from "react";
 import { useSound } from "@/lib/contexts/SoundContext";
-import { isNecromancer, isDruid } from "@/lib/game/avatarAbilities";
+import {
+  isNecromancer,
+  isDruid,
+  hasTapToDrawSite,
+} from "@/lib/game/avatarAbilities";
 import {
   detectBurrowSubmergeAbilities,
   detectBurrowSubmergeAbilitiesSync,
@@ -53,11 +57,14 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   const moveSiteToGraveyardWithRubble = useGameStore(
     (s) => s.moveSiteToGraveyardWithRubble
   );
+  const floodSite = useGameStore((s) => s.floodSite);
+  const silenceSite = useGameStore((s) => s.silenceSite);
   const movePermanentToZone = useGameStore((s) => s.movePermanentToZone);
   const transferSiteControl = useGameStore((s) => s.transferSiteControl);
   const transferPermanentControl = useGameStore(
     (s) => s.transferPermanentControl
   );
+  const copyPermanent = useGameStore((s) => s.copyPermanent);
   const drawFromPileToHand = useGameStore((s) => s.drawFromPileToHand);
   const moveFromGraveyardToBanished = useGameStore(
     (s) => s.moveFromGraveyardToBanished
@@ -485,6 +492,30 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         targetPermanentId: "",
         description:
           "Click another tile to move this site there (swap or move to void). All minions and avatars move with the site.",
+      });
+    }
+
+    // Flood - place a Flooded site token on top of this site
+    if (site && (isMine || isActingPlayer)) {
+      extraActions.push({
+        actionId: "__flood_site__",
+        displayText: "Flood",
+        isEnabled: true,
+        targetPermanentId: "",
+        description:
+          "Place a Flooded token on this site (adds water threshold).",
+      });
+    }
+
+    // Silence - place a Silenced token on this site (removes site abilities)
+    if (site && (isMine || isActingPlayer)) {
+      extraActions.push({
+        actionId: "__silence_site__",
+        displayText: "Silence",
+        isEnabled: true,
+        targetPermanentId: "",
+        description:
+          "Place a Silenced token on this site (removes mana and threshold).",
       });
     }
   } else if (t.kind === "permanent") {
@@ -951,7 +982,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
 
       extraActions.push({
         actionId: "__summon_skeleton__",
-        displayText: `Summon Skeleton (${NECROMANCER_SKELETON_COST}💧)${
+        displayText: `Summon Skeleton (${NECROMANCER_SKELETON_COST} mana)${
           hasAlreadyUsed ? " ✓" : ""
         }`,
         isEnabled: canSummon,
@@ -978,6 +1009,23 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         isEnabled: canFlip,
         targetPermanentId: "",
         description: flipDescription,
+      });
+    }
+
+    // Tap to draw a site action (standard avatar ability)
+    // Available for most avatars except Magician (who has no atlas)
+    if (isMine && hasTapToDrawSite(effectiveAvatarName)) {
+      const atlasCount = zones[t.who]?.atlas?.length ?? 0;
+      const canDraw = atlasCount > 0;
+      const drawDescription =
+        atlasCount > 0 ? "Draw the top site from your Atlas" : "Atlas is empty";
+
+      extraActions.push({
+        actionId: "__tap_draw_site__",
+        displayText: "Draw Site",
+        isEnabled: canDraw,
+        targetPermanentId: "",
+        description: drawDescription,
       });
     }
 
@@ -1287,6 +1335,22 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                   onClick={doTransfer}
                 >
                   {`Transfer control${transferTo ? ` to P${transferTo}` : ""}`}
+                </button>
+              )}
+
+              {/* Copy permanent - creates a token copy that goes to banished when leaving */}
+              {t.kind === "permanent" && isMine && (
+                <button
+                  className="w-full text-left rounded bg-cyan-900/30 hover:bg-cyan-900/50 px-3 py-1"
+                  onClick={() => {
+                    copyPermanent(t.at, t.index);
+                    try {
+                      playCardFlip();
+                    } catch {}
+                    onClose();
+                  }}
+                >
+                  Copy (token)
                 </button>
               )}
 
@@ -1649,6 +1713,48 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                         </button>
                       );
                     }
+                    // Flood site action - place Flooded token on site
+                    if (action.actionId === "__flood_site__") {
+                      return (
+                        <button
+                          key={action.actionId}
+                          className="w-full text-left rounded bg-cyan-600/20 hover:bg-cyan-600/30 px-3 py-1"
+                          title={action.description}
+                          onClick={() => {
+                            if (t.kind === "site") {
+                              floodSite(t.x, t.y);
+                              try {
+                                playCardFlip();
+                              } catch {}
+                            }
+                            onClose();
+                          }}
+                        >
+                          {action.displayText}
+                        </button>
+                      );
+                    }
+                    // Silence site action - place Silenced token on site
+                    if (action.actionId === "__silence_site__") {
+                      return (
+                        <button
+                          key={action.actionId}
+                          className="w-full text-left rounded bg-violet-600/20 hover:bg-violet-600/30 px-3 py-1"
+                          title={action.description}
+                          onClick={() => {
+                            if (t.kind === "site") {
+                              silenceSite(t.x, t.y);
+                              try {
+                                playCardFlip();
+                              } catch {}
+                            }
+                            onClose();
+                          }}
+                        >
+                          {action.displayText}
+                        </button>
+                      );
+                    }
                     // Imposter unmask action
                     if (action.actionId === "__unmask__") {
                       return (
@@ -1705,6 +1811,42 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                           onClick={() => {
                             if (t.kind === "avatar" && action.isEnabled) {
                               flipDruid(t.who);
+                            }
+                            onClose();
+                          }}
+                        >
+                          {action.displayText}
+                        </button>
+                      );
+                    }
+                    // Tap to draw site action (standard avatar ability)
+                    if (action.actionId === "__tap_draw_site__") {
+                      return (
+                        <button
+                          key={action.actionId}
+                          className={`w-full text-left rounded px-3 py-1 ${
+                            action.isEnabled
+                              ? "bg-teal-600/20 hover:bg-teal-600/30 text-teal-200"
+                              : "bg-gray-600/20 text-gray-400 cursor-not-allowed"
+                          }`}
+                          title={action.description}
+                          disabled={!action.isEnabled}
+                          onClick={() => {
+                            if (t.kind === "avatar" && action.isEnabled) {
+                              // Draw from atlas to hand (drawFromPileToHand handles tapping the avatar)
+                              const atlas = zones[t.who]?.atlas;
+                              if (atlas && atlas.length > 0) {
+                                const topCard = atlas[0];
+                                setDragFromPile({
+                                  who: t.who,
+                                  from: "atlas",
+                                  card: topCard,
+                                });
+                                drawFromPileToHand();
+                                try {
+                                  playCardSelect();
+                                } catch {}
+                              }
                             }
                             onClose();
                           }}

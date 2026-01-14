@@ -252,6 +252,52 @@ export type SpecialSiteState = {
   genesisMana: GenesisManaBonus[];
   // Pending element choice (shows overlay)
   pendingElementChoice: PendingElementChoice | null;
+  // Atlantean Fate auras (4x4 areas with flood tokens)
+  atlanteanFateAuras: AtlanteanFateAura[];
+};
+
+// --- Atlantean Fate State ------------------------------------------------
+// Atlantean Fate is an Aura that covers a 4x4 area of the board.
+// Non-ordinary sites in the area get flood tokens and only produce (W).
+export type AtlanteanFatePhase =
+  | "selectingCorner" // Player selecting the upper-right corner of 4x4 area
+  | "confirming" // Player confirming the selection
+  | "complete";
+
+// Represents an active Atlantean Fate aura on the board
+export type AtlanteanFateAura = {
+  id: string;
+  // Upper-right corner of the 4x4 area (the corner player clicks)
+  cornerCell: CellKey;
+  // All cells covered by this aura
+  coveredCells: CellKey[];
+  // Owner of the aura
+  owner: 1 | 2;
+  ownerSeat: PlayerKey;
+  // Flooded sites (non-ordinary sites that got flood tokens)
+  floodedSites: CellKey[];
+  // The permanent representing the aura on board
+  permanentAt: CellKey;
+  permanentIndex: number;
+  createdAt: number;
+};
+
+export type PendingAtlanteanFate = {
+  id: string;
+  spell: {
+    at: CellKey;
+    index: number;
+    instanceId: string | null;
+    owner: 1 | 2;
+    card: CardRef;
+  };
+  casterSeat: PlayerKey;
+  phase: AtlanteanFatePhase;
+  // Preview corner (before confirming)
+  previewCorner: CellKey | null;
+  // Confirmed corner
+  selectedCorner: CellKey | null;
+  createdAt: number;
 };
 
 // --- Harbinger Portal State (Gothic expansion) --------------------------------
@@ -303,6 +349,7 @@ export type PermanentItem = EntityBase<CardRef> & {
   counters?: number | null; // absent/0 => no counter badge
   damage?: number | null;
   faceDown?: boolean; // Card is flipped face-down (hidden from opponent)
+  isCopy?: boolean; // Token copy - goes to banished instead of graveyard when leaving
 };
 export type Permanents = Record<CellKey, PermanentItem[]>;
 
@@ -1803,6 +1850,8 @@ export type GameState = {
     y: number,
     placeRubble: boolean
   ) => void;
+  floodSite: (x: number, y: number) => void;
+  silenceSite: (x: number, y: number) => void;
   moveFromBanishedToZone: (
     who: PlayerKey,
     instanceId: string,
@@ -1821,6 +1870,8 @@ export type GameState = {
   // Transfer control
   transferPermanentControl: (at: CellKey, index: number, to?: 1 | 2) => void;
   transferSiteControl: (x: number, y: number, to?: 1 | 2) => void;
+  // Create a token copy of a permanent (goes to banished when leaving the realm)
+  copyPermanent: (at: CellKey, index: number) => void;
   // Switch site position (Earthquake, Rift Valley) - moves all permanents/avatars with the site
   switchSitePosition: (
     sourceX: number,
@@ -1881,6 +1932,31 @@ export type GameState = {
   flipDruid: (who: PlayerKey) => boolean;
   // Special Site State (Valley of Delight, Bloom sites, etc.)
   specialSiteState: SpecialSiteState;
+  // Atlantean Fate pending state (4x4 area selection)
+  pendingAtlanteanFate: PendingAtlanteanFate | null;
+  // Begin Atlantean Fate placement
+  beginAtlanteanFate: (input: {
+    spell: {
+      at: CellKey;
+      index: number;
+      instanceId: string | null;
+      owner: 1 | 2;
+      card: CardRef;
+    };
+    casterSeat: PlayerKey;
+  }) => void;
+  // Set preview corner (hover highlight)
+  setAtlanteanFatePreview: (cornerCell: CellKey | null) => void;
+  // Select corner to confirm placement
+  selectAtlanteanFateCorner: (cornerCell: CellKey) => void;
+  // Resolve the placement
+  resolveAtlanteanFate: () => void;
+  // Cancel the placement
+  cancelAtlanteanFate: () => void;
+  // Check if a site is flooded (affected by Atlantean Fate)
+  isSiteFlooded: (cellKey: CellKey) => boolean;
+  // Remove Atlantean Fate aura when the permanent is removed
+  removeAtlanteanFateAura: (auraId: string) => void;
   // Headless Haunt State (Gothic expansion)
   // Tracks Headless Haunt/Haunless Head minions for start-of-turn movement
   headlessHaunts: HeadlessHauntEntry[];
@@ -2154,6 +2230,7 @@ export type ServerPatchT = Partial<{
   pendingEarthquake: GameState["pendingEarthquake"];
   pendingAnimistCast: GameState["pendingAnimistCast"];
   pendingInterrogatorChoice: GameState["pendingInterrogatorChoice"];
+  pendingAtlanteanFate: GameState["pendingAtlanteanFate"];
   resolversDisabled: GameState["resolversDisabled"];
   __replaceKeys: string[];
 }>;

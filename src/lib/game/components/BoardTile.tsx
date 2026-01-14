@@ -1,5 +1,7 @@
 import { Text } from "@react-three/drei";
 import type { MutableRefObject } from "react";
+import { AtlanteanFateAreaOverlay } from "@/lib/game/components/AtlanteanFateAreaOverlay";
+import { AuraPreviewOverlay } from "@/lib/game/components/AuraPreviewOverlay";
 import { ChaosTwisterLandingOverlay } from "@/lib/game/components/ChaosTwisterLandingOverlay";
 import { MagicTargetOverlay } from "@/lib/game/components/MagicTargetOverlay";
 import {
@@ -51,6 +53,11 @@ type BoardTileProps = {
     selectEarthquakeArea: GameState["selectEarthquakeArea"];
     performEarthquakeSwap: GameState["performEarthquakeSwap"];
   };
+  atlanteanFateContext: {
+    pendingAtlanteanFate: GameState["pendingAtlanteanFate"];
+    setAtlanteanFatePreview: GameState["setAtlanteanFatePreview"];
+    selectAtlanteanFateCorner: GameState["selectAtlanteanFateCorner"];
+  };
   counterHandlers: PermanentStackProps["counterHandlers"];
   movementHandlers: PermanentStackProps["movementHandlers"];
   handlePointerMove: (x: number, z: number) => void;
@@ -90,6 +97,8 @@ type BoardTileProps = {
   cardScale: number;
   // Stolen cards for Pith Imp indicator
   stolenCards: GameState["stolenCards"];
+  // Card metadata for Aura preview
+  metaByCardId: GameState["metaByCardId"];
 };
 
 export function BoardTile({
@@ -117,6 +126,7 @@ export function BoardTile({
   magicContext,
   chaosTwisterContext,
   earthquakeContext,
+  atlanteanFateContext,
   counterHandlers,
   movementHandlers,
   handlePointerMove,
@@ -152,6 +162,7 @@ export function BoardTile({
   showOwnershipOverlay,
   cardScale,
   stolenCards,
+  metaByCardId,
 }: BoardTileProps) {
   const items = permanents[tileKey] || [];
   const cellNumber = (boardSize.h - 1 - tileY) * boardSize.w + tileX + 1;
@@ -182,6 +193,11 @@ export function BoardTile({
         selectEarthquakeArea={earthquakeContext.selectEarthquakeArea}
         performEarthquakeSwap={earthquakeContext.performEarthquakeSwap}
         hasSiteAtTile={Boolean(site)}
+        pendingAtlanteanFate={atlanteanFateContext.pendingAtlanteanFate}
+        setAtlanteanFatePreview={atlanteanFateContext.setAtlanteanFatePreview}
+        selectAtlanteanFateCorner={
+          atlanteanFateContext.selectAtlanteanFateCorner
+        }
       />
 
       {/* Portal overlay (Harbinger ability) - rendered under cards */}
@@ -192,6 +208,22 @@ export function BoardTile({
         tileX={tileX}
         tileY={tileY}
         pendingChaosTwister={chaosTwisterContext.pendingChaosTwister}
+      />
+
+      {/* Atlantean Fate 2x2 area preview - rendered under cards */}
+      <AtlanteanFateAreaOverlay
+        tileX={tileX}
+        tileY={tileY}
+        pendingAtlanteanFate={atlanteanFateContext.pendingAtlanteanFate}
+      />
+
+      {/* Generic Aura spell 2x2 preview - only when Magic Interactions enabled */}
+      <AuraPreviewOverlay
+        tileX={tileX}
+        tileY={tileY}
+        pendingMagic={pendingMagic}
+        magicGuidesActive={magicGuidesActive}
+        metaByCardId={metaByCardId}
       />
 
       {magicGuidesActive && (

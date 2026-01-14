@@ -77,12 +77,13 @@ function LifeCounter({
   spectatorMode?: boolean;
   isHotseatMode?: boolean;
 }) {
-  const playerState = useGameStore((s) => s.players[player]);
+  const playerState = useGameStore((s) => s.players?.[player]);
   const addLife = useGameStore((s) => s.addLife);
   const [showDeathConfirm, setShowDeathConfirm] = useState(false);
   const isTouchDevice = useTouchDevice();
 
-  const { life, lifeState } = playerState;
+  const life = playerState?.life ?? 20;
+  const lifeState = playerState?.lifeState ?? "alive";
   const lifeDisplay = formatLifeDisplay(life, lifeState);
   const colorClass = getLifeStateColor(lifeState);
   // In hotseat mode, allow modifying both players. In online mode, only your own life
@@ -269,13 +270,13 @@ export default function OnlineLifeCounters({
   const matchEnded = useGameStore((s) => s.matchEnded);
   const isHotseatMode = !myPlayerId && !opponentPlayerId && !matchId;
   const canModifyLife = !readOnly && !!myPlayerKey && !matchEnded;
-  const p1LifeState = useGameStore((s) => s.players.p1.lifeState);
-  const p2LifeState = useGameStore((s) => s.players.p2.lifeState);
+  const p1LifeState = useGameStore((s) => s.players?.p1?.lifeState ?? "alive");
+  const p2LifeState = useGameStore((s) => s.players?.p2?.lifeState ?? "alive");
   const myLife = useGameStore((s) =>
-    myPlayerKey ? s.players[myPlayerKey].life : 0
+    myPlayerKey ? s.players?.[myPlayerKey]?.life ?? 0 : 0
   );
   const myLifeState = useGameStore((s) =>
-    myPlayerKey ? s.players[myPlayerKey].lifeState : "alive"
+    myPlayerKey ? s.players?.[myPlayerKey]?.lifeState ?? "alive" : "alive"
   );
   const addLife = useGameStore((s) => s.addLife);
   const tieGame = useGameStore((s) => s.tieGame);

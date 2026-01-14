@@ -46,7 +46,10 @@ export default function TrackpadOrbitAdapter() {
     const raycaster = new THREE.Raycaster();
     const tmpVec = new THREE.Vector3();
 
-    const getWorldPointOnPlane = (ndcX: number, ndcY: number): THREE.Vector3 => {
+    const getWorldPointOnPlane = (
+      ndcX: number,
+      ndcY: number
+    ): THREE.Vector3 => {
       raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), camera);
       const hit = raycaster.ray.intersectPlane(plane, new THREE.Vector3());
       if (hit) return hit;
@@ -71,7 +74,7 @@ export default function TrackpadOrbitAdapter() {
       // Pinch-to-zoom (Chrome/Safari ctrl+wheel): zoom to cursor
       if (event.ctrlKey) {
         const d = camera.position.distanceTo(controls.target);
-        const zoomSpeed = 1.1;
+        const zoomSpeed = 1.05;
         let scale = event.deltaY < 0 ? 1 / zoomSpeed : zoomSpeed;
         // Clamp scale so resulting distance respects min/max
         const minD = (controls.minDistance ?? 0.1) / Math.max(d, 1e-6);
@@ -81,7 +84,11 @@ export default function TrackpadOrbitAdapter() {
         const p = getWorldPointOnPlane(ndcX, ndcY);
         tmpVec.copy(camera.position).sub(p).multiplyScalar(scale).add(p);
         const newCam = tmpVec.clone();
-        tmpVec.copy(controls.target as THREE.Vector3).sub(p).multiplyScalar(scale).add(p);
+        tmpVec
+          .copy(controls.target as THREE.Vector3)
+          .sub(p)
+          .multiplyScalar(scale)
+          .add(p);
         const newTarget = tmpVec.clone();
         (controls.target as THREE.Vector3).copy(newTarget);
         camera.position.copy(newCam);
@@ -110,7 +117,11 @@ export default function TrackpadOrbitAdapter() {
     }
 
     // Safari gesture events (Mac only): implement pinch zoom using scale delta
-    type SafariGestureEvent = Event & { scale: number; clientX?: number; clientY?: number };
+    type SafariGestureEvent = Event & {
+      scale: number;
+      clientX?: number;
+      clientY?: number;
+    };
     let onGestureStart: ((ev: SafariGestureEvent) => void) | null = null;
     let onGestureChange: ((ev: SafariGestureEvent) => void) | null = null;
     let onGestureEnd: ((ev: SafariGestureEvent) => void) | null = null;
@@ -129,8 +140,14 @@ export default function TrackpadOrbitAdapter() {
         lastScaleRef.current = ev.scale || 1;
 
         const rect = gl.domElement.getBoundingClientRect();
-        const px = typeof ev.clientX === "number" ? ev.clientX - rect.left : rect.width / 2;
-        const py = typeof ev.clientY === "number" ? ev.clientY - rect.top : rect.height / 2;
+        const px =
+          typeof ev.clientX === "number"
+            ? ev.clientX - rect.left
+            : rect.width / 2;
+        const py =
+          typeof ev.clientY === "number"
+            ? ev.clientY - rect.top
+            : rect.height / 2;
         const ndcX = (px / rect.width) * 2 - 1;
         const ndcY = -(py / rect.height) * 2 + 1;
 
@@ -165,9 +182,21 @@ export default function TrackpadOrbitAdapter() {
         ev.stopPropagation();
         lastScaleRef.current = null;
       };
-      gl.domElement.addEventListener("gesturestart", onGestureStart as EventListener, { passive: false, capture: true } as AddEventListenerOptions);
-      gl.domElement.addEventListener("gesturechange", onGestureChange as EventListener, { passive: false, capture: true } as AddEventListenerOptions);
-      gl.domElement.addEventListener("gestureend", onGestureEnd as EventListener, { passive: false, capture: true } as AddEventListenerOptions);
+      gl.domElement.addEventListener(
+        "gesturestart",
+        onGestureStart as EventListener,
+        { passive: false, capture: true } as AddEventListenerOptions
+      );
+      gl.domElement.addEventListener(
+        "gesturechange",
+        onGestureChange as EventListener,
+        { passive: false, capture: true } as AddEventListenerOptions
+      );
+      gl.domElement.addEventListener(
+        "gestureend",
+        onGestureEnd as EventListener,
+        { passive: false, capture: true } as AddEventListenerOptions
+      );
     }
 
     // --- Mobile touch: two-finger pan and pinch-to-zoom; long-press as right-click ---
@@ -243,7 +272,10 @@ export default function TrackpadOrbitAdapter() {
         if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
         longPressTimerRef.current = window.setTimeout(() => {
           if (!longPressStartRef.current) return;
-          dispatchContextMenu(longPressStartRef.current.x, longPressStartRef.current.y);
+          dispatchContextMenu(
+            longPressStartRef.current.x,
+            longPressStartRef.current.y
+          );
           longPressTimerRef.current = null;
           longPressStartRef.current = null;
         }, LONG_PRESS_MS) as unknown as number;
@@ -296,13 +328,19 @@ export default function TrackpadOrbitAdapter() {
           scale = Math.pow(scale, 0.9);
         }
         const currentDist = camera.position.distanceTo(controls.target);
-        const minD = (controls.minDistance ?? 0.1) / Math.max(currentDist, 1e-6);
-        const maxD = (controls.maxDistance ?? 1e6) / Math.max(currentDist, 1e-6);
+        const minD =
+          (controls.minDistance ?? 0.1) / Math.max(currentDist, 1e-6);
+        const maxD =
+          (controls.maxDistance ?? 1e6) / Math.max(currentDist, 1e-6);
         scale = Math.max(minD, Math.min(maxD, scale));
         const p = getWorldPointOnPlane(ndcX, ndcY);
         tmpVec.copy(camera.position).sub(p).multiplyScalar(scale).add(p);
         const newCam = tmpVec.clone();
-        tmpVec.copy(controls.target as THREE.Vector3).sub(p).multiplyScalar(scale).add(p);
+        tmpVec
+          .copy(controls.target as THREE.Vector3)
+          .sub(p)
+          .multiplyScalar(scale)
+          .add(p);
         const newTarget = tmpVec.clone();
         (controls.target as THREE.Vector3).copy(newTarget);
         camera.position.copy(newCam);
@@ -327,7 +365,8 @@ export default function TrackpadOrbitAdapter() {
           const dx = t.clientX - start.x;
           const dy = t.clientY - start.y;
           if (dx * dx + dy * dy > MOVE_CANCEL_PX * MOVE_CANCEL_PX) {
-            if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+            if (longPressTimerRef.current)
+              clearTimeout(longPressTimerRef.current);
             longPressTimerRef.current = null;
             longPressStartRef.current = null;
           }
@@ -351,24 +390,67 @@ export default function TrackpadOrbitAdapter() {
     };
 
     if (isTouch) {
-      gl.domElement.addEventListener("touchstart", handleTouchStart as EventListener, { passive: false, capture: true } as AddEventListenerOptions);
-      gl.domElement.addEventListener("touchmove", handleTouchMove as EventListener, { passive: false, capture: true } as AddEventListenerOptions);
-      gl.domElement.addEventListener("touchend", handleTouchEnd as EventListener, { passive: false, capture: true } as AddEventListenerOptions);
-      gl.domElement.addEventListener("touchcancel", handleTouchEnd as EventListener, { passive: false, capture: true } as AddEventListenerOptions);
+      gl.domElement.addEventListener(
+        "touchstart",
+        handleTouchStart as EventListener,
+        { passive: false, capture: true } as AddEventListenerOptions
+      );
+      gl.domElement.addEventListener(
+        "touchmove",
+        handleTouchMove as EventListener,
+        { passive: false, capture: true } as AddEventListenerOptions
+      );
+      gl.domElement.addEventListener(
+        "touchend",
+        handleTouchEnd as EventListener,
+        { passive: false, capture: true } as AddEventListenerOptions
+      );
+      gl.domElement.addEventListener(
+        "touchcancel",
+        handleTouchEnd as EventListener,
+        { passive: false, capture: true } as AddEventListenerOptions
+      );
     }
 
     return () => {
       if (isMac) {
-        gl.domElement.removeEventListener("wheel", handleWheel as EventListener);
-        if (onGestureStart) gl.domElement.removeEventListener("gesturestart", onGestureStart as EventListener);
-        if (onGestureChange) gl.domElement.removeEventListener("gesturechange", onGestureChange as EventListener);
-        if (onGestureEnd) gl.domElement.removeEventListener("gestureend", onGestureEnd as EventListener);
+        gl.domElement.removeEventListener(
+          "wheel",
+          handleWheel as EventListener
+        );
+        if (onGestureStart)
+          gl.domElement.removeEventListener(
+            "gesturestart",
+            onGestureStart as EventListener
+          );
+        if (onGestureChange)
+          gl.domElement.removeEventListener(
+            "gesturechange",
+            onGestureChange as EventListener
+          );
+        if (onGestureEnd)
+          gl.domElement.removeEventListener(
+            "gestureend",
+            onGestureEnd as EventListener
+          );
       }
       if (isTouch) {
-        gl.domElement.removeEventListener("touchstart", handleTouchStart as EventListener);
-        gl.domElement.removeEventListener("touchmove", handleTouchMove as EventListener);
-        gl.domElement.removeEventListener("touchend", handleTouchEnd as EventListener);
-        gl.domElement.removeEventListener("touchcancel", handleTouchEnd as EventListener);
+        gl.domElement.removeEventListener(
+          "touchstart",
+          handleTouchStart as EventListener
+        );
+        gl.domElement.removeEventListener(
+          "touchmove",
+          handleTouchMove as EventListener
+        );
+        gl.domElement.removeEventListener(
+          "touchend",
+          handleTouchEnd as EventListener
+        );
+        gl.domElement.removeEventListener(
+          "touchcancel",
+          handleTouchEnd as EventListener
+        );
       }
       // no-op
     };

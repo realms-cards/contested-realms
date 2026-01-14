@@ -146,9 +146,10 @@ export const createNecromancerSlice: StateCreator<
     // Send patch to server
     const tr = state.transport;
     if (tr) {
+      // Only send affected player's data to avoid overwriting opponent's state
       const patch: ServerPatchT = {
         permanents: permanentsNext,
-        players: playersNext,
+        players: { [who]: playersNext[who] } as GameState["players"],
         necromancerSkeletonUsed: necromancerSkeletonUsedNext,
       };
       get().trySendPatch(patch);

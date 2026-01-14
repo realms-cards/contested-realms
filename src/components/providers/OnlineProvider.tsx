@@ -1353,7 +1353,8 @@ export default function OnlineProvider({
             const myId = meRef.current?.id || null;
             let msg: string | null = null;
             const reason = (p as { reason?: string | null })?.reason || null;
-            if (reason === "forfeit") {
+            // "forfeit" = explicit player action, "disconnect" = player didn't reconnect
+            if (reason === "forfeit" || reason === "disconnect") {
               const winnerId =
                 (p as { winnerId?: string | null })?.winnerId || null;
               const ratedRaw = (p as { rated?: boolean | null })?.rated;

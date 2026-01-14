@@ -131,8 +131,12 @@ export const createAssortedAnimalsSlice: StateCreator<
       players: playersNext,
     } as Partial<GameState> as GameState);
 
-    // Send mana patch
-    get().trySendPatch({ players: playersNext });
+    // Send only affected player's data to avoid overwriting opponent's state
+    get().trySendPatch({
+      players: {
+        [casterSeat]: playersNext[casterSeat],
+      } as GameState["players"],
+    });
 
     const zones = get().zones;
     const fullSpellbook = zones[casterSeat]?.spellbook || [];

@@ -128,7 +128,9 @@ export const createSearingTruthSlice: StateCreator<
     const metaByCardId = get().metaByCardId;
     let maxCost = 0;
     for (const card of drawnCards) {
-      const meta = metaByCardId[card.cardId] as { cost?: number | null } | undefined;
+      const meta = metaByCardId[card.cardId] as
+        | { cost?: number | null }
+        | undefined;
       const cost = meta?.cost ?? 0;
       if (cost > maxCost) maxCost = cost;
     }
@@ -227,8 +229,12 @@ export const createSearingTruthSlice: StateCreator<
 
       set({ players: playersNext } as Partial<GameState> as GameState);
 
-      // Send players patch
-      const playersPatch: ServerPatchT = { players: playersNext };
+      // Send only affected player's data to avoid overwriting opponent's state
+      const playersPatch: ServerPatchT = {
+        players: {
+          [targetSeat]: playersNext[targetSeat],
+        } as GameState["players"],
+      };
       get().trySendPatch(playersPatch);
     }
 

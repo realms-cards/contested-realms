@@ -604,6 +604,22 @@ const playerRegistry = createPlayerRegistry({
   playerIdBySocket,
 });
 
+// Legacy disconnect timers (used when REDIS_STATE_ENABLED is false)
+// Maps playerId -> { timer, matchId } for grace period tracking
+const LEGACY_DISCONNECT_GRACE_MS = 30000; // 30 seconds
+const legacyDisconnectTimers = new Map<
+  string,
+  { timer: ReturnType<typeof setTimeout>; matchId: string }
+>();
+
+function cancelLegacyDisconnectTimer(playerId: string): void {
+  const pending = legacyDisconnectTimers.get(playerId);
+  if (pending) {
+    clearTimeout(pending.timer);
+    legacyDisconnectTimers.delete(playerId);
+  }
+}
+
 // Leader heartbeat interval (refreshes match leader TTLs)
 let leaderHeartbeatInterval: ReturnType<typeof setInterval> | null = null;
 if (REDIS_STATE_ENABLED) {
@@ -1145,16 +1161,22 @@ async function finalizeMatch(
       : gameTurnFromMatch != null && Number.isFinite(gameTurnFromMatch)
       ? gameTurnFromMatch
       : 1) || 1;
-  const isForfeitReason =
-    typeof options?.reason === "string" && options.reason === "forfeit";
-  const isRatedResult = !isForfeitReason || gameTurn >= 5;
+  // Distinguish between explicit forfeits and disconnects:
+  // - "forfeit": player explicitly left/conceded - always counts as a rated loss
+  // - "disconnect": player disconnected and didn't return - apply early game protection
+  const reason = typeof options?.reason === "string" ? options.reason : null;
+  const isDisconnectReason = reason === "disconnect";
+  const isForfeitReason = reason === "forfeit" || isDisconnectReason;
 
-  // For early forfeits (< 5 turns), don't declare a winner - treat as no result
-  // This prevents abuse of win-trading or penalizing players for opponent disconnects
-  const isEarlyForfeit = isForfeitReason && gameTurn < 5;
-  if (isEarlyForfeit) {
+  // Early disconnect protection: don't count matches where opponent disconnected before turn 5
+  // This prevents penalizing players for opponent connection issues
+  // Explicit forfeits always count regardless of turn
+  const isEarlyDisconnect = isDisconnectReason && gameTurn < 5;
+  const isRatedResult = !isEarlyDisconnect;
+
+  if (isEarlyDisconnect) {
     console.log(
-      `[match] early forfeit at turn ${gameTurn} - no winner declared for match ${match.id}`
+      `[match] early disconnect at turn ${gameTurn} - no winner declared for match ${match.id}`
     );
     winnerId = null;
     loserId = null;
@@ -1402,6 +1424,46 @@ async function finalizeMatch(
       );
     }
   }
+}
+
+// Set up disconnect grace period callback for player registry (late binding)
+// This triggers forfeit when a player disconnects and doesn't reconnect within 30s
+if (REDIS_STATE_ENABLED) {
+  playerRegistry.setOnGracePeriodExpired((playerId, matchId) => {
+    if (!matchId) return;
+    const match = matches.get(matchId);
+    if (!match || match.status === "ended") return;
+
+    // Verify player still hasn't reconnected
+    const player = players.get(playerId);
+    if (player?.socketId) return; // Player reconnected
+
+    console.log(
+      `[match] Player ${playerId} disconnect grace period expired for match ${matchId} - triggering forfeit`
+    );
+
+    // Compute winner (the opponent who stayed)
+    const leftSeat = getSeatForPlayer(
+      match as unknown as { playerIds?: string[] | null },
+      playerId
+    ) as Seat | null;
+    const oppSeat = leftSeat ? getOpponentSeatStrict(leftSeat) : null;
+    const winnerId = oppSeat
+      ? (getPlayerIdForSeat(
+          match as unknown as { playerIds?: string[] | null },
+          oppSeat
+        ) as string | null)
+      : null;
+
+    if (winnerId) {
+      void finalizeMatch(match, {
+        winnerId,
+        winnerSeat: oppSeat ?? undefined,
+        loserId: playerId,
+        reason: "disconnect",
+      });
+    }
+  });
 }
 
 // Bot lifecycle helpers moved into BotManager
@@ -2227,6 +2289,9 @@ io.on("connection", async (socket: SocketClient) => {
       );
     } else {
       // Legacy local-only state management
+      // Cancel any pending disconnect timer (player reconnected)
+      cancelLegacyDisconnectTimer(playerId);
+
       const existing = players.get(playerId);
       if (!existing) {
         player = {
@@ -5068,6 +5133,67 @@ io.on("connection", async (socket: SocketClient) => {
 
       // Keep player record for potential rejoin, just clear socket association
       player.socketId = null;
+
+      // Start legacy disconnect timer for players in human matches (non-Redis path only)
+      // This triggers forfeit after 30 seconds if they don't reconnect
+      if (!REDIS_STATE_ENABLED && player.matchId) {
+        const matchForTimer = matches.get(player.matchId);
+        if (
+          matchForTimer &&
+          matchForTimer.status !== "ended" &&
+          matchHasHumanPlayers(matchForTimer)
+        ) {
+          const matchIdForTimer = player.matchId;
+          const playerIdForTimer = player.id;
+
+          // Cancel any existing timer first
+          cancelLegacyDisconnectTimer(playerIdForTimer);
+
+          const timer = setTimeout(() => {
+            // After grace period, check if player reconnected
+            const p = players.get(playerIdForTimer);
+            if (p && !p.socketId) {
+              // Player didn't reconnect - trigger forfeit
+              const m = matches.get(matchIdForTimer);
+              if (m && m.status !== "ended") {
+                console.log(
+                  `[match] Legacy disconnect grace period expired for ${playerIdForTimer} in match ${matchIdForTimer} - triggering forfeit`
+                );
+
+                // Compute winner (the opponent who stayed)
+                const leftSeat = getSeatForPlayer(
+                  m as unknown as { playerIds?: string[] | null },
+                  playerIdForTimer
+                ) as Seat | null;
+                const oppSeat = leftSeat
+                  ? getOpponentSeatStrict(leftSeat)
+                  : null;
+                const winnerId = oppSeat
+                  ? (getPlayerIdForSeat(
+                      m as unknown as { playerIds?: string[] | null },
+                      oppSeat
+                    ) as string | null)
+                  : null;
+
+                if (winnerId) {
+                  void finalizeMatch(m, {
+                    winnerId,
+                    winnerSeat: oppSeat ?? undefined,
+                    loserId: playerIdForTimer,
+                    reason: "disconnect",
+                  });
+                }
+              }
+            }
+            legacyDisconnectTimers.delete(playerIdForTimer);
+          }, LEGACY_DISCONNECT_GRACE_MS);
+
+          legacyDisconnectTimers.set(playerIdForTimer, {
+            timer,
+            matchId: matchIdForTimer,
+          });
+        }
+      }
     }
 
     // Remove player from matchmaking queue on disconnect
