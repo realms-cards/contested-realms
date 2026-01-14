@@ -23,7 +23,8 @@ export type BodyApi = {
 export const STACK_SPACING = TILE_SIZE * 0.32;
 export const STACK_MARGIN_Z = TILE_SIZE * 0.1;
 // Each stacked card lifts to sit clearly on top of the previous card
-export const STACK_LAYER_LIFT = CARD_THICK * 3;
+// Must be large enough to prevent z-fighting between overlapping cards
+export const STACK_LAYER_LIFT = CARD_THICK * 10;
 // Card elevations - Y position is center of 3D card (thickness ~0.003)
 // Cards rest on playmat (Y=0), so center is at half thickness
 export const BURROWED_ELEVATION = CARD_THICK * 0.5; // Card center when lying flat
