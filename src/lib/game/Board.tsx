@@ -1017,6 +1017,18 @@ export default function Board({
     }),
     [pendingMephistophelesSummon, selectMephistophelesSummonTarget]
   );
+  // Pathfinder target selection
+  const pendingPathfinderPlay = useScopedStore((s) => s.pendingPathfinderPlay);
+  const selectPathfinderTarget = useScopedStore(
+    (s) => s.selectPathfinderTarget
+  );
+  const pathfinderContext = useMemo(
+    () => ({
+      pendingPathfinderPlay,
+      selectPathfinderTarget,
+    }),
+    [pendingPathfinderPlay, selectPathfinderTarget]
+  );
   const counterHandlers = useMemo(
     () => ({
       increment: incrementPermanentCounter,
@@ -1252,6 +1264,7 @@ export default function Board({
               earthquakeContext={earthquakeContext}
               atlanteanFateContext={atlanteanFateContext}
               mephistophelesSummonContext={mephistophelesSummonContext}
+              pathfinderContext={pathfinderContext}
               counterHandlers={counterHandlers}
               movementHandlers={movementHandlers}
               handlePointerMove={handlePointerMove}

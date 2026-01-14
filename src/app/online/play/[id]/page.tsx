@@ -43,6 +43,7 @@ import InterrogatorChoiceOverlay from "@/components/game/InterrogatorChoiceOverl
 import AtlanteanFateOverlay from "@/components/game/AtlanteanFateOverlay";
 import MephistophelesOverlay from "@/components/game/MephistophelesOverlay";
 import MephistophelesSummonOverlay from "@/components/game/MephistophelesSummonOverlay";
+import PathfinderPlayOverlay from "@/components/game/PathfinderPlayOverlay";
 import OnlineConsole from "@/components/game/OnlineConsole";
 import OnlineD20Screen from "@/components/game/OnlineD20Screen";
 import OnlineDeckSelector from "@/components/game/OnlineDeckSelector";
@@ -3259,6 +3260,8 @@ export default function OnlineMatchPage() {
           <MephistophelesOverlay />
           {/* Mephistopheles Summon Overlay (Evil minion summoning) */}
           <MephistophelesSummonOverlay />
+          {/* Pathfinder Play Overlay (reveal and play site) */}
+          <PathfinderPlayOverlay />
           {/* Black Mass Overlay (search for Evil minions) */}
           <BlackMassOverlay />
           {/* Highland Princess Overlay (search for artifact) */}

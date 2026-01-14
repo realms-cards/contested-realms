@@ -4,15 +4,12 @@ import { useFrame } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import { TILE_SIZE } from "@/lib/game/constants";
-import type {
-  CellKey,
-  PendingMephistophelesSummon,
-} from "@/lib/game/store/types";
+import type { CellKey, PendingPathfinderPlay } from "@/lib/game/store/types";
 
-export type MephistophelesSummonTargetOverlayProps = {
+export type PathfinderTargetOverlayProps = {
   tileX: number;
   tileY: number;
-  pendingMephistophelesSummon: PendingMephistophelesSummon | null;
+  pendingPathfinderPlay: PendingPathfinderPlay | null;
 };
 
 // Player colors
@@ -20,38 +17,38 @@ const P1_COLOR = new THREE.Color("#3b82f6"); // blue
 const P2_COLOR = new THREE.Color("#ef4444"); // red
 
 /**
- * Renders a pulsing highlight on tiles that are valid targets for Mephistopheles summon.
- * Shows during the "selectingSite" phase when the player has selected a card.
+ * Renders a pulsing highlight on tiles that are valid targets for Pathfinder.
+ * Shows during the "selectingTarget" phase - adjacent void or Rubble tiles.
  * Uses player color (blue for p1, red for p2).
  */
-export function MephistophelesSummonTargetOverlay({
+export function PathfinderTargetOverlay({
   tileX,
   tileY,
-  pendingMephistophelesSummon,
-}: MephistophelesSummonTargetOverlayProps) {
+  pendingPathfinderPlay,
+}: PathfinderTargetOverlayProps) {
   const fillRef = useRef<THREE.Mesh>(null);
 
   const tileKey = `${tileX},${tileY}` as CellKey;
 
   // Check if this tile is a valid target
   const isValidTarget = useMemo(() => {
-    if (!pendingMephistophelesSummon) return false;
-    if (pendingMephistophelesSummon.phase !== "selectingSite") return false;
-    return pendingMephistophelesSummon.validTargets.includes(tileKey);
-  }, [pendingMephistophelesSummon, tileKey]);
+    if (!pendingPathfinderPlay) return false;
+    if (pendingPathfinderPlay.phase !== "selectingTarget") return false;
+    return pendingPathfinderPlay.validTargets.includes(tileKey);
+  }, [pendingPathfinderPlay, tileKey]);
 
   // Get player color based on owner seat
   const playerColor = useMemo(() => {
-    if (!pendingMephistophelesSummon) return P1_COLOR;
-    return pendingMephistophelesSummon.ownerSeat === "p2" ? P2_COLOR : P1_COLOR;
-  }, [pendingMephistophelesSummon]);
+    if (!pendingPathfinderPlay) return P1_COLOR;
+    return pendingPathfinderPlay.ownerSeat === "p2" ? P2_COLOR : P1_COLOR;
+  }, [pendingPathfinderPlay]);
 
   // Animate the fill with pulsing effect
   useFrame(({ clock }) => {
     const t = clock.getElapsedTime();
     if (fillRef.current) {
       const mat = fillRef.current.material as THREE.MeshBasicMaterial;
-      // Pulse between 0.2 and 0.5 opacity for more visibility
+      // Pulse between 0.2 and 0.5 opacity for visibility
       mat.opacity = 0.35 + Math.sin(t * 4) * 0.15;
     }
   });

@@ -22,6 +22,7 @@ export type AvatarAbility =
   | "animist"
   | "interrogator"
   | "mephistopheles"
+  | "pathfinder"
   | null;
 
 /**
@@ -137,6 +138,17 @@ export function isMephistopheles(
 }
 
 /**
+ * Check if an avatar name indicates Pathfinder
+ * Uses case-insensitive matching
+ * Pathfinder: Atlas can't contain duplicates. Draw no sites during setup.
+ * Tap → Reveal and play the topmost site of your atlas to an adjacent void or Rubble and move there.
+ */
+export function isPathfinder(avatarName: string | null | undefined): boolean {
+  if (!avatarName) return false;
+  return avatarName.toLowerCase().includes("pathfinder");
+}
+
+/**
  * Check if an avatar has the "Tap → Play or draw a site" ability.
  * Most avatars have this standard ability, but some special avatars do not:
  * - Magician: No atlas (all cards in spellbook, including sites)
@@ -172,6 +184,7 @@ export function getAvatarAbility(
   if (name.includes("animist")) return "animist";
   if (name.includes("interrogator")) return "interrogator";
   if (name.includes("mephistopheles")) return "mephistopheles";
+  if (name.includes("pathfinder")) return "pathfinder";
 
   return null;
 }

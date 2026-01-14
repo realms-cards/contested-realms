@@ -7,6 +7,7 @@ import {
   isDruid,
   hasTapToDrawSite,
   isMephistopheles,
+  isPathfinder,
 } from "@/lib/game/avatarAbilities";
 import {
   detectBurrowSubmergeAbilities,
@@ -101,6 +102,8 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   const beginMephistophelesSummon = useGameStore(
     (s) => s.beginMephistophelesSummon
   );
+  const pathfinderUsed = useGameStore((s) => s.pathfinderUsed);
+  const beginPathfinderPlay = useGameStore((s) => s.beginPathfinderPlay);
   const druidFlipped = useGameStore((s) => s.druidFlipped);
   const flipDruid = useGameStore((s) => s.flipDruid);
   const getAvailableMana = useGameStore((s) => s.getAvailableMana);
@@ -1018,6 +1021,36 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
       });
     }
 
+    // Pathfinder play site action (tap → play top site to adjacent void/Rubble and move)
+    const pathfinderHasAlreadyUsed = pathfinderUsed[t.who];
+    if (isMine && isPathfinder(effectiveAvatarName)) {
+      const isNotTapped = !a?.tapped;
+      const atlasCount = zones[t.who]?.atlas?.length ?? 0;
+      const canPlay =
+        isMyTurn &&
+        !pathfinderHasAlreadyUsed &&
+        isNotTapped &&
+        hasPosition &&
+        atlasCount > 0;
+      let pathDescription =
+        "Tap to play top site from atlas to adjacent void/Rubble and move there";
+      if (!isMyTurn) pathDescription = "Can only use on your turn";
+      else if (pathfinderHasAlreadyUsed)
+        pathDescription = "Already used Pathfinder ability this turn";
+      else if (!isNotTapped) pathDescription = "Pathfinder is already tapped";
+      else if (!hasPosition) pathDescription = "Avatar must be on the board";
+      else if (atlasCount === 0)
+        pathDescription = "No sites remaining in atlas";
+
+      extraActions.push({
+        actionId: "__pathfinder_play__",
+        displayText: `Play Site & Move${pathfinderHasAlreadyUsed ? " ✓" : ""}`,
+        isEnabled: canPlay,
+        targetPermanentId: "",
+        description: pathDescription,
+      });
+    }
+
     // Druid flip action (tap → flip, summon Bruin, one-way transformation)
     const hasAlreadyFlipped = druidFlipped[t.who];
     if (isMine && isDruid(effectiveAvatarName)) {
@@ -1838,6 +1871,29 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                           onClick={() => {
                             if (t.kind === "avatar" && action.isEnabled) {
                               beginMephistophelesSummon(t.who);
+                            }
+                            onClose();
+                          }}
+                        >
+                          {action.displayText}
+                        </button>
+                      );
+                    }
+                    // Pathfinder play site action
+                    if (action.actionId === "__pathfinder_play__") {
+                      return (
+                        <button
+                          key={action.actionId}
+                          className={`w-full text-left rounded px-3 py-1 ${
+                            action.isEnabled
+                              ? "bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-200"
+                              : "bg-gray-600/20 text-gray-400 cursor-not-allowed"
+                          }`}
+                          title={action.description}
+                          disabled={!action.isEnabled}
+                          onClick={() => {
+                            if (t.kind === "avatar" && action.isEnabled) {
+                              beginPathfinderPlay(t.who);
                             }
                             onClose();
                           }}

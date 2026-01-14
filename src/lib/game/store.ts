@@ -55,6 +55,10 @@ import {
   createMephistophelesSlice,
   createInitialMephistophelesSummonUsed,
 } from "./store/mephistophelesState";
+import {
+  createPathfinderSlice,
+  createInitialPathfinderUsed,
+} from "./store/pathfinderState";
 import { createMorganaSlice } from "./store/morganaState";
 import { createMotherNatureSlice } from "./store/motherNatureState";
 import {
@@ -194,6 +198,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   ...createInterrogatorSlice(set, get, storeApi),
   ...createAtlanteanFateSlice(set, get, storeApi),
   ...createMephistophelesSlice(set, get, storeApi),
+  ...createPathfinderSlice(set, get, storeApi),
   cardScale: 1,
 
   // Multiplayer transport (injected by online play UI)
@@ -285,6 +290,8 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         pendingMephistopheles: null,
         mephistophelesSummonUsed: createInitialMephistophelesSummonUsed(),
         pendingMephistophelesSummon: null,
+        pathfinderUsed: createInitialPathfinderUsed(),
+        pendingPathfinderPlay: null,
         portalState: null,
         seerState: null,
         imposterMasks: createInitialImposterMasks(),

@@ -5,6 +5,7 @@ import { AuraPreviewOverlay } from "@/lib/game/components/AuraPreviewOverlay";
 import { ChaosTwisterLandingOverlay } from "@/lib/game/components/ChaosTwisterLandingOverlay";
 import { MagicTargetOverlay } from "@/lib/game/components/MagicTargetOverlay";
 import { MephistophelesSummonTargetOverlay } from "@/lib/game/components/MephistophelesSummonTargetOverlay";
+import { PathfinderTargetOverlay } from "@/lib/game/components/PathfinderTargetOverlay";
 import {
   PermanentStack,
   type PermanentStackProps,
@@ -62,6 +63,10 @@ type BoardTileProps = {
   mephistophelesSummonContext: {
     pendingMephistophelesSummon: GameState["pendingMephistophelesSummon"];
     selectMephistophelesSummonTarget: GameState["selectMephistophelesSummonTarget"];
+  };
+  pathfinderContext: {
+    pendingPathfinderPlay: GameState["pendingPathfinderPlay"];
+    selectPathfinderTarget: GameState["selectPathfinderTarget"];
   };
   counterHandlers: PermanentStackProps["counterHandlers"];
   movementHandlers: PermanentStackProps["movementHandlers"];
@@ -133,6 +138,7 @@ export function BoardTile({
   earthquakeContext,
   atlanteanFateContext,
   mephistophelesSummonContext,
+  pathfinderContext,
   counterHandlers,
   movementHandlers,
   handlePointerMove,
@@ -210,6 +216,8 @@ export function BoardTile({
         selectMephistophelesSummonTarget={
           mephistophelesSummonContext.selectMephistophelesSummonTarget
         }
+        pendingPathfinderPlay={pathfinderContext.pendingPathfinderPlay}
+        selectPathfinderTarget={pathfinderContext.selectPathfinderTarget}
       />
 
       {/* Portal overlay (Harbinger ability) - rendered under cards */}
@@ -239,6 +247,13 @@ export function BoardTile({
         pendingMephistophelesSummon={
           mephistophelesSummonContext.pendingMephistophelesSummon
         }
+      />
+
+      {/* Pathfinder target overlay - rendered under cards */}
+      <PathfinderTargetOverlay
+        tileX={tileX}
+        tileY={tileY}
+        pendingPathfinderPlay={pathfinderContext.pendingPathfinderPlay}
       />
 
       {/* Generic Aura spell 2x2 preview - only when Magic Interactions enabled */}

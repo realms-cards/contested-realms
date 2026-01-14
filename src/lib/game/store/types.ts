@@ -335,6 +335,18 @@ export type PendingMephistophelesSummon = {
   createdAt: number;
 };
 
+// Pathfinder Avatar Ability State
+export type PathfinderPhase = "selectingTarget" | "complete";
+
+export type PendingPathfinderPlay = {
+  id: string;
+  ownerSeat: PlayerKey;
+  phase: PathfinderPhase;
+  topSite: CardRef | null; // The site that will be played
+  validTargets: CellKey[]; // Adjacent void or Rubble tiles
+  createdAt: number;
+};
+
 // --- Harbinger Portal State (Gothic expansion) --------------------------------
 export type PortalRollPhase = "pending" | "rolling" | "complete";
 
@@ -2026,6 +2038,17 @@ export type GameState = {
     handIndex: number,
     targetCell: CellKey
   ) => boolean;
+  // Pathfinder Avatar State
+  // Tracks whether each player has used Pathfinder ability this turn
+  pathfinderUsed: Record<PlayerKey, boolean>;
+  // Interactive play flow state
+  pendingPathfinderPlay: PendingPathfinderPlay | null;
+  // Begin the interactive site play flow
+  beginPathfinderPlay: (who: PlayerKey) => void;
+  // Select target tile during play flow
+  selectPathfinderTarget: (targetCell: CellKey) => void;
+  // Cancel the play flow
+  cancelPathfinderPlay: () => void;
   // Headless Haunt State (Gothic expansion)
   // Tracks Headless Haunt/Haunless Head minions for start-of-turn movement
   headlessHaunts: HeadlessHauntEntry[];
@@ -2303,6 +2326,8 @@ export type ServerPatchT = Partial<{
   pendingMephistopheles: GameState["pendingMephistopheles"];
   mephistophelesSummonUsed: GameState["mephistophelesSummonUsed"];
   pendingMephistophelesSummon: GameState["pendingMephistophelesSummon"];
+  pathfinderUsed: GameState["pathfinderUsed"];
+  pendingPathfinderPlay: GameState["pendingPathfinderPlay"];
   resolversDisabled: GameState["resolversDisabled"];
   __replaceKeys: string[];
 }>;
