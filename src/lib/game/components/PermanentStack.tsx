@@ -180,6 +180,7 @@ export type PermanentStackProps = {
   showOwnershipOverlay: boolean;
   cardScale: number;
   stolenCards: GameState["stolenCards"];
+  hasSite?: boolean;
 };
 
 /** Counter badge with +/- buttons that appear on hover */
@@ -315,6 +316,7 @@ export function PermanentStack({
   showOwnershipOverlay,
   cardScale,
   stolenCards: _stolenCards,
+  hasSite = false,
 }: PermanentStackProps) {
   if (items.length === 0) {
     return null;
@@ -496,12 +498,14 @@ export function PermanentStack({
 
         // Burrowed cards at ground level, non-burrowed cards elevated above them
         // When avatar is on this tile, lift permanents above the avatar
+        // When site is on this tile, lift permanents above the site (site rendered by SiteCard)
         const avatarLift = avatarOnThisTile ? layerLift : 0;
+        const siteLift = hasSite && !tokenSiteReplace ? layerLift : 0;
         const baseY = isBurrowed
           ? burrowedElevation
           : tokenSiteReplace
           ? rubbleElevation
-          : baseElevation + burrowedCount * layerLift + avatarLift;
+          : baseElevation + burrowedCount * layerLift + avatarLift + siteLift;
         // Stack index for non-burrowed cards only (burrowed cards don't stack)
         // Cards maintain stable positions based on sort order
         const nonBurrowedIdx = isBurrowed ? 0 : sortedIdx - burrowedCount;
