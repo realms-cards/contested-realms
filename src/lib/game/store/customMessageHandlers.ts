@@ -4040,4 +4040,114 @@ export function handleCustomMessage(
     } catch {}
     return;
   }
+
+  // --- Mephistopheles handlers ---
+  if (t === "mephistophelesBegin") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const casterSeat = (msg as { casterSeat?: unknown }).casterSeat as
+      | PlayerKey
+      | undefined;
+    const spellAny = (msg as { spell?: unknown }).spell;
+
+    if (!id || !casterSeat || typeof spellAny !== "object") return;
+
+    // Skip if we're the caster - we already have the state
+    const actorKey = get().actorKey;
+    if (actorKey === casterSeat) return;
+
+    const rec = spellAny as Record<string, unknown>;
+    set({
+      pendingMephistopheles: {
+        id,
+        spell: {
+          at: rec.at as CellKey,
+          index: Number(rec.index),
+          instanceId: (rec.instanceId as string | null) ?? null,
+          owner: Number(rec.owner) as 1 | 2,
+          card: rec.card as CardRef,
+        },
+        casterSeat,
+        phase: "confirming",
+        createdAt: Date.now(),
+      },
+    } as Partial<GameState> as GameState);
+
+    try {
+      get().log(
+        `[${casterSeat.toUpperCase()}] Mephistopheles enters - awaiting decision`
+      );
+    } catch {}
+    return;
+  }
+
+  if (t === "mephistophelesResolve") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const casterSeat = (msg as { casterSeat?: unknown }).casterSeat as
+      | PlayerKey
+      | undefined;
+
+    if (!id || !casterSeat) return;
+
+    const pending = get().pendingMephistopheles;
+    if (!pending || pending.id !== id) return;
+
+    // Skip if we're the caster - we already have the state
+    const actorKey = get().actorKey;
+    if (actorKey === pending.casterSeat) return;
+
+    // Clear pending state - actual state changes come via patches
+    set({ pendingMephistopheles: null } as Partial<GameState> as GameState);
+
+    try {
+      get().log(
+        `[${casterSeat.toUpperCase()}] Mephistopheles becomes their new Avatar!`
+      );
+    } catch {}
+    return;
+  }
+
+  if (t === "mephistophelesCancel") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+
+    if (!id) return;
+
+    const pending = get().pendingMephistopheles;
+    if (!pending || pending.id !== id) return;
+
+    // Skip if we're the caster - we already have the state
+    const actorKey = get().actorKey;
+    if (actorKey === pending.casterSeat) return;
+
+    set({ pendingMephistopheles: null } as Partial<GameState> as GameState);
+
+    try {
+      get().log(
+        `[${pending.casterSeat.toUpperCase()}] Mephistopheles remains as a minion`
+      );
+    } catch {}
+    return;
+  }
+
+  if (t === "mephistophelesSummon") {
+    const who = (msg as { who?: unknown }).who as PlayerKey | undefined;
+    const card = (msg as { card?: unknown }).card as CardRef | undefined;
+    const targetCell = (msg as { targetCell?: unknown }).targetCell as
+      | CellKey
+      | undefined;
+
+    if (!who || !card || !targetCell) return;
+
+    // Skip if we're the summoner - we already have the state
+    const actorKey = get().actorKey;
+    if (actorKey === who) return;
+
+    try {
+      get().log(
+        `[${who.toUpperCase()}] Mephistopheles summons ${
+          card.name
+        } to the battlefield!`
+      );
+    } catch {}
+    return;
+  }
 }

@@ -451,7 +451,9 @@ export function PermanentStack({
           selectedPermanent &&
           selectedPermanent.at === key &&
           selectedPermanent.index === idx;
-        const isToken = (p.card.type || "").toLowerCase().includes("token");
+        const cardType = (p.card.type || "").toLowerCase();
+        const isToken = cardType.includes("token");
+        const isAura = cardType.includes("aura");
         const tokenDef = isToken
           ? TOKEN_BY_NAME[(p.card.name || "").toLowerCase()]
           : undefined;
@@ -462,11 +464,13 @@ export function PermanentStack({
             ? -avatarAvoidZ
             : avatarAvoidZ
           : 0;
-        const zBase = tokenSiteReplace
-          ? 0
-          : owner === 1
-          ? -TILE_SIZE * 0.5 + marginZ + avatarShiftZ
-          : TILE_SIZE * 0.5 - marginZ + avatarShiftZ;
+        // Auras sit at intersections - no owner-based z offset
+        const zBase =
+          tokenSiteReplace || isAura
+            ? 0
+            : owner === 1
+            ? -TILE_SIZE * 0.5 + marginZ + avatarShiftZ
+            : TILE_SIZE * 0.5 - marginZ + avatarShiftZ;
         const rotZ =
           (owner === 1 ? 0 : Math.PI) +
           (tokenSiteReplace ? -Math.PI / 2 : 0) +

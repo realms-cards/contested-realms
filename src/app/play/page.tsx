@@ -34,6 +34,8 @@ import MotherNatureOverlay from "@/components/game/MotherNatureOverlay";
 import HeadlessHauntOverlay from "@/components/game/HeadlessHauntOverlay";
 import InterrogatorChoiceOverlay from "@/components/game/InterrogatorChoiceOverlay";
 import AtlanteanFateOverlay from "@/components/game/AtlanteanFateOverlay";
+import MephistophelesOverlay from "@/components/game/MephistophelesOverlay";
+import MephistophelesSummonOverlay from "@/components/game/MephistophelesSummonOverlay";
 import OfflineMulliganScreen from "@/components/game/OfflineMulliganScreen";
 import OnlineLifeCounters from "@/components/game/OnlineLifeCounters";
 import PigsOfTheSounderOverlay from "@/components/game/PigsOfTheSounderOverlay";
@@ -928,6 +930,12 @@ export default function PlayPage() {
 
       {/* Atlantean Fate Overlay (4x4 area selection for flood aura) */}
       <AtlanteanFateOverlay />
+
+      {/* Mephistopheles Overlay (avatar replacement confirmation) */}
+      <MephistophelesOverlay />
+
+      {/* Mephistopheles Summon Overlay (Evil minion summoning) */}
+      <MephistophelesSummonOverlay />
 
       {/* Black Mass Overlay (search for Evil minions) */}
       <BlackMassOverlay />

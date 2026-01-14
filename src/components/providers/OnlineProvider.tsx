@@ -1762,9 +1762,43 @@ export default function OnlineProvider({
     },
   };
 
+  // Persistent audio element ref for voice chat
+  const persistentAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Keep persistent audio element in sync with remote stream and playback state
+  useEffect(() => {
+    const el = persistentAudioRef.current;
+    if (!el) return;
+
+    try {
+      const remoteStream = voiceRtc.remoteStream;
+      if (remoteStream) {
+        el.srcObject = remoteStream;
+        if (voicePlaybackEnabled) {
+          el.muted = false;
+          const playPromise = el.play();
+          if (playPromise && typeof playPromise.then === "function") {
+            playPromise.catch(() => {
+              // Autoplay blocked - will resume on user interaction
+            });
+          }
+        } else {
+          el.muted = true;
+        }
+      } else {
+        el.pause();
+        el.srcObject = null;
+      }
+    } catch {
+      // Ignore errors
+    }
+  }, [voiceRtc.remoteStream, voicePlaybackEnabled]);
+
   return (
     <OnlineContext.Provider value={ctxValue}>
       {children}
+      {/* Persistent audio element for voice chat - stays mounted regardless of UI state */}
+      <audio ref={persistentAudioRef} autoPlay playsInline className="hidden" />
       {connToast && (
         <div
           className={`fixed top-3 right-3 z-[3000] text-white text-sm px-3 py-2 rounded shadow ring-1 ring-white/20 ${

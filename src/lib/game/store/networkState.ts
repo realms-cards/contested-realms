@@ -946,6 +946,24 @@ export const createNetworkSlice: StateCreator<
       } else if (replaceKeys.has("necromancerSkeletonUsed")) {
         next.necromancerSkeletonUsed = { p1: false, p2: false };
       }
+      // Mephistopheles summon used state (Gothic expansion)
+      if (p.mephistophelesSummonUsed !== undefined) {
+        next.mephistophelesSummonUsed = p.mephistophelesSummonUsed;
+      } else if (replaceKeys.has("mephistophelesSummonUsed")) {
+        next.mephistophelesSummonUsed = { p1: false, p2: false };
+      }
+      // Pending Mephistopheles state (Gothic expansion)
+      if (p.pendingMephistopheles !== undefined) {
+        next.pendingMephistopheles = p.pendingMephistopheles;
+      } else if (replaceKeys.has("pendingMephistopheles")) {
+        next.pendingMephistopheles = null;
+      }
+      // Pending Mephistopheles Summon state (Gothic expansion)
+      if (p.pendingMephistophelesSummon !== undefined) {
+        next.pendingMephistophelesSummon = p.pendingMephistophelesSummon;
+      } else if (replaceKeys.has("pendingMephistophelesSummon")) {
+        next.pendingMephistophelesSummon = null;
+      }
       // Druid flipped state (Arthurian Legends)
       if (p.druidFlipped !== undefined) {
         next.druidFlipped = p.druidFlipped;
@@ -1293,6 +1311,18 @@ export const createNetworkSlice: StateCreator<
       // Necromancer skeleton used state - applyPatch version
       if (p.necromancerSkeletonUsed !== undefined) {
         next.necromancerSkeletonUsed = p.necromancerSkeletonUsed;
+      }
+      // Mephistopheles summon used state - applyPatch version
+      if (p.mephistophelesSummonUsed !== undefined) {
+        next.mephistophelesSummonUsed = p.mephistophelesSummonUsed;
+      }
+      // Pending Mephistopheles state - applyPatch version
+      if (p.pendingMephistopheles !== undefined) {
+        next.pendingMephistopheles = p.pendingMephistopheles;
+      }
+      // Pending Mephistopheles Summon state - applyPatch version
+      if (p.pendingMephistophelesSummon !== undefined) {
+        next.pendingMephistophelesSummon = p.pendingMephistophelesSummon;
       }
       // Druid flipped state - applyPatch version
       if (p.druidFlipped !== undefined) {

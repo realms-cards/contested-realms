@@ -178,7 +178,7 @@ export default function Hand3D({
   // Hand zone: portion of the screen height from the bottom that counts as "in hand zone"
   // Higher value = smaller zone (cursor must be closer to bottom)
   // On touch devices, use a larger trigger zone for easier access
-  const HAND_ZONE_TOP_FRAC = isCoarsePointer ? 0.82 : 0.88; // Mobile: bottom 18%, Desktop: bottom 12%
+  const HAND_ZONE_TOP_FRAC = isCoarsePointer ? 0.82 : 0.95; // Mobile: bottom 18%, Desktop: bottom 12%
   const HAND_ZONE_BOTTOM_FRAC = 1.0; // Allow touching very edge on mobile
   // Horizontal zone: center portion of screen width that triggers hand reveal
   // On touch devices, use wider zone for easier access
@@ -489,7 +489,8 @@ export default function Hand3D({
     handSpreadLerp.current = 1; // Always spread
 
     // Push hand further off-screen when force hidden via Space or any dragging
-    const normalHiddenOffset = -CARD_LONG * HAND_CARD_SCALE * 0.8;
+    // Show only ~40px (card titles) when collapsed - hide ~92% of the card
+    const normalHiddenOffset = -CARD_LONG * HAND_CARD_SCALE * 1;
     const forceHiddenOffset = -CARD_LONG * HAND_CARD_SCALE * 1.8; // Almost completely off-screen
     const isDraggingFromHand =
       dragFromHand && selected && selected.who === owner;
@@ -560,12 +561,15 @@ export default function Hand3D({
     }
 
     // Smooth hover index animation (sliding highlight)
+    // When collapsed, force no hover so cards don't stick out
     {
       const n = sortedHand.length;
       const target = hoverTargetRef.current;
       const prev = hoverLerpRef.current;
       const kh = 0.3; // hover easing
-      if (n > 0 && target >= 0) {
+      // When collapsed (revealLerp < 0.5), don't preserve hover state
+      const isCollapsed = revealLerp.current < 0.5;
+      if (n > 0 && target >= 0 && !isCollapsed) {
         const clamped = Math.max(0, Math.min(n - 1, target));
         hoverLerpRef.current += (clamped - hoverLerpRef.current) * kh;
       } else {
@@ -603,10 +607,17 @@ export default function Hand3D({
         hoverWeight: number;
       }[];
 
-    // Always use full fan angle (no compact state)
+    // Reduce fan angle when collapsed to make titles more readable
+    // revealLerp: 0 = collapsed, 1 = fully revealed
+    const revealAmount = revealLerp.current;
+    const collapsedAngleMult = 0; // Much tighter fan when collapsed
+    const expandedAngleMult = 0.4;
+    const angleMult =
+      collapsedAngleMult +
+      (expandedAngleMult - collapsedAngleMult) * revealAmount;
     const maxAngle = Math.min(
-      HAND_MAX_TOTAL_ANGLE * 0.4,
-      n * HAND_STEP_MAX * 0.3
+      HAND_MAX_TOTAL_ANGLE * angleMult,
+      n * HAND_STEP_MAX * angleMult
     );
 
     // Dynamic spacing: show more of each card when few cards, compress when many
@@ -621,32 +632,61 @@ export default function Hand3D({
     const stepAngle = n > 1 ? maxAngle / (n - 1) : 0;
     const startAngle = -maxAngle / 2;
 
+    // Check sort direction for site positioning
+    const sitesFirst = graphicsSettings.handSortOrder !== "spellsFirst";
+
     return new Array(n).fill(0).map((_, i) => {
       // Map sorted index back to original hand index
       const sortedCard = sortedHand[i];
       const originalIndex = hand.findIndex((card) => card === sortedCard);
       const isSelected =
         selected && selected.who === owner && selected.index === originalIndex;
+      const isSite = (sortedCard.type || "").toLowerCase().includes("site");
 
       // Fan angle
       const angle = startAngle + i * stepAngle;
       const rot = angle; // Positive for upward fan
 
       // X position centered for the whole fan
-      const x = i * baseSpacing - ((n - 1) * baseSpacing) / 2;
+      // For sites at the outer edge: flip position based on sort order
+      let x = i * baseSpacing - ((n - 1) * baseSpacing) / 2;
+      // When sites first: sites are at left (negative x), flip to right edge
+      // When spells first: sites are at right (positive x), flip to left edge
+      if (isSite && n > 1) {
+        const siteOuterOffset = CARD_SHORT * 0.15 * (1 - revealAmount); // Only when collapsed
+        x += sitesFirst ? -siteOuterOffset : siteOuterOffset;
+      }
 
       // Y position: arc + hover pop-up
       const arcY = -Math.abs(Math.sin(angle)) * HAND_FAN_ARC_Y * 1.5;
       // Focus-based lift without sliding the fan
+      // Scale by revealAmount so lift fades when collapsed
       const w = Math.max(0, 1 - Math.abs(i - focusLerp)); // 0..1 focus weight
-      const liftFromFocus = CARD_LONG * 0.06 * w;
+      const liftFromFocus = CARD_LONG * 0.06 * w * revealAmount;
       // Sliding hover highlight adds extra lift that moves smoothly across cards
+      // Scale by revealAmount so hover lift fades when collapsed
       const hoverWeight =
-        hoverLerp >= 0 ? Math.max(0, 1 - Math.abs(i - hoverLerp)) : 0;
-      const y = arcY + liftFromFocus + CARD_LONG * 0.08 * hoverWeight;
+        hoverLerp >= 0
+          ? Math.max(0, 1 - Math.abs(i - hoverLerp)) * revealAmount
+          : 0;
+      // Sites are rotated 90°, lift them when collapsed so top borders align with spells
+      // CARD_LONG is the long edge, CARD_SHORT is the short edge
+      // Site top needs to align with spell top: lift by half the difference
+      const siteCollapsedLift = isSite
+        ? (CARD_LONG - CARD_SHORT) * 0.5 * (1 - revealAmount)
+        : 0;
+      const y =
+        arcY +
+        liftFromFocus +
+        CARD_LONG * 0.08 * hoverWeight +
+        siteCollapsedLift;
 
       // Scale: hovered card slightly bigger with smoother scaling
-      const scale = Math.max(1 + 0.06 * w, 1.0 + 0.08 * hoverWeight);
+      // Scale effects also fade when collapsed
+      const scale = Math.max(
+        1 + 0.06 * w * revealAmount,
+        1.0 + 0.08 * hoverWeight
+      );
 
       return {
         x,
@@ -658,7 +698,16 @@ export default function Hand3D({
         hoverWeight,
       };
     });
-  }, [sortedHand, hand, selected, owner, focusLerp, hoverLerp, dragFromHand]);
+  }, [
+    sortedHand,
+    hand,
+    selected,
+    owner,
+    focusLerp,
+    hoverLerp,
+    dragFromHand,
+    graphicsSettings.handSortOrder,
+  ]);
 
   // Clamp focus to hand size changes
   useEffect(() => {
@@ -1054,12 +1103,17 @@ export default function Hand3D({
         const baseScale = HAND_CARD_SCALE;
         const scale = baseScale * layoutScale;
         // Spells should render on top of sites: sites get lower render order, spells get higher
+        // When spells first (sites on right), invert site order so leftmost site overlaps rightmost
+        const sitesFirst = graphicsSettings.handSortOrder !== "spellsFirst";
         const baseRenderOrder = showCardBacks ? -5 : isSite ? 1000 : 2000;
+        // For sites when on the right side, invert the index so inner sites render on top
+        const indexForOrder =
+          isSite && !sitesFirst ? sortedHand.length - 1 - i : i;
         const renderOrder = showCardBacks
           ? baseRenderOrder + i
           : hoverWeight > 0.5
           ? 3000
-          : baseRenderOrder + i;
+          : baseRenderOrder + indexForOrder;
         const handInstanceKey = `hand:${owner}:${originalIndex}`;
         const remoteHighlightColor = getRemoteHighlightColor(c, {
           instanceKey: handInstanceKey,

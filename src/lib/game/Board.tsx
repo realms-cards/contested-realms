@@ -702,6 +702,14 @@ export default function Board({
   const setAtlanteanFatePreview = useScopedStore(
     (s) => s.setAtlanteanFatePreview
   );
+
+  // Mephistopheles summon flow (Evil minion to adjacent site)
+  const pendingMephistophelesSummon = useScopedStore(
+    (s) => s.pendingMephistophelesSummon
+  );
+  const selectMephistophelesSummonTarget = useScopedStore(
+    (s) => s.selectMephistophelesSummonTarget
+  );
   const selectAtlanteanFateCorner = useScopedStore(
     (s) => s.selectAtlanteanFateCorner
   );
@@ -1002,6 +1010,13 @@ export default function Board({
     }),
     [pendingAtlanteanFate, setAtlanteanFatePreview, selectAtlanteanFateCorner]
   );
+  const mephistophelesSummonContext = useMemo(
+    () => ({
+      pendingMephistophelesSummon,
+      selectMephistophelesSummonTarget,
+    }),
+    [pendingMephistophelesSummon, selectMephistophelesSummonTarget]
+  );
   const counterHandlers = useMemo(
     () => ({
       increment: incrementPermanentCounter,
@@ -1236,6 +1251,7 @@ export default function Board({
               chaosTwisterContext={chaosTwisterContext}
               earthquakeContext={earthquakeContext}
               atlanteanFateContext={atlanteanFateContext}
+              mephistophelesSummonContext={mephistophelesSummonContext}
               counterHandlers={counterHandlers}
               movementHandlers={movementHandlers}
               handlePointerMove={handlePointerMove}

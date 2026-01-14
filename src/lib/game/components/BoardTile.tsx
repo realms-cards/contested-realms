@@ -4,6 +4,7 @@ import { AtlanteanFateAreaOverlay } from "@/lib/game/components/AtlanteanFateAre
 import { AuraPreviewOverlay } from "@/lib/game/components/AuraPreviewOverlay";
 import { ChaosTwisterLandingOverlay } from "@/lib/game/components/ChaosTwisterLandingOverlay";
 import { MagicTargetOverlay } from "@/lib/game/components/MagicTargetOverlay";
+import { MephistophelesSummonTargetOverlay } from "@/lib/game/components/MephistophelesSummonTargetOverlay";
 import {
   PermanentStack,
   type PermanentStackProps,
@@ -57,6 +58,10 @@ type BoardTileProps = {
     pendingAtlanteanFate: GameState["pendingAtlanteanFate"];
     setAtlanteanFatePreview: GameState["setAtlanteanFatePreview"];
     selectAtlanteanFateCorner: GameState["selectAtlanteanFateCorner"];
+  };
+  mephistophelesSummonContext: {
+    pendingMephistophelesSummon: GameState["pendingMephistophelesSummon"];
+    selectMephistophelesSummonTarget: GameState["selectMephistophelesSummonTarget"];
   };
   counterHandlers: PermanentStackProps["counterHandlers"];
   movementHandlers: PermanentStackProps["movementHandlers"];
@@ -127,6 +132,7 @@ export function BoardTile({
   chaosTwisterContext,
   earthquakeContext,
   atlanteanFateContext,
+  mephistophelesSummonContext,
   counterHandlers,
   movementHandlers,
   handlePointerMove,
@@ -198,6 +204,12 @@ export function BoardTile({
         selectAtlanteanFateCorner={
           atlanteanFateContext.selectAtlanteanFateCorner
         }
+        pendingMephistophelesSummon={
+          mephistophelesSummonContext.pendingMephistophelesSummon
+        }
+        selectMephistophelesSummonTarget={
+          mephistophelesSummonContext.selectMephistophelesSummonTarget
+        }
       />
 
       {/* Portal overlay (Harbinger ability) - rendered under cards */}
@@ -215,6 +227,18 @@ export function BoardTile({
         tileX={tileX}
         tileY={tileY}
         pendingAtlanteanFate={atlanteanFateContext.pendingAtlanteanFate}
+        permanents={permanents}
+        boardWidth={boardSize.w}
+        boardHeight={boardSize.h}
+      />
+
+      {/* Mephistopheles summon target overlay - rendered under cards */}
+      <MephistophelesSummonTargetOverlay
+        tileX={tileX}
+        tileY={tileY}
+        pendingMephistophelesSummon={
+          mephistophelesSummonContext.pendingMephistophelesSummon
+        }
       />
 
       {/* Generic Aura spell 2x2 preview - only when Magic Interactions enabled */}
@@ -224,6 +248,9 @@ export function BoardTile({
         pendingMagic={pendingMagic}
         magicGuidesActive={magicGuidesActive}
         metaByCardId={metaByCardId}
+        permanents={permanents}
+        boardWidth={boardSize.w}
+        boardHeight={boardSize.h}
       />
 
       {magicGuidesActive && (

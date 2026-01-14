@@ -19,6 +19,7 @@ import type {
   Permanents,
 } from "@/lib/game/store/types";
 import { TOKEN_BY_NAME } from "@/lib/game/tokens";
+import { isAuraSubtype } from "@/lib/game/store/atlanteanFateState";
 
 type LastCrossMove = {
   fromKey: string;
@@ -582,20 +583,74 @@ export function useTileDropHandler({
           if (fKeyHeldRef.current || isRightClick) {
             setDragFaceDown(true);
           }
-          playSelectedTo(tileX, tileY);
-          try {
-            playCardPlay();
-          } catch {}
-          setDragFromHand(false);
-          setGhost(null);
-          const type = (selectedCard.card?.type || "").toLowerCase();
-          const isToken = type.includes("token");
-          const tokenDef = isToken
-            ? TOKEN_BY_NAME[(selectedCard.card?.name || "").toLowerCase()]
-            : undefined;
-          const tokenSiteReplace = !!tokenDef?.siteReplacement;
-          if (!type.includes("site") && !tokenSiteReplace) {
-            setPermanentOffset(dropKey, newIndex, [offX, offZ]);
+
+          // Check if this is a 2x2 Aura - snap to intersection instead of tile center
+          // Border auras (Wall of Ice, etc.) are excluded and placed normally
+          const cardId = selectedCard.card?.cardId ?? 0;
+          const cardMeta = metaByCardId[cardId];
+          // Type can be on card directly OR in metaByCardId
+          const cardType = (
+            selectedCard.card?.type ||
+            cardMeta?.type ||
+            ""
+          ).toLowerCase();
+          const cardName = selectedCard.card?.name || "";
+          // Check if it's an aura type and not in the exclusion list
+          const isAura =
+            cardType.includes("aura") && isAuraSubtype("aura", cardName); // Pass "aura" to check exclusion list only
+
+          console.log("[useTileDropHandler] Aura check:", {
+            cardName,
+            cardType,
+            cardTypeFromCard: selectedCard.card?.type,
+            cardTypeFromMeta: cardMeta?.type,
+            isAura,
+            wx,
+            wz,
+            tileX,
+            tileY,
+          });
+
+          if (isAura) {
+            // Aura cards sit at the intersection of 4 tiles
+            // Use raw drop offset without the dropZBase stacking adjustment
+            const auraOffX = clampOffset(wx - pos[0], TILE_OFFSET_LIMIT_X);
+            const auraOffZ = clampOffset(wz - pos[2], TILE_OFFSET_LIMIT_Z);
+
+            console.log(
+              "[useTileDropHandler] Aura placement at intersection:",
+              {
+                tileX,
+                tileY,
+                auraOffX,
+                auraOffZ,
+              }
+            );
+
+            // Play to the tile with raw offset to keep card exactly at intersection
+            playSelectedTo(tileX, tileY, [auraOffX, auraOffZ]);
+            try {
+              playCardPlay();
+            } catch {}
+            setDragFromHand(false);
+            setGhost(null);
+          } else {
+            // Regular non-aura card placement
+            playSelectedTo(tileX, tileY);
+            try {
+              playCardPlay();
+            } catch {}
+            setDragFromHand(false);
+            setGhost(null);
+            const type = (selectedCard.card?.type || "").toLowerCase();
+            const isToken = type.includes("token");
+            const tokenDef = isToken
+              ? TOKEN_BY_NAME[(selectedCard.card?.name || "").toLowerCase()]
+              : undefined;
+            const tokenSiteReplace = !!tokenDef?.siteReplacement;
+            if (!type.includes("site") && !tokenSiteReplace) {
+              setPermanentOffset(dropKey, newIndex, [offX, offZ]);
+            }
           }
         }
         lastDropAt.current = Date.now();

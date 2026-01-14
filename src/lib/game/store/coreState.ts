@@ -604,6 +604,12 @@ export const createCoreSlice: StateCreator<
       [nextKey]: false, // Reset for the player whose turn is starting
     };
 
+    // Reset mephistopheles summon usage for the next player's turn
+    const mephistophelesSummonUsedNext = {
+      ...state.mephistophelesSummonUsed,
+      [nextKey]: false, // Reset for the player whose turn is starting
+    };
+
     // Don't send turn in patch - server increments turn when currentPlayer changes
     // Only send affected player's data to avoid overwriting opponent's state
     const base: ServerPatchT = {
@@ -612,6 +618,7 @@ export const createCoreSlice: StateCreator<
       hasDrawnThisTurn: false, // Reset draw tracking for new turn
       players: { [nextKey]: playersNext[nextKey] } as GameState["players"],
       necromancerSkeletonUsed: necromancerSkeletonUsedNext,
+      mephistophelesSummonUsed: mephistophelesSummonUsedNext,
     };
     const deltaPatch =
       updates.length > 0 ? createPermanentDeltaPatch(updates) : undefined;
@@ -627,6 +634,7 @@ export const createCoreSlice: StateCreator<
       avatars: avatarsNext,
       players: playersNext,
       necromancerSkeletonUsed: necromancerSkeletonUsedNext,
+      mephistophelesSummonUsed: mephistophelesSummonUsedNext,
       selectedCard: null,
       selectedPermanent: null,
     });

@@ -2,6 +2,19 @@
 
 ## January 2026
 
+### Jan 14 - Atlantean Fate and token rendering
+
+- **tokens render great in the stack now**
+- **smaller hand fly-in zone** to make the hand less distracting when doing things on the board, also show only the very top of cards in hand when collapsed
+- **add Mephitopheles and Atlantean fate** automatic resolver
+- **add flood and silence to site right-click**
+- **add copy** to cards on board, copies get banished and can not go to cemetery
+- **made camera dolly smoother**
+- **fix some online match forfeits not counting as wins for the remaining player**
+- **add tap to draw a site** for avatars that actually tap to draw a site
+- **fixes for carryable artifacts** and token units can carry them as well now
+- **fix bug with voice enabling only when user badge is open**
+
 ### Jan 11 - Smooth hands and board dragging
 
 - **allow Magician to put sites back into spellbook**

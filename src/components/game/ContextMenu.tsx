@@ -6,6 +6,7 @@ import {
   isNecromancer,
   isDruid,
   hasTapToDrawSite,
+  isMephistopheles,
 } from "@/lib/game/avatarAbilities";
 import {
   detectBurrowSubmergeAbilities,
@@ -94,6 +95,12 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     (s) => s.necromancerSkeletonUsed
   );
   const summonSkeletonHere = useGameStore((s) => s.summonSkeletonHere);
+  const mephistophelesSummonUsed = useGameStore(
+    (s) => s.mephistophelesSummonUsed
+  );
+  const beginMephistophelesSummon = useGameStore(
+    (s) => s.beginMephistophelesSummon
+  );
   const druidFlipped = useGameStore((s) => s.druidFlipped);
   const flipDruid = useGameStore((s) => s.flipDruid);
   const getAvailableMana = useGameStore((s) => s.getAvailableMana);
@@ -991,6 +998,26 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
       });
     }
 
+    // Mephistopheles summon Evil minion action (once per turn, no mana cost)
+    const mephHasAlreadyUsed = mephistophelesSummonUsed[t.who];
+    if (isMine && isMephistopheles(effectiveAvatarName)) {
+      const canSummon = isMyTurn && !mephHasAlreadyUsed && hasPosition;
+      let mephDescription =
+        "Summon an Evil minion from your hand to an adjacent site (once per turn)";
+      if (!isMyTurn) mephDescription = "Can only summon on your turn";
+      else if (mephHasAlreadyUsed)
+        mephDescription = "Already summoned an Evil minion this turn";
+      else if (!hasPosition) mephDescription = "Avatar must be on the board";
+
+      extraActions.push({
+        actionId: "__mephistopheles_summon__",
+        displayText: `Summon Evil Minion${mephHasAlreadyUsed ? " ✓" : ""}`,
+        isEnabled: canSummon,
+        targetPermanentId: "",
+        description: mephDescription,
+      });
+    }
+
     // Druid flip action (tap → flip, summon Bruin, one-way transformation)
     const hasAlreadyFlipped = druidFlipped[t.who];
     if (isMine && isDruid(effectiveAvatarName)) {
@@ -1788,6 +1815,29 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                           onClick={() => {
                             if (t.kind === "avatar" && action.isEnabled) {
                               summonSkeletonHere(t.who);
+                            }
+                            onClose();
+                          }}
+                        >
+                          {action.displayText}
+                        </button>
+                      );
+                    }
+                    // Mephistopheles summon Evil minion action
+                    if (action.actionId === "__mephistopheles_summon__") {
+                      return (
+                        <button
+                          key={action.actionId}
+                          className={`w-full text-left rounded px-3 py-1 ${
+                            action.isEnabled
+                              ? "bg-red-600/20 hover:bg-red-600/30 text-red-200"
+                              : "bg-gray-600/20 text-gray-400 cursor-not-allowed"
+                          }`}
+                          title={action.description}
+                          disabled={!action.isEnabled}
+                          onClick={() => {
+                            if (t.kind === "avatar" && action.isEnabled) {
+                              beginMephistophelesSummon(t.who);
                             }
                             onClose();
                           }}
