@@ -300,6 +300,41 @@ export type PendingAtlanteanFate = {
   createdAt: number;
 };
 
+// --- Mephistopheles State (Gothic expansion) ----------------------------------
+// Mephistopheles: Can be played anywhere, player chooses to replace avatar or keep as minion
+// Second ability: Once per turn, summon an Evil minion from hand to adjacent site
+export type MephistophelesPhase = "confirming" | "complete";
+
+export type PendingMephistopheles = {
+  id: string;
+  spell: {
+    at: CellKey;
+    index: number;
+    instanceId: string | null;
+    owner: 1 | 2;
+    card: CardRef;
+  };
+  casterSeat: PlayerKey;
+  phase: MephistophelesPhase;
+  createdAt: number;
+};
+
+// Mephistopheles Summon State - for the interactive Evil minion summoning
+export type MephistophelesSummonPhase =
+  | "selectingCard" // Player is selecting an Evil minion from hand
+  | "selectingSite" // Player is selecting an adjacent site
+  | "complete";
+
+export type PendingMephistophelesSummon = {
+  id: string;
+  ownerSeat: PlayerKey;
+  phase: MephistophelesSummonPhase;
+  selectedCardIndex: number | null; // Index in hand of selected Evil minion
+  selectedCard: CardRef | null; // The selected card
+  validTargets: CellKey[]; // Adjacent sites where the minion can be summoned
+  createdAt: number;
+};
+
 // --- Harbinger Portal State (Gothic expansion) --------------------------------
 export type PortalRollPhase = "pending" | "rolling" | "complete";
 
@@ -1805,7 +1840,7 @@ export type GameState = {
   selectHandCard: (who: PlayerKey, index: number) => void;
   selectAvatar: (who: PlayerKey) => void;
   clearSelection: () => void;
-  playSelectedTo: (x: number, y: number) => void;
+  playSelectedTo: (x: number, y: number, offset?: [number, number]) => void;
   playFromPileTo: (x: number, y: number) => void;
   drawFromPileToHand: () => void;
   moveCardFromHandToPile: (
@@ -1957,6 +1992,40 @@ export type GameState = {
   isSiteFlooded: (cellKey: CellKey) => boolean;
   // Remove Atlantean Fate aura when the permanent is removed
   removeAtlanteanFateAura: (auraId: string) => void;
+  // Mephistopheles State (Gothic expansion)
+  // Mephistopheles: cast to Avatar's location to replace them as your Avatar
+  // Second ability: once per turn, summon an Evil minion from hand to adjacent site
+  pendingMephistopheles: PendingMephistopheles | null;
+  beginMephistopheles: (input: {
+    spell: {
+      at: CellKey;
+      index: number;
+      instanceId: string | null;
+      owner: 1 | 2;
+      card: CardRef;
+    };
+    casterSeat: PlayerKey;
+  }) => void;
+  resolveMephistopheles: () => void;
+  cancelMephistopheles: () => void;
+  // Tracks whether each player has used Mephistopheles summon this turn
+  mephistophelesSummonUsed: Record<PlayerKey, boolean>;
+  // Interactive summon flow state
+  pendingMephistophelesSummon: PendingMephistophelesSummon | null;
+  // Begin the interactive Evil minion summon flow
+  beginMephistophelesSummon: (who: PlayerKey) => void;
+  // Select an Evil minion from hand during summon flow
+  selectMephistophelesSummonCard: (handIndex: number) => void;
+  // Select target site during summon flow
+  selectMephistophelesSummonTarget: (targetCell: CellKey) => void;
+  // Cancel the summon flow
+  cancelMephistophelesSummon: () => void;
+  // Legacy: Direct summon (kept for programmatic use)
+  summonEvilMinionFromHand: (
+    who: PlayerKey,
+    handIndex: number,
+    targetCell: CellKey
+  ) => boolean;
   // Headless Haunt State (Gothic expansion)
   // Tracks Headless Haunt/Haunless Head minions for start-of-turn movement
   headlessHaunts: HeadlessHauntEntry[];
@@ -2231,6 +2300,9 @@ export type ServerPatchT = Partial<{
   pendingAnimistCast: GameState["pendingAnimistCast"];
   pendingInterrogatorChoice: GameState["pendingInterrogatorChoice"];
   pendingAtlanteanFate: GameState["pendingAtlanteanFate"];
+  pendingMephistopheles: GameState["pendingMephistopheles"];
+  mephistophelesSummonUsed: GameState["mephistophelesSummonUsed"];
+  pendingMephistophelesSummon: GameState["pendingMephistophelesSummon"];
   resolversDisabled: GameState["resolversDisabled"];
   __replaceKeys: string[];
 }>;

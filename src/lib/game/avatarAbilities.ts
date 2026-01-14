@@ -21,6 +21,7 @@ export type AvatarAbility =
   | "druid"
   | "animist"
   | "interrogator"
+  | "mephistopheles"
   | null;
 
 /**
@@ -124,6 +125,18 @@ export function isInterrogator(avatarName: string | null | undefined): boolean {
 }
 
 /**
+ * Check if an avatar name indicates Mephistopheles (Gothic expansion)
+ * Uses case-insensitive matching
+ * Mephistopheles: Cast to Avatar's location to replace them. Once per turn, summon Evil minion to adjacent site.
+ */
+export function isMephistopheles(
+  avatarName: string | null | undefined
+): boolean {
+  if (!avatarName) return false;
+  return avatarName.toLowerCase().includes("mephistopheles");
+}
+
+/**
  * Check if an avatar has the "Tap → Play or draw a site" ability.
  * Most avatars have this standard ability, but some special avatars do not:
  * - Magician: No atlas (all cards in spellbook, including sites)
@@ -158,6 +171,7 @@ export function getAvatarAbility(
   if (name.includes("druid")) return "druid";
   if (name.includes("animist")) return "animist";
   if (name.includes("interrogator")) return "interrogator";
+  if (name.includes("mephistopheles")) return "mephistopheles";
 
   return null;
 }

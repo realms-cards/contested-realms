@@ -40,6 +40,9 @@ export type TileInteractionPlaneProps = {
   pendingAtlanteanFate?: GameState["pendingAtlanteanFate"];
   setAtlanteanFatePreview?: GameState["setAtlanteanFatePreview"];
   selectAtlanteanFateCorner?: GameState["selectAtlanteanFateCorner"];
+  // Mephistopheles summon target selection support
+  pendingMephistophelesSummon?: GameState["pendingMephistophelesSummon"];
+  selectMephistophelesSummonTarget?: GameState["selectMephistophelesSummonTarget"];
 };
 
 export function TileInteractionPlane({
@@ -69,6 +72,8 @@ export function TileInteractionPlane({
   pendingAtlanteanFate,
   setAtlanteanFatePreview,
   selectAtlanteanFateCorner,
+  pendingMephistophelesSummon,
+  selectMephistophelesSummonTarget,
 }: TileInteractionPlaneProps) {
   const { dragAvatar, dragging, setGhost, draggedBody, moveDraggedBody } =
     dragContext;
@@ -150,6 +155,20 @@ export function TileInteractionPlane({
           const cellKey = `${tileX},${tileY}`;
           selectAtlanteanFateCorner(cellKey);
           return;
+        }
+        // Mephistopheles summon target selection - click on valid target tiles
+        if (
+          pendingMephistophelesSummon &&
+          pendingMephistophelesSummon.phase === "selectingSite" &&
+          (pendingMephistophelesSummon.ownerSeat === actorKey || !actorKey) &&
+          selectMephistophelesSummonTarget
+        ) {
+          const cellKey = `${tileX},${tileY}`;
+          if (pendingMephistophelesSummon.validTargets.includes(cellKey)) {
+            e.stopPropagation();
+            selectMephistophelesSummonTarget(cellKey);
+            return;
+          }
         }
         // Earthquake swap - click on tiles within the 2x2 area to swap
         if (

@@ -121,7 +121,7 @@ export const createPlayActionsSlice: StateCreator<
   [],
   PlayActionsSlice
 > = (set, get) => ({
-  playSelectedTo: (x, y) =>
+  playSelectedTo: (x, y, offset) =>
     set((state) => {
       const sel = state.selectedCard;
       if (!sel) {
@@ -351,7 +351,7 @@ export const createPlayActionsSlice: StateCreator<
       arr.push({
         owner: ownerFromSeat(who),
         card: cardWithId,
-        offset: null,
+        offset: offset || null,
         tilt: randomTilt(),
         tapVersion: 0,
         tapped: false,
@@ -464,6 +464,7 @@ export const createPlayActionsSlice: StateCreator<
       const isAssortedAnimals = cardNameLower === "assorted animals";
       const isDholChants = cardNameLower === "dhol chants";
       const isAtlanteanFate = cardNameLower === "atlantean fate";
+      const isMephistopheles = cardNameLower.includes("mephistopheles");
       console.log("[playActions] Card played:", {
         cardName: card.name,
         cardNameLower,
@@ -478,6 +479,8 @@ export const createPlayActionsSlice: StateCreator<
         isOmphalos,
         isLilith,
         isMotherNature,
+        isMephistopheles,
+        isAtlanteanFate,
         type,
         typeIncludesMinion: type.includes("minion"),
       });
@@ -812,6 +815,29 @@ export const createPlayActionsSlice: StateCreator<
           });
         } catch (e) {
           console.error("[playActions] Error triggering Atlantean Fate:", e);
+        }
+      }
+      // If this is Mephistopheles (Minion), begin the avatar replacement confirmation
+      // Use standalone if (not else if) so it triggers regardless of other card checks
+      if (isMephistopheles && newest && type.includes("minion")) {
+        console.log("[playActions] Triggering Mephistopheles confirmation:", {
+          at: key,
+          owner: newest.owner,
+          ownerSeat: who,
+        });
+        try {
+          get().beginMephistopheles({
+            spell: {
+              at: key,
+              index: arr.length - 1,
+              instanceId: newest.instanceId ?? null,
+              owner: newest.owner,
+              card: newest.card as CardRef,
+            },
+            casterSeat: who,
+          });
+        } catch (e) {
+          console.error("[playActions] Error triggering Mephistopheles:", e);
         }
       }
       // If this is a Magic card (but not one with special handling), begin the magic casting flow

@@ -8,6 +8,82 @@ import {
 } from "@/lib/flags";
 import type { SocketTransport } from "@/lib/net/socketTransport";
 
+/**
+ * Extract m-line media types from SDP in order (e.g., ["audio", "video"])
+ * Safari requires answer m-lines to match offer order exactly.
+ */
+function extractMLineOrder(sdp: string): string[] {
+  const mLines: string[] = [];
+  const lines = sdp.split(/\r?\n/);
+  for (const line of lines) {
+    if (line.startsWith("m=")) {
+      // m=audio, m=video, m=application, etc.
+      const mediaType = line.slice(2).split(/\s+/)[0];
+      if (mediaType) mLines.push(mediaType);
+    }
+  }
+  return mLines;
+}
+
+/**
+ * Reorder m-line sections in an SDP answer to match the offer's m-line order.
+ * This fixes Safari's strict validation of m-line ordering.
+ */
+function reorderAnswerMLines(answerSdp: string, offerOrder: string[]): string {
+  if (offerOrder.length === 0) return answerSdp;
+
+  const lines = answerSdp.split(/\r?\n/);
+
+  // Split SDP into session-level header and media sections
+  const headerLines: string[] = [];
+  const mediaSections: Map<string, string[]> = new Map();
+
+  let currentMediaType: string | null = null;
+  let currentSection: string[] = [];
+
+  for (const line of lines) {
+    if (line.startsWith("m=")) {
+      // Save previous section if exists
+      if (currentMediaType !== null) {
+        mediaSections.set(currentMediaType, currentSection);
+      }
+      // Start new section
+      const mediaType = line.slice(2).split(/\s+/)[0];
+      currentMediaType = mediaType;
+      currentSection = [line];
+    } else if (currentMediaType === null) {
+      // Session-level header
+      headerLines.push(line);
+    } else {
+      // Part of current media section
+      currentSection.push(line);
+    }
+  }
+
+  // Save last section
+  if (currentMediaType !== null) {
+    mediaSections.set(currentMediaType, currentSection);
+  }
+
+  // Rebuild SDP with sections in offer order
+  const reorderedLines = [...headerLines];
+  for (const mediaType of offerOrder) {
+    const section = mediaSections.get(mediaType);
+    if (section) {
+      reorderedLines.push(...section);
+    }
+  }
+
+  // Append any sections not in the offer order (shouldn't happen, but be safe)
+  for (const [mediaType, section] of mediaSections) {
+    if (!offerOrder.includes(mediaType)) {
+      reorderedLines.push(...section);
+    }
+  }
+
+  return reorderedLines.join("\r\n");
+}
+
 export type RtcState =
   | "idle"
   | "joining"
@@ -43,6 +119,8 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
   const remotePeerIdRef = useRef<string | null>(null);
   const previousScopeIdRef = useRef<string | null>(activeScopeId);
   const pendingIceCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
+  // Store offer m-line order for Safari SDP munging (Safari requires answer m-lines to match offer order)
+  const offerMLineOrderRef = useRef<string[]>([]);
   const disconnectTimerRef = useRef<NodeJS.Timeout | null>(null);
   const pendingConnectRef = useRef<boolean>(false);
   const negotiationTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -383,15 +461,20 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
       if (sender.track?.kind === "audio") {
         try {
           const parameters = sender.getParameters();
-          if (!parameters.encodings) {
+          // Ensure encodings array exists and has at least one entry
+          if (!parameters.encodings || parameters.encodings.length === 0) {
             parameters.encodings = [{}];
           }
+          // Safely access the first encoding
+          const encoding = parameters.encodings[0];
+          if (!encoding) continue;
 
           // Set max bitrate for audio (Opus codec optimized for voice)
-          parameters.encodings[0].maxBitrate = 32000; // 32 kbps for voice quality
+          encoding.maxBitrate = 32000; // 32 kbps for voice quality
 
           await sender.setParameters(parameters);
         } catch (error) {
+          // Non-fatal - bitrate optimization is optional
           console.warn("[RTC] Failed to set audio bitrate:", error);
         }
       }
@@ -429,6 +512,10 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
     const pc = ensurePc();
     setState("negotiating");
     const offer = await pc.createOffer();
+    // Store m-line order for Safari SDP munging
+    if (offer.sdp) {
+      offerMLineOrderRef.current = extractMLineOrder(offer.sdp);
+    }
     await pc.setLocalDescription(offer);
     const targetId = remotePeerIdRef.current;
     if (!targetId) return;
@@ -465,7 +552,20 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
 
       try {
         if (d.sdp) {
-          await pc.setRemoteDescription(new RTCSessionDescription(d.sdp));
+          // Safari fix: Reorder answer m-lines to match offer order
+          let sdpToSet = d.sdp;
+          if (
+            d.sdp.type === "answer" &&
+            offerMLineOrderRef.current.length > 0 &&
+            d.sdp.sdp
+          ) {
+            const reorderedSdp = reorderAnswerMLines(
+              d.sdp.sdp,
+              offerMLineOrderRef.current
+            );
+            sdpToSet = { ...d.sdp, sdp: reorderedSdp };
+          }
+          await pc.setRemoteDescription(new RTCSessionDescription(sdpToSet));
 
           // Phase 1 Fix: Flush buffered ICE candidates after remote description is set
           for (const candidate of pendingIceCandidatesRef.current) {
@@ -481,8 +581,23 @@ export function useMatchWebRTC(opts: UseMatchWebRTCOptions) {
           pendingIceCandidatesRef.current = [];
 
           if (d.sdp.type === "offer") {
-            // Answer offer
+            // Answer offer - verify we're in the correct state first
+            if (pc.signalingState !== "have-remote-offer") {
+              console.warn(
+                "[RTC] Cannot create answer - wrong signaling state:",
+                pc.signalingState
+              );
+              return;
+            }
             await addLocalTracks();
+            // Re-check signaling state after async addLocalTracks (state may have changed)
+            if (pc.signalingState !== "have-remote-offer") {
+              console.warn(
+                "[RTC] Cannot create answer after addLocalTracks - state changed to:",
+                pc.signalingState
+              );
+              return;
+            }
             const answer = await pc.createAnswer();
             await pc.setLocalDescription(answer);
             const targetId = remotePeerIdRef.current || from;

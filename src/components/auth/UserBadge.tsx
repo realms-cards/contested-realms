@@ -681,6 +681,7 @@ export default function UserBadge({
                     className="w-full flex-wrap justify-start gap-2 bg-slate-900/70 ring-1 ring-white/5"
                     playbackEnabled={voice.playbackEnabled}
                     onTogglePlayback={voice.setPlaybackEnabled}
+                    renderAudioElement={false}
                     menuAlignment="right"
                     onRequestConnection={voice.requestConnection}
                     targetPlayerId={(() => {

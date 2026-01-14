@@ -3,7 +3,10 @@
 import { useMemo } from "react";
 import { useGameStore } from "@/lib/game/store";
 import type { PlayerKey } from "@/lib/game/store";
-import { computeThresholdTotals } from "@/lib/game/store/utils/resourceHelpers";
+import {
+  computeThresholdTotals,
+  siteProvidesMana,
+} from "@/lib/game/store/utils/resourceHelpers";
 import { useTouchDevice } from "@/lib/hooks/useTouchDevice";
 
 // Element config matching Threshold3D exactly
@@ -231,7 +234,6 @@ export function PlayerResourceColumn({
   // Get mana data
   const addMana = useGameStore((s) => s.addMana);
   const actorKey = useGameStore((s) => s.actorKey);
-  const manaOffset = useGameStore((s) => s.players[player]?.mana ?? 0);
 
   // Subscribe to granular state slices for threshold reactivity
   const boardSize = useGameStore((s) => s.board.size);
@@ -251,13 +253,21 @@ export function PlayerResourceColumn({
     );
     return result;
   }, [boardSize, boardSites, permanents, player, avatar, specialSiteState]);
-  const getAvailableMana = useGameStore((s) => s.getAvailableMana);
 
-  // Use the store's getAvailableMana which includes all special mana sources
-  // (Ether Core in void, City bonuses, shared sites like Avalon, etc.)
-  const mana = getAvailableMana(player);
-  // Base mana is the total before any spending (offset is negative when mana spent)
-  const baseMana = mana - manaOffset;
+  // Compute mana directly from board sites - no offset system
+  const owner = player === "p1" ? 1 : 2;
+  const { baseMana, mana } = useMemo(() => {
+    let total = 0;
+    let available = 0;
+    for (const site of Object.values(boardSites)) {
+      if (!site || site.owner !== owner) continue;
+      if (siteProvidesMana(site.card ?? null)) {
+        total++;
+        if (!site.tapped) available++;
+      }
+    }
+    return { baseMana: total, mana: available };
+  }, [boardSites, owner]);
 
   // Can adjust if we're the actor (or offline) and not dragging
   const canAdjust =

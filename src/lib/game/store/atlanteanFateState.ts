@@ -10,6 +10,177 @@ function newAtlanteanFateId() {
 }
 
 /**
+ * Calculate the nearest valid intersection for aura placement.
+ * Intersections are at corners where 4 tiles meet.
+ * Returns the anchor tile (upper-right of the intersection) and offset to position card at intersection.
+ *
+ * @param worldX - World X coordinate of drop
+ * @param worldZ - World Z coordinate of drop
+ * @param offsetX - Board X offset
+ * @param offsetZ - Board Z offset (typically offsetY in calling code)
+ * @param tileSize - Size of each tile
+ * @param boardWidth - Number of tiles wide
+ * @param boardHeight - Number of tiles tall
+ * @returns { anchorTile, intersectionOffset, isValid } or null if no valid intersection nearby
+ */
+export function snapToIntersection(
+  worldX: number,
+  worldZ: number,
+  offsetX: number,
+  offsetZ: number,
+  tileSize: number,
+  boardWidth: number,
+  boardHeight: number
+): {
+  anchorTileX: number;
+  anchorTileY: number;
+  intersectionOffsetX: number;
+  intersectionOffsetZ: number;
+  isValid: boolean;
+} | null {
+  // Convert world position to relative board position
+  const relX = worldX - offsetX;
+  const relZ = worldZ - offsetZ;
+
+  // Find nearest intersection
+  // Intersections are at tile corners (where 4 tiles meet)
+  // Intersection (ix, iy) is at world position (offsetX + ix * tileSize, offsetZ + iy * tileSize)
+  // The anchor tile for intersection (ix, iy) is tile (ix-1, iy-1) - the lower-left of the 4 tiles
+
+  // Calculate intersection index (1-indexed, so intersection 1,1 is at corner of tiles 0,0 to 1,1)
+  // Intersection ix is at position ix * tileSize, so ix = round(relX / tileSize)
+  const ix = Math.round(relX / tileSize);
+  const iy = Math.round(relZ / tileSize);
+
+  // Validate: intersection must have all 4 tiles on board
+  // Tiles around intersection (ix, iy): (ix-1, iy-1), (ix, iy-1), (ix-1, iy), (ix, iy)
+  // Need: ix-1 >= 0, ix <= boardWidth-1, iy-1 >= 0, iy <= boardHeight-1
+  // Simplified: ix >= 1, ix <= boardWidth, iy >= 1, iy <= boardHeight
+  // But since tiles are 0-indexed: need ix-1 >= 0 && ix-1 < boardWidth && ix >= 0 && ix < boardWidth
+  // So: ix >= 1 && ix <= boardWidth-1+1 = boardWidth... wait let me think again
+
+  // Tiles are indexed 0 to boardWidth-1 and 0 to boardHeight-1
+  // For intersection (ix, iy), affected tiles are:
+  // (ix-1, iy-1), (ix, iy-1), (ix-1, iy), (ix, iy)
+  // All must be valid:
+  // ix-1 >= 0 && ix-1 < boardWidth => ix >= 1 && ix <= boardWidth
+  // ix >= 0 && ix < boardWidth => ix >= 0 && ix <= boardWidth-1
+  // Combined: ix >= 1 && ix <= boardWidth-1... no that's wrong
+  // Let's be explicit:
+  // For tile (ix-1, *) to exist: ix-1 >= 0 => ix >= 1
+  // For tile (ix, *) to exist: ix < boardWidth => ix <= boardWidth-1
+  // So: ix >= 1 && ix <= boardWidth-1 is too restrictive
+  // Actually ix can equal boardWidth-1+1 = boardWidth? No, tile ix must exist so ix < boardWidth
+  // So valid range: 1 <= ix <= boardWidth-1? No...
+
+  // Let me reconsider. boardWidth = 5 means tiles 0,1,2,3,4
+  // Valid intersections have tiles (ix-1) and (ix) both in range [0, 4]
+  // ix-1 >= 0 => ix >= 1
+  // ix <= 4 => ix <= 4
+  // So ix in [1, 4] = [1, boardWidth-1]
+  // Similarly iy in [1, boardHeight-1]
+
+  const isValid =
+    ix >= 1 && ix <= boardWidth - 1 && iy >= 1 && iy <= boardHeight - 1;
+
+  if (!isValid) {
+    // Try to clamp to nearest valid intersection
+    const clampedIx = Math.max(1, Math.min(boardWidth - 1, ix));
+    const clampedIy = Math.max(1, Math.min(boardHeight - 1, iy));
+
+    // Use clamped intersection
+    const anchorTileX = clampedIx - 1; // Lower-left tile of 2x2
+    const anchorTileY = clampedIy - 1;
+
+    // Intersection world position (corner where 4 tiles meet)
+    const intersectionWorldX = offsetX + clampedIx * tileSize;
+    const intersectionWorldZ = offsetZ + clampedIy * tileSize;
+
+    // Offset from anchor tile center to intersection
+    // Tile center is at (tileX + 0.5) * tileSize from board origin
+    const anchorCenterX = offsetX + (anchorTileX + 0.5) * tileSize;
+    const anchorCenterZ = offsetZ + (anchorTileY + 0.5) * tileSize;
+    const intersectionOffsetX = intersectionWorldX - anchorCenterX;
+    const intersectionOffsetZ = intersectionWorldZ - anchorCenterZ;
+
+    return {
+      anchorTileX,
+      anchorTileY,
+      intersectionOffsetX,
+      intersectionOffsetZ,
+      isValid: true, // Clamped to valid
+    };
+  }
+
+  // Use the calculated intersection
+  const anchorTileX = ix - 1; // Lower-left tile of 2x2
+  const anchorTileY = iy - 1;
+
+  // Intersection world position (corner where 4 tiles meet)
+  const intersectionWorldX = offsetX + ix * tileSize;
+  const intersectionWorldZ = offsetZ + iy * tileSize;
+
+  // Offset from anchor tile center to intersection
+  // Tile center is at (tileX + 0.5) * tileSize from board origin
+  const anchorCenterX = offsetX + (anchorTileX + 0.5) * tileSize;
+  const anchorCenterZ = offsetZ + (anchorTileY + 0.5) * tileSize;
+  const intersectionOffsetX = intersectionWorldX - anchorCenterX;
+  const intersectionOffsetZ = intersectionWorldZ - anchorCenterZ;
+
+  return {
+    anchorTileX,
+    anchorTileY,
+    intersectionOffsetX,
+    intersectionOffsetZ,
+    isValid: true,
+  };
+}
+
+/**
+ * Border auras that are placed on the border between two squares,
+ * not at a 2x2 intersection. These should NOT use intersection snapping.
+ */
+const BORDER_AURA_NAMES = new Set([
+  "wall of ice",
+  "wall of brambles",
+  "great wall",
+  "perilous bridge",
+]);
+
+/**
+ * Single-site auras that are conjured atop a specific site or void square,
+ * not at a 2x2 intersection. These should NOT use intersection snapping.
+ */
+const SINGLE_SITE_AURA_NAMES = new Set([
+  "salt the earth",
+  "sow the earth",
+  "hamlet's ablaze!",
+  "castle's ablaze!",
+]);
+
+/**
+ * Check if a card is a 2x2 area Aura (uses intersection snapping).
+ * Excludes border auras and single-site auras.
+ */
+export function isAuraSubtype(
+  subTypes: string | null | undefined,
+  cardName?: string | null
+): boolean {
+  if (!subTypes) return false;
+  if (!subTypes.toLowerCase().includes("aura")) return false;
+
+  if (cardName) {
+    const nameLower = cardName.toLowerCase();
+    // Exclude border auras - placed on edge between two squares
+    if (BORDER_AURA_NAMES.has(nameLower)) return false;
+    // Exclude single-site auras - placed on a specific site/void
+    if (SINGLE_SITE_AURA_NAMES.has(nameLower)) return false;
+  }
+
+  return true;
+}
+
+/**
  * Check if a site is "ordinary" (basic elemental site that just provides mana/threshold).
  * In Sorcery TCG, "Ordinary" is a rarity for basic sites.
  * Non-ordinary sites have special abilities and get flooded by Atlantean Fate.
@@ -44,12 +215,12 @@ export function isOrdinarySite(
 /**
  * Calculate the 2x2 area the aura occupies.
  * Per rules: "aura is cast at the intersection of four squares"
- * The card sits at the CENTER of the 2x2 area.
- * The 4 tiles around the card's center (lower-left corner of anchor tile):
- * - (x-1, y-1) lower-left
- * - (x, y-1) lower-right
- * - (x-1, y) upper-left
- * - (x, y) upper-right (anchor tile)
+ * The card is placed at the anchor tile (lower-left of 2x2) with offset to intersection.
+ * The 4 tiles around the intersection:
+ * - (x, y) lower-left (anchor tile)
+ * - (x+1, y) lower-right
+ * - (x, y+1) upper-left
+ * - (x+1, y+1) upper-right
  */
 export function calculate2x2Area(
   cardX: number,
@@ -58,12 +229,12 @@ export function calculate2x2Area(
   boardHeight: number
 ): CellKey[] {
   const cells: CellKey[] = [];
-  // Card is at center of 2x2 - the 4 tiles meeting at that intersection
+  // Anchor tile is lower-left of 2x2 - affected tiles extend up and right
   const offsets = [
-    { dx: -1, dy: -1 }, // lower-left
-    { dx: 0, dy: -1 }, // lower-right
-    { dx: -1, dy: 0 }, // upper-left
-    { dx: 0, dy: 0 }, // upper-right (anchor tile)
+    { dx: 0, dy: 0 }, // lower-left (anchor tile)
+    { dx: 1, dy: 0 }, // lower-right
+    { dx: 0, dy: 1 }, // upper-left
+    { dx: 1, dy: 1 }, // upper-right
   ];
   for (const { dx, dy } of offsets) {
     const x = cardX + dx;
@@ -77,29 +248,66 @@ export function calculate2x2Area(
 }
 
 /**
- * Check if an intersection position allows a valid 2x2 area.
+ * Calculate the 2x2 area based on tile position and offset.
+ * The offset determines which corner/intersection the card is at:
+ * - offX >= 0, offZ >= 0: bottom-right corner of tile → affects (x, y), (x+1, y), (x, y+1), (x+1, y+1)
+ * - offX < 0, offZ >= 0: bottom-left corner → affects (x-1, y), (x, y), (x-1, y+1), (x, y+1)
+ * - offX >= 0, offZ < 0: top-right corner → affects (x, y-1), (x+1, y-1), (x, y), (x+1, y)
+ * - offX < 0, offZ < 0: top-left corner → affects (x-1, y-1), (x, y-1), (x-1, y), (x, y)
+ */
+export function calculate2x2AreaWithOffset(
+  tileX: number,
+  tileY: number,
+  offX: number,
+  offZ: number,
+  boardWidth: number,
+  boardHeight: number
+): CellKey[] {
+  // Determine anchor tile based on which quadrant the offset is in
+  const anchorX = offX >= 0 ? tileX : tileX - 1;
+  const anchorY = offZ >= 0 ? tileY : tileY - 1;
+
+  const cells: CellKey[] = [];
+  const offsets = [
+    { dx: 0, dy: 0 },
+    { dx: 1, dy: 0 },
+    { dx: 0, dy: 1 },
+    { dx: 1, dy: 1 },
+  ];
+  for (const { dx, dy } of offsets) {
+    const x = anchorX + dx;
+    const y = anchorY + dy;
+    if (x >= 0 && x < boardWidth && y >= 0 && y < boardHeight) {
+      cells.push(toCellKey(x, y));
+    }
+  }
+  return cells;
+}
+
+/**
+ * Check if an anchor tile position allows a valid 2x2 area.
  * An aura MUST affect exactly 4 tiles - it cannot be placed at edges.
- * The intersection is at the lower-left corner of the anchor tile (cursorX, cursorY).
- * Required tiles: (x-1, y), (x, y), (x-1, y-1), (x, y-1)
+ * The anchor tile is the lower-left of the 2x2 area.
+ * Required tiles: (x, y), (x+1, y), (x, y+1), (x+1, y+1)
  */
 export function isValidCornerPosition(
-  cursorX: number,
-  cursorY: number,
+  anchorX: number,
+  anchorY: number,
   boardWidth: number,
   boardHeight: number
 ): boolean {
-  // Check that all 4 tiles around the intersection exist
-  // The intersection is at the lower-left corner of anchor tile (cursorX, cursorY)
+  // Check that all 4 tiles in the 2x2 area exist
+  // Anchor is lower-left, tiles extend up and right
   // Required tiles:
-  // - (cursorX-1, cursorY) upper-left - needs x >= 1
-  // - (cursorX, cursorY) upper-right - needs x < boardWidth, y < boardHeight
-  // - (cursorX-1, cursorY-1) lower-left - needs x >= 1, y >= 1
-  // - (cursorX, cursorY-1) lower-right - needs y >= 1
+  // - (anchorX, anchorY) lower-left - needs x >= 0, y >= 0
+  // - (anchorX+1, anchorY) lower-right - needs x+1 < boardWidth
+  // - (anchorX, anchorY+1) upper-left - needs y+1 < boardHeight
+  // - (anchorX+1, anchorY+1) upper-right - needs both
 
-  if (cursorX < 1) return false; // Need tile to the left
-  if (cursorX >= boardWidth) return false;
-  if (cursorY < 1) return false; // Need tile below
-  if (cursorY >= boardHeight) return false;
+  if (anchorX < 0) return false;
+  if (anchorY < 0) return false;
+  if (anchorX + 1 >= boardWidth) return false; // Need tile to the right
+  if (anchorY + 1 >= boardHeight) return false; // Need tile above
 
   return true;
 }

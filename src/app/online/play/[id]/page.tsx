@@ -41,6 +41,8 @@ import MotherNatureOverlay from "@/components/game/MotherNatureOverlay";
 import HeadlessHauntOverlay from "@/components/game/HeadlessHauntOverlay";
 import InterrogatorChoiceOverlay from "@/components/game/InterrogatorChoiceOverlay";
 import AtlanteanFateOverlay from "@/components/game/AtlanteanFateOverlay";
+import MephistophelesOverlay from "@/components/game/MephistophelesOverlay";
+import MephistophelesSummonOverlay from "@/components/game/MephistophelesSummonOverlay";
 import OnlineConsole from "@/components/game/OnlineConsole";
 import OnlineD20Screen from "@/components/game/OnlineD20Screen";
 import OnlineDeckSelector from "@/components/game/OnlineDeckSelector";
@@ -526,7 +528,7 @@ export default function OnlineMatchPage() {
 
   // Do not auto-join WebRTC. Users must click the Join control to request mic access and connect.
 
-  // Remote audio is handled inside SeatMediaControls
+  // Remote audio is handled by persistent audio element in OnlineProvider
 
   // One-shot guards for rejoin flow per connection
   const lastConnectedRef = useRef<boolean>(false);
@@ -3253,6 +3255,10 @@ export default function OnlineMatchPage() {
           <InterrogatorChoiceOverlay />
           {/* Atlantean Fate Overlay (4x4 area selection for flood aura) */}
           <AtlanteanFateOverlay />
+          {/* Mephistopheles Overlay (avatar replacement confirmation) */}
+          <MephistophelesOverlay />
+          {/* Mephistopheles Summon Overlay (Evil minion summoning) */}
+          <MephistophelesSummonOverlay />
           {/* Black Mass Overlay (search for Evil minions) */}
           <BlackMassOverlay />
           {/* Highland Princess Overlay (search for artifact) */}
