@@ -1,7 +1,9 @@
 "use client";
 
-import React from "react";
+import Image from "next/image";
+import React, { useMemo, useState } from "react";
 import { useGameStore } from "@/lib/game/store";
+import { getImageSlug } from "@/lib/utils/cardSlug";
 
 /**
  * PathfinderPlayOverlay - Interactive UI for Pathfinder site play ability
@@ -15,6 +17,15 @@ export default function PathfinderPlayOverlay() {
   const pending = useGameStore((s) => s.pendingPathfinderPlay);
   const actorKey = useGameStore((s) => s.actorKey);
   const cancel = useGameStore((s) => s.cancelPathfinderPlay);
+  const [imageError, setImageError] = useState(false);
+
+  // Compute card image URL
+  const cardImageUrl = useMemo(() => {
+    if (!pending?.topSite) return null;
+    const site = pending.topSite;
+    const slug = getImageSlug(site.slug, site.name, site.set);
+    return `/api/images/${encodeURIComponent(slug)}`;
+  }, [pending?.topSite]);
 
   if (!pending) return null;
 
@@ -59,21 +70,42 @@ export default function PathfinderPlayOverlay() {
           <div
             className={`pointer-events-auto px-6 py-4 rounded-xl bg-black/90 ring-1 ${playerColorClass} shadow-lg flex items-center gap-5`}
           >
-            {/* Revealed site info */}
-            <div className={`${playerBgClass} rounded-lg px-4 py-2`}>
-              <div className="text-xs text-gray-400 mb-1">Revealed Site</div>
-              <div className="text-amber-400 font-medium text-lg">
+            {/* Revealed site card image */}
+            <div className="relative flex-shrink-0">
+              {cardImageUrl && !imageError ? (
+                <Image
+                  src={cardImageUrl}
+                  alt={topSite?.name || "Site"}
+                  width={105}
+                  height={75}
+                  className="rounded-lg shadow-lg ring-1 ring-white/20"
+                  onError={() => setImageError(true)}
+                  unoptimized
+                />
+              ) : (
+                <div
+                  className={`w-[105px] h-[75px] ${playerBgClass} rounded-lg flex items-center justify-center`}
+                >
+                  <span className="text-amber-400 font-medium text-sm text-center px-2">
+                    {topSite?.name || "Unknown"}
+                  </span>
+                </div>
+              )}
+              <div className="absolute -top-2 -left-2 bg-black/80 px-2 py-0.5 rounded text-xs text-gray-400">
+                Revealed
+              </div>
+            </div>
+
+            {/* Site name and instructions */}
+            <div className="flex flex-col">
+              <div className="text-amber-400 font-medium text-lg mb-1">
                 {topSite?.name || "Unknown"}
               </div>
               {topSite?.subTypes && (
-                <div className="text-gray-400 text-xs mt-0.5">
+                <div className="text-gray-400 text-xs mb-2">
                   {topSite.subTypes}
                 </div>
               )}
-            </div>
-
-            {/* Instructions */}
-            <div className="flex flex-col">
               <span className="text-gray-300 text-sm">
                 Click a highlighted tile to play and move
               </span>
@@ -104,15 +136,36 @@ export default function PathfinderPlayOverlay() {
           <div
             className={`pointer-events-auto px-6 py-4 rounded-xl bg-black/90 ring-1 ${playerColorClass} shadow-lg flex items-center gap-4`}
           >
-            <div className={`${playerBgClass} rounded-lg px-4 py-2`}>
-              <div className="text-xs text-gray-400 mb-1">Revealed Site</div>
+            {/* Revealed site card image */}
+            <div className="relative flex-shrink-0">
+              {cardImageUrl && !imageError ? (
+                <Image
+                  src={cardImageUrl}
+                  alt={topSite?.name || "Site"}
+                  width={84}
+                  height={60}
+                  className="rounded-lg shadow-lg ring-1 ring-white/20"
+                  onError={() => setImageError(true)}
+                  unoptimized
+                />
+              ) : (
+                <div
+                  className={`w-[84px] h-[60px] ${playerBgClass} rounded-lg flex items-center justify-center`}
+                >
+                  <span className="text-amber-400 font-medium text-xs text-center px-1">
+                    {topSite?.name || "Unknown"}
+                  </span>
+                </div>
+              )}
+            </div>
+            <div className="flex flex-col">
               <div className="text-amber-400 font-medium">
                 {topSite?.name || "Unknown"}
               </div>
+              <span className="text-gray-400 text-sm">
+                Opponent is selecting where to play...
+              </span>
             </div>
-            <span className="text-gray-400 text-sm">
-              Opponent is selecting where to play...
-            </span>
           </div>
         </div>
       )}
