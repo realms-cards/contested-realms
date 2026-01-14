@@ -353,6 +353,7 @@ export function BoardTile({
         showOwnershipOverlay={showOwnershipOverlay}
         cardScale={cardScale}
         stolenCards={stolenCards}
+        hasSite={Boolean(site)}
       />
 
       {showGrid && (
