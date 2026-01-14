@@ -23,7 +23,8 @@ export default function PathfinderPlayOverlay() {
   const cardImageUrl = useMemo(() => {
     if (!pending?.topSite) return null;
     const site = pending.topSite;
-    const slug = getImageSlug(site.slug, site.name, site.set);
+    // CardRef doesn't have 'set' property, use slug directly or build from name
+    const slug = getImageSlug(site.slug, site.name);
     return `/api/images/${encodeURIComponent(slug)}`;
   }, [pending?.topSite]);
 
