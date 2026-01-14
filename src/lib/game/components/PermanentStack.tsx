@@ -1265,6 +1265,9 @@ export function PermanentStack({
                     elevation={0}
                     depthWrite
                     depthTest
+                    polygonOffset
+                    polygonOffsetFactor={-1}
+                    polygonOffsetUnits={-1}
                     renderOrder={
                       tokenSiteReplace
                         ? 5
