@@ -3798,10 +3798,23 @@ export function handleCustomMessage(
       | string
       | undefined;
 
+    console.log("[interrogatorTrigger] Received:", {
+      id,
+      interrogatorSeat,
+      victimSeat,
+      attackerName,
+    });
+
     if (!id || !interrogatorSeat || !victimSeat) return;
 
     // Skip if we're the interrogator - we already have the state
     const actorKey = get().actorKey;
+    console.log(
+      "[interrogatorTrigger] actorKey:",
+      actorKey,
+      "skipping:",
+      actorKey === interrogatorSeat
+    );
     if (actorKey === interrogatorSeat) return;
 
     set({
@@ -3835,14 +3848,32 @@ export function handleCustomMessage(
       | "allow"
       | undefined;
 
+    console.log("[interrogatorResolve] Received:", { id, choice });
+
     if (!id || !choice) return;
 
     const pending = get().pendingInterrogatorChoice;
-    if (!pending || pending.id !== id) return;
+    console.log("[interrogatorResolve] pending:", pending);
+    if (!pending || pending.id !== id) {
+      console.log("[interrogatorResolve] No matching pending, skipping");
+      return;
+    }
 
     // Skip if we're the victim - we already handled it locally
     const actorKey = get().actorKey;
+    console.log(
+      "[interrogatorResolve] actorKey:",
+      actorKey,
+      "victimSeat:",
+      pending.victimSeat,
+      "skipping:",
+      actorKey === pending.victimSeat
+    );
     if (actorKey === pending.victimSeat) return;
+
+    console.log(
+      "[interrogatorResolve] Processing resolution for Interrogator player"
+    );
 
     const { interrogatorSeat, victimSeat } = pending;
 

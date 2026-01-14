@@ -7,6 +7,7 @@
 - **tokens render great in the stack now**
 - **smaller hand fly-in zone** to make the hand less distracting when doing things on the board, also show only the very top of cards in hand when collapsed
 - **add Mephitopheles and Atlantean fate** automatic resolver
+- **add Pathfinder right click tap and move**
 - **add flood and silence to site right-click**
 - **add copy** to cards on board, copies get banished and can not go to cemetery
 - **made camera dolly smoother**

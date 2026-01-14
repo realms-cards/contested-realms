@@ -160,7 +160,8 @@ export const createPathfinderSlice: StateCreator<
     }
 
     // Find valid targets: adjacent void or Rubble tiles
-    const [ax, ay] = avatarPos.split(",").map(Number);
+    // avatarPos is [x, y] tuple, not a string
+    const [ax, ay] = avatarPos;
     const board = state.board;
     const adjacentCells = getAdjacentCells(ax, ay, board.size.w, board.size.h);
 
@@ -247,7 +248,7 @@ export const createPathfinderSlice: StateCreator<
     const zones = state.zones;
     const atlas = zones[who]?.atlas || [];
     const board = state.board;
-    const ownerNum = who === "p1" ? 1 : 2;
+    const ownerNum: 1 | 2 = who === "p1" ? 1 : 2;
 
     // Remove top site from atlas
     const newAtlas = atlas.slice(1);
@@ -273,12 +274,16 @@ export const createPathfinderSlice: StateCreator<
       },
     };
 
-    // Move avatar to target
+    // Move avatar to target - parse CellKey "x,y" to [x, y] tuple
+    const [targetX, targetY] = targetCell.split(",").map(Number) as [
+      number,
+      number
+    ];
     const newAvatars = {
       ...state.avatars,
       [who]: {
         ...avatar,
-        pos: targetCell,
+        pos: [targetX, targetY] as [number, number],
         tapped: true, // Tap the avatar
       },
     };

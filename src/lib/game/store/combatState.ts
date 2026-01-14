@@ -745,6 +745,12 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
       );
       return;
     }
+    console.log("[autoResolveCombat] Combat state:", {
+      target: pending.target,
+      attacker: pending.attacker,
+      defenders: pending.defenders,
+      tile: pending.tile,
+    });
     const actor = get().actorKey as PlayerKey | null;
     const isIntercept = !pending.target;
     const attackerSeat = seatFromOwner(pending.attacker.owner);
@@ -844,7 +850,18 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
                 Number(avatarCardId)
               ]
             : undefined;
-          const atk = Number(avatarMeta?.attack ?? 0) || 0;
+          // Default avatar attack to 1 if metadata not loaded (most avatars have 1 attack)
+          const atk = Number(avatarMeta?.attack ?? 1) || 1;
+          console.log(
+            "[autoResolveCombat] Avatar attacker:",
+            avatarCard?.name,
+            "cardId:",
+            avatarCardId,
+            "meta:",
+            avatarMeta,
+            "atk:",
+            atk
+          );
           // Avatars don't have attachments, so no first strike or artifacts
           return { atk, firstStrike: false, hasUntrackedArtifact: false };
         })()
@@ -1118,6 +1135,12 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
       ? (board.sites[tileKey] as SiteTile | undefined)
       : undefined;
 
+    console.log(
+      "[autoResolveCombat] defenders.length:",
+      defenders.length,
+      "pending.target:",
+      pending.target
+    );
     if (defenders.length === 0) {
       if (pending.target && pending.target.kind === "site") {
         const owner = board.sites[pending.target.at]?.owner as
@@ -1180,9 +1203,19 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
         // Trigger: Whenever an ally strikes an enemy Avatar
         // Effect: Draw a spell unless they pay 3 life
         // Triggers for both minions AND the Interrogator's own avatar striking
+        console.log(
+          "[autoResolveCombat] Avatar strike detected - checking Interrogator",
+          { attackerSeat, target: pending.target }
+        );
         try {
           const attackerAvatarName =
             get().avatars?.[attackerSeat]?.card?.name ?? null;
+          console.log(
+            "[autoResolveCombat] Attacker avatar name:",
+            attackerAvatarName,
+            "isInterrogator:",
+            isInterrogator(attackerAvatarName)
+          );
           if (isInterrogator(attackerAvatarName)) {
             // Get attacker name for the UI
             let attackerName: string;
