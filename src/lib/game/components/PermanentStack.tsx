@@ -395,8 +395,10 @@ export function PermanentStack({
   const boardHalfW = (boardSize.w * TILE_SIZE) / 2;
   const boardHalfH = (boardSize.h * TILE_SIZE) / 2;
 
-  // Sort items so burrowed/submerged cards render first (at bottom of stack)
-  // Site stays on top, submerged card goes underneath
+  // Sort items so they stack correctly (bottom to top):
+  // 1. Burrowed/submerged cards (lowest)
+  // 2. Sites (middle)
+  // 3. Minions/tokens/other permanents (top)
   const sortedItems = [...items]
     .map((p, originalIdx) => ({ p, originalIdx }))
     .sort((a, b) => {
@@ -410,6 +412,13 @@ export function PermanentStack({
       // Burrowed cards go first (bottom of stack)
       if (aIsBurrowed && !bIsBurrowed) return -1;
       if (!aIsBurrowed && bIsBurrowed) return 1;
+      // Sites go below minions/tokens (but above burrowed)
+      const aType = (a.p.card.type || "").toLowerCase();
+      const bType = (b.p.card.type || "").toLowerCase();
+      const aIsSite = aType.includes("site");
+      const bIsSite = bType.includes("site");
+      if (aIsSite && !bIsSite) return -1;
+      if (!aIsSite && bIsSite) return 1;
       return 0;
     });
 
@@ -428,11 +437,16 @@ export function PermanentStack({
 
         const owner = p.owner;
         const ownerSeat = seatFromOwner(owner);
-        const ownerAvatar = avatars?.[ownerSeat];
-        const avatarOnThisTile =
-          ownerAvatar?.pos &&
-          ownerAvatar.pos[0] === tileX &&
-          ownerAvatar.pos[1] === tileY;
+        // Check if ANY avatar (owner's or opponent's) is on this tile
+        const p1AvatarOnTile =
+          avatars?.p1?.pos &&
+          avatars.p1.pos[0] === tileX &&
+          avatars.p1.pos[1] === tileY;
+        const p2AvatarOnTile =
+          avatars?.p2?.pos &&
+          avatars.p2.pos[0] === tileX &&
+          avatars.p2.pos[1] === tileY;
+        const avatarOnThisTile = p1AvatarOnTile || p2AvatarOnTile;
         const isSel =
           selectedPermanent &&
           selectedPermanent.at === key &&
@@ -477,26 +491,26 @@ export function PermanentStack({
         }).length;
 
         // Burrowed cards at ground level, non-burrowed cards elevated above them
+        // When avatar is on this tile, lift permanents above the avatar
+        const avatarLift = avatarOnThisTile ? layerLift : 0;
         const baseY = isBurrowed
           ? burrowedElevation
           : tokenSiteReplace
           ? rubbleElevation
-          : baseElevation + burrowedCount * layerLift; // Lift above any burrowed cards
-        const isTopCandidate =
-          (dragging && dragging.from === key && dragging.index === idx) ||
-          isSel ||
-          isLastTouched;
+          : baseElevation + burrowedCount * layerLift + avatarLift;
         // Stack index for non-burrowed cards only (burrowed cards don't stack)
+        // Cards maintain stable positions based on sort order
         const nonBurrowedIdx = isBurrowed ? 0 : sortedIdx - burrowedCount;
-        const effectiveStackIndex =
-          !isBurrowed && !tokenSiteReplace && isTopCandidate
-            ? sortedItems.length - burrowedCount + 1
-            : nonBurrowedIdx;
         const stackLift =
-          !isBurrowed && !tokenSiteReplace
-            ? effectiveStackIndex * layerLift
+          !isBurrowed && !tokenSiteReplace ? nonBurrowedIdx * layerLift : 0;
+        // Lift selected cards above the entire stack (count non-burrowed items)
+        const isSelected = isSel || isLastTouched;
+        const nonBurrowedCount = sortedItems.length - burrowedCount;
+        const selectionLift =
+          isSelected && !isBurrowed && !tokenSiteReplace
+            ? (nonBurrowedCount - nonBurrowedIdx + 1) * layerLift
             : 0;
-        const yPos = baseY + stackLift;
+        const yPos = baseY + stackLift + selectionLift;
 
         const remotePermanentColor = getRemoteHighlightColor(p.card ?? null, {
           instanceKey: permId,
@@ -636,6 +650,7 @@ export function PermanentStack({
               args={[CARD_SHORT / 2, CARD_THICK / 2, CARD_LONG / 2]}
               friction={0.9}
               restitution={0}
+              sensor
             />
             <group
               visible={!isLocalDragGhost}
@@ -649,7 +664,8 @@ export function PermanentStack({
                   e.stopPropagation();
                   return;
                 }
-                if (dragFromHand || dragFromPile) return;
+                if (dragging || dragAvatar || dragFromHand || dragFromPile)
+                  return;
                 if (tokenSiteReplace) {
                   e.stopPropagation();
                   selectPermanent(key, idx);
@@ -1170,6 +1186,22 @@ export function PermanentStack({
                   opacity={0.5}
                 />
               )}
+              {/* Subtle cyan glow for token copies */}
+              {p.isCopy && (
+                <CardOutline
+                  width={CARD_SHORT}
+                  height={CARD_LONG}
+                  rotationZ={rotZ}
+                  elevation={0.003}
+                  color="#22d3ee"
+                  renderOrder={1400}
+                  opacity={0.4}
+                  pulse
+                  pulseSpeed={0.8}
+                  pulseMin={0.25}
+                  pulseMax={0.5}
+                />
+              )}
               <group
                 visible
                 userData={{ cardInstance: permId }}
@@ -1225,7 +1257,13 @@ export function PermanentStack({
                     elevation={0}
                     depthWrite
                     depthTest
-                    renderOrder={tokenSiteReplace ? 5 : 100}
+                    renderOrder={
+                      tokenSiteReplace
+                        ? 5
+                        : isDraggingPermanent || isSel || isLastTouched
+                        ? 1000
+                        : 100
+                    }
                   />
                 ) : (
                   <CardPlane
@@ -1356,13 +1394,14 @@ export function PermanentStack({
                         : isDraggingPermanent || isSel || isLastTouched
                         ? 1000
                         : 100;
+                      // Carryable artifacts render ON TOP of their parent card
                       return (
                         <group
                           key={`attached-${attachIdx}`}
                           position={[
                             attachOffsetX,
-                            (isBurrowed ? burrowedElevation : baseElevation) -
-                              CARD_THICK * 0.05,
+                            (isBurrowed ? burrowedElevation : baseElevation) +
+                              CARD_THICK * 0.15,
                             offsetZ,
                           ]}
                         >
@@ -1371,8 +1410,8 @@ export function PermanentStack({
                             width={artifactW}
                             height={artifactH}
                             rotationZ={rotZ}
-                            elevation={isBurrowed ? 0 : -0.001}
-                            renderOrder={parentRenderOrder - 10 - attachIdx}
+                            elevation={isBurrowed ? 0 : 0.002}
+                            renderOrder={parentRenderOrder + 10 + attachIdx}
                             depthWrite
                             depthTest
                             interactive

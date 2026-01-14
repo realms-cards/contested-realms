@@ -178,8 +178,7 @@ export default function Hand3D({
   // Hand zone: portion of the screen height from the bottom that counts as "in hand zone"
   // Higher value = smaller zone (cursor must be closer to bottom)
   // On touch devices, use a larger trigger zone for easier access
-  // RELAXED: Much larger zone so hand is less finicky to reveal
-  const HAND_ZONE_TOP_FRAC = isCoarsePointer ? 0.65 : 0.7; // Mobile: bottom 35%, Desktop: bottom 30%
+  const HAND_ZONE_TOP_FRAC = isCoarsePointer ? 0.82 : 0.88; // Mobile: bottom 18%, Desktop: bottom 12%
   const HAND_ZONE_BOTTOM_FRAC = 1.0; // Allow touching very edge on mobile
   // Horizontal zone: center portion of screen width that triggers hand reveal
   // On touch devices, use wider zone for easier access

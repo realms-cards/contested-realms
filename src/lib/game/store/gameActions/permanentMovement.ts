@@ -3,6 +3,7 @@ import { isMonumentByName, isAutomatonByName } from "../omphalosState";
 import type {
   CellKey,
   GameState,
+  PermanentItem,
   Permanents,
   PlayerKey,
   ServerPatchT,
@@ -25,7 +26,9 @@ import {
   movePermanentCore,
   bumpPermanentVersion,
   ensurePermanentInstanceId,
+  randomTilt,
 } from "../utils/permanentHelpers";
+import { newPermanentInstanceId } from "../utils/idHelpers";
 import {
   createZonesPatchFor,
   removeCardInstanceFromAllZones,
@@ -38,6 +41,7 @@ export type PermanentMovementSlice = Pick<
   | "moveSelectedPermanentToWithOffset"
   | "movePermanentToZone"
   | "transferPermanentControl"
+  | "copyPermanent"
 >;
 
 export const createPermanentMovementSlice: StateCreator<
@@ -364,8 +368,10 @@ export const createPermanentMovementSlice: StateCreator<
       const isToken = String(item.card?.type || "")
         .toLowerCase()
         .includes("token");
+      const isCopy = !!item.isCopy;
+      // Tokens and copies go to banished instead of graveyard
       const finalTarget =
-        target === "graveyard" && isToken ? "banished" : target;
+        target === "graveyard" && (isToken || isCopy) ? "banished" : target;
       if (finalTarget === "hand")
         seatZones.hand = [...seatZones.hand, movedCard];
       else if (finalTarget === "graveyard")
@@ -546,6 +552,39 @@ export const createPermanentMovementSlice: StateCreator<
       // Cleanup for special minions/artifacts leaving the realm
       const cardNameLower = (item.card?.name || "").toLowerCase();
 
+      // Atlantean Fate: remove flood aura when leaving the board
+      if (cardNameLower.includes("atlantean fate")) {
+        try {
+          // Find and remove the aura associated with this permanent
+          const currentState = get().specialSiteState;
+          const auraToRemove = currentState.atlanteanFateAuras.find(
+            (aura) => aura.permanentAt === at && aura.permanentIndex === index
+          );
+          if (auraToRemove) {
+            const newAuras = currentState.atlanteanFateAuras.filter(
+              (a) => a.id !== auraToRemove.id
+            );
+            // Update state - sites are no longer flooded
+            set({
+              specialSiteState: {
+                ...currentState,
+                atlanteanFateAuras: newAuras,
+              },
+            } as Partial<GameState> as GameState);
+            // Send patch for sync
+            get().trySendPatch({
+              specialSiteState: {
+                ...currentState,
+                atlanteanFateAuras: newAuras,
+              },
+            });
+            get().log(
+              `🌊 Atlantean Fate removed - ${auraToRemove.floodedSites.length} site(s) resume normal threshold`
+            );
+          }
+        } catch {}
+      }
+
       // Pith Imp: return stolen cards when leaving (uses private hand approach)
       if (cardNameLower.includes("pith imp")) {
         try {
@@ -713,6 +752,76 @@ export const createPermanentMovementSlice: StateCreator<
       return {
         permanents: per,
         ...(zonesNext !== state.zones ? { zones: zonesNext } : {}),
+      } as Partial<GameState> as GameState;
+    }),
+  copyPermanent: (at, index) =>
+    set((state) => {
+      get().pushHistory();
+      const arr = state.permanents[at] || [];
+      const item = arr[index];
+      if (!item) return state;
+
+      const ownerKey = seatFromOwner(item.owner);
+      // Only allow copying your own permanents in online mode
+      if (state.transport && state.localPlayerId && state.actorKey) {
+        if (state.actorKey !== ownerKey) {
+          get().log("Cannot copy opponent's permanent");
+          return state as GameState;
+        }
+      }
+
+      // Create a copy with a new instanceId and isCopy flag
+      const copyInstanceId = newPermanentInstanceId();
+      const copyCard: CardRef = {
+        ...item.card,
+        instanceId: copyInstanceId,
+      };
+
+      const copyPermanent: PermanentItem = {
+        owner: item.owner,
+        card: copyCard,
+        offset: [(item.offset?.[0] ?? 0) + 0.15, (item.offset?.[1] ?? 0) + 0.1], // Slight offset from original
+        tilt: randomTilt(),
+        tapVersion: 0,
+        tapped: false,
+        version: 0,
+        instanceId: copyInstanceId,
+        isCopy: true, // Mark as copy - goes to banished when leaving
+      };
+
+      // Add copy to permanents
+      const permanentsNext = { ...state.permanents };
+      const newArr = [...arr, copyPermanent];
+      permanentsNext[at] = newArr;
+
+      // Log the action
+      const { x, y } = parseCellKey(at);
+      const cellNo = getCellNumber(x, y, state.board.size.w);
+      const playerNum = ownerKey === "p1" ? "1" : "2";
+      get().log(
+        `[p${playerNum}:PLAYER] created a token copy of [p${playerNum}card:${item.card.name}] at #${cellNo}`
+      );
+
+      // Send patch to server
+      const tr = state.transport;
+      if (tr) {
+        const patch: ServerPatchT = {
+          permanents: permanentsNext,
+        };
+        get().trySendPatch(patch);
+
+        // Send toast notification
+        try {
+          tr.sendMessage?.({
+            type: "toast",
+            text: `[p${playerNum}:PLAYER] created a token copy of [p${playerNum}card:${item.card.name}]`,
+            seat: ownerKey,
+          } as never);
+        } catch {}
+      }
+
+      return {
+        permanents: permanentsNext,
       } as Partial<GameState> as GameState;
     }),
 });

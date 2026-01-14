@@ -124,6 +124,21 @@ export function isInterrogator(avatarName: string | null | undefined): boolean {
 }
 
 /**
+ * Check if an avatar has the "Tap → Play or draw a site" ability.
+ * Most avatars have this standard ability, but some special avatars do not:
+ * - Magician: No atlas (all cards in spellbook, including sites)
+ */
+export function hasTapToDrawSite(
+  avatarName: string | null | undefined
+): boolean {
+  if (!avatarName) return false;
+  // Magician doesn't have atlas - sites are in spellbook
+  if (isMagician(avatarName)) return false;
+  // All other avatars have the standard tap-to-draw-site ability
+  return true;
+}
+
+/**
  * Get the primary ability type for an avatar by name
  * Returns null if no special ability detected
  */

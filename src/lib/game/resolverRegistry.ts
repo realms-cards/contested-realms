@@ -101,6 +101,14 @@ export const RESOLVER_REGISTRY: ResolverEntry[] = [
     description: "Reveal top cards, opponent chooses which you keep",
   },
   {
+    id: "atlanteanFate",
+    cardName: "Atlantean Fate",
+    category: "spell",
+    stateFile: "atlanteanFateState.ts",
+    description:
+      "Aura covering 2x2 area (upper-left corner) - floods non-ordinary sites (only produce water)",
+  },
+  {
     id: "doomsdayCult",
     cardName: "Doomsday Cult",
     category: "spell",

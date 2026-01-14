@@ -218,7 +218,11 @@ export default function PileSearchDialog({
                           className="flex-1 text-xs bg-purple-600/80 hover:bg-purple-500 rounded px-2 py-1 transition-colors"
                           title="Imposter: Mask yourself as this avatar (3 mana)"
                         >
-                          Mask (3💧)
+                          Mask (
+                          <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full bg-white text-black text-[9px] font-bold align-text-bottom">
+                            3
+                          </span>
+                          )
                         </button>
                       )}
                       {onBanishCard && (

@@ -181,7 +181,8 @@ export const createAnimistSlice: StateCreator<
         else if (fallbackPatch?.permanents)
           combined.permanents = fallbackPatch.permanents;
         if (zonePatch?.zones) combined.zones = zonePatch.zones;
-        combined.players = playersNext;
+        // Only send affected player's data to avoid overwriting opponent's state
+        combined.players = { [who]: playersNext[who] } as GameState["players"];
 
         get().trySendPatch(combined);
 
@@ -292,7 +293,8 @@ export const createAnimistSlice: StateCreator<
         else if (fallbackPatch?.permanents)
           combined.permanents = fallbackPatch.permanents;
         if (zonePatch?.zones) combined.zones = zonePatch.zones;
-        combined.players = playersNext;
+        // Only send affected player's data to avoid overwriting opponent's state
+        combined.players = { [who]: playersNext[who] } as GameState["players"];
 
         get().trySendPatch(combined);
 

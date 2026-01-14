@@ -366,7 +366,7 @@ export default function ChaosTwisterOverlay({
                 ? "🎯 Perfect!"
                 : pending.minigameResult.accuracy === "yellow"
                 ? "🌀 Close!"
-                : "💨 Missed!"}
+                : "Missed!"}
             </span>
             <span className="text-white/80 text-sm">
               <span className="text-red-400 font-bold">

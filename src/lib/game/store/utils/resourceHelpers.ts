@@ -137,6 +137,48 @@ export const conditionalSiteProvides = (
   return true;
 };
 
+// Check if a site is flooded by Atlantean Fate
+const isSiteFloodedByAtlanteanFate = (
+  cellKey: string,
+  specialSiteState?: SpecialSiteState | null
+): boolean => {
+  if (!specialSiteState?.atlanteanFateAuras) return false;
+  for (const aura of specialSiteState.atlanteanFateAuras) {
+    if (aura.floodedSites.includes(cellKey)) {
+      return true;
+    }
+  }
+  return false;
+};
+
+// Check if a site has a Flooded token on it (from context menu flood action)
+export const siteHasFloodedToken = (
+  cellKey: string,
+  permanents: Permanents
+): boolean => {
+  const permsAtCell = permanents[cellKey];
+  if (!permsAtCell) return false;
+  for (const perm of permsAtCell) {
+    const name = String(perm.card?.name || "").toLowerCase();
+    if (name === "flooded") return true;
+  }
+  return false;
+};
+
+// Check if a site has a Silenced token on it
+export const siteHasSilencedToken = (
+  cellKey: string,
+  permanents: Permanents
+): boolean => {
+  const permsAtCell = permanents[cellKey];
+  if (!permsAtCell) return false;
+  for (const perm of permsAtCell) {
+    const name = String(perm.card?.name || "").toLowerCase();
+    if (name === "silenced") return true;
+  }
+  return false;
+};
+
 export const computeThresholdTotals = (
   board: BoardState,
   permanents: Permanents,
@@ -163,6 +205,24 @@ export const computeThresholdTotals = (
 
     // For non-shared sites, check ownership
     if (!isShared && (!tile || tile.owner !== owner)) continue;
+
+    // Check if site is flooded by Atlantean Fate - flooded sites only provide water
+    if (isSiteFloodedByAtlanteanFate(cellKey, specialSiteState)) {
+      totals.water += 1;
+      continue; // Skip normal threshold calculation for flooded sites
+    }
+
+    // Check if site has a Flooded token - adds water threshold
+    if (siteHasFloodedToken(cellKey, permanents)) {
+      totals.water += 1;
+      // Flooded sites still provide their normal threshold, plus the water bonus
+      // So we don't continue here - let it fall through to normal calculation
+    }
+
+    // Check if site is silenced - silenced sites provide no threshold
+    if (siteHasSilencedToken(cellKey, permanents)) {
+      continue; // Skip threshold calculation for silenced sites
+    }
 
     // Check back-row-only sites
     if (
@@ -343,6 +403,11 @@ export const computeAvailableMana = (
     if (!isShared && (!tile || tile.owner !== owner)) continue;
     if (tile?.tapped) continue;
     if (!siteProvidesMana(tile?.card ?? null)) continue;
+
+    // Check if site is silenced - silenced sites provide no mana
+    if (siteHasSilencedToken(cellKey, permanents)) {
+      continue;
+    }
 
     // Check back-row-only sites
     if (

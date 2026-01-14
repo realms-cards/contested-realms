@@ -15,6 +15,7 @@ const emptySpecialSiteState = (): SpecialSiteState => ({
   bloomBonuses: [],
   genesisMana: [],
   pendingElementChoice: null,
+  atlanteanFateAuras: [],
 });
 
 export const createSpecialSiteSlice: StateCreator<
@@ -217,6 +218,7 @@ export const createSpecialSiteSlice: StateCreator<
         bloomBonuses: newBloomBonuses,
         genesisMana: newGenesisMana,
         pendingElementChoice: newPendingChoice,
+        atlanteanFateAuras: state.specialSiteState.atlanteanFateAuras,
       };
 
       set({ specialSiteState: newState });

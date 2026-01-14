@@ -2,6 +2,7 @@ import type { StateCreator } from "zustand";
 import { isMonumentByName, isAutomatonByName } from "../omphalosState";
 import type { GameState, Permanents, PlayerKey } from "../types";
 import {
+  cloneCardForPatch,
   createPermanentDeltaPatch,
   createPermanentsPatch,
 } from "../utils/patchHelpers";
@@ -46,11 +47,14 @@ export const createAttachmentActionsSlice: StateCreator<
       get().log(
         `Attached token [p${ownerNum}card:${token.card.name}] to permanent at ${at}`
       );
+      // Include full card/owner data so opponent can render the attachment
       const deltaPatch = createPermanentDeltaPatch([
         {
           at,
           entry: {
             instanceId: list[index].instanceId ?? undefined,
+            owner: list[index].owner,
+            card: cloneCardForPatch(list[index].card),
             attachedTo: { at, index: targetIdx },
             version: list[index].version,
           },
@@ -91,7 +95,13 @@ export const createAttachmentActionsSlice: StateCreator<
         targetSubTypes.includes("automaton") || isAutomatonByName(targetName);
       const targetIsCarryableArtifact =
         targetIsArtifact && !targetIsMonument && !targetIsAutomaton;
-      if (targetIsToken || targetIsCarryableArtifact) return state;
+      // Allow attaching to minion tokens (Skeleton, Foot Soldier, etc.)
+      const targetIsMinionToken =
+        targetIsToken &&
+        (targetType.includes("minion") || targetSubTypes.includes("minion"));
+      // Block non-minion tokens (Lance, Ward, Disabled, etc.) and carryable artifacts
+      if ((targetIsToken && !targetIsMinionToken) || targetIsCarryableArtifact)
+        return state;
 
       const per: Permanents = { ...state.permanents };
       const list = [...(per[at] || [])];
@@ -105,11 +115,14 @@ export const createAttachmentActionsSlice: StateCreator<
       get().log(
         `Attached ${itemLabel} '${token.card.name}' to permanent '${target.card.name}' at ${at}`
       );
+      // Include full card/owner data so opponent can render the attachment
       const deltaPatch = createPermanentDeltaPatch([
         {
           at,
           entry: {
             instanceId: list[tokenIndex].instanceId ?? undefined,
+            owner: list[tokenIndex].owner,
+            card: cloneCardForPatch(list[tokenIndex].card),
             attachedTo: { at, index: targetIndex },
             version: list[tokenIndex].version,
           },
@@ -144,11 +157,14 @@ export const createAttachmentActionsSlice: StateCreator<
       get().log(
         `Attached '${permanent.card.name}' to ${avatarKey.toUpperCase()} Avatar`
       );
+      // Include full card/owner data so opponent can render the attachment
       const deltaPatch = createPermanentDeltaPatch([
         {
           at,
           entry: {
             instanceId: list[permanentIndex].instanceId ?? undefined,
+            owner: list[permanentIndex].owner,
+            card: cloneCardForPatch(list[permanentIndex].card),
             attachedTo: { at, index: -1 },
             version: list[permanentIndex].version,
           },

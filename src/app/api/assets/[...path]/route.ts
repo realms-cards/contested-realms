@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 const ROOT_DATA = path.join(process.cwd(), "data");
 const ROOT_KTX2 = path.join(process.cwd(), "data-ktx2");
 const ROOT_WEBP = path.join(process.cwd(), "data-webp");
-const ALLOWED_EXTS = new Set(["png", "jpg", "jpeg", "webp", "ktx2"]);
+const ALLOWED_EXTS = new Set(["png", "jpg", "jpeg", "webp", "ktx2", "svg"]);
 
 function contentTypeFor(ext: string): string {
   switch (ext) {
@@ -20,6 +20,8 @@ function contentTypeFor(ext: string): string {
       return "image/webp";
     case "ktx2":
       return "image/ktx2";
+    case "svg":
+      return "image/svg+xml";
     default:
       return "application/octet-stream";
   }
@@ -299,6 +301,7 @@ export async function GET(
     }
 
     const candidates: string[] = [];
+    const isTokenRequest = segments[0]?.toLowerCase() === "tokens";
     for (const variant of pathVariants) {
       const variantLast = variant[variant.length - 1];
       for (const root of roots) {
@@ -316,6 +319,12 @@ export async function GET(
           }
         }
         candidates.push(path.join(root, ...variant));
+        // For tokens, also try SVG fallback when PNG is not found
+        if (isTokenRequest && ["png", "jpg", "jpeg"].includes(requestedExt)) {
+          const svgName = variantLast.replace(/\.[^.]+$/, ".svg");
+          const svgPath = path.join(root, ...variant.slice(0, -1), svgName);
+          candidates.push(svgPath);
+        }
       }
     }
 

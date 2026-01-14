@@ -257,7 +257,12 @@ export const createDemonicContractSlice: StateCreator<
         },
       } as Partial<GameState> as GameState);
 
-      get().trySendPatch({ players: playersNext });
+      // Send only affected player's data to avoid overwriting opponent's state
+      get().trySendPatch({
+        players: {
+          [casterSeat]: playersNext[casterSeat],
+        } as GameState["players"],
+      });
       get().log(
         `[${casterSeat.toUpperCase()}] pays 4 life for Demonic Contract`
       );

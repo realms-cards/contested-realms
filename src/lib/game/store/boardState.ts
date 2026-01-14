@@ -25,6 +25,8 @@ type BoardSlice = Pick<
   | "toggleTapSite"
   | "moveSiteToZone"
   | "moveSiteToGraveyardWithRubble"
+  | "floodSite"
+  | "silenceSite"
   | "transferSiteControl"
   | "switchSitePosition"
 >;
@@ -277,6 +279,212 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
         board: boardNext,
         zones,
         ...(placeRubble ? { permanents: permanentsNext } : {}),
+      } as Partial<GameState> as GameState;
+    }),
+
+  // Place a Flooded token on top of a site (flood effect)
+  floodSite: (x: number, y: number) =>
+    set((state) => {
+      get().pushHistory();
+      const key = toCellKey(x, y);
+      const site = state.board.sites[key];
+      if (!site) {
+        get().log("No site at this position to flood");
+        return state;
+      }
+
+      // Ownership checks
+      if (state.transport && state.actorKey) {
+        const ownerKey = seatFromOwner(site.owner);
+        const isOwner = state.actorKey === ownerKey;
+        const isActingPlayer =
+          (state.actorKey === "p1" && state.currentPlayer === 1) ||
+          (state.actorKey === "p2" && state.currentPlayer === 2);
+        if (!isOwner && !isActingPlayer) {
+          get().log("Cannot flood opponent's site");
+          return state;
+        }
+      }
+
+      const siteOwner = site.owner;
+      const owner = seatFromOwner(siteOwner);
+
+      // Create Flooded token
+      const floodedDef = TOKEN_BY_NAME["flooded"];
+      if (!floodedDef) {
+        get().log("Flooded token definition not found");
+        return state;
+      }
+
+      const floodedCard = prepareCardForSeat(
+        {
+          cardId: newTokenInstanceId(floodedDef),
+          variantId: null,
+          name: floodedDef.name,
+          type: "Token",
+          slug: tokenSlug(floodedDef),
+          thresholds: null,
+        },
+        owner
+      );
+
+      const permanentsNext = { ...state.permanents };
+      const arr = [...(permanentsNext[key] || [])];
+      arr.push({
+        owner: siteOwner,
+        card: floodedCard,
+        offset: null,
+        tilt: randomTilt(),
+        tapVersion: 0,
+        tapped: false,
+        version: 0,
+        instanceId: floodedCard.instanceId ?? newPermanentInstanceId(),
+      });
+      permanentsNext[key] = arr;
+
+      const cellNo = getCellNumber(x, y, state.board.size.w);
+      const playerNum = owner === "p1" ? "1" : "2";
+      get().log(
+        `[p${playerNum}:PLAYER] places [p${playerNum}card:Flooded] on site at #${cellNo}`
+      );
+
+      // Send patch
+      const tr = get().transport;
+      if (tr) {
+        const patch: ServerPatchT = {
+          permanents: permanentsNext,
+        };
+        get().trySendPatch(patch);
+
+        // Send toast
+        const toastMessage = `[p${playerNum}:PLAYER] flooded site at #${cellNo}`;
+        try {
+          tr.sendMessage?.({
+            type: "toast",
+            text: toastMessage,
+            cellKey: key,
+            seat: owner,
+          } as never);
+        } catch {}
+      } else {
+        // Offline: show local toast
+        const toastMessage = `[p${playerNum}:PLAYER] flooded site at #${cellNo}`;
+        try {
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(
+              new CustomEvent("app:toast", {
+                detail: { message: toastMessage, cellKey: key },
+              })
+            );
+          }
+        } catch {}
+      }
+
+      return {
+        permanents: permanentsNext,
+      } as Partial<GameState> as GameState;
+    }),
+
+  // Place a Silenced token on top of a site (removes site abilities)
+  silenceSite: (x: number, y: number) =>
+    set((state) => {
+      get().pushHistory();
+      const key = toCellKey(x, y);
+      const site = state.board.sites[key];
+      if (!site) {
+        get().log("No site at this position to silence");
+        return state;
+      }
+
+      // Ownership checks
+      if (state.transport && state.actorKey) {
+        const ownerKey = seatFromOwner(site.owner);
+        const isOwner = state.actorKey === ownerKey;
+        const isActingPlayer =
+          (state.actorKey === "p1" && state.currentPlayer === 1) ||
+          (state.actorKey === "p2" && state.currentPlayer === 2);
+        if (!isOwner && !isActingPlayer) {
+          get().log("Cannot silence opponent's site");
+          return state;
+        }
+      }
+
+      const siteOwner = site.owner;
+      const owner = seatFromOwner(siteOwner);
+
+      // Create Silenced token
+      const silencedDef = TOKEN_BY_NAME["silenced"];
+      if (!silencedDef) {
+        get().log("Silenced token definition not found");
+        return state;
+      }
+
+      const silencedCard = prepareCardForSeat(
+        {
+          cardId: newTokenInstanceId(silencedDef),
+          variantId: null,
+          name: silencedDef.name,
+          type: "Token",
+          slug: tokenSlug(silencedDef),
+          thresholds: null,
+        },
+        owner
+      );
+
+      const permanentsNext = { ...state.permanents };
+      const arr = [...(permanentsNext[key] || [])];
+      arr.push({
+        owner: siteOwner,
+        card: silencedCard,
+        offset: null,
+        tilt: randomTilt(),
+        tapVersion: 0,
+        tapped: false,
+        version: 0,
+        instanceId: silencedCard.instanceId ?? newPermanentInstanceId(),
+      });
+      permanentsNext[key] = arr;
+
+      const cellNo = getCellNumber(x, y, state.board.size.w);
+      const playerNum = owner === "p1" ? "1" : "2";
+      get().log(
+        `[p${playerNum}:PLAYER] places [p${playerNum}card:Silenced] on site at #${cellNo}`
+      );
+
+      // Send patch
+      const tr = get().transport;
+      if (tr) {
+        const patch: ServerPatchT = {
+          permanents: permanentsNext,
+        };
+        get().trySendPatch(patch);
+
+        // Send toast
+        const toastMessage = `[p${playerNum}:PLAYER] silenced site at #${cellNo}`;
+        try {
+          tr.sendMessage?.({
+            type: "toast",
+            text: toastMessage,
+            cellKey: key,
+            seat: owner,
+          } as never);
+        } catch {}
+      } else {
+        // Offline: show local toast
+        const toastMessage = `[p${playerNum}:PLAYER] silenced site at #${cellNo}`;
+        try {
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(
+              new CustomEvent("app:toast", {
+                detail: { message: toastMessage, cellKey: key },
+              })
+            );
+          }
+        } catch {}
+      }
+
+      return {
+        permanents: permanentsNext,
       } as Partial<GameState> as GameState;
     }),
 

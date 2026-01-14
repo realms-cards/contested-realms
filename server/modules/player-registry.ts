@@ -29,6 +29,8 @@ export interface PlayerRegistryConfig {
   instanceId: string;
   players: Map<string, PlayerRecord>;
   playerIdBySocket: Map<string, string>;
+  /** Called when a player's disconnect grace period expires without reconnect */
+  onGracePeriodExpired?: (playerId: string, matchId: string | null) => void;
 }
 
 interface DisconnectTimer {
@@ -42,6 +44,9 @@ interface DisconnectTimer {
 
 export function createPlayerRegistry(config: PlayerRegistryConfig) {
   const { io, redisState, instanceId, players, playerIdBySocket } = config;
+
+  // Callback for grace period expiry - can be set later via setOnGracePeriodExpired
+  let onGracePeriodExpired = config.onGracePeriodExpired;
 
   // Track pending disconnect timers
   const disconnectTimers = new Map<string, DisconnectTimer>();
@@ -230,14 +235,18 @@ export function createPlayerRegistry(config: PlayerRegistryConfig) {
     // Publish disconnect event
     void redisState.publishPlayerDisconnect(playerId);
 
-    // Set up grace period timer
-    startDisconnectTimer(playerId);
+    // Set up grace period timer - capture matchId at disconnect time
+    const matchIdAtDisconnect = player?.matchId ?? null;
+    startDisconnectTimer(playerId, matchIdAtDisconnect);
   }
 
   /**
    * Start disconnect grace period timer
    */
-  function startDisconnectTimer(playerId: string): void {
+  function startDisconnectTimer(
+    playerId: string,
+    matchIdAtDisconnect: string | null
+  ): void {
     // Cancel existing timer if any
     cancelDisconnectTimer(playerId);
 
@@ -245,11 +254,20 @@ export function createPlayerRegistry(config: PlayerRegistryConfig) {
       // After grace period, check if player reconnected
       const player = players.get(playerId);
       if (player && !player.socketId) {
-        // Player didn't reconnect, can perform cleanup
-        // Note: Match/lobby cleanup is handled by their respective modules
+        // Player didn't reconnect - trigger forfeit callback if they were in a match
         console.log(
-          `[PlayerRegistry] Player ${playerId} disconnect grace period expired`
+          `[PlayerRegistry] Player ${playerId} disconnect grace period expired (was in match: ${matchIdAtDisconnect})`
         );
+        if (matchIdAtDisconnect && onGracePeriodExpired) {
+          try {
+            onGracePeriodExpired(playerId, matchIdAtDisconnect);
+          } catch (err) {
+            console.error(
+              `[PlayerRegistry] onGracePeriodExpired callback failed:`,
+              err
+            );
+          }
+        }
       }
       disconnectTimers.delete(playerId);
     }, DISCONNECT_GRACE_PERIOD_MS);
@@ -330,6 +348,15 @@ export function createPlayerRegistry(config: PlayerRegistryConfig) {
     disconnectTimers.clear();
   }
 
+  /**
+   * Set the callback for grace period expiry (late binding support)
+   */
+  function setOnGracePeriodExpired(
+    callback: (playerId: string, matchId: string | null) => void
+  ): void {
+    onGracePeriodExpired = callback;
+  }
+
   return {
     registerPlayer,
     getPlayer,
@@ -344,6 +371,7 @@ export function createPlayerRegistry(config: PlayerRegistryConfig) {
     handleRemoteConnect,
     shutdown,
     cancelDisconnectTimer,
+    setOnGracePeriodExpired,
   };
 }
 

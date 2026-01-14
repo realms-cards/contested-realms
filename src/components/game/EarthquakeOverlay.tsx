@@ -137,7 +137,9 @@ export default function EarthquakeOverlay({
       {/* Top bar with status */}
       <div className="fixed inset-x-0 top-6 z-[201] pointer-events-none flex justify-center">
         <div className="pointer-events-auto px-5 py-3 rounded-full bg-black/90 text-white ring-1 ring-amber-500/50 shadow-lg text-lg md:text-xl flex items-center gap-3 select-none">
-          <span className="text-amber-400 font-fantaisie">🌍 Earthquake</span>
+          <span className="text-amber-400 font-fantaisie flex items-center gap-1">
+            <img src="/earth.png" alt="earth" className="w-5 h-5" /> Earthquake
+          </span>
           <span className="opacity-80">
             {phase === "selectingArea" &&
               (isCaster

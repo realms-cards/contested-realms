@@ -399,7 +399,10 @@ export const createCoreSlice: StateCreator<
         },
       };
 
-      const patch = { players: newState.players };
+      // Only send the affected player's data to avoid overwriting opponent's mana
+      const patch: ServerPatchT = {
+        players: { [who]: newState.players[who] } as GameState["players"],
+      };
       get().trySendPatch(patch);
 
       if (currentLife !== newLife) {
@@ -602,11 +605,12 @@ export const createCoreSlice: StateCreator<
     };
 
     // Don't send turn in patch - server increments turn when currentPlayer changes
+    // Only send affected player's data to avoid overwriting opponent's state
     const base: ServerPatchT = {
       phase: "Start",
       currentPlayer: nextPlayer,
       hasDrawnThisTurn: false, // Reset draw tracking for new turn
-      players: playersNext,
+      players: { [nextKey]: playersNext[nextKey] } as GameState["players"],
       necromancerSkeletonUsed: necromancerSkeletonUsedNext,
     };
     const deltaPatch =

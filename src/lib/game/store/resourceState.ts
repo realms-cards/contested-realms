@@ -104,7 +104,10 @@ export const createResourceSlice: StateCreator<
         },
       } as Partial<GameState> as GameState;
 
-      const patch: ServerPatchT = { players: newState.players };
+      // Only send the affected player's data to avoid overwriting opponent's state
+      const patch: ServerPatchT = {
+        players: { [who]: newState.players[who] } as GameState["players"],
+      };
       get().trySendPatch(patch);
 
       return newState;
@@ -128,23 +131,18 @@ export const createResourceSlice: StateCreator<
         },
       };
 
-      const patch = { players: newState.players };
+      // Only send the affected player's data to avoid overwriting opponent's state
+      const patch: ServerPatchT = {
+        players: { [who]: newState.players[who] } as GameState["players"],
+      };
       get().trySendPatch(patch);
 
       if (currentThreshold !== newThreshold) {
         const changeText = delta > 0 ? `gains` : `loses`;
-        const elementEmoji =
-          element === "fire"
-            ? "🔥"
-            : element === "water"
-            ? "💧"
-            : element === "earth"
-            ? "🌍"
-            : "💨";
         get().log(
           `${who.toUpperCase()} ${changeText} ${Math.abs(
             delta
-          )} ${elementEmoji} ${element} threshold (${currentThreshold} → ${newThreshold})`
+          )} ${element} threshold (${currentThreshold} → ${newThreshold})`
         );
       }
 

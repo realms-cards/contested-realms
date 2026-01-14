@@ -33,6 +33,7 @@ import MobileHandHint from "@/components/game/MobileHandHint";
 import MotherNatureOverlay from "@/components/game/MotherNatureOverlay";
 import HeadlessHauntOverlay from "@/components/game/HeadlessHauntOverlay";
 import InterrogatorChoiceOverlay from "@/components/game/InterrogatorChoiceOverlay";
+import AtlanteanFateOverlay from "@/components/game/AtlanteanFateOverlay";
 import OfflineMulliganScreen from "@/components/game/OfflineMulliganScreen";
 import OnlineLifeCounters from "@/components/game/OnlineLifeCounters";
 import PigsOfTheSounderOverlay from "@/components/game/PigsOfTheSounderOverlay";
@@ -925,6 +926,9 @@ export default function PlayPage() {
       {/* Interrogator Choice Overlay (pay life or allow spell draw) */}
       <InterrogatorChoiceOverlay />
 
+      {/* Atlantean Fate Overlay (4x4 area selection for flood aura) */}
+      <AtlanteanFateOverlay />
+
       {/* Black Mass Overlay (search for Evil minions) */}
       <BlackMassOverlay />
 
@@ -1197,6 +1201,7 @@ export default function PlayPage() {
           enableRotate={canPanCamera && cameraMode !== "topdown"}
           enableZoom={!dragFromHand && !dragFromPile}
           enableDamping={false}
+          zoomSpeed={0.6}
           onChange={clampControls}
           minDistance={minDist}
           maxDistance={maxDist}

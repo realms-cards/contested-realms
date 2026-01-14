@@ -36,6 +36,10 @@ export type TileInteractionPlaneProps = {
   selectEarthquakeArea?: GameState["selectEarthquakeArea"];
   performEarthquakeSwap?: GameState["performEarthquakeSwap"];
   hasSiteAtTile: boolean;
+  // Atlantean Fate 4x4 area selection support
+  pendingAtlanteanFate?: GameState["pendingAtlanteanFate"];
+  setAtlanteanFatePreview?: GameState["setAtlanteanFatePreview"];
+  selectAtlanteanFateCorner?: GameState["selectAtlanteanFateCorner"];
 };
 
 export function TileInteractionPlane({
@@ -62,6 +66,9 @@ export function TileInteractionPlane({
   selectEarthquakeArea,
   performEarthquakeSwap,
   hasSiteAtTile,
+  pendingAtlanteanFate,
+  setAtlanteanFatePreview,
+  selectAtlanteanFateCorner,
 }: TileInteractionPlaneProps) {
   const { dragAvatar, dragging, setGhost, draggedBody, moveDraggedBody } =
     dragContext;
@@ -74,6 +81,16 @@ export function TileInteractionPlane({
         const world = e.point;
         handlePointerMove(world.x, world.z);
         if (isSpectator) return;
+        // Atlantean Fate preview - update preview corner on hover
+        if (
+          pendingAtlanteanFate &&
+          pendingAtlanteanFate.phase === "selectingCorner" &&
+          (pendingAtlanteanFate.casterSeat === actorKey || !actorKey) &&
+          setAtlanteanFatePreview
+        ) {
+          const cellKey = `${tileX},${tileY}`;
+          setAtlanteanFatePreview(cellKey);
+        }
         if (
           dragFromHand &&
           !dragAvatar &&
@@ -120,6 +137,18 @@ export function TileInteractionPlane({
         ) {
           e.stopPropagation();
           selectEarthquakeArea({ x: tileX, y: tileY });
+          return;
+        }
+        // Atlantean Fate corner selection - click on any tile to select 2x2 area (cursor is lower-right)
+        if (
+          pendingAtlanteanFate &&
+          pendingAtlanteanFate.phase === "selectingCorner" &&
+          (pendingAtlanteanFate.casterSeat === actorKey || !actorKey) &&
+          selectAtlanteanFateCorner
+        ) {
+          e.stopPropagation();
+          const cellKey = `${tileX},${tileY}`;
+          selectAtlanteanFateCorner(cellKey);
           return;
         }
         // Earthquake swap - click on tiles within the 2x2 area to swap

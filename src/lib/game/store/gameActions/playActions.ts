@@ -441,7 +441,9 @@ export const createPlayActionsSlice: StateCreator<
       else if (fallbackPatch?.permanents)
         combined.permanents = fallbackPatch.permanents;
       if (zonePatch?.zones) combined.zones = zonePatch.zones;
-      if (playersNext) combined.players = playersNext;
+      // Only send affected player's data to avoid overwriting opponent's state
+      if (playersNext)
+        combined.players = { [who]: playersNext[who] } as GameState["players"];
       if (Object.keys(combined).length > 0) get().trySendPatch(combined);
       // Check for special card abilities that need custom flows
       const cardNameLower = (card.name || "").toLowerCase();
@@ -461,6 +463,7 @@ export const createPlayActionsSlice: StateCreator<
       const isHighlandPrincess = cardNameLower === "highland princess";
       const isAssortedAnimals = cardNameLower === "assorted animals";
       const isDholChants = cardNameLower === "dhol chants";
+      const isAtlanteanFate = cardNameLower === "atlantean fate";
       console.log("[playActions] Card played:", {
         cardName: card.name,
         cardNameLower,
@@ -794,6 +797,23 @@ export const createPlayActionsSlice: StateCreator<
           console.error("[playActions] Error triggering Dhol Chants:", e);
         }
       }
+      // If this is Atlantean Fate (Aura), begin the 4x4 area selection flow
+      else if (isAtlanteanFate && newest) {
+        try {
+          get().beginAtlanteanFate({
+            spell: {
+              at: key,
+              index: arr.length - 1,
+              instanceId: newest.instanceId ?? null,
+              owner: newest.owner,
+              card: newest.card as CardRef,
+            },
+            casterSeat: who,
+          });
+        } catch (e) {
+          console.error("[playActions] Error triggering Atlantean Fate:", e);
+        }
+      }
       // If this is a Magic card (but not one with special handling), begin the magic casting flow
       else if (type.includes("magic") && newest) {
         try {
@@ -978,28 +998,6 @@ export const createPlayActionsSlice: StateCreator<
           } as Partial<GameState> as GameState;
         }
 
-        // Playing a site from atlas requires tapping the avatar UNLESS it's the free draw
-        // (Avatar ability: "Tap → Play or draw a site")
-        // The free draw happens during Start/Draw phase when hasDrawnThisTurn is false
-        const isFreeDraw =
-          (state.phase === "Start" || state.phase === "Draw") &&
-          !state.hasDrawnThisTurn;
-        const shouldTapAvatar = from === "atlas" && !isFreeDraw;
-
-        // Check if avatar is already tapped when we need to tap it
-        if (shouldTapAvatar) {
-          const avatar = state.avatars[who];
-          if (avatar?.tapped) {
-            get().log(
-              `Cannot play site from Atlas: ${who.toUpperCase()}'s Avatar is already tapped`
-            );
-            return {
-              dragFromPile: null,
-              dragFromHand: false,
-            } as Partial<GameState> as GameState;
-          }
-        }
-
         const ensuredSiteCard = prepareCardForSeat(card, who);
         const sites = {
           ...state.board.sites,
@@ -1010,23 +1008,10 @@ export const createPlayActionsSlice: StateCreator<
           },
         };
 
-        // Build avatar update if we need to tap
-        let avatarsNext = state.avatars;
-        if (shouldTapAvatar) {
-          avatarsNext = {
-            ...state.avatars,
-            [who]: { ...state.avatars[who], tapped: true },
-          } as GameState["avatars"];
-          const logPlayerNum = who === "p1" ? "1" : "2";
-          get().log(
-            `[p${logPlayerNum}:PLAYER] taps Avatar to play site [p${logPlayerNum}card:${card.name}] from ${from} at #${cellNo}`
-          );
-        } else {
-          const logPlayerNum = who === "p1" ? "1" : "2";
-          get().log(
-            `[p${logPlayerNum}:PLAYER] plays site [p${logPlayerNum}card:${card.name}] from ${from} at #${cellNo}`
-          );
-        }
+        const logPlayerNum = who === "p1" ? "1" : "2";
+        get().log(
+          `[p${logPlayerNum}:PLAYER] plays site [p${logPlayerNum}card:${card.name}] from ${from} at #${cellNo}`
+        );
 
         // Broadcast toast to both players with player color and cell for highlighting
         const playerNum = who === "p1" ? "1" : "2";
@@ -1062,10 +1047,6 @@ export const createPlayActionsSlice: StateCreator<
               } as GameState["zones"])
             : state.zones;
 
-        // Playing a site from atlas counts as the draw action for the turn
-        // Mark drawn if this is the free draw (isFreeDraw is true means we're using the free draw)
-        const shouldMarkDrawn = isFreeDraw;
-
         const tr = get().transport;
         if (tr) {
           const zonePatch = createZonesPatchFor(zonesNext, who);
@@ -1073,15 +1054,6 @@ export const createPlayActionsSlice: StateCreator<
             ...(zonePatch?.zones ? { zones: zonePatch.zones } : {}),
             board: { ...state.board, sites } as GameState["board"],
           };
-          if (shouldTapAvatar) {
-            patch.avatars = {
-              [who]: { tapped: true },
-            } as GameState["avatars"];
-          }
-          if (shouldMarkDrawn) {
-            patch.hasDrawnThisTurn = true;
-            patch.phase = "Main"; // Transition to Main phase after free draw
-          }
           get().trySendPatch(patch);
         }
         // Site provides mana immediately - baseMana increases (site counted),
@@ -1093,12 +1065,8 @@ export const createPlayActionsSlice: StateCreator<
         return {
           zones: zonesNext,
           board: { ...state.board, sites },
-          avatars: avatarsNext,
           dragFromPile: null,
           dragFromHand: false,
-          ...(shouldMarkDrawn
-            ? { hasDrawnThisTurn: true, phase: "Main" as const }
-            : {}),
           ...(nextInteractionLog ? { interactionLog: nextInteractionLog } : {}),
         } as Partial<GameState> as GameState;
       }
@@ -1238,26 +1206,6 @@ export const createPlayActionsSlice: StateCreator<
         return { dragFromPile: null } as Partial<GameState> as GameState;
       }
 
-      // Track if this is the free draw at start of turn
-      const isFreeDraw =
-        (state.phase === "Start" || state.phase === "Draw") &&
-        !state.hasDrawnThisTurn;
-
-      // Drawing from atlas requires tapping the avatar (avatar ability: "Tap → Play or draw a site")
-      // UNLESS it's the free draw at start of turn
-      const shouldTapAvatar = from === "atlas" && !isFreeDraw;
-
-      // Check if avatar is already tapped when we need to tap it
-      if (shouldTapAvatar) {
-        const avatar = state.avatars[who];
-        if (avatar?.tapped) {
-          get().log(
-            `Cannot draw from Atlas: ${who.toUpperCase()}'s Avatar is already tapped`
-          );
-          return { dragFromPile: null } as Partial<GameState> as GameState;
-        }
-      }
-
       get().pushHistory();
       const z = { ...state.zones[who] };
       const pileName = from as keyof Zones;
@@ -1314,36 +1262,12 @@ export const createPlayActionsSlice: StateCreator<
         [who]: { ...z, [pileName]: pile, hand },
       } as GameState["zones"];
 
-      // Build avatar update if we need to tap
-      let avatarsNext = state.avatars;
-      if (shouldTapAvatar) {
-        avatarsNext = {
-          ...state.avatars,
-          [who]: { ...state.avatars[who], tapped: true },
-        } as GameState["avatars"];
-        const tapLogNum = who === "p1" ? "1" : "2";
-        get().log(`[p${tapLogNum}:PLAYER] taps Avatar to draw from Atlas`);
-      }
-
-      // Mark that player has drawn this turn (for Draw phase enforcement)
-      // This applies when it's the free draw (Start/Draw phase, not yet drawn)
-      const shouldMarkDrawn = isFreeDraw;
-
       const tr = get().transport;
       if (tr) {
         const patch: ServerPatchT = {};
         const zonePatch = createZonesPatchFor(zonesNext, who);
         if (zonePatch) {
           patch.zones = zonePatch.zones;
-        }
-        if (shouldTapAvatar) {
-          patch.avatars = {
-            [who]: { tapped: true },
-          } as GameState["avatars"];
-        }
-        if (shouldMarkDrawn) {
-          patch.hasDrawnThisTurn = true;
-          patch.phase = "Main"; // Transition to Main phase after free draw
         }
         if (Object.keys(patch).length > 0) {
           get().trySendPatch(patch);
@@ -1352,11 +1276,7 @@ export const createPlayActionsSlice: StateCreator<
 
       return {
         zones: zonesNext,
-        avatars: avatarsNext,
         dragFromPile: null,
-        ...(shouldMarkDrawn
-          ? { hasDrawnThisTurn: true, phase: "Main" as const }
-          : {}),
       } as Partial<GameState> as GameState;
     }),
   moveCardFromHandToPile: (who, pile, position) =>
