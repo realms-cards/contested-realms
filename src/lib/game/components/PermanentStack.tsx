@@ -220,9 +220,10 @@ function CounterBadge3D({
             e.stopPropagation();
             onIncrement();
           }}
+          onClick={(e) => e.stopPropagation()}
         >
           <circleGeometry args={[buttonRadius, 16]} />
-          <meshBasicMaterial color="#166534" transparent opacity={0.9} />
+          <meshBasicMaterial color="#22c55e" transparent opacity={0.9} />
         </mesh>
         <Text
           position={[0, 0, 0.001]}
@@ -263,9 +264,10 @@ function CounterBadge3D({
             e.stopPropagation();
             onDecrement();
           }}
+          onClick={(e) => e.stopPropagation()}
         >
           <circleGeometry args={[buttonRadius, 16]} />
-          <meshBasicMaterial color="#991b1b" transparent opacity={0.9} />
+          <meshBasicMaterial color="#ef4444" transparent opacity={0.9} />
         </mesh>
         <Text
           position={[0, 0, 0.001]}
