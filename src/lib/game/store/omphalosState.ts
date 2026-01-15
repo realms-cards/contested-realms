@@ -376,11 +376,11 @@ export const createOmphalosSlice: StateCreator<
 
     if (!omphalosEntry) return;
 
-    // Banish remaining cards (not graveyard - they were never properly in hand)
+    // Send remaining cards to graveyard (cemetery)
     const ownerSeat = omphalosEntry.ownerSeat;
-    const banished = [...(zones[ownerSeat]?.banished || [])];
+    const graveyard = [...(zones[ownerSeat]?.graveyard || [])];
     for (const card of omphalosEntry.hand) {
-      banished.push(card);
+      graveyard.push(card);
     }
 
     const discardedCount = omphalosEntry.hand.length;
@@ -389,7 +389,7 @@ export const createOmphalosSlice: StateCreator<
       ...zones,
       [ownerSeat]: {
         ...zones[ownerSeat],
-        banished,
+        graveyard,
       },
     };
 
@@ -432,7 +432,7 @@ export const createOmphalosSlice: StateCreator<
           omphalosEntry.artifact.card.name
         }'s ${discardedCount} remaining spell${
           discardedCount !== 1 ? "s" : ""
-        } ${discardedCount !== 1 ? "are" : "is"} banished`
+        } go to graveyard`
       );
     }
   },
