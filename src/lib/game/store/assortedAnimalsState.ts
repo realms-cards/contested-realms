@@ -273,9 +273,8 @@ export const createAssortedAnimalsSlice: StateCreator<
       [spellbook[i], spellbook[j]] = [spellbook[j], spellbook[i]];
     }
 
-    // Move spell to graveyard
-    const graveyard = [...(zones[casterSeat]?.graveyard || [])];
-    graveyard.push(spell.card);
+    // Move spell from board to graveyard (this properly removes it from permanents)
+    get().movePermanentToZone(spell.at, spell.index, "graveyard");
 
     const zonesNext = {
       ...zones,
@@ -283,17 +282,15 @@ export const createAssortedAnimalsSlice: StateCreator<
         ...zones[casterSeat],
         spellbook,
         hand,
-        graveyard,
       },
     };
 
-    // Create patches
+    // Create patches for spellbook and hand (graveyard handled by movePermanentToZone)
     const patches: ServerPatchT = {
       zones: {
         [casterSeat]: {
           spellbook: zonesNext[casterSeat].spellbook,
           hand: zonesNext[casterSeat].hand,
-          graveyard: zonesNext[casterSeat].graveyard,
         },
       } as unknown as ServerPatchT["zones"],
     };
