@@ -13,6 +13,10 @@ import {
   detectBurrowSubmergeAbilities,
   detectBurrowSubmergeAbilitiesSync,
   detectRangedAbilitySync,
+  detectStealthAbility,
+  detectStealthAbilitySync,
+  detectWardAbility,
+  detectWardAbilitySync,
 } from "@/lib/game/cardAbilities";
 import AttachmentTargetSelectionDialog, {
   type AttachmentTarget,
@@ -32,6 +36,11 @@ import {
   toCellKey,
   opponentOwner,
 } from "@/lib/game/store/utils/boardHelpers";
+import {
+  TOKEN_BY_NAME,
+  newTokenInstanceId,
+  tokenSlug,
+} from "@/lib/game/tokens";
 import type { ContextMenuAction } from "@/lib/game/types";
 
 interface ContextMenuProps {
@@ -126,6 +135,10 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   const [positionActions, setPositionActions] = useState<ContextMenuAction[]>(
     []
   );
+  // Track if current permanent/site has stealth/ward keyword ability
+  const [hasStealthAbility, setHasStealthAbility] = useState(false);
+  const [hasWardAbility, setHasWardAbility] = useState(false);
+  const [siteHasWardAbility, setSiteHasWardAbility] = useState(false);
   // Extra combat actions computed per-open menu (do not store in state to avoid duplication)
   const extraActions: ContextMenuAction[] = [];
 
@@ -176,10 +189,30 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   useEffect(() => {
     if (!contextMenu) {
       setPositionActions([]);
+      setHasStealthAbility(false);
+      setHasWardAbility(false);
+      setSiteHasWardAbility(false);
       return;
     }
 
+    // Detect ward ability for sites
     const t = contextMenu.target;
+    if (t.kind === "site") {
+      const key = toCellKey(t.x, t.y);
+      const site = board.sites[key];
+      if (site?.card?.name) {
+        const cardName = site.card.name;
+        (async () => {
+          const hasWard = await detectWardAbility(cardName);
+          setSiteHasWardAbility(hasWard);
+        })();
+      } else {
+        setSiteHasWardAbility(false);
+      }
+    } else {
+      setSiteHasWardAbility(false);
+    }
+
     if (t.kind === "permanent") {
       const item = permanents[t.at]?.[t.index];
       if (item?.card) {
@@ -189,6 +222,12 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         // Fetch abilities asynchronously from API
         (async () => {
           try {
+            // Detect stealth and ward abilities
+            const hasStealth = await detectStealthAbility(item.card.name);
+            setHasStealthAbility(hasStealth);
+            const hasWard = await detectWardAbility(item.card.name);
+            setHasWardAbility(hasWard);
+
             const abilities = await detectBurrowSubmergeAbilities(
               item.card.name
             );
@@ -258,6 +297,8 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
               error
             );
             // Fallback to sync detection as backup
+            setHasStealthAbility(detectStealthAbilitySync(item.card.name));
+            setHasWardAbility(detectWardAbilitySync(item.card.name));
             const abilities = detectBurrowSubmergeAbilitiesSync(item.card.name);
             const canBurrow = abilities.canBurrow;
             const canSubmerge = abilities.canSubmerge;
@@ -1414,6 +1455,263 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                 </button>
               )}
 
+              {/* Ward - for sites with ward keyword */}
+              {t.kind === "site" && siteHasWardAbility && (
+                <button
+                  className="w-full text-left rounded bg-cyan-900/30 hover:bg-cyan-900/50 px-3 py-1"
+                  onClick={() => {
+                    // Spawn ward token and attach to this site
+                    const wardDef = TOKEN_BY_NAME["ward"];
+                    if (!wardDef) {
+                      log("Ward token definition not found");
+                      onClose();
+                      return;
+                    }
+
+                    const key = toCellKey(t.x, t.y);
+                    const site = board.sites[key];
+                    if (!site) {
+                      onClose();
+                      return;
+                    }
+
+                    const ownerNum = site.owner;
+                    const ownerKey = seatFromOwner(ownerNum);
+                    const instanceId = `ward-${Date.now()}-${Math.random()
+                      .toString(36)
+                      .slice(2, 8)}`;
+
+                    // Create ward token card
+                    const wardCard = {
+                      cardId: newTokenInstanceId(wardDef),
+                      variantId: null,
+                      name: wardDef.name,
+                      type: "Token",
+                      slug: tokenSlug(wardDef),
+                      thresholds: null,
+                      instanceId,
+                    };
+
+                    // Create the permanent item for the token on the site's tile
+                    const wardPermanent = {
+                      owner: ownerNum,
+                      card: wardCard,
+                      offset: null,
+                      tilt: 0,
+                      tapVersion: 0,
+                      tapped: false,
+                      version: 0,
+                      instanceId,
+                    };
+
+                    // Add to permanents at the site's cell
+                    const permanentsNext = { ...permanents };
+                    const tileArr = [...(permanentsNext[key] || [])];
+                    tileArr.push(wardPermanent);
+                    permanentsNext[key] = tileArr;
+
+                    // Update store
+                    useGameStore.setState({ permanents: permanentsNext });
+
+                    // Send patch to server
+                    const state = useGameStore.getState();
+                    if (state.transport) {
+                      state.trySendPatch({ permanents: permanentsNext });
+                    }
+
+                    const playerNum = ownerKey === "p1" ? "1" : "2";
+                    log(
+                      `[p${playerNum}card:${
+                        site.card?.name || "Site"
+                      }] gains Ward`
+                    );
+
+                    try {
+                      playCardFlip();
+                    } catch {}
+                    onClose();
+                  }}
+                >
+                  Ward
+                </button>
+              )}
+
+              {/* Stealth - for permanents with stealth keyword */}
+              {t.kind === "permanent" &&
+                isMine &&
+                hasStealthAbility &&
+                (() => {
+                  // Check if already has stealth token attached
+                  const alreadyHasStealth = attachedTokens?.some(
+                    (tk) => tk.name.toLowerCase() === "stealth"
+                  );
+                  return !alreadyHasStealth;
+                })() && (
+                  <button
+                    className="w-full text-left rounded bg-violet-900/30 hover:bg-violet-900/50 px-3 py-1"
+                    onClick={() => {
+                      // Spawn stealth token and attach to this permanent
+                      const stealthDef = TOKEN_BY_NAME["stealth"];
+                      if (!stealthDef) {
+                        log("Stealth token definition not found");
+                        onClose();
+                        return;
+                      }
+
+                      const arr = permanents[t.at] || [];
+                      const perm = arr[t.index];
+                      if (!perm) {
+                        onClose();
+                        return;
+                      }
+
+                      const ownerNum = perm.owner;
+                      const ownerKey = seatFromOwner(ownerNum);
+                      const instanceId = `stealth-${Date.now()}-${Math.random()
+                        .toString(36)
+                        .slice(2, 8)}`;
+
+                      // Create stealth token card
+                      const stealthCard = {
+                        cardId: newTokenInstanceId(stealthDef),
+                        variantId: null,
+                        name: stealthDef.name,
+                        type: "Token",
+                        slug: tokenSlug(stealthDef),
+                        thresholds: null,
+                        instanceId,
+                      };
+
+                      // Create the permanent item for the token
+                      const stealthPermanent = {
+                        owner: ownerNum,
+                        card: stealthCard,
+                        offset: null,
+                        tilt: 0,
+                        tapVersion: 0,
+                        tapped: false,
+                        version: 0,
+                        instanceId,
+                        attachedTo: { at: t.at, index: t.index },
+                      };
+
+                      // Add to permanents and update state
+                      const permanentsNext = { ...permanents };
+                      const tileArr = [...(permanentsNext[t.at] || [])];
+                      tileArr.push(stealthPermanent);
+                      permanentsNext[t.at] = tileArr;
+
+                      // Update store
+                      useGameStore.setState({ permanents: permanentsNext });
+
+                      // Send patch to server
+                      const state = useGameStore.getState();
+                      if (state.transport) {
+                        state.trySendPatch({ permanents: permanentsNext });
+                      }
+
+                      const playerNum = ownerKey === "p1" ? "1" : "2";
+                      log(
+                        `[p${playerNum}card:${perm.card.name}] gains Stealth`
+                      );
+
+                      try {
+                        playCardFlip();
+                      } catch {}
+                      onClose();
+                    }}
+                  >
+                    Gain Stealth
+                  </button>
+                )}
+
+              {/* Ward - for permanents with ward keyword */}
+              {t.kind === "permanent" &&
+                isMine &&
+                hasWardAbility &&
+                (() => {
+                  // Check if already has ward token attached
+                  const alreadyHasWard = attachedTokens?.some(
+                    (tk) => tk.name.toLowerCase() === "ward"
+                  );
+                  return !alreadyHasWard;
+                })() && (
+                  <button
+                    className="w-full text-left rounded bg-cyan-900/30 hover:bg-cyan-900/50 px-3 py-1"
+                    onClick={() => {
+                      // Spawn ward token and attach to this permanent
+                      const wardDef = TOKEN_BY_NAME["ward"];
+                      if (!wardDef) {
+                        log("Ward token definition not found");
+                        onClose();
+                        return;
+                      }
+
+                      const arr = permanents[t.at] || [];
+                      const perm = arr[t.index];
+                      if (!perm) {
+                        onClose();
+                        return;
+                      }
+
+                      const ownerNum = perm.owner;
+                      const ownerKey = seatFromOwner(ownerNum);
+                      const instanceId = `ward-${Date.now()}-${Math.random()
+                        .toString(36)
+                        .slice(2, 8)}`;
+
+                      // Create ward token card
+                      const wardCard = {
+                        cardId: newTokenInstanceId(wardDef),
+                        variantId: null,
+                        name: wardDef.name,
+                        type: "Token",
+                        slug: tokenSlug(wardDef),
+                        thresholds: null,
+                        instanceId,
+                      };
+
+                      // Create the permanent item for the token
+                      const wardPermanent = {
+                        owner: ownerNum,
+                        card: wardCard,
+                        offset: null,
+                        tilt: 0,
+                        tapVersion: 0,
+                        tapped: false,
+                        version: 0,
+                        instanceId,
+                        attachedTo: { at: t.at, index: t.index },
+                      };
+
+                      // Add to permanents and update state
+                      const permanentsNext = { ...permanents };
+                      const tileArr = [...(permanentsNext[t.at] || [])];
+                      tileArr.push(wardPermanent);
+                      permanentsNext[t.at] = tileArr;
+
+                      // Update store
+                      useGameStore.setState({ permanents: permanentsNext });
+
+                      // Send patch to server
+                      const state = useGameStore.getState();
+                      if (state.transport) {
+                        state.trySendPatch({ permanents: permanentsNext });
+                      }
+
+                      const playerNum = ownerKey === "p1" ? "1" : "2";
+                      log(`[p${playerNum}card:${perm.card.name}] gains Ward`);
+
+                      try {
+                        playCardFlip();
+                      } catch {}
+                      onClose();
+                    }}
+                  >
+                    Ward
+                  </button>
+                )}
+
               {(doAttachToken || doDetachToken) && (
                 <div className="space-y-2">
                   {doAttachToken && (
@@ -1577,7 +1875,9 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                               onClose();
                             }}
                           >
-                            Banish {token.name}
+                            {isStealth || isWard
+                              ? `Break ${token.name}`
+                              : `Banish ${token.name}`}
                           </button>
                         );
                       } else {
