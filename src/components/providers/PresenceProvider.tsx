@@ -11,6 +11,7 @@ import {
 import { useOnline } from "@/app/online/online-context";
 import InviteToast from "@/components/online/InviteToast";
 import type { LobbyInvitePayloadT, PlayerLocation } from "@/lib/net/protocol";
+import { notifyLobbyInvite } from "@/lib/notifications/browserNotifications";
 
 interface PresenceContextValue {
   connected: boolean;
@@ -81,6 +82,8 @@ export function PresenceProvider({
 
     const unsubInvite = transport.on("lobbyInvite", (invite) => {
       console.log("[Presence] Received invite from", invite.from.displayName);
+      // Show browser notification if tab is not focused
+      notifyLobbyInvite(invite.from.displayName, invite.lobbyId);
       setLocalInvites((prev) => {
         const key = `${invite.lobbyId}:${invite.from.id}`;
         const exists = prev.some(

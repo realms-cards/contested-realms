@@ -36,6 +36,7 @@ import type {
 import { fetchSocketToken } from "@/lib/net/socketTokenCache";
 import { SocketTransport } from "@/lib/net/socketTransport";
 import type { StartMatchConfig } from "@/lib/net/transport";
+import { notifyPlayerJoinedLobby } from "@/lib/notifications/browserNotifications";
 import { useMatchWebRTC } from "@/lib/rtc/useMatchWebRTC";
 
 // Helper to parse [p1:Name], [p2:Name], [card:Name], and [p1card:Name]/[p2card:Name] markup into styled spans
@@ -994,8 +995,30 @@ export default function OnlineProvider({
         } catch {}
       }),
       transport.on("lobbyUpdated", (p) => {
-        setLobby(p.lobby);
+        const prevLobby = lobbyRef.current;
         const you = meRef.current;
+        const isHost = you && p.lobby.hostId === you.id;
+
+        // Detect new players joining (only notify host when tab is unfocused)
+        if (isHost && prevLobby) {
+          const prevPlayerIds = new Set(prevLobby.players.map((pl) => pl.id));
+          const newPlayers = p.lobby.players.filter(
+            (pl) => !prevPlayerIds.has(pl.id) && pl.id !== you.id
+          );
+          for (const newPlayer of newPlayers) {
+            const notified = notifyPlayerJoinedLobby(
+              newPlayer.displayName,
+              p.lobby.name ?? undefined
+            );
+            console.log(
+              `[Lobby] Player ${newPlayer.displayName} joined. Notification ${
+                notified ? "sent" : "skipped (permission not granted)"
+              }`
+            );
+          }
+        }
+
+        setLobby(p.lobby);
         setReady(
           you ? p.lobby.readyPlayerIds?.includes(you.id) ?? false : false
         );

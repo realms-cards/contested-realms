@@ -15,6 +15,7 @@ import { OnlineContext } from "@/app/online/online-context";
 import AuthButton from "@/components/auth/AuthButton";
 import SeatMediaControls from "@/components/rtc/SeatMediaControls";
 import CacheSettingsSection from "@/components/settings/CacheSettingsSection";
+import NotificationSettingsSection from "@/components/settings/NotificationSettingsSection";
 import { useGraphicsSettings } from "@/hooks/useGraphicsSettings";
 import { FEATURE_CARD_SLEEVES } from "@/lib/config/features";
 import { useColorBlind } from "@/lib/contexts/ColorBlindContext";
@@ -1082,6 +1083,12 @@ export default function UserBadge({
 
               {/* Card Image Cache section */}
               <CacheSettingsSection />
+
+              {/* Browser Notifications section */}
+              <div className="mt-2 pt-3 border-t border-slate-700/50">
+                <NotificationSettingsSection />
+              </div>
+
               {/* SOATC League section */}
               <div className="mt-2 pt-3 border-t border-slate-700/50">
                 <button
