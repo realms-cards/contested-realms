@@ -10,3 +10,35 @@ coverage
 dist
 *.tsbuildinfo
 **/*.tsbuildinfo
+
+# Large card art directories (not needed for server build)
+data/gothic
+data/arthurian_legends
+data/alpha
+data/beta
+data/promo
+data/dragonlord
+data/tokens
+data/scanner-training
+data/scanner-feedback
+
+# Other large asset directories
+cardart
+data-ktx2
+data-ktx2-bak
+data-webp
+public
+
+# Frontend source (not needed for server build)
+src
+
+# Misc
+logs
+exports
+memory
+specs
+docs
+examples
+templates
+openspec
+discord-bot

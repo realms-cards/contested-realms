@@ -1220,6 +1220,11 @@ async function finalizeMatch(
         winnerSeat === "p1" || winnerSeat === "p2"
           ? (winnerSeat as "p1" | "p2")
           : null,
+      // Include winnerId, endReason, and rated for redundancy - ensures client has complete
+      // match end info even if matchEnded event is lost due to network issues
+      winnerId: winnerId || null,
+      endReason,
+      rated: isRatedResult,
     };
     io.to(room).emit("statePatch", { patch: endPatch, t: now });
     try {

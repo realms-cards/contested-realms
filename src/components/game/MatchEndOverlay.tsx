@@ -56,8 +56,14 @@ export default function MatchEndOverlay({
   const isForfeitOrDisconnect = isForfeit || isDisconnect;
   // isAbandonment is true for both forfeits and disconnects - opponent left the match
   const isAbandonment = isForfeitOrDisconnect;
-  // Use ID-based check for forfeits/disconnects, seat-based for normal gameplay wins
-  const didIWin = isForfeitOrDisconnect ? !!didIWinById : didIWinSeat;
+  // Use ID-based check for forfeits/disconnects, but fall back to seat-based if winnerId unavailable.
+  // This handles race conditions where statePatch arrives before matchEnded event.
+  const hasWinnerId = typeof winnerId === "string" && winnerId.length > 0;
+  const didIWin = isForfeitOrDisconnect
+    ? hasWinnerId
+      ? didIWinById
+      : didIWinSeat // Fallback to seat-based when winnerId not yet available
+    : didIWinSeat;
   // Early disconnect = opponent disconnected before turn 5, no winner declared
   const isEarlyForfeit = isDisconnect && !winnerId && rated === false;
   // A draw only occurs when both players died simultaneously (winner is null AND no winnerId AND not a forfeit/disconnect)

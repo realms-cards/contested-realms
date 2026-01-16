@@ -1121,10 +1121,34 @@ export default function OnlineProvider({
             Object.prototype.hasOwnProperty.call(patch, "matchEnded") &&
             Boolean((patch as { matchEnded?: unknown }).matchEnded);
           if (endedFlag) {
+            // Extract match end info from statePatch if present (for redundancy with matchEnded event)
+            const patchWinnerId = (patch as { winnerId?: string | null })
+              ?.winnerId;
+            const patchEndReason = (patch as { endReason?: string })?.endReason;
+            const patchRated = (patch as { rated?: boolean })?.rated;
             setMatch((prev) => {
               if (!prev) return prev;
-              if (prev.status === "ended") return prev;
-              return { ...prev, status: "ended" } as MatchInfo;
+              if (prev.status === "ended" && prev.winnerId) return prev;
+              const next: MatchInfo & Record<string, unknown> = {
+                ...prev,
+                status: "ended",
+              };
+              // Set winnerId from statePatch if available and not already set
+              if (patchWinnerId && !prev.winnerId) {
+                next.winnerId = patchWinnerId;
+              }
+              // Set endReason from statePatch if available
+              if (patchEndReason && !prev.endReason) {
+                next.endReason = patchEndReason;
+              }
+              // Set rated from statePatch if available (rated is not in MatchInfo type but added dynamically)
+              if (
+                typeof patchRated === "boolean" &&
+                (prev as Record<string, unknown>).rated === undefined
+              ) {
+                next.rated = patchRated;
+              }
+              return next as MatchInfo;
             });
           }
         } catch {}
