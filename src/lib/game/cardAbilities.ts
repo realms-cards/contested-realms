@@ -2,7 +2,10 @@
 // Provides access to card rulesText for ability detection via API
 
 // Cache for ability data to avoid repeated API calls
-const abilityCache = new Map<string, { canBurrow: boolean; canSubmerge: boolean; rulesText: string | null }>();
+const abilityCache = new Map<
+  string,
+  { canBurrow: boolean; canSubmerge: boolean; rulesText: string | null }
+>();
 
 /**
  * Fetch card abilities from the API
@@ -15,7 +18,9 @@ async function fetchCardAbilities(cardName: string): Promise<{
   rulesText: string | null;
 }> {
   try {
-    const response = await fetch(`/api/cards/rules?name=${encodeURIComponent(cardName)}`);
+    const response = await fetch(
+      `/api/cards/rules?name=${encodeURIComponent(cardName)}`
+    );
     if (!response.ok) {
       return { canBurrow: false, canSubmerge: false, rulesText: null };
     }
@@ -48,10 +53,10 @@ export async function detectBurrowSubmergeAbilities(cardName: string): Promise<{
 
   // Fetch from API
   const abilities = await fetchCardAbilities(cardName);
-  
+
   // Cache the result
   abilityCache.set(cardName.toLowerCase(), abilities);
-  
+
   return { canBurrow: abilities.canBurrow, canSubmerge: abilities.canSubmerge };
 }
 
@@ -73,24 +78,41 @@ export function detectBurrowSubmergeAbilitiesSync(cardName: string): {
 
   // Fallback to name-based heuristics for common cards
   const lowerName = cardName.toLowerCase();
-  
+
   // Known burrowing cards based on card data analysis
   const burrowingNames = [
-    'hounds of ondaros', 'palliburrie bats', 'cave trolls', 'dwarven digging team',
-    'gneissgnath gnomes', 'root spider', 'pit vipers', 'sand worm', 'muck lampreys',
-    'bluecap knockers', 'dirium fomorians', 'muirid fomorians'
+    "hounds of ondaros",
+    "palliburrie bats",
+    "cave trolls",
+    "dwarven digging team",
+    "gneissgnath gnomes",
+    "root spider",
+    "pit vipers",
+    "sand worm",
+    "muck lampreys",
+    "bluecap knockers",
+    "dirium fomorians",
+    "muirid fomorians",
   ];
-  
-  // Known submerge cards based on card data analysis  
+
+  // Known submerge cards based on card data analysis
   const submergeNames = [
-    'hounds of ondaros', 'muck lampreys', 'anui undine', 'dirium fomorians', 
-    'muirid fomorians', 'vatn draconis'
+    "hounds of ondaros",
+    "muck lampreys",
+    "anui undine",
+    "dirium fomorians",
+    "muirid fomorians",
+    "vatn draconis",
   ];
-  
-  const canBurrow = burrowingNames.some(name => lowerName.includes(name)) ||
-                   lowerName.includes('burrow') || lowerName.includes('worm');
-  const canSubmerge = submergeNames.some(name => lowerName.includes(name)) ||
-                     lowerName.includes('submerge') || lowerName.includes('undine');
+
+  const canBurrow =
+    burrowingNames.some((name) => lowerName.includes(name)) ||
+    lowerName.includes("burrow") ||
+    lowerName.includes("worm");
+  const canSubmerge =
+    submergeNames.some((name) => lowerName.includes(name)) ||
+    lowerName.includes("submerge") ||
+    lowerName.includes("undine");
 
   return { canBurrow, canSubmerge };
 }
@@ -115,7 +137,14 @@ export function detectRangedAbilitySync(cardName: string): boolean {
   const cached = abilityCache.get(cardName.toLowerCase());
   if (cached && cached.rulesText) {
     const t = cached.rulesText.toLowerCase();
-    if (t.includes("ranged") || t.includes("bow") || t.includes("archer") || t.includes("sling") || t.includes("shoot")) return true;
+    if (
+      t.includes("ranged") ||
+      t.includes("bow") ||
+      t.includes("archer") ||
+      t.includes("sling") ||
+      t.includes("shoot")
+    )
+      return true;
   }
   const n = cardName.toLowerCase();
   if (n.includes("archer")) return true;
@@ -137,7 +166,8 @@ export async function detectSpellcaster(cardName: string): Promise<boolean> {
     const abilities = await fetchCardAbilities(cardName);
     const txt = (abilities.rulesText || "").toLowerCase();
     const name = cardName.toLowerCase();
-    const nameCaster = /mage|wizard|sorcer|warlock|witch|shaman|conjur|enchant/.test(name);
+    const nameCaster =
+      /mage|wizard|sorcer|warlock|witch|shaman|conjur|enchant/.test(name);
     if (nameCaster) return true;
     if (!txt) return false;
     if (txt.includes("cast") || txt.includes("spellcaster")) return true;
@@ -147,16 +177,26 @@ export async function detectSpellcaster(cardName: string): Promise<boolean> {
   }
 }
 
-export function detectSpellcasterSync(cardName: string, rulesText?: string | null): boolean {
+export function detectSpellcasterSync(
+  cardName: string,
+  rulesText?: string | null
+): boolean {
   const name = (cardName || "").toLowerCase();
-  if (/mage|wizard|sorcer|warlock|witch|shaman|conjur|enchant/.test(name)) return true;
-  const t = (rulesText || abilityCache.get(name)?.rulesText || "").toLowerCase();
+  if (/mage|wizard|sorcer|warlock|witch|shaman|conjur|enchant/.test(name))
+    return true;
+  const t = (
+    rulesText ||
+    abilityCache.get(name)?.rulesText ||
+    ""
+  ).toLowerCase();
   if (!t) return false;
   if (t.includes("cast") || t.includes("spellcaster")) return true;
   return false;
 }
 
-export async function extractMagicTargetingHints(cardName: string): Promise<MagicTargetHints> {
+export async function extractMagicTargetingHints(
+  cardName: string
+): Promise<MagicTargetHints> {
   try {
     const abilities = await fetchCardAbilities(cardName);
     return extractMagicTargetingHintsSync(cardName, abilities.rulesText || "");
@@ -165,21 +205,108 @@ export async function extractMagicTargetingHints(cardName: string): Promise<Magi
   }
 }
 
-export function extractMagicTargetingHintsSync(cardName: string, rulesText?: string | null): MagicTargetHints {
-  const txt = (rulesText || abilityCache.get(cardName.toLowerCase())?.rulesText || "").toLowerCase();
+export function extractMagicTargetingHintsSync(
+  cardName: string,
+  rulesText?: string | null
+): MagicTargetHints {
+  const txt = (
+    rulesText ||
+    abilityCache.get(cardName.toLowerCase())?.rulesText ||
+    ""
+  ).toLowerCase();
   const nameLc = (cardName || "").toLowerCase();
   const hints: MagicTargetHints = {
     scope: null,
     allow: { location: false, permanent: true, avatar: true },
   };
   const projectileByName = /\b(grapple|shot|missile|arrow|bolt)\b/.test(nameLc);
-  if (txt.includes("projectile") || projectileByName) hints.scope = "projectile";
+  if (txt.includes("projectile") || projectileByName)
+    hints.scope = "projectile";
   else if (txt.includes("adjacent")) hints.scope = "adjacent";
-  else if (txt.includes("nearby") || txt.includes("near")) hints.scope = "nearby";
+  else if (txt.includes("nearby") || txt.includes("near"))
+    hints.scope = "nearby";
   else if (txt.includes("here")) hints.scope = "here";
   else hints.scope = "global";
   if (/(tile|site|here|there|location)/.test(txt)) hints.allow.location = true;
-  if (/(unit|minion|creature|permanent|artifact|relic|totem)/.test(txt)) hints.allow.permanent = true;
+  if (/(unit|minion|creature|permanent|artifact|relic|totem)/.test(txt))
+    hints.allow.permanent = true;
   if (/(avatar|player|opponent)/.test(txt)) hints.allow.avatar = true;
   return hints;
+}
+
+// --- Stealth keyword detection ---
+
+/**
+ * Detect if a card has the Stealth keyword (async)
+ * @param cardName The card name to check
+ * @returns Promise resolving to true if card has stealth keyword
+ */
+export async function detectStealthAbility(cardName: string): Promise<boolean> {
+  try {
+    const abilities = await fetchCardAbilities(cardName);
+    const txt = (abilities.rulesText || "").toLowerCase();
+    if (!txt) return false;
+    // Check for "stealth" keyword in rules text
+    return txt.includes("stealth");
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Detect if a card has the Stealth keyword (synchronous fallback)
+ * Uses cached data if available
+ * @param cardName The card name to check
+ * @param rulesText Optional rules text if already available
+ * @returns true if card has stealth keyword
+ */
+export function detectStealthAbilitySync(
+  cardName: string,
+  rulesText?: string | null
+): boolean {
+  const txt = (
+    rulesText ||
+    abilityCache.get(cardName.toLowerCase())?.rulesText ||
+    ""
+  ).toLowerCase();
+  if (!txt) return false;
+  return txt.includes("stealth");
+}
+
+// --- Ward keyword detection ---
+
+/**
+ * Detect if a card has the Ward keyword (async)
+ * @param cardName The card name to check
+ * @returns Promise resolving to true if card has ward keyword
+ */
+export async function detectWardAbility(cardName: string): Promise<boolean> {
+  try {
+    const abilities = await fetchCardAbilities(cardName);
+    const txt = (abilities.rulesText || "").toLowerCase();
+    if (!txt) return false;
+    return txt.includes("ward");
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Detect if a card has the Ward keyword (synchronous fallback)
+ * Uses cached data if available
+ * @param cardName The card name to check
+ * @param rulesText Optional rules text if already available
+ * @returns true if card has ward keyword
+ */
+export function detectWardAbilitySync(
+  cardName: string,
+  rulesText?: string | null
+): boolean {
+  const txt = (
+    rulesText ||
+    abilityCache.get(cardName.toLowerCase())?.rulesText ||
+    ""
+  ).toLowerCase();
+  if (!txt) return false;
+  return txt.includes("ward");
 }
