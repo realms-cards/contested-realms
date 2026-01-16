@@ -19,6 +19,8 @@ interface D20DiceProps {
   customColor?: string;
   /** Whether this die is highlighted as a duplicate needing reroll */
   isDuplicate?: boolean;
+  /** Key that changes on each reroll to force animation restart (handles same-value rerolls) */
+  rollKey?: number;
 }
 
 export default function D20Dice({
@@ -32,6 +34,7 @@ export default function D20Dice({
   customColor,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   isDuplicate = false,
+  rollKey = 0,
 }: D20DiceProps) {
   const groupRef = useRef<THREE.Group>(null);
   // Initialize rollStartTime to Date.now() if already rolling on mount
@@ -52,30 +55,29 @@ export default function D20Dice({
     "/3dmodels/rpg-dice/textures/RPGDiceSet_m.webp",
   ]);
 
-  // Track the previous isRolling state and roll value to detect when a new roll starts
+  // Track the previous isRolling state and rollKey to detect when a new roll starts
   const prevIsRollingRef = useRef(isRolling);
-  const prevRollRef = useRef(roll);
+  const prevRollKeyRef = useRef(rollKey);
 
-  // Start rolling when isRolling becomes true (edge trigger) OR when roll value changes (reroll)
+  // Start rolling when isRolling becomes true (edge trigger) OR when rollKey changes (explicit reroll signal)
   useEffect(() => {
     // Detect rising edge: was not rolling, now is rolling
     const risingEdge = isRolling && !prevIsRollingRef.current;
-    // Detect reroll: roll value changed while still rolling (both are numbers)
-    const isReroll =
+    // Detect reroll via rollKey change - this is the ONLY way to trigger a reroll animation
+    // This ensures only the specific die that receives a new rollKey will animate
+    const isKeyReroll =
       isRolling &&
       prevIsRollingRef.current &&
-      roll !== null &&
-      prevRollRef.current !== null &&
-      roll !== prevRollRef.current;
+      rollKey !== prevRollKeyRef.current;
 
-    if (risingEdge || isReroll) {
+    if (risingEdge || isKeyReroll) {
       setHasCompletedRoll(false);
       setRollStartTime(Date.now());
       onRollCompleteCalledRef.current = false;
     }
     prevIsRollingRef.current = isRolling;
-    prevRollRef.current = roll;
-  }, [isRolling, roll]);
+    prevRollKeyRef.current = rollKey;
+  }, [isRolling, rollKey]);
 
   // Color based on player or custom override
   const defaultColor = player === "p1" ? "#3b82f6" : "#ef4444"; // blue or red

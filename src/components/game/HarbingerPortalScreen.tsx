@@ -45,6 +45,12 @@ export default function HarbingerPortalScreen({
     false,
   ]);
 
+  // Track roll keys for each die (increments on reroll to trigger animation restart)
+  const [rollKeys, setRollKeys] = useState<number[]>([0, 0, 0]);
+
+  // Track the index of the most recently rolled die (to identify which die caused a duplicate)
+  const [lastRolledIndex, setLastRolledIndex] = useState<number | null>(null);
+
   // Track if we're in a completing state (to show transition message)
   const [isCompleting, setIsCompleting] = useState(false);
 
@@ -71,6 +77,25 @@ export default function HarbingerPortalScreen({
     () => (rolls.length === 3 ? findDuplicateIndices(rolls) : []),
     [rolls]
   );
+
+  // Find the specific die that will be rerolled
+  // If we know which die was rolled last and it caused a duplicate, reroll that one
+  // Otherwise fall back to the highest index duplicate
+  const rerollTargetIndex = useMemo(() => {
+    if (rolls.length !== 3) return -1;
+    const duplicateIndices = findDuplicateIndices(rolls);
+    if (duplicateIndices.length === 0) return -1;
+
+    // If the last rolled die is among the duplicates, that's the one to reroll
+    if (
+      lastRolledIndex !== null &&
+      duplicateIndices.includes(lastRolledIndex)
+    ) {
+      return lastRolledIndex;
+    }
+    // Fallback to highest index duplicate
+    return findLastDuplicateIndex(rolls);
+  }, [rolls, lastRolledIndex]);
 
   const hasDuplicates = duplicateIndices.length > 0;
   const allRolled = rolls.length === 3 && rolls.every((r) => r !== undefined);
@@ -101,24 +126,31 @@ export default function HarbingerPortalScreen({
     (index: number) => {
       if (!isMyTurn || !currentRoller) return;
 
-      // If this die already has a value and is a duplicate, it's a reroll
-      if (rolls[index] !== undefined && duplicateIndices.includes(index)) {
+      // If this die already has a value and is the reroll target, it's a reroll
+      if (rolls[index] !== undefined && index === rerollTargetIndex) {
         rerollPortalDie(currentRoller, index);
         setDiceComplete((prev) => {
           const next = [...prev];
           next[index] = false;
           return next;
         });
+        // Increment rollKey to trigger animation restart even if same value
+        setRollKeys((prev) => {
+          const next = [...prev];
+          next[index] = prev[index] + 1;
+          return next;
+        });
       } else if (rolls[index] === undefined) {
         // First roll for this die
         rollPortalDie(currentRoller, index);
+        setLastRolledIndex(index);
       }
     },
     [
       isMyTurn,
       currentRoller,
       rolls,
-      duplicateIndices,
+      rerollTargetIndex,
       rollPortalDie,
       rerollPortalDie,
     ]
@@ -180,17 +212,25 @@ export default function HarbingerPortalScreen({
     // Don't reroll if phase is already complete
     if (rollPhase === "complete") return;
 
-    // Find only the last die that caused a duplicate (the most recently rolled one)
-    const lastDupIndex = findLastDuplicateIndex(rolls);
-    if (lastDupIndex < 0) return;
+    // Use rerollTargetIndex which considers which die was actually rolled last
+    const targetIndex = rerollTargetIndex;
+    if (targetIndex < 0) return;
 
-    // Auto-reroll only the last duplicate die with a short delay for visual feedback
+    // Auto-reroll only the die that caused the duplicate with a short delay for visual feedback
     const timer = setTimeout(() => {
-      rerollPortalDie(currentRoller, lastDupIndex);
+      rerollPortalDie(currentRoller, targetIndex);
+      // Track this as the last rolled die (for potential chain duplicates)
+      setLastRolledIndex(targetIndex);
       // Reset dice completion state for the rerolled die
       setDiceComplete((prev) => {
         const next = [...prev];
-        next[lastDupIndex] = false;
+        next[targetIndex] = false;
+        return next;
+      });
+      // Increment rollKey to trigger animation restart even if same value
+      setRollKeys((prev) => {
+        const next = [...prev];
+        next[targetIndex] = prev[targetIndex] + 1;
         return next;
       });
     }, 800); // Short delay to show the duplicate highlight
@@ -202,7 +242,7 @@ export default function HarbingerPortalScreen({
     allRolled,
     diceComplete,
     hasDuplicates,
-    rolls,
+    rerollTargetIndex,
     rollPhase,
     rerollPortalDie,
   ]);
@@ -268,8 +308,9 @@ export default function HarbingerPortalScreen({
           {[0, 1, 2].map((index) => {
             const xPos = (index - 1) * 2.5; // -2.5, 0, 2.5
             const roll = rolls[index] ?? null;
-            const isDuplicate = duplicateIndices.includes(index);
-            const canRoll = isMyTurn && (roll === null || isDuplicate);
+            // Only mark the specific die that will be rerolled as duplicate
+            const isRerollTarget = index === rerollTargetIndex;
+            const canRoll = isMyTurn && (roll === null || isRerollTarget);
 
             return (
               <D20Dice
@@ -280,7 +321,8 @@ export default function HarbingerPortalScreen({
                 roll={roll}
                 isRolling={roll !== null}
                 customColor={PORTAL_DICE_COLOR}
-                isDuplicate={isDuplicate && diceComplete[index]}
+                isDuplicate={isRerollTarget && diceComplete[index]}
+                rollKey={rollKeys[index]}
                 onRoll={canRoll ? () => handleRollDie(index) : undefined}
                 onRollComplete={() => handleDiceComplete(index)}
               />
@@ -295,12 +337,13 @@ export default function HarbingerPortalScreen({
         <div className="flex justify-center items-center gap-4 text-sm">
           {[0, 1, 2].map((index) => {
             const roll = rolls[index];
-            const isDuplicate = duplicateIndices.includes(index);
+            // Only highlight the specific die that will be rerolled
+            const isRerollTarget = index === rerollTargetIndex;
             return (
               <div
                 key={index}
                 className={`flex items-center gap-2 px-3 py-1 rounded ${
-                  isDuplicate
+                  isRerollTarget
                     ? "bg-yellow-500/20 ring-1 ring-yellow-500"
                     : roll !== undefined
                     ? "bg-green-500/20"
@@ -311,7 +354,7 @@ export default function HarbingerPortalScreen({
                 <span className="font-fantaisie text-lg">
                   {roll !== undefined ? roll : "—"}
                 </span>
-                {isDuplicate && (
+                {isRerollTarget && (
                   <span className="text-xs text-yellow-400">(reroll)</span>
                 )}
               </div>
