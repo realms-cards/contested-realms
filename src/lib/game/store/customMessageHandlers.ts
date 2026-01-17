@@ -3104,6 +3104,83 @@ export function handleCustomMessage(
     return;
   }
 
+  // --- Auto-Resolve Confirmation message handlers ---
+  if (t === "autoResolveBegin") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const kind = (msg as { kind?: unknown }).kind as string | undefined;
+    const ownerSeat = (msg as { ownerSeat?: unknown }).ownerSeat as
+      | PlayerKey
+      | undefined;
+    const sourceName = (msg as { sourceName?: unknown }).sourceName as
+      | string
+      | undefined;
+    const effectDescription = (msg as { effectDescription?: unknown })
+      .effectDescription as string | undefined;
+
+    if (!id || !kind || !ownerSeat || !sourceName) return;
+
+    set({
+      pendingAutoResolve: {
+        id,
+        kind: kind as import("./types").AutoResolveKind,
+        ownerSeat,
+        sourceName,
+        effectDescription: effectDescription ?? "",
+        callbackData: {},
+        createdAt: Date.now(),
+      },
+    } as Partial<GameState> as GameState);
+    return;
+  }
+
+  if (t === "autoResolveConfirm") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const ownerSeat = (msg as { ownerSeat?: unknown }).ownerSeat as
+      | PlayerKey
+      | undefined;
+    const sourceName = (msg as { sourceName?: unknown }).sourceName as
+      | string
+      | undefined;
+
+    set((s) => {
+      if (!s.pendingAutoResolve || (id && s.pendingAutoResolve.id !== id))
+        return s as GameState;
+      return { pendingAutoResolve: null } as Partial<GameState> as GameState;
+    });
+    try {
+      get().log(
+        `[${ownerSeat?.toUpperCase() ?? "PLAYER"}] ${
+          sourceName ?? "Effect"
+        }: Auto-resolved`
+      );
+    } catch {}
+    return;
+  }
+
+  if (t === "autoResolveCancel") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const ownerSeat = (msg as { ownerSeat?: unknown }).ownerSeat as
+      | PlayerKey
+      | undefined;
+    const sourceName = (msg as { sourceName?: unknown }).sourceName as
+      | string
+      | undefined;
+
+    set((s) => {
+      if (!s.pendingAutoResolve || (id && s.pendingAutoResolve.id !== id))
+        return s as GameState;
+      return { pendingAutoResolve: null } as Partial<GameState> as GameState;
+    });
+    try {
+      get().log(
+        `[${ownerSeat?.toUpperCase() ?? "PLAYER"}] ${
+          sourceName ?? "Effect"
+        }: Manual resolution chosen`
+      );
+    } catch {}
+    return;
+  }
+
   // --- Mother Nature message handlers ---
   if (t === "motherNatureRevealBegin") {
     const id = (msg as { id?: unknown }).id as string | undefined;
@@ -3495,11 +3572,11 @@ export function handleCustomMessage(
           pendingLilithReveal: { ...pending, phase: "complete" },
         } as Partial<GameState> as GameState);
 
-        // Send patch for our spellbook
-        console.log("[Lilith] Sending spellbook patch");
+        // Send patch - send full zones for seat to prevent partial patch issues
+        console.log("[Lilith] Sending zones patch");
         get().trySendPatch({
           zones: {
-            [actorKey]: { spellbook: ourSpellbook },
+            [actorKey]: zonesNext[actorKey],
           },
         } as unknown as ServerPatchT);
       } else {

@@ -61,13 +61,13 @@ export const createMorganaSlice: StateCreator<
       card: CardRef;
     };
     ownerSeat: PlayerKey;
+    skipConfirmation?: boolean; // Set to true when called from auto-resolve
   }) => {
-    const id = newMorganaId();
     const ownerSeat = input.ownerSeat;
     const zones = get().zones;
-    const spellbook = [...(zones[ownerSeat]?.spellbook || [])];
+    const spellbook = zones[ownerSeat]?.spellbook || [];
 
-    // Draw up to 3 spells from top of spellbook
+    // Check if there are spells to draw
     const drawCount = Math.min(3, spellbook.length);
     if (drawCount === 0) {
       get().log(
@@ -76,14 +76,36 @@ export const createMorganaSlice: StateCreator<
       return;
     }
 
-    const drawnCards = spellbook.splice(0, drawCount);
+    // If not skipping confirmation, show dialog first
+    if (!input.skipConfirmation) {
+      get().beginAutoResolve({
+        kind: "morgana_genesis",
+        ownerSeat,
+        sourceName: "Morgana le Fay",
+        sourceLocation: input.minion.at,
+        sourceInstanceId: input.minion.instanceId,
+        effectDescription: `Draw ${drawCount} spell${
+          drawCount !== 1 ? "s" : ""
+        } from your spellbook into Morgana's hand`,
+        callbackData: {
+          minion: input.minion,
+          skipConfirmation: true,
+        },
+      });
+      return;
+    }
+
+    // Execute the actual draw (called after confirmation)
+    const id = newMorganaId();
+    const spellbookCopy = [...spellbook];
+    const drawnCards = spellbookCopy.splice(0, drawCount);
 
     // Update zones
     const zonesNext = {
       ...zones,
       [ownerSeat]: {
         ...zones[ownerSeat],
-        spellbook,
+        spellbook: spellbookCopy,
       },
     };
 

@@ -970,6 +970,31 @@ export type PendingRaiseDead = {
   createdAt: number;
 };
 
+// --- Generic Auto-Resolve Confirmation State --------------------------
+// Used by resolvers that need user confirmation before auto-resolving
+// (for silence effects or manual resolution preference)
+export type AutoResolveKind =
+  | "omphalos_draw" // End of turn: draw spell to Omphalos hand
+  | "morgana_genesis" // Genesis: draw 3 spells to Morgana hand
+  | "headless_haunt_move" // Start of turn: random movement
+  | "pith_imp_steal" // Genesis: steal random card
+  | "lilith_reveal"; // End of turn: reveal opponent's top spell
+
+export type PendingAutoResolve = {
+  id: string;
+  kind: AutoResolveKind;
+  ownerSeat: PlayerKey;
+  // Card/permanent that triggered the effect
+  sourceName: string;
+  sourceLocation?: CellKey;
+  sourceInstanceId?: string | null;
+  // Description of what will happen if auto-resolved
+  effectDescription: string;
+  // Callback data needed to execute the effect
+  callbackData: Record<string, unknown>;
+  createdAt: number;
+};
+
 // --- Doomsday Cult State ----------------------------------------------
 // Continuous effect: reveal top spellbook, allow Evil casting from spellbook
 export type DoomsdayCultInfo = {
@@ -1490,6 +1515,7 @@ export type GameState = {
       card: CardRef;
     };
     ownerSeat: PlayerKey;
+    skipConfirmation?: boolean;
   }) => void;
   returnStolenCard: (
     minionInstanceId: string | null,
@@ -1519,6 +1545,7 @@ export type GameState = {
       card: CardRef;
     };
     ownerSeat: PlayerKey;
+    skipConfirmation?: boolean;
   }) => void;
   castFromMorganaHand: (
     morganaId: string,
@@ -1569,7 +1596,10 @@ export type GameState = {
     cardName: string;
   }) => void;
   unregisterLilith: (instanceId: string) => void;
-  triggerLilithEndOfTurn: (endingPlayerSeat: PlayerKey) => Promise<void>;
+  triggerLilithEndOfTurn: (
+    endingPlayerSeat: PlayerKey,
+    skipConfirmation?: boolean
+  ) => Promise<void>;
   resolveLilithReveal: () => void;
   cancelLilithReveal: () => void;
   // Mother Nature minions (start of turn: reveal your top spell, may summon if minion)
@@ -1691,6 +1721,44 @@ export type GameState = {
   }) => Promise<void>;
   resolveRaiseDead: () => void;
   cancelRaiseDead: () => void;
+  // Generic auto-resolve confirmation (for silence effects)
+  pendingAutoResolve: PendingAutoResolve | null;
+  beginAutoResolve: (
+    pending: Omit<PendingAutoResolve, "id" | "createdAt">
+  ) => void;
+  confirmAutoResolve: () => void;
+  cancelAutoResolve: () => void;
+  // Internal execution functions for auto-resolve (called after confirmation)
+  _executeOmphalosDrawEffect: (
+    omphalosId: string,
+    ownerSeat: PlayerKey
+  ) => void;
+  _executeMorganaGenesisEffect: (
+    minion: {
+      at: string;
+      index: number;
+      instanceId?: string | null;
+      owner: 1 | 2;
+      card: unknown;
+    },
+    ownerSeat: PlayerKey
+  ) => void;
+  _executeHeadlessHauntMoveEffect: (ownerSeat: PlayerKey) => void;
+  _executePithImpStealEffect: (
+    minion: {
+      at: string;
+      index: number;
+      instanceId?: string | null;
+      owner: 1 | 2;
+      card: unknown;
+    },
+    ownerSeat: PlayerKey
+  ) => void;
+  _executeLilithRevealEffect: (
+    lilithInstanceId: string,
+    lilithLocation: string,
+    ownerSeat: PlayerKey
+  ) => void;
   // Dhol Chants (tap N allies, reveal N spells, cast one free)
   pendingDholChants: PendingDholChants | null;
   beginDholChants: (input: {

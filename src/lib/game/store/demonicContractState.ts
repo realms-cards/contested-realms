@@ -461,13 +461,10 @@ export const createDemonicContractSlice: StateCreator<
     // Move spell to graveyard
     get().movePermanentToZone(spell.at, spell.index, "graveyard");
 
-    // Send patches
+    // Send patches - send full zones for seat to prevent partial patch issues
     const patches: ServerPatchT = {
       zones: {
-        [casterSeat]: {
-          spellbook: zonesNext[casterSeat].spellbook,
-          hand: zonesNext[casterSeat].hand,
-        },
+        [casterSeat]: zonesNext[casterSeat],
       } as unknown as ServerPatchT["zones"],
     };
     get().trySendPatch(patches);

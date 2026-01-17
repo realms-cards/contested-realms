@@ -209,13 +209,12 @@ export const createHighlandPrincessSlice: StateCreator<
       },
     };
 
-    // Create patches
+    // Create patches - send ALL zones for the affected seat to prevent partial patch issues
+    // Partial zone patches can lose data when filtering logic on the receiving end
+    // creates intermediate objects that don't preserve all zone keys
     const patches: ServerPatchT = {
       zones: {
-        [ownerSeat]: {
-          spellbook: zonesNext[ownerSeat].spellbook,
-          hand: zonesNext[ownerSeat].hand,
-        },
+        [ownerSeat]: zonesNext[ownerSeat],
       } as unknown as ServerPatchT["zones"],
     };
 

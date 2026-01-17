@@ -52,9 +52,9 @@ export const createPithImpSlice: StateCreator<
       card: CardRef;
     };
     ownerSeat: PlayerKey;
+    skipConfirmation?: boolean;
   }) => {
     console.log("[PithImp] triggerPithImpGenesis called:", input);
-    const id = newPithImpId();
     const ownerSeat = input.ownerSeat;
     const victimSeat = ownerSeat === "p1" ? "p2" : "p1";
     const zones = get().zones;
@@ -80,6 +80,28 @@ export const createPithImpSlice: StateCreator<
       );
       return;
     }
+
+    // Show confirmation dialog before stealing
+    if (!input.skipConfirmation) {
+      get().beginAutoResolve({
+        kind: "pith_imp_steal",
+        ownerSeat,
+        sourceName: "Pith Imp",
+        sourceLocation: input.minion.at,
+        sourceInstanceId: input.minion.instanceId,
+        effectDescription: `Steal a random spell from ${victimSeat.toUpperCase()}'s hand (${
+          spellsInHand.length
+        } eligible)`,
+        callbackData: {
+          minion: input.minion,
+          skipConfirmation: true,
+        },
+      });
+      return;
+    }
+
+    // Execute the actual steal (called after confirmation)
+    const id = newPithImpId();
 
     // Pick a random spell
     const randomValue = Math.random();

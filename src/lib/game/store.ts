@@ -71,6 +71,7 @@ import { createPermanentSlice } from "./store/permanentState";
 import { createPigsOfTheSounderSlice } from "./store/pigsOfTheSounderState";
 import { createPithImpSlice } from "./store/pithImpState";
 import { createRaiseDeadSlice } from "./store/raiseDeadState";
+import { createAutoResolveSlice } from "./store/autoResolveState";
 import { createPortalSlice } from "./store/portalState";
 import { createPositionSlice } from "./store/positionState";
 import { createPreferenceSlice } from "./store/preferenceState";
@@ -179,6 +180,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   ...createPigsOfTheSounderSlice(set, get, storeApi),
   ...createDemonicContractSlice(set, get, storeApi),
   ...createRaiseDeadSlice(set, get, storeApi),
+  ...createAutoResolveSlice(set, get, storeApi),
   ...createDholChantsSlice(set, get, storeApi),
   ...createDoomsdayCultSlice(set, get, storeApi),
   ...createPreferenceSlice(set, get, storeApi),
@@ -291,6 +293,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         pendingAtlanteanFate: null,
         pendingMephistopheles: null,
         pendingRaiseDead: null,
+        pendingAutoResolve: null,
         mephistophelesSummonUsed: createInitialMephistophelesSummonUsed(),
         pendingMephistophelesSummon: null,
         pathfinderUsed: createInitialPathfinderUsed(),

@@ -298,11 +298,11 @@ export const createFrontierSettlersSlice: StateCreator<
       pendingFrontierSettlers: { ...pending, phase: "complete" },
     } as Partial<GameState> as GameState);
 
-    // Send patches
+    // Send patches - send full zones for seat to prevent partial patch issues
     const patches: ServerPatchT = {
       board: { sites: sitesNext } as unknown as ServerPatchT["board"],
       zones: {
-        [ownerSeat]: { atlas: zonesNext[ownerSeat].atlas },
+        [ownerSeat]: zonesNext[ownerSeat],
       } as unknown as ServerPatchT["zones"],
       permanents: permanentsNext,
     };

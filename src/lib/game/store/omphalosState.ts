@@ -6,7 +6,6 @@ import type {
   GameState,
   PlayerKey,
   ServerPatchT,
-  Zones,
 } from "./types";
 
 function newOmphalosId() {
@@ -167,10 +166,11 @@ export const createOmphalosSlice: StateCreator<
     );
   },
 
-  // Trigger end of turn - draws 1 spell for each Omphalos owned by the ending player
+  // Trigger end of turn - shows confirmation before drawing for each Omphalos
   triggerOmphalosEndOfTurn: (endingPlayerSeat: PlayerKey) => {
     const omphalosHands = get().omphalosHands;
     const zones = get().zones;
+    const actorKey = get().actorKey;
 
     // Find all Omphalos owned by the ending player
     const playerOmphalos = omphalosHands.filter(
@@ -179,15 +179,16 @@ export const createOmphalosSlice: StateCreator<
 
     if (playerOmphalos.length === 0) return;
 
+    // In online play, only the owner triggers
+    if (actorKey && actorKey !== endingPlayerSeat) return;
+
     console.log(
       `[Omphalos] End of turn trigger for ${endingPlayerSeat}, found ${playerOmphalos.length} Omphalos`
     );
 
-    let zonesNext = { ...zones };
-    const updatedOmphalosHands = [...omphalosHands];
-
+    // Process each Omphalos with confirmation
     for (const omphalos of playerOmphalos) {
-      const spellbook = [...(zonesNext[endingPlayerSeat]?.spellbook || [])];
+      const spellbook = zones[endingPlayerSeat]?.spellbook || [];
 
       if (spellbook.length === 0) {
         get().log(
@@ -198,71 +199,22 @@ export const createOmphalosSlice: StateCreator<
         continue;
       }
 
-      // Draw 1 spell from top of spellbook
-      const drawnCard = spellbook.shift();
-      if (!drawnCard) {
-        console.warn(
-          `[Omphalos] No card to draw from spellbook for ${endingPlayerSeat}`
-        );
-        continue;
-      }
-
-      // Update zones
-      zonesNext = {
-        ...zonesNext,
-        [endingPlayerSeat]: {
-          ...zonesNext[endingPlayerSeat],
-          spellbook,
+      // Show confirmation dialog before auto-resolving
+      get().beginAutoResolve({
+        kind: "omphalos_draw",
+        ownerSeat: endingPlayerSeat,
+        sourceName: omphalos.artifact.card.name,
+        sourceLocation: omphalos.artifact.at,
+        sourceInstanceId: omphalos.artifact.instanceId,
+        effectDescription: `Draw a spell from your spellbook into ${omphalos.artifact.card.name}'s hand`,
+        callbackData: {
+          omphalosId: omphalos.id,
         },
-      };
+      });
 
-      // Add card to Omphalos hand
-      const omphalosIndex = updatedOmphalosHands.findIndex(
-        (o) => o.id === omphalos.id
-      );
-      if (omphalosIndex !== -1) {
-        updatedOmphalosHands[omphalosIndex] = {
-          ...updatedOmphalosHands[omphalosIndex],
-          hand: [...updatedOmphalosHands[omphalosIndex].hand, drawnCard],
-        };
-      }
-
-      get().log(
-        `[${endingPlayerSeat.toUpperCase()}] ${
-          omphalos.artifact.card.name
-        } draws a spell (now has ${
-          updatedOmphalosHands[omphalosIndex]?.hand.length || 1
-        })`
-      );
-
-      // Broadcast
-      const transport = get().transport;
-      if (transport?.sendMessage) {
-        try {
-          transport.sendMessage({
-            type: "omphalosDrawn",
-            omphalosId: omphalos.id,
-            drawnCard,
-            newHandSize: updatedOmphalosHands[omphalosIndex]?.hand.length || 1,
-            ts: Date.now(),
-          } as unknown as CustomMessage);
-        } catch {}
-      }
+      // Only process one Omphalos at a time (user must confirm each)
+      break;
     }
-
-    set({
-      zones: zonesNext,
-      omphalosHands: updatedOmphalosHands,
-    } as Partial<GameState> as GameState);
-
-    // Send patch
-    const zonePatch: ServerPatchT = {
-      zones: {
-        [endingPlayerSeat]: zonesNext[endingPlayerSeat],
-      } as Record<PlayerKey, Zones>,
-      omphalosHands: updatedOmphalosHands,
-    };
-    get().trySendPatch(zonePatch);
   },
 
   castFromOmphalosHand: (

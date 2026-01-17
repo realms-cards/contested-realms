@@ -258,7 +258,8 @@ export const createHeadlessHauntSlice: StateCreator<
         } catch {}
       }
     } else {
-      // Without Kythera: auto-move each haunt to random tile
+      // Without Kythera: show confirmation before random movement
+      // Store the pending state for use after confirmation
       set({
         pendingHeadlessHauntMove: {
           id,
@@ -272,10 +273,20 @@ export const createHeadlessHauntSlice: StateCreator<
         },
       } as Partial<GameState> as GameState);
 
-      // Process all haunts with random movement
-      setTimeout(() => {
-        get().resolveHeadlessHauntMove();
-      }, 100);
+      // Show confirmation dialog
+      const hauntNames = haunts.map((h) => h.cardName).join(", ");
+      get().beginAutoResolve({
+        kind: "headless_haunt_move",
+        ownerSeat: startingPlayerSeat,
+        sourceName:
+          haunts.length === 1 ? haunts[0].cardName : "Headless Haunts",
+        effectDescription: `Move ${haunts.length} haunt${
+          haunts.length !== 1 ? "s" : ""
+        } to random tile${haunts.length !== 1 ? "s" : ""} (${hauntNames})`,
+        callbackData: {
+          haunts,
+        },
+      });
     }
   },
 
