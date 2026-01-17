@@ -945,6 +945,31 @@ export type PendingDemonicContract = {
   createdAt: number;
 };
 
+// --- Raise Dead State ------------------------------------------------
+// "Summon a random dead minion" - looks at both players' graveyards
+export type RaiseDeadPhase = "confirming" | "resolving" | "complete";
+
+export type PendingRaiseDead = {
+  id: string;
+  spell: {
+    at: CellKey;
+    index: number;
+    instanceId: string | null;
+    owner: 1 | 2;
+    card: CardRef;
+  };
+  casterSeat: PlayerKey;
+  phase: RaiseDeadPhase;
+  // All eligible minions from both graveyards
+  eligibleMinions: Array<{
+    card: CardRef;
+    fromSeat: PlayerKey;
+  }>;
+  selectedMinion: CardRef | null;
+  selectedFromSeat: PlayerKey | null;
+  createdAt: number;
+};
+
 // --- Doomsday Cult State ----------------------------------------------
 // Continuous effect: reveal top spellbook, allow Evil casting from spellbook
 export type DoomsdayCultInfo = {
@@ -1652,6 +1677,20 @@ export type GameState = {
   selectDemonicContractCard: (card: CardRef) => void;
   resolveDemonicContract: () => void;
   cancelDemonicContract: () => void;
+  // Raise Dead (summon random dead minion from any graveyard)
+  pendingRaiseDead: PendingRaiseDead | null;
+  beginRaiseDead: (input: {
+    spell: {
+      at: CellKey;
+      index: number;
+      instanceId: string | null;
+      owner: 1 | 2;
+      card: CardRef;
+    };
+    casterSeat: PlayerKey;
+  }) => Promise<void>;
+  resolveRaiseDead: () => void;
+  cancelRaiseDead: () => void;
   // Dhol Chants (tap N allies, reveal N spells, cast one free)
   pendingDholChants: PendingDholChants | null;
   beginDholChants: (input: {

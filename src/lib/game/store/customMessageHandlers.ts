@@ -3018,6 +3018,92 @@ export function handleCustomMessage(
     return;
   }
 
+  // --- Raise Dead message handlers ---
+  if (t === "raiseDeadBegin") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const spellAny = (msg as { spell?: unknown }).spell as unknown;
+    const casterSeat = (msg as { casterSeat?: unknown }).casterSeat as
+      | PlayerKey
+      | undefined;
+    const eligibleCount = (msg as { eligibleCount?: unknown }).eligibleCount as
+      | number
+      | undefined;
+    if (!id || !spellAny || !casterSeat) return;
+    const rec = spellAny as Record<string, unknown>;
+    // Opponent sees Raise Dead begin but waits for caster decision
+    set({
+      pendingRaiseDead: {
+        id,
+        spell: {
+          at: rec.at as CellKey,
+          index: Number(rec.index),
+          instanceId: (rec.instanceId as string | null) ?? null,
+          owner: Number(rec.owner) as 1 | 2,
+          card: rec.card as CardRef,
+        },
+        casterSeat,
+        phase: "confirming",
+        eligibleMinions: [], // Opponent doesn't see eligible list
+        selectedMinion: null,
+        selectedFromSeat: null,
+        createdAt: Date.now(),
+      },
+    } as Partial<GameState> as GameState);
+    try {
+      get().log(
+        `[${casterSeat.toUpperCase()}] casts Raise Dead (${
+          eligibleCount ?? "?"
+        } dead minions found)`
+      );
+    } catch {}
+    return;
+  }
+
+  if (t === "raiseDeadResolve") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const casterSeat = (msg as { casterSeat?: unknown }).casterSeat as
+      | PlayerKey
+      | undefined;
+    const selectedMinionName = (msg as { selectedMinionName?: unknown })
+      .selectedMinionName as string | undefined;
+    const selectedFromSeat = (msg as { selectedFromSeat?: unknown })
+      .selectedFromSeat as PlayerKey | undefined;
+    const pending = get().pendingRaiseDead;
+    if (!pending || (id && pending.id !== id)) return;
+
+    set({ pendingRaiseDead: null } as Partial<GameState> as GameState);
+    const fromPlayerStr =
+      selectedFromSeat === casterSeat ? "their own" : "opponent's";
+    try {
+      get().log(
+        `[${casterSeat?.toUpperCase() ?? "PLAYER"}] Raise Dead summons ${
+          selectedMinionName ?? "a minion"
+        } from ${fromPlayerStr} graveyard!`
+      );
+    } catch {}
+    return;
+  }
+
+  if (t === "raiseDeadCancel") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const casterSeat = (msg as { casterSeat?: unknown }).casterSeat as
+      | PlayerKey
+      | undefined;
+    set((s) => {
+      if (!s.pendingRaiseDead || (id && s.pendingRaiseDead.id !== id))
+        return s as GameState;
+      return { pendingRaiseDead: null } as Partial<GameState> as GameState;
+    });
+    try {
+      get().log(
+        `[${
+          casterSeat?.toUpperCase() ?? "PLAYER"
+        }] Raise Dead: Manual resolution chosen`
+      );
+    } catch {}
+    return;
+  }
+
   // --- Mother Nature message handlers ---
   if (t === "motherNatureRevealBegin") {
     const id = (msg as { id?: unknown }).id as string | undefined;
