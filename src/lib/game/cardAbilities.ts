@@ -1,6 +1,136 @@
 // Card ability detection utility
 // Provides access to card rulesText for ability detection via API
 
+// Static keyword maps for instant lookup (extracted from cards_raw.json)
+// These are pre-computed for performance - no API call needed
+const STEALTH_CARDS = new Set([
+  "Aino",
+  "Asmodeus",
+  "Band of Thieves",
+  "Brocéliande",
+  "City of Traitors",
+  "Dark Alley",
+  "Dead of Night Demon",
+  "Draco Corvus",
+  "Fade",
+  "Far East Assassin",
+  "Feign Death",
+  "Frozen Horror",
+  "Gossamer Ghost",
+  "Hounds of Ondaros",
+  "Hunter's Lodge",
+  "Hunting Party",
+  "Infiltrate",
+  "Jack the Ripper",
+  "Kingswood Poachers",
+  "Master Tracker",
+  "Midnight Rogue",
+  "Morgana le Fay",
+  "Moss Troll",
+  "Phase Assassin",
+  "Questing Beast",
+  "Scent Hounds",
+  "Sir Agravaine",
+  "Sir Bors the Younger",
+  "Sly Fox",
+  "Sneak Thief",
+  "Survivors of Serava",
+  "Swindler Troupe",
+  "Treetop Hideout",
+  "Truesight Crossbow",
+  "Vanishment",
+  "Watchtower",
+  "Winter Nymph",
+]);
+
+const WARD_CARDS = new Set([
+  "Accursed Desert",
+  "Accursed Tower",
+  "Angel Ascendant",
+  "Archangel Gabriel",
+  "Archangel Michael",
+  "Archangel Raphael",
+  "Archangel Samael",
+  "Bane of Aventis",
+  "Baptize",
+  "Bless",
+  "Blessed Village",
+  "Blessed Well",
+  "Book of Blessings",
+  "Call of the Sea",
+  "Cherubim",
+  "Clairvoyant",
+  "Consecrate",
+  "Coy Nixie",
+  "Crave Golem",
+  "Dalcean Phalanx",
+  "Demonic Contract",
+  "Divine Lance",
+  "Doctor Demetrius",
+  "Enduring Faith",
+  "Faith Incarnate",
+  "Ghostfire",
+  "Guardian Angel",
+  "Guile Sirens",
+  "Heretics of Seth",
+  "Hillside Chapel",
+  "Holy Nova",
+  "Holy Warrior",
+  "Holy Water",
+  "Hotwheel",
+  "Kissers of Wounds",
+  "Malakhim",
+  "Martyrs of Tomorrow",
+  "Monks of Kobalsa",
+  "Mount Ussar Sanctuary",
+  "Murder of Crows",
+  "Nightwatchmen",
+  "Ophanim",
+  "Order of the Pale Worm",
+  "Order of the Sacred Oak",
+  "Order of the White Wing",
+  "Paladins of Bazia",
+  "Persecutor",
+  "Pilgrim's Shrine",
+  "Red Rock of Ravannis",
+  "Revered Revenant",
+  "Sacred Stag",
+  "Saint of Redemption",
+  "Savior",
+  "Second Wind",
+  "Seraphim",
+  "Sir Agravaine",
+  "Sister Stefánia",
+  "Skeleton Mage",
+  "The Empyrean",
+  "Unland Angler",
+  "Vanguard Knights",
+  "Virgin in Prayer",
+  "Wreathed in Righteousness",
+  "Zeppelin of Zealots",
+]);
+
+const LANCE_CARDS = new Set([
+  "Blue Knight",
+  "Dame Britomart",
+  "Forge",
+  "Lance",
+  "Purple Knight",
+  "Reckless Squire",
+  "Shameless Squire",
+  "Sir Balin",
+  "Sir Gaheris",
+  "Sir Lancelot",
+  "Sir Pellinore",
+  "Sir Priamus",
+  "Sir Yvain",
+  "Spearmarshal",
+  "Thankless Squire",
+  "Verdant Knight",
+  "Weightless Squire",
+  "Yellow Knight",
+]);
+
 // Cache for ability data to avoid repeated API calls
 const abilityCache = new Map<
   string,
@@ -237,76 +367,74 @@ export function extractMagicTargetingHintsSync(
 // --- Stealth keyword detection ---
 
 /**
- * Detect if a card has the Stealth keyword (async)
+ * Detect if a card has the Stealth keyword (instant lookup from static map)
  * @param cardName The card name to check
  * @returns Promise resolving to true if card has stealth keyword
  */
 export async function detectStealthAbility(cardName: string): Promise<boolean> {
-  try {
-    const abilities = await fetchCardAbilities(cardName);
-    const txt = (abilities.rulesText || "").toLowerCase();
-    if (!txt) return false;
-    // Check for "stealth" keyword in rules text
-    return txt.includes("stealth");
-  } catch {
-    return false;
-  }
+  // Instant lookup from static map - no API call needed
+  return STEALTH_CARDS.has(cardName);
 }
 
 /**
- * Detect if a card has the Stealth keyword (synchronous fallback)
- * Uses cached data if available
+ * Detect if a card has the Stealth keyword (instant lookup from static map)
  * @param cardName The card name to check
- * @param rulesText Optional rules text if already available
+ * @param _rulesText Unused, kept for API compatibility
  * @returns true if card has stealth keyword
  */
 export function detectStealthAbilitySync(
   cardName: string,
-  rulesText?: string | null
+  _rulesText?: string | null
 ): boolean {
-  const txt = (
-    rulesText ||
-    abilityCache.get(cardName.toLowerCase())?.rulesText ||
-    ""
-  ).toLowerCase();
-  if (!txt) return false;
-  return txt.includes("stealth");
+  return STEALTH_CARDS.has(cardName);
 }
 
 // --- Ward keyword detection ---
 
 /**
- * Detect if a card has the Ward keyword (async)
+ * Detect if a card has the Ward keyword (instant lookup from static map)
  * @param cardName The card name to check
  * @returns Promise resolving to true if card has ward keyword
  */
 export async function detectWardAbility(cardName: string): Promise<boolean> {
-  try {
-    const abilities = await fetchCardAbilities(cardName);
-    const txt = (abilities.rulesText || "").toLowerCase();
-    if (!txt) return false;
-    return txt.includes("ward");
-  } catch {
-    return false;
-  }
+  // Instant lookup from static map - no API call needed
+  return WARD_CARDS.has(cardName);
 }
 
 /**
- * Detect if a card has the Ward keyword (synchronous fallback)
- * Uses cached data if available
+ * Detect if a card has the Ward keyword (instant lookup from static map)
  * @param cardName The card name to check
- * @param rulesText Optional rules text if already available
+ * @param _rulesText Unused, kept for API compatibility
  * @returns true if card has ward keyword
  */
 export function detectWardAbilitySync(
   cardName: string,
-  rulesText?: string | null
+  _rulesText?: string | null
 ): boolean {
-  const txt = (
-    rulesText ||
-    abilityCache.get(cardName.toLowerCase())?.rulesText ||
-    ""
-  ).toLowerCase();
-  if (!txt) return false;
-  return txt.includes("ward");
+  return WARD_CARDS.has(cardName);
+}
+
+// --- Lance keyword detection ---
+
+/**
+ * Detect if a card has the Lance keyword (instant lookup from static map)
+ * @param cardName The card name to check
+ * @returns Promise resolving to true if card has lance keyword
+ */
+export async function detectLanceAbility(cardName: string): Promise<boolean> {
+  // Instant lookup from static map - no API call needed
+  return LANCE_CARDS.has(cardName);
+}
+
+/**
+ * Detect if a card has the Lance keyword (instant lookup from static map)
+ * @param cardName The card name to check
+ * @param _rulesText Unused, kept for API compatibility
+ * @returns true if card has lance keyword
+ */
+export function detectLanceAbilitySync(
+  cardName: string,
+  _rulesText?: string | null
+): boolean {
+  return LANCE_CARDS.has(cardName);
 }
