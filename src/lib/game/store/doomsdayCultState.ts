@@ -146,10 +146,10 @@ export const createDoomsdayCultSlice: StateCreator<
 
     set({ zones: zonesNext } as Partial<GameState> as GameState);
 
-    // Send patch
+    // Send patch - send full zones for seat to prevent partial patch issues
     get().trySendPatch({
       zones: {
-        [playerKey]: { spellbook: zonesNext[playerKey].spellbook },
+        [playerKey]: zonesNext[playerKey],
       } as GameState["zones"],
     });
 

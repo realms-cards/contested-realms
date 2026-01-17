@@ -285,13 +285,11 @@ export const createAssortedAnimalsSlice: StateCreator<
       },
     };
 
-    // Create patches for spellbook and hand (graveyard handled by movePermanentToZone)
+    // Create patches - send full zones for seat to prevent partial patch issues
+    // (graveyard handled by movePermanentToZone)
     const patches: ServerPatchT = {
       zones: {
-        [casterSeat]: {
-          spellbook: zonesNext[casterSeat].spellbook,
-          hand: zonesNext[casterSeat].hand,
-        },
+        [casterSeat]: zonesNext[casterSeat],
       } as unknown as ServerPatchT["zones"],
     };
 

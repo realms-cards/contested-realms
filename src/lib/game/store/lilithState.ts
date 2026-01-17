@@ -51,7 +51,10 @@ export const createLilithSlice: StateCreator<GameState, [], [], LilithSlice> = (
   },
 
   // Trigger end of turn - reveals opponent's top spell for each Lilith owned by the ending player
-  triggerLilithEndOfTurn: async (endingPlayerSeat: PlayerKey) => {
+  triggerLilithEndOfTurn: async (
+    endingPlayerSeat: PlayerKey,
+    skipConfirmation?: boolean
+  ) => {
     const lilithMinions = get().lilithMinions;
     const zones = get().zones;
     const permanents = get().permanents;
@@ -62,6 +65,7 @@ export const createLilithSlice: StateCreator<GameState, [], [], LilithSlice> = (
       actorKey,
       lilithMinions,
       lilithCount: lilithMinions.length,
+      skipConfirmation,
     });
 
     // Find all Lilith minions owned by the ending player
@@ -90,6 +94,30 @@ export const createLilithSlice: StateCreator<GameState, [], [], LilithSlice> = (
       }
 
       const opponentSeat = endingPlayerSeat === "p1" ? "p2" : "p1";
+
+      // Show confirmation dialog before revealing (only for owner)
+      if (
+        !skipConfirmation &&
+        (actorKey === null || actorKey === endingPlayerSeat)
+      ) {
+        const opponentSpellbook = zones[opponentSeat]?.spellbook || [];
+        if (opponentSpellbook.length > 0) {
+          get().beginAutoResolve({
+            kind: "lilith_reveal",
+            ownerSeat: endingPlayerSeat,
+            sourceName: lilith.cardName,
+            sourceLocation: lilith.location,
+            sourceInstanceId: lilith.instanceId,
+            effectDescription: `Reveal ${opponentSeat.toUpperCase()}'s top spell (if minion, summon it under your control)`,
+            callbackData: {
+              lilithInstanceId: lilith.instanceId,
+              lilithLocation: lilith.location,
+              skipConfirmation: true,
+            },
+          });
+          return; // Wait for confirmation before proceeding
+        }
+      }
 
       // In online games, only the Lilith owner initiates the reveal flow
       // The opponent responds via the lilithRevealRequest handler in customMessageHandlers.ts

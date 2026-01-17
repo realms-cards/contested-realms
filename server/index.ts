@@ -604,21 +604,9 @@ const playerRegistry = createPlayerRegistry({
   playerIdBySocket,
 });
 
-// Legacy disconnect timers (used when REDIS_STATE_ENABLED is false)
-// Maps playerId -> { timer, matchId } for grace period tracking
-const LEGACY_DISCONNECT_GRACE_MS = 30000; // 30 seconds
-const legacyDisconnectTimers = new Map<
-  string,
-  { timer: ReturnType<typeof setTimeout>; matchId: string }
->();
-
-function cancelLegacyDisconnectTimer(playerId: string): void {
-  const pending = legacyDisconnectTimers.get(playerId);
-  if (pending) {
-    clearTimeout(pending.timer);
-    legacyDisconnectTimers.delete(playerId);
-  }
-}
+// NOTE: Legacy disconnect timers have been removed.
+// Disconnects do NOT end matches - players can rejoin anytime.
+// Matches only end naturally (game over) or via explicit "Leave Match" button in lobby.
 
 // Leader heartbeat interval (refreshes match leader TTLs)
 let leaderHeartbeatInterval: ReturnType<typeof setInterval> | null = null;
@@ -1431,45 +1419,9 @@ async function finalizeMatch(
   }
 }
 
-// Set up disconnect grace period callback for player registry (late binding)
-// This triggers forfeit when a player disconnects and doesn't reconnect within 30s
-if (REDIS_STATE_ENABLED) {
-  playerRegistry.setOnGracePeriodExpired((playerId, matchId) => {
-    if (!matchId) return;
-    const match = matches.get(matchId);
-    if (!match || match.status === "ended") return;
-
-    // Verify player still hasn't reconnected
-    const player = players.get(playerId);
-    if (player?.socketId) return; // Player reconnected
-
-    console.log(
-      `[match] Player ${playerId} disconnect grace period expired for match ${matchId} - triggering forfeit`
-    );
-
-    // Compute winner (the opponent who stayed)
-    const leftSeat = getSeatForPlayer(
-      match as unknown as { playerIds?: string[] | null },
-      playerId
-    ) as Seat | null;
-    const oppSeat = leftSeat ? getOpponentSeatStrict(leftSeat) : null;
-    const winnerId = oppSeat
-      ? (getPlayerIdForSeat(
-          match as unknown as { playerIds?: string[] | null },
-          oppSeat
-        ) as string | null)
-      : null;
-
-    if (winnerId) {
-      void finalizeMatch(match, {
-        winnerId,
-        winnerSeat: oppSeat ?? undefined,
-        loserId: playerId,
-        reason: "disconnect",
-      });
-    }
-  });
-}
+// NOTE: Disconnects do NOT end matches - players can rejoin anytime.
+// Matches only end naturally (game over) or via explicit "Leave Match" button in lobby.
+// The grace period callback is intentionally not set to prevent disconnect-based forfeits.
 
 // Bot lifecycle helpers moved into BotManager
 
@@ -2294,9 +2246,6 @@ io.on("connection", async (socket: SocketClient) => {
       );
     } else {
       // Legacy local-only state management
-      // Cancel any pending disconnect timer (player reconnected)
-      cancelLegacyDisconnectTimer(playerId);
-
       const existing = players.get(playerId);
       if (!existing) {
         player = {
@@ -5139,66 +5088,9 @@ io.on("connection", async (socket: SocketClient) => {
       // Keep player record for potential rejoin, just clear socket association
       player.socketId = null;
 
-      // Start legacy disconnect timer for players in human matches (non-Redis path only)
-      // This triggers forfeit after 30 seconds if they don't reconnect
-      if (!REDIS_STATE_ENABLED && player.matchId) {
-        const matchForTimer = matches.get(player.matchId);
-        if (
-          matchForTimer &&
-          matchForTimer.status !== "ended" &&
-          matchHasHumanPlayers(matchForTimer)
-        ) {
-          const matchIdForTimer = player.matchId;
-          const playerIdForTimer = player.id;
-
-          // Cancel any existing timer first
-          cancelLegacyDisconnectTimer(playerIdForTimer);
-
-          const timer = setTimeout(() => {
-            // After grace period, check if player reconnected
-            const p = players.get(playerIdForTimer);
-            if (p && !p.socketId) {
-              // Player didn't reconnect - trigger forfeit
-              const m = matches.get(matchIdForTimer);
-              if (m && m.status !== "ended") {
-                console.log(
-                  `[match] Legacy disconnect grace period expired for ${playerIdForTimer} in match ${matchIdForTimer} - triggering forfeit`
-                );
-
-                // Compute winner (the opponent who stayed)
-                const leftSeat = getSeatForPlayer(
-                  m as unknown as { playerIds?: string[] | null },
-                  playerIdForTimer
-                ) as Seat | null;
-                const oppSeat = leftSeat
-                  ? getOpponentSeatStrict(leftSeat)
-                  : null;
-                const winnerId = oppSeat
-                  ? (getPlayerIdForSeat(
-                      m as unknown as { playerIds?: string[] | null },
-                      oppSeat
-                    ) as string | null)
-                  : null;
-
-                if (winnerId) {
-                  void finalizeMatch(m, {
-                    winnerId,
-                    winnerSeat: oppSeat ?? undefined,
-                    loserId: playerIdForTimer,
-                    reason: "disconnect",
-                  });
-                }
-              }
-            }
-            legacyDisconnectTimers.delete(playerIdForTimer);
-          }, LEGACY_DISCONNECT_GRACE_MS);
-
-          legacyDisconnectTimers.set(playerIdForTimer, {
-            timer,
-            matchId: matchIdForTimer,
-          });
-        }
-      }
+      // NOTE: Disconnects do NOT end matches - players can rejoin anytime.
+      // Matches only end naturally (game over) or via explicit "Leave Match" button in lobby.
+      // Legacy disconnect timer is intentionally disabled to prevent disconnect-based forfeits.
     }
 
     // Remove player from matchmaking queue on disconnect

@@ -198,10 +198,10 @@ export const createPigsOfTheSounderSlice: StateCreator<
       pendingPigsOfTheSounder: { ...pending, phase: "complete" },
     } as Partial<GameState> as GameState);
 
-    // Send patches
+    // Send patches - send full zones for seat to prevent partial patch issues
     const patches: ServerPatchT = {
       zones: {
-        [ownerSeat]: { spellbook: zonesNext[ownerSeat].spellbook },
+        [ownerSeat]: zonesNext[ownerSeat],
       } as unknown as ServerPatchT["zones"],
       permanents: permanentsNext,
     };
