@@ -12,6 +12,8 @@ import {
 import {
   detectBurrowSubmergeAbilities,
   detectBurrowSubmergeAbilitiesSync,
+  detectLanceAbility,
+  detectLanceAbilitySync,
   detectRangedAbilitySync,
   detectStealthAbility,
   detectStealthAbilitySync,
@@ -135,9 +137,10 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   const [positionActions, setPositionActions] = useState<ContextMenuAction[]>(
     []
   );
-  // Track if current permanent/site has stealth/ward keyword ability
+  // Track if current permanent/site has stealth/ward/lance keyword ability
   const [hasStealthAbility, setHasStealthAbility] = useState(false);
   const [hasWardAbility, setHasWardAbility] = useState(false);
+  const [hasLanceAbility, setHasLanceAbility] = useState(false);
   const [siteHasWardAbility, setSiteHasWardAbility] = useState(false);
   // Extra combat actions computed per-open menu (do not store in state to avoid duplication)
   const extraActions: ContextMenuAction[] = [];
@@ -191,6 +194,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
       setPositionActions([]);
       setHasStealthAbility(false);
       setHasWardAbility(false);
+      setHasLanceAbility(false);
       setSiteHasWardAbility(false);
       return;
     }
@@ -222,11 +226,13 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         // Fetch abilities asynchronously from API
         (async () => {
           try {
-            // Detect stealth and ward abilities
+            // Detect stealth, ward, and lance abilities
             const hasStealth = await detectStealthAbility(item.card.name);
             setHasStealthAbility(hasStealth);
             const hasWard = await detectWardAbility(item.card.name);
             setHasWardAbility(hasWard);
+            const hasLance = await detectLanceAbility(item.card.name);
+            setHasLanceAbility(hasLance);
 
             const abilities = await detectBurrowSubmergeAbilities(
               item.card.name
@@ -299,6 +305,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
             // Fallback to sync detection as backup
             setHasStealthAbility(detectStealthAbilitySync(item.card.name));
             setHasWardAbility(detectWardAbilitySync(item.card.name));
+            setHasLanceAbility(detectLanceAbilitySync(item.card.name));
             const abilities = detectBurrowSubmergeAbilitiesSync(item.card.name);
             const canBurrow = abilities.canBurrow;
             const canSubmerge = abilities.canSubmerge;
@@ -1709,6 +1716,93 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                     }}
                   >
                     Ward
+                  </button>
+                )}
+
+              {/* Lance - for permanents with lance keyword */}
+              {t.kind === "permanent" &&
+                isMine &&
+                hasLanceAbility &&
+                (() => {
+                  // Check if already has lance token attached
+                  const alreadyHasLance = attachedTokens?.some(
+                    (tk) => tk.name.toLowerCase() === "lance"
+                  );
+                  return !alreadyHasLance;
+                })() && (
+                  <button
+                    className="w-full text-left rounded bg-amber-900/30 hover:bg-amber-900/50 px-3 py-1"
+                    onClick={() => {
+                      // Spawn lance token and attach to this permanent
+                      const lanceDef = TOKEN_BY_NAME["lance"];
+                      if (!lanceDef) {
+                        log("Lance token definition not found");
+                        onClose();
+                        return;
+                      }
+
+                      const arr = permanents[t.at] || [];
+                      const perm = arr[t.index];
+                      if (!perm) {
+                        onClose();
+                        return;
+                      }
+
+                      const ownerNum = perm.owner;
+                      const ownerKey = seatFromOwner(ownerNum);
+                      const instanceId = `lance-${Date.now()}-${Math.random()
+                        .toString(36)
+                        .slice(2, 8)}`;
+
+                      // Create lance token card
+                      const lanceCard = {
+                        cardId: newTokenInstanceId(lanceDef),
+                        variantId: null,
+                        name: lanceDef.name,
+                        type: "Token",
+                        slug: tokenSlug(lanceDef),
+                        thresholds: null,
+                        instanceId,
+                      };
+
+                      // Create the permanent item for the token
+                      const lancePermanent = {
+                        owner: ownerNum,
+                        card: lanceCard,
+                        offset: null,
+                        tilt: 0,
+                        tapVersion: 0,
+                        tapped: false,
+                        version: 0,
+                        instanceId,
+                        attachedTo: { at: t.at, index: t.index },
+                      };
+
+                      // Add to permanents and update state
+                      const permanentsNext = { ...permanents };
+                      const tileArr = [...(permanentsNext[t.at] || [])];
+                      tileArr.push(lancePermanent);
+                      permanentsNext[t.at] = tileArr;
+
+                      // Update store
+                      useGameStore.setState({ permanents: permanentsNext });
+
+                      // Send patch to server
+                      const state = useGameStore.getState();
+                      if (state.transport) {
+                        state.trySendPatch({ permanents: permanentsNext });
+                      }
+
+                      const playerNum = ownerKey === "p1" ? "1" : "2";
+                      log(`[p${playerNum}card:${perm.card.name}] gains Lance`);
+
+                      try {
+                        playCardFlip();
+                      } catch {}
+                      onClose();
+                    }}
+                  >
+                    Lance
                   </button>
                 )}
 
