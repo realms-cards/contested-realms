@@ -20,6 +20,7 @@ import ContextMenu from "@/components/game/ContextMenu";
 import DeckSelector from "@/components/game/DeckSelector";
 import DemonicContractOverlay from "@/components/game/DemonicContractOverlay";
 import DholChantsOverlay from "@/components/game/DholChantsOverlay";
+import RaiseDeadOverlay from "@/components/game/RaiseDeadOverlay";
 import DoomsdayCultOverlay from "@/components/game/DoomsdayCultOverlay";
 import EarthquakeOverlay from "@/components/game/EarthquakeOverlay";
 import { ElementChoiceOverlay } from "@/components/game/ElementChoiceOverlay";
@@ -958,6 +959,9 @@ export default function PlayPage() {
 
       {/* Demonic Contract Overlay */}
       <DemonicContractOverlay />
+
+      {/* Raise Dead Overlay (summon random dead minion) */}
+      <RaiseDeadOverlay />
 
       {/* Dhol Chants Overlay */}
       <DholChantsOverlay />

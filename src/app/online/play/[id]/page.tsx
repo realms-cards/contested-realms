@@ -54,6 +54,7 @@ import OnlineSealedDeckLoader from "@/components/game/OnlineSealedDeckLoader";
 import OnlineStatusBar from "@/components/game/OnlineStatusBar";
 import PigsOfTheSounderOverlay from "@/components/game/PigsOfTheSounderOverlay";
 import PileSearchDialog from "@/components/game/PileSearchDialog";
+import RaiseDeadOverlay from "@/components/game/RaiseDeadOverlay";
 import PithImpOverlay from "@/components/game/PithImpOverlay";
 import PlacementDialog from "@/components/game/PlacementDialog";
 import PlayerResourcePanels from "@/components/game/PlayerResourcePanel";
@@ -3274,6 +3275,8 @@ export default function OnlineMatchPage() {
           <PigsOfTheSounderOverlay />
           {/* Demonic Contract Overlay */}
           <DemonicContractOverlay />
+          {/* Raise Dead Overlay (summon random dead minion) */}
+          <RaiseDeadOverlay />
           {/* Dhol Chants Overlay */}
           <DholChantsOverlay />
           {/* Doomsday Cult Overlay (continuous reveal) */}

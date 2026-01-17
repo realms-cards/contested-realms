@@ -465,6 +465,7 @@ export const createPlayActionsSlice: StateCreator<
       const isDholChants = cardNameLower === "dhol chants";
       const isAtlanteanFate = cardNameLower === "atlantean fate";
       const isMephistopheles = cardNameLower.includes("mephistopheles");
+      const isRaiseDead = cardNameLower === "raise dead";
       console.log("[playActions] Card played:", {
         cardName: card.name,
         cardNameLower,
@@ -815,6 +816,23 @@ export const createPlayActionsSlice: StateCreator<
           });
         } catch (e) {
           console.error("[playActions] Error triggering Atlantean Fate:", e);
+        }
+      }
+      // If this is Raise Dead, begin the confirmation flow to summon random dead minion
+      else if (isRaiseDead && newest) {
+        try {
+          get().beginRaiseDead({
+            spell: {
+              at: key,
+              index: arr.length - 1,
+              instanceId: newest.instanceId ?? null,
+              owner: newest.owner,
+              card: newest.card as CardRef,
+            },
+            casterSeat: who,
+          });
+        } catch (e) {
+          console.error("[playActions] Error triggering Raise Dead:", e);
         }
       }
       // If this is Mephistopheles (Minion), begin the avatar replacement confirmation
