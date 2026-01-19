@@ -33,7 +33,7 @@ import { createZonesPatchFor } from "../utils/zoneHelpers";
 const countPlayerSitesByName = (
   state: GameState,
   siteName: string,
-  owner: 1 | 2
+  owner: 1 | 2,
 ): number => {
   const lc = siteName.toLowerCase();
   let count = 0;
@@ -50,7 +50,7 @@ const triggerSiteGenesis = (
   siteName: string,
   cellKey: CellKey,
   owner: 1 | 2,
-  get: () => GameState
+  get: () => GameState,
 ): void => {
   const lc = siteName.toLowerCase();
   const state = get();
@@ -84,7 +84,7 @@ const triggerSiteGenesis = (
       state.log(`${siteName} Genesis: Only one copy - gain (1) this turn`);
     } else {
       state.log(
-        `${siteName} Genesis: You control ${towerCount} copies - no bonus`
+        `${siteName} Genesis: You control ${towerCount} copies - no bonus`,
       );
     }
     return;
@@ -97,7 +97,7 @@ const getManaCost = (
   metaByCardId: Record<
     number,
     { attack: number | null; defence: number | null; cost: number | null }
-  >
+  >,
 ): number => {
   // First try the card's cost field
   if (typeof card.cost === "number") return card.cost;
@@ -148,7 +148,7 @@ export const createPlayActionsSlice: StateCreator<
         get().log(
           `[Warning] Playing '${
             card.name
-          }' out of turn: ${who.toUpperCase()} is not the current player`
+          }' out of turn: ${who.toUpperCase()} is not the current player`,
         );
       }
       const type = typeEarly;
@@ -167,7 +167,7 @@ export const createPlayActionsSlice: StateCreator<
         }
         if (miss.length) {
           get().log(
-            `[Warning] '${card.name}' missing thresholds (${miss.join(", ")})`
+            `[Warning] '${card.name}' missing thresholds (${miss.join(", ")})`,
           );
         }
       }
@@ -187,7 +187,7 @@ export const createPlayActionsSlice: StateCreator<
         try {
           if (typeof window !== "undefined") {
             window.dispatchEvent(
-              new CustomEvent("app:toast", { detail: { message } })
+              new CustomEvent("app:toast", { detail: { message } }),
             );
           }
         } catch {}
@@ -250,7 +250,7 @@ export const createPlayActionsSlice: StateCreator<
       if (type.includes("site")) {
         if (state.board.sites[key]) {
           get().log(
-            `Cannot play site '${card.name}': #${cellNo} already occupied`
+            `Cannot play site '${card.name}': #${cellNo} already occupied`,
           );
           return state;
         }
@@ -260,7 +260,7 @@ export const createPlayActionsSlice: StateCreator<
         };
         const logPlayerNum = who === "p1" ? "1" : "2";
         get().log(
-          `[p${logPlayerNum}:PLAYER] plays site [p${logPlayerNum}card:${card.name}] at #${cellNo}`
+          `[p${logPlayerNum}:PLAYER] plays site [p${logPlayerNum}card:${card.name}] at #${cellNo}`,
         );
         // Broadcast toast to both players with player color and cell for highlighting
         const playerNum = who === "p1" ? "1" : "2";
@@ -282,7 +282,7 @@ export const createPlayActionsSlice: StateCreator<
               window.dispatchEvent(
                 new CustomEvent("app:toast", {
                   detail: { message: toastMessage, cellKey: key },
-                })
+                }),
               );
             }
           } catch {}
@@ -323,7 +323,7 @@ export const createPlayActionsSlice: StateCreator<
 
         const nextInteractionLog = expireInteractionGrant(
           state,
-          consumeInstantId
+          consumeInstantId,
         );
         return {
           zones: {
@@ -393,7 +393,7 @@ export const createPlayActionsSlice: StateCreator<
             window.dispatchEvent(
               new CustomEvent("app:toast", {
                 detail: { message: toastMessage, cellKey: key },
-              })
+              }),
             );
           }
         } catch {}
@@ -490,7 +490,7 @@ export const createPlayActionsSlice: StateCreator<
       const resolversDisabled = get().resolversDisabled;
       if (resolversDisabled) {
         console.log(
-          "[playActions] Resolvers disabled - skipping custom card logic"
+          "[playActions] Resolvers disabled - skipping custom card logic",
         );
         // Still trigger generic magic cast for Magic cards so they can be resolved manually
         if (type.includes("magic") && newest) {
@@ -875,7 +875,7 @@ export const createPlayActionsSlice: StateCreator<
       }
       const nextInteractionLog = expireInteractionGrant(
         state,
-        consumeInstantId
+        consumeInstantId,
       );
       // IMPORTANT: Merge zone changes from multiple sources:
       // - zonesNext[who].hand: the hand update (card removed from hand)
@@ -936,7 +936,7 @@ export const createPlayActionsSlice: StateCreator<
         get().log(
           `[Warning] Playing '${
             card.name
-          }' from ${from} out of turn: ${who.toUpperCase()} is not the current player`
+          }' from ${from} out of turn: ${who.toUpperCase()} is not the current player`,
         );
       }
       // Guard: Must draw a card before playing during Start/Draw phase
@@ -957,7 +957,7 @@ export const createPlayActionsSlice: StateCreator<
         try {
           if (typeof window !== "undefined") {
             window.dispatchEvent(
-              new CustomEvent("app:toast", { detail: { message } })
+              new CustomEvent("app:toast", { detail: { message } }),
             );
           }
         } catch {}
@@ -978,7 +978,7 @@ export const createPlayActionsSlice: StateCreator<
         !allowInstant
       ) {
         get().log(
-          `Cannot play '${card.name}' from ${from} during ${state.phase} phase`
+          `Cannot play '${card.name}' from ${from} during ${state.phase} phase`,
         );
         return {
           dragFromPile: null,
@@ -998,7 +998,7 @@ export const createPlayActionsSlice: StateCreator<
             (c) =>
               c.cardId === card.cardId &&
               c.variantId === card.variantId &&
-              c.name === card.name
+              c.name === card.name,
           );
         }
         if (removedIndex < 0) {
@@ -1024,7 +1024,7 @@ export const createPlayActionsSlice: StateCreator<
         TOKEN_BY_NAME[(card.name || "").toLowerCase()]?.siteReplacement;
       if (isRubble && state.board.sites[key]) {
         get().log(
-          `Cannot place token '${card.name}': #${cellNo} already occupied`
+          `Cannot place token '${card.name}': #${cellNo} already occupied`,
         );
         return {
           dragFromPile: null,
@@ -1034,7 +1034,7 @@ export const createPlayActionsSlice: StateCreator<
       if (type.includes("site")) {
         if (state.board.sites[key]) {
           get().log(
-            `Cannot play site '${card.name}': #${cellNo} already occupied`
+            `Cannot play site '${card.name}': #${cellNo} already occupied`,
           );
           return {
             dragFromPile: null,
@@ -1054,7 +1054,7 @@ export const createPlayActionsSlice: StateCreator<
 
         const logPlayerNum = who === "p1" ? "1" : "2";
         get().log(
-          `[p${logPlayerNum}:PLAYER] plays site [p${logPlayerNum}card:${card.name}] from ${from} at #${cellNo}`
+          `[p${logPlayerNum}:PLAYER] plays site [p${logPlayerNum}card:${card.name}] from ${from} at #${cellNo}`,
         );
 
         // Broadcast toast to both players with player color and cell for highlighting
@@ -1077,7 +1077,7 @@ export const createPlayActionsSlice: StateCreator<
               window.dispatchEvent(
                 new CustomEvent("app:toast", {
                   detail: { message: toastMessage, cellKey: key },
-                })
+                }),
               );
             }
           } catch {}
@@ -1104,7 +1104,7 @@ export const createPlayActionsSlice: StateCreator<
         // and availableMana = baseMana + offset, so both numbers increase automatically
         const nextInteractionLog = expireInteractionGrant(
           state,
-          consumeInstantId
+          consumeInstantId,
         );
         return {
           zones: zonesNext,
@@ -1140,7 +1140,7 @@ export const createPlayActionsSlice: StateCreator<
         ? "a card face-down"
         : `[p${logPlayerNum2}card:${card.name}]`;
       get().log(
-        `[p${logPlayerNum2}:PLAYER] plays ${logCardName2} from ${from} at #${cellNo}`
+        `[p${logPlayerNum2}:PLAYER] plays ${logCardName2} from ${from} at #${cellNo}`,
       );
       // Broadcast toast to both players with player color and cell for highlighting (skip tokens)
       if (!type.includes("token")) {
@@ -1166,7 +1166,7 @@ export const createPlayActionsSlice: StateCreator<
               window.dispatchEvent(
                 new CustomEvent("app:toast", {
                   detail: { message: toastMessage, cellKey: key },
-                })
+                }),
               );
             }
           } catch {}
@@ -1213,7 +1213,7 @@ export const createPlayActionsSlice: StateCreator<
       } catch {}
       const nextInteractionLog = expireInteractionGrant(
         state,
-        consumeInstantId
+        consumeInstantId,
       );
       return {
         zones: zonesNext ?? state.zones,
@@ -1238,7 +1238,7 @@ export const createPlayActionsSlice: StateCreator<
       if (!isCurrent) {
         // Log warning but allow operation for game repair purposes
         get().log(
-          `[Warning] Drawing from ${from} out of turn: ${who.toUpperCase()} is not the current player`
+          `[Warning] Drawing from ${from} out of turn: ${who.toUpperCase()} is not the current player`,
         );
       }
       // Collection-to-hand moves are only legal during the controlling player's own Main phase.
@@ -1254,7 +1254,7 @@ export const createPlayActionsSlice: StateCreator<
       const z = { ...state.zones[who] };
       const pileName = from as keyof Zones;
       const pile = [...(z[pileName] as CardRef[])].map((pileCard) =>
-        prepareCardForSeat(pileCard, who)
+        prepareCardForSeat(pileCard, who),
       );
       let removedIndex = pile.findIndex((c) => c === card);
       if (removedIndex < 0) {
@@ -1262,7 +1262,7 @@ export const createPlayActionsSlice: StateCreator<
           (c) =>
             c.cardId === card.cardId &&
             c.variantId === card.variantId &&
-            c.name === card.name
+            c.name === card.name,
         );
       }
       if (removedIndex < 0) {
@@ -1286,16 +1286,16 @@ export const createPlayActionsSlice: StateCreator<
           from === "spellbook"
             ? "Spellbook"
             : from === "atlas"
-            ? "Atlas"
-            : from === "collection"
-            ? "Collection"
-            : from;
+              ? "Atlas"
+              : from === "collection"
+                ? "Collection"
+                : from;
         try {
           if (typeof window !== "undefined") {
             window.dispatchEvent(
               new CustomEvent("app:toast", {
                 detail: { message: `Drew from ${pileLabel}` },
-              })
+              }),
             );
           }
         } catch {}
@@ -1306,12 +1306,24 @@ export const createPlayActionsSlice: StateCreator<
         [who]: { ...z, [pileName]: pile, hand },
       } as GameState["zones"];
 
+      // Track if this is the free draw at start of turn (same logic as drawFrom in zoneState.ts)
+      const isFreeDraw =
+        (state.phase === "Start" || state.phase === "Draw") &&
+        !state.hasDrawnThisTurn &&
+        isCurrent;
+      const shouldMarkDrawn =
+        isFreeDraw && (from === "spellbook" || from === "atlas");
+
       const tr = get().transport;
       if (tr) {
         const patch: ServerPatchT = {};
         const zonePatch = createZonesPatchFor(zonesNext, who);
         if (zonePatch) {
           patch.zones = zonePatch.zones;
+        }
+        if (shouldMarkDrawn) {
+          patch.hasDrawnThisTurn = true;
+          patch.phase = "Main"; // Transition to Main phase after free draw
         }
         if (Object.keys(patch).length > 0) {
           get().trySendPatch(patch);
@@ -1321,6 +1333,9 @@ export const createPlayActionsSlice: StateCreator<
       return {
         zones: zonesNext,
         dragFromPile: null,
+        ...(shouldMarkDrawn
+          ? { hasDrawnThisTurn: true, phase: "Main" as const }
+          : {}),
       } as Partial<GameState> as GameState;
     }),
   moveCardFromHandToPile: (who, pile, position) =>
@@ -1331,14 +1346,14 @@ export const createPlayActionsSlice: StateCreator<
       const isCurrent = (who === "p1" ? 1 : 2) === state.currentPlayer;
       if (!isCurrent) {
         get().log(
-          `[Warning] Moving card to ${pile} out of turn: ${who.toUpperCase()} is not the current player`
+          `[Warning] Moving card to ${pile} out of turn: ${who.toUpperCase()} is not the current player`,
         );
       }
       get().pushHistory();
       const zones = { ...state.zones[who] };
       const hand = [...zones.hand];
       const targetPile = [...(zones[pile] as CardRef[])].map((card) =>
-        prepareCardForSeat(card, who)
+        prepareCardForSeat(card, who),
       );
       const cardToMove = hand.splice(selectedCard.index, 1)[0];
       if (!cardToMove) {
@@ -1351,7 +1366,7 @@ export const createPlayActionsSlice: StateCreator<
       get().log(
         `${who.toUpperCase()} moves '${
           ensuredCard.name
-        }' from hand to ${position} of ${pile}`
+        }' from hand to ${position} of ${pile}`,
       );
       const zonesNext = {
         ...state.zones,
