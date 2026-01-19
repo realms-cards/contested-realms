@@ -2,6 +2,19 @@
 
 ## January 2026
 
+### Jan 20 - Autoresolvers and forfeits
+
+- **attach token on right click for ward, stealth, lance**
+- **add resolver for "Raise Dead"**
+- **add browser notifications** enable them in user settings
+- **add manual confirm for auto resolvers**
+- **remove forfeit on disconnect** and harden forfeit on disconnect
+- **fix zone patch for some resolvers**
+- **fix Omphalos cards going to cemetery**
+- **fix Assorted Animals staying on board when resolved**
+- **fix counter rendering and buttons**
+- **fix double duplicate bug for Harbinger portals**
+
 ### Jan 14 - Atlantean Fate and token rendering
 
 - **tokens render great in the stack now**
