@@ -69,14 +69,14 @@ interface InteractionModuleDeps {
     match: any,
     patch: any,
     playerId: string,
-    ts: number
+    ts: number,
   ) => Promise<void>;
   prisma: any;
   // Optional: functions to truncate replay data when snapshot is restored
   truncateRecordingAfter?: (matchId: string, afterTimestamp: number) => number;
   truncateActionsAfter?: (
     matchId: string,
-    afterTimestamp: number
+    afterTimestamp: number,
   ) => Promise<number>;
 }
 
@@ -137,7 +137,7 @@ export function createInteractionModule({
     for (const [playerId, grants] of match.interactionGrants.entries()) {
       const filtered = Array.isArray(grants)
         ? grants.filter(
-            (grant) => !grant || !grant.expiresAt || grant.expiresAt > now
+            (grant) => !grant || !grant.expiresAt || grant.expiresAt > now,
           )
         : [];
       if (filtered.length > 0) {
@@ -191,7 +191,7 @@ export function createInteractionModule({
     playerId: string,
     actorSeat: any,
     requirement: string,
-    now: number
+    now: number,
   ) {
     ensureInteractionState(match);
     const grants = match.interactionGrants.get(playerId);
@@ -227,7 +227,7 @@ export function createInteractionModule({
     request: any,
     response: any,
     grantOpts: any,
-    now: number
+    now: number,
   ) {
     return {
       __grantId: rid("igr"),
@@ -248,7 +248,7 @@ export function createInteractionModule({
     match: any,
     message: any,
     proposedGrant: any,
-    pendingAction: any
+    pendingAction: any,
   ) {
     ensureInteractionState(match);
     const entry = match.interactionRequests.get(message.requestId) || {};
@@ -269,7 +269,7 @@ export function createInteractionModule({
   function recordInteractionResponse(
     match: any,
     response: any,
-    grantRecord: any
+    grantRecord: any,
   ) {
     ensureInteractionState(match);
     const entry = match.interactionRequests.get(response.requestId) || {};
@@ -308,8 +308,9 @@ export function createInteractionModule({
       message,
     };
     const room = `match:${matchId}`;
+    // Only emit the envelope - client handles unwrapping.
+    // Previously we also emitted message.type directly, causing duplicate processing.
     io.to(room).emit("interaction", envelope);
-    io.to(room).emit(message.type, message);
   }
 
   function emitInteractionResult(matchId: string, result: any) {
@@ -321,7 +322,7 @@ export function createInteractionModule({
     kind: string,
     payload: any,
     actorSeat: any,
-    requestingPlayerId: string
+    requestingPlayerId: string,
   ) {
     if (!payload || typeof payload !== "object") return null;
     const safe: Record<string, unknown> = {};
@@ -341,7 +342,7 @@ export function createInteractionModule({
     seat: string,
     pile: string,
     count: number,
-    from: string
+    from: string,
   ) {
     if (!match || !match.game || !match.game.zones) return [];
     const zones = match.game.zones;
@@ -473,7 +474,7 @@ export function createInteractionModule({
           if (Number.isFinite((card as any).variantId))
             out.variantId = Number((card as any).variantId);
           return out;
-        }
+        },
       );
       return {
         ...resultBase,
@@ -513,7 +514,7 @@ export function createInteractionModule({
           ? [...seatZonesRaw.banished]
           : [];
         const idx = banished.findIndex(
-          (c: any) => c && typeof c === "object" && c.instanceId === instanceId
+          (c: any) => c && typeof c === "object" && c.instanceId === instanceId,
         );
         if (idx < 0) {
           return {
@@ -589,7 +590,7 @@ export function createInteractionModule({
           ? [...seatZonesRaw.graveyard]
           : [];
         const idx = graveyard.findIndex(
-          (c: any) => c && typeof c === "object" && c.instanceId === instanceId
+          (c: any) => c && typeof c === "object" && c.instanceId === instanceId,
         );
         if (idx < 0) {
           return {
@@ -756,7 +757,7 @@ export function createInteractionModule({
         if (snapshotTimestamp !== null) {
           try {
             console.log(
-              `[interactions] Truncating replay data after snapshot timestamp ${snapshotTimestamp} for match ${match.id}`
+              `[interactions] Truncating replay data after snapshot timestamp ${snapshotTimestamp} for match ${match.id}`,
             );
             // Truncate in-memory recording
             if (truncateRecordingAfter) {
@@ -769,7 +770,7 @@ export function createInteractionModule({
           } catch (truncateErr) {
             console.error(
               `[interactions] Failed to truncate replay data for match ${match.id}:`,
-              truncateErr
+              truncateErr,
             );
             // Continue with snapshot restore even if truncation fails
           }

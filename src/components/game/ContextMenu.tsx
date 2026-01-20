@@ -1138,11 +1138,13 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     }
 
     // Find artifacts attached to this avatar (attachedTo.index === -1)
+    // Must filter by owner to prevent showing another player's artifacts when both share a tile
     const avatarPos =
       Array.isArray(a?.pos) && a.pos.length === 2 ? a.pos : null;
     if (avatarPos) {
       const [ax, ay] = avatarPos;
       const avatarTileKey = toCellKey(ax, ay);
+      const avatarOwner = t.who === "p1" ? 1 : 2;
       const tilePermanents = permanents[avatarTileKey] || [];
       attachedTokens = tilePermanents
         .map((perm, idx) => ({ perm, idx }))
@@ -1150,7 +1152,8 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
           ({ perm }) =>
             perm.attachedTo &&
             perm.attachedTo.at === avatarTileKey &&
-            perm.attachedTo.index === -1
+            perm.attachedTo.index === -1 &&
+            perm.owner === avatarOwner
         )
         .map(({ perm, idx }) => ({
           name: perm.card.name,

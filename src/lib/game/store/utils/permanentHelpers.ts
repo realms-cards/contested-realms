@@ -130,7 +130,8 @@ export function movePermanentCore(
 export function moveAvatarAttachedArtifacts(
   permanents: Permanents,
   oldTileKey: CellKey,
-  newTileKey: CellKey
+  newTileKey: CellKey,
+  avatarOwner?: 1 | 2
 ): { permanents: Permanents; movedArtifacts: PermanentItem[] } {
   const per: Permanents = { ...permanents };
   const oldArr = [...(per[oldTileKey] || [])];
@@ -141,7 +142,9 @@ export function moveAvatarAttachedArtifacts(
     if (
       perm.attachedTo &&
       perm.attachedTo.index === -1 &&
-      perm.attachedTo.at === oldTileKey
+      perm.attachedTo.at === oldTileKey &&
+      // Only move artifacts owned by the moving avatar's player
+      (avatarOwner === undefined || perm.owner === avatarOwner)
     ) {
       attachedIndices.push(idx);
     }

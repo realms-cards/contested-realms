@@ -111,4 +111,101 @@ describe('Avatar attachments: moving avatar should not duplicate attached artifa
     expect(matches).toHaveLength(1);
     expect(matches[0].attachedTo).toEqual({ at: k3, index: -1 });
   });
+
+  it('does not copy artifacts between avatars when both occupy the same tile', () => {
+    const store = createGameStore();
+    const sharedTile = '2,2';
+    const p1StartTile = '1,2';
+    const p2EndTile = '3,2';
+
+    // Setup: P1 avatar at sharedTile with artifact, P2 avatar at sharedTile without artifact
+    store.setState({
+      board: { size: { w: 5, h: 5 }, sites: {} as Record<string, unknown> } as any,
+      avatars: {
+        p1: { pos: [2, 2], offset: null, tapped: false, card: null },
+        p2: { pos: [2, 2], offset: null, tapped: false, card: null },
+      },
+      permanents: {
+        [sharedTile]: [
+          // P1's artifact attached to avatar (owner: 1)
+          { ...makeArtifact('Meat Hook', 'p1-meathook', 1), attachedTo: { at: sharedTile, index: -1 } },
+          // P2's artifact attached to avatar (owner: 2)
+          { ...makeArtifact('The Rack', 'p2-rack', 2), attachedTo: { at: sharedTile, index: -1 } },
+        ],
+      },
+    } as any);
+
+    const s1 = store.getState();
+    const initialPerms = s1.permanents[sharedTile];
+    expect(initialPerms).toHaveLength(2);
+
+    // When P2 moves away from the shared tile
+    s1.moveAvatarTo('p2', 3, 2);
+
+    const s2 = store.getState();
+    const sharedTilePerms = s2.permanents[sharedTile] || [];
+    const p2EndPerms = s2.permanents[p2EndTile] || [];
+
+    // P1's artifact should stay at the shared tile (P1 is still there)
+    const p1ArtifactsAtShared = sharedTilePerms.filter(
+      (p) => p.owner === 1 && p.attachedTo?.index === -1
+    );
+    expect(p1ArtifactsAtShared).toHaveLength(1);
+    expect(p1ArtifactsAtShared[0].instanceId).toBe('p1-meathook');
+
+    // P2's artifact should have moved to P2's new tile
+    const p2ArtifactsAtEnd = p2EndPerms.filter(
+      (p) => p.owner === 2 && p.attachedTo?.index === -1
+    );
+    expect(p2ArtifactsAtEnd).toHaveLength(1);
+    expect(p2ArtifactsAtEnd[0].instanceId).toBe('p2-rack');
+
+    // P1's artifact should NOT be at P2's new tile (no copying)
+    const p1ArtifactsAtP2End = p2EndPerms.filter((p) => p.owner === 1);
+    expect(p1ArtifactsAtP2End).toHaveLength(0);
+
+    // P2's artifact should NOT remain at shared tile (it moved with P2)
+    const p2ArtifactsAtShared = sharedTilePerms.filter((p) => p.owner === 2);
+    expect(p2ArtifactsAtShared).toHaveLength(0);
+  });
+
+  it('does not copy artifacts when avatar moves to a tile occupied by opponent avatar', () => {
+    const store = createGameStore();
+    const p1Tile = '1,1';
+    const p2Tile = '2,1';
+
+    // Setup: P1 at (1,1) with artifact, P2 at (2,1) with artifact
+    store.setState({
+      board: { size: { w: 5, h: 5 }, sites: {} as Record<string, unknown> } as any,
+      avatars: {
+        p1: { pos: [1, 1], offset: null, tapped: false, card: null },
+        p2: { pos: [2, 1], offset: null, tapped: false, card: null },
+      },
+      permanents: {
+        [p1Tile]: [
+          { ...makeArtifact('P1 Artifact', 'p1-art', 1), attachedTo: { at: p1Tile, index: -1 } },
+        ],
+        [p2Tile]: [
+          { ...makeArtifact('P2 Artifact', 'p2-art', 2), attachedTo: { at: p2Tile, index: -1 } },
+        ],
+      },
+    } as any);
+
+    // P1 moves to P2's tile
+    store.getState().moveAvatarTo('p1', 2, 1);
+
+    const s2 = store.getState();
+    const p2TilePerms = s2.permanents[p2Tile] || [];
+
+    // Both artifacts should now be at P2's tile, but each owned by their respective player
+    expect(p2TilePerms).toHaveLength(2);
+
+    const p1Arts = p2TilePerms.filter((p) => p.owner === 1);
+    const p2Arts = p2TilePerms.filter((p) => p.owner === 2);
+
+    expect(p1Arts).toHaveLength(1);
+    expect(p1Arts[0].instanceId).toBe('p1-art');
+    expect(p2Arts).toHaveLength(1);
+    expect(p2Arts[0].instanceId).toBe('p2-art');
+  });
 });

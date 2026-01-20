@@ -355,11 +355,17 @@ export function AvatarCard({
     return hl;
   }
 
+  // Filter artifacts attached to this avatar - must match owner to prevent
+  // showing artifacts from another player's avatar when both share a tile
+  const avatarOwner = seat === "p1" ? 1 : 2;
   const attachedItems = (permanents[tileKey] || [])
     .map((p, idx) => ({ p, idx }))
     .filter(
       ({ p }) =>
-        p.attachedTo && p.attachedTo.index === -1 && p.attachedTo.at === tileKey
+        p.attachedTo &&
+        p.attachedTo.index === -1 &&
+        p.attachedTo.at === tileKey &&
+        p.owner === avatarOwner
     );
   const seenIds = new Set<string>();
   const uniqueAttachedItems = attachedItems.filter(({ p }) => {
