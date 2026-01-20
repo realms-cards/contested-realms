@@ -4,6 +4,7 @@
 
 ### Jan 20 - Autoresolvers and forfeits
 
+- **REPLACE most MUSIC** - enjoy some Dungeonsynth from Knight of Cups instead
 - **add Discord bot to connect Realms discord and platform** enables direct challenges and a constructed queue
 - **attach token on right click for ward, stealth, lance**
 - **add resolver for "Raise Dead"**
@@ -15,6 +16,9 @@
 - **fix Assorted Animals staying on board when resolved**
 - **fix counter rendering and buttons**
 - **fix double duplicate bug for Harbinger portals**
+- **fix attachment duplication when Avatars occupy same tile**
+- **fix not transporting if opponent moves our avatar**
+- **fix multiple emits for toolbox consent**
 
 ### Jan 14 - Atlantean Fate and token rendering
 

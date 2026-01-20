@@ -14,7 +14,7 @@ import PlayersInvitePanel from "@/components/online/PlayersInvitePanel";
 import { SoatcLeagueCheckbox } from "@/components/online/SoatcLeagueBadge";
 import ChangelogOverlay from "@/components/ui/ChangelogOverlay";
 import ManualOverlay from "@/components/ui/ManualOverlay";
-import PatreonMarquee from "@/components/ui/PatreonMarquee";
+import CombinedMarquee from "@/components/ui/CombinedMarquee";
 import { useRealtimeTournaments } from "@/contexts/RealtimeTournamentContext";
 import { tournamentFeatures } from "@/lib/config/features";
 import {
@@ -2573,7 +2573,7 @@ function LobbyPageContent({
             Patreon
           </a>
         </div>
-        <PatreonMarquee />
+        <CombinedMarquee />
       </div>
 
       {/* Invite Overlay - shows first pending invite */}

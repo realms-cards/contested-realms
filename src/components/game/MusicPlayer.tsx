@@ -263,7 +263,7 @@ export default function MusicPlayer() {
               <div
                 className="
                   absolute bottom-full mb-2 left-0 right-0
-                  max-h-64 overflow-y-auto
+                  max-h-48 overflow-y-auto
                   bg-slate-900/95 backdrop-blur-md
                   border border-slate-700/50
                   rounded-lg shadow-xl

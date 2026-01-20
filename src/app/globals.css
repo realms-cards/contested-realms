@@ -336,6 +336,64 @@ body[data-colorblind="true"] *[class*="ring-rose-"] {
   animation: thank-you-flash 3s ease-in-out forwards;
 }
 
+/* Credits label - simple fade in/out (no slide) */
+@keyframes credits-fade-in {
+  0% {
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.animate-credits-fade-in {
+  animation: credits-fade-in 3s ease-in-out forwards;
+}
+
+/* Credits marquee - slide from bottom for label (legacy, kept for reference) */
+@keyframes slide-up-fade {
+  0% {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+  20% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  80% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-up-fade {
+  animation: slide-up-fade 3s ease-in-out forwards;
+}
+
+/* Credits marquee - slide from right */
+@keyframes slide-from-right {
+  0% {
+    transform: translateX(100vw);
+  }
+  100% {
+    transform: translateX(-100%);
+  }
+}
+
+.animate-slide-from-right {
+  animation: slide-from-right 15s linear infinite;
+}
+
 /* Instant tooltip using data-tooltip attribute */
 [data-tooltip]::after {
   content: attr(data-tooltip);
