@@ -8,6 +8,7 @@ import type { RealmsApiClient } from "./realms-api.js";
 import type { VoiceChannelManager } from "./voice-manager.js";
 import type { VoiceCoordinator } from "./voice-coordinator.js";
 import type { ChallengeManager } from "./challenge-manager.js";
+import type { QueueManager } from "./queue-manager.js";
 
 export interface BotContext {
   client: Client;
@@ -15,6 +16,7 @@ export interface BotContext {
   voiceManager: VoiceChannelManager;
   voiceCoordinator: VoiceCoordinator;
   challengeManager: ChallengeManager;
+  queueManager: QueueManager;
 }
 
 let context: BotContext | null = null;

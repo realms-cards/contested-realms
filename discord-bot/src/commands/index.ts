@@ -10,6 +10,7 @@ import {
 } from "discord.js";
 import { challengeCommand } from "./challenge.js";
 import { linkCommand } from "./link.js";
+import { queueCommand } from "./queue.js";
 import { statusCommand } from "./status.js";
 
 export interface CommandModule {
@@ -21,6 +22,7 @@ export interface CommandModule {
 export const commands = new Map<string, CommandModule>([
   ["challenge", challengeCommand],
   ["link", linkCommand],
+  ["queue", queueCommand],
   ["status", statusCommand],
 ]);
 

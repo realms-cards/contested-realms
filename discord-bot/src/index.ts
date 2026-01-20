@@ -7,6 +7,7 @@ import { RealmsApiClient } from "./services/realms-api.js";
 import { VoiceChannelManager } from "./services/voice-manager.js";
 import { VoiceCoordinator } from "./services/voice-coordinator.js";
 import { ChallengeManager } from "./services/challenge-manager.js";
+import { QueueManager } from "./services/queue-manager.js";
 import { setContext } from "./services/context.js";
 import { acquireBotLock, releaseBotLock } from "./services/leader-lock.js";
 
@@ -35,6 +36,7 @@ const client = new Client({
 // Services (initialized after client ready)
 let voiceManager: VoiceChannelManager;
 let voiceCoordinator: VoiceCoordinator;
+let queueManager: QueueManager;
 
 client.once(Events.ClientReady, async (readyClient) => {
   console.log(`[bot] Logged in as ${readyClient.user.tag}`);
@@ -47,6 +49,12 @@ client.once(Events.ClientReady, async (readyClient) => {
   voiceManager = new VoiceChannelManager(readyClient);
   voiceCoordinator = new VoiceCoordinator(realmsApi, voiceManager);
   const challengeManager = new ChallengeManager(realmsApi);
+  queueManager = new QueueManager(
+    readyClient,
+    realmsApi,
+    challengeManager,
+    voiceCoordinator
+  );
 
   // Set context for command handlers
   setContext({
@@ -55,6 +63,7 @@ client.once(Events.ClientReady, async (readyClient) => {
     voiceManager,
     voiceCoordinator,
     challengeManager,
+    queueManager,
   });
 
   // Register slash commands
@@ -78,6 +87,10 @@ async function shutdown(signal: string) {
     // Cleanup voice channels
     if (voiceCoordinator) {
       await voiceCoordinator.cleanup();
+    }
+    // Cleanup queue manager
+    if (queueManager) {
+      await queueManager.cleanup();
     }
     await releaseBotLock();
     client.destroy();
