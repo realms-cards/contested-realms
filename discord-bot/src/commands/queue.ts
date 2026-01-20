@@ -6,6 +6,7 @@ import {
   SlashCommandBuilder,
   ChatInputCommandInteraction,
   EmbedBuilder,
+  TextChannel,
 } from "discord.js";
 import { getServices } from "../services/context.js";
 
@@ -98,10 +99,16 @@ async function handleJoin(interaction: ChatInputCommandInteraction): Promise<voi
     await interaction.editReply({ embeds: [embed] });
 
     // Post match announcement in channel (public)
-    await queueManager.postAnnouncement(
-      interaction.channelId,
-      `**Match Found!** <@${interaction.user.id}> vs <@${match.challengee.shortId || "opponent"}> - Constructed`
-    );
+    if (interaction.channel) {
+      try {
+        const channel = interaction.channel as TextChannel;
+        await channel.send(
+          `⚔️ **Match Found!** <@${interaction.user.id}> vs **${match.challengee.name || "opponent"}** - Constructed`
+        );
+      } catch (err) {
+        console.error("[queue] Failed to post match announcement:", err);
+      }
+    }
     return;
   }
 
@@ -119,11 +126,15 @@ async function handleJoin(interaction: ChatInputCommandInteraction): Promise<voi
   await interaction.editReply({ embeds: [embed] });
 
   // If queue was empty, post public announcement to attract opponents
-  if (result.wasEmpty) {
-    await queueManager.postAnnouncement(
-      interaction.channelId,
-      `**${interaction.user.displayName}** is looking for a constructed match! Use \`/queue join\` to play them.`
-    );
+  if (result.wasEmpty && interaction.channel) {
+    try {
+      const channel = interaction.channel as TextChannel;
+      await channel.send(
+        `🎮 **${interaction.user.displayName}** is looking for a constructed match! Use \`/queue join\` to play them.`
+      );
+    } catch (err) {
+      console.error("[queue] Failed to post announcement:", err);
+    }
   }
 }
 
