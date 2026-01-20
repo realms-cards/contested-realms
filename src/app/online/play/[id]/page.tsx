@@ -44,6 +44,7 @@ import AtlanteanFateOverlay from "@/components/game/AtlanteanFateOverlay";
 import MephistophelesOverlay from "@/components/game/MephistophelesOverlay";
 import MephistophelesSummonOverlay from "@/components/game/MephistophelesSummonOverlay";
 import PathfinderPlayOverlay from "@/components/game/PathfinderPlayOverlay";
+import MusicGameSync from "@/components/game/MusicGameSync";
 import OnlineConsole from "@/components/game/OnlineConsole";
 import OnlineD20Screen from "@/components/game/OnlineD20Screen";
 import OnlineDeckSelector from "@/components/game/OnlineDeckSelector";
@@ -3044,6 +3045,8 @@ export default function OnlineMatchPage() {
               myPlayerKey={viewPlayerKey}
             />
           )}
+          {/* Music-Game state sync for mood-based track selection */}
+          {!shouldShowDraft && <MusicGameSync myPlayerKey={viewPlayerKey} />}
           <OnlineLifeCounters
             dragFromHand={dragFromHand}
             myPlayerKey={viewPlayerKey}

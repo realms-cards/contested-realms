@@ -33,6 +33,7 @@ import { InteractionConsentDialog } from "@/components/game/InteractionConsentDi
 import LilithOverlay from "@/components/game/LilithOverlay";
 import MobileHandHint from "@/components/game/MobileHandHint";
 import MotherNatureOverlay from "@/components/game/MotherNatureOverlay";
+import MusicGameSync from "@/components/game/MusicGameSync";
 import HeadlessHauntOverlay from "@/components/game/HeadlessHauntOverlay";
 import InterrogatorChoiceOverlay from "@/components/game/InterrogatorChoiceOverlay";
 import AtlanteanFateOverlay from "@/components/game/AtlanteanFateOverlay";
@@ -996,6 +997,8 @@ export default function PlayPage() {
 
       {/* HUD */}
       <StatusBar dragFromHand={dragFromHand} />
+      {/* Music-Game state sync for mood-based track selection */}
+      <MusicGameSync myPlayerKey={currentPlayerKey} />
 
       <OnlineLifeCounters
         dragFromHand={dragFromHand}

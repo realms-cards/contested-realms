@@ -13,8 +13,17 @@ import {
   getTrackByIndex,
   getNextTrackIndex,
   getPreviousTrackIndex,
+  getStartingTrackIndex,
+  selectTrackForGameState,
   type MusicTrack,
+  type MusicMood,
 } from "@/lib/music/music-config";
+
+interface GameMusicState {
+  currentHealth: number;
+  isDeathsDoor: boolean;
+  recentHealthChange: number;
+}
 
 interface MusicPlayerState {
   /** Current track being played */
@@ -31,6 +40,8 @@ interface MusicPlayerState {
   isExpanded: boolean;
   /** Whether browser blocked autoplay */
   autoplayBlocked: boolean;
+  /** Current track's mood category */
+  currentMood: MusicMood;
 }
 
 interface MusicPlayerControls {
@@ -50,6 +61,14 @@ interface MusicPlayerControls {
   toggleExpanded: () => void;
   /** Set expanded state explicitly */
   setExpanded: (expanded: boolean) => void;
+  /** Update game state for mood-based track selection */
+  updateGameState: (
+    currentHealth: number,
+    isDeathsDoor: boolean,
+    recentHealthChange: number
+  ) => void;
+  /** Reset to starting track (for new matches) */
+  resetToStartingTrack: () => void;
 }
 
 /**
@@ -100,6 +119,13 @@ export function useMusicPlayer(): [MusicPlayerState, MusicPlayerControls] {
   // This ensures we continue playing after track ends
   const shouldBePlayingRef = useRef(false);
 
+  // Game state for mood-based track selection (stored as ref for callback access)
+  const gameStateRef = useRef<GameMusicState>({
+    currentHealth: 20,
+    isDeathsDoor: false,
+    recentHealthChange: 0,
+  });
+
   // Load initial settings from localStorage
   const [isEnabled, setIsEnabled] = useState<boolean>(() =>
     loadSetting(MUSIC_STORAGE_KEYS.enabled, MUSIC_DEFAULTS.enabled)
@@ -127,17 +153,31 @@ export function useMusicPlayer(): [MusicPlayerState, MusicPlayerControls] {
       audioRef.current.preload = "auto";
     }
 
-    // Handle track end - auto-advance to next track
+    // Handle track end - select next track based on game state mood
     const handleEnded = () => {
-      const nextIndex = getNextTrackIndex(currentTrackIndex);
+      const { currentHealth, isDeathsDoor, recentHealthChange } =
+        gameStateRef.current;
+      const nextIndex = selectTrackForGameState(
+        currentHealth,
+        isDeathsDoor,
+        recentHealthChange,
+        currentTrackIndex
+      );
       setCurrentTrackIndexState(nextIndex);
       saveSetting(MUSIC_STORAGE_KEYS.currentTrackIndex, nextIndex);
     };
 
-    // Handle audio errors - skip to next track
+    // Handle audio errors - skip to next track (use mood-based selection)
     const handleError = (e: ErrorEvent) => {
       console.error("Music playback error:", e);
-      const nextIndex = getNextTrackIndex(currentTrackIndex);
+      const { currentHealth, isDeathsDoor, recentHealthChange } =
+        gameStateRef.current;
+      const nextIndex = selectTrackForGameState(
+        currentHealth,
+        isDeathsDoor,
+        recentHealthChange,
+        currentTrackIndex
+      );
       setCurrentTrackIndexState(nextIndex);
       saveSetting(MUSIC_STORAGE_KEYS.currentTrackIndex, nextIndex);
     };
@@ -302,6 +342,35 @@ export function useMusicPlayer(): [MusicPlayerState, MusicPlayerControls] {
     saveSetting(MUSIC_STORAGE_KEYS.expanded, expanded);
   }, []);
 
+  // Update game state for mood-based track selection
+  const updateGameState = useCallback(
+    (
+      currentHealth: number,
+      isDeathsDoor: boolean,
+      recentHealthChange: number
+    ) => {
+      gameStateRef.current = {
+        currentHealth,
+        isDeathsDoor,
+        recentHealthChange,
+      };
+    },
+    []
+  );
+
+  // Reset to starting track (The Autumn Equinox) for new matches
+  const resetToStartingTrack = useCallback(() => {
+    const startingIndex = getStartingTrackIndex();
+    setCurrentTrackIndexState(startingIndex);
+    saveSetting(MUSIC_STORAGE_KEYS.currentTrackIndex, startingIndex);
+    // Reset game state to defaults
+    gameStateRef.current = {
+      currentHealth: 20,
+      isDeathsDoor: false,
+      recentHealthChange: 0,
+    };
+  }, []);
+
   return [
     {
       currentTrack,
@@ -311,6 +380,7 @@ export function useMusicPlayer(): [MusicPlayerState, MusicPlayerControls] {
       volume,
       isExpanded,
       autoplayBlocked,
+      currentMood: currentTrack.mood,
     },
     {
       togglePlay,
@@ -321,6 +391,8 @@ export function useMusicPlayer(): [MusicPlayerState, MusicPlayerControls] {
       toggleEnabled,
       toggleExpanded,
       setExpanded,
+      updateGameState,
+      resetToStartingTrack,
     },
   ];
 }

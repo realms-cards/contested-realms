@@ -189,7 +189,7 @@ export default function AudioControls({ enableMusic = true }: AudioControlsProps
                   </button>
 
                   {showTrackList && (
-                    <div className="absolute bottom-full mb-2 left-0 right-0 max-h-64 overflow-y-auto bg-slate-900/95 backdrop-blur-md border border-slate-700/50 rounded-lg shadow-xl">
+                    <div className="absolute top-full mt-2 left-0 right-0 max-h-48 overflow-y-auto bg-slate-900/95 backdrop-blur-md border border-slate-700/50 rounded-lg shadow-xl z-10">
                       {MUSIC_TRACKS.map((track, index) => (
                         <button
                           key={track.filename}
