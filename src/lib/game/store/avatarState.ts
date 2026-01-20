@@ -109,10 +109,12 @@ export const createAvatarSlice: StateCreator<GameState, [], [], AvatarSlice> = (
       }
       let permanents = state.permanents;
       if (isCrossTileMove) {
+        const avatarOwner = who === "p1" ? 1 : 2;
         const result = moveAvatarAttachedArtifacts(
           state.permanents,
           oldKey as CellKey,
-          newKey
+          newKey,
+          avatarOwner as 1 | 2
         );
         permanents = result.permanents;
         if (result.movedArtifacts.length > 0) {
@@ -169,10 +171,12 @@ export const createAvatarSlice: StateCreator<GameState, [], [], AvatarSlice> = (
       }
       let permanents = state.permanents;
       if (isCrossTileMove) {
+        const avatarOwner = who === "p1" ? 1 : 2;
         const result = moveAvatarAttachedArtifacts(
           state.permanents,
           oldKey as CellKey,
-          newKey
+          newKey,
+          avatarOwner as 1 | 2
         );
         permanents = result.permanents;
         if (result.movedArtifacts.length > 0) {

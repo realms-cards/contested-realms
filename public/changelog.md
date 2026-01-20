@@ -4,7 +4,7 @@
 
 ### Jan 20 - Autoresolvers and forfeits
 
-- **add Discord bot to connect Realms discord and platform**
+- **add Discord bot to connect Realms discord and platform** enables direct challenges and a constructed queue
 - **attach token on right click for ward, stealth, lance**
 - **add resolver for "Raise Dead"**
 - **add browser notifications** enable them in user settings

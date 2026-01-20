@@ -622,27 +622,18 @@ export const createTransportSlice: StateCreator<
       return false;
     }
 
-    // Sanitize: only include actor's own seat data (online mode only)
+    // Sanitize: only include actor's own zone data (online mode only)
     // Local transports send full patches since both players are controlled locally
+    // NOTE: Avatar patches are NOT filtered - game mechanics allow moving opponent's avatar
+    // (e.g., card effects, combat resolution). Only zones (hand, deck, graveyard) are private.
     const sanitized: ServerPatchT = { ...patchObj };
     if (!isLocalTransport) {
       try {
-        if (sanitized.avatars && typeof sanitized.avatars === "object") {
-          const keys = Object.keys(sanitized.avatars).filter(
-            (k) => k === "p1" || k === "p2"
-          ) as PlayerKey[];
-          const out: Partial<GameState["avatars"]> = {};
-          if (actorKey && keys.includes(actorKey)) {
-            out[actorKey] = (sanitized.avatars as GameState["avatars"])[
-              actorKey
-            ];
-          }
-          if (Object.keys(out).length > 0) {
-            sanitized.avatars = out as GameState["avatars"];
-          } else {
-            delete (sanitized as unknown as { avatars?: unknown }).avatars;
-          }
-        }
+        // Avatars: Allow ALL avatar patches - avatars are shared board state
+        // Either player can move either avatar through game mechanics
+        // (no filtering needed for avatars)
+
+        // Zones: Only include actor's own zones - these are private
         if (sanitized.zones && typeof sanitized.zones === "object") {
           const z = sanitized.zones as Partial<Record<PlayerKey, Zones>>;
           const outZ: Partial<Record<PlayerKey, Zones>> = {};
@@ -815,27 +806,11 @@ export const createTransportSlice: StateCreator<
         if (!isAuthoritativeSnapshot) {
           try {
             const sanitized: ServerPatchT = { ...(p as ServerPatchT) };
-            if (sanitized.avatars && typeof sanitized.avatars === "object") {
-              const keys = Object.keys(sanitized.avatars).filter(
-                (k) => k === "p1" || k === "p2"
-              ) as PlayerKey[];
-              const out: Partial<GameState["avatars"]> = {};
-              if (keys.includes(actorKey as PlayerKey)) {
-                const v = (sanitized.avatars as GameState["avatars"])[
-                  actorKey as PlayerKey
-                ];
-                if (v && typeof v === "object") {
-                  (out as Record<string, unknown>)[actorKey as PlayerKey] = {
-                    ...(v as Record<string, unknown>),
-                  } as unknown;
-                }
-              }
-              if (Object.keys(out).length > 0) {
-                sanitized.avatars = out as GameState["avatars"];
-              } else {
-                delete (sanitized as unknown as { avatars?: unknown }).avatars;
-              }
-            }
+            // Avatars: Allow ALL avatar patches - avatars are shared board state
+            // Either player can move either avatar through game mechanics
+            // (no filtering needed for avatars)
+
+            // Zones: Only include actor's own zones - these are private
             if (sanitized.zones && typeof sanitized.zones === "object") {
               const z = sanitized.zones as Partial<Record<PlayerKey, Zones>>;
               const outZ: Partial<Record<PlayerKey, Zones>> = {};
