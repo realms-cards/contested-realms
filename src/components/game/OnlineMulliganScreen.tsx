@@ -226,30 +226,29 @@ export default function OnlineMulliganScreen({
   ]);
 
   return (
-    <div className="w-full max-w-[92vw] sm:max-w-4xl bg-zinc-900/80 text-white rounded-2xl ring-1 ring-white/10 p-4 sm:p-6">
-      <div className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+    <div className="w-full max-w-[95vw] sm:max-w-4xl bg-zinc-900/80 text-white rounded-xl sm:rounded-2xl ring-1 ring-white/10 p-2 sm:p-6">
+      <div className="mb-2 sm:mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3">
         <div className="text-center sm:text-left">
-          <div className="text-lg font-semibold mb-1">Mulligan Phase</div>
-          <div className="text-sm opacity-80">
+          <div className="text-base sm:text-lg font-semibold mb-0.5 sm:mb-1">Mulligan Phase</div>
+          <div className="text-xs sm:text-sm opacity-80">
             Playing as:{" "}
             <span className="font-medium text-blue-400">
               {playerNames[myPlayerKey]}
             </span>
           </div>
-          <div className="text-xs opacity-60 mt-1">
-            Select up to 3 cards to put back. You&apos;ll draw the same number
-            from the appropriate pile.
+          <div className="text-[10px] sm:text-xs opacity-60 mt-0.5 sm:mt-1">
+            Select up to 3 cards to put back.
           </div>
         </div>
         {(myAvatar?.slug || opponentAvatar?.slug) && (
-          <div className="flex-shrink-0 flex flex-row gap-4 items-center sm:items-end">
+          <div className="flex-shrink-0 flex flex-row gap-2 sm:gap-4 items-center sm:items-end">
             {myAvatar?.slug && (
               <div className="flex flex-col items-center sm:items-end">
-                <div className="text-[10px] uppercase tracking-wide opacity-70 mb-1">
-                  Your Avatar
+                <div className="text-[9px] sm:text-[10px] uppercase tracking-wide opacity-70 mb-0.5 sm:mb-1">
+                  You
                 </div>
                 <div
-                  className="relative aspect-[3/4] w-16 sm:w-20 md:w-24 rounded-lg overflow-hidden ring-1 ring-white/30 shadow-lg"
+                  className="relative aspect-[3/4] w-10 sm:w-20 md:w-24 rounded-md sm:rounded-lg overflow-hidden ring-1 ring-white/30 shadow-lg"
                   onMouseEnter={() => setPreviewCard(myAvatar)}
                   onMouseLeave={() => setPreviewCard(null)}
                 >
@@ -257,7 +256,7 @@ export default function OnlineMulliganScreen({
                     src={`/api/images/${myAvatar.slug}`}
                     alt={myAvatar.name}
                     fill
-                    sizes="(max-width: 640px) 64px, 96px"
+                    sizes="(max-width: 640px) 40px, 96px"
                     className="object-contain"
                     unoptimized
                   />
@@ -272,11 +271,11 @@ export default function OnlineMulliganScreen({
             )}
             {opponentAvatar?.slug && (
               <div className="flex flex-col items-center sm:items-end">
-                <div className="text-[10px] uppercase tracking-wide opacity-70 mb-1">
-                  Opponent Avatar
+                <div className="text-[9px] sm:text-[10px] uppercase tracking-wide opacity-70 mb-0.5 sm:mb-1">
+                  Opp
                 </div>
                 <div
-                  className="relative aspect-[3/4] w-16 sm:w-20 md:w-24 rounded-lg overflow-hidden ring-1 ring-white/30 shadow-lg"
+                  className="relative aspect-[3/4] w-10 sm:w-20 md:w-24 rounded-md sm:rounded-lg overflow-hidden ring-1 ring-white/30 shadow-lg"
                   onMouseEnter={() => setPreviewCard(opponentAvatar)}
                   onMouseLeave={() => setPreviewCard(null)}
                 >
@@ -284,7 +283,7 @@ export default function OnlineMulliganScreen({
                     src={`/api/images/${opponentAvatar.slug}`}
                     alt={opponentAvatar.name}
                     fill
-                    sizes="(max-width: 640px) 64px, 96px"
+                    sizes="(max-width: 640px) 40px, 96px"
                     className="object-contain"
                     unoptimized
                   />
@@ -302,20 +301,20 @@ export default function OnlineMulliganScreen({
       </div>
 
       {/* Always show hand - players need to see their cards during seer phase */}
-      <div className="bg-black/30 rounded-xl p-4 ring-1 ring-white/10">
-        <div className="flex items-center justify-between mb-2">
-          <div className="font-semibold">Your Hand</div>
+      <div className="bg-black/30 rounded-lg sm:rounded-xl p-2 sm:p-4 ring-1 ring-white/10">
+        <div className="flex items-center justify-between mb-1 sm:mb-2">
+          <div className="text-sm sm:text-base font-semibold">Your Hand</div>
           {!showSeerUI && (
-            <div className="text-xs opacity-80">
-              Mulligans remaining: {myMulligans}
+            <div className="text-[10px] sm:text-xs opacity-80">
+              Mulligans: {myMulligans}
             </div>
           )}
         </div>
 
         {!showSeerUI && (
-          <div className="text-xs opacity-80 mb-3">
+          <div className="text-[10px] sm:text-xs opacity-80 mb-1 sm:mb-3">
             {!done && myMulligans > 0
-              ? "Click cards to select for mulligan (max 3)."
+              ? "Tap cards to select (max 3)"
               : myMulligans === 0
               ? "Mulligan used. Ready to start game."
               : "Mulligan complete."}
@@ -323,7 +322,7 @@ export default function OnlineMulliganScreen({
         )}
 
         {myHand.length > 0 ? (
-          <div className="flex items-center gap-2 overflow-x-auto overflow-y-visible pb-2 pt-10 sm:pt-16 min-h-[160px] sm:min-h-[200px]">
+          <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto overflow-y-visible pb-2 pt-2 sm:pt-16 min-h-[120px] sm:min-h-[200px]">
             {myHand.map((card, i) => {
               const isSite = (card.type || "").toLowerCase().includes("site");
               const isSelected = selected.includes(i);
@@ -339,7 +338,7 @@ export default function OnlineMulliganScreen({
                       : ""
                   } ${
                     isSelected && !showSeerUI
-                      ? "ring-2 ring-red-400 -translate-y-2"
+                      ? "ring-2 ring-red-400 -translate-y-1 sm:-translate-y-2"
                       : ""
                   } ${
                     done || myMulligans === 0 || showSeerUI
@@ -353,8 +352,8 @@ export default function OnlineMulliganScreen({
                   <div
                     className={`relative ${
                       isSite
-                        ? "aspect-[4/3] w-28 sm:w-36"
-                        : "aspect-[3/4] w-20 sm:w-24"
+                        ? "aspect-[4/3] w-20 sm:w-36"
+                        : "aspect-[3/4] w-16 sm:w-24"
                     } rounded-lg overflow-hidden ring-1 ring-white/20 shadow-lg ${
                       isSelected && !showSeerUI ? "opacity-70" : ""
                     } ${done || myMulligans === 0 ? "opacity-60" : ""}`}
@@ -363,7 +362,7 @@ export default function OnlineMulliganScreen({
                       src={`/api/images/${cardSlug}`}
                       alt={card.name}
                       fill
-                      sizes={isSite ? "(max-width: 640px) 112px, 144px" : "(max-width: 640px) 96px, 120px"}
+                      sizes={isSite ? "(max-width: 640px) 80px, 144px" : "(max-width: 640px) 64px, 96px"}
                       className={`${isSite ? "object-contain rotate-90 scale-[1.333] origin-center" : "object-contain"}`}
                       unoptimized
                     />

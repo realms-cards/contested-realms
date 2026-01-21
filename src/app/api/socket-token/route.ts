@@ -26,7 +26,7 @@ export async function GET() {
         {
           status: 500,
           headers: { "content-type": "application/json" },
-        }
+        },
       );
     }
 
@@ -52,13 +52,19 @@ export async function GET() {
         email: userEmail,
       },
       secret,
-      { expiresIn: "24h" }
+      { expiresIn: "24h" },
     );
 
     // Success - no logging needed for normal flow
+    // Add browser-level caching as second layer of defense (in case localStorage fails)
+    // private: only browser can cache (not CDN), max-age=300: 5 minutes
+    // This dramatically reduces Vercel function invocations when localStorage fails
     return new Response(JSON.stringify({ token }), {
       status: 200,
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        "cache-control": "private, max-age=300, stale-while-revalidate=60",
+      },
     });
   } catch (e: unknown) {
     console.error("[socket-token] Error generating token:", e);

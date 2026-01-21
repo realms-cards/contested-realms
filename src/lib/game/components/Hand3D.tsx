@@ -256,15 +256,38 @@ export default function Hand3D({
         hoverCleanupTimeoutRef.current = null;
       }
     }
+    // Handle touchend to collapse hand when tapping outside hand zone
+    function onTouchEnd(e: TouchEvent) {
+      const t = e.changedTouches?.[0];
+      if (!t) return;
+      const h = window.innerHeight || 1;
+      const w = window.innerWidth || 1;
+      // Check if touch ended outside the hand zone
+      const inVerticalZone =
+        t.clientY >= h * HAND_ZONE_TOP_FRAC &&
+        t.clientY <= h * HAND_ZONE_BOTTOM_FRAC;
+      const inHorizontalZone =
+        t.clientX >= w * HAND_ZONE_LEFT_FRAC &&
+        t.clientX <= w * HAND_ZONE_RIGHT_FRAC;
+      const inHandZone = (inVerticalZone && inHorizontalZone) || overCardsArea;
+      // If touch ended outside hand zone, collapse the hand
+      if (!inHandZone) {
+        setMouseInHandZone(false);
+      }
+    }
     window.addEventListener("touchstart", onTouch, {
       passive: true,
     } as AddEventListenerOptions);
     window.addEventListener("touchmove", onTouch, {
       passive: true,
     } as AddEventListenerOptions);
+    window.addEventListener("touchend", onTouchEnd, {
+      passive: true,
+    } as AddEventListenerOptions);
     return () => {
       window.removeEventListener("touchstart", onTouch as EventListener);
       window.removeEventListener("touchmove", onTouch as EventListener);
+      window.removeEventListener("touchend", onTouchEnd as EventListener);
     };
   }, [
     setMouseInHandZone,

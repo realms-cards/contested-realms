@@ -53,19 +53,21 @@ function computeLayout(isSite: boolean): LayoutState {
   const aspectWidthOverHeight = 3 / 4;
   const widthFromHeight = cappedHeight * aspectWidthOverHeight;
 
-  const baseVwFraction = 0.21;
+  // Mobile-first sizing: larger preview on small screens
+  const isMobileWidth = innerWidth < 768;
+  const baseVwFraction = isMobileWidth ? 0.35 : 0.21; // Larger fraction on mobile
   const heightShortness = Math.max(0, Math.min(1, (780 - innerHeight) / 360));
   const widthShortness = Math.max(0, Math.min(1, (1400 - innerWidth) / 600));
-  const heightReduction = 0.5 * heightShortness;
-  const widthReduction = 0.65 * widthShortness;
+  const heightReduction = isMobileWidth ? 0.2 * heightShortness : 0.5 * heightShortness;
+  const widthReduction = isMobileWidth ? 0.3 * widthShortness : 0.65 * widthShortness;
   let vwFraction =
     baseVwFraction * (1 - heightReduction) * (1 - widthReduction);
   if (preferBottomNext) {
-    vwFraction *= 0.82;
+    vwFraction *= isMobileWidth ? 0.9 : 0.82; // Less reduction on mobile
   }
-  vwFraction = Math.max(vwFraction, 0.12);
+  vwFraction = Math.max(vwFraction, isMobileWidth ? 0.28 : 0.12); // Higher floor on mobile
   const preferredWidth = innerWidth * vwFraction;
-  const minWidth = 200;
+  const minWidth = isMobileWidth ? 140 : 200; // Slightly smaller min but better proportions
   const absoluteMaxWidth = isSite ? 345 * SITE_SIZE_MULTIPLIER : 345;
 
   let maxWidth = Number.isFinite(widthFromHeight)
@@ -76,14 +78,14 @@ function computeLayout(isSite: boolean): LayoutState {
   }
 
   const wideViewportRatio = Math.max(0, innerWidth - 1280) / 720;
-  const widthRatioBase = preferBottomNext ? 0.29 : 0.38;
-  const widthRatioDynamic = widthRatioBase * (1 - widthShortness * 0.45);
+  const widthRatioBase = isMobileWidth ? 0.45 : (preferBottomNext ? 0.29 : 0.38);
+  const widthRatioDynamic = widthRatioBase * (1 - widthShortness * (isMobileWidth ? 0.2 : 0.45));
   const widthRatio = Math.max(
     widthRatioDynamic * (1 - wideViewportRatio * 0.45),
-    0.18
+    isMobileWidth ? 0.35 : 0.18 // Higher floor on mobile
   );
   const horizontalCap = Math.min(
-    Math.max(innerWidth - 72, 220),
+    Math.max(innerWidth - (isMobileWidth ? 20 : 72), isMobileWidth ? 140 : 220),
     innerWidth * widthRatio,
     absoluteMaxWidth
   );
