@@ -206,8 +206,10 @@ export default function OnlineMulliganScreen({
     if (isSecondSeat) return; // Second seat auto-starts in handleSeerComplete
     if (!seerComplete) return; // Seer not done yet
     if (submitted) return; // Already submitted
+    // Wait for P1 to finish mulligan before auto-starting
+    if (!done && myMulligans > 0) return;
 
-    // Player 1: auto-start when seer is complete
+    // Player 1: auto-start when seer is complete AND mulligan is done
     setSubmitted(true);
     setDone(true);
     finalizeMulligan();
@@ -217,6 +219,8 @@ export default function OnlineMulliganScreen({
     isSecondSeat,
     seerComplete,
     submitted,
+    done,
+    myMulligans,
     finalizeMulligan,
     onStartGame,
   ]);

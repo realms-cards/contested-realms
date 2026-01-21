@@ -108,6 +108,7 @@ export const createAvatarSlice: StateCreator<GameState, [], [], AvatarSlice> = (
         avatars = { ...avatars, [who]: { ...avatars[who], tapped: true } };
       }
       let permanents = state.permanents;
+      let movedArtifactIds: string[] = [];
       if (isCrossTileMove) {
         const avatarOwner = who === "p1" ? 1 : 2;
         const result = moveAvatarAttachedArtifacts(
@@ -117,6 +118,10 @@ export const createAvatarSlice: StateCreator<GameState, [], [], AvatarSlice> = (
           avatarOwner as 1 | 2
         );
         permanents = result.permanents;
+        // Track moved artifact instanceIds for removal markers in patch
+        movedArtifactIds = result.movedArtifacts
+          .map((a) => a.instanceId || a.card?.instanceId)
+          .filter((id): id is string => typeof id === "string" && id.length > 0);
         if (result.movedArtifacts.length > 0) {
           get().log(
             `Moved ${result.movedArtifacts.length} attached artifact(s) with avatar`
@@ -141,10 +146,21 @@ export const createAvatarSlice: StateCreator<GameState, [], [], AvatarSlice> = (
           } as GameState["avatars"],
         };
         if (isCrossTileMove) {
+          // Build patch with __remove markers for artifacts moved FROM oldKey
+          // This ensures receiving clients properly remove artifacts from old tile
+          const oldTilePatch = [
+            // Keep remaining permanents at old tile
+            ...(permanents[oldKey as CellKey] || []),
+            // Add __remove markers for moved artifacts
+            ...movedArtifactIds.map((instanceId) => ({
+              instanceId,
+              __remove: true,
+            })),
+          ];
           patch.permanents = {
-            [oldKey as CellKey]: permanents[oldKey as CellKey] || [],
+            [oldKey as CellKey]: oldTilePatch,
             [newKey]: permanents[newKey] || [],
-          };
+          } as GameState["permanents"];
         }
         get().trySendPatch(patch);
       }
@@ -170,6 +186,7 @@ export const createAvatarSlice: StateCreator<GameState, [], [], AvatarSlice> = (
         avatars = { ...avatars, [who]: { ...avatars[who], tapped: true } };
       }
       let permanents = state.permanents;
+      let movedArtifactIds: string[] = [];
       if (isCrossTileMove) {
         const avatarOwner = who === "p1" ? 1 : 2;
         const result = moveAvatarAttachedArtifacts(
@@ -179,6 +196,10 @@ export const createAvatarSlice: StateCreator<GameState, [], [], AvatarSlice> = (
           avatarOwner as 1 | 2
         );
         permanents = result.permanents;
+        // Track moved artifact instanceIds for removal markers in patch
+        movedArtifactIds = result.movedArtifacts
+          .map((a) => a.instanceId || a.card?.instanceId)
+          .filter((id): id is string => typeof id === "string" && id.length > 0);
         if (result.movedArtifacts.length > 0) {
           get().log(
             `Moved ${result.movedArtifacts.length} attached artifact(s) with avatar`
@@ -203,10 +224,21 @@ export const createAvatarSlice: StateCreator<GameState, [], [], AvatarSlice> = (
           } as GameState["avatars"],
         };
         if (isCrossTileMove) {
+          // Build patch with __remove markers for artifacts moved FROM oldKey
+          // This ensures receiving clients properly remove artifacts from old tile
+          const oldTilePatch = [
+            // Keep remaining permanents at old tile
+            ...(permanents[oldKey as CellKey] || []),
+            // Add __remove markers for moved artifacts
+            ...movedArtifactIds.map((instanceId) => ({
+              instanceId,
+              __remove: true,
+            })),
+          ];
           patch.permanents = {
-            [oldKey as CellKey]: permanents[oldKey as CellKey] || [],
+            [oldKey as CellKey]: oldTilePatch,
             [newKey]: permanents[newKey] || [],
-          };
+          } as GameState["permanents"];
         }
         get().trySendPatch(patch);
       }

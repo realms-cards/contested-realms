@@ -23,7 +23,7 @@ type StoreGet = Parameters<StateCreator<GameState>>[1];
 export function handleCustomMessage(
   msg: unknown,
   set: StoreSet,
-  get: StoreGet
+  get: StoreGet,
 ) {
   if (!msg || typeof msg !== "object") return;
   const t = (msg as { type?: unknown }).type;
@@ -69,7 +69,7 @@ export function handleCustomMessage(
           seat: PlayerKey;
           pile: "spellbook" | "atlas" | "hand";
           from: "top" | "bottom";
-        }
+        },
       );
     }
     return;
@@ -132,7 +132,7 @@ export function handleCustomMessage(
             get().applyDamageToPermanent(
               at as CellKey,
               Number(idx),
-              Math.max(0, Math.floor(amt))
+              Math.max(0, Math.floor(amt)),
             );
           }
         } catch {}
@@ -469,7 +469,7 @@ export function handleCustomMessage(
           window.dispatchEvent(
             new CustomEvent("app:toast", {
               detail: { message: text, cellKey, seat },
-            })
+            }),
           );
         }
       } catch {}
@@ -602,7 +602,7 @@ export function handleCustomMessage(
         get().applyDamageToPermanent(
           at as CellKey,
           Number(idx),
-          Math.max(0, Math.floor(amt))
+          Math.max(0, Math.floor(amt)),
         );
       } catch {}
     }
@@ -617,7 +617,7 @@ export function handleCustomMessage(
         "[combatAutoApply] mySeat:",
         mySeat,
         "kills count:",
-        killsAny.length
+        killsAny.length,
       );
 
       // Parse kills and filter to only my kills
@@ -644,7 +644,7 @@ export function handleCustomMessage(
           if (mySeat) {
             const matches = k.owner === mySeat;
             console.log(
-              `[combatAutoApply] Kill owner=${k.owner}, mySeat=${mySeat}, matches=${matches}`
+              `[combatAutoApply] Kill owner=${k.owner}, mySeat=${mySeat}, matches=${matches}`,
             );
             return matches;
           }
@@ -661,7 +661,7 @@ export function handleCustomMessage(
               console.log(
                 "[combatAutoApply] Fallback: applying kill for owner",
                 k.owner,
-                "without mySeat"
+                "without mySeat",
               );
               return true;
             }
@@ -685,30 +685,30 @@ export function handleCustomMessage(
             const permanents = get().permanents as Permanents;
             const list = permanents[kill.at] || [];
             const foundIdx = list.findIndex(
-              (p) => p.instanceId === kill.instanceId
+              (p) => p.instanceId === kill.instanceId,
             );
             if (foundIdx >= 0) {
               currentIndex = foundIdx;
               console.log(
                 "[combatAutoApply] Found by instanceId at index:",
-                currentIndex
+                currentIndex,
               );
             } else {
               console.warn(
                 "[combatAutoApply] Permanent not found by instanceId, using original index:",
-                kill
+                kill,
               );
             }
           }
           console.log(
             "[combatAutoApply] Applying kill to graveyard:",
             kill.at,
-            currentIndex
+            currentIndex,
           );
           get().movePermanentToZone(
             kill.at as CellKey,
             currentIndex,
-            "graveyard"
+            "graveyard",
           );
         } catch (err) {
           console.error("[combatAutoApply] Error moving to graveyard:", err);
@@ -856,13 +856,13 @@ export function handleCustomMessage(
       })
       .filter(
         (
-          x
+          x,
         ): x is {
           at: CellKey;
           index: number;
           owner: 1 | 2;
           instanceId: string | null;
-        } => Boolean(x)
+        } => Boolean(x),
       );
     set((s) => {
       if (!s.pendingCombat || s.pendingCombat.id !== (id as string))
@@ -880,7 +880,7 @@ export function handleCustomMessage(
       get().log(
         `Acting player selected ${defenders.length} defender${
           defenders.length === 1 ? "" : "s"
-        }`
+        }`,
       );
     } catch {}
     return;
@@ -932,7 +932,7 @@ export function handleCustomMessage(
       const players = get().players;
       function getAtkDef(
         at: string,
-        index: number
+        index: number,
       ): { atk: number; def: number } {
         try {
           const cardId = permanents[at]?.[index]?.card?.cardId;
@@ -950,7 +950,7 @@ export function handleCustomMessage(
           (p) =>
             p.attachedTo &&
             p.attachedTo.at === at &&
-            p.attachedTo.index === index
+            p.attachedTo.index === index,
         );
       }
       function listAttachmentEffects(at: string, index: number): string[] {
@@ -1025,14 +1025,14 @@ export function handleCustomMessage(
         isAvatarAttacker && avatarSeat
           ? getAvatarName(avatarSeat)
           : aCell
-          ? getPermName(aCell.at, aCell.index)
-          : "Attacker";
+            ? getPermName(aCell.at, aCell.index)
+            : "Attacker";
       // Avatars don't have attachments
       const atkFx = isAvatarAttacker
         ? []
         : aCell
-        ? listAttachmentEffects(aCell.at, aCell.index)
-        : [];
+          ? listAttachmentEffects(aCell.at, aCell.index)
+          : [];
       const fxTxt = atkFx.length ? ` [${atkFx.join(", ")}]` : "";
       const fsTag = eff.firstStrike ? " (FS)" : "";
       const attackerOwner = Number(attacker?.owner);
@@ -1338,7 +1338,7 @@ export function handleCustomMessage(
         get().applyDamageToPermanent(
           pending.targetMinion.at,
           pending.targetMinion.index,
-          power
+          power,
         );
       }
 
@@ -1415,7 +1415,7 @@ export function handleCustomMessage(
       get().log(
         `[${casterSeat.toUpperCase()}] is browsing ${
           revealedCount ?? "?"
-        } spells...`
+        } spells...`,
       );
     } catch {}
     return;
@@ -1523,7 +1523,7 @@ export function handleCustomMessage(
       get().log(
         `[${casterSeat.toUpperCase()}] is searching for Ordinary cards (${
           eligibleCount ?? "?"
-        } found)...`
+        } found)...`,
       );
     } catch {}
     return;
@@ -1561,7 +1561,7 @@ export function handleCustomMessage(
       get().log(
         `[${pending.casterSeat.toUpperCase()}] Common Sense resolved: found ${
           selectedCardName ?? "a card"
-        }`
+        }`,
       );
     } catch {}
     return;
@@ -1613,7 +1613,7 @@ export function handleCustomMessage(
       get().log(
         `[${casterSeat.toUpperCase()}] is searching for Exceptional Mortals (${
           eligibleCount ?? "?"
-        } found)...`
+        } found)...`,
       );
     } catch {}
     return;
@@ -1651,7 +1651,7 @@ export function handleCustomMessage(
       get().log(
         `[${pending.casterSeat.toUpperCase()}] Call to War resolved: found ${
           selectedCardName ?? "a warrior"
-        }`
+        }`,
       );
     } catch {}
     return;
@@ -1739,7 +1739,7 @@ export function handleCustomMessage(
         "actorKey:",
         actorKey,
         "targetSeat:",
-        targetSeat
+        targetSeat,
       );
 
       let zonesUpdate = {};
@@ -1755,7 +1755,7 @@ export function handleCustomMessage(
         for (const c of revealedCards) {
           drawnCardCounts.set(
             c.cardId,
-            (drawnCardCounts.get(c.cardId) || 0) + 1
+            (drawnCardCounts.get(c.cardId) || 0) + 1,
           );
         }
         const movedCards: CardRef[] = [];
@@ -1780,7 +1780,7 @@ export function handleCustomMessage(
           "updatedSpellbook:",
           updatedSpellbook.length,
           "hand:",
-          hand.length
+          hand.length,
         );
 
         zonesUpdate = {
@@ -1824,7 +1824,7 @@ export function handleCustomMessage(
       get().log(
         `[${targetSeat.toUpperCase()}] reveals ${cardNames} - ${
           damageAmount ?? 0
-        } damage incoming`
+        } damage incoming`,
       );
     } catch {}
     return;
@@ -1853,7 +1853,7 @@ export function handleCustomMessage(
       get().log(
         `Searing Truth resolved: ${pending.targetSeat?.toUpperCase()} takes ${
           damageAmount ?? 0
-        } damage`
+        } damage`,
       );
     } catch {}
     return;
@@ -1926,7 +1926,7 @@ export function handleCustomMessage(
       get().log(
         `[${casterSeat.toUpperCase()}] casts Accusation - ${victimSeat.toUpperCase()}'s hand is revealed (${
           handSize ?? "?"
-        } cards)`
+        } cards)`,
       );
     } catch {}
 
@@ -1977,7 +1977,7 @@ export function handleCustomMessage(
       get().log(
         `Accusation resolved: ${
           selectedCardName ?? "a card"
-        } banished from ${pending.victimSeat.toUpperCase()}'s hand`
+        } banished from ${pending.victimSeat.toUpperCase()}'s hand`,
       );
     } catch {}
     return;
@@ -2045,7 +2045,7 @@ export function handleCustomMessage(
     } else if (stolenCard) {
       // Fallback to findIndex
       const handIndex = victimHand.findIndex(
-        (c) => c.cardId === stolenCard.cardId && c.name === stolenCard.name
+        (c) => c.cardId === stolenCard.cardId && c.name === stolenCard.name,
       );
       if (handIndex !== -1) {
         victimHand.splice(handIndex, 1);
@@ -2081,15 +2081,20 @@ export function handleCustomMessage(
     const minionAt = minionRec.at as CellKey;
     const minionCell = permanents[minionAt] || [];
     const minionIndex = minionCell.findIndex(
-      (p) => p.instanceId === minionRec.instanceId
+      (p) => p.instanceId === minionRec.instanceId,
     );
+
+    // IMPORTANT: Use victim's owner number so the card returns to the correct hand
+    // when detached/moved. The victim is the opposite of the Pith Imp owner.
+    const victimOwnerNum: 1 | 2 = victimSeat === "p1" ? 1 : 2;
 
     let permanentsNext = permanents;
     if (minionIndex !== -1 && stolenCard) {
       // Add stolen card as visual attachment (for display only)
+      // Use victimOwnerNum so "move to hand" sends it to the victim's hand
       const stolenVisual = {
         card: { ...stolenCard, pithImpStolen: true } as CardRef,
-        owner: Number(minionRec.owner) as 1 | 2,
+        owner: victimOwnerNum,
         instanceId: `pithimp_visual_${id}`,
         tapped: false,
         attachedTo: { at: minionAt, index: minionIndex },
@@ -2111,7 +2116,7 @@ export function handleCustomMessage(
       get().log(
         `[${ownerSeat.toUpperCase()}] Pith Imp steals ${
           stolenCardName ?? "a spell"
-        } from ${victimSeat.toUpperCase()}'s hand!`
+        } from ${victimSeat.toUpperCase()}'s hand!`,
       );
     } catch {}
     return;
@@ -2160,7 +2165,7 @@ export function handleCustomMessage(
           pithImpHands: s.pithImpHands.filter(
             (p) =>
               p.minion.at !== minionAt &&
-              (!minionInstanceId || p.minion.instanceId !== minionInstanceId)
+              (!minionInstanceId || p.minion.instanceId !== minionInstanceId),
           ),
         };
       }) as unknown as void;
@@ -2203,7 +2208,7 @@ export function handleCustomMessage(
         pithImpHands: s.pithImpHands.filter(
           (p) =>
             p.minion.at !== minionAt &&
-            (!minionInstanceId || p.minion.instanceId !== minionInstanceId)
+            (!minionInstanceId || p.minion.instanceId !== minionInstanceId),
         ),
         permanents: permanentsNext,
         zones: zonesNext,
@@ -2216,7 +2221,7 @@ export function handleCustomMessage(
         get().log(
           `${
             card.name
-          } returns to ${victimSeat.toUpperCase()}'s hand (Pith Imp left the realm)`
+          } returns to ${victimSeat.toUpperCase()}'s hand (Pith Imp left the realm)`,
         );
       } catch {}
     }
@@ -2242,7 +2247,7 @@ export function handleCustomMessage(
     const actorKey = get().actorKey;
     if (actorKey === ownerSeat) {
       console.log(
-        "[Morgana] morganaGenesis: Skipping - we are the owner, already handled locally"
+        "[Morgana] morganaGenesis: Skipping - we are the owner, already handled locally",
       );
       return;
     }
@@ -2306,7 +2311,7 @@ export function handleCustomMessage(
       get().log(
         `[${ownerSeat.toUpperCase()}] Morgana le Fay draws her own hand of ${
           drawnCount ?? drawnCards.length
-        } spell${(drawnCount ?? drawnCards.length) !== 1 ? "s" : ""}`
+        } spell${(drawnCount ?? drawnCards.length) !== 1 ? "s" : ""}`,
       );
     } catch {}
     return;
@@ -2342,7 +2347,7 @@ export function handleCustomMessage(
       get().log(
         `Morgana le Fay casts ${cardName ?? "a spell"}${
           targetTile ? ` at tile ${targetTile.x},${targetTile.y}` : ""
-        }`
+        }`,
       );
     } catch {}
     return;
@@ -2363,7 +2368,7 @@ export function handleCustomMessage(
       morganaHands: s.morganaHands.filter(
         (m) =>
           m.minion.at !== minionAt &&
-          (!minionInstanceId || m.minion.instanceId !== minionInstanceId)
+          (!minionInstanceId || m.minion.instanceId !== minionInstanceId),
       ),
     })) as unknown as void;
 
@@ -2372,7 +2377,7 @@ export function handleCustomMessage(
         get().log(
           `Morgana le Fay's remaining ${discardedCount} spell${
             discardedCount !== 1 ? "s" : ""
-          } go to graveyard`
+          } go to graveyard`,
         );
       } catch {}
     }
@@ -2392,7 +2397,7 @@ export function handleCustomMessage(
     const actorKey = get().actorKey;
     if (actorKey === ownerSeat) {
       console.log(
-        "[Omphalos] omphalosRegister: Skipping - we are the owner, already handled locally"
+        "[Omphalos] omphalosRegister: Skipping - we are the owner, already handled locally",
       );
       return;
     }
@@ -2422,7 +2427,7 @@ export function handleCustomMessage(
       get().log(
         `[${ownerSeat.toUpperCase()}] ${
           (artifactRec.card as CardRef)?.name || "Omphalos"
-        } enters the realm`
+        } enters the realm`,
       );
     } catch {}
     return;
@@ -2460,7 +2465,7 @@ export function handleCustomMessage(
         // Only add card if not already in hand (from patch)
         const currentEntry = s.omphalosHands.find((o) => o.id === omphalosId);
         const alreadyHasCard = currentEntry?.hand.some(
-          (c) => c.cardId === drawnCard.cardId
+          (c) => c.cardId === drawnCard.cardId,
         );
 
         return {
@@ -2487,7 +2492,7 @@ export function handleCustomMessage(
         get().log(
           `[${updatedEntry.ownerSeat.toUpperCase()}] ${
             updatedEntry.artifact.card.name
-          } draws a spell (now has ${newHandSize ?? updatedEntry.hand.length})`
+          } draws a spell (now has ${newHandSize ?? updatedEntry.hand.length})`,
         );
       } catch {}
     }
@@ -2525,7 +2530,7 @@ export function handleCustomMessage(
       get().log(
         `${entry?.artifact.card.name || "Omphalos"} casts ${
           cardName ?? "a spell"
-        }${targetTile ? ` at tile ${targetTile.x},${targetTile.y}` : ""}`
+        }${targetTile ? ` at tile ${targetTile.x},${targetTile.y}` : ""}`,
       );
     } catch {}
     return;
@@ -2545,7 +2550,7 @@ export function handleCustomMessage(
     const entry = get().omphalosHands.find(
       (o) =>
         o.artifact.at === artifactAt ||
-        (artifactInstanceId && o.artifact.instanceId === artifactInstanceId)
+        (artifactInstanceId && o.artifact.instanceId === artifactInstanceId),
     );
 
     // Remove from omphalosHands tracking
@@ -2553,7 +2558,7 @@ export function handleCustomMessage(
       omphalosHands: s.omphalosHands.filter(
         (o) =>
           o.artifact.at !== artifactAt &&
-          (!artifactInstanceId || o.artifact.instanceId !== artifactInstanceId)
+          (!artifactInstanceId || o.artifact.instanceId !== artifactInstanceId),
       ),
     })) as unknown as void;
 
@@ -2562,7 +2567,7 @@ export function handleCustomMessage(
         get().log(
           `${entry.artifact.card.name}'s remaining ${discardedCount} spell${
             discardedCount !== 1 ? "s" : ""
-          } go to graveyard`
+          } go to graveyard`,
         );
       } catch {}
     }
@@ -2599,7 +2604,7 @@ export function handleCustomMessage(
     } as Partial<GameState> as GameState);
     try {
       get().log(
-        `[${casterSeat.toUpperCase()}] casts Earthquake - selecting a 2×2 area...`
+        `[${casterSeat.toUpperCase()}] casts Earthquake - selecting a 2×2 area...`,
       );
     } catch {}
     return;
@@ -2723,7 +2728,7 @@ export function handleCustomMessage(
           ? burrowedItems.map((b) => b.name).join(", ")
           : "no units";
       get().log(
-        `[${pending.casterSeat.toUpperCase()}] Earthquake resolved. Burrowed: ${burrowedList}`
+        `[${pending.casterSeat.toUpperCase()}] Earthquake resolved. Burrowed: ${burrowedList}`,
       );
     } catch {}
     return;
@@ -2785,7 +2790,7 @@ export function handleCustomMessage(
     try {
       const playerNum = casterSeat === "p1" ? "1" : "2";
       get().log(
-        `[p${playerNum}:PLAYER] is choosing how to cast [p${playerNum}card:${card.name}] (Magic or Spirit)...`
+        `[p${playerNum}:PLAYER] is choosing how to cast [p${playerNum}card:${card.name}] (Magic or Spirit)...`,
       );
     } catch {}
     return;
@@ -2809,7 +2814,7 @@ export function handleCustomMessage(
       const modeLabel =
         mode === "spirit" ? `Spirit (Power: ${pending.manaCost})` : "Magic";
       get().log(
-        `[p${playerNum}:PLAYER] cast [p${playerNum}card:${pending.card.name}] as ${modeLabel}`
+        `[p${playerNum}:PLAYER] cast [p${playerNum}card:${pending.card.name}] as ${modeLabel}`,
       );
     } catch {}
 
@@ -2867,7 +2872,7 @@ export function handleCustomMessage(
       get().log(
         `[${ownerSeat.toUpperCase()}] Highland Princess searches for an artifact (${
           eligibleCount ?? "?"
-        } eligible)`
+        } eligible)`,
       );
     } catch {}
     return;
@@ -2888,7 +2893,7 @@ export function handleCustomMessage(
     try {
       if (selectedCardName) {
         get().log(
-          `[${pending.ownerSeat.toUpperCase()}] Highland Princess finds ${selectedCardName}`
+          `[${pending.ownerSeat.toUpperCase()}] Highland Princess finds ${selectedCardName}`,
         );
       }
     } catch {}
@@ -2962,7 +2967,7 @@ export function handleCustomMessage(
 
     try {
       get().log(
-        `[${casterSeat.toUpperCase()}] casts Black Mass - searching top spells`
+        `[${casterSeat.toUpperCase()}] casts Black Mass - searching top spells`,
       );
     } catch {}
     return;
@@ -2985,11 +2990,11 @@ export function handleCustomMessage(
         get().log(
           `[${pending.casterSeat.toUpperCase()}] draws ${
             selectedCardNames.length
-          } Evil minion(s)`
+          } Evil minion(s)`,
         );
       } else {
         get().log(
-          `[${pending.casterSeat.toUpperCase()}] draws no cards from Black Mass`
+          `[${pending.casterSeat.toUpperCase()}] draws no cards from Black Mass`,
         );
       }
     } catch {}
@@ -3053,7 +3058,7 @@ export function handleCustomMessage(
       get().log(
         `[${casterSeat.toUpperCase()}] casts Raise Dead (${
           eligibleCount ?? "?"
-        } dead minions found)`
+        } dead minions found)`,
       );
     } catch {}
     return;
@@ -3078,7 +3083,7 @@ export function handleCustomMessage(
       get().log(
         `[${casterSeat?.toUpperCase() ?? "PLAYER"}] Raise Dead summons ${
           selectedMinionName ?? "a minion"
-        } from ${fromPlayerStr} graveyard!`
+        } from ${fromPlayerStr} graveyard!`,
       );
     } catch {}
     return;
@@ -3098,7 +3103,7 @@ export function handleCustomMessage(
       get().log(
         `[${
           casterSeat?.toUpperCase() ?? "PLAYER"
-        }] Raise Dead: Manual resolution chosen`
+        }] Raise Dead: Manual resolution chosen`,
       );
     } catch {}
     return;
@@ -3151,7 +3156,7 @@ export function handleCustomMessage(
       get().log(
         `[${ownerSeat?.toUpperCase() ?? "PLAYER"}] ${
           sourceName ?? "Effect"
-        }: Auto-resolved`
+        }: Auto-resolved`,
       );
     } catch {}
     return;
@@ -3175,7 +3180,7 @@ export function handleCustomMessage(
       get().log(
         `[${ownerSeat?.toUpperCase() ?? "PLAYER"}] ${
           sourceName ?? "Effect"
-        }: Manual resolution chosen`
+        }: Manual resolution chosen`,
       );
     } catch {}
     return;
@@ -3218,7 +3223,7 @@ export function handleCustomMessage(
       get().log(
         `[${ownerSeat.toUpperCase()}] Mother Nature reveals ${
           revealedCard?.name ?? "a card"
-        }`
+        }`,
       );
     } catch {}
 
@@ -3270,13 +3275,13 @@ export function handleCustomMessage(
         get().log(
           `[${pending.ownerSeat.toUpperCase()}] Mother Nature summons ${
             revealedCardName ?? "a minion"
-          }!`
+          }!`,
         );
       } else {
         get().log(
           `[${pending.ownerSeat.toUpperCase()}] declines to summon ${
             revealedCardName ?? "the minion"
-          }`
+          }`,
         );
       }
     } catch {}
@@ -3385,7 +3390,7 @@ export function handleCustomMessage(
         get().log(
           `[${lilithOwner.toUpperCase()}] Lilith reveals ${
             revealedCard.name
-          } from your spellbook`
+          } from your spellbook`,
         );
       } catch {}
     }
@@ -3427,7 +3432,7 @@ export function handleCustomMessage(
       set({ pendingLilithReveal: null } as Partial<GameState> as GameState);
       try {
         get().log(
-          `[${lilithOwner.toUpperCase()}] Lilith: Opponent's spellbook is empty`
+          `[${lilithOwner.toUpperCase()}] Lilith: Opponent's spellbook is empty`,
         );
       } catch {}
       return;
@@ -3451,7 +3456,7 @@ export function handleCustomMessage(
       get().log(
         `[${lilithOwner.toUpperCase()}] Lilith reveals ${
           revealedCard?.name ?? "a card"
-        } from opponent's spellbook`
+        } from opponent's spellbook`,
       );
     } catch {}
     return;
@@ -3492,7 +3497,7 @@ export function handleCustomMessage(
       get().log(
         `[${lilithOwner.toUpperCase()}] Lilith reveals ${
           revealedCard?.name ?? "a card"
-        } from opponent's spellbook`
+        } from opponent's spellbook`,
       );
     } catch {}
     return;
@@ -3598,7 +3603,7 @@ export function handleCustomMessage(
         get().log(
           `[${effectiveLilithOwner.toUpperCase()}] Lilith summons ${
             revealedCardName ?? "a minion"
-          }!`
+          }!`,
         );
       } else {
         get().log(`${revealedCardName ?? "Card"} goes to bottom of spellbook`);
@@ -3646,7 +3651,7 @@ export function handleCustomMessage(
     const actorKey = get().actorKey;
     if (actorKey === ownerSeat) {
       console.log(
-        "[Pigs] pigsDeathrite: Skipping - we are the owner, already handled locally"
+        "[Pigs] pigsDeathrite: Skipping - we are the owner, already handled locally",
       );
       return;
     }
@@ -3659,7 +3664,7 @@ export function handleCustomMessage(
         name,
         slug: "",
         type: "", // Placeholder type for display purposes
-      })
+      }),
     );
 
     const pendingPigs = {
@@ -3683,7 +3688,7 @@ export function handleCustomMessage(
       get().log(
         `[${ownerSeat.toUpperCase()}] ${
           triggerCardName || "Pigs of the Sounder"
-        } Deathrite reveals ${revealedCards.length} cards`
+        } Deathrite reveals ${revealedCards.length} cards`,
       );
     } catch {}
     return;
@@ -3704,7 +3709,7 @@ export function handleCustomMessage(
     const actorKey = get().actorKey;
     if (actorKey === ownerSeat) {
       console.log(
-        "[Pigs] pigsDeathResolve: Skipping - we are the owner, already handled locally"
+        "[Pigs] pigsDeathResolve: Skipping - we are the owner, already handled locally",
       );
       return;
     }
@@ -3721,13 +3726,13 @@ export function handleCustomMessage(
           get().log(
             `[${ownerSeat?.toUpperCase() || "??"}] ${
               pending.triggerCardName
-            } summons ${summonedCount} ${pending.targetCardName}!`
+            } summons ${summonedCount} ${pending.targetCardName}!`,
           );
         } else {
           get().log(
             `[${ownerSeat?.toUpperCase() || "??"}] ${
               pending.triggerCardName
-            } finds no ${pending.targetCardName}`
+            } finds no ${pending.targetCardName}`,
           );
         }
       } catch {}
@@ -3790,7 +3795,7 @@ export function handleCustomMessage(
     try {
       if (hasKythera) {
         get().log(
-          `[${ownerSeat.toUpperCase()}] Kythera Mechanism allows choosing haunt movement`
+          `[${ownerSeat.toUpperCase()}] Kythera Mechanism allows choosing haunt movement`,
         );
       }
     } catch {}
@@ -3832,7 +3837,7 @@ export function handleCustomMessage(
         get().log(
           `[${pending.ownerSeat.toUpperCase()}] ${
             haunt.cardName
-          } moves (Kythera Mechanism)`
+          } moves (Kythera Mechanism)`,
         );
       } catch {}
     }
@@ -3887,7 +3892,7 @@ export function handleCustomMessage(
         get().log(
           `[${pending.ownerSeat.toUpperCase()}] chooses not to move ${
             haunt.cardName
-          }`
+          }`,
         );
       } catch {}
     }
@@ -3926,11 +3931,11 @@ export function handleCustomMessage(
         const cellNo = toY * boardWidth + toX + 1;
         if (hasKythera) {
           get().log(
-            `[p${playerNum}card:${move.cardName}] moves to #${cellNo} (Kythera Mechanism)`
+            `[p${playerNum}card:${move.cardName}] moves to #${cellNo} (Kythera Mechanism)`,
           );
         } else {
           get().log(
-            `[p${playerNum}card:${move.cardName}] wanders to #${cellNo}`
+            `[p${playerNum}card:${move.cardName}] wanders to #${cellNo}`,
           );
         }
       }
@@ -3976,7 +3981,7 @@ export function handleCustomMessage(
       "[interrogatorTrigger] actorKey:",
       actorKey,
       "skipping:",
-      actorKey === interrogatorSeat
+      actorKey === interrogatorSeat,
     );
     if (actorKey === interrogatorSeat) return;
 
@@ -3998,7 +4003,7 @@ export function handleCustomMessage(
       get().log(
         `[p${
           interrogatorSeat === "p1" ? "1" : "2"
-        }:${interrogatorAvatarName}] ability triggers: ${victimSeat.toUpperCase()} must pay 3 life or allow a spell draw`
+        }:${interrogatorAvatarName}] ability triggers: ${victimSeat.toUpperCase()} must pay 3 life or allow a spell draw`,
       );
     } catch {}
     return;
@@ -4030,12 +4035,12 @@ export function handleCustomMessage(
       "victimSeat:",
       pending.victimSeat,
       "skipping:",
-      actorKey === pending.victimSeat
+      actorKey === pending.victimSeat,
     );
     if (actorKey === pending.victimSeat) return;
 
     console.log(
-      "[interrogatorResolve] Processing resolution for Interrogator player"
+      "[interrogatorResolve] Processing resolution for Interrogator player",
     );
 
     const { interrogatorSeat, victimSeat } = pending;
@@ -4047,7 +4052,7 @@ export function handleCustomMessage(
       } catch {}
       try {
         get().log(
-          `${victimSeat.toUpperCase()} pays 3 life to prevent Interrogator's draw`
+          `${victimSeat.toUpperCase()} pays 3 life to prevent Interrogator's draw`,
         );
       } catch {}
     } else {
@@ -4057,7 +4062,7 @@ export function handleCustomMessage(
       } catch {}
       try {
         get().log(
-          `${victimSeat.toUpperCase()} allows Interrogator's draw - ${interrogatorSeat.toUpperCase()} draws a spell`
+          `${victimSeat.toUpperCase()} allows Interrogator's draw - ${interrogatorSeat.toUpperCase()} draws a spell`,
         );
       } catch {}
     }
@@ -4122,7 +4127,7 @@ export function handleCustomMessage(
 
     try {
       get().log(
-        `[${casterSeat.toUpperCase()}] casts Atlantean Fate - selecting 4×4 area`
+        `[${casterSeat.toUpperCase()}] casts Atlantean Fate - selecting 4×4 area`,
       );
     } catch {}
     return;
@@ -4209,7 +4214,7 @@ export function handleCustomMessage(
       get().log(
         `Atlantean Fate resolved! ${floodCount} site${
           floodCount !== 1 ? "s" : ""
-        } flooded`
+        } flooded`,
       );
     } catch {}
     return;
@@ -4268,7 +4273,7 @@ export function handleCustomMessage(
 
     try {
       get().log(
-        `[${casterSeat.toUpperCase()}] Mephistopheles enters - awaiting decision`
+        `[${casterSeat.toUpperCase()}] Mephistopheles enters - awaiting decision`,
       );
     } catch {}
     return;
@@ -4294,7 +4299,7 @@ export function handleCustomMessage(
 
     try {
       get().log(
-        `[${casterSeat.toUpperCase()}] Mephistopheles becomes their new Avatar!`
+        `[${casterSeat.toUpperCase()}] Mephistopheles becomes their new Avatar!`,
       );
     } catch {}
     return;
@@ -4316,7 +4321,7 @@ export function handleCustomMessage(
 
     try {
       get().log(
-        `[${pending.casterSeat.toUpperCase()}] Mephistopheles remains as a minion`
+        `[${pending.casterSeat.toUpperCase()}] Mephistopheles remains as a minion`,
       );
     } catch {}
     return;
@@ -4339,7 +4344,7 @@ export function handleCustomMessage(
       get().log(
         `[${who.toUpperCase()}] Mephistopheles summons ${
           card.name
-        } to the battlefield!`
+        } to the battlefield!`,
       );
     } catch {}
     return;
@@ -4370,7 +4375,7 @@ export function handleCustomMessage(
       get().log(
         `[${pending.ownerSeat.toUpperCase()}] Pathfinder selecting target for ${
           pending.topSite?.name
-        }`
+        }`,
       );
     } catch {}
     return;
@@ -4400,7 +4405,7 @@ export function handleCustomMessage(
       get().log(
         `[${pending.ownerSeat.toUpperCase()}] Pathfinder plays ${
           topSite.name
-        } and moves there`
+        } and moves there`,
       );
     } catch {}
     return;
@@ -4418,7 +4423,7 @@ export function handleCustomMessage(
 
     try {
       get().log(
-        `[${pending.ownerSeat.toUpperCase()}] Pathfinder play cancelled`
+        `[${pending.ownerSeat.toUpperCase()}] Pathfinder play cancelled`,
       );
     } catch {}
     return;

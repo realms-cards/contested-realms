@@ -61,7 +61,7 @@ export const createPithImpSlice: StateCreator<
     const victimHand = zones[victimSeat]?.hand || [];
 
     console.log(
-      `[PithImp] Victim ${victimSeat} hand has ${victimHand.length} cards`
+      `[PithImp] Victim ${victimSeat} hand has ${victimHand.length} cards`,
     );
 
     // Filter to only spells (non-site cards)
@@ -71,12 +71,12 @@ export const createPithImpSlice: StateCreator<
     });
 
     console.log(
-      `[PithImp] Found ${spellsInHand.length} spells (non-site cards) in victim's hand`
+      `[PithImp] Found ${spellsInHand.length} spells (non-site cards) in victim's hand`,
     );
 
     if (spellsInHand.length === 0) {
       get().log(
-        `[${ownerSeat.toUpperCase()}] Pith Imp: ${victimSeat.toUpperCase()} has no spells in hand to steal`
+        `[${ownerSeat.toUpperCase()}] Pith Imp: ${victimSeat.toUpperCase()} has no spells in hand to steal`,
       );
       return;
     }
@@ -132,7 +132,7 @@ export const createPithImpSlice: StateCreator<
     });
 
     console.log(
-      `[PithImp] Random selection: spellIndex=${randomIndex}, actualHandIndex=${actualHandIndex}, card=${stolenCard.name}`
+      `[PithImp] Random selection: spellIndex=${randomIndex}, actualHandIndex=${actualHandIndex}, card=${stolenCard.name}`,
     );
 
     // Create Pith Imp's private hand entry with the stolen card
@@ -170,15 +170,20 @@ export const createPithImpSlice: StateCreator<
     const permanents = get().permanents;
     const minionCell = permanents[input.minion.at] || [];
     const minionIndex = minionCell.findIndex(
-      (p) => p.instanceId === input.minion.instanceId
+      (p) => p.instanceId === input.minion.instanceId,
     );
+
+    // IMPORTANT: Use victim's owner number so the card returns to the correct hand
+    // when detached/moved. The victim is the opposite of the Pith Imp owner.
+    const victimOwnerNum: 1 | 2 = victimSeat === "p1" ? 1 : 2;
 
     let permanentsNext = permanents;
     if (minionIndex !== -1) {
       // Add stolen card as visual attachment (for display only, not for state)
+      // Use victimOwnerNum so "move to hand" sends it to the victim's hand
       const stolenVisual = {
         card: { ...stolenCard, pithImpStolen: true } as CardRef,
-        owner: input.minion.owner,
+        owner: victimOwnerNum,
         instanceId: `pithimp_visual_${id}`,
         tapped: false,
         attachedTo: { at: input.minion.at, index: minionIndex },
@@ -228,7 +233,7 @@ export const createPithImpSlice: StateCreator<
     get().log(
       `[${ownerSeat.toUpperCase()}] Pith Imp steals ${
         stolenCard.name
-      } from ${victimSeat.toUpperCase()}'s hand!`
+      } from ${victimSeat.toUpperCase()}'s hand!`,
     );
   },
 
@@ -247,7 +252,7 @@ export const createPithImpSlice: StateCreator<
     const pithImpEntry = pithImpHands.find(
       (p) =>
         p.minion.at === minionAt ||
-        (minionInstanceId && p.minion.instanceId === minionInstanceId)
+        (minionInstanceId && p.minion.instanceId === minionInstanceId),
     );
 
     if (!pithImpEntry || pithImpEntry.hand.length === 0) {
@@ -268,7 +273,7 @@ export const createPithImpSlice: StateCreator<
       get().log(
         `${
           card.name
-        } returns to ${pithImpEntry.victimSeat.toUpperCase()}'s hand (Pith Imp left the realm)`
+        } returns to ${pithImpEntry.victimSeat.toUpperCase()}'s hand (Pith Imp left the realm)`,
       );
     }
 
@@ -284,7 +289,7 @@ export const createPithImpSlice: StateCreator<
     const remainingPithImpHands = pithImpHands.filter(
       (p) =>
         p.minion.at !== minionAt &&
-        (!minionInstanceId || p.minion.instanceId !== minionInstanceId)
+        (!minionInstanceId || p.minion.instanceId !== minionInstanceId),
     );
 
     // Remove visual attachments (stolen cards with pithImpStolen flag)
@@ -332,13 +337,13 @@ export const createPithImpSlice: StateCreator<
   // Get the private hand for a specific Pith Imp
   getPithImpHandForMinion: (
     minionInstanceId: string | null,
-    minionAt: CellKey
+    minionAt: CellKey,
   ): CardRef[] => {
     const pithImpHands = get().pithImpHands;
     const entry = pithImpHands.find(
       (p) =>
         p.minion.at === minionAt ||
-        (minionInstanceId && p.minion.instanceId === minionInstanceId)
+        (minionInstanceId && p.minion.instanceId === minionInstanceId),
     );
     return entry?.hand || [];
   },
@@ -347,7 +352,7 @@ export const createPithImpSlice: StateCreator<
   dropStolenCard: (
     pithImpId: string,
     cardIndex: number,
-    targetTile: { x: number; y: number }
+    targetTile: { x: number; y: number },
   ) => {
     const pithImpHands = get().pithImpHands;
     const pithImpEntry = pithImpHands.find((p) => p.id === pithImpId);
@@ -365,11 +370,13 @@ export const createPithImpSlice: StateCreator<
     });
 
     // Add the card as a permanent on the board
+    // IMPORTANT: Use the victim's owner number (original card owner), not the Pith Imp's owner
+    const victimOwnerNum: 1 | 2 = pithImpEntry.victimSeat === "p1" ? 1 : 2;
     const permanents = get().permanents;
     const cellPerms = [...(permanents[key] || [])];
     const newPermanent = {
       card,
-      owner: pithImpEntry.minion.owner, // Keep current ownership
+      owner: victimOwnerNum, // Keep original ownership (victim's)
       instanceId: `dropped_${Date.now().toString(36)}`,
       tapped: false,
     };
@@ -385,7 +392,7 @@ export const createPithImpSlice: StateCreator<
     newHand.splice(cardIndex, 1);
 
     const updatedPithImpHands = pithImpHands.map((p) =>
-      p.id === pithImpId ? { ...p, hand: newHand } : p
+      p.id === pithImpId ? { ...p, hand: newHand } : p,
     );
 
     set({
