@@ -6,6 +6,7 @@
 
 - **add automatic resolver for Mismanaged Mortuary**
 - **add status effect icons** for various effects on the board
+- **fix aura handling**
 - **fix Player not having their mulligan if second player was faster**
 - **add Gem tokens to toolbox** these can be used for various purposes
 - **add RND button in toolbox** to generate a random number between 1 and x where we can choose x
