@@ -9,7 +9,7 @@
 - **add status effect icons** for various effects on the board
 - **fix Player not having their mulligan if second player was faster**
 - **add Gem tokens to toolbox** these can be used for various purposes
-- **add RND button in toolbox** to generate a random number between n and x where we can choose x
+- **add RND button in toolbox** to generate a random number between 1 and x where we can choose x
 - **fix core mana and treshold tracking**
 - **fix problems with undo and activate it in main game** be careful with it! report if things go wrong
 - **harden Pith Imp steal action**
