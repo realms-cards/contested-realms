@@ -39,7 +39,11 @@ function getCachedToken(): CachedSocketToken | null {
     }
     // Token expired or expiring soon
     localStorage.removeItem(SOCKET_TOKEN_STORAGE_KEY);
-  } catch {}
+  } catch (e) {
+    // Log localStorage errors to help diagnose cache failures
+    // (common causes: private browsing, storage quota, corrupted data)
+    console.warn("[SocketTokenCache] localStorage read failed:", e);
+  }
   return null;
 }
 
@@ -57,9 +61,14 @@ function setCachedToken(token: string): void {
     };
     localStorage.setItem(SOCKET_TOKEN_STORAGE_KEY, JSON.stringify(cached));
     lastFetchAttemptTime = now;
-    console.log("[SocketTokenCache] Token stored in localStorage");
+    // Token stored successfully - no log needed for normal flow
   } catch (e) {
-    console.warn("[SocketTokenCache] Failed to store token:", e);
+    // Log storage failures - this explains why cache misses occur
+    // Common causes: private browsing, storage quota exceeded
+    console.warn(
+      "[SocketTokenCache] Failed to store token (localStorage may be unavailable):",
+      e,
+    );
   }
 }
 
@@ -105,7 +114,6 @@ function shouldRateLimitFetch(): boolean {
  * Internal function that actually performs the fetch
  */
 async function doFetch(): Promise<string | undefined> {
-  console.log("[SocketTokenCache] >>> FETCH START");
   try {
     const res = await fetch("/api/socket-token", { credentials: "include" });
     if (res.ok) {
@@ -113,17 +121,18 @@ async function doFetch(): Promise<string | undefined> {
       const token = j?.token as string;
       if (token) {
         setCachedToken(token);
-        console.log("[SocketTokenCache] <<< FETCH SUCCESS");
         return token;
       }
     } else if (res.status === 401) {
-      console.log("[SocketTokenCache] <<< FETCH 401");
+      // User not authenticated - clear any stale cache
       clearSocketTokenCache();
-    } else {
-      console.log("[SocketTokenCache] <<< FETCH FAILED:", res.status);
+    } else if (process.env.NODE_ENV === "development") {
+      console.warn("[SocketTokenCache] Fetch failed:", res.status);
     }
   } catch (e) {
-    console.log("[SocketTokenCache] <<< FETCH ERROR:", e);
+    if (process.env.NODE_ENV === "development") {
+      console.warn("[SocketTokenCache] Fetch error:", e);
+    }
   }
   return undefined;
 }
@@ -135,12 +144,11 @@ async function doFetch(): Promise<string | undefined> {
  * @returns Token string or undefined if fetch fails
  */
 export async function fetchSocketToken(
-  forceRefresh = false
+  forceRefresh = false,
 ): Promise<string | undefined> {
   // ALWAYS check for active fetch first - if one is in progress, wait for it
   // This prevents multiple simultaneous fetches regardless of forceRefresh
   if (activeFetchPromise) {
-    console.log("[SocketTokenCache] Waiting for existing fetch...");
     return activeFetchPromise;
   }
 
@@ -153,26 +161,23 @@ export async function fetchSocketToken(
     return cached.token;
   }
 
-  // Even with forceRefresh, respect rate limiting to prevent API spam
-  // Only bypass rate limit for actual auth errors (handled by caller clearing cache)
-  if (forceRefresh && shouldRateLimitFetch()) {
+  // CRITICAL: Global rate limit applies even when localStorage fails
+  // This prevents API spam when localStorage is unavailable (private browsing, etc.)
+  if (shouldRateLimitFetch()) {
     if (cached) {
-      console.log(
-        "[SocketTokenCache] RATE LIMITED - returning cached token despite forceRefresh"
-      );
+      // Rate limited but have cached token - return it
       return cached.token;
     }
-    console.log(
-      "[SocketTokenCache] RATE LIMITED - no cached token, waiting..."
-    );
-    // No cached token and rate limited - return undefined, caller should retry later
+    // No cached token and rate limited - return undefined
+    // Caller should handle gracefully (socket will retry with backoff)
     return undefined;
   }
 
   if (!cached) {
-    console.log("[SocketTokenCache] MISS - no cached token");
-  } else {
-    console.log("[SocketTokenCache] Force refresh requested");
+    // Only log cache misses in development to help diagnose issues
+    if (process.env.NODE_ENV === "development") {
+      console.log("[SocketTokenCache] MISS - no cached token");
+    }
   }
 
   // Track fetch attempt time before starting

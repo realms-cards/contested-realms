@@ -100,7 +100,7 @@ import {
 } from "@/lib/game/store/portalState";
 import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
 import { useSoatcPlayers } from "@/lib/hooks/useSoatcStatus";
-import { useTouchDevice } from "@/lib/hooks/useTouchDevice";
+import { useTouchDevice, useSmallScreen } from "@/lib/hooks/useTouchDevice";
 import { useZoomKeyboardShortcuts } from "@/lib/hooks/useZoomKeyboardShortcuts";
 import { LegacySeatVideo3D } from "@/lib/rtc/SeatVideo3D";
 import { generateClientLeagueMatchResult } from "@/lib/soatc/clientResult";
@@ -2151,6 +2151,9 @@ export default function OnlineMatchPage() {
   const handVisibilityMode = useGameStore((s) => s.handVisibilityMode);
   const setHandVisibilityMode = useGameStore((s) => s.setHandVisibilityMode);
   const isTouchDevice = useTouchDevice();
+  const isSmallScreen = useSmallScreen();
+  // Show hand toggle on touch devices OR small screens (mobile fallback)
+  const showMobileHandToggle = isTouchDevice || isSmallScreen;
 
   // Space key to toggle hand visibility
   useEffect(() => {
@@ -2802,8 +2805,8 @@ export default function OnlineMatchPage() {
           >
             3D
           </button>
-          {/* Mobile hand toggle - only show on touch devices */}
-          {isTouchDevice && (
+          {/* Mobile hand toggle - show on touch devices OR small screens */}
+          {showMobileHandToggle && (
             <button
               className={`ml-2 p-2 rounded ${
                 handVisibilityMode === "visible"
