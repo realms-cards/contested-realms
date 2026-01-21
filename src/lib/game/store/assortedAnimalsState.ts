@@ -76,7 +76,7 @@ export const createAssortedAnimalsSlice: StateCreator<
     const board = get().board;
     const ownerNum = casterSeat === "p1" ? 1 : 2;
     const siteCount = Object.values(board.sites || {}).filter(
-      (s) => s?.owner === ownerNum
+      (s) => s?.owner === ownerNum,
     ).length;
     const players = get().players;
     const player = players[casterSeat];
@@ -148,21 +148,12 @@ export const createAssortedAnimalsSlice: StateCreator<
       ? fullSpellbook.slice(0, haystackLimit)
       : fullSpellbook;
 
-    // Fetch metadata for all cards in spellbook
-    const cardIds = spellbook.map((c) => c.cardId);
-    if (cardIds.length > 0) {
-      await get().fetchCardMeta(cardIds);
-    }
-    const metaByCardId = get().metaByCardId;
-
-    // Find eligible cards (Beasts with cost ≤ X)
+    // Find eligible cards (Beasts with cost ≤ X) - use embedded CardRef data
     const eligibleCards: Array<CardRef & { cost: number }> = [];
     spellbook.forEach((card) => {
-      const meta = metaByCardId[card.cardId];
-      const subTypes = (meta?.subTypes || "").toLowerCase();
-      const cost = meta?.cost ?? 999;
+      const subTypes = (card.subTypes || "").toLowerCase();
+      const cost = card.cost ?? 999;
 
-      // Check if it's a Beast and affordable
       if (subTypes.includes("beast") && cost <= chosenX) {
         eligibleCards.push({ ...card, cost });
       }
@@ -173,7 +164,7 @@ export const createAssortedAnimalsSlice: StateCreator<
       get().movePermanentToZone(spell.at, spell.index, "graveyard");
       set({ pendingAssortedAnimals: null } as Partial<GameState> as GameState);
       get().log(
-        `[${casterSeat.toUpperCase()}] Assorted Animals finds no Beasts costing ${chosenX} or less`
+        `[${casterSeat.toUpperCase()}] Assorted Animals finds no Beasts costing ${chosenX} or less`,
       );
       return;
     }
@@ -207,7 +198,7 @@ export const createAssortedAnimalsSlice: StateCreator<
     }
 
     get().log(
-      `[${casterSeat.toUpperCase()}] casts Assorted Animals (X=${chosenX}) - searching for Beasts`
+      `[${casterSeat.toUpperCase()}] casts Assorted Animals (X=${chosenX}) - searching for Beasts`,
     );
   },
 
@@ -224,7 +215,7 @@ export const createAssortedAnimalsSlice: StateCreator<
     // Check if adding this card would exceed X
     const currentTotal = pending.selectedCards.reduce(
       (sum, c) => sum + c.cost,
-      0
+      0,
     );
     if (currentTotal + card.cost > pending.xValue) return;
 
@@ -310,7 +301,7 @@ export const createAssortedAnimalsSlice: StateCreator<
           selectedCards.length
         } Beast(s) (total cost ${totalCost}): ${selectedCards
           .map((c) => c.name)
-          .join(", ")}`
+          .join(", ")}`,
       );
     } else {
       get().log(`[${casterSeat.toUpperCase()}] chooses not to take any Beasts`);

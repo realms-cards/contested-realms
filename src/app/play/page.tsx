@@ -8,6 +8,8 @@ import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import AccusationOverlay from "@/components/game/AccusationOverlay";
 import { AnimistCastChoiceOverlay } from "@/components/game/AnimistCastChoiceOverlay";
 import AssortedAnimalsOverlay from "@/components/game/AssortedAnimalsOverlay";
+import AtlanteanFateOverlay from "@/components/game/AtlanteanFateOverlay";
+import AutoResolveConfirmOverlay from "@/components/game/AutoResolveConfirmOverlay";
 import BlackMassOverlay from "@/components/game/BlackMassOverlay";
 import BrowseOverlay from "@/components/game/BrowseOverlay";
 import CallToWarOverlay from "@/components/game/CallToWarOverlay";
@@ -20,37 +22,36 @@ import ContextMenu from "@/components/game/ContextMenu";
 import DeckSelector from "@/components/game/DeckSelector";
 import DemonicContractOverlay from "@/components/game/DemonicContractOverlay";
 import DholChantsOverlay from "@/components/game/DholChantsOverlay";
-import RaiseDeadOverlay from "@/components/game/RaiseDeadOverlay";
-import AutoResolveConfirmOverlay from "@/components/game/AutoResolveConfirmOverlay";
 import DoomsdayCultOverlay from "@/components/game/DoomsdayCultOverlay";
 import EarthquakeOverlay from "@/components/game/EarthquakeOverlay";
 import { ElementChoiceOverlay } from "@/components/game/ElementChoiceOverlay";
 import FrontierSettlersOverlay from "@/components/game/FrontierSettlersOverlay";
 import GameToolbox from "@/components/game/GameToolbox";
 import HarbingerPortalScreen from "@/components/game/HarbingerPortalScreen";
+import HeadlessHauntOverlay from "@/components/game/HeadlessHauntOverlay";
 import HighlandPrincessOverlay from "@/components/game/HighlandPrincessOverlay";
 import { InteractionConsentDialog } from "@/components/game/InteractionConsentDialog";
+import InterrogatorChoiceOverlay from "@/components/game/InterrogatorChoiceOverlay";
 import LilithOverlay from "@/components/game/LilithOverlay";
+import MephistophelesOverlay from "@/components/game/MephistophelesOverlay";
+import MephistophelesSummonOverlay from "@/components/game/MephistophelesSummonOverlay";
 import MobileHandHint from "@/components/game/MobileHandHint";
 import MotherNatureOverlay from "@/components/game/MotherNatureOverlay";
 import MusicGameSync from "@/components/game/MusicGameSync";
-import HeadlessHauntOverlay from "@/components/game/HeadlessHauntOverlay";
-import InterrogatorChoiceOverlay from "@/components/game/InterrogatorChoiceOverlay";
-import AtlanteanFateOverlay from "@/components/game/AtlanteanFateOverlay";
-import MephistophelesOverlay from "@/components/game/MephistophelesOverlay";
-import MephistophelesSummonOverlay from "@/components/game/MephistophelesSummonOverlay";
-import PathfinderPlayOverlay from "@/components/game/PathfinderPlayOverlay";
 import OfflineMulliganScreen from "@/components/game/OfflineMulliganScreen";
 import OnlineLifeCounters from "@/components/game/OnlineLifeCounters";
+import PathfinderPlayOverlay from "@/components/game/PathfinderPlayOverlay";
 import PigsOfTheSounderOverlay from "@/components/game/PigsOfTheSounderOverlay";
 import PileSearchDialog from "@/components/game/PileSearchDialog";
 import PithImpOverlay from "@/components/game/PithImpOverlay";
 import PlacementDialog from "@/components/game/PlacementDialog";
 import PlayerResourcePanels from "@/components/game/PlayerResourcePanel";
 import PrivateHandTargetingOverlay from "@/components/game/PrivateHandTargetingOverlay";
+import RaiseDeadOverlay from "@/components/game/RaiseDeadOverlay";
 import SearingTruthOverlay from "@/components/game/SearingTruthOverlay";
 import SeerScreen from "@/components/game/SeerScreen";
 import StatusBar from "@/components/game/StatusBar";
+import PlayerStatusEffects from "@/components/game/StatusEffectIcons";
 import SwitchSiteHudOverlay from "@/components/game/SwitchSiteHudOverlay";
 import UnitHandsOverlay from "@/components/game/UnitHandsOverlay";
 import {
@@ -124,11 +125,11 @@ export default function PlayPage() {
   const currentPlayerKey = currentPlayer === 1 ? "p1" : "p2";
   const offlinePlayerNames = useMemo(
     () => ({ p1: "Player 1", p2: "Player 2" }),
-    []
+    [],
   );
   const offlineNameById = useMemo(
     () => ({ hotseat_p1: "Player 1", hotseat_p2: "Player 2" }),
-    []
+    [],
   );
   const consentPlayerId = currentPlayerKey
     ? (`hotseat_${currentPlayerKey}` satisfies string)
@@ -232,7 +233,7 @@ export default function PlayPage() {
       useGameStore.setState(updates);
       console.log(
         "[hotseat] After setState, store.board.sites:",
-        useGameStore.getState().board?.sites
+        useGameStore.getState().board?.sites,
       );
       setSetupOpen(false);
       setPrepared(true);
@@ -286,7 +287,7 @@ export default function PlayPage() {
         if (snap?.game) {
           queueServerPatch(
             snap.game,
-            typeof snap.t === "number" ? snap.t : undefined
+            typeof snap.t === "number" ? snap.t : undefined,
           );
         }
       }),
@@ -294,7 +295,7 @@ export default function PlayPage() {
         try {
           console.warn("local transport error", p);
         } catch {}
-      })
+      }),
     );
 
     return () => {
@@ -345,7 +346,7 @@ export default function PlayPage() {
     // Case 2: Cannot draw 'Card Name' ...: P2 is not the current player
     processedText = processedText.replace(
       /^Cannot draw '.*?'( from .+: P2 is not the current player)$/i,
-      "Cannot draw a card$1"
+      "Cannot draw a card$1",
     );
 
     // Parse and render [pX:PLAYER] and [pXcard:CardName] placeholders with colors
@@ -377,7 +378,7 @@ export default function PlayPage() {
           className={isCard ? "font-fantaisie" : undefined}
         >
           {displayText}
-        </span>
+        </span>,
       );
       lastIndex = match.index + match[0].length;
     }
@@ -541,7 +542,7 @@ export default function PlayPage() {
         cam.position.set(
           0,
           Math.cos(tilt) * dist,
-          sign * Math.sin(tilt) * dist
+          sign * Math.sin(tilt) * dist,
         );
         cam.up.set(0, 1, 0);
       } else {
@@ -560,7 +561,7 @@ export default function PlayPage() {
       cam.lookAt(0, 0, 0);
       c.update();
     },
-    [currentPlayer, matW, matH, naturalTiltAngle]
+    [currentPlayer, matW, matH, naturalTiltAngle],
   );
 
   const resetCamera = useCallback(() => {
@@ -1016,6 +1017,9 @@ export default function PlayPage() {
         dragFromHand={dragFromHand}
       />
 
+      {/* Status effect icons (Mismanaged Mortuary, etc.) */}
+      <PlayerStatusEffects />
+
       {/* Event Console */}
       <div
         className={`absolute left-3 bottom-2 z-10 ${
@@ -1063,8 +1067,8 @@ export default function PlayPage() {
                       isWarn
                         ? "text-yellow-400"
                         : isSearch
-                        ? "text-blue-400"
-                        : ""
+                          ? "text-blue-400"
+                          : ""
                     }`}
                   >
                     • {formatEventText(ev.text)}

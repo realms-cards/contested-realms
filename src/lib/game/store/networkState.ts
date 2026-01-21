@@ -75,7 +75,7 @@ export const createNetworkSlice: StateCreator<
       const p = incoming as ServerPatchT;
       const next: Partial<GameState> = {};
       const replaceKeys = new Set<string>(
-        Array.isArray(p.__replaceKeys) ? p.__replaceKeys : []
+        Array.isArray(p.__replaceKeys) ? p.__replaceKeys : [],
       );
       if (replaceKeys.size > 0) {
         try {
@@ -91,7 +91,7 @@ export const createNetworkSlice: StateCreator<
           ) {
             const prevPerCount = Object.values(state.permanents || {}).reduce(
               (a, v) => a + (Array.isArray(v) ? v.length : 0),
-              0
+              0,
             );
             const prevSiteCount =
               state.board && state.board.sites
@@ -108,7 +108,7 @@ export const createNetworkSlice: StateCreator<
             const pPer = p.permanents
               ? Object.values(p.permanents as Record<string, unknown[]>).reduce(
                   (a, v) => a + (Array.isArray(v) ? v.length : 0),
-                  0
+                  0,
                 )
               : undefined;
             const pBoard = p.board as GameState["board"] | undefined;
@@ -150,7 +150,7 @@ export const createNetworkSlice: StateCreator<
           ? (p.players as GameState["players"])
           : (deepMergeReplaceArrays(
               state.players,
-              p.players
+              p.players,
             ) as GameState["players"]);
         // DEBUG: Log result
         try {
@@ -165,7 +165,7 @@ export const createNetworkSlice: StateCreator<
         next.players = createInitialPlayers();
         try {
           console.log(
-            "[applyServerPatch] players reset to initial (replaceKeys had players but patch did not)"
+            "[applyServerPatch] players reset to initial (replaceKeys had players but patch did not)",
           );
         } catch {}
       }
@@ -202,7 +202,7 @@ export const createNetworkSlice: StateCreator<
           startingPlayerSeat,
           "(we are",
           actorKey,
-          ")"
+          ")",
         );
 
         // End-of-turn effects (Lilith) - only trigger if WE are the ending player
@@ -227,7 +227,7 @@ export const createNetworkSlice: StateCreator<
             } catch (e) {
               console.error(
                 "[applyServerPatch] Error triggering Mother Nature:",
-                e
+                e,
               );
             }
           }, 500);
@@ -243,7 +243,7 @@ export const createNetworkSlice: StateCreator<
               } catch (e) {
                 console.error(
                   "[applyServerPatch] Error triggering Headless Haunt:",
-                  e
+                  e,
                 );
               }
             }, 700);
@@ -256,7 +256,7 @@ export const createNetworkSlice: StateCreator<
           ? p.d20Rolls
           : (deepMergeReplaceArrays(
               state.d20Rolls,
-              p.d20Rolls
+              p.d20Rolls,
             ) as GameState["d20Rolls"]);
         try {
           console.log("[applyServerPatch] Applied d20Rolls:", {
@@ -303,7 +303,7 @@ export const createNetworkSlice: StateCreator<
           ? (p.board as GameState["board"])
           : (deepMergeReplaceArrays(
               state.board,
-              p.board
+              p.board,
             ) as GameState["board"]);
       }
       if (p.zones !== undefined) {
@@ -368,7 +368,8 @@ export const createNetworkSlice: StateCreator<
                 filteredZones[seat] = {
                   ...seatZones,
                   hand: seatZones.hand.filter(
-                    (c) => !c.instanceId || !stolenInstanceIds.has(c.instanceId)
+                    (c) =>
+                      !c.instanceId || !stolenInstanceIds.has(c.instanceId),
                   ),
                 };
               }
@@ -390,7 +391,7 @@ export const createNetworkSlice: StateCreator<
             for (const card of morganaEntry.hand) {
               if (card.instanceId) {
                 morganaInstanceIdsBySeat[morganaEntry.ownerSeat].add(
-                  card.instanceId
+                  card.instanceId,
                 );
               }
             }
@@ -407,7 +408,7 @@ export const createNetworkSlice: StateCreator<
                 filteredZones[seat] = {
                   ...seatZones,
                   spellbook: seatZones.spellbook.filter(
-                    (c) => !c.instanceId || !instanceIds.has(c.instanceId)
+                    (c) => !c.instanceId || !instanceIds.has(c.instanceId),
                   ),
                 };
               }
@@ -429,7 +430,7 @@ export const createNetworkSlice: StateCreator<
             for (const card of omphalosEntry.hand) {
               if (card.instanceId) {
                 omphalosInstanceIdsBySeat[omphalosEntry.ownerSeat].add(
-                  card.instanceId
+                  card.instanceId,
                 );
               }
             }
@@ -446,7 +447,7 @@ export const createNetworkSlice: StateCreator<
                 filteredZones[seat] = {
                   ...seatZones,
                   spellbook: seatZones.spellbook.filter(
-                    (c) => !c.instanceId || !instanceIds.has(c.instanceId)
+                    (c) => !c.instanceId || !instanceIds.has(c.instanceId),
                   ),
                 };
               }
@@ -473,7 +474,7 @@ export const createNetworkSlice: StateCreator<
           zonesCandidate
         ) {
           console.log(
-            "[SearingTruth] Filter ACTIVE - filtering cards from spellbook"
+            "[SearingTruth] Filter ACTIVE - filtering cards from spellbook",
           );
           const targetSeat = pendingSearingTruth.targetSeat;
           // Track counts instead of using Set to handle duplicate cardIds
@@ -481,12 +482,12 @@ export const createNetworkSlice: StateCreator<
           for (const c of pendingSearingTruth.revealedCards) {
             revealedCardCounts.set(
               c.cardId,
-              (revealedCardCounts.get(c.cardId) || 0) + 1
+              (revealedCardCounts.get(c.cardId) || 0) + 1,
             );
           }
           console.log(
             "[SearingTruth] Filter cardIds:",
-            Array.from(revealedCardCounts.entries())
+            Array.from(revealedCardCounts.entries()),
           );
           const filteredZones = { ...zonesCandidate } as Record<
             PlayerKey,
@@ -498,7 +499,7 @@ export const createNetworkSlice: StateCreator<
             if (Array.isArray(seatZones.spellbook)) {
               console.log(
                 "[SearingTruth] Spellbook BEFORE filter:",
-                seatZones.spellbook.length
+                seatZones.spellbook.length,
               );
               const movedCards: CardRef[] = [];
               const updatedSpellbook = seatZones.spellbook.filter((c) => {
@@ -518,7 +519,7 @@ export const createNetworkSlice: StateCreator<
                 "[SearingTruth] Spellbook AFTER filter:",
                 updatedSpellbook.length,
                 "movedCards:",
-                movedCards.length
+                movedCards.length,
               );
 
               // Ensure revealed cards are in hand (add if not present)
@@ -531,7 +532,7 @@ export const createNetworkSlice: StateCreator<
               }
               console.log(
                 "[SearingTruth] Hand AFTER filter:",
-                currentHand.length
+                currentHand.length,
               );
 
               filteredZones[targetSeat] = {
@@ -583,7 +584,7 @@ export const createNetworkSlice: StateCreator<
               if (seatZones && Array.isArray(seatZones.hand)) {
                 const originalCount = seatZones.hand.length;
                 const filteredHand = seatZones.hand.filter(
-                  (c) => !c.instanceId || !onBoardInstanceIds.has(c.instanceId)
+                  (c) => !c.instanceId || !onBoardInstanceIds.has(c.instanceId),
                 );
                 if (filteredHand.length !== originalCount) {
                   console.log(
@@ -593,7 +594,7 @@ export const createNetworkSlice: StateCreator<
                       originalCount,
                       filteredCount: filteredHand.length,
                       removedCount: originalCount - filteredHand.length,
-                    }
+                    },
                   );
                   filteredZones[seat] = {
                     ...seatZones,
@@ -637,7 +638,7 @@ export const createNetworkSlice: StateCreator<
                 Array.isArray(candidateArr)
               ) {
                 console.error(
-                  `[FILTER_CATASTROPHE] ${seat}.${zoneName}: filtering wiped ${stateCount} cards to 0! Restoring.`
+                  `[FILTER_CATASTROPHE] ${seat}.${zoneName}: filtering wiped ${stateCount} cards to 0! Restoring.`,
                 );
                 if (candidateZones && candidateSeatZones) {
                   (candidateSeatZones as Record<string, CardRef[]>)[zoneName] =
@@ -681,7 +682,7 @@ export const createNetworkSlice: StateCreator<
                 patchVal.length === 0
               ) {
                 console.warn(
-                  `[ZONE_WIPE_DETECT] ${seat}.${zoneName}: patch has [] but state has ${stateCount} cards`
+                  `[ZONE_WIPE_DETECT] ${seat}.${zoneName}: patch has [] but state has ${stateCount} cards`,
                 );
               }
             }
@@ -697,7 +698,7 @@ export const createNetworkSlice: StateCreator<
             >);
         next.avatars = normalizeAvatars(
           candidate,
-          replaceKeys.has("avatars") ? undefined : state.avatars
+          replaceKeys.has("avatars") ? undefined : state.avatars,
         );
 
         // Preserve existing avatar cards if not explicitly updated in the patch
@@ -737,7 +738,7 @@ export const createNetworkSlice: StateCreator<
           ? (p.permanents as Permanents)
           : mergePermanentsMap(state.permanents, p.permanents);
         next.permanents = normalizePermanentsRecord(
-          source as Permanents
+          source as Permanents,
         ) as GameState["permanents"];
 
         // Detect Lilith/Mother Nature minions in permanents
@@ -749,10 +750,10 @@ export const createNetworkSlice: StateCreator<
 
         // Get already registered instance IDs to avoid duplicates
         const registeredLiliths = new Set(
-          (state.lilithMinions || []).map((l) => l.instanceId)
+          (state.lilithMinions || []).map((l) => l.instanceId),
         );
         const registeredMotherNatures = new Set(
-          (state.motherNatureMinions || []).map((m) => m.instanceId)
+          (state.motherNatureMinions || []).map((m) => m.instanceId),
         );
 
         const prevInstanceIds = new Set<string>();
@@ -818,7 +819,7 @@ export const createNetworkSlice: StateCreator<
                 if (minion.type === "lilith") {
                   console.log(
                     "[networkState] Registering Lilith from patch:",
-                    minion
+                    minion,
                   );
                   get().registerLilith({
                     instanceId: minion.instanceId,
@@ -829,7 +830,7 @@ export const createNetworkSlice: StateCreator<
                 } else if (minion.type === "motherNature") {
                   console.log(
                     "[networkState] Registering Mother Nature from patch:",
-                    minion
+                    minion,
                   );
                   get().registerMotherNature({
                     instanceId: minion.instanceId,
@@ -850,7 +851,7 @@ export const createNetworkSlice: StateCreator<
           ? p.mulligans
           : (deepMergeReplaceArrays(
               state.mulligans,
-              p.mulligans
+              p.mulligans,
             ) as GameState["mulligans"]);
       } else if (replaceKeys.has("mulligans")) {
         next.mulligans = { p1: 0, p2: 0 } as GameState["mulligans"];
@@ -860,7 +861,7 @@ export const createNetworkSlice: StateCreator<
           ? p.mulliganDrawn
           : (deepMergeReplaceArrays(
               state.mulliganDrawn,
-              p.mulliganDrawn
+              p.mulliganDrawn,
             ) as GameState["mulliganDrawn"]);
       } else if (replaceKeys.has("mulliganDrawn")) {
         next.mulliganDrawn = { p1: [], p2: [] } as GameState["mulliganDrawn"];
@@ -870,7 +871,7 @@ export const createNetworkSlice: StateCreator<
           ? (p.permanentPositions as GameState["permanentPositions"])
           : (deepMergeReplaceArrays(
               state.permanentPositions,
-              p.permanentPositions
+              p.permanentPositions,
             ) as GameState["permanentPositions"]);
       } else if (replaceKeys.has("permanentPositions")) {
         next.permanentPositions = {} as GameState["permanentPositions"];
@@ -880,7 +881,7 @@ export const createNetworkSlice: StateCreator<
           ? (p.permanentAbilities as GameState["permanentAbilities"])
           : (deepMergeReplaceArrays(
               state.permanentAbilities,
-              p.permanentAbilities
+              p.permanentAbilities,
             ) as GameState["permanentAbilities"]);
       } else if (replaceKeys.has("permanentAbilities")) {
         next.permanentAbilities = {} as GameState["permanentAbilities"];
@@ -890,7 +891,7 @@ export const createNetworkSlice: StateCreator<
           ? (p.sitePositions as GameState["sitePositions"])
           : (deepMergeReplaceArrays(
               state.sitePositions,
-              p.sitePositions
+              p.sitePositions,
             ) as GameState["sitePositions"]);
       } else if (replaceKeys.has("sitePositions")) {
         next.sitePositions = {} as GameState["sitePositions"];
@@ -902,11 +903,13 @@ export const createNetworkSlice: StateCreator<
             >)
           : (deepMergeReplaceArrays(
               state.playerPositions,
-              p.playerPositions
+              p.playerPositions,
             ) as Partial<Record<PlayerKey, Partial<PlayerPositionReference>>>);
         next.playerPositions = normalizePlayerPositions(
           candidate,
-          replaceKeys.has("playerPositions") ? undefined : state.playerPositions
+          replaceKeys.has("playerPositions")
+            ? undefined
+            : state.playerPositions,
         );
       } else if (replaceKeys.has("playerPositions")) {
         next.playerPositions = createDefaultPlayerPositions();
@@ -970,6 +973,11 @@ export const createNetworkSlice: StateCreator<
       } else if (replaceKeys.has("druidFlipped")) {
         next.druidFlipped = { p1: false, p2: false };
       }
+      // Special site state (Valley of Delight, Mismanaged Mortuary, etc.)
+      // Always replace, don't merge (arrays inside)
+      if (p.specialSiteState !== undefined) {
+        next.specialSiteState = p.specialSiteState;
+      }
       // Pith Imp private hands (stolen cards)
       // CRITICAL: Do NOT clear based on replaceKeys - owner tracks locally, server snapshots would wipe it
       if (p.pithImpHands !== undefined) {
@@ -986,6 +994,13 @@ export const createNetworkSlice: StateCreator<
         next.omphalosHands = p.omphalosHands;
       }
       // NOTE: No else if for omphalosHands either - same reason
+
+      // Gem tokens (draggable tokens on board)
+      if (p.gemTokens !== undefined) {
+        next.gemTokens = p.gemTokens;
+      } else if (replaceKeys.has("gemTokens")) {
+        next.gemTokens = [];
+      }
 
       // Snapshot creation is handled by GameToolbox.tsx useEffect
 
@@ -1008,7 +1023,7 @@ export const createNetworkSlice: StateCreator<
               continue;
             }
             const overlap = candidate.__replaceKeys.some((key) =>
-              replaceKeys.has(key)
+              replaceKeys.has(key),
             );
             if (!overlap) {
               remainingPending.push(candidate);
@@ -1034,7 +1049,7 @@ export const createNetworkSlice: StateCreator<
       ) {
         try {
           const mergedPerCount = Object.values(
-            (next.permanents ?? state.permanents) || {}
+            (next.permanents ?? state.permanents) || {},
           ).reduce((a, v) => a + (Array.isArray(v) ? v.length : 0), 0);
           const mergedSummary = {
             p1: {
@@ -1079,11 +1094,11 @@ export const createNetworkSlice: StateCreator<
         const nextAvatarP2 = !!result.avatars?.p2?.card;
         const prevPermCount = Object.values(state.permanents || {}).reduce(
           (a, v) => a + (Array.isArray(v) ? v.length : 0),
-          0
+          0,
         );
         const nextPermCount = Object.values(result.permanents || {}).reduce(
           (a, v) => a + (Array.isArray(v) ? v.length : 0),
-          0
+          0,
         );
         if (
           (prevAvatarP1 && !nextAvatarP1) ||
@@ -1098,30 +1113,30 @@ export const createNetworkSlice: StateCreator<
             prevAvatarP2,
             "next:",
             nextAvatarP1,
-            nextAvatarP2
+            nextAvatarP2,
           );
           console.error(
             "[net] Permanents - prev:",
             prevPermCount,
             "next:",
-            nextPermCount
+            nextPermCount,
           );
           console.error("[net] Patch keys:", Object.keys(p).join(", "));
           console.error("[net] Next keys:", Object.keys(next).join(", "));
           console.error(
             "[net] Replace keys:",
-            Array.from(replaceKeys).join(", ")
+            Array.from(replaceKeys).join(", "),
           );
           console.error("[net] Has avatars in patch:", p.avatars !== undefined);
           console.error(
             "[net] Has permanents in patch:",
-            p.permanents !== undefined
+            p.permanents !== undefined,
           );
           // Log the actual patch for debugging
           try {
             console.error(
               "[net] Patch content:",
-              JSON.stringify(p, null, 2).slice(0, 2000)
+              JSON.stringify(p, null, 2).slice(0, 2000),
             );
           } catch {
             console.error("[net] Could not stringify patch");
@@ -1146,7 +1161,7 @@ export const createNetworkSlice: StateCreator<
       const p = patch as ServerPatchT;
       const next: Partial<GameState> = {};
       const replaceKeys = new Set<string>(
-        Array.isArray(p.__replaceKeys) ? p.__replaceKeys : []
+        Array.isArray(p.__replaceKeys) ? p.__replaceKeys : [],
       );
 
       if (p.players !== undefined) {
@@ -1154,7 +1169,7 @@ export const createNetworkSlice: StateCreator<
           ? (p.players as GameState["players"])
           : (deepMergeReplaceArrays(
               state.players,
-              p.players
+              p.players,
             ) as GameState["players"]);
       } else if (replaceKeys.has("players")) {
         next.players = createInitialPlayers();
@@ -1185,7 +1200,7 @@ export const createNetworkSlice: StateCreator<
           ? (p.board as GameState["board"])
           : (deepMergeReplaceArrays(
               state.board,
-              p.board
+              p.board,
             ) as GameState["board"]);
       }
       if (p.zones !== undefined) {
@@ -1193,7 +1208,7 @@ export const createNetworkSlice: StateCreator<
           ? (p.zones as GameState["zones"])
           : (deepMergeReplaceArrays(
               state.zones,
-              p.zones
+              p.zones,
             ) as GameState["zones"]);
       }
       if (p.avatars !== undefined) {
@@ -1201,18 +1216,18 @@ export const createNetworkSlice: StateCreator<
           ? (p.avatars as GameState["avatars"])
           : (deepMergeReplaceArrays(
               state.avatars,
-              p.avatars
+              p.avatars,
             ) as GameState["avatars"]);
       }
       if (p.permanents !== undefined) {
         if (replaceKeys.has("permanents")) {
           next.permanents = normalizePermanentsRecord(
-            (p.permanents as Permanents) || ({} as Permanents)
+            (p.permanents as Permanents) || ({} as Permanents),
           ) as GameState["permanents"];
         } else {
           const merged = mergePermanentsMap(state.permanents, p.permanents);
           next.permanents = normalizePermanentsRecord(
-            merged as Permanents
+            merged as Permanents,
           ) as GameState["permanents"];
         }
       }
@@ -1221,7 +1236,7 @@ export const createNetworkSlice: StateCreator<
           ? (p.mulligans as GameState["mulligans"])
           : (deepMergeReplaceArrays(
               state.mulligans,
-              p.mulligans
+              p.mulligans,
             ) as GameState["mulligans"]);
       }
       if (p.mulliganDrawn !== undefined) {
@@ -1229,7 +1244,7 @@ export const createNetworkSlice: StateCreator<
           ? (p.mulliganDrawn as GameState["mulliganDrawn"])
           : (deepMergeReplaceArrays(
               state.mulliganDrawn,
-              p.mulliganDrawn
+              p.mulliganDrawn,
             ) as GameState["mulliganDrawn"]);
       }
       if (p.permanentPositions !== undefined) {
@@ -1237,7 +1252,7 @@ export const createNetworkSlice: StateCreator<
           ? (p.permanentPositions as GameState["permanentPositions"])
           : (deepMergeReplaceArrays(
               state.permanentPositions,
-              p.permanentPositions
+              p.permanentPositions,
             ) as GameState["permanentPositions"]);
       }
       if (p.permanentAbilities !== undefined) {
@@ -1245,7 +1260,7 @@ export const createNetworkSlice: StateCreator<
           ? (p.permanentAbilities as GameState["permanentAbilities"])
           : (deepMergeReplaceArrays(
               state.permanentAbilities,
-              p.permanentAbilities
+              p.permanentAbilities,
             ) as GameState["permanentAbilities"]);
       }
       if (p.sitePositions !== undefined) {
@@ -1253,7 +1268,7 @@ export const createNetworkSlice: StateCreator<
           ? (p.sitePositions as GameState["sitePositions"])
           : (deepMergeReplaceArrays(
               state.sitePositions,
-              p.sitePositions
+              p.sitePositions,
             ) as GameState["sitePositions"]);
       }
       if (p.playerPositions !== undefined) {
@@ -1261,7 +1276,7 @@ export const createNetworkSlice: StateCreator<
           ? (p.playerPositions as GameState["playerPositions"])
           : (deepMergeReplaceArrays(
               state.playerPositions,
-              p.playerPositions
+              p.playerPositions,
             ) as GameState["playerPositions"]);
       }
       if (p.events !== undefined) {
@@ -1273,17 +1288,17 @@ export const createNetworkSlice: StateCreator<
               ? Math.max(Number(p.eventSeq) || 0, 0)
               : Math.max(
                   ev.reduce((mx, e) => Math.max(mx, Number(e.id) || 0), 0),
-                  0
+                  0,
                 );
         } else {
           const merged = mergeEvents(
             state.events,
-            (p.events as GameState["events"]) || []
+            (p.events as GameState["events"]) || [],
           );
           next.events = merged;
           const mergedMaxId = merged.reduce(
             (mx, e) => Math.max(mx, Number(e.id) || 0),
-            0
+            0,
           );
           const candidateSeq = Math.max(state.eventSeq, mergedMaxId);
           next.eventSeq =
@@ -1327,6 +1342,13 @@ export const createNetworkSlice: StateCreator<
       // Druid flipped state - applyPatch version
       if (p.druidFlipped !== undefined) {
         next.druidFlipped = p.druidFlipped;
+      }
+      // Special site state (Valley of Delight, Mismanaged Mortuary, etc.) - applyPatch version
+      // Use replaceKeys to fully replace the state (arrays don't merge well)
+      if (p.specialSiteState !== undefined) {
+        next.specialSiteState = replaceKeys.has("specialSiteState")
+          ? (p.specialSiteState as GameState["specialSiteState"])
+          : (p.specialSiteState as GameState["specialSiteState"]);
       }
 
       // CRITICAL: Spread state first, then next - otherwise we lose all state not in the patch

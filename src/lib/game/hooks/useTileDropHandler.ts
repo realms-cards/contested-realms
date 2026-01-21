@@ -11,6 +11,7 @@ import { TILE_SIZE } from "@/lib/game/constants";
 import type { AttachmentPileInfo } from "@/lib/game/hooks/useAttachmentDialog";
 import { triggerAttackChoiceIfApplicable } from "@/lib/game/hooks/useAttackChoiceTrigger";
 import type { BoardDragControls } from "@/lib/game/hooks/useBoardDragControls";
+import { isAuraSubtype } from "@/lib/game/store/atlanteanFateState";
 import type {
   PlayerKey,
   CardRef,
@@ -19,7 +20,6 @@ import type {
   Permanents,
 } from "@/lib/game/store/types";
 import { TOKEN_BY_NAME } from "@/lib/game/tokens";
-import { isAuraSubtype } from "@/lib/game/store/atlanteanFateState";
 
 type LastCrossMove = {
   fromKey: string;
@@ -102,7 +102,7 @@ export function useTileDropHandler({
   dragFromHand,
   dragFromPile,
   selectedCard,
-  mouseInHandZone,
+  mouseInHandZone: _mouseInHandZone,
   isSpectator,
   actorKey,
   currentPlayer,
@@ -694,7 +694,6 @@ export function useTileDropHandler({
       useGhostOnlyBoardDrag,
       interactionGuides,
       metaByCardId,
-      mouseInHandZone,
       isSpectator,
       isAttachableToken,
       isCarryableArtifact,

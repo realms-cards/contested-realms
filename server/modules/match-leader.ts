@@ -175,18 +175,18 @@ interface MatchLeaderDeps {
   purgeExpiredGrants: (match: MatchState, now: number) => void;
   collectInteractionRequirements: (
     patch: MatchPatch,
-    actorSeat: Seat
+    actorSeat: Seat,
   ) => InteractionRequirements;
   usePermitForRequirement: (
     match: MatchState,
     playerId: string,
     actorSeat: Seat,
     requirement: string,
-    now: number
+    now: number,
   ) => unknown;
   mergeEvents: (
     prev: ReadonlyArray<MatchEvent> | undefined,
-    additions: ReadonlyArray<MatchEvent> | undefined
+    additions: ReadonlyArray<MatchEvent> | undefined,
   ) => MatchEvent[];
   dedupePermanents: (per: unknown) => MatchPermanents | null | undefined;
   deepMergeReplaceArrays: <T>(base: T, patch: unknown) => T;
@@ -194,90 +194,90 @@ interface MatchLeaderDeps {
     baseState: MatchGameState | undefined,
     patch: MatchPatch,
     playerId: string,
-    ctx: { match: MatchState }
+    ctx: { match: MatchState },
   ) => MatchPatch | null | undefined;
   applyTurnStart: (
-    state: MatchGameState | undefined
+    state: MatchGameState | undefined,
   ) => MatchPatch | null | undefined;
   applyGenesis: (
     state: MatchGameState | undefined,
     patch: MatchPatch,
     playerId: string,
-    ctx: { match: MatchState }
+    ctx: { match: MatchState },
   ) => MatchPatch | null | undefined;
   applyKeywordAnnotations: (
     state: MatchGameState | undefined,
     patch: MatchPatch,
     playerId: string,
-    ctx: { match: MatchState }
+    ctx: { match: MatchState },
   ) => MatchPatch | null | undefined;
   ensureCosts: (
     state: MatchGameState | undefined,
     patch: MatchPatch,
     playerId: string,
-    ctx: { match: MatchState }
+    ctx: { match: MatchState },
   ) => { ok: boolean; error?: string; autoPatch?: MatchPatch };
   validateAction: (
     state: MatchGameState | undefined,
     patch: MatchPatch,
     playerId: string,
-    ctx: { match: MatchState }
+    ctx: { match: MatchState },
   ) => { ok: boolean; error?: string };
   enrichPatchWithCosts: (
     patch: MatchPatch | null,
-    prisma: PrismaClient
+    prisma: PrismaClient,
   ) => Promise<MatchPatch | null>;
   sanitizeGrantOptions: (
     grantValue: unknown,
-    seat: Seat
+    seat: Seat,
   ) => Record<string, unknown> | null;
   sanitizePendingAction: (
     kind: string,
     payload: Record<string, unknown>,
     actorSeat: Seat,
-    playerId: string
+    playerId: string,
   ) => MatchPatch | null;
   recordInteractionRequest: (
     match: MatchState,
     message: InteractionRequestMessage,
     grant: Record<string, unknown> | null,
-    pendingAction: MatchPatch | null
+    pendingAction: MatchPatch | null,
   ) => void;
   createGrantRecord: (
     entry: InteractionRequestEntry,
     response: InteractionResponseMessage,
     grantOptions: Record<string, unknown>,
-    now: number
+    now: number,
   ) => GrantRecord;
   recordInteractionResponse: (
     match: MatchState,
     response: InteractionResponseMessage,
-    grantRecord: GrantRecord | null
+    grantRecord: GrantRecord | null,
   ) => void;
   applyPendingAction: (
     match: MatchState,
     entry: InteractionRequestEntry,
-    now: number
+    now: number,
   ) => Promise<MatchPatch | null>;
   emitInteraction: (
     matchId: string,
-    message: InteractionRequestMessage | InteractionResponseMessage
+    message: InteractionRequestMessage | InteractionResponseMessage,
   ) => void;
   emitInteractionResult: (matchId: string, result: MatchPatch) => void;
   recordMatchAction: (
     matchId: string,
     patch: MatchPatch | null,
-    playerId: string
+    playerId: string,
   ) => void;
   persistMatchUpdate: (
     match: MatchState,
     patch: MatchPatch | null,
     playerId: string,
-    timestamp: number
+    timestamp: number,
   ) => Promise<void>;
   finalizeMatch: (
     match: MatchState,
-    options: Record<string, unknown>
+    options: Record<string, unknown>,
   ) => Promise<void>;
   rulesEnforceMode: string;
   rulesHelpersEnabled: boolean;
@@ -291,12 +291,79 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
+/**
+ * Check if Mismanaged Mortuary swap is active and redirects actor's graveyard to opponent.
+ * XOR logic: swap is active if exactly one player has an active (non-silenced) Mortuary.
+ */
+function checkMortuarySwapActive(
+  game: MatchGameState | undefined,
+  actorSeat: Seat,
+  opponentSeat: Seat,
+): boolean {
+  if (!game) {
+    console.log("[checkMortuarySwapActive] No game state");
+    return false;
+  }
+  try {
+    const specialSiteState = game.specialSiteState as
+      | Record<string, unknown>
+      | undefined;
+    console.log(
+      "[checkMortuarySwapActive] specialSiteState:",
+      specialSiteState ? "exists" : "undefined",
+    );
+    if (!specialSiteState) return false;
+    const mortuaries = specialSiteState.mismanagedMortuaries as
+      | Array<Record<string, unknown>>
+      | undefined;
+    console.log(
+      "[checkMortuarySwapActive] mortuaries:",
+      mortuaries?.length ?? 0,
+    );
+    if (!Array.isArray(mortuaries) || mortuaries.length === 0) return false;
+
+    const permanents = (game.permanents || {}) as Record<string, unknown[]>;
+
+    // Check if a mortuary is silenced (has a Silence token)
+    const isSilenced = (cellKey: string): boolean => {
+      const perms = permanents[cellKey];
+      if (!Array.isArray(perms)) return false;
+      return perms.some((p) => {
+        const perm = p as Record<string, unknown>;
+        const card = perm?.card as Record<string, unknown> | undefined;
+        const name = card?.name;
+        return (
+          typeof name === "string" && name.toLowerCase().includes("silence")
+        );
+      });
+    };
+
+    // Filter to active (non-silenced) mortuaries
+    const activeMortuaries = mortuaries.filter((m) => {
+      const cellKey = m.cellKey as string | undefined;
+      if (!cellKey) return false;
+      return !isSilenced(cellKey);
+    });
+
+    // XOR logic: swap is active if exactly one player has an active mortuary
+    const p1Has = activeMortuaries.some((m) => m.ownerSeat === "p1");
+    const p2Has = activeMortuaries.some((m) => m.ownerSeat === "p2");
+    const swapActive = p1Has !== p2Has;
+
+    // If swap is active (XOR condition met), both players' cards go to opponent's graveyard
+    // So any actor can update opponent's graveyard when swap is active
+    return swapActive;
+  } catch {
+    return false;
+  }
+}
+
 const newZoneCardInstanceId = () =>
   `card_${Math.random().toString(36).slice(2, 8)}_${Date.now().toString(36)}`;
 
 function normalizeZoneCard(
   entry: unknown,
-  seat?: Seat
+  seat?: Seat,
 ): Record<string, unknown> | null {
   if (!entry || typeof entry !== "object") return null;
   const src = entry as Record<string, unknown>;
@@ -399,7 +466,7 @@ function ensurePlayerZones(value: unknown, seat: Seat): PlayerZones {
 }
 
 function buildBattlefieldFromPermanents(
-  permanents: MatchPermanents | null | undefined
+  permanents: MatchPermanents | null | undefined,
 ): Record<Seat, unknown[]> {
   const result: Record<Seat, unknown[]> = { p1: [], p2: [] };
   if (!permanents) return result;
@@ -431,7 +498,7 @@ function zoneCardsEqual(a: unknown[], b: unknown[]): boolean {
 
 function syncBattlefieldZones(
   match: MatchState,
-  patch: MatchPatch
+  patch: MatchPatch,
 ): MatchPatch {
   if (!match.game) return patch;
   const battlefield = buildBattlefieldFromPermanents(match.game.permanents);
@@ -492,11 +559,13 @@ function ensureAvatar(value: unknown, fallback: AvatarState): AvatarState {
     }
   }
   const tapped =
-    typeof value.tapped === "boolean" ? value.tapped : fallback.tapped ?? false;
+    typeof value.tapped === "boolean"
+      ? value.tapped
+      : (fallback.tapped ?? false);
   const avatar: AvatarState = {
     card: Object.prototype.hasOwnProperty.call(value, "card")
-      ? value.card ?? null
-      : fallback.card ?? null,
+      ? (value.card ?? null)
+      : (fallback.card ?? null),
     pos,
     tapped,
   };
@@ -511,7 +580,7 @@ function ensureAvatar(value: unknown, fallback: AvatarState): AvatarState {
 function ensurePlayerPosition(
   seat: Seat,
   value: unknown,
-  fallback: PlayerPosition
+  fallback: PlayerPosition,
 ): PlayerPosition {
   if (!isRecord(value)) {
     return { ...fallback };
@@ -529,7 +598,7 @@ function ensurePlayerPosition(
     playerId:
       typeof value.playerId === "number"
         ? value.playerId
-        : fallback.playerId ?? (seat === "p1" ? 1 : 2),
+        : (fallback.playerId ?? (seat === "p1" ? 1 : 2)),
     position: { x, z },
   };
 }
@@ -593,7 +662,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
     playerId: string,
     event: string,
     data: T,
-    socketId?: string | null
+    socketId?: string | null,
   ): void {
     // Always use player room for cross-instance compatibility
     // The Socket.IO Redis adapter will propagate to the correct instance
@@ -626,7 +695,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
   // - Hide deck contents (spellbook/atlas) but keep count
   // - Keep graveyard, banished, collection visible (they're public/face-up)
   function sanitizePlayerZonesForSpectator(
-    zones: PlayerZones | undefined
+    zones: PlayerZones | undefined,
   ): PlayerZones | undefined {
     if (!zones) return undefined;
     const out: PlayerZones = { ...zones };
@@ -646,7 +715,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
   }
 
   function sanitizePatchForSpectator(
-    patch: MatchPatch | null | undefined
+    patch: MatchPatch | null | undefined,
   ): MatchPatch | null {
     if (!patch || typeof patch !== "object") return patch ?? null;
     const out = { ...(patch as Record<string, unknown>) };
@@ -664,7 +733,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
   function broadcastSpectatePatch(
     matchId: string,
     enrichedPatch: MatchPatch,
-    now: number
+    now: number,
   ): void {
     try {
       const sanitized = sanitizePatchForSpectator(enrichedPatch);
@@ -689,7 +758,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
     matchId: string,
     playerId: string,
     incomingPatch: unknown,
-    actorSocketId: string | null | undefined
+    actorSocketId: string | null | undefined,
   ): Promise<void> {
     const match = await getOrLoadMatch(matchId);
     if (!match) return;
@@ -712,7 +781,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
           message: "Only seated players may take actions",
           code: "action_not_authorized",
         },
-        actorSocketId
+        actorSocketId,
       );
       return;
     }
@@ -838,7 +907,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
                     incRaw: incomingRolls,
                     matchId,
                     playerId,
-                  }
+                  },
                 );
               } catch {
                 // ignore
@@ -863,7 +932,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
                     incRaw: incomingRolls,
                     matchId,
                     playerId,
-                  }
+                  },
                 );
               } catch {
                 // ignore
@@ -977,7 +1046,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
             if (costRes && costRes.autoPatch && rulesHelpersEnabled) {
               patchToApply = deepMergeReplaceArrays(
                 patchToApply as Record<string, unknown>,
-                costRes.autoPatch as Record<string, unknown>
+                costRes.autoPatch as Record<string, unknown>,
               ) as MatchPatch;
               try {
                 console.debug("[rules] ensureCosts autoPatch applied", {
@@ -999,7 +1068,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
                     message: costRes.error || "Insufficient resources",
                     code: "cost_unpaid",
                   },
-                  actorSocketId
+                  actorSocketId,
                 );
                 try {
                   console.warn("[rules] ensureCosts rejected action", {
@@ -1039,7 +1108,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
               match.game,
               patchToApply,
               playerId,
-              { match }
+              { match },
             );
             if (!validationResult.ok) {
               const msg = validationResult.error
@@ -1057,7 +1126,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
               }
 
               const mustReject = /Cannot tap or untap opponent/i.test(
-                msg || ""
+                msg || "",
               );
               if (mustReject) {
                 emitToPlayer(
@@ -1067,7 +1136,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
                     message: msg || "Illegal tap action",
                     code: "rules_violation",
                   },
-                  actorSocketId
+                  actorSocketId,
                 );
                 return;
               }
@@ -1080,7 +1149,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
                     message: validationResult.error || "Rules violation",
                     code: "rules_violation",
                   },
-                  actorSocketId
+                  actorSocketId,
                 );
                 return;
               }
@@ -1121,8 +1190,8 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
               typeof idValue === "number"
                 ? idValue
                 : typeof idValue === "string"
-                ? Number(idValue)
-                : NaN;
+                  ? Number(idValue)
+                  : NaN;
             return Number.isFinite(numeric) && numeric > max ? numeric : max;
           }, 0);
           const seqCandidate =
@@ -1212,11 +1281,11 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
           const normalizedAvatars: AvatarsState = {
             p1: ensureAvatar(
               incomingAvatars?.p1,
-              fallbackAvatars.p1 ?? defaultAvatar
+              fallbackAvatars.p1 ?? defaultAvatar,
             ),
             p2: ensureAvatar(
               incomingAvatars?.p2,
-              fallbackAvatars.p2 ?? defaultAvatar
+              fallbackAvatars.p2 ?? defaultAvatar,
             ),
           };
 
@@ -1263,7 +1332,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
                   x: prevPositions?.p1?.position?.x ?? 0,
                   z: prevPositions?.p1?.position?.z ?? 0,
                 },
-              }
+              },
             ),
             p2: ensurePlayerPosition(
               "p2",
@@ -1274,7 +1343,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
                   x: prevPositions?.p2?.position?.x ?? 0,
                   z: prevPositions?.p2?.position?.z ?? 0,
                 },
-              }
+              },
             ),
           };
 
@@ -1289,6 +1358,15 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
         if (patchToApply.zones && isRecord(patchToApply.zones)) {
           const incomingZones = patchToApply.zones as ZonesState;
           const sanitizedZones: Partial<ZonesState> = {};
+
+          // Check if Mortuary swap allows opponent graveyard updates
+          const opponentSeat: Seat = actorSeat === "p1" ? "p2" : "p1";
+          const mortuarySwapActive = checkMortuarySwapActive(
+            match.game,
+            actorSeat,
+            opponentSeat,
+          );
+
           if (
             isRecord(incomingZones) &&
             "p1" in incomingZones &&
@@ -1300,15 +1378,42 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
             "p1" in incomingZones &&
             actorSeat !== "p1"
           ) {
-            try {
-              console.warn("[match] dropped opponent zone update", {
-                matchId,
-                playerId,
-                seat: "p1",
-                actorSeat,
-              });
-            } catch {
-              // ignore
+            // Allow opponent graveyard update if Mortuary swap is active
+            if (mortuarySwapActive && opponentSeat === "p1") {
+              const oppZones = incomingZones.p1 as PlayerZones | undefined;
+              if (oppZones && "graveyard" in oppZones) {
+                // Only allow graveyard field, preserve other zones from current state
+                const currentP1 = match.game?.zones?.p1 as
+                  | PlayerZones
+                  | undefined;
+                sanitizedZones.p1 = {
+                  ...(currentP1 || {
+                    spellbook: [],
+                    atlas: [],
+                    hand: [],
+                    graveyard: [],
+                    battlefield: [],
+                    collection: [],
+                    banished: [],
+                  }),
+                  graveyard: oppZones.graveyard,
+                };
+                console.log(
+                  "[match] Mortuary swap: allowing p1 graveyard update from",
+                  actorSeat,
+                );
+              }
+            } else {
+              try {
+                console.warn("[match] dropped opponent zone update", {
+                  matchId,
+                  playerId,
+                  seat: "p1",
+                  actorSeat,
+                });
+              } catch {
+                // ignore
+              }
             }
           }
           if (
@@ -1322,19 +1427,46 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
             "p2" in incomingZones &&
             actorSeat !== "p2"
           ) {
-            try {
-              console.warn("[match] dropped opponent zone update", {
-                matchId,
-                playerId,
-                seat: "p2",
-                actorSeat,
-              });
-            } catch {
-              // ignore logging failures
+            // Allow opponent graveyard update if Mortuary swap is active
+            if (mortuarySwapActive && opponentSeat === "p2") {
+              const oppZones = incomingZones.p2 as PlayerZones | undefined;
+              if (oppZones && "graveyard" in oppZones) {
+                // Only allow graveyard field, preserve other zones from current state
+                const currentP2 = match.game?.zones?.p2 as
+                  | PlayerZones
+                  | undefined;
+                sanitizedZones.p2 = {
+                  ...(currentP2 || {
+                    spellbook: [],
+                    atlas: [],
+                    hand: [],
+                    graveyard: [],
+                    battlefield: [],
+                    collection: [],
+                    banished: [],
+                  }),
+                  graveyard: oppZones.graveyard,
+                };
+                console.log(
+                  "[match] Mortuary swap: allowing p2 graveyard update from",
+                  actorSeat,
+                );
+              }
+            } else {
+              try {
+                console.warn("[match] dropped opponent zone update", {
+                  matchId,
+                  playerId,
+                  seat: "p2",
+                  actorSeat,
+                });
+              } catch {
+                // ignore logging failures
+              }
             }
           }
           const zoneKeys = Object.keys(sanitizedZones).filter(
-            (key) => sanitizedZones[key as keyof ZonesState]
+            (key) => sanitizedZones[key as keyof ZonesState],
           );
           if (zoneKeys.length > 0) {
             patchToApply = {
@@ -1369,10 +1501,10 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
             baseP1HandCount: baseP1Hand.length,
             baseP2HandCount: baseP2Hand.length,
             patchP1HandCards: patchP1Hand.map(
-              (c: CardLike) => c.name || c.cardId
+              (c: CardLike) => c.name || c.cardId,
             ),
             patchP2HandCards: patchP2Hand.map(
-              (c: CardLike) => c.name || c.cardId
+              (c: CardLike) => c.name || c.cardId,
             ),
             patchHasPermanents: !!patchToApply.permanents,
           });
@@ -1380,7 +1512,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
 
         const mergedGame = deepMergeReplaceArrays(
           baseForMerge as Record<string, unknown>,
-          patchToApply as Record<string, unknown>
+          patchToApply as Record<string, unknown>,
         );
         match.game = mergedGame as MatchGameState;
 
@@ -1400,16 +1532,16 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
         }
 
         const movementPatch = await Promise.resolve(
-          applyMovementAndCombat(match.game, patchToApply, playerId, { match })
+          applyMovementAndCombat(match.game, patchToApply, playerId, { match }),
         );
         if (movementPatch && isRecord(movementPatch)) {
           match.game = deepMergeReplaceArrays(
             match.game as Record<string, unknown>,
-            movementPatch as Record<string, unknown>
+            movementPatch as Record<string, unknown>,
           ) as MatchGameState;
           patchToApply = deepMergeReplaceArrays(
             patchToApply as Record<string, unknown>,
-            movementPatch as Record<string, unknown>
+            movementPatch as Record<string, unknown>,
           ) as MatchPatch;
         }
 
@@ -1437,11 +1569,11 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
         if (turnStartPatch && isRecord(turnStartPatch)) {
           match.game = deepMergeReplaceArrays(
             match.game as Record<string, unknown>,
-            turnStartPatch as Record<string, unknown>
+            turnStartPatch as Record<string, unknown>,
           ) as MatchGameState;
           patchToApply = deepMergeReplaceArrays(
             patchToApply as Record<string, unknown>,
-            turnStartPatch as Record<string, unknown>
+            turnStartPatch as Record<string, unknown>,
           ) as MatchPatch;
         }
 
@@ -1451,11 +1583,11 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
         if (genesisPatch && isRecord(genesisPatch)) {
           match.game = deepMergeReplaceArrays(
             match.game as Record<string, unknown>,
-            genesisPatch as Record<string, unknown>
+            genesisPatch as Record<string, unknown>,
           ) as MatchGameState;
           patchToApply = deepMergeReplaceArrays(
             patchToApply as Record<string, unknown>,
-            genesisPatch as Record<string, unknown>
+            genesisPatch as Record<string, unknown>,
           ) as MatchPatch;
         }
 
@@ -1463,22 +1595,22 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
           match.game,
           patchToApply,
           playerId,
-          { match }
+          { match },
         );
         if (keywordPatch && isRecord(keywordPatch)) {
           match.game = deepMergeReplaceArrays(
             match.game as Record<string, unknown>,
-            keywordPatch as Record<string, unknown>
+            keywordPatch as Record<string, unknown>,
           ) as MatchGameState;
           patchToApply = deepMergeReplaceArrays(
             patchToApply as Record<string, unknown>,
-            keywordPatch as Record<string, unknown>
+            keywordPatch as Record<string, unknown>,
           ) as MatchPatch;
         }
 
         const requirements = collectInteractionRequirements(
           patchToApply,
-          actorSeat
+          actorSeat,
         );
         const shouldEnforceInteraction =
           interactionEnforcementEnabled &&
@@ -1491,7 +1623,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
             playerId,
             actorSeat,
             "allowOpponentZoneWrite",
-            now
+            now,
           );
           if (!grant) {
             try {
@@ -1501,7 +1633,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
                   matchId,
                   playerId,
                   actorSeat,
-                }
+                },
               );
             } catch {
               // ignore logging failure
@@ -1602,17 +1734,17 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
           (await enrichPatchWithCosts(patchToApply, prisma)) ?? patchToApply;
 
         const patchKeys = Object.keys(
-          (enrichedPatchToApply as unknown as Record<string, unknown>) || {}
+          (enrichedPatchToApply as unknown as Record<string, unknown>) || {},
         );
         const nonMetaKeys = patchKeys.filter(
           (key) =>
-            key !== "__replaceKeys" && key !== "events" && key !== "eventSeq"
+            key !== "__replaceKeys" && key !== "events" && key !== "eventSeq",
         );
         const hasD20RollsPatch = nonMetaKeys.includes("d20Rolls");
         const d20OnlyPatch =
           hasD20RollsPatch &&
           nonMetaKeys.every(
-            (key) => key === "d20Rolls" || key === "setupWinner"
+            (key) => key === "d20Rolls" || key === "setupWinner",
           );
 
         // Build an events-only patch for the acting player so they still see
@@ -1628,7 +1760,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
           if (
             Object.prototype.hasOwnProperty.call(
               enrichedPatchToApply as Record<string, unknown>,
-              "eventSeq"
+              "eventSeq",
             )
           ) {
             base.eventSeq = (
@@ -1701,7 +1833,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
             try {
               console.warn(
                 "[match] finalize failed",
-                err instanceof Error ? err.message : err
+                err instanceof Error ? err.message : err,
               );
             } catch {
               // ignore
@@ -1726,7 +1858,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
           if (
             Object.prototype.hasOwnProperty.call(
               enrichedPatch as Record<string, unknown>,
-              "eventSeq"
+              "eventSeq",
             )
           ) {
             base.eventSeq = (enrichedPatch as Record<string, unknown>).eventSeq;
@@ -1765,7 +1897,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
     } catch (error) {
       const enrichedIncoming = await enrichPatchWithCosts(
         patchInput ?? null,
-        prisma
+        prisma,
       );
 
       // Build an events-only patch for the acting player (if any events exist)
@@ -1777,7 +1909,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
         if (
           Object.prototype.hasOwnProperty.call(
             enrichedIncoming as Record<string, unknown>,
-            "eventSeq"
+            "eventSeq",
           )
         ) {
           base.eventSeq = (
@@ -1834,7 +1966,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
   async function detachPlayerFromMatch(
     match: MatchState,
     playerId: string,
-    socketId: string | null
+    socketId: string | null,
   ): Promise<void> {
     if (!Array.isArray(match.playerIds)) return;
     if (!match.playerIds.includes(playerId)) return;
@@ -1874,7 +2006,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
   async function joinMatch(
     matchId: string,
     playerId: string,
-    socketId: string
+    socketId: string,
   ): Promise<void> {
     const playerState = await ensurePlayerCached(playerId);
     const previousSocketId = playerState.socketId || socketId;
@@ -1903,7 +2035,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
           playerId,
           status: match.status,
           existingPlayers: match.playerIds,
-        }
+        },
       );
       // Emit error to the player so client can handle appropriately
       try {
@@ -1916,7 +2048,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
             message:
               "You are not a player in this match. Use spectate mode to watch.",
           },
-          socketId
+          socketId,
         );
       } catch {}
       return;
@@ -1965,7 +2097,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
         playerId,
         "matchStarted",
         { match: getMatchInfo(match) },
-        socketId
+        socketId,
       );
     } catch {
       // ignore
@@ -2000,7 +2132,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
 
   async function handleMulliganDone(
     matchId: string,
-    playerId: string
+    playerId: string,
   ): Promise<void> {
     const match = await getOrLoadMatch(matchId);
     if (!match) return;
@@ -2038,14 +2170,14 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
         ? match.playerIds.filter((pid) => !match.mulliganDone!.has(pid))
         : [];
       const names = waitingFor.map(
-        (pid) => players.get(pid)?.displayName ?? pid
+        (pid) => players.get(pid)?.displayName ?? pid,
       );
       console.log(
         `[Setup] mulliganDone <= ${playerId}${
           wasAlreadyDone ? " (duplicate)" : ""
         }. ${doneCount}/${total} complete. Waiting for: ${
           names.length > 0 ? names.join(", ") : "none"
-        }`
+        }`,
       );
     } catch {
       // ignore logging errors
@@ -2128,7 +2260,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
   async function handleInteractionRequest(
     matchId: string,
     playerId: string,
-    payload: Record<string, unknown> | null | undefined
+    payload: Record<string, unknown> | null | undefined,
   ): Promise<LeaderResult> {
     try {
       const match = await getOrLoadMatch(matchId);
@@ -2210,7 +2342,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
 
       const proposedGrant = sanitizeGrantOptions(
         payload?.grant ?? rawPayload?.grant ?? rawPayload?.proposedGrant,
-        opponentSeat
+        opponentSeat,
       );
       if (proposedGrant) {
         sanitizedPayload.proposedGrant = proposedGrant;
@@ -2235,14 +2367,14 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
         rawKind,
         sanitizedPayload,
         actorSeat,
-        playerId
+        playerId,
       );
 
       recordInteractionRequest(
         match,
         message,
         proposedGrant ?? null,
-        pendingAction
+        pendingAction,
       );
       match.lastTs = now;
       emitInteraction(matchId, message);
@@ -2257,7 +2389,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
       try {
         console.warn(
           "[interaction] request failed",
-          err instanceof Error ? err.message : String(err)
+          err instanceof Error ? err.message : String(err),
         );
       } catch {
         // ignore
@@ -2273,7 +2405,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
   async function handleInteractionResponse(
     matchId: string,
     playerId: string,
-    payload: Record<string, unknown> | null | undefined
+    payload: Record<string, unknown> | null | undefined,
   ): Promise<LeaderResult> {
     try {
       const match = await getOrLoadMatch(matchId);
@@ -2366,7 +2498,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
           actorSeat ?? getOpponentSeat(getSeatForPlayer(match, request.from)!);
         grantOpts = sanitizeGrantOptions(
           payload?.grant ?? rawPayload?.grant ?? rawPayload?.proposedGrant,
-          grantSeat
+          grantSeat,
         );
         if (grantOpts) {
           sanitizedPayload.grant = grantOpts;
@@ -2398,7 +2530,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
             entryRecord,
             responseMessage,
             grantOpts,
-            now
+            now,
           );
           match.interactionGrants.set(grantRecord.grantedTo, [
             ...(match.interactionGrants.get(grantRecord.grantedTo) ?? []),
@@ -2423,7 +2555,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
           } catch (err) {
             console.warn(
               "[interaction] failed to execute pending action",
-              err instanceof Error ? err.message : err
+              err instanceof Error ? err.message : err,
             );
           }
         }
@@ -2442,7 +2574,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
       try {
         console.warn(
           "[interaction] response failed",
-          err instanceof Error ? err.message : String(err)
+          err instanceof Error ? err.message : String(err),
         );
       } catch {
         // ignore

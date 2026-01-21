@@ -72,14 +72,14 @@ export const createAccusationSlice: StateCreator<
 
     if (victimHand.length === 0) {
       get().log(
-        `[${casterSeat.toUpperCase()}] Accusation: Opponent has no cards in hand`
+        `[${casterSeat.toUpperCase()}] Accusation: Opponent has no cards in hand`,
       );
       // Move spell to graveyard since it resolves with no effect
       try {
         get().movePermanentToZone(
           input.spell.at,
           input.spell.index,
-          "graveyard"
+          "graveyard",
         );
       } catch {}
       return;
@@ -103,16 +103,11 @@ export const createAccusationSlice: StateCreator<
       return EVIL_SUBTYPES.some((evil) => lower.includes(evil));
     };
 
-    const metaByCardId = get().metaByCardId;
+    // Check hand for Evil cards (use embedded subTypes from CardRef)
     const evilCardIndices: number[] = [];
     for (let i = 0; i < victimHand.length; i++) {
       const card = victimHand[i];
-      const meta = metaByCardId[card.cardId] as
-        | {
-            subTypes?: string;
-          }
-        | undefined;
-      const subTypes = meta?.subTypes || card.subTypes || "";
+      const subTypes = card.subTypes || "";
       if (isEvilSubtype(subTypes)) {
         evilCardIndices.push(i);
       }
@@ -127,12 +122,7 @@ export const createAccusationSlice: StateCreator<
         if (perm.owner !== (victimSeat === "p1" ? 1 : 2)) continue;
         const type = (perm.card?.type || "").toLowerCase();
         if (!type.includes("minion")) continue;
-        const permMeta = metaByCardId[perm.card?.cardId ?? 0] as
-          | {
-              subTypes?: string;
-            }
-          | undefined;
-        const permSubTypes = permMeta?.subTypes || perm.card?.subTypes || "";
+        const permSubTypes = perm.card?.subTypes || "";
         if (isEvilSubtype(permSubTypes)) {
           hasEvilAlly = true;
           break;
@@ -186,7 +176,7 @@ export const createAccusationSlice: StateCreator<
     get().log(
       `[${casterSeat.toUpperCase()}] casts Accusation - ${victimSeat.toUpperCase()}'s hand is revealed (${
         victimHand.length
-      } cards)`
+      } cards)`,
     );
 
     // Automatically transition to selecting phase after a brief reveal
@@ -252,7 +242,7 @@ export const createAccusationSlice: StateCreator<
       (c) =>
         c.cardId === selectedCard.cardId &&
         c.slug === selectedCard.slug &&
-        c.name === selectedCard.name
+        c.name === selectedCard.name,
     );
 
     if (handIndex !== -1) {
@@ -289,7 +279,7 @@ export const createAccusationSlice: StateCreator<
       get().movePermanentToZone(
         pending.spell.at,
         pending.spell.index,
-        "graveyard"
+        "graveyard",
       );
     } catch {}
 
@@ -310,7 +300,7 @@ export const createAccusationSlice: StateCreator<
     get().log(
       `Accusation resolved: ${
         selectedCard?.name || "card"
-      } banished from ${victimSeat.toUpperCase()}'s hand`
+      } banished from ${victimSeat.toUpperCase()}'s hand`,
     );
   },
 

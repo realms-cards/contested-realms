@@ -84,7 +84,7 @@ export default function Piles3D({
       collection: [],
       banished: [],
     }),
-    []
+    [],
   );
 
   const playerZones = zones?.[owner] ?? emptyPlayerZones;
@@ -146,7 +146,7 @@ export default function Piles3D({
       playerZones.atlas,
       playerZones.spellbook,
       playerZones.graveyard,
-    ]
+    ],
   );
 
   const hoverTimer = useRef<number | null>(null);
@@ -165,7 +165,7 @@ export default function Piles3D({
 
     hoverTimer.current = window.setTimeout(
       () => setPreviewCard(card || null),
-      600
+      600,
     );
   }
   function clearHoverPreview() {
@@ -224,10 +224,10 @@ export default function Piles3D({
         const cardbackUrl = isCemetery
           ? undefined
           : presetId
-          ? undefined
-          : key === "atlas"
-          ? ownerCardbacks?.atlas ?? cardbackAtlasUrl()
-          : ownerCardbacks?.spellbook ?? cardbackSpellbookUrl();
+            ? undefined
+            : key === "atlas"
+              ? (ownerCardbacks?.atlas ?? cardbackAtlasUrl())
+              : (ownerCardbacks?.spellbook ?? cardbackSpellbookUrl());
         const w = isAtlas ? CARD_LONG : CARD_SHORT;
         const h = isAtlas ? CARD_SHORT : CARD_LONG;
         // Physically realistic pile: use real card thickness for all cards
@@ -268,7 +268,7 @@ export default function Piles3D({
                         interactive={false}
                         elevation={stackIndex * stackSpacing}
                       />
-                    )
+                    ),
                   )}
 
                 {/* Top card (interactive) - add invisible mesh for reliable clicking */}
@@ -311,13 +311,13 @@ export default function Piles3D({
                         key === "atlas"
                           ? "atlas"
                           : key === "graveyard"
-                          ? "graveyard"
-                          : key === "collection"
-                          ? "collection"
-                          : "spellbook";
+                            ? "graveyard"
+                            : key === "collection"
+                              ? "collection"
+                              : "spellbook";
                       openContextMenu(
                         { kind: "pile", who: owner, from: pileType },
-                        { x: e.clientX, y: e.clientY }
+                        { x: e.clientX, y: e.clientY },
                       );
                       clearHoverPreview();
                     }}
@@ -411,12 +411,12 @@ export default function Piles3D({
                       if (dragFromHand && store.selectedCard) {
                         const card = store.selectedCard;
                         const typeLc = String(
-                          card.card?.type || ""
+                          card.card?.type || "",
                         ).toLowerCase();
                         // Check if owner is Magician (Magician has no atlas, sites go to spellbook)
                         const ownerAvatar = avatars[owner];
                         const ownerIsMagician = isMagician(
-                          ownerAvatar?.card?.name
+                          ownerAvatar?.card?.name,
                         );
                         // Non-site cards go to Spellbook; Magician can also put sites in Spellbook
                         if (
@@ -431,7 +431,7 @@ export default function Piles3D({
                               store.moveCardFromHandToPile(
                                 owner,
                                 "spellbook",
-                                position
+                                position,
                               );
                               try {
                                 playCardFlip();
@@ -439,7 +439,7 @@ export default function Piles3D({
                               setDragFromHand(false);
                               store.clearSelection();
                               store.closePlacementDialog();
-                            }
+                            },
                           );
                           // Site cards go to Atlas
                         } else if (key === "atlas" && typeLc.includes("site")) {
@@ -451,7 +451,7 @@ export default function Piles3D({
                               store.moveCardFromHandToPile(
                                 owner,
                                 "atlas",
-                                position
+                                position,
                               );
                               try {
                                 playCardFlip();
@@ -459,7 +459,7 @@ export default function Piles3D({
                               setDragFromHand(false);
                               store.clearSelection();
                               store.closePlacementDialog();
-                            }
+                            },
                           );
                         } else {
                           // Invalid drop - just cancel
@@ -529,11 +529,11 @@ export default function Piles3D({
                     key === "atlas"
                       ? "atlas"
                       : key === "collection"
-                      ? "collection"
-                      : "spellbook";
+                        ? "collection"
+                        : "spellbook";
                   openContextMenu(
                     { kind: "pile", who: owner, from: pileType },
-                    { x: e.clientX, y: e.clientY }
+                    { x: e.clientX, y: e.clientY },
                   );
                   clearHoverPreview();
                 }}
@@ -559,7 +559,7 @@ export default function Piles3D({
                           store.moveCardFromHandToPile(
                             owner,
                             "spellbook",
-                            position
+                            position,
                           );
                           try {
                             playCardFlip();
@@ -567,7 +567,7 @@ export default function Piles3D({
                           setDragFromHand(false);
                           store.clearSelection();
                           store.closePlacementDialog();
-                        }
+                        },
                       );
                       // Site cards go to Atlas
                     } else if (key === "atlas" && typeLc.includes("site")) {
@@ -579,7 +579,7 @@ export default function Piles3D({
                           store.moveCardFromHandToPile(
                             owner,
                             "atlas",
-                            position
+                            position,
                           );
                           try {
                             playCardFlip();
@@ -587,7 +587,7 @@ export default function Piles3D({
                           setDragFromHand(false);
                           store.clearSelection();
                           store.closePlacementDialog();
-                        }
+                        },
                       );
                     } else {
                       // Invalid drop - cancel

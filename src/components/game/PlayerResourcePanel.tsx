@@ -1,9 +1,11 @@
 "use client";
 
 import { useMemo } from "react";
+import { IN_PLAY_ARTIFACT_PROVIDERS } from "@/lib/game/mana-providers";
 import { useGameStore } from "@/lib/game/store";
 import type { PlayerKey } from "@/lib/game/store";
 import {
+  computeAvailableMana,
   computeThresholdTotals,
   siteProvidesMana,
 } from "@/lib/game/store/utils/resourceHelpers";
@@ -249,25 +251,55 @@ export function PlayerResourceColumn({
       permanents,
       player,
       avatar,
-      specialSiteState
+      specialSiteState,
     );
     return result;
   }, [boardSize, boardSites, permanents, player, avatar, specialSiteState]);
 
-  // Compute mana directly from board sites - no offset system
+  // Compute mana from sites + permanents (including cores)
   const owner = player === "p1" ? 1 : 2;
+  const zones = useGameStore((s) => s.zones);
   const { baseMana, mana } = useMemo(() => {
+    // Base mana: count sites that provide mana + permanents that provide mana (cores)
     let total = 0;
-    let available = 0;
     for (const site of Object.values(boardSites)) {
       if (!site || site.owner !== owner) continue;
       if (siteProvidesMana(site.card ?? null)) {
         total++;
-        if (!site.tapped) available++;
       }
     }
+    // Add mana from permanents (cores provide mana while in play)
+    for (const arr of Object.values(permanents ?? {})) {
+      const list = Array.isArray(arr) ? arr : [];
+      for (const p of list) {
+        if (!p || p.owner !== owner) continue;
+        const nm = String(p.card?.name || "").toLowerCase();
+        // Cores provide mana while in play
+        if (IN_PLAY_ARTIFACT_PROVIDERS.has(nm)) {
+          total++;
+        }
+      }
+    }
+    // Available mana: use computeAvailableMana which includes permanents (cores)
+    const available = computeAvailableMana(
+      { size: boardSize, sites: boardSites },
+      permanents,
+      player,
+      zones,
+      specialSiteState,
+      thresholds,
+    );
     return { baseMana: total, mana: available };
-  }, [boardSites, owner]);
+  }, [
+    boardSites,
+    boardSize,
+    permanents,
+    owner,
+    player,
+    zones,
+    specialSiteState,
+    thresholds,
+  ]);
 
   // Can adjust if we're the actor (or offline) and not dragging
   const canAdjust =

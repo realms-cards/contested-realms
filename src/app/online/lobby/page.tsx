@@ -13,8 +13,8 @@ import OnlinePageShell from "@/components/online/OnlinePageShell";
 import PlayersInvitePanel from "@/components/online/PlayersInvitePanel";
 import { SoatcLeagueCheckbox } from "@/components/online/SoatcLeagueBadge";
 import ChangelogOverlay from "@/components/ui/ChangelogOverlay";
-import ManualOverlay from "@/components/ui/ManualOverlay";
 import CombinedMarquee from "@/components/ui/CombinedMarquee";
+import ManualOverlay from "@/components/ui/ManualOverlay";
 import { useRealtimeTournaments } from "@/contexts/RealtimeTournamentContext";
 import { tournamentFeatures } from "@/lib/config/features";
 import {

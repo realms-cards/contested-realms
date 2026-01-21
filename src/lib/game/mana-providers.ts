@@ -98,7 +98,7 @@ export const THRESHOLD_GRANT_BY_NAME: Record<
   string,
   Partial<{ air: number; water: number; earth: number; fire: number }>
 > = {
-  // Cores (Artifact) - provide threshold + mana
+  // Cores (Artifact) - provide threshold + mana while in play (no attachment required)
   "amethyst core": { air: 1 },
   "aquamarine core": { water: 1 },
   "onyx core": { earth: 1 },
@@ -109,6 +109,16 @@ export const THRESHOLD_GRANT_BY_NAME: Record<
   "common cottagers": { earth: 1 },
   "fisherman's family": { water: 1 },
 };
+
+// Artifacts that provide mana/threshold while "in the realm" (on board), without needing attachment.
+// These follow the "Provides X to its controller" pattern - they work as long as they're in play.
+// Other artifacts typically require being attached/carried to provide benefits.
+export const IN_PLAY_ARTIFACT_PROVIDERS = new Set<string>([
+  "amethyst core",
+  "aquamarine core",
+  "onyx core",
+  "ruby core",
+]);
 
 // Sites that should NOT provide mana at all.
 export const NON_MANA_SITE_IDENTIFIERS = new Set<string>([
@@ -178,7 +188,7 @@ export const isSpecialSite = (name: string | null | undefined): boolean => {
 
 // Helper to get all special site names for a given category
 export const getSpecialSiteCategory = (
-  name: string | null | undefined
+  name: string | null | undefined,
 ):
   | "element_choice"
   | "shared"

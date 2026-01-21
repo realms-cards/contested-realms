@@ -4,6 +4,7 @@ import {
   newTokenInstanceId,
   tokenSlug,
 } from "@/lib/game/tokens";
+import { getEffectiveGraveyardSeatStatic } from "./specialSiteState";
 import type {
   CardRef,
   GameState,
@@ -55,7 +56,7 @@ export const createInitialMulliganDrawn = (): GameState["mulliganDrawn"] => ({
 
 export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
   set,
-  get
+  get,
 ) => ({
   zones: createEmptyZonesRecord(),
 
@@ -85,7 +86,7 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
   shuffleSpellbook: (who) =>
     set((state) => {
       const pile = [...state.zones[who].spellbook].map((card) =>
-        prepareCardForSeat(card, who)
+        prepareCardForSeat(card, who),
       );
       for (let i = pile.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
@@ -108,7 +109,7 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
   shuffleAtlas: (who) =>
     set((state) => {
       const pile = [...state.zones[who].atlas].map((card) =>
-        prepareCardForSeat(card, who)
+        prepareCardForSeat(card, who),
       );
       for (let i = pile.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
@@ -151,10 +152,10 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
       const pile =
         from === "spellbook"
           ? [...state.zones[who].spellbook].map((card) =>
-              prepareCardForSeat(card, who)
+              prepareCardForSeat(card, who),
             )
           : [...state.zones[who].atlas].map((card) =>
-              prepareCardForSeat(card, who)
+              prepareCardForSeat(card, who),
             );
       const hand = [...state.zones[who].hand];
       for (let i = 0; i < count; i++) {
@@ -186,7 +187,7 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
             window.dispatchEvent(
               new CustomEvent("app:toast", {
                 detail: { message: toastMessage },
-              })
+              }),
             );
           }
         } catch {}
@@ -230,7 +231,7 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
       // Log warning but allow operation for game repair purposes
       if (!isCurrent) {
         get().log(
-          `[Warning] Drawing from bottom of ${from} out of turn: ${who.toUpperCase()} is not the current player`
+          `[Warning] Drawing from bottom of ${from} out of turn: ${who.toUpperCase()} is not the current player`,
         );
       }
       if (
@@ -239,7 +240,7 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
         state.phase !== "Start"
       ) {
         get().log(
-          `[Warning] Drawing from bottom of ${from} during ${state.phase} phase`
+          `[Warning] Drawing from bottom of ${from} during ${state.phase} phase`,
         );
       }
 
@@ -255,10 +256,10 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
       const pile =
         from === "spellbook"
           ? [...state.zones[who].spellbook].map((card) =>
-              prepareCardForSeat(card, who)
+              prepareCardForSeat(card, who),
             )
           : [...state.zones[who].atlas].map((card) =>
-              prepareCardForSeat(card, who)
+              prepareCardForSeat(card, who),
             );
       const hand = [...state.zones[who].hand];
 
@@ -274,7 +275,7 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
       const playerNum = who === "p1" ? "1" : "2";
       const pileLabel = from === "spellbook" ? "Spellbook" : "Atlas";
       get().log(
-        `[p${playerNum}:PLAYER] draws ${count} from bottom of ${pileLabel}`
+        `[p${playerNum}:PLAYER] draws ${count} from bottom of ${pileLabel}`,
       );
 
       // Broadcast toast for draw action to both players
@@ -294,7 +295,7 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
             window.dispatchEvent(
               new CustomEvent("app:toast", {
                 detail: { message: toastMessage },
-              })
+              }),
             );
           }
         } catch {}
@@ -339,14 +340,14 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
         state.currentPlayer === 1 ? "p2" : "p1";
       if (who !== expectedSecondSeat) {
         console.warn(
-          `[scryTop] Rejected: who=${who} but expectedSecondSeat=${expectedSecondSeat} (currentPlayer=${state.currentPlayer})`
+          `[scryTop] Rejected: who=${who} but expectedSecondSeat=${expectedSecondSeat} (currentPlayer=${state.currentPlayer})`,
         );
         return state;
       }
       // Allow scry during Setup (mulligan/seer phase) or Start phase
       if (state.phase !== "Start" && state.phase !== "Setup") {
         console.warn(
-          `[scryTop] Rejected: phase=${state.phase} (expected Setup or Start)`
+          `[scryTop] Rejected: phase=${state.phase} (expected Setup or Start)`,
         );
         return state;
       }
@@ -357,7 +358,7 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
           : [...state.zones[who].atlas];
 
       console.log(
-        `[scryTop] Processing: who=${who}, from=${from}, decision=${decision}, pile.length=${pile.length}`
+        `[scryTop] Processing: who=${who}, from=${from}, decision=${decision}, pile.length=${pile.length}`,
       );
 
       if (pile.length === 0) {
@@ -390,7 +391,7 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
       get().log(
         `${who.toUpperCase()} scries ${from} (${
           decision === "bottom" ? "bottom" : "top"
-        }${top?.name ? ": " + top.name : ""})`
+        }${top?.name ? ": " + top.name : ""})`,
       );
 
       const tr = get().transport;
@@ -415,7 +416,7 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
       const setBottom = new Set(
         Array.isArray(bottomIndexes)
           ? bottomIndexes.filter((i) => Number.isInteger(i) && i >= 0 && i < k)
-          : []
+          : [],
       );
       const keepers = top.filter((_, i) => !setBottom.has(i));
       const movers = top.filter((_, i) => setBottom.has(i));
@@ -432,7 +433,7 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
       get().log(
         `${who.toUpperCase()} scries ${k} from ${from} (${
           movers.length
-        } to bottom)`
+        } to bottom)`,
       );
       const tr = get().transport;
       if (tr) {
@@ -498,7 +499,7 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
         hand.push(prepareCardForSeat(c, who));
       }
       get().log(
-        `${who.toUpperCase()} draws opening hand (${sbCount} SB + ${atCount} AT)`
+        `${who.toUpperCase()} draws opening hand (${sbCount} SB + ${atCount} AT)`,
       );
       const zonesNext = {
         ...state.zones,
@@ -527,7 +528,7 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
       const isCurrent = (who === "p1" ? 1 : 2) === state.currentPlayer;
       if (!isCurrent) {
         get().log(
-          `[Warning] Drawing from ${from} out of turn: ${who.toUpperCase()} is not the current player`
+          `[Warning] Drawing from ${from} out of turn: ${who.toUpperCase()} is not the current player`,
         );
       }
 
@@ -538,7 +539,7 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
       const z = { ...state.zones[who] };
       const pileName = from as keyof Zones;
       const pile = [...(z[pileName] as CardRef[])].map((pileCard) =>
-        prepareCardForSeat(pileCard, who)
+        prepareCardForSeat(pileCard, who),
       );
       let removedIndex = pile.findIndex((c) => c === card);
       if (removedIndex < 0) {
@@ -546,7 +547,7 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
           (c) =>
             c.cardId === card.cardId &&
             c.variantId === card.variantId &&
-            c.name === card.name
+            c.name === card.name,
         );
       }
       if (removedIndex < 0) {
@@ -597,7 +598,7 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
       const isCurrent = (who === "p1" ? 1 : 2) === state.currentPlayer;
       if (!isCurrent) {
         get().log(
-          `[Warning] Moving card to ${pile} out of turn: ${who.toUpperCase()} is not the current player`
+          `[Warning] Moving card to ${pile} out of turn: ${who.toUpperCase()} is not the current player`,
         );
       }
 
@@ -606,7 +607,7 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
       const zones = { ...state.zones[who] };
       const hand = [...zones.hand];
       const targetPile = [...(zones[pile] as CardRef[])].map((card) =>
-        prepareCardForSeat(card, who)
+        prepareCardForSeat(card, who),
       );
 
       const cardToMove = hand.splice(selectedCard.index, 1)[0];
@@ -625,7 +626,7 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
       get().log(
         `${who.toUpperCase()} moves '${
           ensuredCard.name
-        }' from hand to ${position} of ${pile}`
+        }' from hand to ${position} of ${pile}`,
       );
 
       const zonesNext = {
@@ -663,7 +664,7 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
       hand.push(card);
       const playerNum = who === "p1" ? "1" : "2";
       get().log(
-        `[p${playerNum}:PLAYER] adds token [p${playerNum}card:${def.name}] to hand`
+        `[p${playerNum}:PLAYER] adds token [p${playerNum}card:${def.name}] to hand`,
       );
       const zonesNext = {
         ...state.zones,
@@ -685,12 +686,12 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
           ...card,
           instanceId: newZoneCardInstanceId(),
         },
-        who
+        who,
       );
       hand.push(preparedCard);
       const playerNum = who === "p1" ? "1" : "2";
       get().log(
-        `[p${playerNum}:PLAYER] adds [p${playerNum}card:${card.name}] to hand`
+        `[p${playerNum}:PLAYER] adds [p${playerNum}card:${card.name}] to hand`,
       );
       // Create deep copy of all zones to ensure patch contains correct state
       const zonesNext = {
@@ -791,7 +792,7 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
         [who]: state.mulligans[who] - 1,
       } as GameState["mulligans"];
       get().log(
-        `${who.toUpperCase()} mulligans (draws ${sbCount} SB + ${atCount} AT)`
+        `${who.toUpperCase()} mulligans (draws ${sbCount} SB + ${atCount} AT)`,
       );
       const zonesNext = {
         ...state.zones,
@@ -875,11 +876,11 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
       get().log(
         `${who.toUpperCase()} mulligans ${
           toReturn.length
-        } card(s) (${backAtlas} site(s), ${backSpell} other)`
+        } card(s) (${backAtlas} site(s), ${backSpell} other)`,
       );
       if (drawn.length)
         get().log(
-          `${who.toUpperCase()} draws ${drawn.length} replacement card(s)`
+          `${who.toUpperCase()} draws ${drawn.length} replacement card(s)`,
         );
       const zonesNext = {
         ...state.zones,
@@ -945,20 +946,62 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
       if (idx < 0) return state;
       const card = banished.splice(idx, 1)[0];
       if (!card) return state;
+
+      // Check for Mismanaged Mortuary cemetery swap (silenced mortuaries don't apply)
+      const mortuaries = state.specialSiteState.mismanagedMortuaries;
+      const effectiveGraveyardSeat = getEffectiveGraveyardSeatStatic(
+        who,
+        mortuaries,
+        state.permanents,
+      );
+
+      const affectedSeats: PlayerKey[] = [who];
+
       if (target === "hand") {
         seatZones.hand = [...seatZones.hand, card];
       } else {
-        seatZones.graveyard = [card, ...seatZones.graveyard];
+        // Route to effective graveyard (may be swapped due to Mismanaged Mortuary)
+        if (effectiveGraveyardSeat !== who) {
+          // Cemetery is swapped - route to opponent's graveyard
+          let oppZones: Zones;
+          if (
+            zonesNext[effectiveGraveyardSeat] ===
+            state.zones[effectiveGraveyardSeat]
+          ) {
+            oppZones = {
+              spellbook: [...state.zones[effectiveGraveyardSeat].spellbook],
+              atlas: [...state.zones[effectiveGraveyardSeat].atlas],
+              hand: [...state.zones[effectiveGraveyardSeat].hand],
+              graveyard: [...state.zones[effectiveGraveyardSeat].graveyard],
+              battlefield: [...state.zones[effectiveGraveyardSeat].battlefield],
+              collection: [...state.zones[effectiveGraveyardSeat].collection],
+              banished: [
+                ...(state.zones[effectiveGraveyardSeat].banished || []),
+              ],
+            };
+          } else {
+            oppZones = { ...zonesNext[effectiveGraveyardSeat] };
+          }
+          oppZones.graveyard = [card, ...oppZones.graveyard];
+          zonesNext[effectiveGraveyardSeat] = oppZones;
+          affectedSeats.push(effectiveGraveyardSeat);
+        } else {
+          seatZones.graveyard = [card, ...seatZones.graveyard];
+        }
       }
       seatZones.banished = banished;
       zonesNext[who] = seatZones;
       const playerNum = who === "p1" ? "1" : "2";
+      const targetPlayerNum = effectiveGraveyardSeat === "p1" ? "1" : "2";
       get().log(
         `Returned [p${playerNum}card:${card.name}] from banished to ${
-          target === "hand" ? "hand" : "cemetery"
-        }`
+          target === "hand" ? "hand" : `[p${targetPlayerNum}:PLAYER] cemetery`
+        }`,
       );
-      const patch = createZonesPatchFor(zonesNext as GameState["zones"], who);
+      const patch = createZonesPatchFor(
+        zonesNext as GameState["zones"],
+        affectedSeats,
+      );
       if (patch) get().trySendPatch(patch);
       return {
         zones: zonesNext as GameState["zones"],
@@ -1003,7 +1046,7 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
       zonesNext[who] = seatZones;
       const playerNum = who === "p1" ? "1" : "2";
       get().log(
-        `[p${playerNum}:PLAYER] banished entire cemetery (${graveyard.length} cards)`
+        `[p${playerNum}:PLAYER] banished entire cemetery (${graveyard.length} cards)`,
       );
       const patch = createZonesPatchFor(zonesNext as GameState["zones"], who);
       if (patch) get().trySendPatch(patch);
@@ -1032,8 +1075,8 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
         pile === "spellbook"
           ? [...state.zones[who].spellbook]
           : pile === "atlas"
-          ? [...state.zones[who].atlas]
-          : [...state.zones[who].hand];
+            ? [...state.zones[who].atlas]
+            : [...state.zones[who].hand];
 
       // Find card by instanceId first, then try cardId as fallback
       let cardIndex = sourcePile.findIndex((c) => c.instanceId === instanceId);
@@ -1049,15 +1092,15 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
           "[handlePeekedCard] Card not found by instanceId:",
           instanceId,
           "pile length:",
-          sourcePile.length
+          sourcePile.length,
         );
         console.log(
           "[handlePeekedCard] Available instanceIds:",
-          sourcePile.map((c) => c.instanceId)
+          sourcePile.map((c) => c.instanceId),
         );
         console.log(
           "[handlePeekedCard] Available cardIds:",
-          sourcePile.map((c) => c.cardId)
+          sourcePile.map((c) => c.cardId),
         );
         return state;
       }
@@ -1095,8 +1138,8 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
         pile === "spellbook"
           ? "Spellbook"
           : pile === "atlas"
-          ? "Atlas"
-          : "Hand";
+            ? "Atlas"
+            : "Hand";
       // For steal action, we need the actor's seat (the viewer)
       const actorKey = state.actorKey;
       const otherSeat: PlayerKey = who === "p1" ? "p2" : "p1";
@@ -1104,6 +1147,14 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
 
       // Track which seats need patches
       const affectedSeats: PlayerKey[] = [who];
+
+      // Check for Mismanaged Mortuary cemetery swap (silenced mortuaries don't apply)
+      const mortuaries = state.specialSiteState.mismanagedMortuaries;
+      const effectiveGraveyardSeat = getEffectiveGraveyardSeatStatic(
+        who,
+        mortuaries,
+        state.permanents,
+      );
 
       switch (action) {
         case "top":
@@ -1129,8 +1180,39 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
           actionDesc = "drawn to hand";
           break;
         case "graveyard":
-          seatZones.graveyard = [preparedCard, ...seatZones.graveyard];
-          actionDesc = "sent to cemetery";
+          // Route to effective graveyard (may be swapped due to Mismanaged Mortuary)
+          if (effectiveGraveyardSeat !== who) {
+            // Cemetery is swapped - route to opponent's graveyard
+            let oppZones: Zones;
+            if (
+              zonesNext[effectiveGraveyardSeat] ===
+              state.zones[effectiveGraveyardSeat]
+            ) {
+              oppZones = {
+                spellbook: [...state.zones[effectiveGraveyardSeat].spellbook],
+                atlas: [...state.zones[effectiveGraveyardSeat].atlas],
+                hand: [...state.zones[effectiveGraveyardSeat].hand],
+                graveyard: [...state.zones[effectiveGraveyardSeat].graveyard],
+                battlefield: [
+                  ...state.zones[effectiveGraveyardSeat].battlefield,
+                ],
+                collection: [...state.zones[effectiveGraveyardSeat].collection],
+                banished: [
+                  ...(state.zones[effectiveGraveyardSeat].banished || []),
+                ],
+              };
+            } else {
+              oppZones = { ...zonesNext[effectiveGraveyardSeat] };
+            }
+            oppZones.graveyard = [preparedCard, ...oppZones.graveyard];
+            zonesNext[effectiveGraveyardSeat] = oppZones;
+            affectedSeats.push(effectiveGraveyardSeat);
+            const targetPlayerNum = effectiveGraveyardSeat === "p1" ? "1" : "2";
+            actionDesc = `sent to [p${targetPlayerNum}:PLAYER] cemetery`;
+          } else {
+            seatZones.graveyard = [preparedCard, ...seatZones.graveyard];
+            actionDesc = "sent to cemetery";
+          }
           break;
         case "banish":
           seatZones.banished = [preparedCard, ...(seatZones.banished || [])];
@@ -1162,12 +1244,12 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
       get().log(
         `${who.toUpperCase()} peeked '${
           card.name
-        }' from ${pileName} → ${actionDesc}`
+        }' from ${pileName} → ${actionDesc}`,
       );
       // Send single combined patch for all affected seats
       const zonePatch = createZonesPatchFor(
         zonesNext as GameState["zones"],
-        affectedSeats
+        affectedSeats,
       );
       console.log(
         "[handlePeekedCard] action:",
@@ -1175,19 +1257,19 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
         "who:",
         who,
         "affectedSeats:",
-        affectedSeats
+        affectedSeats,
       );
       console.log(
         "[handlePeekedCard] seatZones.hand length:",
-        seatZones.hand.length
+        seatZones.hand.length,
       );
       console.log(
         "[handlePeekedCard] seatZones.graveyard length:",
-        seatZones.graveyard.length
+        seatZones.graveyard.length,
       );
       console.log(
         "[handlePeekedCard] seatZones.banished length:",
-        seatZones.banished?.length
+        seatZones.banished?.length,
       );
       // Send zones patch - DO NOT use __replaceKeys here!
       // The patch only contains partial zones (affected seats), so using __replaceKeys
@@ -1196,7 +1278,7 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
       if (zonePatch) {
         console.log(
           "[handlePeekedCard] Sending zones patch (no __replaceKeys) for:",
-          affectedSeats
+          affectedSeats,
         );
         get().trySendPatch(zonePatch);
       }

@@ -1,7 +1,7 @@
 "use client";
 
 import { Canvas } from "@react-three/fiber";
-import { Wrench, Eye, Search, AlertTriangle } from "lucide-react";
+import { Wrench, Eye, Search, AlertTriangle, Circle } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useRef, useState, useMemo } from "react";
 import BugReportModal from "@/components/game/BugReportModal";
@@ -16,6 +16,7 @@ import {
   type CardRef,
   type ServerPatchT,
 } from "@/lib/game/store";
+import { GEM_COLORS } from "@/lib/game/store/gemTokenState";
 import { seatFromOwner } from "@/lib/game/store/utils/boardHelpers";
 import {
   generateInteractionRequestId,
@@ -124,6 +125,16 @@ export default function GameToolbox({
   // Bug report modal state
   const [bugReportOpen, setBugReportOpen] = useState(false);
 
+  // Gem token state
+  const [gemColorPickerOpen, setGemColorPickerOpen] = useState(false);
+  const spawnGemToken = useGameStore((s) => s.spawnGemToken);
+
+  // Random number generator state
+  const [rndOpen, setRndOpen] = useState(false);
+  const [rndMax, setRndMax] = useState<number>(6);
+  const [rndResult, setRndResult] = useState<number | null>(null);
+  const [rndReceived, setRndReceived] = useState(false); // true = received from opponent
+
   // Burrow/Submerge (forced)
   const selectedPermanent = useGameStore((s) => s.selectedPermanent);
   const permanents = useGameStore((s) => s.permanents);
@@ -198,6 +209,25 @@ export default function GameToolbox({
         setD6Value(Math.max(1, Math.min(6, Math.floor(value))));
         setD6Open(true);
         setD6Rolling(true);
+      } else if (t === "randomNumber") {
+        const valRaw = (m as { value?: unknown }).value as number | undefined;
+        const maxRaw = (m as { max?: unknown }).max as number | undefined;
+        const value = Number(valRaw);
+        const max = Number(maxRaw);
+        if (!Number.isFinite(value) || !Number.isFinite(max)) return;
+        const clampedMax = Math.max(1, Math.floor(max));
+        const clampedValue = Math.max(
+          1,
+          Math.min(clampedMax, Math.floor(value)),
+        );
+        console.log(
+          `[Toolbox] Random number received: ${clampedValue} (1-${clampedMax})`,
+        );
+        log(`Random (1-${clampedMax}): ${clampedValue}`);
+        setRndMax(clampedMax);
+        setRndResult(clampedValue);
+        setRndReceived(true);
+        setRndOpen(true);
       }
     });
     return () => {
@@ -260,6 +290,15 @@ export default function GameToolbox({
           count: cnt,
           from: "top",
         };
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("app:toast", {
+              detail: {
+                message: `Requesting consent to scry ${cnt} from top of ${seat.toUpperCase()} ${pile}...`,
+              },
+            }),
+          );
+        }
       }
       return;
     }
@@ -558,6 +597,15 @@ export default function GameToolbox({
           count: cnt,
           from,
         };
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("app:toast", {
+              detail: {
+                message: `Requesting consent to draw ${cnt} from ${from} of ${seat.toUpperCase()} ${pile}...`,
+              },
+            }),
+          );
+        }
       }
       return;
     }
@@ -590,6 +638,15 @@ export default function GameToolbox({
           count: cnt,
           from,
         };
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("app:toast", {
+              detail: {
+                message: `Requesting consent to peek at ${cnt} from ${from} of ${seat.toUpperCase()} ${pile}...`,
+              },
+            }),
+          );
+        }
       }
       return;
     }
@@ -634,6 +691,15 @@ export default function GameToolbox({
           count: cnt,
           from,
         };
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("app:toast", {
+              detail: {
+                message: `Requesting consent to reveal ${cnt} from ${from} of ${seat.toUpperCase()} ${pile}...`,
+              },
+            }),
+          );
+        }
       }
       return;
     }
@@ -886,6 +952,30 @@ export default function GameToolbox({
     setD20Rolling(true);
   };
 
+  const handleRndGenerate = () => {
+    const max = Math.max(1, Math.floor(rndMax));
+    const value = Math.floor(Math.random() * max) + 1;
+
+    if (isOnline && transport?.sendMessage) {
+      // Online: send to server, wait for echo back to show result
+      try {
+        transport.sendMessage({ type: "randomNumber", max, value });
+        console.log(`[Toolbox] Random number sent: ${value} (1-${max})`);
+      } catch (err) {
+        console.warn(`[Toolbox] Random number send failed:`, err);
+        // Fallback: show locally if send fails
+        setRndResult(value);
+        log(`Random (1-${max}): ${value}`);
+      }
+      return;
+    }
+
+    // Offline: show result immediately
+    setRndResult(value);
+    log(`Random (1-${max}): ${value}`);
+    console.log(`[Toolbox] Random (1-${max}): ${value}`);
+  };
+
   const startD6Roll = () => {
     const value = Math.floor(Math.random() * 6) + 1;
     if (isOnline && transport?.sendMessage) {
@@ -1119,7 +1209,7 @@ export default function GameToolbox({
                   onClick={handleRequestInstantSpell}
                   title="Sends a consent request to the acting player"
                 >
-                  Ask Permission
+                  Ask to play a card
                 </button>
               </div>
             )}
@@ -1325,7 +1415,51 @@ export default function GameToolbox({
                   className="invert"
                 />
               </button>
+              <button
+                className="rounded bg-amber-600/90 hover:bg-amber-500 px-3 py-1.5 flex items-center justify-center relative"
+                onClick={() => setGemColorPickerOpen(!gemColorPickerOpen)}
+                aria-label="Spawn Gem Token"
+                title="Spawn Gem Token"
+              >
+                <Circle className="w-4 h-4" />
+              </button>
+              <button
+                className="rounded bg-violet-600/90 hover:bg-violet-500 px-2.5 py-1.5 flex items-center justify-center text-xs font-semibold"
+                onClick={() => {
+                  setRndResult(null);
+                  setRndReceived(false);
+                  setRndOpen(true);
+                }}
+                aria-label="Random Number Generator"
+                title="Random Number Generator (1-X)"
+              >
+                RND
+              </button>
             </div>
+
+            {/* Gem Token Color Picker */}
+            {gemColorPickerOpen && (
+              <div className="rounded-lg bg-white/5 ring-1 ring-white/10 p-2">
+                <div className="text-xs opacity-70 mb-2">Pick a gem color:</div>
+                <div className="grid grid-cols-5 gap-1.5">
+                  {GEM_COLORS.map((color) => (
+                    <button
+                      key={color.id}
+                      className="w-8 h-8 rounded-full ring-2 ring-white/20 hover:ring-white/50 transition-all hover:scale-110"
+                      style={{ backgroundColor: color.hex }}
+                      onClick={() => {
+                        if (mySeat) {
+                          spawnGemToken(color.id, mySeat);
+                          setGemColorPickerOpen(false);
+                        }
+                      }}
+                      title={color.label}
+                      disabled={!mySeat}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Force Burrow/Submerge (moved under Inspect/D20) */}
             <div className="rounded-lg bg-white/5 ring-1 ring-white/10 p-2">
@@ -1445,7 +1579,7 @@ export default function GameToolbox({
                 onClick={() => setFixOpen((v) => !v)}
                 aria-expanded={fixOpen}
               >
-                {fixOpen ? "Fix Game State ▲" : "Fix Game State ▼"}
+                {fixOpen ? "Game State ▲" : "Game State ▼"}
               </button>
               {fixOpen && (
                 <div className="mt-2 space-y-2">
@@ -1504,6 +1638,17 @@ export default function GameToolbox({
                     </button>
                   </div>
 
+                  {/* Realm (single version: archive if none, otherwise restore board + cemetery) */}
+                  <div className="rounded-lg bg-white/5 ring-1 ring-white/10 p-2">
+                    <button
+                      className={realmBtnClass}
+                      onClick={handleArchiveOrRestoreRealm}
+                      title={realmBtnText}
+                    >
+                      {realmBtnText}
+                    </button>
+                  </div>
+
                   {/* Banish Entire Cemetery */}
                   <div className="rounded-lg bg-white/5 ring-1 ring-white/10 p-2">
                     <button
@@ -1516,7 +1661,7 @@ export default function GameToolbox({
                       }
                       title="Banish all cards in your cemetery"
                     >
-                      Banish Entire Cemetery (
+                      Banish Your Entire Cemetery (
                       {zones[mySeat ?? "p1"]?.graveyard?.length ?? 0})
                     </button>
                   </div>
@@ -1566,17 +1711,6 @@ export default function GameToolbox({
                   </div>
                 </div>
               )}
-            </div>
-
-            {/* Realm (single version: archive if none, otherwise restore board + cemetery) */}
-            <div className="rounded-lg bg-white/5 ring-1 ring-white/10 p-2">
-              <button
-                className={realmBtnClass}
-                onClick={handleArchiveOrRestoreRealm}
-                title={realmBtnText}
-              >
-                {realmBtnText}
-              </button>
             </div>
           </div>
         </div>
@@ -1682,6 +1816,77 @@ export default function GameToolbox({
                   }}
                 />
               </Canvas>
+            </div>
+          </div>
+        </div>
+      )}
+      {rndOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+          onClick={() => setRndOpen(false)}
+        >
+          <div
+            className="relative w-[92vw] sm:w-full max-w-xs bg-zinc-900/90 rounded-2xl ring-1 ring-white/10 shadow-2xl p-4 sm:p-6 text-white"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base sm:text-lg font-semibold">
+                Random Number
+              </h3>
+              <button
+                className="text-sm text-zinc-400 hover:text-white"
+                onClick={() => setRndOpen(false)}
+              >
+                ✕
+              </button>
+            </div>
+            <div className="space-y-4">
+              {rndReceived ? (
+                /* Received from opponent - show only result */
+                <div className="text-center py-6 bg-white/5 rounded-xl">
+                  <div className="text-5xl font-bold text-violet-300">
+                    {rndResult}
+                  </div>
+                  <div className="text-sm text-zinc-400 mt-2">
+                    (1-{Math.max(1, Math.floor(rndMax))})
+                  </div>
+                </div>
+              ) : (
+                /* Generating - show full controls */
+                <>
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm whitespace-nowrap">1 to</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={1000}
+                      value={rndMax}
+                      onChange={(e) => setRndMax(Number(e.target.value) || 1)}
+                      className="flex-1 bg-white/10 rounded px-3 py-2 text-center text-lg"
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleRndGenerate();
+                      }}
+                    />
+                  </div>
+                  <button
+                    className="w-full rounded bg-violet-600/90 hover:bg-violet-500 py-2 font-semibold"
+                    onClick={handleRndGenerate}
+                  >
+                    Generate
+                  </button>
+                  {rndResult !== null && (
+                    <div className="text-center py-4 bg-white/5 rounded-xl">
+                      <div className="text-4xl font-bold text-violet-300">
+                        {rndResult}
+                      </div>
+                      <div className="text-xs text-zinc-400 mt-1">
+                        (1-{Math.max(1, Math.floor(rndMax))})
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           </div>
         </div>

@@ -24,11 +24,11 @@ interface MusicGameSyncProps {
 export default function MusicGameSync({ myPlayerKey }: MusicGameSyncProps) {
   const [, musicControls] = useMusicPlayer();
 
-  // Get player states from game store
-  const p1Life = useGameStore((s) => s.players.p1.life);
-  const p2Life = useGameStore((s) => s.players.p2.life);
-  const p1LifeState = useGameStore((s) => s.players.p1.lifeState);
-  const p2LifeState = useGameStore((s) => s.players.p2.lifeState);
+  // Get player states from game store (with defaults for when players aren't initialized)
+  const p1Life = useGameStore((s) => s.players.p1?.life ?? 20);
+  const p2Life = useGameStore((s) => s.players.p2?.life ?? 20);
+  const p1LifeState = useGameStore((s) => s.players.p1?.lifeState ?? "alive");
+  const p2LifeState = useGameStore((s) => s.players.p2?.lifeState ?? "alive");
   const phase = useGameStore((s) => s.phase);
   const matchEnded = useGameStore((s) => s.matchEnded);
 

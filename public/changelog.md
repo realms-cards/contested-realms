@@ -2,6 +2,18 @@
 
 ## January 2026
 
+### Jan 21 - Fixes from GitHub issues
+
+- **add automatic resolver for Mismanaged Mortuary**
+- **fix Player not having their mulligan if second player was faster**
+- **add Gem tokens to toolbox** these can be used for various purposes
+- **add RND button in toolbox** to generate a random number between n and x where we can choose x
+- **fix core mana and treshold tracking**
+- **fix problems with undo and activate it in main game** be careful with it! report if things go wrong
+- **harden Pith Imp steal action**
+- **fix Pathfinder not be able to play to the tile they are on**
+- **fix Mephistopheles adjacency**
+
 ### Jan 20 - Autoresolvers and forfeits
 
 - **REPLACE most MUSIC** - enjoy some Dungeonsynth from Knight of Cups instead

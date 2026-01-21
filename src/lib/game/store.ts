@@ -1,8 +1,9 @@
 import { create, type StateCreator } from "zustand";
 import { createAccusationSlice } from "./store/accusationState";
 import { createAnimistSlice } from "./store/animistState";
-import { createAtlanteanFateSlice } from "./store/atlanteanFateState";
 import { createAssortedAnimalsSlice } from "./store/assortedAnimalsState";
+import { createAtlanteanFateSlice } from "./store/atlanteanFateState";
+import { createAutoResolveSlice } from "./store/autoResolveState";
 import { createAvatarSlice } from "./store/avatarState";
 import { createBlackMassSlice } from "./store/blackMassState";
 import { createBoardSlice, createInitialBoard } from "./store/boardState";
@@ -36,8 +37,9 @@ import {
 import { createEarthquakeSlice } from "./store/earthquakeState";
 import { createEventSlice } from "./store/eventState";
 import { createFrontierSettlersSlice } from "./store/frontierSettlersState";
-import { createHeadlessHauntSlice } from "./store/headlessHauntState";
 import { createGameActionsSlice } from "./store/gameActions";
+import { createGemTokenSlice } from "./store/gemTokenState";
+import { createHeadlessHauntSlice } from "./store/headlessHauntState";
 import { createHighlandPrincessSlice } from "./store/highlandPrincessState";
 import {
   createHistorySlice,
@@ -55,10 +57,6 @@ import {
   createMephistophelesSlice,
   createInitialMephistophelesSummonUsed,
 } from "./store/mephistophelesState";
-import {
-  createPathfinderSlice,
-  createInitialPathfinderUsed,
-} from "./store/pathfinderState";
 import { createMorganaSlice } from "./store/morganaState";
 import { createMotherNatureSlice } from "./store/motherNatureState";
 import {
@@ -67,14 +65,17 @@ import {
 } from "./store/necromancerState";
 import { createNetworkSlice } from "./store/networkState";
 import { createOmphalosSlice } from "./store/omphalosState";
+import {
+  createPathfinderSlice,
+  createInitialPathfinderUsed,
+} from "./store/pathfinderState";
 import { createPermanentSlice } from "./store/permanentState";
 import { createPigsOfTheSounderSlice } from "./store/pigsOfTheSounderState";
 import { createPithImpSlice } from "./store/pithImpState";
-import { createRaiseDeadSlice } from "./store/raiseDeadState";
-import { createAutoResolveSlice } from "./store/autoResolveState";
 import { createPortalSlice } from "./store/portalState";
 import { createPositionSlice } from "./store/positionState";
 import { createPreferenceSlice } from "./store/preferenceState";
+import { createRaiseDeadSlice } from "./store/raiseDeadState";
 import { createRemoteCursorSlice } from "./store/remoteCursorState";
 import { createResourceSlice } from "./store/resourceState";
 import { createSearingTruthSlice } from "./store/searingTruthState";
@@ -123,6 +124,8 @@ export type {
   CellKey,
   GameEvent,
   GameState,
+  GemColorId,
+  GemToken,
   InteractionRecordStatus,
   InteractionRequestEntry,
   InteractionResponseOptions,
@@ -203,6 +206,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   ...createAtlanteanFateSlice(set, get, storeApi),
   ...createMephistophelesSlice(set, get, storeApi),
   ...createPathfinderSlice(set, get, storeApi),
+  ...createGemTokenSlice(set, get, storeApi),
   cardScale: 1,
 
   // Multiplayer transport (injected by online play UI)
@@ -306,6 +310,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         specialSiteState: getEmptySpecialSiteState(),
         headlessHaunts: [],
         pendingHeadlessHauntMove: null,
+        gemTokens: [],
       };
       return reset as GameState;
     }),

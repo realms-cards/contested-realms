@@ -11,6 +11,8 @@ import UserBadge from "@/components/auth/UserBadge";
 import AccusationOverlay from "@/components/game/AccusationOverlay";
 import { AnimistCastChoiceOverlay } from "@/components/game/AnimistCastChoiceOverlay";
 import AssortedAnimalsOverlay from "@/components/game/AssortedAnimalsOverlay";
+import AtlanteanFateOverlay from "@/components/game/AtlanteanFateOverlay";
+import AutoResolveConfirmOverlay from "@/components/game/AutoResolveConfirmOverlay";
 import BlackMassOverlay from "@/components/game/BlackMassOverlay";
 import BrowseOverlay from "@/components/game/BrowseOverlay";
 import CallToWarOverlay from "@/components/game/CallToWarOverlay";
@@ -30,20 +32,18 @@ import EnhancedOnlineDraft3DScreen from "@/components/game/EnhancedOnlineDraft3D
 import FrontierSettlersOverlay from "@/components/game/FrontierSettlersOverlay";
 import GameToolbox from "@/components/game/GameToolbox";
 import HarbingerPortalScreen from "@/components/game/HarbingerPortalScreen";
+import HeadlessHauntOverlay from "@/components/game/HeadlessHauntOverlay";
 import HighlandPrincessOverlay from "@/components/game/HighlandPrincessOverlay";
 import { InteractionConsentDialog } from "@/components/game/InteractionConsentDialog";
+import InterrogatorChoiceOverlay from "@/components/game/InterrogatorChoiceOverlay";
 import LilithOverlay from "@/components/game/LilithOverlay";
 import MagicHudOverlay from "@/components/game/MagicHudOverlay";
 import MatchEndOverlay from "@/components/game/MatchEndOverlay";
 import MatchInfoPopup from "@/components/game/MatchInfoPopup";
-import MobileHandHint from "@/components/game/MobileHandHint";
-import MotherNatureOverlay from "@/components/game/MotherNatureOverlay";
-import HeadlessHauntOverlay from "@/components/game/HeadlessHauntOverlay";
-import InterrogatorChoiceOverlay from "@/components/game/InterrogatorChoiceOverlay";
-import AtlanteanFateOverlay from "@/components/game/AtlanteanFateOverlay";
 import MephistophelesOverlay from "@/components/game/MephistophelesOverlay";
 import MephistophelesSummonOverlay from "@/components/game/MephistophelesSummonOverlay";
-import PathfinderPlayOverlay from "@/components/game/PathfinderPlayOverlay";
+import MobileHandHint from "@/components/game/MobileHandHint";
+import MotherNatureOverlay from "@/components/game/MotherNatureOverlay";
 import MusicGameSync from "@/components/game/MusicGameSync";
 import OnlineConsole from "@/components/game/OnlineConsole";
 import OnlineD20Screen from "@/components/game/OnlineD20Screen";
@@ -53,14 +53,15 @@ import OnlineLifeCounters from "@/components/game/OnlineLifeCounters";
 import OnlineMulliganScreen from "@/components/game/OnlineMulliganScreen";
 import OnlineSealedDeckLoader from "@/components/game/OnlineSealedDeckLoader";
 import OnlineStatusBar from "@/components/game/OnlineStatusBar";
+import PathfinderPlayOverlay from "@/components/game/PathfinderPlayOverlay";
 import PigsOfTheSounderOverlay from "@/components/game/PigsOfTheSounderOverlay";
 import PileSearchDialog from "@/components/game/PileSearchDialog";
-import RaiseDeadOverlay from "@/components/game/RaiseDeadOverlay";
-import AutoResolveConfirmOverlay from "@/components/game/AutoResolveConfirmOverlay";
 import PithImpOverlay from "@/components/game/PithImpOverlay";
 import PlacementDialog from "@/components/game/PlacementDialog";
 import PlayerResourcePanels from "@/components/game/PlayerResourcePanel";
 import PrivateHandTargetingOverlay from "@/components/game/PrivateHandTargetingOverlay";
+import PlayerStatusEffects from "@/components/game/StatusEffectIcons";
+import RaiseDeadOverlay from "@/components/game/RaiseDeadOverlay";
 import SearingTruthOverlay from "@/components/game/SearingTruthOverlay";
 // SeerScreen is now integrated into OnlineMulliganScreen
 import SwitchSiteHudOverlay from "@/components/game/SwitchSiteHudOverlay";
@@ -130,7 +131,7 @@ export default function OnlineMatchPage() {
 
   // Enhanced card preview state using the draft-3d/editor-3d pattern
   const [hoverPreview, setHoverPreview] = useState<CardPreviewData | null>(
-    null
+    null,
   );
   const {
     showCardPreview,
@@ -187,8 +188,8 @@ export default function OnlineMatchPage() {
       const order = Array.isArray(orderedPlayerIds)
         ? orderedPlayerIds
         : Array.isArray(match?.playerIds)
-        ? (match?.playerIds as string[])
-        : [];
+          ? (match?.playerIds as string[])
+          : [];
       const idx = order.indexOf(myPlayerId);
       if (idx === 0) return "p1";
       if (idx === 1) return "p2";
@@ -225,11 +226,11 @@ export default function OnlineMatchPage() {
 
   const viewPlayerKey = useMemo(
     () => (isSpectatorView ? spectatorSeat : myPlayerKey),
-    [isSpectatorView, spectatorSeat, myPlayerKey]
+    [isSpectatorView, spectatorSeat, myPlayerKey],
   );
   const viewPlayerNumber = useMemo(
     () => (isSpectatorView ? (spectatorSeat === "p2" ? 2 : 1) : myPlayerNumber),
-    [isSpectatorView, spectatorSeat, myPlayerNumber]
+    [isSpectatorView, spectatorSeat, myPlayerNumber],
   );
 
   // Initialize actor seat and player IDs in store for ownership guards and consent
@@ -259,7 +260,7 @@ export default function OnlineMatchPage() {
     // Helper to parse sleeve refs into URLs and preset
     const parseSleeveRefs = (
       data: { selectedSpellbookRef?: string; selectedAtlasRef?: string },
-      baseUrl: string
+      baseUrl: string,
     ) => {
       let spellbookUrl: string | null = null;
       let preset: string | null = null;
@@ -300,7 +301,7 @@ export default function OnlineMatchPage() {
             };
             const { spellbookUrl, atlasUrl, preset } = parseSleeveRefs(
               data,
-              "/api/users/me/cardbacks"
+              "/api/users/me/cardbacks",
             );
             setCardbackUrls(resolvedSeat, spellbookUrl, atlasUrl, preset);
           }
@@ -323,7 +324,7 @@ export default function OnlineMatchPage() {
             };
             const { spellbookUrl, atlasUrl, preset } = parseSleeveRefs(
               data,
-              `/api/users/${opponentPlayerId}/cardbacks`
+              `/api/users/${opponentPlayerId}/cardbacks`,
             );
             setCardbackUrls(opponentSeat, spellbookUrl, atlasUrl, preset);
           }
@@ -383,7 +384,7 @@ export default function OnlineMatchPage() {
               if (id) {
                 setPlaymatUrlFor(
                   resolvedSeat,
-                  `/api/users/me/playmats/${id}/image`
+                  `/api/users/me/playmats/${id}/image`,
                 );
               }
             } else {
@@ -410,7 +411,7 @@ export default function OnlineMatchPage() {
               if (id) {
                 setPlaymatUrlFor(
                   opponentSeat,
-                  `/api/users/${opponentPlayerId}/playmats/${id}/image`
+                  `/api/users/${opponentPlayerId}/playmats/${id}/image`,
                 );
                 // Show opponent's playmat by default when they have a custom one
                 setActivePlaymatOwner(opponentSeat);
@@ -622,7 +623,7 @@ export default function OnlineMatchPage() {
         const serverMatchId = match.id;
         if (!sessionStorage.getItem(`force_reload_match_${serverMatchId}`)) {
           console.log(
-            "[game] Switching to different match - forcing page reload for clean state"
+            "[game] Switching to different match - forcing page reload for clean state",
           );
           sessionStorage.setItem(`force_reload_match_${serverMatchId}`, "1");
           sessionStorage.removeItem(`force_reload_match_${matchId}`);
@@ -638,7 +639,7 @@ export default function OnlineMatchPage() {
           return;
         } else {
           console.log(
-            "[game] After reload still have wrong match - resetting game state"
+            "[game] After reload still have wrong match - resetting game state",
           );
           useGameStore.getState().resetGameState();
           return;
@@ -711,7 +712,7 @@ export default function OnlineMatchPage() {
     // Perform local reset/resync only once per match for this page session.
     if (resetDoneForRef.current !== matchId) {
       console.log(
-        "[game] Joining match - requesting resync (will reset state when snapshot arrives)"
+        "[game] Joining match - requesting resync (will reset state when snapshot arrives)",
       );
       // DON'T reset game state here - let the resync snapshot replace it cleanly
       // Resetting here causes a race: if we reset, then a patch arrives, then snapshot arrives,
@@ -801,7 +802,7 @@ export default function OnlineMatchPage() {
   // Detect Harbinger seats for portal phase logic
   const harbingerSeats = useMemo(
     () => detectHarbingerSeats(avatars),
-    [avatars]
+    [avatars],
   );
 
   // Detect if Harbinger portal phase is needed (after BOTH players finish mulligan, before game starts)
@@ -921,7 +922,7 @@ export default function OnlineMatchPage() {
       } else {
         console.warn(
           "[Portal] setupComplete flag set but portals not fully assigned",
-          portalState
+          portalState,
         );
       }
     }
@@ -966,7 +967,7 @@ export default function OnlineMatchPage() {
       if (!arePortalsFullyAssigned(portalState)) {
         console.warn(
           "[Portal] Blocking game start - Harbinger detected but portals not assigned",
-          { harbingerSeats, portalState }
+          { harbingerSeats, portalState },
         );
         return;
       }
@@ -1082,7 +1083,7 @@ export default function OnlineMatchPage() {
         {
           matchId,
           status: match?.status,
-        }
+        },
       );
       setPrepared(true);
       return;
@@ -1120,13 +1121,13 @@ export default function OnlineMatchPage() {
             k === "libraries" ||
             k === "currentPlayer" ||
             k === "avatars" ||
-            k === "mulligans"
+            k === "mulligans",
         ) || hasActualRolls
       );
     })();
     if (hasMeaningfulGameState) {
       console.log(
-        "[match] Server game snapshot present; skipping local deck autoload"
+        "[match] Server game snapshot present; skipping local deck autoload",
       );
       setPrepared(true);
       return;
@@ -1167,7 +1168,7 @@ export default function OnlineMatchPage() {
 
           if (isCondensedFormat) {
             console.log(
-              "[match] Detected condensed tournament deck format, expanding to full cards..."
+              "[match] Detected condensed tournament deck format, expanding to full cards...",
             );
 
             // Extract unique card IDs
@@ -1175,14 +1176,14 @@ export default function OnlineMatchPage() {
               new Set(
                 (rawDeck as Array<{ cardId: string; quantity: number }>)
                   .map((entry) => Number(entry.cardId))
-                  .filter((n) => Number.isFinite(n) && n > 0)
-              )
+                  .filter((n) => Number.isFinite(n) && n > 0),
+              ),
             );
 
             if (cardIds.length > 0) {
               // Fetch card metadata
               const resMeta = await fetch(
-                `/api/cards/by-id?ids=${encodeURIComponent(cardIds.join(","))}`
+                `/api/cards/by-id?ids=${encodeURIComponent(cardIds.join(","))}`,
               );
 
               if (resMeta.ok) {
@@ -1209,7 +1210,7 @@ export default function OnlineMatchPage() {
                       cost: m.cost ?? null,
                       thresholds: m.thresholds ?? null,
                     },
-                  ])
+                  ]),
                 );
 
                 // Expand condensed format to full cards
@@ -1222,7 +1223,7 @@ export default function OnlineMatchPage() {
                   const meta = byId.get(idNum);
                   if (!meta) {
                     console.warn(
-                      `[match] Missing metadata for card ID ${idNum}`
+                      `[match] Missing metadata for card ID ${idNum}`,
                     );
                     continue;
                   }
@@ -1244,12 +1245,12 @@ export default function OnlineMatchPage() {
                 console.log(
                   "[match] Expanded deck to",
                   expandedDeck.length,
-                  "cards"
+                  "cards",
                 );
                 deckToLoad = expandedDeck;
               } else {
                 console.error(
-                  "[match] Failed to fetch card metadata for condensed deck"
+                  "[match] Failed to fetch card metadata for condensed deck",
                 );
               }
             }
@@ -1292,7 +1293,7 @@ export default function OnlineMatchPage() {
                       id?: number | string;
                     }
                   ).id ??
-                  0
+                  0,
               );
               if (Number.isFinite(avatarCardId) && avatarCardId > 0) {
                 deckToLoad = [
@@ -1342,7 +1343,7 @@ export default function OnlineMatchPage() {
         const ok = await loadSealedDeckFor(
           myPlayerKey as "p1" | "p2",
           deckToLoad,
-          (error) => console.error("[match] Deck load error:", error)
+          (error) => console.error("[match] Deck load error:", error),
         );
         if (!ok || cancelled) return;
 
@@ -1354,7 +1355,7 @@ export default function OnlineMatchPage() {
       } catch (error) {
         console.error(
           "[match] Failed to auto-load deck from match data:",
-          error
+          error,
         );
       }
     })();
@@ -1405,7 +1406,7 @@ export default function OnlineMatchPage() {
     (async () => {
       try {
         const res = await fetch(
-          `/api/tournaments/${encodeURIComponent(String(tournamentId))}`
+          `/api/tournaments/${encodeURIComponent(String(tournamentId))}`,
         );
         if (!res.ok) throw new Error("Failed to load tournament detail");
         const detail = await res.json();
@@ -1417,13 +1418,13 @@ export default function OnlineMatchPage() {
           new Set(
             list
               .map((entry) => Number(entry.cardId))
-              .filter((n) => Number.isFinite(n) && n > 0)
-          )
+              .filter((n) => Number.isFinite(n) && n > 0),
+          ),
         );
         if (ids.length === 0) return;
 
         const resMeta = await fetch(
-          `/api/cards/by-id?ids=${encodeURIComponent(ids.join(","))}`
+          `/api/cards/by-id?ids=${encodeURIComponent(ids.join(","))}`,
         );
         if (!resMeta.ok) throw new Error("Failed to load card meta");
         const metas = (await resMeta.json()) as Array<{
@@ -1438,7 +1439,7 @@ export default function OnlineMatchPage() {
           "[match] Fetched card metadata for",
           metas.length,
           "cards. Sample:",
-          metas.slice(0, 3)
+          metas.slice(0, 3),
         );
         const byId = new Map<
           number,
@@ -1471,13 +1472,13 @@ export default function OnlineMatchPage() {
         console.log(
           "[match] Building deck from list with",
           list.length,
-          "unique cards"
+          "unique cards",
         );
         console.log("[match] Metadata map has", byId.size, "entries");
         console.log("[match] Sample list entry:", list[0]);
         console.log(
           "[match] Sample byId keys:",
-          Array.from(byId.keys()).slice(0, 5)
+          Array.from(byId.keys()).slice(0, 5),
         );
 
         const deck: Array<Record<string, unknown>> = [];
@@ -1491,7 +1492,7 @@ export default function OnlineMatchPage() {
                 entry,
                 hasInMap: byId.has(idNum),
                 mapKeys: Array.from(byId.keys()),
-              }
+              },
             );
             continue;
           }
@@ -1526,7 +1527,7 @@ export default function OnlineMatchPage() {
               }, 600);
             } catch {}
             console.warn(
-              `[match] Viewer deck empty (attempt ${deckFetchAttemptsRef.current}/3), retrying shortly...`
+              `[match] Viewer deck empty (attempt ${deckFetchAttemptsRef.current}/3), retrying shortly...`,
             );
             return;
           }
@@ -1544,7 +1545,7 @@ export default function OnlineMatchPage() {
               myPlayerKey as "p1" | "p2",
               deck,
               (error) =>
-                console.error("[match] Tournament deck load error:", error)
+                console.error("[match] Tournament deck load error:", error),
             );
             if (ok && !cancelled) {
               useGameStore.getState().setPhase("Setup");
@@ -1608,7 +1609,7 @@ export default function OnlineMatchPage() {
             k === "libraries" ||
             k === "currentPlayer" ||
             k === "avatars" ||
-            k === "mulligans"
+            k === "mulligans",
         ) || hasActualRolls
       );
     })();
@@ -1723,16 +1724,16 @@ export default function OnlineMatchPage() {
         if (myId && packsByPlayer && Array.isArray(packsByPlayer[myId])) {
           console.log(
             "[Sealed Redirect] Saving packs to localStorage:",
-            packsByPlayer[myId].length
+            packsByPlayer[myId].length,
           );
           localStorage.setItem(
             `sealedPacks_${match.id}`,
-            JSON.stringify(packsByPlayer[myId])
+            JSON.stringify(packsByPlayer[myId]),
           );
         } else {
           console.warn(
             "[Sealed Redirect] No sealedPacks found for player",
-            myId
+            myId,
           );
         }
       } catch (e) {
@@ -2237,7 +2238,7 @@ export default function OnlineMatchPage() {
         cam.position.set(
           0,
           Math.cos(tilt) * dist,
-          sign * Math.sin(tilt) * dist
+          sign * Math.sin(tilt) * dist,
         );
         cam.up.set(0, 1, 0);
       } else {
@@ -2249,7 +2250,7 @@ export default function OnlineMatchPage() {
       cam.lookAt(0, 0, 0);
       c.update();
     },
-    [viewPlayerNumber, matW, matH, naturalTiltAngle]
+    [viewPlayerNumber, matW, matH, naturalTiltAngle],
   );
 
   const resetCamera = useCallback(() => {
@@ -2489,7 +2490,7 @@ export default function OnlineMatchPage() {
           (match?.matchType as "constructed" | "sealed" | "draft") ||
           "constructed",
         startedAt: new Date(
-          (match as { startedAt?: number })?.startedAt || Date.now()
+          (match as { startedAt?: number })?.startedAt || Date.now(),
         ),
         completedAt: new Date(),
         replayId: matchId,
@@ -2691,7 +2692,7 @@ export default function OnlineMatchPage() {
       try {
         localStorage.setItem(
           `draftedCards_${matchId}`,
-          JSON.stringify(draftedCards)
+          JSON.stringify(draftedCards),
         );
       } catch (error) {
         console.error("[Draft] Failed to store drafted cards:", error);
@@ -2710,7 +2711,7 @@ export default function OnlineMatchPage() {
       // Redirect to editor
       window.location.href = `/decks/editor-3d?${params.toString()}`;
     },
-    [matchId]
+    [matchId],
   );
 
   // Stabilize Canvas props to prevent renderer teardown/remount between renders
@@ -2720,7 +2721,7 @@ export default function OnlineMatchPage() {
       alpha: false,
       premultipliedAlpha: true,
     }),
-    []
+    [],
   );
   // Smooth spectator rotation helpers
   const spectatorYawTargetRef = useRef<number>(0);
@@ -2729,11 +2730,11 @@ export default function OnlineMatchPage() {
       position: (viewPlayerNumber === 2 ? [0, 10, -5] : [0, 10, 5]) as [
         number,
         number,
-        number
+        number,
       ],
       fov: 50,
     }),
-    [viewPlayerNumber]
+    [viewPlayerNumber],
   );
 
   // Show draft screen for active draft matches (but only if we haven't submitted a deck)
@@ -2808,8 +2809,8 @@ export default function OnlineMatchPage() {
                 handVisibilityMode === "visible"
                   ? "bg-cyan-500/50"
                   : handVisibilityMode === "hidden"
-                  ? "bg-red-500/30"
-                  : "bg-transparent hover:bg-white/10"
+                    ? "bg-red-500/30"
+                    : "bg-transparent hover:bg-white/10"
               }`}
               onClick={() => {
                 // Toggle: null -> visible, visible -> hidden, hidden -> null
@@ -2825,8 +2826,8 @@ export default function OnlineMatchPage() {
                 handVisibilityMode === "visible"
                   ? "Hand shown (tap to hide)"
                   : handVisibilityMode === "hidden"
-                  ? "Hand hidden (tap for auto)"
-                  : "Hand auto (tap to show)"
+                    ? "Hand hidden (tap for auto)"
+                    : "Hand auto (tap to show)"
               }
             >
               {/* Hand icon */}
@@ -3068,6 +3069,9 @@ export default function OnlineMatchPage() {
             dragFromHand={dragFromHand}
           />
 
+          {/* Status effect icons (Mismanaged Mortuary, etc.) */}
+          <PlayerStatusEffects />
+
           {/* Online Console with Events and Chat tabs - only show when setup overlay is not visible */}
           {!setupOpen && (
             <OnlineConsole
@@ -3204,7 +3208,7 @@ export default function OnlineMatchPage() {
             soatcLeagueResult={soatcLeagueResult}
             viewerSoatcUuid={
               myPlayerId
-                ? soatcPlayerInfo[myPlayerId]?.soatcUuid ?? undefined
+                ? (soatcPlayerInfo[myPlayerId]?.soatcUuid ?? undefined)
                 : undefined
             }
             rated={
@@ -3480,15 +3484,15 @@ export default function OnlineMatchPage() {
                     isSpectatorView
                       ? -Infinity
                       : viewPlayerNumber === 2
-                      ? Math.PI - 0.5
-                      : -0.5
+                        ? Math.PI - 0.5
+                        : -0.5
                   }
                   maxAzimuthAngle={
                     isSpectatorView
                       ? Infinity
                       : viewPlayerNumber === 2
-                      ? Math.PI + 0.5
-                      : 0.5
+                        ? Math.PI + 0.5
+                        : 0.5
                   }
                 />
                 {/* Smooth spectator rotation around board center */}
@@ -3530,7 +3534,7 @@ export default function OnlineMatchPage() {
                     voice.respondToRequest(
                       voice.incomingRequest.requestId,
                       voice.incomingRequest.from.id,
-                      false
+                      false,
                     );
                   }
                 }}
@@ -3544,7 +3548,7 @@ export default function OnlineMatchPage() {
                     voice.respondToRequest(
                       voice.incomingRequest.requestId,
                       voice.incomingRequest.from.id,
-                      true
+                      true,
                     );
                   }
                 }}

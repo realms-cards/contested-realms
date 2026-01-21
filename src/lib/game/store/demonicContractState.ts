@@ -107,27 +107,20 @@ export const createDemonicContractSlice: StateCreator<
     const id = newDemonicContractId();
     const { spell, casterSeat } = input;
     const permanents = get().permanents;
-    const metaByCardId = get().metaByCardId;
 
-    // Find all Demons controlled by the caster and determine highest rarity
+    // Find all Demons controlled by the caster and determine highest rarity (use embedded CardRef data)
     let maxRarity = 0;
     let highestDemonName: string | null = null;
-
-    for (const cellKey of Object.keys(permanents)) {
-      const cellPerms = permanents[cellKey as CellKey] || [];
-      for (const perm of cellPerms) {
-        const ownerSeat = seatFromOwner(perm.owner);
+    for (const cell of Object.values(permanents)) {
+      if (!Array.isArray(cell)) continue;
+      for (const perm of cell) {
+        const ownerSeat = perm.owner === 1 ? "p1" : "p2";
         if (ownerSeat !== casterSeat) continue;
 
         // Check if it's a Demon
-        const meta = metaByCardId[perm.card.cardId];
-        const subTypes = (
-          meta?.subTypes ||
-          perm.card.subTypes ||
-          ""
-        ).toLowerCase();
+        const subTypes = (perm.card.subTypes || "").toLowerCase();
         if (subTypes.includes("demon")) {
-          const rarity = (meta?.rarity || "").toLowerCase();
+          const rarity = (perm.card.rarity || "").toLowerCase();
           const rarityLevel = getRarityLevel(rarity);
           if (rarityLevel > maxRarity) {
             maxRarity = rarityLevel;
@@ -139,7 +132,7 @@ export const createDemonicContractSlice: StateCreator<
 
     if (maxRarity === 0) {
       get().log(
-        `[${casterSeat.toUpperCase()}] Demonic Contract: No Demon minion controlled - cannot cast`
+        `[${casterSeat.toUpperCase()}] Demonic Contract: No Demon minion controlled - cannot cast`,
       );
       // Move spell to graveyard
       get().movePermanentToZone(spell.at, spell.index, "graveyard");
@@ -194,7 +187,7 @@ export const createDemonicContractSlice: StateCreator<
       `[${casterSeat.toUpperCase()}] Demonic Contract: Highest Demon is ${highestDemonName} (${
         Object.entries(RARITY_ORDER).find(([, v]) => v === maxRarity)?.[0] ||
         "unknown"
-      } rarity)`
+      } rarity)`,
     );
 
     // Broadcast to opponent
@@ -223,7 +216,7 @@ export const createDemonicContractSlice: StateCreator<
 
     if (costType === "sacrifice" && sacrificeOptions.length === 0) {
       get().log(
-        `[${casterSeat.toUpperCase()}] No valid sacrifice tokens available`
+        `[${casterSeat.toUpperCase()}] No valid sacrifice tokens available`,
       );
       return;
     }
@@ -234,7 +227,7 @@ export const createDemonicContractSlice: StateCreator<
       const currentLife = players[casterSeat].life;
       if (currentLife <= 4) {
         get().log(
-          `[${casterSeat.toUpperCase()}] Not enough life to pay (need > 4)`
+          `[${casterSeat.toUpperCase()}] Not enough life to pay (need > 4)`,
         );
         return;
       }
@@ -264,7 +257,7 @@ export const createDemonicContractSlice: StateCreator<
         } as GameState["players"],
       });
       get().log(
-        `[${casterSeat.toUpperCase()}] pays 4 life for Demonic Contract`
+        `[${casterSeat.toUpperCase()}] pays 4 life for Demonic Contract`,
       );
 
       // Proceed to search
@@ -294,17 +287,9 @@ export const createDemonicContractSlice: StateCreator<
         ? fullSpellbook.slice(0, haystackLimit)
         : fullSpellbook;
 
-      // Fetch metadata for all cards
-      const cardIds = spellbook.map((c) => c.cardId);
-      if (cardIds.length > 0) {
-        await get().fetchCardMeta(cardIds);
-      }
-      const metaByCardId = get().metaByCardId;
-
-      // Filter cards by rarity (must be ≤ maxRarity of Demon controlled)
+      // Filter cards by rarity (must be ≤ maxRarity of Demon controlled) - use embedded CardRef data
       const eligibleCards = spellbook.filter((card) => {
-        const meta = metaByCardId[card.cardId];
-        const cardRarity = (meta?.rarity || "").toLowerCase();
+        const cardRarity = (card.rarity || "").toLowerCase();
         const cardRarityLevel = getRarityLevel(cardRarity);
         return cardRarityLevel <= pendingNow.maxRarity;
       });
@@ -319,7 +304,7 @@ export const createDemonicContractSlice: StateCreator<
 
       if (eligibleCards.length === 0) {
         get().log(
-          `[${casterSeat.toUpperCase()}] Demonic Contract: No eligible cards found`
+          `[${casterSeat.toUpperCase()}] Demonic Contract: No eligible cards found`,
         );
       }
     }
@@ -333,7 +318,7 @@ export const createDemonicContractSlice: StateCreator<
 
     // Validate sacrifice is in options
     const sacrifice = sacrificeOptions.find(
-      (s) => s.at === at && s.index === index
+      (s) => s.at === at && s.index === index,
     );
     if (!sacrifice) return;
 
@@ -343,7 +328,7 @@ export const createDemonicContractSlice: StateCreator<
     get().log(
       `[${casterSeat.toUpperCase()}] sacrifices ${
         sacrifice.name
-      } for Demonic Contract`
+      } for Demonic Contract`,
     );
 
     set({
@@ -365,24 +350,16 @@ export const createDemonicContractSlice: StateCreator<
       ? fullSpellbook.slice(0, haystackLimit)
       : fullSpellbook;
 
-    // Fetch metadata
-    const cardIds = spellbook.map((c) => c.cardId);
-    if (cardIds.length > 0) {
-      await get().fetchCardMeta(cardIds);
-    }
-    const metaByCardId = get().metaByCardId;
-
-    // Filter by rarity
+    // Filter cards by rarity (must be ≤ maxRarity of Demon controlled) - use embedded CardRef data
     const eligibleCards = spellbook.filter((card) => {
-      const meta = metaByCardId[card.cardId];
-      const cardRarity = (meta?.rarity || "").toLowerCase();
+      const cardRarity = (card.rarity || "").toLowerCase();
       const cardRarityLevel = getRarityLevel(cardRarity);
       return cardRarityLevel <= pending.maxRarity;
     });
 
     set({
       pendingDemonicContract: {
-        ...(get().pendingDemonicContract || pending),
+        ...pending,
         phase: "selecting",
         eligibleCards,
       },
@@ -395,7 +372,7 @@ export const createDemonicContractSlice: StateCreator<
 
     // Verify card is eligible
     const isEligible = pending.eligibleCards.some(
-      (c) => c.cardId === card.cardId
+      (c) => c.cardId === card.cardId,
     );
     if (!isEligible) return;
 
@@ -431,7 +408,7 @@ export const createDemonicContractSlice: StateCreator<
 
     // Find and remove selected card from spellbook
     const cardIndex = spellbook.findIndex(
-      (c) => c.cardId === selectedCard.cardId
+      (c) => c.cardId === selectedCard.cardId,
     );
     if (cardIndex === -1) {
       get().log(`[${casterSeat.toUpperCase()}] Card not found in spellbook`);
@@ -472,7 +449,7 @@ export const createDemonicContractSlice: StateCreator<
     get().log(
       `[${casterSeat.toUpperCase()}] draws ${
         selectedCard.name
-      } via Demonic Contract and shuffles`
+      } via Demonic Contract and shuffles`,
     );
 
     // Broadcast resolution

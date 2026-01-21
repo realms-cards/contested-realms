@@ -90,7 +90,7 @@ export const createSearingTruthSlice: StateCreator<
     }
 
     get().log(
-      `[${casterSeat.toUpperCase()}] casts Searing Truth - choose a target player`
+      `[${casterSeat.toUpperCase()}] casts Searing Truth - choose a target player`,
     );
   },
 
@@ -114,25 +114,13 @@ export const createSearingTruthSlice: StateCreator<
       }
     }
 
-    // Fetch meta for drawn cards to get mana costs
-    const cardIds = drawnCards
-      .map((c) => c.cardId)
-      .filter((cardId) => Number.isFinite(cardId) && cardId > 0);
-    if (cardIds.length > 0) {
-      try {
-        await get().fetchCardMeta(cardIds);
-      } catch {}
-    }
-
-    // Calculate the higher mana cost
-    const metaByCardId = get().metaByCardId;
+    // Calculate the higher mana cost (use embedded CardRef cost)
     let maxCost = 0;
     for (const card of drawnCards) {
-      const meta = metaByCardId[card.cardId] as
-        | { cost?: number | null }
-        | undefined;
-      const cost = meta?.cost ?? 0;
-      if (cost > maxCost) maxCost = cost;
+      const cost = card.cost ?? 0;
+      if (cost > maxCost) {
+        maxCost = cost;
+      }
     }
 
     // Update zones with drawn cards
@@ -186,7 +174,7 @@ export const createSearingTruthSlice: StateCreator<
 
     const cardNames = drawnCards.map((c) => c.name || "Unknown").join(" and ");
     get().log(
-      `[${targetSeat.toUpperCase()}] draws and reveals ${cardNames} - will take ${maxCost} damage`
+      `[${targetSeat.toUpperCase()}] draws and reveals ${cardNames} - will take ${maxCost} damage`,
     );
   },
 
@@ -245,7 +233,7 @@ export const createSearingTruthSlice: StateCreator<
       get().movePermanentToZone(
         pending.spell.at,
         pending.spell.index,
-        "graveyard"
+        "graveyard",
       );
     } catch {}
 
@@ -263,7 +251,7 @@ export const createSearingTruthSlice: StateCreator<
     }
 
     get().log(
-      `Searing Truth resolved: ${targetSeat.toUpperCase()} takes ${damageAmount} damage`
+      `Searing Truth resolved: ${targetSeat.toUpperCase()} takes ${damageAmount} damage`,
     );
   },
 

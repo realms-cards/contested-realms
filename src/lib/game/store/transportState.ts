@@ -1,6 +1,7 @@
 import type { StateCreator } from "zustand";
 import { wrapInteractionMessage } from "@/lib/net/interactions";
 import type { GameTransport, CustomMessage } from "@/lib/net/transport";
+import { getEffectiveGraveyardSeatStatic } from "./specialSiteState";
 import type { GameState, PlayerKey, ServerPatchT, Zones } from "./types";
 import { clonePatchForQueue } from "./utils/patchHelpers";
 
@@ -54,7 +55,7 @@ let batchFlushCallback: (() => void) | null = null;
  */
 const mergePermanentArrays = (
   baseArr: unknown[],
-  incomingArr: unknown[]
+  incomingArr: unknown[],
 ): unknown[] => {
   const map = new Map<string, Record<string, unknown>>();
   const order: string[] = [];
@@ -105,7 +106,7 @@ const mergePermanentArrays = (
  */
 const mergePatch = (
   base: ServerPatchT | null,
-  incoming: ServerPatchT
+  incoming: ServerPatchT,
 ): ServerPatchT => {
   if (!base) return { ...incoming };
   const result: ServerPatchT = { ...base };
@@ -148,7 +149,7 @@ const mergePatch = (
         ...(baseVal as Record<string, unknown>),
       };
       for (const [subKey, subVal] of Object.entries(
-        incomingVal as Record<string, unknown>
+        incomingVal as Record<string, unknown>,
       )) {
         if (subVal === undefined) continue;
         const existingSubVal = merged[subKey];
@@ -196,12 +197,12 @@ const mergePatch = (
  * Moves any pending batched patches to the pending queue to avoid data loss.
  */
 export const clearBatchState = (
-  addToPending?: (patch: ServerPatchT) => void
+  addToPending?: (patch: ServerPatchT) => void,
 ) => {
   if (batchedPatch && addToPending) {
     console.warn(
       "[net] clearBatchState: saving batched patch to pending queue",
-      { keys: Object.keys(batchedPatch) }
+      { keys: Object.keys(batchedPatch) },
     );
     addToPending(batchedPatch);
   } else if (batchedPatch) {
@@ -247,7 +248,7 @@ const normalizeForSignature = (value: unknown): unknown => {
     const record = value as Record<string, unknown>;
     const out: Record<string, unknown> = {};
     const entries = Object.entries(record).sort(([a], [b]) =>
-      a.localeCompare(b)
+      a.localeCompare(b),
     );
     for (const [key, val] of entries) {
       out[key] = normalizeForSignature(val);
@@ -273,7 +274,7 @@ const prunePatchSignatures = (now: number) => {
 };
 
 const makePatchSignature = (
-  patch: ServerPatchT
+  patch: ServerPatchT,
 ): { id: string; fields: TrackedPatchField[] } | null => {
   if (!patch || typeof patch !== "object") return null;
   const parts: string[] = [];
@@ -291,7 +292,7 @@ const makePatchSignature = (
 };
 
 export const filterEchoPatchIfAny = (
-  patch: ServerPatchT
+  patch: ServerPatchT,
 ): { patch: ServerPatchT | null; matched: boolean } => {
   if (!patch || typeof patch !== "object") {
     return { patch, matched: false };
@@ -399,7 +400,7 @@ export const filterEchoPatchIfAny = (
         if (!(field in payload)) continue;
         const currentValue = (state as Record<string, unknown>)[field];
         const serializedCurrent = stableSerialize(
-          normalizeForSignature(currentValue)
+          normalizeForSignature(currentValue),
         );
         if (serializedCurrent !== payload[field]) {
           mustKeep = true;
@@ -425,12 +426,12 @@ export const filterEchoPatchIfAny = (
   if (!mutated) return { patch, matched: true };
   if (Array.isArray(filtered.__replaceKeys)) {
     const remaining = filtered.__replaceKeys.filter(
-      (key) => !fields.includes(key as TrackedPatchField)
+      (key) => !fields.includes(key as TrackedPatchField),
     );
     filtered.__replaceKeys = remaining.length > 0 ? remaining : undefined;
   }
   const remainingKeys = Object.keys(filtered).filter(
-    (key) => key !== "__replaceKeys"
+    (key) => key !== "__replaceKeys",
   );
   if (remainingKeys.length === 0) {
     return { patch: null, matched: true };
@@ -440,7 +441,7 @@ export const filterEchoPatchIfAny = (
 
 const registerPatchSignature = (
   signature: { id: string; fields: TrackedPatchField[] } | null,
-  patch: ServerPatchT
+  patch: ServerPatchT,
 ) => {
   if (!signature) return;
   const now = Date.now();
@@ -451,7 +452,7 @@ const registerPatchSignature = (
     // Remove oldest entries by deleting first keys
     const keysToDelete = Array.from(pendingPatchSignatures.keys()).slice(
       0,
-      Math.floor(MAX_SIGNATURE_MAP_SIZE / 4)
+      Math.floor(MAX_SIGNATURE_MAP_SIZE / 4),
     );
     for (const key of keysToDelete) {
       pendingPatchSignatures.delete(key);
@@ -543,7 +544,7 @@ export const createTransportSlice: StateCreator<
             try {
               get().receiveCustomMessage(m as unknown as CustomMessage);
             } catch {}
-          })
+          }),
         );
       } catch {}
     }
@@ -616,7 +617,7 @@ export const createTransportSlice: StateCreator<
       try {
         console.warn(
           "[net] trySendPatch: queued seat-specific patch until actorKey is set",
-          { keys: Object.keys(patchObj.zones ?? {}) }
+          { keys: Object.keys(patchObj.zones ?? {}) },
         );
       } catch {}
       return false;
@@ -634,11 +635,45 @@ export const createTransportSlice: StateCreator<
         // (no filtering needed for avatars)
 
         // Zones: Only include actor's own zones - these are private
+        // EXCEPTION: Allow opponent's graveyard when Mismanaged Mortuary swap is active
         if (sanitized.zones && typeof sanitized.zones === "object") {
           const z = sanitized.zones as Partial<Record<PlayerKey, Zones>>;
           const outZ: Partial<Record<PlayerKey, Zones>> = {};
           if (actorKey && z[actorKey]) {
             outZ[actorKey] = z[actorKey] as Zones;
+          }
+          // Check if Mortuary swap redirects our graveyard to opponent
+          // If so, allow sending opponent's graveyard data
+          const mortuaries = state.specialSiteState?.mismanagedMortuaries || [];
+          if (actorKey && mortuaries.length > 0) {
+            const effectiveGraveyardSeat = getEffectiveGraveyardSeatStatic(
+              actorKey,
+              mortuaries,
+              state.permanents,
+            );
+            console.log("[trySendPatch] Mortuary check:", {
+              actorKey,
+              effectiveGraveyardSeat,
+              mortuariesCount: mortuaries.length,
+            });
+            // If our effective graveyard is opponent's, include their zones (graveyard only)
+            if (
+              effectiveGraveyardSeat !== actorKey &&
+              z[effectiveGraveyardSeat]
+            ) {
+              const oppZones = z[effectiveGraveyardSeat] as Zones;
+              console.log(
+                "[trySendPatch] Including opponent graveyard in patch:",
+                effectiveGraveyardSeat,
+                "graveyard length:",
+                oppZones.graveyard?.length,
+              );
+              // Only include the graveyard - don't expose other private zones
+              outZ[effectiveGraveyardSeat] = {
+                ...((outZ[effectiveGraveyardSeat] as Zones) || {}),
+                graveyard: oppZones.graveyard,
+              } as Zones;
+            }
           }
           if (Object.keys(outZ).length > 0) {
             sanitized.zones = outZ as GameState["zones"];
@@ -663,7 +698,7 @@ export const createTransportSlice: StateCreator<
     // Log incoming patch for debugging
     if (process.env.NODE_ENV !== "production") {
       const incomingKeys = Object.keys(sanitized).filter(
-        (k) => k !== "__replaceKeys"
+        (k) => k !== "__replaceKeys",
       );
       const hasPermanents = "permanents" in sanitized;
       const hasZones = "zones" in sanitized;
@@ -730,7 +765,7 @@ export const createTransportSlice: StateCreator<
           // Always log sent patches in dev
           if (process.env.NODE_ENV !== "production") {
             const keys = Object.keys(patchToSend).filter(
-              (k) => k !== "__replaceKeys"
+              (k) => k !== "__replaceKeys",
             );
             const hasPermanents = "permanents" in patchToSend;
             console.debug("[net] Sent batched patch:", {
@@ -795,7 +830,7 @@ export const createTransportSlice: StateCreator<
       try {
         let toSend: ServerPatchT = p as ServerPatchT;
         const replaceKeysCandidate = Array.isArray(
-          (p as ServerPatchT).__replaceKeys
+          (p as ServerPatchT).__replaceKeys,
         )
           ? (p as ServerPatchT).__replaceKeys
           : null;
