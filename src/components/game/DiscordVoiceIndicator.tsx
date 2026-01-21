@@ -16,7 +16,7 @@ export function DiscordVoiceIndicator({
   matchId,
   className = "",
 }: DiscordVoiceIndicatorProps) {
-  const [voiceUrl, setVoiceUrl] = useState<string | null>(null);
+  const [voiceUrl, _setVoiceUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {

@@ -1,4 +1,5 @@
 import type { StateCreator } from "zustand";
+import { isInterrogator } from "@/lib/game/avatarAbilities";
 import type { CustomMessage } from "@/lib/net/transport";
 import type {
   CellKey,
@@ -14,7 +15,6 @@ import {
   seatFromOwner,
   toCellKey,
 } from "./utils/boardHelpers";
-import { isInterrogator } from "@/lib/game/avatarAbilities";
 
 type CombatSlice = Pick<
   GameState,

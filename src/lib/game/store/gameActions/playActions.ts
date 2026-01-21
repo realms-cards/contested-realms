@@ -7,6 +7,7 @@ import {
   TOWER_GENESIS_SITES,
 } from "@/lib/game/mana-providers";
 import { TOKEN_BY_NAME } from "@/lib/game/tokens";
+import { isMismanagedMortuary } from "../specialSiteState";
 import type {
   CardRef,
   CellKey,
@@ -54,6 +55,13 @@ const triggerSiteGenesis = (
 ): void => {
   const lc = siteName.toLowerCase();
   const state = get();
+
+  // Mismanaged Mortuary - register cemetery swap effect
+  // "Treat your opponent's cemetery as yours, and vice versa."
+  if (isMismanagedMortuary(siteName)) {
+    state.registerMismanagedMortuary(cellKey, owner);
+    return;
+  }
 
   // Valley of Delight - trigger element choice overlay
   if (ELEMENT_CHOICE_SITES.has(lc)) {

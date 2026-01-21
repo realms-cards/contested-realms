@@ -159,4 +159,36 @@ export function useBoardHotkeys({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [store, isSpectator, overlayBlocking]);
+
+  // Spawn gem token at cursor shortcut (G)
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.repeat) return;
+      if (event.code !== "KeyG") return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (isTextInput(document.activeElement as HTMLElement | null)) {
+        return;
+      }
+      if (isSpectator || overlayBlocking) return;
+
+      const { actorKey, lastPointerWorldPos, spawnGemTokenAt } =
+        store.getState();
+      if (!actorKey) return;
+
+      event.preventDefault();
+
+      // Spawn at cursor position if available, otherwise at a default position
+      const pos = lastPointerWorldPos ?? { x: 0, z: 0 };
+      try {
+        spawnGemTokenAt("red", actorKey, { x: pos.x, y: 0, z: pos.z });
+      } catch (err) {
+        if (process.env.NODE_ENV !== "production") {
+          console.warn("[board] Failed to spawn gem via keyboard:", err);
+        }
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [store, isSpectator, overlayBlocking]);
 }

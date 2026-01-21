@@ -4,12 +4,12 @@ import { useFrame } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import { TILE_SIZE } from "@/lib/game/constants";
+import { calculate2x2AreaWithOffset } from "@/lib/game/store/atlanteanFateState";
 import type {
   CellKey,
   PendingAtlanteanFate,
   Permanents,
 } from "@/lib/game/store/types";
-import { calculate2x2AreaWithOffset } from "@/lib/game/store/atlanteanFateState";
 
 export type AtlanteanFateAreaOverlayProps = {
   tileX: number;

@@ -7,6 +7,7 @@ import {
   CONDITIONAL_THRESHOLD_SITES,
   ELEMENT_CHOICE_SITES,
   GENESIS_MANA_SITES,
+  IN_PLAY_ARTIFACT_PROVIDERS,
   MANA_PROVIDER_BY_NAME,
   MULTI_THRESHOLD_SITES,
   NON_MANA_SITE_IDENTIFIERS,
@@ -48,7 +49,7 @@ export const playerKeyToOwner = (who: PlayerKey): 1 | 2 =>
 
 const accumulateThresholds = (
   acc: Thresholds,
-  amount: Partial<Thresholds> | null | undefined
+  amount: Partial<Thresholds> | null | undefined,
 ) => {
   if (!amount || typeof amount !== "object") return;
   for (const key of THRESHOLD_KEYS) {
@@ -79,7 +80,7 @@ const hasNearbyAngelOrWard = (
   cellKey: string,
   board: BoardState,
   permanents: Permanents,
-  owner: 1 | 2
+  owner: 1 | 2,
 ): boolean => {
   const adjacent = getAdjacentCells(cellKey, board.size.w, board.size.h);
   const cellsToCheck = [cellKey, ...adjacent];
@@ -119,7 +120,7 @@ export const conditionalSiteProvides = (
   siteName: string,
   cellKey: string,
   board: BoardState,
-  permanents: Permanents
+  permanents: Permanents,
 ): boolean => {
   const lc = siteName.toLowerCase();
   const condition =
@@ -140,7 +141,7 @@ export const conditionalSiteProvides = (
 // Check if a site is flooded by Atlantean Fate
 const isSiteFloodedByAtlanteanFate = (
   cellKey: string,
-  specialSiteState?: SpecialSiteState | null
+  specialSiteState?: SpecialSiteState | null,
 ): boolean => {
   if (!specialSiteState?.atlanteanFateAuras) return false;
   for (const aura of specialSiteState.atlanteanFateAuras) {
@@ -154,7 +155,7 @@ const isSiteFloodedByAtlanteanFate = (
 // Check if a site has a Flooded token on it (from context menu flood action)
 export const siteHasFloodedToken = (
   cellKey: string,
-  permanents: Permanents
+  permanents: Permanents,
 ): boolean => {
   const permsAtCell = permanents[cellKey];
   if (!permsAtCell) return false;
@@ -168,7 +169,7 @@ export const siteHasFloodedToken = (
 // Check if a site has a Silenced token on it
 export const siteHasSilencedToken = (
   cellKey: string,
-  permanents: Permanents
+  permanents: Permanents,
 ): boolean => {
   const permsAtCell = permanents[cellKey];
   if (!permsAtCell) return false;
@@ -184,7 +185,7 @@ export const computeThresholdTotals = (
   permanents: Permanents,
   who: PlayerKey,
   avatar?: AvatarState | null,
-  specialSiteState?: SpecialSiteState | null
+  specialSiteState?: SpecialSiteState | null,
 ): Thresholds => {
   const owner = playerKeyToOwner(who);
   const boardHeight = board?.size?.h ?? 4;
@@ -230,7 +231,7 @@ export const computeThresholdTotals = (
         tile?.card ?? null,
         cellKey,
         tile?.owner ?? owner,
-        boardHeight
+        boardHeight,
       )
     )
       continue;
@@ -243,7 +244,7 @@ export const computeThresholdTotals = (
     if (ELEMENT_CHOICE_SITES.has(siteName)) {
       // Look up the choice for this site cell (each cell can only have one choice)
       const choice = specialSiteState?.valleyChoices.find(
-        (c) => c.cellKey === cellKey
+        (c) => c.cellKey === cellKey,
       );
       if (choice) {
         totals[choice.element] += 1;
@@ -295,11 +296,16 @@ export const computeThresholdTotals = (
         const nm = String(p.card?.name || "").toLowerCase();
         const grant = THRESHOLD_GRANT_BY_NAME[nm];
         if (grant) {
-          // Artifacts (like cores) only provide threshold when attached (being carried)
           const cardType = String(p.card?.type || "").toLowerCase();
           const isArtifact = cardType.includes("artifact");
-          if (isArtifact && !p.attachedTo) {
-            // Artifact not attached - does not provide threshold
+          // Cores (IN_PLAY_ARTIFACT_PROVIDERS) provide threshold while in play - no attachment needed
+          // Other artifacts only provide threshold when attached (being carried)
+          if (
+            isArtifact &&
+            !p.attachedTo &&
+            !IN_PLAY_ARTIFACT_PROVIDERS.has(nm)
+          ) {
+            // Non-core artifact not attached - does not provide threshold
             continue;
           }
           accumulateThresholds(totals, grant as Partial<Thresholds>);
@@ -313,7 +319,7 @@ export const computeThresholdTotals = (
 
 export const getCachedThresholdTotals = (
   state: GameState,
-  who: PlayerKey
+  who: PlayerKey,
 ): Thresholds => {
   // Note: Cache is disabled when special site state changes frequently
   // For now, always recompute to ensure accuracy with bloom bonuses
@@ -324,7 +330,7 @@ export const getCachedThresholdTotals = (
     state.permanents,
     who,
     avatarRef,
-    state.specialSiteState
+    state.specialSiteState,
   );
 };
 
@@ -343,7 +349,7 @@ export const siteProvidesMana = (card: CardRef | null | undefined): boolean => {
 export const isInBackRow = (
   cellKey: string,
   owner: 1 | 2,
-  boardHeight: number
+  boardHeight: number,
 ): boolean => {
   const { y } = parseCellKey(cellKey);
   // P1 (owner=1) back row is at the top (y = boardHeight - 1)
@@ -356,7 +362,7 @@ export const backRowSiteProvidesMana = (
   card: CardRef | null | undefined,
   cellKey: string,
   owner: 1 | 2,
-  boardHeight: number
+  boardHeight: number,
 ): boolean => {
   if (!card) return false;
   const name = typeof card.name === "string" ? card.name.toLowerCase() : null;
@@ -386,7 +392,7 @@ export const computeAvailableMana = (
   who: PlayerKey,
   zones?: Record<PlayerKey, Zones> | null,
   specialSiteState?: SpecialSiteState | null,
-  thresholds?: Thresholds | null
+  thresholds?: Thresholds | null,
 ): number => {
   const owner = playerKeyToOwner(who);
   const opponent: PlayerKey = who === "p1" ? "p2" : "p1";
@@ -415,7 +421,7 @@ export const computeAvailableMana = (
         tile?.card ?? null,
         cellKey,
         tile?.owner ?? owner,
-        boardHeight
+        boardHeight,
       )
     )
       continue;
@@ -428,7 +434,7 @@ export const computeAvailableMana = (
     // These provide mana only after a choice is made
     if (ELEMENT_CHOICE_SITES.has(siteName)) {
       const choice = specialSiteState?.valleyChoices.find(
-        (c) => c.cellKey === cellKey
+        (c) => c.cellKey === cellKey,
       );
       if (choice) {
         mana += 1; // Valley of Delight provides 1 mana after choice
@@ -507,10 +513,16 @@ export const computeAvailableMana = (
           mana += VOID_MANA_PROVIDERS[nm];
           continue;
         }
-        // Regular mana providers - artifacts only provide mana when attached
+        // Regular mana providers
         if (MANA_PROVIDER_BY_NAME.has(nm)) {
-          if (isArtifact && !p.attachedTo) {
-            // Artifact not attached - does not provide mana
+          // Cores (IN_PLAY_ARTIFACT_PROVIDERS) provide mana while in play - no attachment needed
+          // Other artifacts only provide mana when attached (being carried)
+          if (
+            isArtifact &&
+            !p.attachedTo &&
+            !IN_PLAY_ARTIFACT_PROVIDERS.has(nm)
+          ) {
+            // Non-core artifact not attached - does not provide mana
             continue;
           }
           mana += 1;

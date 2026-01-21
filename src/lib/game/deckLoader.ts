@@ -1,4 +1,5 @@
 import { isDuplicator, isMagician } from "@/lib/game/avatarAbilities";
+import { enrichCardRefs } from "@/lib/game/cardMetadataLoader";
 import { getSpawnedCollectionCards } from "@/lib/game/collectionSpawners";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef, Phase } from "@/lib/game/store";
@@ -13,7 +14,7 @@ type CardRefWithZone = CardRef & { __zone?: string | null };
  */
 function validateDuplicatorDeck(
   spellbook: CardRef[],
-  atlas: CardRef[]
+  atlas: CardRef[],
 ): { valid: boolean; error?: string } {
   // Count occurrences of each card name across both zones
   const cardCounts = new Map<string, number>();
@@ -41,7 +42,7 @@ function validateDuplicatorDeck(
     return {
       valid: false,
       error: `Duplicator deck must contain matching pairs of Uniques. Invalid: ${sample.join(
-        ", "
+        ", ",
       )}${more}`,
     };
   }
@@ -68,7 +69,7 @@ function validateDuplicatorDeck(
 export async function loadDeckFor(
   who: "p1" | "p2",
   deckId: string,
-  setError: (error: string) => void
+  setError: (error: string) => void,
 ): Promise<boolean> {
   if (!deckId) return false;
 
@@ -89,26 +90,34 @@ export async function loadDeckFor(
       `[loadDeckFor] ${who} API response atlas sites:`,
       (data?.atlas || [])
         .filter((c: { type?: string }) =>
-          c?.type?.toLowerCase().includes("site")
+          c?.type?.toLowerCase().includes("site"),
         )
         .map((c: { name?: string; thresholds?: unknown }) => ({
           name: c?.name,
           thresholds: c?.thresholds,
-        }))
+        })),
     );
 
     // Pre-cache card images in the background for offline play
     preCacheDeckFromResponse(data);
 
-    const rawSpellbook: CardRef[] = Array.isArray(data?.spellbook)
+    // Load and enrich cards with full metadata from service worker cache
+    let rawSpellbook: CardRef[] = Array.isArray(data?.spellbook)
       ? (data.spellbook as CardRef[])
       : [];
-    const rawAtlas: CardRef[] = Array.isArray(data?.atlas)
+    let rawAtlas: CardRef[] = Array.isArray(data?.atlas)
       ? (data.atlas as CardRef[])
       : [];
-    const rawCollection: CardRef[] = Array.isArray(data?.collection)
+    let rawCollection: CardRef[] = Array.isArray(data?.collection)
       ? (data.collection as CardRef[])
       : [];
+
+    // Enrich all cards with full metadata (text, attack, defence, rarity)
+    [rawSpellbook, rawAtlas, rawCollection] = await Promise.all([
+      enrichCardRefs(rawSpellbook),
+      enrichCardRefs(rawAtlas),
+      enrichCardRefs(rawCollection),
+    ]);
 
     const isAvatar = (c: CardRef) =>
       typeof c?.type === "string" && c.type.toLowerCase().includes("avatar");
@@ -118,7 +127,7 @@ export async function loadDeckFor(
       setError(
         avatars.length === 0
           ? "Deck requires exactly 1 Avatar"
-          : "Deck has multiple Avatars. Keep only one."
+          : "Deck has multiple Avatars. Keep only one.",
       );
       return false;
     }
@@ -205,7 +214,7 @@ export function setPhase(phase: Phase) {
 export async function loadSealedDeckFor(
   who: "p1" | "p2",
   deckData: unknown,
-  setError: (error: string) => void
+  setError: (error: string) => void,
 ): Promise<boolean> {
   if (!deckData) return false;
 
@@ -219,7 +228,7 @@ export async function loadSealedDeckFor(
     }
 
     // Convert incoming card format to CardRef format (support optional zone for constructed decks)
-    const cards: CardRefWithZone[] = sealedCards.map(
+    let cards: CardRefWithZone[] = sealedCards.map(
       (card: Record<string, unknown>) => {
         const zoneRaw = (card.zone as string | null) || null;
         const zone = typeof zoneRaw === "string" ? zoneRaw.toLowerCase() : null;
@@ -232,8 +241,11 @@ export async function loadSealedDeckFor(
           thresholds: (card.thresholds as Record<string, number>) || null,
           __zone: zone,
         };
-      }
+      },
     );
+
+    // Enrich all cards with full metadata (text, attack, defence, rarity)
+    cards = await enrichCardRefs(cards);
 
     // Separate cards by type
     const isAvatar = (c: CardRef) => {
@@ -241,7 +253,7 @@ export async function loadSealedDeckFor(
         if (c.name && c.name.toLowerCase().includes("avatar")) {
           console.warn(
             "[loadSealedDeckFor] Card with 'avatar' in name but empty/null type:",
-            { name: c.name, type: c.type }
+            { name: c.name, type: c.type },
           );
         }
         return false;
@@ -260,7 +272,7 @@ export async function loadSealedDeckFor(
     // Only count avatars that are NOT in the collection zone
     // For sealed/draft, collection contains unplayed cards from the card pool (including extra avatars)
     const avatars = cards.filter(
-      (c: CardRefWithZone) => isAvatar(c) && c.__zone !== "collection"
+      (c: CardRefWithZone) => isAvatar(c) && c.__zone !== "collection",
     );
 
     if (anyZonesProvided) {
@@ -268,13 +280,13 @@ export async function loadSealedDeckFor(
       // Cards without zones (null) fall back to type-based classification
       const atlasZ: CardRefWithZone[] = cards.filter(
         (c: CardRefWithZone) =>
-          c.__zone === "atlas" || (c.__zone == null && isSite(c))
+          c.__zone === "atlas" || (c.__zone == null && isSite(c)),
       );
       const spellZ: CardRefWithZone[] = cards.filter(
         (c: CardRefWithZone) =>
           c.__zone === "spellbook" ||
           c.__zone === "spell" ||
-          (c.__zone == null && !isSite(c) && !isAvatar(c))
+          (c.__zone == null && !isSite(c) && !isAvatar(c)),
       );
       rawAtlas = atlasZ;
       // Exclude avatar from spellbook later using isAvatar
@@ -296,7 +308,7 @@ export async function loadSealedDeckFor(
       avatar = avatars[0];
     } else {
       console.warn(
-        "[loadSealedDeckFor] No avatar found in deck - this is OK for draft/sealed tournament matches during deck construction"
+        "[loadSealedDeckFor] No avatar found in deck - this is OK for draft/sealed tournament matches during deck construction",
       );
     }
 
@@ -332,7 +344,7 @@ export async function loadSealedDeckFor(
           spellbookCount: spellbook.length,
           avatarsCount: avatars.length,
           totalCards: cards.length,
-        }
+        },
       );
       setError("Sealed deck needs at least 24 cards (excluding Avatar)");
       return false;
@@ -367,7 +379,7 @@ export async function loadSealedDeckFor(
     if (submittedCollectionCards.length > 0) {
       console.debug(
         `[loadSealedDeckFor] Found ${submittedCollectionCards.length} collection cards from sideboard:`,
-        submittedCollectionCards.map((c) => c.name)
+        submittedCollectionCards.map((c) => c.name),
       );
     }
 
@@ -382,13 +394,13 @@ export async function loadSealedDeckFor(
     if (spawnedCardNames.length > 0) {
       console.debug(
         "[loadSealedDeckFor] Injecting spawner collection cards:",
-        spawnedCardNames
+        spawnedCardNames,
       );
       try {
         // Fetch card metadata for spawned cards
         const searchPromises = spawnedCardNames.map(async (name) => {
           const res = await fetch(
-            `/api/cards/search?q=${encodeURIComponent(name)}`
+            `/api/cards/search?q=${encodeURIComponent(name)}`,
           );
           if (!res.ok) return null;
           const results = (await res.json()) as Array<{
@@ -400,11 +412,11 @@ export async function loadSealedDeckFor(
           }>;
           // Find exact match by name (case-insensitive)
           const match = results.find(
-            (r) => r.cardName.toLowerCase() === name.toLowerCase()
+            (r) => r.cardName.toLowerCase() === name.toLowerCase(),
           );
           if (!match) {
             console.warn(
-              `[loadSealedDeckFor] Could not find card "${name}" for collection`
+              `[loadSealedDeckFor] Could not find card "${name}" for collection`,
             );
             return null;
           }
@@ -419,16 +431,18 @@ export async function loadSealedDeckFor(
         });
 
         const fetchedCards = await Promise.all(searchPromises);
-        spawnedCollection = fetchedCards.filter(
-          (c): c is CardRef => c !== null
+        const filteredCards = fetchedCards.filter(
+          (c): c is CardRef => c !== null,
         );
+        // Enrich spawned collection cards with full metadata
+        spawnedCollection = await enrichCardRefs(filteredCards);
         console.debug(
-          `[loadSealedDeckFor] Injected ${spawnedCollection.length} spawner collection cards`
+          `[loadSealedDeckFor] Injected ${spawnedCollection.length} spawner collection cards`,
         );
       } catch (e) {
         console.error(
           "[loadSealedDeckFor] Failed to fetch spawner collection cards:",
-          e
+          e,
         );
         // Continue without spawner cards - not critical
       }
@@ -440,7 +454,7 @@ export async function loadSealedDeckFor(
       ...spawnedCollection,
     ];
     console.debug(
-      `[loadSealedDeckFor] Total collection: ${collection.length} cards (${submittedCollectionCards.length} from sideboard, ${spawnedCollection.length} from spawners)`
+      `[loadSealedDeckFor] Total collection: ${collection.length} cards (${submittedCollectionCards.length} from sideboard, ${spawnedCollection.length} from spawners)`,
     );
 
     initLibraries(who, spellbook, rawAtlas, collection);
@@ -470,7 +484,7 @@ export async function loadSealedDeckFor(
 export async function loadTournamentConstructedDeck(
   who: "p1" | "p2",
   deckData: unknown,
-  setError: (error: string) => void
+  setError: (error: string) => void,
 ): Promise<boolean> {
   if (!deckData || typeof deckData !== "object") return false;
 
@@ -483,8 +497,8 @@ export async function loadTournamentConstructedDeck(
 
     // Convert database deck format to CardRef format
     // Group cards by zone (spellbook/atlas)
-    const rawSpellbook: CardRef[] = [];
-    const rawAtlas: CardRef[] = [];
+    let rawSpellbook: CardRef[] = [];
+    let rawAtlas: CardRef[] = [];
 
     for (const deckCard of deck.cards) {
       const card = deckCard.card as Record<string, unknown>;
@@ -512,6 +526,12 @@ export async function loadTournamentConstructedDeck(
       }
     }
 
+    // Enrich all cards with full metadata (text, attack, defence, rarity)
+    [rawSpellbook, rawAtlas] = await Promise.all([
+      enrichCardRefs(rawSpellbook),
+      enrichCardRefs(rawAtlas),
+    ]);
+
     // Validate and separate
     const isAvatar = (c: CardRef) =>
       typeof c?.type === "string" && c.type.toLowerCase().includes("avatar");
@@ -522,7 +542,7 @@ export async function loadTournamentConstructedDeck(
       setError(
         avatars.length === 0
           ? "Deck requires exactly 1 Avatar"
-          : "Deck has multiple Avatars. Keep only one."
+          : "Deck has multiple Avatars. Keep only one.",
       );
       return false;
     }

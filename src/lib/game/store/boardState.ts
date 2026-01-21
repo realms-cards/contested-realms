@@ -4,6 +4,7 @@ import {
   tokenSlug,
   newTokenInstanceId,
 } from "@/lib/game/tokens";
+import { getEffectiveGraveyardSeatStatic } from "./specialSiteState";
 import type { GameState, PlayerKey, ServerPatchT, Zones } from "./types";
 import { getCellNumber, seatFromOwner, toCellKey } from "./utils/boardHelpers";
 import { prepareCardForSeat } from "./utils/cardHelpers";
@@ -33,7 +34,7 @@ type BoardSlice = Pick<
 
 export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
   set,
-  get
+  get,
 ) => ({
   board: createInitialBoard(),
 
@@ -70,13 +71,48 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
       delete sites[key];
       const zones = { ...state.zones } as Record<PlayerKey, Zones>;
       const z = { ...zones[owner] };
+
+      // Check for Mismanaged Mortuary cemetery swap (silenced mortuaries don't apply)
+      const mortuaries = state.specialSiteState.mismanagedMortuaries;
+      const effectiveGraveyardSeat = getEffectiveGraveyardSeatStatic(
+        owner,
+        mortuaries,
+        state.permanents,
+      );
+
       const movedSiteCard = site.card
         ? prepareCardForSeat(site.card, owner)
         : site.card;
       if (target === "hand" && movedSiteCard) {
         z.hand = [...z.hand, movedSiteCard];
       } else if (target === "graveyard" && movedSiteCard) {
-        z.graveyard = [movedSiteCard, ...z.graveyard];
+        // Route to effective graveyard (may be swapped due to Mismanaged Mortuary)
+        if (effectiveGraveyardSeat !== owner) {
+          // Cemetery is swapped - route to opponent's graveyard
+          let oppZones: Zones;
+          if (
+            zones[effectiveGraveyardSeat] ===
+            state.zones[effectiveGraveyardSeat]
+          ) {
+            oppZones = {
+              spellbook: [...state.zones[effectiveGraveyardSeat].spellbook],
+              atlas: [...state.zones[effectiveGraveyardSeat].atlas],
+              hand: [...state.zones[effectiveGraveyardSeat].hand],
+              graveyard: [...state.zones[effectiveGraveyardSeat].graveyard],
+              battlefield: [...state.zones[effectiveGraveyardSeat].battlefield],
+              collection: [...state.zones[effectiveGraveyardSeat].collection],
+              banished: [
+                ...(state.zones[effectiveGraveyardSeat].banished || []),
+              ],
+            };
+          } else {
+            oppZones = { ...zones[effectiveGraveyardSeat] };
+          }
+          oppZones.graveyard = [movedSiteCard, ...oppZones.graveyard];
+          zones[effectiveGraveyardSeat] = oppZones;
+        } else {
+          z.graveyard = [movedSiteCard, ...z.graveyard];
+        }
       } else if (target === "atlas" && movedSiteCard) {
         const pile = [...z.atlas];
         if (position === "top") pile.unshift(movedSiteCard);
@@ -86,26 +122,31 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
         z.banished = [...z.banished, movedSiteCard];
       }
       zones[owner] = z;
+      // Track affected seats for zone patch (include swapped graveyard seat)
+      const affectedSeats: PlayerKey[] = [owner];
+      if (target === "graveyard" && effectiveGraveyardSeat !== owner) {
+        affectedSeats.push(effectiveGraveyardSeat);
+      }
       const cellNo = getCellNumber(x, y, state.board.size.w);
       const label =
         target === "hand"
           ? "hand"
           : target === "graveyard"
-          ? "cemetery"
-          : target === "atlas"
-          ? "atlas"
-          : "banished";
+            ? "cemetery"
+            : target === "atlas"
+              ? "atlas"
+              : "banished";
       const playerNum = owner === "p1" ? "1" : "2";
       const zoneLabel =
         label === "hand"
           ? "hand"
           : label === "cemetery"
-          ? "cemetery"
-          : label === "atlas"
-          ? "Atlas"
-          : "banished";
+            ? "cemetery"
+            : label === "atlas"
+              ? "Atlas"
+              : "banished";
       get().log(
-        `[p${playerNum}:PLAYER] moved site [p${playerNum}card:${site.card.name}] from #${cellNo} to ${zoneLabel}`
+        `[p${playerNum}:PLAYER] moved site [p${playerNum}card:${site.card.name}] from #${cellNo} to ${zoneLabel}`,
       );
       // Broadcast toast to both players
       const toastMessage = `[p${playerNum}:PLAYER] moved [p${playerNum}card:${site.card.name}] to ${zoneLabel}`;
@@ -116,10 +157,28 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
         // This is necessary because deepMergeReplaceArrays won't remove keys
         // that are missing from the patch - it only updates present keys
         const sitesPatch: Record<string, unknown> = { [key]: null };
+        // Use createZonesPatchFor with affected seats for proper sync
+        const zonePatch = createZonesPatchFor(
+          zones as GameState["zones"],
+          affectedSeats,
+        );
+        console.log(
+          "[moveSiteToZone] affectedSeats:",
+          affectedSeats,
+          "effectiveGraveyardSeat:",
+          effectiveGraveyardSeat,
+          "owner:",
+          owner,
+        );
+        console.log("[moveSiteToZone] zonePatch:", zonePatch);
         const patch: ServerPatchT = {
           board: { ...boardNext, sites: sitesPatch as typeof boardNext.sites },
-          zones: zones as GameState["zones"],
+          ...(zonePatch?.zones ? { zones: zonePatch.zones } : {}),
         };
+        console.log(
+          "[moveSiteToZone] final patch zones keys:",
+          patch.zones ? Object.keys(patch.zones) : "none",
+        );
         get().trySendPatch(patch);
         try {
           tr.sendMessage?.({
@@ -135,11 +194,18 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
             window.dispatchEvent(
               new CustomEvent("app:toast", {
                 detail: { message: toastMessage },
-              })
+              }),
             );
           }
         } catch {}
       }
+
+      // Remove any special site effects (e.g., Mismanaged Mortuary cemetery swap)
+      // Must be called after state update via setTimeout
+      setTimeout(() => {
+        get().removeSiteChoice(key);
+      }, 0);
+
       return {
         board: boardNext,
         zones,
@@ -175,16 +241,54 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
       const sites = { ...state.board.sites };
       delete sites[key];
 
-      // Add site card to graveyard
+      // Check for Mismanaged Mortuary cemetery swap (silenced mortuaries don't apply)
+      const mortuaries = state.specialSiteState.mismanagedMortuaries;
+      const effectiveGraveyardSeat = getEffectiveGraveyardSeatStatic(
+        owner,
+        mortuaries,
+        state.permanents,
+      );
+
+      // Add site card to graveyard (may be swapped due to Mismanaged Mortuary)
       const zones = { ...state.zones } as Record<PlayerKey, Zones>;
       const z = { ...zones[owner] };
       const movedSiteCard = site.card
         ? prepareCardForSeat(site.card, owner)
         : site.card;
       if (movedSiteCard) {
-        z.graveyard = [movedSiteCard, ...z.graveyard];
+        if (effectiveGraveyardSeat !== owner) {
+          // Cemetery is swapped - route to opponent's graveyard
+          let oppZones: Zones;
+          if (
+            zones[effectiveGraveyardSeat] ===
+            state.zones[effectiveGraveyardSeat]
+          ) {
+            oppZones = {
+              spellbook: [...state.zones[effectiveGraveyardSeat].spellbook],
+              atlas: [...state.zones[effectiveGraveyardSeat].atlas],
+              hand: [...state.zones[effectiveGraveyardSeat].hand],
+              graveyard: [...state.zones[effectiveGraveyardSeat].graveyard],
+              battlefield: [...state.zones[effectiveGraveyardSeat].battlefield],
+              collection: [...state.zones[effectiveGraveyardSeat].collection],
+              banished: [
+                ...(state.zones[effectiveGraveyardSeat].banished || []),
+              ],
+            };
+          } else {
+            oppZones = { ...zones[effectiveGraveyardSeat] };
+          }
+          oppZones.graveyard = [movedSiteCard, ...oppZones.graveyard];
+          zones[effectiveGraveyardSeat] = oppZones;
+        } else {
+          z.graveyard = [movedSiteCard, ...z.graveyard];
+        }
       }
       zones[owner] = z;
+      // Track affected seats for zone patch (include swapped graveyard seat)
+      const affectedSeats: PlayerKey[] = [owner];
+      if (effectiveGraveyardSeat !== owner) {
+        affectedSeats.push(effectiveGraveyardSeat);
+      }
 
       // Optionally place Rubble token
       let permanentsNext = state.permanents;
@@ -200,7 +304,7 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
               slug: tokenSlug(rubbleDef),
               thresholds: null,
             },
-            owner
+            owner,
           );
           permanentsNext = { ...state.permanents };
           const arr = [...(permanentsNext[key] || [])];
@@ -220,8 +324,8 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
             `[p${playerNum}:PLAYER] places [p${playerNum}card:Rubble] at #${getCellNumber(
               x,
               y,
-              state.board.size.w
-            )}`
+              state.board.size.w,
+            )}`,
           );
         }
       }
@@ -229,7 +333,7 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
       const cellNo = getCellNumber(x, y, state.board.size.w);
       const playerNum = owner === "p1" ? "1" : "2";
       get().log(
-        `[p${playerNum}:PLAYER] moved site [p${playerNum}card:${site.card.name}] from #${cellNo} to cemetery`
+        `[p${playerNum}:PLAYER] moved site [p${playerNum}card:${site.card.name}] from #${cellNo} to cemetery`,
       );
 
       const boardNext = { ...state.board, sites } as GameState["board"];
@@ -241,9 +345,14 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
         // This is necessary because deepMergeReplaceArrays won't remove keys
         // that are missing from the patch - it only updates present keys
         const sitesPatch: Record<string, unknown> = { [key]: null };
+        // Use createZonesPatchFor with affected seats for proper sync
+        const zonePatch = createZonesPatchFor(
+          zones as GameState["zones"],
+          affectedSeats,
+        );
         const patch: ServerPatchT = {
           board: { ...boardNext, sites: sitesPatch as typeof boardNext.sites },
-          zones: zones as GameState["zones"],
+          ...(zonePatch?.zones ? { zones: zonePatch.zones } : {}),
           ...(placeRubble ? { permanents: permanentsNext } : {}),
         };
         get().trySendPatch(patch);
@@ -269,11 +378,17 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
             window.dispatchEvent(
               new CustomEvent("app:toast", {
                 detail: { message: toastMessage },
-              })
+              }),
             );
           }
         } catch {}
       }
+
+      // Remove any special site effects (e.g., Mismanaged Mortuary cemetery swap)
+      // Must be called after state update via setTimeout
+      setTimeout(() => {
+        get().removeSiteChoice(key);
+      }, 0);
 
       return {
         board: boardNext,
@@ -325,7 +440,7 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
           slug: tokenSlug(floodedDef),
           thresholds: null,
         },
-        owner
+        owner,
       );
 
       const permanentsNext = { ...state.permanents };
@@ -345,7 +460,7 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
       const cellNo = getCellNumber(x, y, state.board.size.w);
       const playerNum = owner === "p1" ? "1" : "2";
       get().log(
-        `[p${playerNum}:PLAYER] places [p${playerNum}card:Flooded] on site at #${cellNo}`
+        `[p${playerNum}:PLAYER] places [p${playerNum}card:Flooded] on site at #${cellNo}`,
       );
 
       // Send patch
@@ -374,7 +489,7 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
             window.dispatchEvent(
               new CustomEvent("app:toast", {
                 detail: { message: toastMessage, cellKey: key },
-              })
+              }),
             );
           }
         } catch {}
@@ -428,7 +543,7 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
           slug: tokenSlug(silencedDef),
           thresholds: null,
         },
-        owner
+        owner,
       );
 
       const permanentsNext = { ...state.permanents };
@@ -448,7 +563,7 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
       const cellNo = getCellNumber(x, y, state.board.size.w);
       const playerNum = owner === "p1" ? "1" : "2";
       get().log(
-        `[p${playerNum}:PLAYER] places [p${playerNum}card:Silenced] on site at #${cellNo}`
+        `[p${playerNum}:PLAYER] places [p${playerNum}card:Silenced] on site at #${cellNo}`,
       );
 
       // Send patch
@@ -477,7 +592,7 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
             window.dispatchEvent(
               new CustomEvent("app:toast", {
                 detail: { message: toastMessage, cellKey: key },
-              })
+              }),
             );
           }
         } catch {}
@@ -518,7 +633,7 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
       if (updatedSiteCard?.instanceId) {
         const removal = removeCardInstanceFromAllZones(
           state.zones,
-          updatedSiteCard.instanceId
+          updatedSiteCard.instanceId,
         );
         if (removal) {
           zonesNext = removal.zones;
@@ -527,15 +642,15 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
       }
       const zonePatch = createZonesPatchFor(
         zonesNext as GameState["zones"],
-        changedSeats.length ? changedSeats : [newOwnerSeat]
+        changedSeats.length ? changedSeats : [newOwnerSeat],
       );
       const boardNext = { ...state.board, sites } as GameState["board"];
       get().log(
         `Site at #${getCellNumber(
           x,
           y,
-          state.board.size.w
-        )} transfers to P${newOwner}`
+          state.board.size.w,
+        )} transfers to P${newOwner}`,
       );
       const tr = get().transport;
       if (tr) {
@@ -639,11 +754,11 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
 
       if (isSwap) {
         get().log(
-          `Switched site positions: #${sourceCellNo} <-> #${targetCellNo}`
+          `Switched site positions: #${sourceCellNo} <-> #${targetCellNo}`,
         );
       } else {
         get().log(
-          `Moved site from #${sourceCellNo} to void at #${targetCellNo}`
+          `Moved site from #${sourceCellNo} to void at #${targetCellNo}`,
         );
       }
 

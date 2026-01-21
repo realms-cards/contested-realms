@@ -1,6 +1,6 @@
 import type { StateCreator } from "zustand";
-import type { CustomMessage } from "@/lib/net/transport";
 import { isMephistopheles } from "@/lib/game/avatarAbilities";
+import type { CustomMessage } from "@/lib/net/transport";
 import type { CardRef, CellKey, GameState, PlayerKey } from "./types";
 
 function newMephistophelesId() {

@@ -18,6 +18,7 @@ type HistorySlice = Pick<
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 
 const buildSnapshot = (state: GameState): SerializedGame => ({
+  snapshotTs: Date.now(),
   actorKey: state.actorKey ?? null,
   players: clone(state.players),
   currentPlayer: state.currentPlayer,
@@ -47,8 +48,62 @@ const buildSnapshot = (state: GameState): SerializedGame => ({
   portalState: state.portalState ? clone(state.portalState) : null,
 });
 
+// Build permanents patch for undo: restores only OWN permanents.
+// IMPORTANT: Opponent CAN act during our turn (move/tap cards, response cards),
+// so their permanents in our snapshot may be stale. We only restore our own
+// permanents to avoid overwriting opponent's valid actions.
+// Trade-off: Effects we had on opponent's permanents won't be undone,
+// but at least we won't corrupt their state.
+const buildPermanentsPatchForUndo = (
+  snapshotPermanents: GameState["permanents"],
+  currentPermanents: GameState["permanents"],
+  ownerNum: 1 | 2,
+): GameState["permanents"] => {
+  // Map instanceId -> cellKey from snapshot for OUR permanents only
+  const snapshotIdToCell = new Map<string, string>();
+  for (const [cellKey, items] of Object.entries(snapshotPermanents)) {
+    if (!Array.isArray(items)) continue;
+    for (const item of items) {
+      if (item.instanceId && item.owner === ownerNum) {
+        snapshotIdToCell.set(item.instanceId, cellKey);
+      }
+    }
+  }
+
+  // Start with OUR permanents from snapshot only
+  const result: GameState["permanents"] = {};
+  for (const [cellKey, items] of Object.entries(snapshotPermanents)) {
+    if (!Array.isArray(items)) continue;
+    const ours = items.filter((item) => item.owner === ownerNum);
+    if (ours.length > 0) {
+      result[cellKey] = clone(ours);
+    }
+  }
+
+  // Find OUR current permanents that need removal:
+  // 1. Our permanents not in snapshot (played after snapshot)
+  // 2. Our permanents that MOVED to a different cell (e.g., artifact dropped then attached)
+  for (const [cellKey, items] of Object.entries(currentPermanents)) {
+    if (!Array.isArray(items)) continue;
+    for (const item of items) {
+      if (!item.instanceId || item.owner !== ownerNum) continue;
+      const snapshotCell = snapshotIdToCell.get(item.instanceId);
+      // Mark for removal if: not in snapshot OR in a different cell than snapshot
+      if (!snapshotCell || snapshotCell !== cellKey) {
+        if (!result[cellKey]) result[cellKey] = [];
+        result[cellKey].push({
+          ...item,
+          __remove: true,
+        } as typeof item);
+      }
+    }
+  }
+
+  return result;
+};
+
 const sanitizeBoardSitesForUndo = (
-  board: GameState["board"] | undefined
+  board: GameState["board"] | undefined,
 ): GameState["board"] | undefined => {
   if (!board || typeof board !== "object") return board;
   const sitesPrev = board.sites;
@@ -116,6 +171,46 @@ export const createHistorySlice: StateCreator<
 
   undo: () =>
     set((state) => {
+      // PRODUCTION HARDENING: Block undo during critical game phases
+      // to prevent state corruption or desync issues
+
+      // Block during active combat
+      if (state.pendingCombat) {
+        try {
+          get().log("Cannot undo during active combat");
+        } catch {}
+        return state as GameState;
+      }
+
+      // Block during mulligan phase (before mulligan decision made)
+      const me = state.actorKey as PlayerKey | null;
+      if (me && state.phase === "Setup" && state.mulligans[me] === 0) {
+        try {
+          get().log("Cannot undo during mulligan phase");
+        } catch {}
+        return state as GameState;
+      }
+
+      // Block during active spell/ability resolution phases
+      // Check for any pending resolution that could cause issues if undone mid-resolution
+      const hasPendingResolution =
+        state.pendingMagic ||
+        state.pendingChaosTwister?.phase === "minigame" ||
+        state.pendingBrowse?.phase === "viewing" ||
+        state.pendingBrowse?.phase === "ordering" ||
+        state.pendingSearingTruth?.phase === "revealing" ||
+        state.pendingAccusation?.phase === "selecting" ||
+        state.pendingInterrogatorChoice?.phase === "pending" ||
+        state.pendingAnimistCast ||
+        state.pendingHeadlessHauntMove?.phase === "choosing";
+
+      if (hasPendingResolution) {
+        try {
+          get().log("Cannot undo while resolving a card effect");
+        } catch {}
+        return state as GameState;
+      }
+
       const hb = { ...state.historyByPlayer } as Record<
         PlayerKey,
         SerializedGame[]
@@ -185,7 +280,7 @@ export const createHistorySlice: StateCreator<
                   lastServerTs: state.lastServerTs,
                   lastLocalActionTs: state.lastLocalActionTs,
                   retries: undoRetryCount,
-                }
+                },
               );
             } catch {}
             undoRetryCount = 0;
@@ -198,7 +293,7 @@ export const createHistorySlice: StateCreator<
                   lastServerTs: state.lastServerTs,
                   lastLocalActionTs: state.lastLocalActionTs,
                   retryCount: undoRetryCount,
-                }
+                },
               );
             } catch {}
             setTimeout(() => {
@@ -215,36 +310,48 @@ export const createHistorySlice: StateCreator<
 
         const perCount = Object.values(prev.permanents || {}).reduce(
           (a, v) => a + (Array.isArray(v) ? v.length : 0),
-          0
+          0,
         );
 
         const boardForUndo = sanitizeBoardSitesForUndo(prev.board);
 
-        // Only restore our own zones, preserve opponent's current zones
-        // to avoid undoing their draws/actions
+        // CRITICAL FIX: Only restore our own seat's data in the patch.
+        // We do NOT include opponent data and do NOT use __replaceKeys for
+        // player-specific fields. This ensures opponent's state is preserved
+        // via merge logic rather than being replaced with our stale view.
         const me = state.actorKey as PlayerKey;
-        const opponent: PlayerKey = me === "p1" ? "p2" : "p1";
+
+        // For player-specific data, we only send OUR seat's snapshot data.
+        // The applyServerPatch merge logic will only update our seat.
         const zonesForUndo = {
           [me]: prev.zones[me],
-          [opponent]: state.zones[opponent],
-        } as Record<PlayerKey, typeof prev.zones.p1>;
+        } as Partial<Record<PlayerKey, typeof prev.zones.p1>>;
 
-        // Similarly, only restore our own mulligan state
         const mulligansForUndo = {
           [me]: prev.mulligans[me],
-          [opponent]: state.mulligans[opponent],
-        } as Record<PlayerKey, number>;
+        } as Partial<Record<PlayerKey, number>>;
         const mulliganDrawnForUndo = {
           [me]: prev.mulliganDrawn[me],
-          [opponent]: state.mulliganDrawn[opponent],
-        } as Record<PlayerKey, typeof prev.mulliganDrawn.p1>;
+        } as Partial<Record<PlayerKey, typeof prev.mulliganDrawn.p1>>;
 
-        // Similarly, only restore our own avatar state
         const avatarsForUndo = {
           [me]: prev.avatars[me],
-          [opponent]: state.avatars[opponent],
-        } as Record<PlayerKey, typeof prev.avatars.p1>;
+        } as Partial<Record<PlayerKey, typeof prev.avatars.p1>>;
 
+        // CRITICAL FIX: Build permanents patch with proper removal markers.
+        // Only restore OWN permanents - opponent can act during our turn
+        // (move/tap cards, response cards), so their state may have changed.
+        const myOwnerNum = me === "p1" ? 1 : 2;
+        const permanentsForUndo = buildPermanentsPatchForUndo(
+          prev.permanents,
+          state.permanents,
+          myOwnerNum as 1 | 2,
+        );
+
+        // CRITICAL: Do NOT include zones, avatars, mulligans, mulliganDrawn,
+        // permanents, permanentPositions, permanentAbilities in __replaceKeys!
+        // These contain player-specific data and should be MERGED,
+        // not replaced. This prevents wiping opponent's state with our stale view.
         const patch: ServerPatchT = {
           players: prev.players,
           currentPlayer: prev.currentPlayer,
@@ -255,7 +362,7 @@ export const createHistorySlice: StateCreator<
           board: boardForUndo,
           zones: zonesForUndo,
           avatars: avatarsForUndo,
-          permanents: prev.permanents,
+          permanents: permanentsForUndo,
           mulligans: mulligansForUndo,
           mulliganDrawn: mulliganDrawnForUndo,
           permanentPositions: prev.permanentPositions,
@@ -265,7 +372,11 @@ export const createHistorySlice: StateCreator<
           events: prev.events,
           eventSeq: prev.eventSeq,
           portalState: prev.portalState,
+          // REPLAY TRUNCATION: Tell server to remove actions after this timestamp
+          // This ensures replays don't include the undone actions
+          __snapshotTs: prev.snapshotTs,
           __replaceKeys: [
+            // Shared game state - safe to replace
             "players",
             "currentPlayer",
             "turn",
@@ -273,18 +384,14 @@ export const createHistorySlice: StateCreator<
             "d20Rolls",
             "setupWinner",
             "board",
-            "zones",
-            "avatars",
-            "permanents",
-            "mulligans",
-            "mulliganDrawn",
-            "permanentPositions",
-            "permanentAbilities",
             "sitePositions",
             "playerPositions",
             "events",
             "eventSeq",
             "portalState",
+            // NOTE: zones, avatars, mulligans, mulliganDrawn, permanents,
+            // permanentPositions, permanentAbilities are NOT here!
+            // They contain player-specific data and will be MERGED to preserve opponent state.
           ],
         } as ServerPatchT;
         try {
@@ -294,12 +401,60 @@ export const createHistorySlice: StateCreator<
               keys: patch.__replaceKeys,
               eventSeq: patch.eventSeq,
               permanentsCount: perCount,
-            }
+            },
           );
         } catch {}
         get().trySendPatch(patch);
 
         // Also apply state locally (don't just wait for server echo)
+        // For local application, we DO want full zones (preserving opponent)
+        const opponent: PlayerKey = me === "p1" ? "p2" : "p1";
+        const localZones = {
+          [me]: prev.zones[me],
+          [opponent]: state.zones[opponent],
+        } as Record<PlayerKey, typeof prev.zones.p1>;
+        const localAvatars = {
+          [me]: prev.avatars[me],
+          [opponent]: state.avatars[opponent],
+        } as Record<PlayerKey, typeof prev.avatars.p1>;
+        const localMulligans = {
+          [me]: prev.mulligans[me],
+          [opponent]: state.mulligans[opponent],
+        } as Record<PlayerKey, number>;
+        const localMulliganDrawn = {
+          [me]: prev.mulliganDrawn[me],
+          [opponent]: state.mulliganDrawn[opponent],
+        } as Record<PlayerKey, typeof prev.mulliganDrawn.p1>;
+
+        // Merge permanents: our snapshot permanents + opponent's current permanents.
+        // Opponent can act during our turn, so we preserve their current state.
+        const opponentOwnerNum = me === "p1" ? 2 : 1;
+        const localPermanents: GameState["permanents"] = {};
+        // Add our permanents from snapshot
+        for (const [cellKey, items] of Object.entries(prev.permanents)) {
+          if (!Array.isArray(items)) continue;
+          const ours = items.filter((item) => item.owner === myOwnerNum);
+          if (ours.length > 0) {
+            localPermanents[cellKey] = [
+              ...(localPermanents[cellKey] || []),
+              ...ours,
+            ];
+          }
+        }
+        // Add opponent's permanents from current state
+        for (const [cellKey, items] of Object.entries(state.permanents)) {
+          if (!Array.isArray(items)) continue;
+          const theirs = items.filter(
+            (item) => item.owner === opponentOwnerNum,
+          );
+          if (theirs.length > 0) {
+            localPermanents[cellKey] = [
+              ...(localPermanents[cellKey] || []),
+              ...theirs,
+            ];
+          }
+        }
+
         return {
           history: historyNext ?? state.history,
           historyByPlayer: hb as GameState["historyByPlayer"],
@@ -310,11 +465,11 @@ export const createHistorySlice: StateCreator<
           d20Rolls: prev.d20Rolls,
           setupWinner: prev.setupWinner,
           board: boardForUndo,
-          zones: zonesForUndo,
-          avatars: avatarsForUndo,
-          permanents: prev.permanents,
-          mulligans: mulligansForUndo,
-          mulliganDrawn: mulliganDrawnForUndo,
+          zones: localZones,
+          avatars: localAvatars,
+          permanents: localPermanents,
+          mulligans: localMulligans,
+          mulliganDrawn: localMulliganDrawn,
           permanentPositions: prev.permanentPositions,
           permanentAbilities: prev.permanentAbilities,
           sitePositions: prev.sitePositions,

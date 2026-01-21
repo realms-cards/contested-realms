@@ -159,7 +159,7 @@ function getCellNumber(key: string, boardWidth: number): number | null {
 function _inBounds(
   pos: { x: number; y: number },
   w: number,
-  h: number
+  h: number,
 ): boolean {
   try {
     return pos.x >= 0 && pos.x < w && pos.y >= 0 && pos.y < h;
@@ -179,7 +179,7 @@ function _manhattan(a: { x: number; y: number }, b: { x: number; y: number }) {
 function isAdjacentToOwnedSite(
   game: AnyRecord,
   playerNum: number,
-  key: string
+  key: string,
 ): boolean {
   const pos = parseCellKey(key);
   if (!pos) return false;
@@ -204,7 +204,7 @@ function isAdjacentToOwnedSite(
 
 function countThresholdsForPlayer(
   game: AnyRecord,
-  playerNum: number
+  playerNum: number,
 ): Thresholds {
   const out: Thresholds = { air: 0, water: 0, earth: 0, fire: 0 };
   const board = game.board as AnyRecord | undefined;
@@ -252,10 +252,63 @@ function countThresholdsForPlayer(
   return out;
 }
 
+/**
+ * Check if Mismanaged Mortuary swap is active and redirects actor's graveyard to opponent.
+ * XOR logic: swap is active if exactly one player has an active (non-silenced) Mortuary.
+ */
+function checkMortuarySwapActive(
+  game: AnyRecord,
+  actorKey: SeatKey,
+  opponentKey: SeatKey,
+): boolean {
+  try {
+    const specialSiteState = game.specialSiteState as AnyRecord | undefined;
+    if (!specialSiteState) return false;
+    const mortuaries = specialSiteState.mismanagedMortuaries as
+      | AnyRecord[]
+      | undefined;
+    if (!Array.isArray(mortuaries) || mortuaries.length === 0) return false;
+
+    const permanents = (game.permanents || {}) as Record<string, unknown[]>;
+
+    // Check if a mortuary is silenced (has a Silence token)
+    const isSilenced = (cellKey: string): boolean => {
+      const perms = permanents[cellKey];
+      if (!Array.isArray(perms)) return false;
+      return perms.some((p) => {
+        const perm = p as AnyRecord;
+        const card = perm?.card as AnyRecord | undefined;
+        const name = card?.name;
+        return (
+          typeof name === "string" && name.toLowerCase().includes("silence")
+        );
+      });
+    };
+
+    // Filter to active (non-silenced) mortuaries
+    const activeMortuaries = mortuaries.filter((m) => {
+      const cellKey = m.cellKey as string | undefined;
+      if (!cellKey) return false;
+      return !isSilenced(cellKey);
+    });
+
+    // XOR logic: swap is active if exactly one player has an active mortuary
+    const p1Has = activeMortuaries.some((m) => m.ownerSeat === "p1");
+    const p2Has = activeMortuaries.some((m) => m.ownerSeat === "p2");
+    const swapActive = p1Has !== p2Has;
+
+    // If swap is active (XOR condition met), both players' cards go to opponent's graveyard
+    // So any actor can update opponent's graveyard when swap is active
+    return swapActive;
+  } catch {
+    return false;
+  }
+}
+
 export function markAndCountNewPlacements(
   game: AnyRecord,
   action: MatchPatch,
-  playerNum: number
+  playerNum: number,
 ): { newItems: AnyRecord[]; isNew: WeakSet<AnyRecord> } {
   const result: { newItems: AnyRecord[]; isNew: WeakSet<AnyRecord> } = {
     newItems: [],
@@ -334,7 +387,7 @@ export function validateAction(
   game: AnyRecord,
   action: MatchPatch,
   playerId: string,
-  context?: AnyRecord
+  context?: AnyRecord,
 ): { ok: boolean; error?: string } {
   try {
     if (!action || typeof action !== "object") return { ok: true };
@@ -356,7 +409,7 @@ export function validateAction(
     const _effectivePhase =
       typeof (action as AnyRecord).phase === "string"
         ? ((action as AnyRecord).phase as string)
-        : (game.phase as string | undefined) ?? undefined;
+        : ((game.phase as string | undefined) ?? undefined);
 
     if (
       (action as AnyRecord).board &&
@@ -384,7 +437,7 @@ export function validateAction(
           const isOwnedByMe = Number(nextTile?.owner) === meNum;
           if (isNewSite && isOwnedByMe && meNum) {
             const sitesOwned = Object.values(currentSites).filter(
-              (t) => t && t.card && Number(t.owner) === meNum
+              (t) => t && t.card && Number(t.owner) === meNum,
             ).length;
             if (sitesOwned === 0 && meKey) {
               const av = avatars[meKey as string] || {};
@@ -451,7 +504,7 @@ export function validateAction(
               const prevTapped = !!prevItem.tapped;
               const nextTapped = Object.prototype.hasOwnProperty.call(
                 nextItem,
-                "tapped"
+                "tapped",
               )
                 ? !!nextItem.tapped
                 : prevTapped;
@@ -479,19 +532,19 @@ export function validateAction(
                     gameCurrentPlayer: game.currentPlayer,
                     permanentCard:
                       (prevItem.card as AnyRecord)?.name || "unknown",
-                  }
+                  },
                 );
 
                 if (isTurnTransition && isUntapping && untappingNextPlayer) {
                   // Allow: player ending turn can untap next player's permanents
                   console.log(
-                    "[rules-validation] Allowing turn transition untap"
+                    "[rules-validation] Allowing turn transition untap",
                   );
                   continue;
                 }
 
                 console.log(
-                  "[rules-validation] REJECTING tap/untap of opponent permanent"
+                  "[rules-validation] REJECTING tap/untap of opponent permanent",
                 );
                 return {
                   ok: false,
@@ -515,8 +568,27 @@ export function validateAction(
         string,
         unknown
       >;
+      // Check if Mismanaged Mortuary swap is active - allows opponent graveyard updates
+      const opponentKey: SeatKey = meKey === "p1" ? "p2" : "p1";
+      const mortuarySwapAllowsOpponentGraveyard = checkMortuarySwapActive(
+        game,
+        meKey,
+        opponentKey,
+      );
       for (const zk of Object.keys(zonesPatch)) {
         if (zk !== meKey) {
+          // Allow opponent graveyard updates if Mortuary swap is active
+          // and the patch only contains graveyard changes
+          if (mortuarySwapAllowsOpponentGraveyard && zk === opponentKey) {
+            const zonePatchData = zonesPatch[zk] as AnyRecord | undefined;
+            // Only allow graveyard field, not other private zones
+            const allowedKeys = ["graveyard"];
+            const patchKeys = Object.keys(zonePatchData || {});
+            const allAllowed = patchKeys.every((k) => allowedKeys.includes(k));
+            if (allAllowed) {
+              continue; // Allow this opponent zone update
+            }
+          }
           return {
             ok: false,
             error: `Cannot modify opponent zones (${zk})`,

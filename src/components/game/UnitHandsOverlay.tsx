@@ -3,12 +3,12 @@
 import Image from "next/image";
 import React, { useCallback, useRef, useState } from "react";
 import { useGameStore } from "@/lib/game/store";
-import { useTouchDevice } from "@/lib/hooks/useTouchDevice";
 import type {
   CardRef,
   MorganaHandEntry,
   OmphalosHandEntry,
 } from "@/lib/game/store/types";
+import { useTouchDevice } from "@/lib/hooks/useTouchDevice";
 
 type UnitHand =
   | { kind: "morgana"; entry: MorganaHandEntry }

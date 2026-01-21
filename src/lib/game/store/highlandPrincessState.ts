@@ -85,19 +85,11 @@ export const createHighlandPrincessSlice: StateCreator<
       },
     } as Partial<GameState> as GameState);
 
-    // Fetch metadata for all cards in spellbook
-    const cardIds = spellbook.map((c) => c.cardId);
-    if (cardIds.length > 0) {
-      await get().fetchCardMeta(cardIds);
-    }
-    const metaByCardId = get().metaByCardId;
-
-    // Find eligible cards (artifacts with cost ≤ 1)
+    // Find eligible cards (artifacts with cost ≤ 1) - use embedded CardRef data
     const eligibleCards: CardRef[] = [];
     spellbook.forEach((card) => {
-      const meta = metaByCardId[card.cardId];
-      const cardType = (meta?.type || "").toLowerCase();
-      const cost = meta?.cost ?? 999;
+      const cardType = (card.type || "").toLowerCase();
+      const cost = card.cost ?? 999;
 
       if (cardType.includes("artifact") && cost <= 1) {
         eligibleCards.push(card);
@@ -108,7 +100,7 @@ export const createHighlandPrincessSlice: StateCreator<
       // No eligible cards, resolve with nothing
       set({ pendingHighlandPrincess: null } as Partial<GameState> as GameState);
       get().log(
-        `[${ownerSeat.toUpperCase()}] Highland Princess finds no artifacts costing ①or less`
+        `[${ownerSeat.toUpperCase()}] Highland Princess finds no artifacts costing ①or less`,
       );
       return;
     }
@@ -142,7 +134,7 @@ export const createHighlandPrincessSlice: StateCreator<
     }
 
     get().log(
-      `[${ownerSeat.toUpperCase()}] Highland Princess searches for an artifact...`
+      `[${ownerSeat.toUpperCase()}] Highland Princess searches for an artifact...`,
     );
   },
 
@@ -152,7 +144,7 @@ export const createHighlandPrincessSlice: StateCreator<
 
     // Check if card is eligible
     const isEligible = pending.eligibleCards.some(
-      (c) => c.cardId === card.cardId
+      (c) => c.cardId === card.cardId,
     );
     if (!isEligible) return;
 
@@ -171,7 +163,7 @@ export const createHighlandPrincessSlice: StateCreator<
       // No card selected, just close
       set({ pendingHighlandPrincess: null } as Partial<GameState> as GameState);
       get().log(
-        `[${ownerSeat.toUpperCase()}] Highland Princess chooses not to take an artifact`
+        `[${ownerSeat.toUpperCase()}] Highland Princess chooses not to take an artifact`,
       );
       return;
     }
@@ -182,7 +174,7 @@ export const createHighlandPrincessSlice: StateCreator<
 
     // Find and remove the selected card from spellbook
     const cardIndex = spellbook.findIndex(
-      (c) => c.cardId === selectedCard.cardId
+      (c) => c.cardId === selectedCard.cardId,
     );
     if (cardIndex === -1) {
       set({ pendingHighlandPrincess: null } as Partial<GameState> as GameState);
@@ -230,7 +222,7 @@ export const createHighlandPrincessSlice: StateCreator<
     get().log(
       `[${ownerSeat.toUpperCase()}] Highland Princess finds ${
         selectedCard.name
-      }`
+      }`,
     );
 
     // Broadcast resolution
@@ -264,7 +256,7 @@ export const createHighlandPrincessSlice: StateCreator<
     set({ pendingHighlandPrincess: null } as Partial<GameState> as GameState);
 
     get().log(
-      `[${pending.ownerSeat.toUpperCase()}] Highland Princess search cancelled`
+      `[${pending.ownerSeat.toUpperCase()}] Highland Princess search cancelled`,
     );
 
     // Broadcast cancellation

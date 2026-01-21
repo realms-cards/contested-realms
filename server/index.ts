@@ -3048,6 +3048,40 @@ io.on("connection", async (socket: SocketClient) => {
           io.to(`spectate:${matchId}`).emit("message", out);
         } catch {}
       } catch {}
+    } else if (type === "randomNumber") {
+      try {
+        const match = await getOrLoadMatch(matchId);
+        const room = `match:${matchId}`;
+        const playerKey = getSeatForPlayer(match, player.id) || "p1";
+        // Sanitize max and value
+        let max = Number((payload as { max?: unknown })?.max);
+        let value = Number((payload as { value?: unknown })?.value);
+        if (!Number.isFinite(max) || max < 1) {
+          max = 6;
+        } else {
+          max = Math.max(1, Math.min(1000, Math.floor(max)));
+        }
+        if (!Number.isFinite(value) || value < 1 || value > max) {
+          value = Math.floor(Math.random() * max) + 1;
+        } else {
+          value = Math.max(1, Math.min(max, Math.floor(value)));
+        }
+        const out = {
+          type: "randomNumber",
+          max,
+          value,
+          playerKey,
+          from: player.id,
+          ts: Date.now(),
+        } as const;
+        console.log(
+          `[Server] Random number: ${value} (1-${max}) by ${playerKey} in match ${matchId}`,
+        );
+        io.to(room).emit("message", out);
+        try {
+          io.to(`spectate:${matchId}`).emit("message", out);
+        } catch {}
+      } catch {}
     } else if (type === "attackDeclare") {
       try {
         const match = await getOrLoadMatch(matchId);

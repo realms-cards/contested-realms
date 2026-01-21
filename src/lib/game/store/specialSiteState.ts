@@ -5,10 +5,13 @@ import type {
   ElementChoice,
   GameState,
   GenesisManaBonus,
+  MismanagedMortuaryAura,
+  Permanents,
   PlayerKey,
   SpecialSiteState,
   ValleyOfDelightChoice,
 } from "./types";
+import { siteHasSilencedToken } from "./utils/resourceHelpers";
 
 const emptySpecialSiteState = (): SpecialSiteState => ({
   valleyChoices: [],
@@ -16,7 +19,22 @@ const emptySpecialSiteState = (): SpecialSiteState => ({
   genesisMana: [],
   pendingElementChoice: null,
   atlanteanFateAuras: [],
+  mismanagedMortuaries: [],
 });
+
+// --- Mismanaged Mortuary Detection ---
+// Card name matching for Mismanaged Mortuary site
+export function isMismanagedMortuary(
+  cardName: string | null | undefined,
+): boolean {
+  if (!cardName) return false;
+  return cardName.toLowerCase().includes("mismanaged mortuary");
+}
+
+// Generate unique ID for Mismanaged Mortuary aura
+function newMortuaryAuraId(): string {
+  return `mortuary_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+}
 
 export const createSpecialSiteSlice: StateCreator<
   GameState,
@@ -32,6 +50,8 @@ export const createSpecialSiteSlice: StateCreator<
     | "registerGenesisMana"
     | "clearTurnBonuses"
     | "removeSiteChoice"
+    | "registerMismanagedMortuary"
+    | "getEffectiveGraveyardSeat"
   >
 > = (set, get) => ({
   specialSiteState: emptySpecialSiteState(),
@@ -68,7 +88,7 @@ export const createSpecialSiteSlice: StateCreator<
 
     const elementName = element.charAt(0).toUpperCase() + element.slice(1);
     state.log(
-      `${pending.siteName} now provides ${elementName} threshold permanently`
+      `${pending.siteName} now provides ${elementName} threshold permanently`,
     );
 
     const newState: SpecialSiteState = {
@@ -102,7 +122,7 @@ export const createSpecialSiteSlice: StateCreator<
       earth: number;
       fire: number;
     }>,
-    owner: 1 | 2
+    owner: 1 | 2,
   ) => {
     const state = get();
     const turn = state.turn;
@@ -124,7 +144,7 @@ export const createSpecialSiteSlice: StateCreator<
     const thresholdDesc = elements.join(", ");
 
     state.log(
-      `${siteName} Genesis: Provides ${thresholdDesc} threshold this turn`
+      `${siteName} Genesis: Provides ${thresholdDesc} threshold this turn`,
     );
 
     const newState: SpecialSiteState = {
@@ -140,7 +160,7 @@ export const createSpecialSiteSlice: StateCreator<
     cellKey: CellKey,
     siteName: string,
     amount: number,
-    owner: 1 | 2
+    owner: 1 | 2,
   ) => {
     const state = get();
     const turn = state.turn;
@@ -186,20 +206,33 @@ export const createSpecialSiteSlice: StateCreator<
 
   removeSiteChoice: (cellKey: CellKey) => {
     const state = get();
+    console.log(
+      "[removeSiteChoice] Removing site choice for cellKey:",
+      cellKey,
+    );
+    console.log(
+      "[removeSiteChoice] Current mortuaries:",
+      state.specialSiteState.mismanagedMortuaries,
+    );
 
     // Remove valley choice for this cell
     const newValleyChoices = state.specialSiteState.valleyChoices.filter(
-      (c) => c.cellKey !== cellKey
+      (c) => c.cellKey !== cellKey,
     );
 
     // Remove any bloom bonuses for this cell
     const newBloomBonuses = state.specialSiteState.bloomBonuses.filter(
-      (b) => b.cellKey !== cellKey
+      (b) => b.cellKey !== cellKey,
     );
 
     // Remove any genesis mana for this cell
     const newGenesisMana = state.specialSiteState.genesisMana.filter(
-      (b) => b.cellKey !== cellKey
+      (b) => b.cellKey !== cellKey,
+    );
+
+    // Remove any mismanaged mortuary for this cell
+    const newMortuaries = state.specialSiteState.mismanagedMortuaries.filter(
+      (m) => m.cellKey !== cellKey,
     );
 
     // Cancel pending choice if it's for this cell
@@ -207,11 +240,16 @@ export const createSpecialSiteSlice: StateCreator<
     const newPendingChoice =
       pendingChoice?.cellKey === cellKey ? null : pendingChoice;
 
+    const mortuaryChanged =
+      newMortuaries.length !==
+      state.specialSiteState.mismanagedMortuaries.length;
+
     if (
       newValleyChoices.length !== state.specialSiteState.valleyChoices.length ||
       newBloomBonuses.length !== state.specialSiteState.bloomBonuses.length ||
       newGenesisMana.length !== state.specialSiteState.genesisMana.length ||
-      newPendingChoice !== pendingChoice
+      newPendingChoice !== pendingChoice ||
+      mortuaryChanged
     ) {
       const newState: SpecialSiteState = {
         valleyChoices: newValleyChoices,
@@ -219,13 +257,146 @@ export const createSpecialSiteSlice: StateCreator<
         genesisMana: newGenesisMana,
         pendingElementChoice: newPendingChoice,
         atlanteanFateAuras: state.specialSiteState.atlanteanFateAuras,
+        mismanagedMortuaries: newMortuaries,
       };
 
+      console.log(
+        "[removeSiteChoice] Updating specialSiteState with newMortuaries:",
+        newMortuaries,
+      );
       set({ specialSiteState: newState });
+      console.log("[removeSiteChoice] Sending patch with specialSiteState");
       state.trySendPatch({ specialSiteState: newState });
+
+      // Log mortuary removal
+      if (mortuaryChanged) {
+        console.log("[removeSiteChoice] Mortuary was removed!");
+        state.log(
+          "🪦 Mismanaged Mortuary removed - cemeteries return to normal",
+        );
+      }
     }
+  },
+
+  registerMismanagedMortuary: (cellKey: CellKey, owner: 1 | 2) => {
+    const state = get();
+    const ownerSeat: PlayerKey = owner === 1 ? "p1" : "p2";
+
+    const newAura: MismanagedMortuaryAura = {
+      id: newMortuaryAuraId(),
+      cellKey,
+      owner,
+      ownerSeat,
+      createdAt: Date.now(),
+    };
+
+    const newState: SpecialSiteState = {
+      ...state.specialSiteState,
+      mismanagedMortuaries: [
+        ...state.specialSiteState.mismanagedMortuaries,
+        newAura,
+      ],
+    };
+
+    set({ specialSiteState: newState });
+    state.trySendPatch({ specialSiteState: newState });
+
+    const playerNum = owner === 1 ? "1" : "2";
+    state.log(
+      `🪦 [p${playerNum}:PLAYER] Mismanaged Mortuary: Cemeteries are now swapped!`,
+    );
+
+    // Send toast notification to both players
+    const tr = state.transport;
+    if (tr?.sendMessage) {
+      try {
+        tr.sendMessage({
+          type: "toast",
+          text: `🪦 [p${playerNum}:PLAYER] Mismanaged Mortuary: Cemeteries are now swapped!`,
+          seat: ownerSeat,
+        } as never);
+      } catch {}
+    } else {
+      // Offline: show local toast
+      try {
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("app:toast", {
+              detail: {
+                message: `🪦 Mismanaged Mortuary: Cemeteries are now swapped!`,
+              },
+            }),
+          );
+        }
+      } catch {}
+    }
+  },
+
+  getEffectiveGraveyardSeat: (who: PlayerKey): PlayerKey => {
+    const state = get();
+    const mortuaries = state.specialSiteState.mismanagedMortuaries;
+
+    // Check if there's an active Mismanaged Mortuary for the player
+    // If the player controls a Mortuary, their graveyard is swapped with opponent's
+    const hasMortuary = mortuaries.some((m) => m.ownerSeat === who);
+
+    if (hasMortuary) {
+      // Swap: p1's graveyard becomes p2's, and vice versa
+      return who === "p1" ? "p2" : "p1";
+    }
+
+    // Also check if opponent controls a Mortuary (they swap too)
+    const opponentSeat: PlayerKey = who === "p1" ? "p2" : "p1";
+    const opponentHasMortuary = mortuaries.some(
+      (m) => m.ownerSeat === opponentSeat,
+    );
+
+    if (opponentHasMortuary) {
+      // Opponent's mortuary also swaps our perspective
+      return opponentSeat;
+    }
+
+    return who;
   },
 });
 
 // Helper to get empty state for reset
 export const getEmptySpecialSiteState = emptySpecialSiteState;
+
+// --- Exported helper for checking cemetery swap ---
+// Returns the effective graveyard seat for a given player, accounting for Mismanaged Mortuary.
+// This is used by zone operations to route cards to the correct graveyard.
+// A silenced Mortuary does NOT apply its swap effect.
+export function getEffectiveGraveyardSeatStatic(
+  who: PlayerKey,
+  mismanagedMortuaries: MismanagedMortuaryAura[],
+  permanents?: Permanents,
+): PlayerKey {
+  // The swap is perspective-based:
+  // - If I control a Mortuary, MY cemetery operations go to opponent's cemetery
+  // - If opponent controls a Mortuary, THEIR cemetery operations go to my cemetery
+  // Both effects can stack if both players control Mortuaries (cancel out)
+  // A silenced Mortuary does NOT apply its effect
+
+  // Filter out silenced mortuaries if permanents are provided
+  const activeMortuaries = permanents
+    ? mismanagedMortuaries.filter(
+        (m) => !siteHasSilencedToken(m.cellKey, permanents),
+      )
+    : mismanagedMortuaries;
+
+  const myMortuary = activeMortuaries.some((m) => m.ownerSeat === who);
+  const opponentSeat: PlayerKey = who === "p1" ? "p2" : "p1";
+  const oppMortuary = activeMortuaries.some(
+    (m) => m.ownerSeat === opponentSeat,
+  );
+
+  // XOR logic: if only one player has mortuary, swap happens
+  // If both have mortuaries, they cancel out (no swap)
+  // If neither has mortuaries, no swap
+  if (myMortuary !== oppMortuary) {
+    return opponentSeat;
+  }
+
+  return who;
+}

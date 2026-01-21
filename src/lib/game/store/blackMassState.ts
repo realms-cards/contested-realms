@@ -95,15 +95,10 @@ export const createBlackMassSlice: StateCreator<
       get().movePermanentToZone(spell.at, spell.index, "graveyard");
       set({ pendingBlackMass: null } as Partial<GameState> as GameState);
       get().log(
-        `[${casterSeat.toUpperCase()}] Black Mass finds no cards to search`
+        `[${casterSeat.toUpperCase()}] Black Mass finds no cards to search`,
       );
       return;
     }
-
-    // Fetch metadata for filtering
-    const cardIds = topSevenCards.map((c) => c.cardId);
-    await get().fetchCardMeta(cardIds);
-    const metaByCardId = get().metaByCardId;
 
     // Evil minion types: Demons, Undead, Monsters
     const EVIL_SUBTYPES = ["demon", "undead", "monster"];
@@ -112,19 +107,16 @@ export const createBlackMassSlice: StateCreator<
       return EVIL_SUBTYPES.some((evil) => lower.includes(evil));
     };
 
-    // Find eligible cards (Evil minions) and all minions
+    // Filter using embedded CardRef data (no async fetch needed)
     const eligibleIndices: number[] = [];
     const allMinionIndices: number[] = [];
     topSevenCards.forEach((card, index) => {
-      const meta = metaByCardId[card.cardId];
-      const cardType = (meta?.type || "").toLowerCase();
-      const subTypes = meta?.subTypes || card.subTypes || "";
+      const cardType = (card.type || "").toLowerCase();
+      const subTypes = card.subTypes || "";
       const isMinion = cardType.includes("minion");
-      const isEvil = isEvilSubtype(subTypes);
-
       if (isMinion) {
         allMinionIndices.push(index);
-        if (isEvil) {
+        if (isEvilSubtype(subTypes)) {
           eligibleIndices.push(index);
         }
       }
@@ -165,7 +157,7 @@ export const createBlackMassSlice: StateCreator<
     get().log(
       `[${casterSeat.toUpperCase()}] casts Black Mass - searching top ${
         topSevenCards.length
-      } spells`
+      } spells`,
     );
   },
 
@@ -185,7 +177,7 @@ export const createBlackMassSlice: StateCreator<
     // Check if card is different from already selected (different card names)
     const newCard = pending.topSevenCards[index];
     const alreadySelectedNames = pending.selectedIndices.map(
-      (i) => pending.topSevenCards[i]?.name
+      (i) => pending.topSevenCards[i]?.name,
     );
     if (alreadySelectedNames.includes(newCard?.name)) {
       // Can't select duplicates
@@ -232,7 +224,7 @@ export const createBlackMassSlice: StateCreator<
 
     // Get remaining cards (not selected) from top 7 to put at bottom
     const remainingCards = topSevenCards.filter(
-      (_, i) => !selectedIndices.includes(i)
+      (_, i) => !selectedIndices.includes(i),
     );
 
     // Remove top 7 from spellbook
@@ -278,7 +270,7 @@ export const createBlackMassSlice: StateCreator<
       get().log(
         `[${casterSeat.toUpperCase()}] draws ${
           selectedCards.length
-        } Evil minion(s): ${selectedCards.map((c) => c.name).join(", ")}`
+        } Evil minion(s): ${selectedCards.map((c) => c.name).join(", ")}`,
       );
     } else {
       get().log(`[${casterSeat.toUpperCase()}] chooses not to draw any cards`);

@@ -2,10 +2,10 @@
 
 import Image from "next/image";
 import { useEffect, useCallback } from "react";
+import { cardbackAtlasUrl, cardbackSpellbookUrl } from "@/lib/assets";
 import { useSound } from "@/lib/contexts/SoundContext";
 import { useGameStore } from "@/lib/game/store";
 import type { PlayerKey } from "@/lib/game/store";
-import { cardbackSpellbookUrl, cardbackAtlasUrl } from "@/lib/assets";
 
 interface SeerScreenProps {
   myPlayerKey: PlayerKey;

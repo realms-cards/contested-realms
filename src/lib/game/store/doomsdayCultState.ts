@@ -103,10 +103,8 @@ export const createDoomsdayCultSlice: StateCreator<
 
     const topCard = spellbook[0];
 
-    // Check if the card is Evil (has Evil subtype)
-    const metaByCardId = get().metaByCardId;
-    const meta = metaByCardId[topCard.cardId];
-    const subTypes = (meta?.subTypes || topCard.subTypes || "").toLowerCase();
+    // Check if the card is Evil (has Evil subtype) - use embedded CardRef data
+    const subTypes = (topCard.subTypes || "").toLowerCase();
 
     // Check for Evil subtype
     const isEvil = subTypes.includes("evil");
@@ -126,7 +124,7 @@ export const createDoomsdayCultSlice: StateCreator<
       get().log(
         `[${playerKey.toUpperCase()}] Cannot cast from spellbook: ${
           check.reason
-        }`
+        }`,
       );
       return false;
     }
@@ -156,7 +154,7 @@ export const createDoomsdayCultSlice: StateCreator<
     get().log(
       `[${playerKey.toUpperCase()}] Casts ${
         card.name
-      } from spellbook top (Doomsday Cult)`
+      } from spellbook top (Doomsday Cult)`,
     );
 
     // Broadcast

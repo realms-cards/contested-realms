@@ -100,7 +100,7 @@ export type InteractionResponseOptions = {
   grant?: InteractionGrantRequest;
 };
 
-// Minimal card reference for zones
+// Full card reference for zones - includes all metadata to avoid async lookups
 export type CardRef = {
   cardId: number;
   variantId?: number | null;
@@ -112,6 +112,11 @@ export type CardRef = {
   cost?: number | null; // mana cost
   owner?: PlayerKey | null;
   instanceId?: string | null;
+  // Full metadata for resolvers (populated at deck load time)
+  text?: string | null; // full card text
+  attack?: number | null; // base attack value
+  defence?: number | null; // base defence value
+  rarity?: string | null; // card rarity (Ordinary, Exceptional, Elite, Unique)
 };
 
 export type Zones = {
@@ -254,6 +259,22 @@ export type SpecialSiteState = {
   pendingElementChoice: PendingElementChoice | null;
   // Atlantean Fate auras (4x4 areas with flood tokens)
   atlanteanFateAuras: AtlanteanFateAura[];
+  // Mismanaged Mortuary sites (cemetery swap effect)
+  mismanagedMortuaries: MismanagedMortuaryAura[];
+};
+
+// --- Mismanaged Mortuary State ------------------------------------------------
+// "Treat your opponent's cemetery as yours, and vice versa."
+// When this site is on the board, the owner's graveyard operations are swapped
+// with their opponent's. Cards going to "your graveyard" go to opponent's instead.
+export type MismanagedMortuaryAura = {
+  id: string;
+  // Cell where the Mismanaged Mortuary site is placed
+  cellKey: CellKey;
+  // Owner of the site (1 or 2)
+  owner: 1 | 2;
+  ownerSeat: PlayerKey;
+  createdAt: number;
 };
 
 // --- Atlantean Fate State ------------------------------------------------
@@ -1061,6 +1082,27 @@ export type PendingHeadlessHauntMove = {
   createdAt: number;
 };
 
+// --- Gem Token State (generic draggable tokens on board) --------------------------------
+export type GemColorId =
+  | "red"
+  | "blue"
+  | "green"
+  | "yellow"
+  | "purple"
+  | "orange"
+  | "cyan"
+  | "pink"
+  | "white"
+  | "black";
+
+export type GemToken = {
+  id: string;
+  color: GemColorId;
+  position: { x: number; y: number; z: number };
+  owner: PlayerKey;
+  createdAt: number;
+};
+
 // Context menu targeting for click-driven actions
 export type ContextMenuTarget =
   | { kind: "site"; x: number; y: number }
@@ -1071,7 +1113,8 @@ export type ContextMenuTarget =
       who: PlayerKey;
       from: "spellbook" | "atlas" | "graveyard" | "collection";
     }
-  | { kind: "tokenpile"; who: PlayerKey };
+  | { kind: "tokenpile"; who: PlayerKey }
+  | { kind: "gemToken"; tokenId: string };
 
 export type GameEvent = {
   id: number;
@@ -1086,6 +1129,8 @@ export const BOARD_PING_MAX_HISTORY = 8;
 
 // Snapshot of serializable game state we can restore on undo
 export type SerializedGame = {
+  // Timestamp when snapshot was taken - used for replay truncation on undo
+  snapshotTs: number;
   actorKey: PlayerKey | null;
   players: Record<PlayerKey, PlayerState>;
   currentPlayer: 1 | 2;
@@ -1172,7 +1217,7 @@ export type GameState = {
   activeInteraction: InteractionRequestEntry | null;
   sendInteractionRequest: (input: SendInteractionRequestInput) => void;
   receiveInteractionEnvelope: (
-    envelope: InteractionEnvelope | InteractionMessage
+    envelope: InteractionEnvelope | InteractionMessage,
   ) => void;
   // New: handle server-executed interaction outcomes
   receiveInteractionResult: (message: InteractionResultMessage) => void;
@@ -1180,7 +1225,7 @@ export type GameState = {
     requestId: string,
     decision: InteractionDecision,
     actorId: string,
-    options?: InteractionResponseOptions
+    options?: InteractionResponseOptions,
   ) => void;
   expireInteraction: (requestId: string) => void;
   clearInteraction: (requestId: string) => void;
@@ -1312,7 +1357,7 @@ export type GameState = {
       ts: number;
       actor?: PlayerKey;
       targetSeat?: PlayerKey;
-    } | null
+    } | null,
   ) => void;
   declareAttack: (
     tile: { x: number; y: number },
@@ -1328,7 +1373,7 @@ export type GameState = {
       kind: "permanent" | "avatar" | "site";
       at: CellKey;
       index: number | null;
-    } | null
+    } | null,
   ) => void;
   // Trigger an intercept offer after a Move Only action by the attacker
   offerIntercept: (
@@ -1340,7 +1385,7 @@ export type GameState = {
       owner: 1 | 2;
       isAvatar?: boolean;
       avatarSeat?: PlayerKey;
-    }
+    },
   ) => void;
   setDefenderSelection: (
     defenders: Array<{
@@ -1348,11 +1393,11 @@ export type GameState = {
       index: number;
       instanceId?: string | null;
       owner: 1 | 2;
-    }>
+    }>,
   ) => void;
   commitDefenders: () => void;
   setDamageAssignment: (
-    asgn: Array<{ at: CellKey; index: number; amount: number }>
+    asgn: Array<{ at: CellKey; index: number; amount: number }>,
   ) => boolean;
   resolveCombat: () => void;
   autoResolveCombat: () => void;
@@ -1379,7 +1424,7 @@ export type GameState = {
   triggerInterrogatorChoice: (
     interrogatorSeat: PlayerKey,
     victimSeat: PlayerKey,
-    attackerName: string
+    attackerName: string,
   ) => void;
   resolveInterrogatorChoice: (choice: "pay" | "allow") => void;
   // Chaos Twister minigame flow
@@ -1498,7 +1543,7 @@ export type GameState = {
   selectEarthquakeArea: (corner: { x: number; y: number }) => void;
   performEarthquakeSwap: (
     from: { x: number; y: number },
-    to: { x: number; y: number }
+    to: { x: number; y: number },
   ) => void;
   resolveEarthquake: () => void;
   cancelEarthquake: () => void;
@@ -1519,20 +1564,20 @@ export type GameState = {
   }) => void;
   returnStolenCard: (
     minionInstanceId: string | null,
-    minionAt: CellKey
+    minionAt: CellKey,
   ) => void;
   removePithImpHand: (
     minionInstanceId: string | null,
-    minionAt: CellKey
+    minionAt: CellKey,
   ) => void;
   getPithImpHandForMinion: (
     minionInstanceId: string | null,
-    minionAt: CellKey
+    minionAt: CellKey,
   ) => CardRef[];
   dropStolenCard: (
     pithImpId: string,
     cardIndex: number,
-    targetTile: { x: number; y: number }
+    targetTile: { x: number; y: number },
   ) => void;
   // Morgana le Fay private hands
   morganaHands: MorganaHandEntry[];
@@ -1550,15 +1595,15 @@ export type GameState = {
   castFromMorganaHand: (
     morganaId: string,
     cardIndex: number,
-    targetTile: { x: number; y: number }
+    targetTile: { x: number; y: number },
   ) => void;
   removeMorganaHand: (
     minionInstanceId: string | null,
-    minionAt: CellKey
+    minionAt: CellKey,
   ) => void;
   getMorganaHandForMinion: (
     minionInstanceId: string | null,
-    minionAt: CellKey
+    minionAt: CellKey,
   ) => CardRef[];
   // Omphalos private hands (artifacts that draw spells at end of turn)
   omphalosHands: OmphalosHandEntry[];
@@ -1576,15 +1621,15 @@ export type GameState = {
   castFromOmphalosHand: (
     omphalosId: string,
     cardIndex: number,
-    targetTile: { x: number; y: number }
+    targetTile: { x: number; y: number },
   ) => void;
   removeOmphalosHand: (
     artifactInstanceId: string | null,
-    artifactAt: CellKey
+    artifactAt: CellKey,
   ) => void;
   getOmphalosHandForArtifact: (
     artifactInstanceId: string | null,
-    artifactAt: CellKey
+    artifactAt: CellKey,
   ) => CardRef[];
   // Lilith minions (end of turn: reveal opponent's top spell, summon if minion)
   lilithMinions: LilithEntry[];
@@ -1598,7 +1643,7 @@ export type GameState = {
   unregisterLilith: (instanceId: string) => void;
   triggerLilithEndOfTurn: (
     endingPlayerSeat: PlayerKey,
-    skipConfirmation?: boolean
+    skipConfirmation?: boolean,
   ) => Promise<void>;
   resolveLilithReveal: () => void;
   cancelLilithReveal: () => void;
@@ -1724,14 +1769,14 @@ export type GameState = {
   // Generic auto-resolve confirmation (for silence effects)
   pendingAutoResolve: PendingAutoResolve | null;
   beginAutoResolve: (
-    pending: Omit<PendingAutoResolve, "id" | "createdAt">
+    pending: Omit<PendingAutoResolve, "id" | "createdAt">,
   ) => void;
   confirmAutoResolve: () => void;
   cancelAutoResolve: () => void;
   // Internal execution functions for auto-resolve (called after confirmation)
   _executeOmphalosDrawEffect: (
     omphalosId: string,
-    ownerSeat: PlayerKey
+    ownerSeat: PlayerKey,
   ) => void;
   _executeMorganaGenesisEffect: (
     minion: {
@@ -1741,7 +1786,7 @@ export type GameState = {
       owner: 1 | 2;
       card: unknown;
     },
-    ownerSeat: PlayerKey
+    ownerSeat: PlayerKey,
   ) => void;
   _executeHeadlessHauntMoveEffect: (ownerSeat: PlayerKey) => void;
   _executePithImpStealEffect: (
@@ -1752,12 +1797,12 @@ export type GameState = {
       owner: 1 | 2;
       card: unknown;
     },
-    ownerSeat: PlayerKey
+    ownerSeat: PlayerKey,
   ) => void;
   _executeLilithRevealEffect: (
     lilithInstanceId: string,
     lilithLocation: string,
-    ownerSeat: PlayerKey
+    ownerSeat: PlayerKey,
   ) => void;
   // Dhol Chants (tap N allies, reveal N spells, cast one free)
   pendingDholChants: PendingDholChants | null;
@@ -1782,11 +1827,11 @@ export type GameState = {
   getRevealedSpellbookTop: (playerKey: PlayerKey) => CardRef | null;
   canCastFromSpellbookTop: (
     playerKey: PlayerKey,
-    targetCell: CellKey
+    targetCell: CellKey,
   ) => { canCast: boolean; reason?: string; card?: CardRef };
   castFromSpellbookTop: (
     playerKey: PlayerKey,
-    targetCell: CellKey
+    targetCell: CellKey,
   ) => CardRef | false;
   // Pending cast from Morgana/Omphalos hands (for tile targeting)
   pendingPrivateHandCast: {
@@ -1803,7 +1848,7 @@ export type GameState = {
       cardIndex: number;
       card: CardRef;
       mustCastAtLocation?: CellKey;
-    } | null
+    } | null,
   ) => void;
   completePendingPrivateHandCast: (targetTile: {
     x: number;
@@ -1827,7 +1872,7 @@ export type GameState = {
     caster:
       | { kind: "avatar"; seat: PlayerKey }
       | { kind: "permanent"; at: CellKey; index: number; owner: 1 | 2 }
-      | null
+      | null,
   ) => void;
   setMagicTargetChoice: (target: MagicTarget | null) => void;
   confirmMagic: () => void;
@@ -1846,7 +1891,7 @@ export type GameState = {
   addThreshold: (
     who: PlayerKey,
     element: keyof Thresholds,
-    delta: number
+    delta: number,
   ) => void;
   nextPhase: () => void; // legacy manual stepping
   endTurn: () => void; // auto-resolve to next player's Main
@@ -1884,7 +1929,7 @@ export type GameState = {
     who: PlayerKey,
     spellbook: string | null,
     atlas: string | null,
-    preset?: string | null
+    preset?: string | null,
   ) => void;
   setGridColor: (color: "white" | "black") => void;
   setGridBlend: (blend: "normal" | "subtract") => void;
@@ -1897,7 +1942,7 @@ export type GameState = {
       sourceKey: CellKey;
       site: SiteTile;
       worldPos: { x: number; z: number };
-    } | null
+    } | null,
   ) => void;
   updateDraggingSitePos: (x: number, z: number) => void;
   dropDraggingSite: (targetX: number, targetY: number) => void;
@@ -1914,35 +1959,35 @@ export type GameState = {
     who: PlayerKey,
     spellbook: CardRef[],
     atlas: CardRef[],
-    collection?: CardRef[]
+    collection?: CardRef[],
   ) => void;
   shuffleSpellbook: (who: PlayerKey) => void;
   shuffleAtlas: (who: PlayerKey) => void;
   drawFrom: (
     who: PlayerKey,
     from: "spellbook" | "atlas",
-    count?: number
+    count?: number,
   ) => void;
   drawFromBottom: (
     who: PlayerKey,
     from: "spellbook" | "atlas",
-    count?: number
+    count?: number,
   ) => void;
   scryTop: (
     who: PlayerKey,
     from: "spellbook" | "atlas",
-    decision: "top" | "bottom"
+    decision: "top" | "bottom",
   ) => void;
   scryMany: (
     who: PlayerKey,
     from: "spellbook" | "atlas",
     count: number,
-    bottomIndexes: number[]
+    bottomIndexes: number[],
   ) => void;
   drawOpening: (
     who: PlayerKey,
     spellbookCount?: number,
-    atlasCount?: number
+    atlasCount?: number,
   ) => void;
   selectedCard: { who: PlayerKey; index: number; card: CardRef } | null;
   selectedPermanent: { at: CellKey; index: number } | null;
@@ -1965,19 +2010,19 @@ export type GameState = {
   moveCardFromHandToPile: (
     who: PlayerKey,
     pile: "spellbook" | "atlas",
-    position: "top" | "bottom"
+    position: "top" | "bottom",
   ) => void;
   selectPermanent: (at: CellKey, index: number) => void;
   moveSelectedPermanentTo: (x: number, y: number) => void;
   moveSelectedPermanentToWithOffset: (
     x: number,
     y: number,
-    offset: [number, number]
+    offset: [number, number],
   ) => void;
   setPermanentOffset: (
     at: CellKey,
     index: number,
-    offset: [number, number]
+    offset: [number, number],
   ) => void;
   toggleTapPermanent: (at: CellKey, index: number) => void;
   toggleFaceDown: (at: CellKey, index: number) => void;
@@ -1991,25 +2036,25 @@ export type GameState = {
     at: CellKey,
     index: number,
     target: "hand" | "graveyard" | "banished" | "spellbook",
-    position?: "top" | "bottom"
+    position?: "top" | "bottom",
   ) => void;
   moveSiteToZone: (
     x: number,
     y: number,
     target: "hand" | "graveyard" | "banished" | "atlas",
-    position?: "top" | "bottom"
+    position?: "top" | "bottom",
   ) => void;
   moveSiteToGraveyardWithRubble: (
     x: number,
     y: number,
-    placeRubble: boolean
+    placeRubble: boolean,
   ) => void;
   floodSite: (x: number, y: number) => void;
   silenceSite: (x: number, y: number) => void;
   moveFromBanishedToZone: (
     who: PlayerKey,
     instanceId: string,
-    target: "hand" | "graveyard"
+    target: "hand" | "graveyard",
   ) => void;
   moveFromGraveyardToBanished: (who: PlayerKey, instanceId: string) => void;
   banishEntireGraveyard: (who: PlayerKey) => void;
@@ -2019,7 +2064,7 @@ export type GameState = {
     who: PlayerKey,
     pile: "spellbook" | "atlas" | "hand",
     instanceId: string,
-    action: "top" | "bottom" | "hand" | "graveyard" | "banish" | "steal"
+    action: "top" | "bottom" | "hand" | "graveyard" | "banish" | "steal",
   ) => void;
   // Transfer control
   transferPermanentControl: (at: CellKey, index: number, to?: 1 | 2) => void;
@@ -2031,7 +2076,7 @@ export type GameState = {
     sourceX: number,
     sourceY: number,
     targetX: number,
-    targetY: number
+    targetY: number,
   ) => void;
   avatars: Record<PlayerKey, AvatarState>;
   permanents: Permanents;
@@ -2043,7 +2088,7 @@ export type GameState = {
     who: PlayerKey,
     x: number,
     y: number,
-    offset: [number, number]
+    offset: [number, number],
   ) => void;
   setAvatarOffset: (who: PlayerKey, offset: [number, number] | null) => void;
   toggleTapAvatar: (who: PlayerKey) => void;
@@ -2143,7 +2188,7 @@ export type GameState = {
   summonEvilMinionFromHand: (
     who: PlayerKey,
     handIndex: number,
-    targetCell: CellKey
+    targetCell: CellKey,
   ) => boolean;
   // Pathfinder Avatar State
   // Tracks whether each player has used Pathfinder ability this turn
@@ -2166,11 +2211,26 @@ export type GameState = {
   selectHeadlessHauntTile: (tileKey: CellKey) => void;
   skipHeadlessHauntMove: () => void;
   resolveHeadlessHauntMove: () => void;
+  // Gem Token State (generic draggable tokens on board)
+  gemTokens: GemToken[];
+  spawnGemToken: (color: GemColorId, owner: PlayerKey) => void;
+  spawnGemTokenAt: (
+    color: GemColorId,
+    owner: PlayerKey,
+    position: { x: number; y: number; z: number },
+  ) => void;
+  moveGemToken: (
+    id: string,
+    position: { x: number; y: number; z: number },
+  ) => void;
+  changeGemTokenColor: (id: string, color: GemColorId) => void;
+  duplicateGemToken: (id: string) => void;
+  destroyGemToken: (id: string) => void;
   // Trigger element choice for Valley of Delight (shows overlay)
   triggerElementChoice: (
     cellKey: CellKey,
     siteName: string,
-    owner: 1 | 2
+    owner: 1 | 2,
   ) => void;
   // Complete element choice for Valley of Delight
   completeElementChoice: (element: ElementChoice) => void;
@@ -2186,19 +2246,23 @@ export type GameState = {
       earth: number;
       fire: number;
     }>,
-    owner: 1 | 2
+    owner: 1 | 2,
   ) => void;
   // Register genesis mana bonus (called on Genesis)
   registerGenesisMana: (
     cellKey: CellKey,
     siteName: string,
     amount: number,
-    owner: 1 | 2
+    owner: 1 | 2,
   ) => void;
   // Clear turn-based bonuses (called at end of turn)
   clearTurnBonuses: () => void;
   // Remove site choice when site is removed from board
   removeSiteChoice: (cellKey: CellKey) => void;
+  // Register Mismanaged Mortuary (swaps cemeteries while on board)
+  registerMismanagedMortuary: (cellKey: CellKey, owner: 1 | 2) => void;
+  // Get effective graveyard seat accounting for Mismanaged Mortuary swap
+  getEffectiveGraveyardSeat: (who: PlayerKey) => PlayerKey;
   // Mulligans
   mulligans: Record<PlayerKey, number>;
   mulligan: (who: PlayerKey) => void;
@@ -2235,7 +2299,7 @@ export type GameState = {
       who: PlayerKey;
       from: "spellbook" | "atlas" | "graveyard" | "collection" | "tokens";
       card: CardRef | null;
-    } | null
+    } | null,
   ) => void;
   hoverCell: [number, number] | null;
   setHoverCell: (x: number, y: number) => void;
@@ -2250,7 +2314,7 @@ export type GameState = {
   } | null;
   openContextMenu: (
     target: ContextMenuTarget,
-    screen?: { x: number; y: number }
+    screen?: { x: number; y: number },
   ) => void;
   closeContextMenu: () => void;
   // Switch site position selection (Earthquake, Rift Valley)
@@ -2265,7 +2329,7 @@ export type GameState = {
   openPlacementDialog: (
     cardName: string,
     pileName: string,
-    onPlace: (position: "top" | "bottom") => void
+    onPlace: (position: "top" | "bottom") => void,
   ) => void;
   closePlacementDialog: () => void;
   // Search dialog for pile contents
@@ -2283,7 +2347,7 @@ export type GameState = {
     options?: {
       onBanishCard?: (card: CardRef) => void;
       banishRequiresConsent?: boolean;
-    }
+    },
   ) => void;
   closeSearchDialog: () => void;
   // Peek-only dialog used for reveals (with optional card actions)
@@ -2303,7 +2367,7 @@ export type GameState = {
       seat: PlayerKey;
       pile: "spellbook" | "atlas" | "hand";
       from: "top" | "bottom";
-    }
+    },
   ) => void;
   closePeekDialog: () => void;
   // Tokens
@@ -2314,12 +2378,12 @@ export type GameState = {
   attachTokenToPermanent: (
     at: CellKey,
     tokenIndex: number,
-    targetIndex: number
+    targetIndex: number,
   ) => void;
   attachPermanentToAvatar: (
     at: CellKey,
     permanentIndex: number,
-    avatarKey: PlayerKey
+    avatarKey: PlayerKey,
   ) => void;
   detachToken: (at: CellKey, index: number) => void;
   // Derived selectors (pure getters)
@@ -2355,32 +2419,32 @@ export type GameState = {
   // Position Actions
   setPermanentPosition: (
     permanentId: string,
-    position: PermanentPosition
+    position: PermanentPosition,
   ) => void;
   updatePermanentState: (
     permanentId: string,
-    newState: PermanentPositionState
+    newState: PermanentPositionState,
   ) => void;
   setPermanentAbility: (permanentId: string, ability: BurrowAbility) => void;
   setSitePosition: (siteId: number, positionData: SitePositionData) => void;
   setPlayerPosition: (
     playerId: PlayerKey,
-    position: PlayerPositionReference
+    position: PlayerPositionReference,
   ) => void;
 
   // Validation and Utilities
   canTransitionState: (
     permanentId: string,
-    targetState: PermanentPositionState
+    targetState: PermanentPositionState,
   ) => boolean;
   getAvailableActions: (permanentId: string) => ContextMenuAction[];
   calculateEdgePosition: (
     tileCoords: { x: number; z: number },
-    playerPos: { x: number; z: number }
+    playerPos: { x: number; z: number },
   ) => { x: number; z: number };
   calculatePlacementAngle: (
     tilePos: { x: number; z: number },
-    playerPos: { x: number; z: number }
+    playerPos: { x: number; z: number },
   ) => number;
   // Remote cursor telemetry
   remoteCursors: Record<string, RemoteCursorState>;
@@ -2388,7 +2452,7 @@ export type GameState = {
   pruneRemoteCursors: (olderThanMs: number) => void;
   getRemoteHighlightColor: (
     card: { cardId?: number | null; slug?: string | null } | null | undefined,
-    options?: { instanceKey?: string | null }
+    options?: { instanceKey?: string | null },
   ) => string | null;
 };
 
@@ -2436,5 +2500,8 @@ export type ServerPatchT = Partial<{
   pathfinderUsed: GameState["pathfinderUsed"];
   pendingPathfinderPlay: GameState["pendingPathfinderPlay"];
   resolversDisabled: GameState["resolversDisabled"];
+  gemTokens: GameState["gemTokens"];
   __replaceKeys: string[];
+  // Snapshot timestamp for replay truncation on undo
+  __snapshotTs: number;
 }>;

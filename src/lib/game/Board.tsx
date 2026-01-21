@@ -24,6 +24,7 @@ import { BoardEnvironment } from "@/lib/game/components/BoardEnvironment";
 import BoardPingLayer from "@/lib/game/components/BoardPingLayer";
 import { BoardTile } from "@/lib/game/components/BoardTile";
 import { DraggingSiteGhost } from "@/lib/game/components/DraggingSiteGhost";
+import { GemToken3D } from "@/lib/game/components/GemToken3D";
 import { HandDragGhost } from "@/lib/game/components/HandDragGhost";
 import { MagicConnectionLines } from "@/lib/game/components/MagicConnectionLines";
 import { RemoteDragOverlays } from "@/lib/game/components/RemoteDragOverlays";
@@ -190,12 +191,12 @@ export default function Board({
   const cardScale = useScopedStore((s) => s.cardScale);
   const playSelectedTo = useScopedStore((s) => s.playSelectedTo);
   const moveSelectedPermanentToWithOffset = useScopedStore(
-    (s) => s.moveSelectedPermanentToWithOffset
+    (s) => s.moveSelectedPermanentToWithOffset,
   );
   const setPermanentOffset = useScopedStore((s) => s.setPermanentOffset);
   const movePermanentToZone = useScopedStore((s) => s.movePermanentToZone);
   const moveAvatarToWithOffset = useScopedStore(
-    (s) => s.moveAvatarToWithOffset
+    (s) => s.moveAvatarToWithOffset,
   );
   const contextMenu = useScopedStore((s) => s.contextMenu);
   const openContextMenu = useScopedStore((s) => s.openContextMenu);
@@ -221,7 +222,7 @@ export default function Board({
   const setPreviewCard = useScopedStore((s) => s.setPreviewCard);
   const dragFromPile = useScopedStore((s) => s.dragFromPile);
   const setLastPointerWorldPos = useScopedStore(
-    (s) => s.setLastPointerWorldPos
+    (s) => s.setLastPointerWorldPos,
   );
   const setDragFromPile = useScopedStore((s) => s.setDragFromPile);
   const setBoardDragActive = useScopedStore((s) => s.setBoardDragActive);
@@ -234,20 +235,23 @@ export default function Board({
     p2: null,
   });
   const getRemoteHighlightColor = useScopedStore(
-    (s) => s.getRemoteHighlightColor
+    (s) => s.getRemoteHighlightColor,
   );
   const currentPlayer = useScopedStore((s) => s.currentPlayer);
   const actorKey = useScopedStore((s) => s.actorKey);
   const remoteCursors = useScopedStore((s) => s.remoteCursors);
   const localPlayerId = useScopedStore((s) => s.localPlayerId);
   const avatars = useScopedStore((s) => s.avatars);
+  const gemTokens = useScopedStore((s) => s.gemTokens);
+  const _duplicateGemToken = useScopedStore((s) => s.duplicateGemToken);
+  const _destroyGemToken = useScopedStore((s) => s.destroyGemToken);
   const portalState = useScopedStore((s) => s.portalState);
   const stolenCards = useScopedStore((s) => s.stolenCards);
   const pendingPrivateHandCast = useScopedStore(
-    (s) => s.pendingPrivateHandCast
+    (s) => s.pendingPrivateHandCast,
   );
   const completePendingPrivateHandCast = useScopedStore(
-    (s) => s.completePendingPrivateHandCast
+    (s) => s.completePendingPrivateHandCast,
   );
   const switchSiteSource = useScopedStore((s) => s.switchSiteSource);
   const setSwitchSiteSource = useScopedStore((s) => s.setSwitchSiteSource);
@@ -258,29 +262,29 @@ export default function Board({
   const matchId = useScopedStore((s) => s.matchId);
   const opponentPlayerId = useScopedStore((s) => s.opponentPlayerId);
   const sendInteractionRequest = useScopedStore(
-    (s) => s.sendInteractionRequest
+    (s) => s.sendInteractionRequest,
   );
   const overlayBlocking = useScopedStore((s) =>
-    Boolean(s.peekDialog || s.searchDialog || s.placementDialog)
+    Boolean(s.peekDialog || s.searchDialog || s.placementDialog),
   );
   // Counter actions
   const incrementPermanentCounter = useScopedStore(
-    (s) => s.incrementPermanentCounter
+    (s) => s.incrementPermanentCounter,
   );
   const decrementPermanentCounter = useScopedStore(
-    (s) => s.decrementPermanentCounter
+    (s) => s.decrementPermanentCounter,
   );
   const incrementAvatarCounter = useScopedStore(
-    (s) => s.incrementAvatarCounter
+    (s) => s.incrementAvatarCounter,
   );
   const decrementAvatarCounter = useScopedStore(
-    (s) => s.decrementAvatarCounter
+    (s) => s.decrementAvatarCounter,
   );
   const attachTokenToPermanent = useScopedStore(
-    (s) => s.attachTokenToPermanent
+    (s) => s.attachTokenToPermanent,
   );
   const attachPermanentToAvatar = useScopedStore(
-    (s) => s.attachPermanentToAvatar
+    (s) => s.attachPermanentToAvatar,
   );
   const hoverPreviewSourceRef = useRef<string | null>(null);
   const hoverPreviewClearTimerRef = useRef<number | null>(null);
@@ -297,7 +301,7 @@ export default function Board({
       hoverPreviewSourceRef.current = sourceKey ?? null;
       setPreviewCard(card);
     },
-    [setPreviewCard]
+    [setPreviewCard],
   );
 
   const clearHoverPreview = useCallback(
@@ -316,7 +320,7 @@ export default function Board({
       hoverPreviewSourceRef.current = null;
       setPreviewCard(null);
     },
-    [setPreviewCard]
+    [setPreviewCard],
   );
 
   const clearHoverPreviewDebounced = useCallback(
@@ -325,12 +329,15 @@ export default function Board({
         window.clearTimeout(hoverPreviewClearTimerRef.current);
         hoverPreviewClearTimerRef.current = null;
       }
-      hoverPreviewClearTimerRef.current = window.setTimeout(() => {
-        hoverPreviewClearTimerRef.current = null;
-        clearHoverPreview(sourceKey);
-      }, Math.max(0, delay)) as unknown as number;
+      hoverPreviewClearTimerRef.current = window.setTimeout(
+        () => {
+          hoverPreviewClearTimerRef.current = null;
+          clearHoverPreview(sourceKey);
+        },
+        Math.max(0, delay),
+      ) as unknown as number;
     },
-    [clearHoverPreview]
+    [clearHoverPreview],
   );
 
   const clearTouchTimers = useCallback(() => {
@@ -616,7 +623,7 @@ export default function Board({
       board,
       permanents,
       resolvedStoreApi,
-    ]
+    ],
   );
 
   // Cancel switch site selection on Escape key
@@ -686,10 +693,10 @@ export default function Board({
   // Chaos Twister minigame flow
   const pendingChaosTwister = useScopedStore((s) => s.pendingChaosTwister);
   const selectChaosTwisterMinion = useScopedStore(
-    (s) => s.selectChaosTwisterMinion
+    (s) => s.selectChaosTwisterMinion,
   );
   const selectChaosTwisterSite = useScopedStore(
-    (s) => s.selectChaosTwisterSite
+    (s) => s.selectChaosTwisterSite,
   );
 
   // Earthquake spell flow
@@ -700,18 +707,18 @@ export default function Board({
   // Atlantean Fate spell flow (4x4 area selection)
   const pendingAtlanteanFate = useScopedStore((s) => s.pendingAtlanteanFate);
   const setAtlanteanFatePreview = useScopedStore(
-    (s) => s.setAtlanteanFatePreview
+    (s) => s.setAtlanteanFatePreview,
   );
 
   // Mephistopheles summon flow (Evil minion to adjacent site)
   const pendingMephistophelesSummon = useScopedStore(
-    (s) => s.pendingMephistophelesSummon
+    (s) => s.pendingMephistophelesSummon,
   );
   const selectMephistophelesSummonTarget = useScopedStore(
-    (s) => s.selectMephistophelesSummonTarget
+    (s) => s.selectMephistophelesSummonTarget,
   );
   const selectAtlanteanFateCorner = useScopedStore(
-    (s) => s.selectAtlanteanFateCorner
+    (s) => s.selectAtlanteanFateCorner,
   );
 
   // Helper to check if a token can be attached
@@ -866,11 +873,11 @@ export default function Board({
 
   const offsetX = useMemo(
     () => -((board.size.w - 1) * TILE_SIZE) / 2,
-    [board.size.w]
+    [board.size.w],
   );
   const offsetY = useMemo(
     () => -((board.size.h - 1) * TILE_SIZE) / 2,
-    [board.size.h]
+    [board.size.h],
   );
 
   const cells = useMemo(() => {
@@ -922,7 +929,7 @@ export default function Board({
       moveDraggedBody,
       snapBodyTo,
       setGhost,
-    ]
+    ],
   );
   const hoverContext = useMemo(
     () => ({
@@ -936,7 +943,7 @@ export default function Board({
       clearHoverPreview,
       clearHoverPreviewDebounced,
       openContextMenu,
-    ]
+    ],
   );
   const touchContext = useMemo(
     () => ({
@@ -944,7 +951,7 @@ export default function Board({
       touchPreviewTimerRef,
       touchContextTimerRef,
     }),
-    [clearTouchTimers]
+    [clearTouchTimers],
   );
   const selectionContext = useMemo(
     () => ({
@@ -953,7 +960,7 @@ export default function Board({
       lastTouchedId,
       setLastTouchedId,
     }),
-    [selectPermanent, selectedPermanent, lastTouchedId]
+    [selectPermanent, selectedPermanent, lastTouchedId],
   );
   const combatContext = useMemo(
     () => ({
@@ -962,7 +969,7 @@ export default function Board({
       pendingCombat,
       setDefenderSelection,
     }),
-    [attackTargetChoice, setAttackConfirm, pendingCombat, setDefenderSelection]
+    [attackTargetChoice, setAttackConfirm, pendingCombat, setDefenderSelection],
   );
   const magicContext = useMemo(
     () => ({
@@ -978,7 +985,7 @@ export default function Board({
       setMagicCasterChoice,
       computeProjectileFirstHits,
       magicGuidesActive,
-    ]
+    ],
   );
   const chaosTwisterContext = useMemo(
     () => ({
@@ -992,7 +999,7 @@ export default function Board({
       selectChaosTwisterMinion,
       selectChaosTwisterSite,
       metaByCardId,
-    ]
+    ],
   );
   const earthquakeContext = useMemo(
     () => ({
@@ -1000,7 +1007,7 @@ export default function Board({
       selectEarthquakeArea,
       performEarthquakeSwap,
     }),
-    [pendingEarthquake, selectEarthquakeArea, performEarthquakeSwap]
+    [pendingEarthquake, selectEarthquakeArea, performEarthquakeSwap],
   );
   const atlanteanFateContext = useMemo(
     () => ({
@@ -1008,33 +1015,33 @@ export default function Board({
       setAtlanteanFatePreview,
       selectAtlanteanFateCorner,
     }),
-    [pendingAtlanteanFate, setAtlanteanFatePreview, selectAtlanteanFateCorner]
+    [pendingAtlanteanFate, setAtlanteanFatePreview, selectAtlanteanFateCorner],
   );
   const mephistophelesSummonContext = useMemo(
     () => ({
       pendingMephistophelesSummon,
       selectMephistophelesSummonTarget,
     }),
-    [pendingMephistophelesSummon, selectMephistophelesSummonTarget]
+    [pendingMephistophelesSummon, selectMephistophelesSummonTarget],
   );
   // Pathfinder target selection
   const pendingPathfinderPlay = useScopedStore((s) => s.pendingPathfinderPlay);
   const selectPathfinderTarget = useScopedStore(
-    (s) => s.selectPathfinderTarget
+    (s) => s.selectPathfinderTarget,
   );
   const pathfinderContext = useMemo(
     () => ({
       pendingPathfinderPlay,
       selectPathfinderTarget,
     }),
-    [pendingPathfinderPlay, selectPathfinderTarget]
+    [pendingPathfinderPlay, selectPathfinderTarget],
   );
   const counterHandlers = useMemo(
     () => ({
       increment: incrementPermanentCounter,
       decrement: decrementPermanentCounter,
     }),
-    [incrementPermanentCounter, decrementPermanentCounter]
+    [incrementPermanentCounter, decrementPermanentCounter],
   );
   const movementHandlers = useMemo(
     () => ({
@@ -1042,7 +1049,11 @@ export default function Board({
       moveToWithOffset: moveSelectedPermanentToWithOffset,
       moveToZone: movePermanentToZone,
     }),
-    [setPermanentOffset, moveSelectedPermanentToWithOffset, movePermanentToZone]
+    [
+      setPermanentOffset,
+      moveSelectedPermanentToWithOffset,
+      movePermanentToZone,
+    ],
   );
 
   const handleTilePointerUp = useTileDropHandler({
@@ -1120,7 +1131,7 @@ export default function Board({
         updateDraggingSitePos(x, z);
       }
     },
-    [baseHandlePointerMove, draggingSite, updateDraggingSitePos]
+    [baseHandlePointerMove, draggingSite, updateDraggingSitePos],
   );
 
   useBoardDropManager({
@@ -1191,7 +1202,7 @@ export default function Board({
           moveSelectedPermanentToWithOffset(
             fx,
             fy,
-            (snap.prevOffset ?? [0, 0]) as [number, number]
+            (snap.prevOffset ?? [0, 0]) as [number, number],
           );
         } finally {
           setLastCrossMove(null);
@@ -1419,6 +1430,21 @@ export default function Board({
       />
 
       <DraggingSiteGhost draggingSite={draggingSite} />
+
+      {/* Gem Tokens */}
+      {gemTokens.map((token) => (
+        <GemToken3D
+          key={token.id}
+          token={token}
+          onContextMenu={(e, tokenId) => {
+            e.nativeEvent.preventDefault();
+            openContextMenu(
+              { kind: "gemToken" as const, tokenId },
+              { x: e.nativeEvent.clientX, y: e.nativeEvent.clientY },
+            );
+          }}
+        />
+      ))}
 
       {attachmentDialogNode}
 

@@ -3,6 +3,7 @@
 import { useFrame, useThree } from "@react-three/fiber";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Group, PerspectiveCamera } from "three";
+import { useGraphicsSettings } from "@/hooks/useGraphicsSettings";
 import { cardbackAtlasUrl, cardbackSpellbookUrl } from "@/lib/assets";
 import { useSound } from "@/lib/contexts/SoundContext";
 import { isMagician } from "@/lib/game/avatarAbilities";
@@ -26,7 +27,6 @@ import { DRAG_HOLD_MS } from "@/lib/game/constants";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef, PlayerKey } from "@/lib/game/store";
 import { useTouchDevice } from "@/lib/hooks/useTouchDevice";
-import { useGraphicsSettings } from "@/hooks/useGraphicsSettings";
 
 export interface Hand3DProps {
   matW: number;
@@ -359,7 +359,7 @@ export default function Hand3D({
       hideDelayRef.current = window.setTimeout(() => {
         setHandVisibilityMode(null);
         hideDelayRef.current = null;
-      }, 400); // 400ms delay before hiding
+      }, 150); // 150ms delay before hiding - quick but still prevents accidental hide
     } else if (overCardsArea || mouseInZone) {
       // Cancel pending hide if cursor returns
       if (hideDelayRef.current) {
@@ -478,8 +478,8 @@ export default function Hand3D({
       targetShown = 0;
     }
 
-    // Smooth reveal animation - slower for a more relaxed feel
-    const k = 0.12; // Slower animation for smoother, less jarring transitions
+    // Smooth reveal animation - fast and snappy for responsive feel
+    const k = 0.35; // Faster animation for snappy, responsive transitions
     revealLerp.current += (targetShown - revealLerp.current) * k;
     if (Math.abs(targetShown - revealLerp.current) < 0.005)
       revealLerp.current = targetShown;
@@ -705,7 +705,6 @@ export default function Hand3D({
     owner,
     focusLerp,
     hoverLerp,
-    dragFromHand,
     graphicsSettings.handSortOrder,
   ]);
 

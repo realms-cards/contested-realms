@@ -4,6 +4,7 @@ import { OrbitControls } from "@react-three/drei";
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useState, useEffect, useCallback } from "react";
+import { useOnline } from "@/app/online/online-context";
 import CardPreview from "@/components/game/CardPreview";
 import { ClientCanvas } from "@/components/game/ClientCanvas";
 import OnlineConsole from "@/components/game/OnlineConsole";
@@ -14,7 +15,6 @@ import {
   DynamicHand3D as Hand3D,
   DynamicPiles3D as Piles3D,
 } from "@/components/game/dynamic-3d";
-import { useOnline } from "@/app/online/online-context";
 import TextureCache from "@/lib/game/components/TextureCache";
 import { Physics } from "@/lib/game/physics";
 import { useGameStore } from "@/lib/game/store";
@@ -45,7 +45,7 @@ export default function ReplayViewerPage() {
   // Use shared transport from OnlineProvider instead of creating a new socket
   const { transport: onlineTransport, connected } = useOnline();
   const transport = onlineTransport;
-  const { data: session } = useSession();
+  const { data: _session } = useSession();
 
   const [recording, setRecording] = useState<MatchRecording | null>(null);
   const [loading, setLoading] = useState(true);
