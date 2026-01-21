@@ -21,6 +21,7 @@ type MyDeck = {
   format: string;
   isPublic: boolean;
   imported?: boolean;
+  curiosaSourceId?: string | null;
   updatedAt: string;
   /** True while deck is being loaded after import */
   isPending?: boolean;
@@ -81,6 +82,7 @@ function mapAvatarSummary(deck: RawDeck): AvatarSummary {
 
 function mapMyDeckFromApi(deck: RawDeck): MyDeck {
   const summary = mapAvatarSummary(deck);
+  const curiosaSourceId = deck["curiosaSourceId"];
   return {
     id: String(deck["id"] ?? ""),
     name:
@@ -93,6 +95,8 @@ function mapMyDeckFromApi(deck: RawDeck): MyDeck {
         : "Unknown",
     isPublic: Boolean(deck["isPublic"]),
     imported: Boolean(deck["imported"]),
+    curiosaSourceId:
+      typeof curiosaSourceId === "string" ? curiosaSourceId : null,
     updatedAt: normalizeUpdatedAt(deck["updatedAt"]),
     ...summary,
   };
@@ -581,6 +585,7 @@ export default function DecksPage() {
                         format: d.format,
                         isPublic: d.isPublic,
                         imported: d.imported,
+                        curiosaSourceId: d.curiosaSourceId,
                         avatarState: d.avatarState,
                         avatarCard: d.avatarCard,
                         updatedAt: d.updatedAt,

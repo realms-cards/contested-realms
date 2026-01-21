@@ -292,14 +292,9 @@ function checkMortuarySwapActive(
       return !isSilenced(cellKey);
     });
 
-    // XOR logic: swap is active if exactly one player has an active mortuary
-    const p1Has = activeMortuaries.some((m) => m.ownerSeat === "p1");
-    const p2Has = activeMortuaries.some((m) => m.ownerSeat === "p2");
-    const swapActive = p1Has !== p2Has;
-
-    // If swap is active (XOR condition met), both players' cards go to opponent's graveyard
-    // So any actor can update opponent's graveyard when swap is active
-    return swapActive;
+    // Swap is active if at least one active mortuary exists
+    // (Both players having mortuaries = same effect as one)
+    return activeMortuaries.length > 0;
   } catch {
     return false;
   }

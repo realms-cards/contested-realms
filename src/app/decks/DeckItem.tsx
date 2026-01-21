@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { Globe, Lock, Trash2, FileText, List, Pencil } from "lucide-react";
+import { Globe, Lock, Trash2, FileText, List, Pencil, RefreshCw } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -15,6 +15,7 @@ type DeckItemProps = {
     updatedAt: string; // ISO string
     isPublic?: boolean;
     imported?: boolean;
+    curiosaSourceId?: string | null; // For sync functionality
     userName?: string; // For public decks from other users
     isOwner?: boolean; // Whether current user owns this deck
     avatarState: "none" | "single" | "multiple";
@@ -69,6 +70,7 @@ export default function DeckItem({
   const router = useRouter();
   const [deleting, setDeleting] = useState(false);
   const [updatingPublic, setUpdatingPublic] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [isPublicState, setIsPublicState] = useState<boolean>(
     Boolean(deck.isPublic)
   );
@@ -106,6 +108,34 @@ export default function DeckItem({
       router.refresh();
     } finally {
       setDeleting(false);
+    }
+  }
+
+  async function handleSync(e: MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (syncing || !deck.curiosaSourceId) return;
+
+    try {
+      setSyncing(true);
+      const res = await fetch(`/api/decks/${encodeURIComponent(deck.id)}/sync`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to sync deck");
+      }
+      setCopiedMsg("Synced!");
+      setTimeout(() => setCopiedMsg(null), 1500);
+      // Refresh to show updated deck
+      try {
+        window.dispatchEvent(new Event("decks:refresh"));
+      } catch {}
+      router.refresh();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSyncing(false);
     }
   }
 
@@ -548,6 +578,19 @@ export default function DeckItem({
             </button>
           )}
 
+          {/* Sync from Curiosa */}
+          {isOwner && deck.curiosaSourceId && (
+            <button
+              onClick={handleSync}
+              disabled={syncing}
+              className="p-1.5 rounded bg-zinc-700/80 ring-1 ring-cyan-500/50 hover:bg-cyan-600/70 text-cyan-400 hover:text-white"
+              aria-label="Sync from Curiosa"
+              title="Reload deck from Curiosa"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${syncing ? "animate-spin" : ""}`} />
+            </button>
+          )}
+
           {/* Delete */}
           {isOwner && (
             <button
@@ -908,6 +951,19 @@ export default function DeckItem({
             ) : (
               <Lock className="h-5 w-5" />
             )}
+          </button>
+        )}
+
+        {/* Sync from Curiosa */}
+        {isOwner && deck.curiosaSourceId && (
+          <button
+            aria-label="Sync from Curiosa"
+            data-tooltip="Reload from Curiosa"
+            onClick={handleSync}
+            disabled={syncing}
+            className="inline-flex items-center justify-center h-10 w-10 rounded-lg bg-zinc-700/80 ring-1 ring-cyan-500/50 hover:bg-cyan-600/70 text-cyan-400 hover:text-white transition-colors"
+          >
+            <RefreshCw className={`h-5 w-5 ${syncing ? "animate-spin" : ""}`} />
           </button>
         )}
 

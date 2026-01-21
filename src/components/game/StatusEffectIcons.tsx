@@ -1,92 +1,242 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useGameStore } from "@/lib/game/store";
 import type { PlayerKey } from "@/lib/game/store";
 import { siteHasSilencedToken } from "@/lib/game/store/utils/resourceHelpers";
 
-/** Mismanaged Mortuary card image URL (beta set) */
+/** Card image URLs */
 const MORTUARY_IMAGE_URL = "/api/images/bet_mismanaged_mortuary_b_s";
+const ATLANTEAN_FATE_IMAGE_URL = "/api/images/alp_atlantean_fate_b_s";
 
-interface StatusEffectIconProps {
+/** Status effect type for unified display */
+interface StatusEffect {
+  id: string;
   imageUrl: string;
   title: string;
+  description: string;
   controllerSeat: PlayerKey;
+  effectType: "mortuary" | "atlanteanFate" | "counter" | "aura";
 }
 
-function StatusEffectIcon({
-  imageUrl,
-  title,
-  controllerSeat,
-}: StatusEffectIconProps) {
+interface StatusEffectIconProps {
+  effect: StatusEffect;
+  expanded: boolean;
+}
+
+function StatusEffectIcon({ effect, expanded }: StatusEffectIconProps) {
   const ringColor =
-    controllerSeat === "p1"
+    effect.controllerSeat === "p1"
       ? "ring-blue-400 shadow-blue-400/30"
       : "ring-red-400 shadow-red-400/30";
 
   return (
-    <div className="relative group cursor-help" title={title}>
-      {/* Tiny circular icon with card art */}
+    <div
+      className={`relative flex items-center gap-2 transition-all duration-200 ${
+        expanded ? "bg-slate-800/90 rounded-lg px-2 py-1" : ""
+      }`}
+    >
+      {/* Circular icon with card art */}
       <div
-        className={`w-5 h-5 rounded-full overflow-hidden ring-2 ${ringColor} bg-slate-900 shadow-md`}
+        className={`w-6 h-6 rounded-full overflow-hidden ring-2 ${ringColor} bg-slate-900 shadow-md flex-shrink-0`}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={imageUrl}
-          alt="Status Effect"
+          src={effect.imageUrl}
+          alt={effect.title}
           className="w-full h-full object-cover object-[center_15%] scale-[2]"
         />
       </div>
-      {/* Tooltip on hover */}
-      <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 px-2 py-1 bg-slate-900/95 text-white text-[10px] rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
-        {title}
+      {/* Expanded description */}
+      {expanded && (
+        <div className="text-white text-xs whitespace-nowrap">
+          <div className="font-medium">{effect.title}</div>
+          <div className="text-white/70 text-[10px]">{effect.description}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface ClusteredIconProps {
+  effects: StatusEffect[];
+  isExpanded: boolean;
+}
+
+function ClusteredIcon({ effects, isExpanded }: ClusteredIconProps) {
+  if (effects.length === 0) return null;
+
+  // Show stacked icons when collapsed (max 3 visible, overlapping)
+  if (!isExpanded) {
+    const visibleEffects = effects.slice(0, 3);
+    const hiddenCount = effects.length - 3;
+
+    return (
+      <div className="flex items-center">
+        <div className="flex -space-x-2">
+          {visibleEffects.map((effect, idx) => {
+            const ringColor =
+              effect.controllerSeat === "p1"
+                ? "ring-blue-400"
+                : "ring-red-400";
+            return (
+              <div
+                key={effect.id}
+                className={`w-6 h-6 rounded-full overflow-hidden ring-2 ${ringColor} bg-slate-900 shadow-md`}
+                style={{ zIndex: 10 - idx }}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={effect.imageUrl}
+                  alt={effect.title}
+                  className="w-full h-full object-cover object-[center_15%] scale-[2]"
+                />
+              </div>
+            );
+          })}
+        </div>
+        {hiddenCount > 0 && (
+          <div className="ml-1 w-5 h-5 rounded-full bg-slate-700 text-white text-[10px] flex items-center justify-center font-medium">
+            +{hiddenCount}
+          </div>
+        )}
       </div>
+    );
+  }
+
+  // Show expanded list
+  return (
+    <div className="flex flex-col gap-1">
+      {effects.map((effect) => (
+        <StatusEffectIcon key={effect.id} effect={effect} expanded />
+      ))}
     </div>
   );
 }
 
 /**
- * Displays a single status effect icon for active automatic effects.
- * Shows a tiny round icon next to the user badge at top-right.
- * Ring color indicates which player controls the effect.
+ * Displays status effect icons for active board-altering effects.
+ * Shows clustered icons that expand on hover to reveal details.
+ * Tracks: Mismanaged Mortuary (cemetery swap), Atlantean Fate (flood zones),
+ * and other persistent game-state-modifying effects.
  */
 export default function PlayerStatusEffects() {
+  const [isHovered, setIsHovered] = useState(false);
+
   const mismanagedMortuaries = useGameStore(
     (s) => s.specialSiteState.mismanagedMortuaries,
+  );
+  const atlanteanFateAuras = useGameStore(
+    (s) => s.specialSiteState.atlanteanFateAuras,
   );
   const permanents = useGameStore((s) => s.permanents);
   const boardSites = useGameStore((s) => s.board.sites);
 
-  // Find all active mortuaries (non-silenced AND still on the board)
-  const activeMortuaries = useMemo(() => {
-    return mismanagedMortuaries.filter((m) => {
-      // Verify the site is still on the board
+  // Collect all active status effects
+  const activeEffects = useMemo(() => {
+    const effects: StatusEffect[] = [];
+
+    // --- Mismanaged Mortuary ---
+    // Find all active mortuaries (non-silenced AND still on the board)
+    const activeMortuaries = mismanagedMortuaries.filter((m) => {
       const siteStillExists = !!boardSites[m.cellKey];
       if (!siteStillExists) return false;
-      // Check if silenced
       return !siteHasSilencedToken(m.cellKey, permanents);
     });
-  }, [mismanagedMortuaries, permanents, boardSites]);
 
-  // XOR logic: cemetery swap is active if exactly one player has an active mortuary
-  const p1Mortuaries = activeMortuaries.filter((m) => m.ownerSeat === "p1");
-  const p2Mortuaries = activeMortuaries.filter((m) => m.ownerSeat === "p2");
-  const p1HasMortuary = p1Mortuaries.length > 0;
-  const p2HasMortuary = p2Mortuaries.length > 0;
-  const cemeterySwapActive = p1HasMortuary !== p2HasMortuary;
+    // XOR logic: cemetery swap is active if exactly one player has an active mortuary
+    const p1Mortuaries = activeMortuaries.filter((m) => m.ownerSeat === "p1");
+    const p2Mortuaries = activeMortuaries.filter((m) => m.ownerSeat === "p2");
+    const p1HasMortuary = p1Mortuaries.length > 0;
+    const p2HasMortuary = p2Mortuaries.length > 0;
+    const cemeterySwapActive = p1HasMortuary !== p2HasMortuary;
 
-  // Determine controller (who has the active mortuary)
-  const controllerSeat: PlayerKey = p1HasMortuary ? "p1" : "p2";
+    if (cemeterySwapActive) {
+      const controllerSeat: PlayerKey = p1HasMortuary ? "p1" : "p2";
+      effects.push({
+        id: "mortuary-swap",
+        imageUrl: MORTUARY_IMAGE_URL,
+        title: "Cemeteries Swapped",
+        description: "Mismanaged Mortuary active",
+        controllerSeat,
+        effectType: "mortuary",
+      });
+    }
 
-  if (!cemeterySwapActive) return null;
+    // --- Atlantean Fate Auras ---
+    // Each active aura that has flooded sites should be shown
+    for (const aura of atlanteanFateAuras) {
+      if (aura.floodedSites.length > 0) {
+        effects.push({
+          id: `atlantean-fate-${aura.id}`,
+          imageUrl: ATLANTEAN_FATE_IMAGE_URL,
+          title: "Atlantean Fate",
+          description: `${aura.floodedSites.length} site${aura.floodedSites.length !== 1 ? "s" : ""} flooded`,
+          controllerSeat: aura.ownerSeat,
+          effectType: "atlanteanFate",
+        });
+      }
+    }
+
+    // --- Cards with Counters (tracking effects) ---
+    // Scan permanents for cards with counters that might indicate tracking
+    for (const [cellKey, cellPerms] of Object.entries(permanents)) {
+      for (const perm of cellPerms || []) {
+        if (perm.counters && perm.counters > 0) {
+          const cardName = perm.card?.name || "Unknown";
+          const cardNameLower = cardName.toLowerCase();
+
+          // Track cards that have game-state-altering counter tracking
+          // Add specific cards here as needed (e.g., "Counting Core")
+          if (
+            cardNameLower.includes("counting") ||
+            cardNameLower.includes("core")
+          ) {
+            const ownerSeat: PlayerKey = perm.owner === 1 ? "p1" : "p2";
+            effects.push({
+              id: `counter-${cellKey}-${perm.instanceId || cardName}`,
+              imageUrl: `/api/images/${perm.card?.slug || "unknown"}_s`,
+              title: cardName,
+              description: `${perm.counters} counter${perm.counters !== 1 ? "s" : ""}`,
+              controllerSeat: ownerSeat,
+              effectType: "counter",
+            });
+          }
+        }
+      }
+    }
+
+    return effects;
+  }, [
+    mismanagedMortuaries,
+    atlanteanFateAuras,
+    permanents,
+    boardSites,
+  ]);
+
+  if (activeEffects.length === 0) return null;
 
   return (
-    <div className="fixed top-4 right-16 z-50 flex items-center gap-2 pointer-events-auto">
-      <StatusEffectIcon
-        imageUrl={MORTUARY_IMAGE_URL}
-        title="Mismanaged Mortuary: Cemeteries Swapped"
-        controllerSeat={controllerSeat}
-      />
+    <div
+      className="fixed top-4 right-16 z-50 pointer-events-auto cursor-pointer"
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      <div
+        className={`transition-all duration-200 ${
+          isHovered
+            ? "bg-slate-900/95 rounded-xl p-2 shadow-xl border border-slate-700/50"
+            : ""
+        }`}
+      >
+        {/* Header when expanded */}
+        {isHovered && activeEffects.length > 1 && (
+          <div className="text-white/50 text-[10px] uppercase tracking-wider mb-2 px-1">
+            Active Effects ({activeEffects.length})
+          </div>
+        )}
+        <ClusteredIcon effects={activeEffects} isExpanded={isHovered} />
+      </div>
     </div>
   );
 }

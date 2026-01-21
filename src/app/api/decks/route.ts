@@ -26,6 +26,7 @@ type DeckListResponse = {
     format: string | null;
     isPublic: boolean;
     imported: boolean;
+    curiosaSourceId: string | null; // For sync functionality
     updatedAt: string;
     avatarState: "none" | "single" | "multiple";
     avatarCard: { name: string; slug: string | null } | null;
@@ -80,6 +81,7 @@ export async function GET() {
               format: true,
               isPublic: true,
               imported: true,
+              curiosaSourceId: true,
               updatedAt: true,
             },
           }),
@@ -214,6 +216,7 @@ export async function GET() {
               format: d.format,
               isPublic: d.isPublic,
               imported: d.imported,
+              curiosaSourceId: d.curiosaSourceId,
               updatedAt: d.updatedAt.toISOString(),
               avatarState: avatarSummary.state,
               avatarCard: avatarSummary.avatarCard ?? null,
