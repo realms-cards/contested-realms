@@ -79,7 +79,7 @@ type HoverContext = {
   clearHoverPreview: (sourceKey?: string | null) => void;
   clearHoverPreviewDebounced: (
     sourceKey?: string | null,
-    delay?: number
+    delay?: number,
   ) => void;
   openContextMenu: GameState["openContextMenu"];
 };
@@ -457,7 +457,6 @@ export function PermanentStack({
           selectedPermanent.index === idx;
         const cardType = (p.card.type || "").toLowerCase();
         const isToken = cardType.includes("token");
-        const isAura = cardType.includes("aura");
         const tokenDef = isToken
           ? TOKEN_BY_NAME[(p.card.name || "").toLowerCase()]
           : undefined;
@@ -468,11 +467,10 @@ export function PermanentStack({
             ? -avatarAvoidZ
             : avatarAvoidZ
           : 0;
-        // Auras sit at intersections - no owner-based z offset
-        const zBase =
-          tokenSiteReplace || isAura
-            ? 0
-            : owner === 1
+        // Token site replacements sit at center, regular cards get owner-based z offset
+        const zBase = tokenSiteReplace
+          ? 0
+          : owner === 1
             ? -TILE_SIZE * 0.5 + marginZ + avatarShiftZ
             : TILE_SIZE * 0.5 - marginZ + avatarShiftZ;
         const rotZ =
@@ -506,8 +504,8 @@ export function PermanentStack({
         const baseY = isBurrowed
           ? burrowedElevation
           : tokenSiteReplace
-          ? rubbleElevation
-          : baseElevation + burrowedCount * layerLift + avatarLift + siteLift;
+            ? rubbleElevation
+            : baseElevation + burrowedCount * layerLift + avatarLift + siteLift;
         // Stack index for non-burrowed cards only (burrowed cards don't stack)
         // Cards maintain stable positions based on sort order
         const nonBurrowedIdx = isBurrowed ? 0 : sortedIdx - burrowedCount;
@@ -560,7 +558,7 @@ export function PermanentStack({
           }
           if (
             (pendingCombat.defenders || []).some(
-              (d) => d.at === key && d.index === idx
+              (d) => d.at === key && d.index === idx,
             )
           ) {
             roleGlow = HIGHLIGHT_DEFENDER;
@@ -621,8 +619,8 @@ export function PermanentStack({
         const bodyType = tokenSiteReplace
           ? "fixed" // Rubble tokens are truly fixed (site replacements)
           : isDraggingPermanent && !useGhostOnlyBoardDrag
-          ? "kinematicPosition" // Active drag: body follows physics during drag
-          : "fixed"; // Not dragging: locked in place to prevent unwanted position updates
+            ? "kinematicPosition" // Active drag: body follows physics during drag
+            : "fixed"; // Not dragging: locked in place to prevent unwanted position updates
         const gravityScale =
           useGhostOnlyBoardDrag || tokenSiteReplace || !isDraggingPermanent
             ? 0
@@ -642,7 +640,7 @@ export function PermanentStack({
               } catch (error) {
                 console.warn(
                   `[physics] Failed to update body map for ${id}:`,
-                  error
+                  error,
                 );
               }
             }}
@@ -784,11 +782,11 @@ export function PermanentStack({
                   if (onTile && owner === myOwner && !isAttachment) {
                     e.stopPropagation();
                     const present = (pendingCombat.defenders || []).some(
-                      (d) => d.at === key && d.index === idx
+                      (d) => d.at === key && d.index === idx,
                     );
                     if (present) {
                       const next = (pendingCombat.defenders || []).filter(
-                        (d) => !(d.at === key && d.index === idx)
+                        (d) => !(d.at === key && d.index === idx),
                       ) as Array<{
                         at: CellKey;
                         index: number;
@@ -834,7 +832,7 @@ export function PermanentStack({
                     setLastTouchedId(permId);
                     openContextMenu(
                       { kind: "permanent", at: key, index: idx },
-                      { x: cx, y: cy }
+                      { x: cx, y: cy },
                     );
                   }, 500) as unknown as number;
                 }
@@ -954,7 +952,7 @@ export function PermanentStack({
                         boardGhostRef.current.position.set(
                           e.point.x,
                           0.26,
-                          e.point.z
+                          e.point.z,
                         );
                       }
                     }
@@ -971,7 +969,7 @@ export function PermanentStack({
                           try {
                             draggedBody.current.setBodyType(
                               "kinematicPosition",
-                              false
+                              false,
                             );
                           } catch {}
                           moveDraggedBody(e.point.x, e.point.z, true);
@@ -1242,7 +1240,7 @@ export function PermanentStack({
                   setLastTouchedId(permId);
                   openContextMenu(
                     { kind: "permanent", at: key, index: idx },
-                    { x: e.clientX, y: e.clientY }
+                    { x: e.clientX, y: e.clientY },
                   );
                 }}
               >
@@ -1274,8 +1272,8 @@ export function PermanentStack({
                       tokenSiteReplace
                         ? 5
                         : isDraggingPermanent || isSel || isLastTouched
-                        ? 1000
-                        : 100
+                          ? 1000
+                          : 100
                     }
                   />
                 ) : (
@@ -1288,8 +1286,8 @@ export function PermanentStack({
                       isDraggingPermanent || isSel || isLastTouched
                         ? 1000
                         : isBurrowed
-                        ? 50
-                        : 100
+                          ? 50
+                          : 100
                     }
                     depthWrite
                     depthTest
@@ -1297,8 +1295,8 @@ export function PermanentStack({
                       p.faceDown
                         ? "/api/assets/cardback_spellbook.png"
                         : !p.card?.slug
-                        ? "/api/assets/air.png"
-                        : undefined
+                          ? "/api/assets/air.png"
+                          : undefined
                     }
                   />
                 )}
@@ -1318,7 +1316,7 @@ export function PermanentStack({
                     (item) =>
                       item.attachedTo &&
                       item.attachedTo.at === key &&
-                      item.attachedTo.index === idx
+                      item.attachedTo.index === idx,
                   );
                   return attachedTokens.map((token, attachIdx) => {
                     const tokenName = (token.card.name || "").toLowerCase();
@@ -1405,8 +1403,8 @@ export function PermanentStack({
                       const parentRenderOrder = isBurrowed
                         ? -10
                         : isDraggingPermanent || isSel || isLastTouched
-                        ? 1000
-                        : 100;
+                          ? 1000
+                          : 100;
                       // Carryable artifacts render ON TOP of their parent card
                       return (
                         <group
