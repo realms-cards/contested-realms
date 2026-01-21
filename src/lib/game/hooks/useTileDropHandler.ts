@@ -384,7 +384,7 @@ export function useTileDropHandler({
                 tileX,
                 tileY,
                 newIndex,
-              }
+              },
             );
           }
         } catch {}
@@ -498,7 +498,7 @@ export function useTileDropHandler({
             // Find closest target from all potential targets
             for (const target of potentialTargets) {
               const distance = Math.sqrt(
-                Math.pow(wx - target.x, 2) + Math.pow(wz - target.z, 2)
+                Math.pow(wx - target.x, 2) + Math.pow(wz - target.z, 2),
               );
               if (distance < closestDistance) {
                 closestDistance = distance;
@@ -546,10 +546,10 @@ export function useTileDropHandler({
             ? 1
             : 2
           : actorKey === "p1"
-          ? 1
-          : actorKey === "p2"
-          ? 2
-          : currentPlayer;
+            ? 1
+            : actorKey === "p2"
+              ? 2
+              : currentPlayer;
         const dropZBase =
           dropOwner === 1
             ? -TILE_SIZE * 0.5 + STACK_MARGIN_Z
@@ -612,28 +612,15 @@ export function useTileDropHandler({
           });
 
           if (isAura) {
-            // Aura cards sit at the intersection of 4 tiles
-            // Use raw drop offset without the dropZBase stacking adjustment
-            const auraOffX = clampOffset(wx - pos[0], TILE_OFFSET_LIMIT_X);
-            const auraOffZ = clampOffset(wz - pos[2], TILE_OFFSET_LIMIT_Z);
-
-            console.log(
-              "[useTileDropHandler] Aura placement at intersection:",
-              {
-                tileX,
-                tileY,
-                auraOffX,
-                auraOffZ,
-              }
-            );
-
-            // Play to the tile with raw offset to keep card exactly at intersection
-            playSelectedTo(tileX, tileY, [auraOffX, auraOffZ]);
+            // Aura placement - use same flow as regular cards
+            playSelectedTo(tileX, tileY);
             try {
               playCardPlay();
             } catch {}
             setDragFromHand(false);
             setGhost(null);
+            // Apply offset same as regular cards
+            setPermanentOffset(dropKey, newIndex, [offX, offZ]);
           } else {
             // Regular non-aura card placement
             playSelectedTo(tileX, tileY);
@@ -701,6 +688,6 @@ export function useTileDropHandler({
       dropDraggingSite,
       pendingPrivateHandCast,
       completePendingPrivateHandCast,
-    ]
+    ],
   );
 }

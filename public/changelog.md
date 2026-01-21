@@ -4,7 +4,6 @@
 
 ### Jan 21 - Fixes from GitHub issues
 
-- **add undo - EXPERIMENTAL** use at your own risk!
 - **add automatic resolver for Mismanaged Mortuary**
 - **add status effect icons** for various effects on the board
 - **fix Player not having their mulligan if second player was faster**
