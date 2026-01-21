@@ -61,7 +61,7 @@ export default function GameToolbox({
   const baseFontSize = 12;
   const scaledFontSize = Math.max(
     10,
-    Math.min(16, Math.round(baseFontSize * graphicsSettings.uiTextScale))
+    Math.min(16, Math.round(baseFontSize * graphicsSettings.uiTextScale)),
   );
   const fontStyle = { fontSize: `${scaledFontSize}px` };
 
@@ -81,11 +81,11 @@ export default function GameToolbox({
 
   const [revealSeat, setRevealSeat] = useState<PlayerKey>(mySeat ?? "p1");
   const [revealPile, setRevealPile] = useState<"spellbook" | "atlas">(
-    "spellbook"
+    "spellbook",
   );
   const [revealCount, setRevealCount] = useState<number>(1);
   const [revealFromWhere, setRevealFromWhere] = useState<"top" | "bottom">(
-    "top"
+    "top",
   );
 
   const [scrySeat, setScrySeat] = useState<PlayerKey>(mySeat ?? "p1");
@@ -101,7 +101,7 @@ export default function GameToolbox({
   const [fixOpen, setFixOpen] = useState<boolean>(false);
   const [unbanishSeat, setUnbanishSeat] = useState<PlayerKey>(mySeat ?? "p1");
   const [unbanishTarget, setUnbanishTarget] = useState<"hand" | "graveyard">(
-    "hand"
+    "hand",
   );
 
   // Toolbox D20 overlay state
@@ -240,20 +240,38 @@ export default function GameToolbox({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [d20Open, d6Open, isOnline, transport]);
 
-  const disabledOnlineOpponentScry =
-    isOnline && mySeat != null && scrySeat !== mySeat;
   const handleOpenScry = () => {
-    if (disabledOnlineOpponentScry) {
-      log("Online: cannot scry opponent piles");
+    const seat = scrySeat;
+    const pile = scryPile;
+    const cnt = Math.max(1, Math.floor(scryCount));
+
+    // Online: always request consent for scry (manipulates pile order)
+    if (isOnline && mySeat && opponentSeat) {
+      const rid = requestConsent(
+        "takeFromPile",
+        `Request to scry ${cnt} from top of ${seat.toUpperCase()} ${pile}`,
+        { seat, pile, count: cnt, from: "top", scry: true },
+      );
+      if (rid) {
+        pendingRequestRef.current[rid] = {
+          kind: "takeFromPile",
+          seat,
+          pile,
+          count: cnt,
+          from: "top",
+        };
+      }
       return;
     }
+
+    // Offline: scry immediately
     const cards =
-      scryPile === "spellbook"
-        ? zones[scrySeat]?.spellbook || []
-        : zones[scrySeat]?.atlas || [];
-    const cnt = Math.max(1, Math.min(Math.floor(scryCount) || 1, cards.length));
-    if (cnt <= 0) return;
-    setScryCards(cards.slice(0, cnt));
+      pile === "spellbook"
+        ? zones[seat]?.spellbook || []
+        : zones[seat]?.atlas || [];
+    const actualCnt = Math.max(1, Math.min(cnt, cards.length));
+    if (actualCnt <= 0) return;
+    setScryCards(cards.slice(0, actualCnt));
     setScryBottom({});
     setScryOpen(true);
   };
@@ -307,14 +325,14 @@ export default function GameToolbox({
       Array.isArray(snapshots)
         ? snapshots.filter((s) => s.kind === "auto")
         : [],
-    [snapshots]
+    [snapshots],
   );
   const archiveSnapshots = useMemo(
     () =>
       Array.isArray(snapshots)
         ? snapshots.filter((s) => (s.kind ?? "manual") === "manual")
         : [],
-    [snapshots]
+    [snapshots],
   );
   const [selectedAutoId, setSelectedAutoId] = useState<string | null>(null);
   useEffect(() => {
@@ -342,7 +360,7 @@ export default function GameToolbox({
       return;
     }
     const raw: Record<string, unknown> = JSON.parse(
-      JSON.stringify(item.payload || {})
+      JSON.stringify(item.payload || {}),
     );
     const allowed = [
       "board",
@@ -389,7 +407,7 @@ export default function GameToolbox({
       (selectedAutoId ? pool.find((s) => s.id === selectedAutoId) : null) ||
       pool[pool.length - 1];
     const raw: Record<string, unknown> = JSON.parse(
-      JSON.stringify(item.payload || {})
+      JSON.stringify(item.payload || {}),
     );
     const keys = Object.keys(raw).filter((k) => k !== "__replaceKeys");
     (raw as { __replaceKeys?: string[] }).__replaceKeys = keys;
@@ -431,14 +449,14 @@ export default function GameToolbox({
                 singleUse: true,
                 expiresAt: Date.now() + ttlMs,
               } as Record<string, unknown>,
-            }
+            },
           );
           if (rid) {
           }
           return;
         }
         moveFromBanishedToZone(seat, instanceId, target);
-      }
+      },
     );
   };
 
@@ -483,7 +501,7 @@ export default function GameToolbox({
   function requestConsent(
     kind: InteractionRequestKind,
     note: string,
-    payload: Record<string, unknown>
+    payload: Record<string, unknown>,
   ) {
     const ids = requireOnlineIds();
     if (!ids) return null;
@@ -513,7 +531,7 @@ export default function GameToolbox({
       {
         // Show a helpful summary in the consent dialog
         proposedGrant: { singleUse: true, expiresAt: Date.now() + ttlMs },
-      }
+      },
     );
     if (rid) {
       pendingRequestRef.current[rid] = { kind: "instantSpell" };
@@ -521,15 +539,34 @@ export default function GameToolbox({
   };
   const handleDraw = () => {
     const seat = drawSeat;
-    if (isOnline && mySeat && seat !== mySeat) {
-      // Drawing opponent's pile online is not supported yet (requires server-side action)
-      log("[Warning] Drawing from opponent pile online is not supported");
+    const pile = drawPile;
+    const cnt = Math.max(1, Math.floor(drawCount));
+    const from = drawFromWhere;
+
+    // Online: always request consent for draw (affects game state)
+    if (isOnline && mySeat && opponentSeat) {
+      const rid = requestConsent(
+        "takeFromPile",
+        `Request to draw ${cnt} from ${from} of ${seat.toUpperCase()} ${pile}`,
+        { seat, pile, count: cnt, from, draw: true },
+      );
+      if (rid) {
+        pendingRequestRef.current[rid] = {
+          kind: "takeFromPile",
+          seat,
+          pile,
+          count: cnt,
+          from,
+        };
+      }
       return;
     }
-    if (drawFromWhere === "top") {
-      drawFrom(seat, drawPile, Math.max(1, Math.floor(drawCount)));
+
+    // Offline: draw immediately
+    if (from === "top") {
+      drawFrom(seat, pile, cnt);
     } else {
-      drawFromBottom(seat, drawPile, Math.max(1, Math.floor(drawCount)));
+      drawFromBottom(seat, pile, cnt);
     }
   };
 
@@ -543,7 +580,7 @@ export default function GameToolbox({
       const rid = requestConsent(
         "takeFromPile",
         `Request to look at ${cnt} from ${from} of ${pile}`,
-        { seat, pile, count: cnt, from }
+        { seat, pile, count: cnt, from },
       );
       if (rid) {
         pendingRequestRef.current[rid] = {
@@ -572,7 +609,7 @@ export default function GameToolbox({
           pile === "spellbook" ? "Spellbook" : "Atlas"
         } (${from})`,
         slice,
-        { seat, pile, from }
+        { seat, pile, from },
       );
   };
 
@@ -581,6 +618,27 @@ export default function GameToolbox({
     const pile = revealPile;
     const cnt = Math.max(1, Math.floor(revealCount));
     const from = revealFromWhere;
+
+    // Online: always request consent for reveal (shows cards to both players)
+    if (isOnline && mySeat && opponentSeat) {
+      const rid = requestConsent(
+        "takeFromPile",
+        `Request to reveal ${cnt} from ${from} of ${seat.toUpperCase()} ${pile}`,
+        { seat, pile, count: cnt, from, reveal: true },
+      );
+      if (rid) {
+        pendingRequestRef.current[rid] = {
+          kind: "takeFromPile",
+          seat,
+          pile,
+          count: cnt,
+          from,
+        };
+      }
+      return;
+    }
+
+    // Offline: reveal immediately
     const cards =
       pile === "spellbook"
         ? zones[seat]?.spellbook || []
@@ -646,7 +704,7 @@ export default function GameToolbox({
   };
 
   const handleForcePosition = (
-    target: "burrowed" | "submerged" | "surface"
+    target: "burrowed" | "submerged" | "surface",
   ) => {
     const sel = selectedPermanent;
     if (!sel) {
@@ -686,7 +744,7 @@ export default function GameToolbox({
           at: sel.at,
           index: sel.index,
           newState: target,
-        }
+        },
       );
       if (rid) {
         // When approved, simply apply locally (permanentPositions patch will sync)
@@ -717,9 +775,6 @@ export default function GameToolbox({
       apply();
     }
   };
-
-  const disabledOnlineOpponentDraw =
-    isOnline && mySeat != null && drawSeat !== mySeat;
 
   // Retry state for toolbox D20 roll
   const [d20Pending, setD20Pending] = useState<{
@@ -804,7 +859,7 @@ export default function GameToolbox({
         // Retry up to maxRetries times
         if (retryCount >= maxRetries) {
           console.warn(
-            `[Toolbox] D20 roll failed after ${maxRetries} retries, showing locally`
+            `[Toolbox] D20 roll failed after ${maxRetries} retries, showing locally`,
           );
           // Fallback: show locally if server never responded
           setD20Value(value);
@@ -816,7 +871,7 @@ export default function GameToolbox({
           return;
         }
         console.log(
-          `[Toolbox] Retrying D20 roll send (${retryCount}/${maxRetries})...`
+          `[Toolbox] Retrying D20 roll send (${retryCount}/${maxRetries})...`,
         );
         sendD20Message();
       }, 3000);
@@ -863,7 +918,7 @@ export default function GameToolbox({
         }
         if (retryCount >= maxRetries) {
           console.warn(
-            `[Toolbox] D6 roll failed after ${maxRetries} retries, showing locally`
+            `[Toolbox] D6 roll failed after ${maxRetries} retries, showing locally`,
           );
           // Fallback: show locally if server never responded
           setD6Value(value);
@@ -875,7 +930,7 @@ export default function GameToolbox({
           return;
         }
         console.log(
-          `[Toolbox] Retrying D6 roll send (${retryCount}/${maxRetries})...`
+          `[Toolbox] Retrying D6 roll send (${retryCount}/${maxRetries})...`,
         );
         sendD6Message();
       }, 3000);
@@ -916,7 +971,7 @@ export default function GameToolbox({
       log(
         `Error fetching random spell: ${
           e instanceof Error ? e.message : "Unknown"
-        }`
+        }`,
       );
     } finally {
       setRandomSpellLoading(false);
@@ -1155,25 +1210,15 @@ export default function GameToolbox({
                   if (actionType === "reveal") return handleReveal();
                   return handleOpenScry();
                 }}
-                disabled={
-                  (actionType === "draw" && disabledOnlineOpponentDraw) ||
-                  (actionType === "scry" && disabledOnlineOpponentScry)
-                }
-                title={
-                  actionType === "draw" && disabledOnlineOpponentDraw
-                    ? "Online: cannot draw from opponent piles"
-                    : actionType === "scry" && disabledOnlineOpponentScry
-                    ? "Online: cannot scry opponent piles"
-                    : ""
-                }
+                disabled={false}
               >
                 {actionType === "draw"
                   ? `Draw • ${drawSeat.toUpperCase()} • ${drawPile} • ${drawFromWhere} • x${drawCount}`
                   : actionType === "peek"
-                  ? `Peek • ${peekSeat.toUpperCase()} • ${peekPile} • ${peekFromWhere} • x${peekCount}`
-                  : actionType === "reveal"
-                  ? `Reveal • ${revealSeat.toUpperCase()} • ${revealPile} • ${revealFromWhere} • x${revealCount}`
-                  : `Scry • ${scrySeat.toUpperCase()} • ${scryPile} • x${scryCount}`}
+                    ? `Peek • ${peekSeat.toUpperCase()} • ${peekPile} • ${peekFromWhere} • x${peekCount}`
+                    : actionType === "reveal"
+                      ? `Reveal • ${revealSeat.toUpperCase()} • ${revealPile} • ${revealFromWhere} • x${revealCount}`
+                      : `Scry • ${scrySeat.toUpperCase()} • ${scryPile} • x${scryCount}`}
               </button>
 
               {scryOpen && (
@@ -1421,7 +1466,7 @@ export default function GameToolbox({
                         value={unbanishTarget}
                         onChange={(e) =>
                           setUnbanishTarget(
-                            e.target.value as "hand" | "graveyard"
+                            e.target.value as "hand" | "graveyard",
                           )
                         }
                         className="bg-white/10 rounded px-2 py-1"
@@ -1507,7 +1552,7 @@ export default function GameToolbox({
                       <div className="mt-1 text-xs opacity-70">
                         {(() => {
                           const pool = autoSnapshots.slice(
-                            Math.max(autoSnapshots.length - 5, 0)
+                            Math.max(autoSnapshots.length - 5, 0),
                           );
                           const sel =
                             pool.find((s) => s.id === selectedAutoId) ||

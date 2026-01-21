@@ -149,7 +149,7 @@ type TournamentBroadcastEventName =
   (typeof TOURNAMENT_BROADCAST_EVENT_NAMES)[number];
 
 const TOURNAMENT_BROADCAST_EVENT_SET: ReadonlySet<string> = new Set(
-  TOURNAMENT_BROADCAST_EVENT_NAMES
+  TOURNAMENT_BROADCAST_EVENT_NAMES,
 );
 
 interface TournamentBroadcastData extends Record<string, unknown> {
@@ -202,13 +202,13 @@ interface HighlightPayload extends Record<string, unknown> {
 }
 
 function isTournamentBroadcastEvent(
-  value: unknown
+  value: unknown,
 ): value is TournamentBroadcastEventName {
   return typeof value === "string" && TOURNAMENT_BROADCAST_EVENT_SET.has(value);
 }
 
 function normalizeTournamentBroadcastData(
-  input: unknown
+  input: unknown,
 ): TournamentBroadcastData {
   if (!input || typeof input !== "object") {
     return {};
@@ -224,10 +224,10 @@ function toOptionalNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value)
     ? value
     : typeof value === "string" &&
-      value.trim() !== "" &&
-      Number.isFinite(Number(value))
-    ? Number(value)
-    : null;
+        value.trim() !== "" &&
+        Number.isFinite(Number(value))
+      ? Number(value)
+      : null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -240,29 +240,29 @@ interface MatchDraftService {
   leaderDraftPlayerReady(
     matchId: string,
     playerId: string,
-    ready: boolean
+    ready: boolean,
   ): Promise<void>;
   leaderStartDraft(
     matchId: string,
     requestingPlayerId?: string | null,
     overrideConfig?: AnyRecord | null,
-    requestingSocketId?: string | null
+    requestingSocketId?: string | null,
   ): Promise<void>;
   leaderMakeDraftPick(
     matchId: string,
     playerId: string,
-    payload: AnyRecord
+    payload: AnyRecord,
   ): Promise<void>;
   leaderChooseDraftPack(
     matchId: string,
     playerId: string,
-    payload: AnyRecord
+    payload: AnyRecord,
   ): Promise<void>;
   updateDraftPresence(
     sessionId: string,
     playerId: string,
     playerName: string | null,
-    isConnected: boolean
+    isConnected: boolean,
   ): Promise<DraftPresenceEntry[]>;
   getDraftPresenceList(sessionId: string): DraftPresenceEntry[];
   clearDraftWatchdog(matchId: string): void;
@@ -276,12 +276,12 @@ const getOpponentSeatStrict = (seat: Seat): Seat => {
   return result === "p1" || result === "p2"
     ? result
     : seat === "p1"
-    ? "p2"
-    : "p1";
+      ? "p2"
+      : "p1";
 };
 const enrichPatchWithCostsSafe = async (
   patch: MatchPatch | null,
-  prismaClient: PrismaClient
+  prismaClient: PrismaClient,
 ): Promise<MatchPatch | null> => {
   if (!patch) return null;
   return (await enrichPatchWithCosts(patch, prismaClient)) as MatchPatch;
@@ -370,15 +370,15 @@ const PERSIST_IS_WRITE_BEHIND =
   PERSIST_STRATEGY === "redis" ||
   PERSIST_STRATEGY === "redis_writebehind";
 const PERSIST_FLUSH_INTERVAL_MS = Number(
-  process.env.PERSIST_FLUSH_INTERVAL_MS || 3000
+  process.env.PERSIST_FLUSH_INTERVAL_MS || 3000,
 );
 const PERSIST_MAX_WAIT_MS = Number(process.env.PERSIST_MAX_WAIT_MS || 2000);
 const PERSIST_TIMEOUT_MS = Number(process.env.PERSIST_TIMEOUT_MS || 2000);
 const PERSIST_ACTION_BATCH_SIZE = Number(
-  process.env.PERSIST_ACTION_BATCH_SIZE || 200
+  process.env.PERSIST_ACTION_BATCH_SIZE || 200,
 );
 const REDIS_SESSION_TTL_SEC = Number(
-  process.env.MATCH_SESSION_TTL_SEC || 60 * 60 * 24
+  process.env.MATCH_SESSION_TTL_SEC || 60 * 60 * 24,
 );
 
 // Simple in-memory metrics registry (process lifetime)
@@ -412,7 +412,7 @@ let getPersistenceBufferStats: () => {
   bufferedActions: 0,
 });
 let flushAllPersistenceBuffers: (
-  reason?: string
+  reason?: string,
 ) => Promise<void> = async () => {};
 
 function collectMetricsSnapshot(): MetricsSnapshot {
@@ -476,7 +476,7 @@ function buildPromMetrics(): string {
     name: string,
     sum: unknown,
     count: unknown,
-    help?: string
+    help?: string,
   ) => {
     const base = `sorcery_${promSafe(name)}`;
     if (help) lines.push(`# HELP ${base} ${help}`);
@@ -488,28 +488,28 @@ function buildPromMetrics(): string {
   pushGauge(
     "matches_cached",
     snap.matchesCached,
-    "Number of matches in memory"
+    "Number of matches in memory",
   );
   pushGauge(
     "persist_buffers",
     snap.persistBuffers,
-    "Number of write-behind buffers"
+    "Number of write-behind buffers",
   );
   pushGauge(
     "persist_buffered_actions",
     snap.bufferedActions,
-    "Queued actions in buffers"
+    "Queued actions in buffers",
   );
   pushGauge(
     "sockets_connected",
     snap.socketsConnected,
-    "Connected WebSocket clients"
+    "Connected WebSocket clients",
   );
   pushGauge("uptime_seconds", snap.uptimeSec, "Process uptime in seconds");
   pushGauge(
     "process_heap_used_bytes",
     snap.memory.heapUsed,
-    "Node.js heap used"
+    "Node.js heap used",
   );
   pushGauge("process_rss_bytes", snap.memory.rss, "Resident set size");
   // Counters
@@ -549,13 +549,13 @@ function buildPromMetrics(): string {
 const MATCH_CONTROL_CHANNEL = "match:control";
 const DRAFT_STATE_CHANNEL = "draft:session:update";
 const MATCH_CLEANUP_DELAY_MS = Number(
-  process.env.MATCH_CLEANUP_DELAY_MS || 60000
+  process.env.MATCH_CLEANUP_DELAY_MS || 60000,
 ); // 60s default
 const STALE_WAITING_MS = Number(
-  process.env.STALE_MATCH_WAITING_MS || 10 * 60 * 1000
+  process.env.STALE_MATCH_WAITING_MS || 10 * 60 * 1000,
 ); // 10 min default
 const INACTIVE_MATCH_CLEANUP_MS = Number(
-  process.env.INACTIVE_MATCH_CLEANUP_MS || 3 * 60 * 60 * 1000
+  process.env.INACTIVE_MATCH_CLEANUP_MS || 3 * 60 * 60 * 1000,
 ); // 3 hours default
 const LOBBY_CONTROL_CHANNEL = "lobby:control";
 const LOBBY_STATE_CHANNEL = "lobby:state";
@@ -629,7 +629,7 @@ if (REDIS_STATE_ENABLED) {
       try {
         console.warn(
           "[scaling] Leader heartbeat error:",
-          safeErrorMessage(err)
+          safeErrorMessage(err),
         );
       } catch {}
     }
@@ -665,10 +665,10 @@ const persistence = createPersistenceLayer({
   matches: matches as unknown as Map<string, Record<string, unknown>>,
   hydrateMatchFromDatabase: hydrateMatchFromDatabase as unknown as (
     matchId: string,
-    match: Record<string, unknown>
+    match: Record<string, unknown>,
   ) => Promise<void>,
   startMatchRecording: startMatchRecording as unknown as (
-    match: Record<string, unknown>
+    match: Record<string, unknown>,
   ) => void,
   config: {
     isWriteBehind: PERSIST_IS_WRITE_BEHIND,
@@ -931,55 +931,55 @@ const handleHttpRequest = createRequestHandler({
     emitTournamentUpdate: (
       _io: SocketServer,
       tournamentId: string,
-      data: AnyRecord
+      data: AnyRecord,
     ) => broadcastTournamentUpdate(tournamentId, data),
     emitPhaseChanged: (
       _io: SocketServer,
       tournamentId: string,
       newPhase: string,
-      additionalData?: AnyRecord
+      additionalData?: AnyRecord,
     ) => broadcastPhaseChanged(tournamentId, newPhase, additionalData),
     emitRoundStarted: (
       _io: SocketServer,
       tournamentId: string,
       roundNumber: number,
-      matchesPayload: unknown
+      matchesPayload: unknown,
     ) =>
       broadcastRoundStarted(
         tournamentId,
         roundNumber,
-        matchesPayload as AnyRecord[]
+        matchesPayload as AnyRecord[],
       ),
     emitPlayerJoined: (
       _io: SocketServer,
       tournamentId: string,
       playerId: string | undefined,
       playerName: string | undefined,
-      currentPlayerCount: number | undefined
+      currentPlayerCount: number | undefined,
     ) =>
       broadcastPlayerJoined(
         tournamentId,
         playerId,
         playerName ?? "",
-        typeof currentPlayerCount === "number" ? currentPlayerCount : 0
+        typeof currentPlayerCount === "number" ? currentPlayerCount : 0,
       ),
     emitPlayerLeft: (
       _io: SocketServer,
       tournamentId: string,
       playerId: string | undefined,
       playerName: string | undefined,
-      currentPlayerCount: number | undefined
+      currentPlayerCount: number | undefined,
     ) =>
       broadcastPlayerLeft(
         tournamentId,
         playerId,
         playerName ?? "",
-        typeof currentPlayerCount === "number" ? currentPlayerCount : 0
+        typeof currentPlayerCount === "number" ? currentPlayerCount : 0,
       ),
     emitDraftReady: (
       _io: SocketServer,
       tournamentId: string,
-      payload: AnyRecord
+      payload: AnyRecord,
     ) => broadcastDraftReady(tournamentId, payload),
     emitPreparationUpdate: (
       _io: SocketServer,
@@ -988,7 +988,7 @@ const handleHttpRequest = createRequestHandler({
       preparationStatus: string | undefined,
       readyPlayerCount: number | undefined,
       totalPlayerCount: number | undefined,
-      deckSubmitted?: boolean
+      deckSubmitted?: boolean,
     ) =>
       broadcastPreparationUpdate(
         tournamentId,
@@ -996,12 +996,12 @@ const handleHttpRequest = createRequestHandler({
         preparationStatus ?? "inProgress",
         typeof readyPlayerCount === "number" ? readyPlayerCount : 0,
         typeof totalPlayerCount === "number" ? totalPlayerCount : 0,
-        !!deckSubmitted
+        !!deckSubmitted,
       ),
     emitStatisticsUpdate: (
       _io: SocketServer,
       tournamentId: string,
-      statistics: AnyRecord
+      statistics: AnyRecord,
     ) => broadcastStatisticsUpdate(tournamentId, statistics),
   },
   normalizeTournamentBroadcastData,
@@ -1019,7 +1019,7 @@ container.initialize().catch((err: unknown) => {
   try {
     console.error(
       "[container] Initialization failed:",
-      err instanceof Error ? err.message : err
+      err instanceof Error ? err.message : err,
     );
   } catch {
     // noop
@@ -1027,7 +1027,7 @@ container.initialize().catch((err: unknown) => {
 });
 
 function getVoiceRoomIdForPlayer(
-  player: PlayerState | null | undefined
+  player: PlayerState | null | undefined,
 ): string | null {
   if (!player) return null;
   if (player.lobbyId) return `lobby:${player.lobbyId}`;
@@ -1045,7 +1045,7 @@ const botManager = new BotManager(
   matches,
   getLobbyInfo,
   getMatchInfo,
-  isCpuPlayerId
+  isCpuPlayerId,
 );
 setBotManager(botManager);
 
@@ -1067,7 +1067,7 @@ function lobbyHasHumanPlayers(lobby: LobbyState | null | undefined): boolean {
 
 // Returns true if there is at least one non-CPU (human) player in the match
 function matchHasHumanPlayers(
-  match: ServerMatchState | null | undefined
+  match: ServerMatchState | null | undefined,
 ): boolean {
   if (!match || !Array.isArray(match.playerIds) || match.playerIds.length === 0)
     return false;
@@ -1079,7 +1079,7 @@ function matchHasHumanPlayers(
 
 async function finalizeMatch(
   match: ServerMatchState,
-  options: AnyRecord = {}
+  options: AnyRecord = {},
 ): Promise<void> {
   if (!match) return;
   if (match._finalized) {
@@ -1096,14 +1096,14 @@ async function finalizeMatch(
     winnerSeatOption === "p1" || winnerSeatOption === "p2"
       ? winnerSeatOption
       : match.game && (match.game.winner === "p1" || match.game.winner === "p2")
-      ? match.game.winner
-      : null;
+        ? match.game.winner
+        : null;
   const loserSeat =
     loserSeatOption === "p1" || loserSeatOption === "p2"
       ? loserSeatOption
       : winnerSeat
-      ? getOpponentSeatStrict(winnerSeat)
-      : null;
+        ? getOpponentSeatStrict(winnerSeat)
+        : null;
 
   let winnerId =
     typeof options?.winnerId === "string" ? options.winnerId : null;
@@ -1141,14 +1141,14 @@ async function finalizeMatch(
     typeof matchTurnRaw === "number"
       ? matchTurnRaw
       : typeof matchTurnRaw === "string" && matchTurnRaw.trim() !== ""
-      ? Number(matchTurnRaw)
-      : null;
+        ? Number(matchTurnRaw)
+        : null;
   const gameTurn =
     (gameTurnFromGame != null && Number.isFinite(gameTurnFromGame)
       ? gameTurnFromGame
       : gameTurnFromMatch != null && Number.isFinite(gameTurnFromMatch)
-      ? gameTurnFromMatch
-      : 1) || 1;
+        ? gameTurnFromMatch
+        : 1) || 1;
   // Distinguish between explicit forfeits and disconnects:
   // - "forfeit": player explicitly left/conceded - always counts as a rated loss
   // - "disconnect": player disconnected and didn't return - apply early game protection
@@ -1164,7 +1164,7 @@ async function finalizeMatch(
 
   if (isEarlyDisconnect) {
     console.log(
-      `[match] early disconnect at turn ${gameTurn} - no winner declared for match ${match.id}`
+      `[match] early disconnect at turn ${gameTurn} - no winner declared for match ${match.id}`,
     );
     winnerId = null;
     loserId = null;
@@ -1285,7 +1285,7 @@ async function finalizeMatch(
                 ...(isLoss ? { losses: { increment: 1 } } : {}),
                 ...(isDrawLocal ? { draws: { increment: 1 } } : {}),
               },
-            })
+            }),
           );
         };
         for (const id of p1Cards) bump(id, "p1");
@@ -1309,9 +1309,9 @@ async function finalizeMatch(
         console.error(
           `[leaderboard] Failed to record match result for ${match.id}:`,
           err instanceof Error ? err.message : err,
-          { winnerId, loserId, isDraw, playerIds: match.playerIds }
+          { winnerId, loserId, isDraw, playerIds: match.playerIds },
         );
-      }
+      },
     );
   }
 
@@ -1367,14 +1367,14 @@ async function finalizeMatch(
           const playerIds = playersVal
             .map(
               (
-                p: { id?: string; playerId?: string; userId?: string } | null
+                p: { id?: string; playerId?: string; userId?: string } | null,
               ) => {
                 if (p && typeof p === "object") {
                   const id = p.id || p.playerId || p.userId;
                   return typeof id === "string" ? id : null;
                 }
                 return null;
-              }
+              },
             )
             .filter(Boolean);
           if (playerIds.length === 2) {
@@ -1387,7 +1387,7 @@ async function finalizeMatch(
                 tMatch.tournamentId || "",
                 w,
                 l,
-                isDraw
+                isDraw,
               );
             }
           }
@@ -1397,7 +1397,7 @@ async function finalizeMatch(
             "[Match] Failed to update standings:",
             err && typeof err === "object" && "message" in err
               ? (err as Error).message
-              : err
+              : err,
           );
         }
 
@@ -1413,7 +1413,7 @@ async function finalizeMatch(
         "[tournament] failed to record result into rounds:",
         err && typeof err === "object" && "message" in err
           ? (err as Error).message
-          : err
+          : err,
       );
     }
   }
@@ -1445,7 +1445,7 @@ type BasicPlayerInfo = {
 
 function getPlayerInfo(
   playerId: string,
-  seat: Seat | null = null
+  seat: Seat | null = null,
 ): BasicPlayerInfo | null {
   const p = players.get(playerId);
   if (!p) return null;
@@ -1463,7 +1463,7 @@ function getPlayerInfo(
 }
 
 function getPlayerBySocket(
-  socket: SocketClient | null | undefined
+  socket: SocketClient | null | undefined,
 ): PlayerState | null {
   if (!socket) return null;
   const pid = playerIdBySocket.get(socket.id);
@@ -1540,7 +1540,7 @@ async function getOrClaimMatchLeader(matchId: string): Promise<string | null> {
 }
 
 async function getOrLoadMatch(
-  matchId: string
+  matchId: string,
 ): Promise<ServerMatchState | null> {
   if (matches.has(matchId)) return matches.get(matchId) ?? null;
   // Try Redis cache first
@@ -1619,8 +1619,8 @@ async function getOrLoadMatch(
               return typeof value === "string"
                 ? value
                 : value != null
-                ? String(value)
-                : null;
+                  ? String(value)
+                  : null;
             }
             return null;
           })
@@ -1647,7 +1647,7 @@ async function getOrLoadMatch(
       if (status === "in_progress") {
         try {
           console.warn(
-            `[match] WARNING: Creating tournament match ${matchId} from Match table with status in_progress. This indicates OnlineMatchSession was lost and game state will be reset. This should not happen with cleanup protection.`
+            `[match] WARNING: Creating tournament match ${matchId} from Match table with status in_progress. This indicates OnlineMatchSession was lost and game state will be reset. This should not happen with cleanup protection.`,
           );
         } catch {}
       }
@@ -1689,7 +1689,7 @@ async function getOrLoadMatch(
             INSTANCE_ID,
             "EX",
             60,
-            "NX"
+            "NX",
           );
       } catch {}
       try {
@@ -1712,7 +1712,7 @@ async function getOrLoadMatch(
 async function cleanupMatchNow(
   matchId: string,
   reason: string | null,
-  force = false
+  force = false,
 ): Promise<void> {
   const match = await getOrLoadMatch(matchId);
   if (!match) return;
@@ -1728,7 +1728,7 @@ async function cleanupMatchNow(
     if (match.tournamentId && !botOnly) {
       try {
         console.log(
-          `[match] cleanup blocked for active tournament match ${matchId} (status: ${match.status})`
+          `[match] cleanup blocked for active tournament match ${matchId} (status: ${match.status})`,
         );
       } catch {}
       return;
@@ -1760,7 +1760,7 @@ async function cleanupMatchNow(
   if ((!rosterEmpty && !force) || !roomEmpty) {
     try {
       console.log(
-        `[match] cleanup skipped for ${matchId}: rosterEmpty=${rosterEmpty}, roomEmpty=${roomEmpty}, force=${force}`
+        `[match] cleanup skipped for ${matchId}: rosterEmpty=${rosterEmpty}, roomEmpty=${roomEmpty}, force=${force}`,
       );
     } catch {}
     return;
@@ -1803,7 +1803,7 @@ async function cleanupMatchNow(
   } else {
     try {
       console.log(
-        `[match] preserving replay data for completed match ${matchId}`
+        `[match] preserving replay data for completed match ${matchId}`,
       );
     } catch {}
   }
@@ -1817,22 +1817,22 @@ async function cleanupMatchNow(
 // Handle per-player mulligan completion as the cluster leader
 function getMatchInfo(match: ServerMatchState): AnyRecord {
   const serializeSealedPacks = (
-    packs: unknown
+    packs: unknown,
   ): Record<string, unknown> | undefined => {
     if (!packs) return undefined;
     if (packs instanceof Map) {
       const out: Record<string, unknown> = {};
       for (const [key, value] of packs.entries()) {
-        out[String(key)] = Array.isArray(value) ? value : value ?? [];
+        out[String(key)] = Array.isArray(value) ? value : (value ?? []);
       }
       return out;
     }
     if (typeof packs === "object") {
       const out: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(
-        packs as Record<string, unknown>
+        packs as Record<string, unknown>,
       )) {
-        out[String(key)] = Array.isArray(value) ? value : value ?? [];
+        out[String(key)] = Array.isArray(value) ? value : (value ?? []);
       }
       return out;
     }
@@ -1840,7 +1840,7 @@ function getMatchInfo(match: ServerMatchState): AnyRecord {
   };
 
   const serializePlayerDecks = (
-    decks: unknown
+    decks: unknown,
   ): Record<string, unknown> | undefined => {
     if (!decks) return undefined;
     if (decks instanceof Map) return Object.fromEntries(decks);
@@ -1894,7 +1894,7 @@ function getMatchInfo(match: ServerMatchState): AnyRecord {
 
 async function hydrateMatchFromDatabase(
   matchId: string,
-  match: ServerMatchState
+  match: ServerMatchState,
 ): Promise<void> {
   console.log("[hydrateMatchFromDatabase] Called for match:", {
     matchId,
@@ -1943,7 +1943,7 @@ async function hydrateMatchFromDatabase(
     if (match.matchType === "draft" && match.tournamentId) {
       console.log(
         "[hydrateMatchFromDatabase] Loading DraftSession for tournament draft:",
-        { matchId, tournamentId: match.tournamentId }
+        { matchId, tournamentId: match.tournamentId },
       );
       try {
         const draftSession = await prisma.draftSession.findFirst({
@@ -1995,13 +1995,13 @@ async function hydrateMatchFromDatabase(
 
           console.log(
             "[Tournament Draft] Loaded draftConfig from DraftSession:",
-            { matchId, cubeId, packCount: match.draftConfig.packCount }
+            { matchId, cubeId, packCount: match.draftConfig.packCount },
           );
         }
       } catch (err) {
         console.warn(
           "[Tournament Draft] Failed to load DraftSession:",
-          safeErrorMessage(err)
+          safeErrorMessage(err),
         );
       }
     }
@@ -2009,7 +2009,7 @@ async function hydrateMatchFromDatabase(
     try {
       console.warn(
         `[Tournament] Failed to hydrate match ${matchId} from database:`,
-        safeErrorMessage(err)
+        safeErrorMessage(err),
       );
     } catch {}
   }
@@ -2022,7 +2022,7 @@ function broadcastPlayers() {
 
 const REQUIRE_JWT = Boolean(
   (process.env.SOCKET_REQUIRE_JWT || "").toLowerCase() === "1" ||
-    (process.env.SOCKET_REQUIRE_JWT || "").toLowerCase() === "true"
+  (process.env.SOCKET_REQUIRE_JWT || "").toLowerCase() === "true",
 );
 
 // Rate limiting for auth rejection logs to prevent log flooding
@@ -2061,7 +2061,7 @@ function shouldLogAuthRejection(socket: SocketClient): boolean {
     authRejectionLogCache.set(ip, { lastLogTime: now, count: 0 });
     if (suppressedCount > 0) {
       console.warn(
-        `[auth] (${suppressedCount} similar rejections suppressed for ${ip})`
+        `[auth] (${suppressedCount} similar rejections suppressed for ${ip})`,
       );
     }
     return true;
@@ -2094,7 +2094,7 @@ io.use((socket: SocketClient, next: (err?: Error) => void) => {
     if (token && process.env.NEXTAUTH_SECRET) {
       const payload = jwt.verify(
         token,
-        process.env.NEXTAUTH_SECRET
+        process.env.NEXTAUTH_SECRET,
       ) as NextAuthJwtPayload;
       socket.data = socket.data || {};
       socket.data.authUser = {
@@ -2222,7 +2222,7 @@ io.on("connection", async (socket: SocketClient) => {
     // This handles cases where a user has multiple tabs or reconnects without proper cleanup
     const existingSocketId = playerIdBySocket.get(playerId)
       ? Array.from(playerIdBySocket.entries()).find(
-          ([, pid]) => pid === playerId
+          ([, pid]) => pid === playerId,
         )?.[0]
       : null;
 
@@ -2230,7 +2230,7 @@ io.on("connection", async (socket: SocketClient) => {
       const existingSocket = io.sockets.sockets.get(existingSocketId);
       if (existingSocket) {
         console.log(
-          `[auth] Disconnecting old socket ${existingSocketId} for ${displayName} (new: ${socket.id})`
+          `[auth] Disconnecting old socket ${existingSocketId} for ${displayName} (new: ${socket.id})`,
         );
         existingSocket.disconnect(true);
       }
@@ -2242,7 +2242,7 @@ io.on("connection", async (socket: SocketClient) => {
       player = await playerRegistry.registerPlayer(
         playerId,
         displayName,
-        socket
+        socket,
       );
     } else {
       // Legacy local-only state management
@@ -2284,7 +2284,7 @@ io.on("connection", async (socket: SocketClient) => {
         try {
           console.warn(
             `[auth] Failed to persist displayName for ${tokenId}:`,
-            safeErrorMessage(err)
+            safeErrorMessage(err),
           );
         } catch {}
       }
@@ -2301,7 +2301,7 @@ io.on("connection", async (socket: SocketClient) => {
       console.log(
         `[auth] hello <= name="${displayName}" id=${playerId} providedId=${!!providedId} tokenId=${
           tokenId ? "yes" : "no"
-        } socket=${socket.id}`
+        } socket=${socket.id}`,
       );
     } catch {}
 
@@ -2333,7 +2333,7 @@ io.on("connection", async (socket: SocketClient) => {
         ) {
           try {
             console.log(
-              `[Draft] Player ${player.displayName} (${player.id}) rejoining active draft - sending current draft state`
+              `[Draft] Player ${player.displayName} (${player.id}) rejoining active draft - sending current draft state`,
             );
           } catch {}
           socket.emit("draftUpdate", m.draftState);
@@ -2387,7 +2387,7 @@ io.on("connection", async (socket: SocketClient) => {
           sessionId,
           pid || "unknown",
           p?.displayName || null,
-          true
+          true,
         );
         if (pid) {
           try {
@@ -2399,7 +2399,7 @@ io.on("connection", async (socket: SocketClient) => {
             try {
               console.warn(
                 "[draft] failed to mark participant active",
-                safeErrorMessage(err)
+                safeErrorMessage(err),
               );
             } catch {}
           }
@@ -2458,7 +2458,7 @@ io.on("connection", async (socket: SocketClient) => {
               sessionId,
               pid,
               players.get(pid)?.displayName || null,
-              false
+              false,
             );
             io.to(`draft:${sessionId}`).emit("draft:session:presence", {
               sessionId,
@@ -2473,14 +2473,14 @@ io.on("connection", async (socket: SocketClient) => {
               try {
                 console.warn(
                   "[draft] failed to mark participant disconnected",
-                  safeErrorMessage(err)
+                  safeErrorMessage(err),
                 );
               } catch {}
             }
           }
         } catch {}
       }
-    }
+    },
   );
 
   // Per-player mulligan completion. When all players are done, advance to Main.
@@ -2514,7 +2514,7 @@ io.on("connection", async (socket: SocketClient) => {
               type: "mulligan:done",
               matchId,
               playerId: player.id,
-            })
+            }),
           );
         return;
       }
@@ -2533,7 +2533,7 @@ io.on("connection", async (socket: SocketClient) => {
     // This catches cases where a spectator socket tries to call joinMatch
     const isSpectatorSocket = Boolean(
       (socket as unknown as { data?: { isSpectator?: boolean } | undefined })
-        .data?.isSpectator
+        .data?.isSpectator,
     );
     if (isSpectatorSocket) {
       console.warn("[joinMatch] Rejected: socket is marked as spectator", {
@@ -2575,7 +2575,7 @@ io.on("connection", async (socket: SocketClient) => {
               matchId,
               playerId: player.id,
               socketId: socket.id,
-            })
+            }),
           );
         return;
       }
@@ -2671,7 +2671,7 @@ io.on("connection", async (socket: SocketClient) => {
             socket as unknown as {
               data?: { canViewHands?: boolean } | undefined;
             }
-          ).data?.canViewHands
+          ).data?.canViewHands,
         );
         const handsText = canViewHands ? " (can see hands)" : "";
         io.to(`match:${matchId}`).emit("statePatch", {
@@ -2709,10 +2709,10 @@ io.on("connection", async (socket: SocketClient) => {
         if (meaningful) {
           const enriched = await enrichPatchWithCostsSafe(
             (match.game ?? null) as MatchPatch | null,
-            prisma
+            prisma,
           );
           snap.game = sanitizeGameForSpectator(
-            enriched as unknown as AnyRecord
+            enriched as unknown as AnyRecord,
           ) as unknown as MatchPatch | null;
           snap.t = typeof match.lastTs === "number" ? match.lastTs : Date.now();
         }
@@ -2746,17 +2746,17 @@ io.on("connection", async (socket: SocketClient) => {
       if (match) {
         const leftSeat = getSeatForPlayer(
           match as unknown as { playerIds?: string[] | null },
-          player.id
+          player.id,
         ) as Seat | null;
         const oppSeat = leftSeat ? getOpponentSeatStrict(leftSeat) : null;
         const candidate = oppSeat
           ? (getPlayerIdForSeat(
               match as unknown as { playerIds?: string[] | null },
-              oppSeat
+              oppSeat,
             ) as string | null)
           : (inferLoserId(
               match as unknown as { playerIds?: string[] | null },
-              player.id
+              player.id,
             ) as string | null);
         if (candidate && (oppSeat === "p1" || oppSeat === "p2")) {
           forfeitWinnerId = candidate;
@@ -2810,7 +2810,7 @@ io.on("connection", async (socket: SocketClient) => {
         const delay = MATCH_CLEANUP_DELAY_MS;
         try {
           console.log(
-            `[match] scheduling cleanup in ${delay}ms for ${matchId} (both players left)`
+            `[match] scheduling cleanup in ${delay}ms for ${matchId} (both players left)`,
           );
         } catch {}
         try {
@@ -2825,7 +2825,7 @@ io.on("connection", async (socket: SocketClient) => {
                       type: "match:cleanup",
                       matchId,
                       reason: "timeout_after_empty",
-                    })
+                    }),
                   );
                 return;
               }
@@ -2875,7 +2875,7 @@ io.on("connection", async (socket: SocketClient) => {
               playerId: player.id,
               socketId: socket.id,
               patch,
-            })
+            }),
           );
         return;
       }
@@ -2908,7 +2908,7 @@ io.on("connection", async (socket: SocketClient) => {
       try {
         console.warn(
           "[interaction] request handler error",
-          safeErrorMessage(err)
+          safeErrorMessage(err),
         );
       } catch {}
     }
@@ -2939,7 +2939,7 @@ io.on("connection", async (socket: SocketClient) => {
       try {
         console.warn(
           "[interaction] response handler error",
-          safeErrorMessage(err)
+          safeErrorMessage(err),
         );
       } catch {}
     }
@@ -2966,7 +2966,7 @@ io.on("connection", async (socket: SocketClient) => {
                 matchId,
                 playerId: player.id,
                 ready,
-              })
+              }),
             );
           return;
         }
@@ -3014,7 +3014,7 @@ io.on("connection", async (socket: SocketClient) => {
           ts: Date.now(),
         } as const;
         console.log(
-          `[Server] D20 roll: ${value} by ${playerKey} in match ${matchId}`
+          `[Server] D20 roll: ${value} by ${playerKey} in match ${matchId}`,
         );
         io.to(room).emit("message", out);
         try {
@@ -3041,7 +3041,7 @@ io.on("connection", async (socket: SocketClient) => {
           ts: Date.now(),
         } as const;
         console.log(
-          `[Server] D6 roll: ${value} by ${playerKey} in match ${matchId}`
+          `[Server] D6 roll: ${value} by ${playerKey} in match ${matchId}`,
         );
         io.to(room).emit("message", out);
         try {
@@ -3194,7 +3194,7 @@ io.on("connection", async (socket: SocketClient) => {
           : [];
         const defenders = raw
           .map((d) =>
-            d && typeof d === "object" ? (d as Record<string, unknown>) : null
+            d && typeof d === "object" ? (d as Record<string, unknown>) : null,
           )
           .filter(Boolean)
           .map((d) => {
@@ -3262,7 +3262,7 @@ io.on("connection", async (socket: SocketClient) => {
           : [];
         const defenders = raw
           .map((d) =>
-            d && typeof d === "object" ? (d as Record<string, unknown>) : null
+            d && typeof d === "object" ? (d as Record<string, unknown>) : null,
           )
           .filter(Boolean)
           .map((d) => {
@@ -3317,7 +3317,7 @@ io.on("connection", async (socket: SocketClient) => {
           : [];
         const defenders = rawDefs
           .map((d) =>
-            d && typeof d === "object" ? (d as Record<string, unknown>) : null
+            d && typeof d === "object" ? (d as Record<string, unknown>) : null,
           )
           .filter(Boolean)
           .map((d) => {
@@ -3395,7 +3395,7 @@ io.on("connection", async (socket: SocketClient) => {
         const rawKills = Array.isArray(msg.kills) ? msg.kills : [];
         const kills = rawKills
           .filter(
-            (k): k is Record<string, unknown> => k && typeof k === "object"
+            (k): k is Record<string, unknown> => k && typeof k === "object",
           )
           .map((k) => ({
             at: typeof k.at === "string" ? k.at : "",
@@ -3458,7 +3458,7 @@ io.on("connection", async (socket: SocketClient) => {
         const rawDamage = Array.isArray(msg.damage) ? msg.damage : [];
         const damage = rawDamage
           .filter(
-            (d): d is Record<string, unknown> => d && typeof d === "object"
+            (d): d is Record<string, unknown> => d && typeof d === "object",
           )
           .map((d) => ({
             at: typeof d.at === "string" ? d.at : "",
@@ -3466,7 +3466,8 @@ io.on("connection", async (socket: SocketClient) => {
             amount: Number(d.amount),
           }))
           .filter(
-            (d) => d.at && Number.isFinite(d.index) && Number.isFinite(d.amount)
+            (d) =>
+              d.at && Number.isFinite(d.index) && Number.isFinite(d.amount),
           );
         const out = {
           type: "combatDamage",
@@ -3916,7 +3917,7 @@ io.on("connection", async (socket: SocketClient) => {
         const raw = Array.isArray(msg.damage) ? (msg.damage as unknown[]) : [];
         const damage = raw
           .map((d) =>
-            d && typeof d === "object" ? (d as Record<string, unknown>) : null
+            d && typeof d === "object" ? (d as Record<string, unknown>) : null,
           )
           .filter(Boolean)
           .map((d) => {
@@ -4041,7 +4042,7 @@ io.on("connection", async (socket: SocketClient) => {
               ? draggingCandidate.kind
               : null;
           const allowedKinds: ReadonlySet<NormalizedDragging["kind"]> = new Set(
-            ["permanent", "hand", "pile", "avatar", "token"]
+            ["permanent", "hand", "pile", "avatar", "token"],
           );
           if (kind && allowedKinds.has(kind)) {
             const next: NormalizedDragging = { kind };
@@ -4055,8 +4056,8 @@ io.on("connection", async (socket: SocketClient) => {
                 Number.isFinite(draggingCandidate.index)
                   ? draggingCandidate.index
                   : typeof draggingCandidate.index === "string"
-                  ? Number(draggingCandidate.index)
-                  : NaN;
+                    ? Number(draggingCandidate.index)
+                    : NaN;
               const index = Number.isFinite(indexValue)
                 ? Number(indexValue)
                 : null;
@@ -4080,8 +4081,8 @@ io.on("connection", async (socket: SocketClient) => {
               Number.isFinite(draggingCandidate.cardId)
                 ? draggingCandidate.cardId
                 : typeof draggingCandidate.cardId === "string"
-                ? Number(draggingCandidate.cardId)
-                : NaN;
+                  ? Number(draggingCandidate.cardId)
+                  : NaN;
             const cardId = Number.isFinite(cardIdValue)
               ? Number(cardIdValue)
               : null;
@@ -4103,8 +4104,8 @@ io.on("connection", async (socket: SocketClient) => {
                 Number.isFinite(metaRaw.owner)
                   ? metaRaw.owner
                   : typeof metaRaw.owner === "string"
-                  ? Number(metaRaw.owner)
-                  : null;
+                    ? Number(metaRaw.owner)
+                    : null;
               if (ownerValue !== null && Number.isFinite(ownerValue)) {
                 meta.owner = Number(ownerValue);
               }
@@ -4128,8 +4129,8 @@ io.on("connection", async (socket: SocketClient) => {
             Number.isFinite(highlightCandidate.cardId)
               ? highlightCandidate.cardId
               : typeof highlightCandidate.cardId === "string"
-              ? Number(highlightCandidate.cardId)
-              : NaN;
+                ? Number(highlightCandidate.cardId)
+                : NaN;
           const cardId = Number.isFinite(cardIdValue)
             ? Number(cardIdValue)
             : null;
@@ -4197,7 +4198,7 @@ io.on("connection", async (socket: SocketClient) => {
             socket as unknown as {
               data?: { isSpectator?: boolean } | undefined;
             }
-          ).data?.isSpectator
+          ).data?.isSpectator,
         );
         const baseMatchInfo = getMatchInfo(match);
         const matchInfo = isSpectator
@@ -4265,11 +4266,11 @@ io.on("connection", async (socket: SocketClient) => {
           // Enrich game state with card costs before sending to client
           const enrichedGameRaw = await enrichPatchWithCostsSafe(
             (match.game ?? null) as MatchPatch | null,
-            prisma
+            prisma,
           );
           snap.game = isSpectator
             ? (sanitizeGameForSpectator(
-                enrichedGameRaw as unknown as AnyRecord
+                enrichedGameRaw as unknown as AnyRecord,
               ) as unknown as MatchPatch | null)
             : enrichedGameRaw;
           snap.t = typeof match.lastTs === "number" ? match.lastTs : Date.now();
@@ -4321,7 +4322,7 @@ io.on("connection", async (socket: SocketClient) => {
     ).data?.watchMatchId;
     const isSpectatorSock = Boolean(
       (socket as unknown as { data?: { isSpectator?: boolean } | undefined })
-        .data?.isSpectator
+        .data?.isSpectator,
     );
     if (
       isSpectatorSock &&
@@ -4349,19 +4350,19 @@ io.on("connection", async (socket: SocketClient) => {
           if (hasMeaningfulGame) {
             const enrichedGameRaw = await enrichPatchWithCostsSafe(
               (match.game ?? null) as MatchPatch | null,
-              prisma
+              prisma,
             );
             const canViewHands = Boolean(
               (
                 socket as unknown as {
                   data?: { canViewHands?: boolean } | undefined;
                 }
-              ).data?.canViewHands
+              ).data?.canViewHands,
             );
             snap.game = canViewHands
               ? (enrichedGameRaw as unknown as MatchPatch | null)
               : (sanitizeGameForSpectator(
-                  enrichedGameRaw as unknown as AnyRecord
+                  enrichedGameRaw as unknown as AnyRecord,
                 ) as unknown as MatchPatch | null);
             snap.t =
               typeof match.lastTs === "number" ? match.lastTs : Date.now();
@@ -4401,13 +4402,13 @@ io.on("connection", async (socket: SocketClient) => {
     const match = matches.get(player.matchId);
     if (!match) {
       console.log(
-        `[Sealed] submitDeck rejected: match not found for ${player.matchId}`
+        `[Sealed] submitDeck rejected: match not found for ${player.matchId}`,
       );
       return;
     }
     if (match.status !== "deck_construction") {
       console.log(
-        `[Sealed] submitDeck rejected: wrong status ${match.status} (expected deck_construction)`
+        `[Sealed] submitDeck rejected: wrong status ${match.status} (expected deck_construction)`,
       );
       return;
     }
@@ -4420,7 +4421,7 @@ io.on("connection", async (socket: SocketClient) => {
     // Idempotency: if this player already submitted, ignore duplicates
     if (playerDecks.has(player.id)) {
       console.log(
-        `[Sealed] submitDeck ignored: ${player.displayName} already submitted for match ${match.id}`
+        `[Sealed] submitDeck ignored: ${player.displayName} already submitted for match ${match.id}`,
       );
       // Still send ack in case client missed it
       try {
@@ -4438,7 +4439,7 @@ io.on("connection", async (socket: SocketClient) => {
     const deckRaw = payload && payload.deck;
     if (!deckRaw) {
       console.log(
-        `[Sealed] submitDeck rejected: no deck payload from ${player.displayName}`
+        `[Sealed] submitDeck rejected: no deck payload from ${player.displayName}`,
       );
       return;
     }
@@ -4447,7 +4448,7 @@ io.on("connection", async (socket: SocketClient) => {
     if (!val.isValid) {
       console.log(
         `[Sealed] submitDeck rejected: invalid deck from ${player.displayName}:`,
-        val.errors
+        val.errors,
       );
       socket.emit("error", {
         message: `Deck invalid: ${val.errors.join(", ")}`,
@@ -4458,7 +4459,7 @@ io.on("connection", async (socket: SocketClient) => {
     // Store the player's deck
     playerDecks.set(player.id, cards);
     console.log(
-      `[Sealed] Deck submitted by ${player.displayName} for match ${match.id}`
+      `[Sealed] Deck submitted by ${player.displayName} for match ${match.id}`,
     );
 
     // Lightweight ack so client UI can flip instantly
@@ -4484,10 +4485,10 @@ io.on("connection", async (socket: SocketClient) => {
     // Check if all players have submitted decks
     const allSubmitted = match.playerIds.every((pid) => playerDecks.has(pid));
     const submittedCount = match.playerIds.filter((pid) =>
-      playerDecks.has(pid)
+      playerDecks.has(pid),
     ).length;
     console.log(
-      `[Sealed] Deck submission progress: ${submittedCount}/${match.playerIds.length} for match ${match.id}`
+      `[Sealed] Deck submission progress: ${submittedCount}/${match.playerIds.length} for match ${match.id}`,
     );
 
     // Broadcast deck submission update to match room
@@ -4508,7 +4509,7 @@ io.on("connection", async (socket: SocketClient) => {
 
     if (allSubmitted) {
       console.log(
-        `[Sealed] All decks submitted for match ${match.id}, transitioning to waiting phase`
+        `[Sealed] All decks submitted for match ${match.id}, transitioning to waiting phase`,
       );
       // All decks submitted, transition to waiting phase for game start
       match.status = "waiting";
@@ -4595,7 +4596,7 @@ io.on("connection", async (socket: SocketClient) => {
             opts.playerId
           }), returning ${recordings.length} DB-backed summaries (filtered ${
             result.recordings.length - recordings.length
-          } bot matches), hasMore: ${result.hasMore}`
+          } bot matches), hasMore: ${result.hasMore}`,
         );
       } catch {}
       socket.emit("matchRecordingsResponse", {
@@ -4667,7 +4668,7 @@ io.on("connection", async (socket: SocketClient) => {
               playerId: player.id,
               draftConfig: payload?.draftConfig || null,
               socketId: socket.id,
-            })
+            }),
           );
         return;
       }
@@ -4683,7 +4684,7 @@ io.on("connection", async (socket: SocketClient) => {
           matchId,
           player.id,
           payload?.draftConfig || null,
-          socket.id
+          socket.id,
         );
       }
       // Failsafe: fetch fresh state and broadcast to ensure clients transition
@@ -4715,7 +4716,7 @@ io.on("connection", async (socket: SocketClient) => {
               cardId,
               packIndex,
               pickNumber,
-            })
+            }),
           );
         return;
       }
@@ -4745,7 +4746,7 @@ io.on("connection", async (socket: SocketClient) => {
               playerId: player.id,
               setChoice,
               packIndex,
-            })
+            }),
           );
         return;
       }
@@ -4754,9 +4755,8 @@ io.on("connection", async (socket: SocketClient) => {
   });
 
   // Tournament draft handlers (extracted module)
-  const { registerTournamentDraftHandlers } = await import(
-    "./modules/tournament/draft-socket-handler.js"
-  );
+  const { registerTournamentDraftHandlers } =
+    await import("./modules/tournament/draft-socket-handler.js");
   registerTournamentDraftHandlers(socket, () => authed, getPlayerBySocket);
 
   // Submit draft deck during deck construction phase (with validation)
@@ -4777,7 +4777,7 @@ io.on("connection", async (socket: SocketClient) => {
     const match = matches.get(player.matchId);
     if (!match) {
       console.log(
-        `[Draft] submitDeck rejected: match not found for ${player.matchId}`
+        `[Draft] submitDeck rejected: match not found for ${player.matchId}`,
       );
       return;
     }
@@ -4790,7 +4790,7 @@ io.on("connection", async (socket: SocketClient) => {
     // Idempotency: ignore duplicate submissions by the same player
     if (playerDecks.has(player.id)) {
       console.log(
-        `[Draft] submitDeck ignored: ${player.displayName} already submitted for match ${match.id}`
+        `[Draft] submitDeck ignored: ${player.displayName} already submitted for match ${match.id}`,
       );
       // Still send ack in case client missed it
       try {
@@ -4809,7 +4809,7 @@ io.on("connection", async (socket: SocketClient) => {
     const deckRaw = payload && payload.deck ? payload.deck : payload;
     if (!deckRaw) {
       console.log(
-        `[Draft] submitDeck rejected: no deck payload from ${player.displayName}`
+        `[Draft] submitDeck rejected: no deck payload from ${player.displayName}`,
       );
       return;
     }
@@ -4818,7 +4818,7 @@ io.on("connection", async (socket: SocketClient) => {
     if (!val.isValid) {
       console.log(
         `[Draft] submitDeck rejected: invalid deck from ${player.displayName}:`,
-        val.errors
+        val.errors,
       );
       socket.emit("error", {
         message: `Deck invalid: ${val.errors.join(", ")}`,
@@ -4828,7 +4828,7 @@ io.on("connection", async (socket: SocketClient) => {
     playerDecks.set(player.id, cards);
 
     console.log(
-      `[Draft] Deck submitted by ${player.displayName} for match ${match.id}`
+      `[Draft] Deck submitted by ${player.displayName} for match ${match.id}`,
     );
 
     // Persist updated playerDecks for recovery and cross-instance consistency
@@ -4854,10 +4854,10 @@ io.on("connection", async (socket: SocketClient) => {
     // Check if all players have submitted decks
     const allSubmitted = match.playerIds.every((pid) => playerDecks.has(pid));
     const submittedCount = match.playerIds.filter((pid) =>
-      playerDecks.has(pid)
+      playerDecks.has(pid),
     ).length;
     console.log(
-      `[Draft] Deck submission progress: ${submittedCount}/${match.playerIds.length} for match ${match.id}`
+      `[Draft] Deck submission progress: ${submittedCount}/${match.playerIds.length} for match ${match.id}`,
     );
 
     // Broadcast updated match info to match room
@@ -4878,7 +4878,7 @@ io.on("connection", async (socket: SocketClient) => {
 
     if (allSubmitted && match.status === "deck_construction") {
       console.log(
-        `[Draft] All decks submitted for match ${match.id}, transitioning to waiting phase`
+        `[Draft] All decks submitted for match ${match.id}, transitioning to waiting phase`,
       );
       // Do NOT skip setup for draft; mirror sealed flow: move to waiting and keep lobby visible
       match.status = "waiting";
@@ -4983,25 +4983,25 @@ io.on("connection", async (socket: SocketClient) => {
           disconnectedDraftSessionId,
           pid,
           players.get(pid)?.displayName || null,
-          false
+          false,
         )
           .then((list) => {
             try {
               io.to(`draft:${disconnectedDraftSessionId}`).emit(
                 "draft:session:presence",
-                { sessionId: disconnectedDraftSessionId, players: list }
+                { sessionId: disconnectedDraftSessionId, players: list },
               );
             } catch (emitErr) {
               console.warn(
                 "[draft] Failed to emit presence on disconnect:",
-                emitErr
+                emitErr,
               );
             }
           })
           .catch((presenceErr) => {
             console.warn(
               "[draft] Failed to update presence on disconnect:",
-              presenceErr
+              presenceErr,
             );
           });
       }
@@ -5069,15 +5069,15 @@ io.on("connection", async (socket: SocketClient) => {
         if (match && !matchHasHumanPlayers(match)) {
           try {
             console.log(
-              `[Match] Cleaning up bot-only match ${match.id} after disconnect`
+              `[Match] Cleaning up bot-only match ${match.id} after disconnect`,
             );
             cleanupMatchNow(match.id, "bot_only_disconnect", true).catch(
               (err) => {
                 console.warn(
                   `[Match] Failed to cleanup bot match ${match.id}:`,
-                  err
+                  err,
                 );
-              }
+              },
             );
           } catch (err) {
             console.warn(`[Match] Error initiating bot match cleanup:`, err);
@@ -5125,7 +5125,7 @@ startMaintenanceTimers({
 
 server.listen(PORT, () => {
   console.log(
-    `[sorcery] Socket.IO server listening on http://localhost:${PORT}`
+    `[sorcery] Socket.IO server listening on http://localhost:${PORT}`,
   );
 });
 
@@ -5198,7 +5198,7 @@ async function shutdown() {
   } catch (err) {
     console.error(
       "[server] failed to flush persistence buffers on shutdown:",
-      err
+      err,
     );
   }
 

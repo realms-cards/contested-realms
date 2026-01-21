@@ -331,11 +331,11 @@ export const createMephistophelesSlice: StateCreator<
       return false;
     }
 
-    // Check target is adjacent to avatar
+    // Check target is adjacent to avatar (includes avatar's own site)
     const [tx, ty] = targetCell.split(",").map(Number);
     const dx = Math.abs(tx - avatarPos[0]);
     const dy = Math.abs(ty - avatarPos[1]);
-    if (dx > 1 || dy > 1 || (dx === 0 && dy === 0)) {
+    if (dx > 1 || dy > 1) {
       get().log(
         `[${who.toUpperCase()}] Target must be adjacent to your Avatar`
       );
@@ -551,11 +551,8 @@ export const createMephistophelesSlice: StateCreator<
     const ownerNum = who === "p1" ? 1 : 2;
     const cardHasVoidwalk = hasVoidwalk(card);
 
-    // Filter to valid targets: sites you control, or void for Voidwalk minions
+    // Filter to valid targets: sites you control (including avatar's site), or void for Voidwalk minions
     const validTargets = adjacentCells.filter((cellKey) => {
-      // Skip avatar's own position
-      if (cellKey === `${avatarPos[0]},${avatarPos[1]}`) return false;
-
       const site = board.sites[cellKey];
       if (site && site.owner === ownerNum) {
         // Player controls this site

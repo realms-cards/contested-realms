@@ -50,7 +50,7 @@ function getAdjacentCells(
   x: number,
   y: number,
   boardWidth: number,
-  boardHeight: number
+  boardHeight: number,
 ): CellKey[] {
   const cells: CellKey[] = [];
   const directions = [
@@ -159,13 +159,22 @@ export const createPathfinderSlice: StateCreator<
       return;
     }
 
-    // Find valid targets: adjacent void or Rubble tiles
+    // Find valid targets: adjacent void or Rubble tiles, plus the avatar's current position
     // avatarPos is [x, y] tuple, not a string
     const [ax, ay] = avatarPos;
     const board = state.board;
+    const avatarCellKey = `${ax},${ay}` as CellKey;
     const adjacentCells = getAdjacentCells(ax, ay, board.size.w, board.size.h);
 
     const validTargets: CellKey[] = [];
+
+    // Always allow the avatar's current position (important for playing the first site)
+    const currentSite = board.sites[avatarCellKey];
+    if (!currentSite || isRubble(currentSite.card?.name)) {
+      validTargets.push(avatarCellKey);
+    }
+
+    // Add adjacent cells
     for (const cellKey of adjacentCells) {
       const site = board.sites[cellKey];
       // Valid if void (no site) or Rubble
@@ -176,7 +185,7 @@ export const createPathfinderSlice: StateCreator<
 
     if (validTargets.length === 0) {
       get().log(
-        `[${who.toUpperCase()}] No valid target tiles (void or Rubble)`
+        `[${who.toUpperCase()}] No valid target tiles (void or Rubble)`,
       );
       const transport = get().transport;
       if (transport?.sendMessage) {
@@ -203,7 +212,7 @@ export const createPathfinderSlice: StateCreator<
     set({ pendingPathfinderPlay: pending });
 
     get().log(
-      `[${who.toUpperCase()}] Pathfinder selecting target for ${topSite.name}`
+      `[${who.toUpperCase()}] Pathfinder selecting target for ${topSite.name}`,
     );
 
     // Broadcast to opponent
@@ -277,7 +286,7 @@ export const createPathfinderSlice: StateCreator<
     // Move avatar to target - parse CellKey "x,y" to [x, y] tuple
     const [targetX, targetY] = targetCell.split(",").map(Number) as [
       number,
-      number
+      number,
     ];
     const newAvatars = {
       ...state.avatars,
@@ -319,7 +328,7 @@ export const createPathfinderSlice: StateCreator<
       ? `replaces Rubble with ${topSite.name}`
       : `places ${topSite.name}`;
     get().log(
-      `[${who.toUpperCase()}] Pathfinder ${actionDesc} at ${targetCell} and moves there`
+      `[${who.toUpperCase()}] Pathfinder ${actionDesc} at ${targetCell} and moves there`,
     );
 
     // Send toast
