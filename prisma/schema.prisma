@@ -111,8 +111,9 @@ model Deck {
   updatedAt      DateTime   @updatedAt
   userId         String
   isPublic       Boolean    @default(false)
-  imported       Boolean    @default(false)
-  championCardId Int?
+  imported        Boolean    @default(false)
+  curiosaSourceId String?    // Curiosa deck ID for sync functionality
+  championCardId  Int?
   champion       Card?      @relation("DeckChampion", fields: [championCardId], references: [id])
   user           User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   cards          DeckCard[]

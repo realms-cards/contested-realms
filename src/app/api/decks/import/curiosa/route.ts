@@ -2,6 +2,12 @@ import { NextRequest } from "next/server";
 import { getServerAuthSession } from "@/lib/auth";
 import { invalidateCache, CacheKeys } from "@/lib/cache/redis-cache";
 import { prisma } from "@/lib/prisma";
+import {
+  fetchCuriosatrpc,
+  fetchWithTimeout,
+  extractDeckId,
+  type CuriosatrpcDeck,
+} from "@/lib/services/curiosa-deck";
 
 export const dynamic = "force-dynamic";
 
@@ -150,7 +156,8 @@ export async function POST(req: NextRequest) {
           trpcData.sideboardList,
           trpcData.avatarName,
           session.user.id,
-          finalName
+          finalName,
+          deckId // Pass curiosaSourceId for sync functionality
         );
         if (importResult.error || !importResult.deck) {
           return new Response(
@@ -330,13 +337,15 @@ export async function POST(req: NextRequest) {
     }
 
     // 8) Create the deck
+    const curiosaSourceId = extractDeckId(rawUrl);
     const deckName =
-      overrideName || `Curiosa Import ${extractDeckId(rawUrl) || "Deck"}`;
+      overrideName || `Curiosa Import ${curiosaSourceId || "Deck"}`;
     const deck = await prisma.deck.create({
       data: {
         name: deckName,
         format: "Constructed",
         imported: true,
+        curiosaSourceId, // Store for sync functionality
         user: { connect: { id: session.user.id } },
       },
     });
@@ -370,36 +379,6 @@ export async function POST(req: NextRequest) {
         ? e
         : "Unknown error";
     return new Response(JSON.stringify({ error: message }), { status: 500 });
-  }
-}
-
-function extractDeckId(urlOrId: string): string | null {
-  try {
-    const u = new URL(urlOrId);
-    const parts = u.pathname.split("/").filter(Boolean);
-    // find last non-empty path segment
-    const last = parts[parts.length - 1] || "";
-    return last || null;
-  } catch {
-    // not a URL, treat as id-ish
-    const trimmed = urlOrId.trim().replace(/^[#/]+|[?#].*$/g, "");
-    return trimmed || null;
-  }
-}
-
-// Fetch with timeout helper
-async function fetchWithTimeout(
-  url: string,
-  options: RequestInit = {},
-  timeoutMs = 10000
-): Promise<Response> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const res = await fetch(url, { ...options, signal: controller.signal });
-    return res;
-  } finally {
-    clearTimeout(timeoutId);
   }
 }
 
@@ -727,131 +706,14 @@ async function findBestVariantsForNames(
   return result;
 }
 
-// Fetch deck data from Curiosa tRPC endpoint using Origin spoofing
-interface CuriosatrpcResult {
-  deckList: CuriosatrpcDeck[];
-  sideboardList: CuriosatrpcDeck[]; // Collection zone (up to 10 cards)
-  avatarName: string | null;
-  deckName: string | null;
-}
-
-async function fetchCuriosatrpc(
-  deckId: string | null
-): Promise<CuriosatrpcResult | null> {
-  if (!deckId) return null;
-
-  const input = JSON.stringify({ json: { id: deckId } });
-  const headers = {
-    Origin: "https://curiosa.io",
-    Referer: "https://curiosa.io/",
-    Accept: "application/json",
-  };
-
-  try {
-    // Fetch deck list, sideboard, and deck metadata in parallel with timeout
-    const [listRes, sideboardRes, metaRes] = await Promise.all([
-      fetchWithTimeout(
-        `https://curiosa.io/api/trpc/deck.getDecklistById?input=${encodeURIComponent(
-          input
-        )}`,
-        { cache: "no-store", headers },
-        10000 // 10 second timeout
-      ),
-      fetchWithTimeout(
-        `https://curiosa.io/api/trpc/deck.getSideboardById?input=${encodeURIComponent(
-          input
-        )}`,
-        { cache: "no-store", headers },
-        10000
-      ),
-      fetchWithTimeout(
-        `https://curiosa.io/api/trpc/deck.getById?input=${encodeURIComponent(
-          input
-        )}`,
-        { cache: "no-store", headers },
-        10000
-      ),
-    ]);
-
-    if (!listRes.ok) return null;
-
-    const listData = await listRes.json();
-    const deckList = listData?.result?.data?.json;
-    if (!Array.isArray(deckList)) return null;
-
-    // Parse sideboard (Collection zone) - may contain avatars for Imposter ability
-    let sideboardList: CuriosatrpcDeck[] = [];
-    if (sideboardRes.ok) {
-      const sideboardData = await sideboardRes.json();
-      const sbList = sideboardData?.result?.data?.json;
-      if (Array.isArray(sbList)) {
-        sideboardList = sbList as CuriosatrpcDeck[];
-      }
-    }
-
-    // Get main avatar from deck metadata first (this is the authoritative source)
-    // The sideboard may contain additional avatars for Imposter ability
-    let avatarName: string | null = null;
-    let deckName: string | null = null;
-    if (metaRes.ok) {
-      const metaData = await metaRes.json();
-      const meta = metaData?.result?.data?.json;
-      if (meta) {
-        deckName = meta.name || null;
-        // Primary source: avatars array from deck metadata
-        const avatars = meta.avatars;
-        if (Array.isArray(avatars) && avatars.length > 0) {
-          avatarName = avatars[0]?.card?.name || null;
-        }
-      }
-    }
-
-    // Fallback: if no avatar in metadata, try first avatar in sideboard
-    if (!avatarName) {
-      for (const entry of sideboardList) {
-        if (entry.card?.type?.toLowerCase() === "avatar") {
-          avatarName = entry.card.name;
-          break;
-        }
-      }
-    }
-
-    return {
-      deckList: deckList as CuriosatrpcDeck[],
-      sideboardList,
-      avatarName,
-      deckName,
-    };
-  } catch {
-    return null;
-  }
-}
-
-// Type for Curiosa tRPC deck entry
-interface CuriosatrpcDeck {
-  quantity: number;
-  variantId: string;
-  card: {
-    id: string;
-    slug: string;
-    name: string;
-    type: string;
-    category: string;
-    variants: Array<{
-      id: string;
-      slug: string;
-      setCard?: { set?: { name?: string } };
-    }>;
-  };
-}
-
 // Import directly from Curiosa tRPC response
 async function importFromTrpcData(
   deckList: CuriosatrpcDeck[],
   sideboardList: CuriosatrpcDeck[],
   avatarName: string | null,
   userId: string,
-  deckName: string
+  deckName: string,
+  curiosaSourceId: string | null = null
 ): Promise<{
   error?: string;
   unresolved?: { name: string; count: number }[];
@@ -1103,6 +965,7 @@ async function importFromTrpcData(
       name: deckName,
       format: "Constructed",
       imported: true,
+      curiosaSourceId, // Store for sync functionality
       user: { connect: { id: userId } },
     },
   });

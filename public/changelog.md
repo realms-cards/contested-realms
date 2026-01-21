@@ -4,7 +4,9 @@
 
 ### Jan 21 - Fixes from GitHub issues
 
+- **add undo - EXPERIMENTAL** use at your own risk!
 - **add automatic resolver for Mismanaged Mortuary**
+- **add status effect icons** for various effects on the board
 - **fix Player not having their mulligan if second player was faster**
 - **add Gem tokens to toolbox** these can be used for various purposes
 - **add RND button in toolbox** to generate a random number between n and x where we can choose x
@@ -13,6 +15,7 @@
 - **harden Pith Imp steal action**
 - **fix Pathfinder not be able to play to the tile they are on**
 - **fix Mephistopheles adjacency**
+- **imported Decks can be reloaded now**
 
 ### Jan 20 - Autoresolvers and forfeits
 
