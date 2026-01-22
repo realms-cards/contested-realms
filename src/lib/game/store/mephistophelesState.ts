@@ -67,7 +67,7 @@ function getAdjacentCells(
   x: number,
   y: number,
   boardWidth = 5,
-  boardHeight = 4
+  boardHeight = 4,
 ): CellKey[] {
   const cells: CellKey[] = [];
   // Own square
@@ -142,7 +142,7 @@ export const createMephistophelesSlice: StateCreator<
     } as Partial<GameState> as GameState);
 
     get().log(
-      `[${casterSeat.toUpperCase()}] Mephistopheles enters - confirm to replace your Avatar`
+      `[${casterSeat.toUpperCase()}] Mephistopheles enters - confirm to replace your Avatar`,
     );
 
     // Broadcast to opponent
@@ -170,7 +170,7 @@ export const createMephistophelesSlice: StateCreator<
 
     if (!originalAvatar) {
       get().log(
-        `[${casterSeat.toUpperCase()}] Cannot resolve: Avatar not found`
+        `[${casterSeat.toUpperCase()}] Cannot resolve: Avatar not found`,
       );
       set({ pendingMephistopheles: null } as Partial<GameState> as GameState);
       return;
@@ -204,7 +204,7 @@ export const createMephistophelesSlice: StateCreator<
       });
 
       get().log(
-        `[${casterSeat.toUpperCase()}] ${originalAvatarCard.name} is banished`
+        `[${casterSeat.toUpperCase()}] ${originalAvatarCard.name} is banished`,
       );
     }
 
@@ -250,7 +250,7 @@ export const createMephistophelesSlice: StateCreator<
         });
 
         get().log(
-          `[${casterSeat.toUpperCase()}] Mephistopheles becomes your new Avatar!`
+          `[${casterSeat.toUpperCase()}] Mephistopheles becomes your new Avatar!`,
         );
       }
     } else {
@@ -279,7 +279,7 @@ export const createMephistophelesSlice: StateCreator<
     // The second ability (summoning Evil minions) still works
 
     get().log(
-      `[${pending.casterSeat.toUpperCase()}] Mephistopheles remains as a minion (did not replace Avatar)`
+      `[${pending.casterSeat.toUpperCase()}] Mephistopheles remains as a minion (did not replace Avatar)`,
     );
 
     // Broadcast cancellation
@@ -310,7 +310,7 @@ export const createMephistophelesSlice: StateCreator<
     // Check if already used this turn
     if (state.mephistophelesSummonUsed[who]) {
       get().log(
-        `[${who.toUpperCase()}] Already used Mephistopheles summon this turn`
+        `[${who.toUpperCase()}] Already used Mephistopheles summon this turn`,
       );
       return false;
     }
@@ -319,7 +319,7 @@ export const createMephistophelesSlice: StateCreator<
     const avatar = state.avatars[who];
     if (!isMephistopheles(avatar?.card?.name)) {
       get().log(
-        `[${who.toUpperCase()}] Only Mephistopheles can use this ability`
+        `[${who.toUpperCase()}] Only Mephistopheles can use this ability`,
       );
       return false;
     }
@@ -337,17 +337,17 @@ export const createMephistophelesSlice: StateCreator<
     const dy = Math.abs(ty - avatarPos[1]);
     if (dx > 1 || dy > 1) {
       get().log(
-        `[${who.toUpperCase()}] Target must be adjacent to your Avatar`
+        `[${who.toUpperCase()}] Target must be adjacent to your Avatar`,
       );
       return false;
     }
 
-    // Check target has a site controlled by the player
+    // Check target has any site (per Codex: no need to choose a location you control)
     const board = state.board;
     const siteAtTarget = board.sites[targetCell];
     const ownerNum = who === "p1" ? 1 : 2;
-    if (!siteAtTarget || siteAtTarget.owner !== ownerNum) {
-      get().log(`[${who.toUpperCase()}] Target must be a site you control`);
+    if (!siteAtTarget) {
+      get().log(`[${who.toUpperCase()}] Target must be a site`);
       return false;
     }
 
@@ -411,7 +411,7 @@ export const createMephistophelesSlice: StateCreator<
     get().log(
       `[${who.toUpperCase()}] Mephistopheles summons ${
         card.name
-      } to the battlefield!`
+      } to the battlefield!`,
     );
 
     // Broadcast
@@ -444,7 +444,7 @@ export const createMephistophelesSlice: StateCreator<
 
     if (state.mephistophelesSummonUsed[who]) {
       get().log(
-        `[${who.toUpperCase()}] Already used Mephistopheles summon this turn`
+        `[${who.toUpperCase()}] Already used Mephistopheles summon this turn`,
       );
       return;
     }
@@ -452,7 +452,7 @@ export const createMephistophelesSlice: StateCreator<
     const avatar = state.avatars[who];
     if (!isMephistopheles(avatar?.card?.name)) {
       get().log(
-        `[${who.toUpperCase()}] Only Mephistopheles can use this ability`
+        `[${who.toUpperCase()}] Only Mephistopheles can use this ability`,
       );
       return;
     }
@@ -473,12 +473,12 @@ export const createMephistophelesSlice: StateCreator<
         type: c?.type,
         subTypes: c?.subTypes,
         isEvil: isEvilMinion(c),
-      }))
+      })),
     );
     const evilMinions = hand.filter((card) => isEvilMinion(card));
     console.log(
       "[mephistophelesState] Evil minions found:",
-      evilMinions.map((c) => c?.name)
+      evilMinions.map((c) => c?.name),
     );
     if (evilMinions.length === 0) {
       get().log(`[${who.toUpperCase()}] No Evil minions in hand to summon`);
@@ -510,7 +510,7 @@ export const createMephistophelesSlice: StateCreator<
     } as Partial<GameState> as GameState);
 
     get().log(
-      `[${who.toUpperCase()}] Select an Evil minion from your hand to summon`
+      `[${who.toUpperCase()}] Select an Evil minion from your hand to summon`,
     );
 
     // Broadcast
@@ -551,11 +551,11 @@ export const createMephistophelesSlice: StateCreator<
     const ownerNum = who === "p1" ? 1 : 2;
     const cardHasVoidwalk = hasVoidwalk(card);
 
-    // Filter to valid targets: sites you control (including avatar's site), or void for Voidwalk minions
+    // Filter to valid targets: any site (per Codex: no need to choose a location you control), or void for Voidwalk minions
     const validTargets = adjacentCells.filter((cellKey) => {
       const site = board.sites[cellKey];
-      if (site && site.owner === ownerNum) {
-        // Player controls this site
+      if (site) {
+        // Any site is valid (owned by either player)
         return true;
       }
       if (!site && cardHasVoidwalk) {
@@ -567,7 +567,7 @@ export const createMephistophelesSlice: StateCreator<
 
     if (validTargets.length === 0) {
       get().log(
-        `[${who.toUpperCase()}] No valid adjacent sites to summon this minion`
+        `[${who.toUpperCase()}] No valid adjacent sites to summon this minion`,
       );
       return;
     }
@@ -585,7 +585,7 @@ export const createMephistophelesSlice: StateCreator<
     get().log(
       `[${who.toUpperCase()}] Selected ${
         card.name
-      } - now choose an adjacent site`
+      } - now choose an adjacent site`,
     );
 
     // Broadcast
@@ -623,7 +623,7 @@ export const createMephistophelesSlice: StateCreator<
     const success = get().summonEvilMinionFromHand(
       who,
       selectedCardIndex,
-      targetCell
+      targetCell,
     );
 
     if (success) {
@@ -652,7 +652,7 @@ export const createMephistophelesSlice: StateCreator<
     if (!pending) return;
 
     get().log(
-      `[${pending.ownerSeat.toUpperCase()}] Cancelled Mephistopheles summon`
+      `[${pending.ownerSeat.toUpperCase()}] Cancelled Mephistopheles summon`,
     );
 
     // Broadcast
