@@ -2092,6 +2092,7 @@ export type GameState = {
   ) => void;
   floodSite: (x: number, y: number) => void;
   silenceSite: (x: number, y: number) => void;
+  silencePermanent: (cellKey: CellKey, index: number) => void;
   moveFromBanishedToZone: (
     who: PlayerKey,
     instanceId: string,
@@ -2191,6 +2192,8 @@ export type GameState = {
   selectAtlanteanFateCorner: (cornerCell: CellKey) => void;
   // Resolve the placement
   resolveAtlanteanFate: () => void;
+  // Re-place the aura (go back to corner selection)
+  replaceAtlanteanFate: () => void;
   // Cancel the placement
   cancelAtlanteanFate: () => void;
   // Check if a site is flooded (affected by Atlantean Fate)

@@ -138,14 +138,35 @@ export const conditionalSiteProvides = (
   return true;
 };
 
+// Check if an Atlantean Fate aura has a Silenced token on it
+// (placed at the aura's permanent location)
+export const auraHasSilencedToken = (
+  auraPermanentAt: string,
+  permanents: Permanents,
+): boolean => {
+  const permsAtCell = permanents[auraPermanentAt];
+  if (!permsAtCell) return false;
+  for (const perm of permsAtCell) {
+    const name = String(perm.card?.name || "").toLowerCase();
+    if (name === "silenced") return true;
+  }
+  return false;
+};
+
 // Check if a site is flooded by Atlantean Fate
+// A silenced Atlantean Fate aura does NOT flood sites
 const isSiteFloodedByAtlanteanFate = (
   cellKey: string,
   specialSiteState?: SpecialSiteState | null,
+  permanents?: Permanents,
 ): boolean => {
   if (!specialSiteState?.atlanteanFateAuras) return false;
   for (const aura of specialSiteState.atlanteanFateAuras) {
     if (aura.floodedSites.includes(cellKey)) {
+      // Check if this aura is silenced - silenced auras don't apply their effect
+      if (permanents && auraHasSilencedToken(aura.permanentAt, permanents)) {
+        continue; // Skip this aura, it's silenced
+      }
       return true;
     }
   }
@@ -208,7 +229,8 @@ export const computeThresholdTotals = (
     if (!isShared && (!tile || tile.owner !== owner)) continue;
 
     // Check if site is flooded by Atlantean Fate - flooded sites only provide water
-    if (isSiteFloodedByAtlanteanFate(cellKey, specialSiteState)) {
+    // A silenced Atlantean Fate aura does NOT flood sites
+    if (isSiteFloodedByAtlanteanFate(cellKey, specialSiteState, permanents)) {
       totals.water += 1;
       continue; // Skip normal threshold calculation for flooded sites
     }

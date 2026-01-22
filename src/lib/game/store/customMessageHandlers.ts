@@ -4502,6 +4502,30 @@ export function handleCustomMessage(
     return;
   }
 
+  if (t === "atlanteanFateReplace") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+
+    if (!id) return;
+
+    const pending = get().pendingAtlanteanFate;
+    if (!pending || pending.id !== id) return;
+
+    // Skip if we're the caster - we already have the state
+    const actorKey = get().actorKey;
+    if (actorKey === pending.casterSeat) return;
+
+    // Clear pending state - the state patch will sync permanents and zones
+    // (card returned to hand, permanent removed from board)
+    set({
+      pendingAtlanteanFate: null,
+    } as Partial<GameState> as GameState);
+
+    try {
+      get().log("Atlantean Fate returned to hand for re-placement");
+    } catch {}
+    return;
+  }
+
   // --- Mephistopheles handlers ---
   if (t === "mephistophelesBegin") {
     const id = (msg as { id?: unknown }).id as string | undefined;

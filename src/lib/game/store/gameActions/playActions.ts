@@ -810,24 +810,23 @@ export const createPlayActionsSlice: StateCreator<
           console.error("[playActions] Error triggering Dhol Chants:", e);
         }
       }
-      // DISABLED: Atlantean Fate auto-resolver not working correctly
-      // TODO: Re-enable when fixed
-      // else if (isAtlanteanFate && newest) {
-      //   try {
-      //     get().beginAtlanteanFate({
-      //       spell: {
-      //         at: key,
-      //         index: arr.length - 1,
-      //         instanceId: newest.instanceId ?? null,
-      //         owner: newest.owner,
-      //         card: newest.card as CardRef,
-      //       },
-      //       casterSeat: who,
-      //     });
-      //   } catch (e) {
-      //     console.error("[playActions] Error triggering Atlantean Fate:", e);
-      //   }
-      // }
+      // If this is Atlantean Fate (Aura), begin the 4x4 area selection flow
+      else if (isAtlanteanFate && newest) {
+        try {
+          get().beginAtlanteanFate({
+            spell: {
+              at: key,
+              index: arr.length - 1,
+              instanceId: newest.instanceId ?? null,
+              owner: newest.owner,
+              card: newest.card as CardRef,
+            },
+            casterSeat: who,
+          });
+        } catch (e) {
+          console.error("[playActions] Error triggering Atlantean Fate:", e);
+        }
+      }
       // If this is Raise Dead, begin the confirmation flow to summon random dead minion
       else if (isRaiseDead && newest) {
         try {

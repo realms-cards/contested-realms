@@ -68,19 +68,20 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   const toggleTapAvatar = useGameStore((s) => s.toggleTapAvatar);
   const moveSiteToZone = useGameStore((s) => s.moveSiteToZone);
   const moveSiteToGraveyardWithRubble = useGameStore(
-    (s) => s.moveSiteToGraveyardWithRubble
+    (s) => s.moveSiteToGraveyardWithRubble,
   );
   const floodSite = useGameStore((s) => s.floodSite);
   const silenceSite = useGameStore((s) => s.silenceSite);
+  const silencePermanent = useGameStore((s) => s.silencePermanent);
   const movePermanentToZone = useGameStore((s) => s.movePermanentToZone);
   const transferSiteControl = useGameStore((s) => s.transferSiteControl);
   const transferPermanentControl = useGameStore(
-    (s) => s.transferPermanentControl
+    (s) => s.transferPermanentControl,
   );
   const copyPermanent = useGameStore((s) => s.copyPermanent);
   const drawFromPileToHand = useGameStore((s) => s.drawFromPileToHand);
   const moveFromGraveyardToBanished = useGameStore(
-    (s) => s.moveFromGraveyardToBanished
+    (s) => s.moveFromGraveyardToBanished,
   );
   const setDragFromPile = useGameStore((s) => s.setDragFromPile);
   const shuffleSpellbook = useGameStore((s) => s.shuffleSpellbook);
@@ -91,7 +92,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   const addTokenToHand = useGameStore((s) => s.addTokenToHand);
   const attachTokenToPermanent = useGameStore((s) => s.attachTokenToPermanent);
   const attachPermanentToAvatar = useGameStore(
-    (s) => s.attachPermanentToAvatar
+    (s) => s.attachPermanentToAvatar,
   );
   const detachToken = useGameStore((s) => s.detachToken);
   const log = useGameStore((s) => s.log);
@@ -104,14 +105,14 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   const imposterMasks = useGameStore((s) => s.imposterMasks);
   const unmask = useGameStore((s) => s.unmask);
   const necromancerSkeletonUsed = useGameStore(
-    (s) => s.necromancerSkeletonUsed
+    (s) => s.necromancerSkeletonUsed,
   );
   const summonSkeletonHere = useGameStore((s) => s.summonSkeletonHere);
   const mephistophelesSummonUsed = useGameStore(
-    (s) => s.mephistophelesSummonUsed
+    (s) => s.mephistophelesSummonUsed,
   );
   const beginMephistophelesSummon = useGameStore(
-    (s) => s.beginMephistophelesSummon
+    (s) => s.beginMephistophelesSummon,
   );
   const pathfinderUsed = useGameStore((s) => s.pathfinderUsed);
   const beginPathfinderPlay = useGameStore((s) => s.beginPathfinderPlay);
@@ -119,10 +120,10 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   const flipDruid = useGameStore((s) => s.flipDruid);
   const getAvailableMana = useGameStore((s) => s.getAvailableMana);
   const triggerFrontierSettlersAbility = useGameStore(
-    (s) => s.triggerFrontierSettlersAbility
+    (s) => s.triggerFrontierSettlersAbility,
   );
   const _hasFrontierSettlersAbility = useGameStore(
-    (s) => s.hasFrontierSettlersAbility
+    (s) => s.hasFrontierSettlersAbility,
   );
 
   // Permanent position management (burrow/submerge)
@@ -132,10 +133,10 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
 
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [menuPos, setMenuPos] = useState<{ left: number; top: number } | null>(
-    null
+    null,
   );
   const [positionActions, setPositionActions] = useState<ContextMenuAction[]>(
-    []
+    [],
   );
   // Track if current permanent/site has stealth/ward/lance keyword ability
   const [hasStealthAbility, setHasStealthAbility] = useState(false);
@@ -235,7 +236,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
             setHasLanceAbility(hasLance);
 
             const abilities = await detectBurrowSubmergeAbilities(
-              item.card.name
+              item.card.name,
             );
             const canBurrow = abilities.canBurrow;
             const canSubmerge = abilities.canSubmerge;
@@ -250,8 +251,8 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                   canBurrow && canSubmerge
                     ? "Burrowing/Submerge"
                     : canBurrow
-                    ? "Burrowing"
-                    : "Submerge"
+                      ? "Burrowing"
+                      : "Submerge"
                 } ability`,
               });
 
@@ -280,19 +281,19 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
             const state = useGameStore.getState();
             console.log(
               "Debug - Position data:",
-              state.permanentPositions[permanentId]
+              state.permanentPositions[permanentId],
             );
             console.log(
               "Debug - Ability data:",
-              state.permanentAbilities[permanentId]
+              state.permanentAbilities[permanentId],
             );
             console.log(
               "Debug - All positions:",
-              Object.keys(state.permanentPositions)
+              Object.keys(state.permanentPositions),
             );
             console.log(
               "Debug - All abilities:",
-              Object.keys(state.permanentAbilities)
+              Object.keys(state.permanentAbilities),
             );
 
             setPositionActions(actions);
@@ -300,7 +301,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
             console.warn(
               "Failed to fetch abilities for",
               item.card.name,
-              error
+              error,
             );
             // Fallback to sync detection as backup
             setHasStealthAbility(detectStealthAbilitySync(item.card.name));
@@ -320,8 +321,8 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                   canBurrow && canSubmerge
                     ? "Burrowing/Submerge"
                     : canBurrow
-                    ? "Burrowing"
-                    : "Submerge"
+                      ? "Burrowing"
+                      : "Submerge"
                 } ability`,
               });
 
@@ -653,7 +654,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
           ({ perm }) =>
             perm.attachedTo &&
             perm.attachedTo.at === t.at &&
-            perm.attachedTo.index === t.index
+            perm.attachedTo.index === t.index,
         )
         .map(({ perm, idx }) => ({
           name: perm.card.name,
@@ -669,7 +670,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
       const nonTokenIndices = arr
         .map((it, i) => ({ it, i }))
         .filter(
-          ({ it }) => !(it.card.type || "").toLowerCase().includes("token")
+          ({ it }) => !(it.card.type || "").toLowerCase().includes("token"),
         );
       const tokenName = (item?.card?.name || "").toLowerCase();
       const isAttachableToken =
@@ -702,7 +703,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
             index: i,
             card: it.card,
             displayName: it.card.name,
-          })
+          }),
         );
 
         // Add avatar if on same tile
@@ -720,7 +721,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
           doAttachToken = () => {
             console.log(
               "[ContextMenu] Token attach clicked, targets:",
-              possibleTargets.length
+              possibleTargets.length,
             );
             // If only one target, attach directly (old behavior)
             if (possibleTargets.length === 1) {
@@ -735,7 +736,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
               // Multiple targets: show selection dialog (don't close menu yet)
               console.log(
                 "[ContextMenu] Opening attachment dialog for token",
-                item.card.name
+                item.card.name,
               );
               setAttachmentDialog({
                 artifactName: item.card.name,
@@ -813,7 +814,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
             console.log(
               "[ContextMenu] Artifact attach clicked, targets:",
               possibleTargets.length,
-              possibleTargets
+              possibleTargets,
             );
             // If only one target, attach directly (old behavior)
             if (possibleTargets.length === 1) {
@@ -823,7 +824,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
               } else {
                 attachTokenToPermanent(t.at, t.index, target.index);
                 log(
-                  `Attached artifact '${item.card.name}' to ${target.displayName}`
+                  `Attached artifact '${item.card.name}' to ${target.displayName}`,
                 );
               }
               onClose();
@@ -831,7 +832,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
               // Multiple targets: show selection dialog (don't close menu yet)
               console.log(
                 "[ContextMenu] Opening attachment dialog for artifact",
-                item.card.name
+                item.card.name,
               );
               setAttachmentDialog({
                 artifactName: item.card.name,
@@ -841,7 +842,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
               });
               console.log(
                 "[ContextMenu] Dialog state set, targets:",
-                possibleTargets
+                possibleTargets,
               );
             }
           };
@@ -889,6 +890,26 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         } catch {}
         onClose();
       };
+
+      // Silence action for auras and minions (place Silenced token on the permanent)
+      const permanentType = (item?.card?.type || "").toLowerCase();
+      const permanentSubTypes = (item?.card?.subTypes || "").toLowerCase();
+      const isAura =
+        permanentType.includes("aura") || permanentSubTypes.includes("aura");
+      const isMinion = permanentType.includes("minion");
+      const isArtifactWithAbility = permanentType.includes("artifact");
+      const canSilence = isAura || isMinion || isArtifactWithAbility;
+
+      if (canSilence) {
+        extraActions.push({
+          actionId: "__silence_permanent__",
+          displayText: "Silence",
+          isEnabled: true,
+          targetPermanentId: "",
+          description:
+            "Place a Silenced token on this permanent (removes abilities).",
+        });
+      }
     }
 
     // Combat actions (same-tile and ranged-adjacent)
@@ -1153,7 +1174,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
             perm.attachedTo &&
             perm.attachedTo.at === avatarTileKey &&
             perm.attachedTo.index === -1 &&
-            perm.owner === avatarOwner
+            perm.owner === avatarOwner,
         )
         .map(({ perm, idx }) => ({
           name: perm.card.name,
@@ -1171,10 +1192,10 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
       t.from === "spellbook"
         ? "Spellbook"
         : t.from === "atlas"
-        ? "Atlas"
-        : t.from === "graveyard"
-        ? "Cemetery"
-        : "Collection";
+          ? "Atlas"
+          : t.from === "graveyard"
+            ? "Cemetery"
+            : "Collection";
     header = `${name} (${count} cards)`;
     const isMine = !actorKey || actorKey === t.who;
     const isCurrent = (t.who === "p1" ? 1 : 2) === currentPlayer;
@@ -1222,10 +1243,10 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
           t.from === "spellbook"
             ? "Spellbook"
             : t.from === "atlas"
-            ? "Atlas"
-            : t.from === "graveyard"
-            ? "Cemetery"
-            : "Collection";
+              ? "Atlas"
+              : t.from === "graveyard"
+                ? "Cemetery"
+                : "Collection";
         if (t.from === "graveyard") {
           // Cemetery search with draw and banish options
           // Own cemetery: can draw and banish freely
@@ -1254,7 +1275,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                     },
                   });
                   log(
-                    `Requested consent to draw ${selectedCard.name} from opponent's cemetery`
+                    `Requested consent to draw ${selectedCard.name} from opponent's cemetery`,
                   );
                   return;
                 }
@@ -1272,7 +1293,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
               },
               // Show warning indicator on opponent's cemetery banish button
               banishRequiresConsent: isOpponentGraveyard,
-            }
+            },
           );
         } else {
           openSearchDialog(displayName, pile, (selectedCard) => {
@@ -1304,7 +1325,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
           type: "Token",
           slug: tokenSlug(def),
           thresholds: null,
-        })
+        }),
       ) as CardRef[];
       openSearchDialog("Tokens", tokenCards, (selected) => {
         addTokenToHand(who, selected.name);
@@ -1345,7 +1366,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
 
   console.log(
     "[ContextMenu] Rendering, attachmentDialog:",
-    attachmentDialog ? "SET" : "null"
+    attachmentDialog ? "SET" : "null",
   );
 
   return (
@@ -1533,7 +1554,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                     log(
                       `[p${playerNum}card:${
                         site.card?.name || "Site"
-                      }] gains Ward`
+                      }] gains Ward`,
                     );
 
                     try {
@@ -1553,7 +1574,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                 (() => {
                   // Check if already has stealth token attached
                   const alreadyHasStealth = attachedTokens?.some(
-                    (tk) => tk.name.toLowerCase() === "stealth"
+                    (tk) => tk.name.toLowerCase() === "stealth",
                   );
                   return !alreadyHasStealth;
                 })() && (
@@ -1622,7 +1643,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
 
                       const playerNum = ownerKey === "p1" ? "1" : "2";
                       log(
-                        `[p${playerNum}card:${perm.card.name}] gains Stealth`
+                        `[p${playerNum}card:${perm.card.name}] gains Stealth`,
                       );
 
                       try {
@@ -1642,7 +1663,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                 (() => {
                   // Check if already has ward token attached
                   const alreadyHasWard = attachedTokens?.some(
-                    (tk) => tk.name.toLowerCase() === "ward"
+                    (tk) => tk.name.toLowerCase() === "ward",
                   );
                   return !alreadyHasWard;
                 })() && (
@@ -1729,7 +1750,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                 (() => {
                   // Check if already has lance token attached
                   const alreadyHasLance = attachedTokens?.some(
-                    (tk) => tk.name.toLowerCase() === "lance"
+                    (tk) => tk.name.toLowerCase() === "lance",
                   );
                   return !alreadyHasLance;
                 })() && (
@@ -1912,7 +1933,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                                 movePermanentToZone(
                                   token.tileKey,
                                   token.index,
-                                  "banished"
+                                  "banished",
                                 );
                                 try {
                                   playCardFlip();
@@ -1952,7 +1973,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                                 const detachedToken = items.find(
                                   (item) =>
                                     !item.attachedTo &&
-                                    item.card.name.toLowerCase() === tokenName
+                                    item.card.name.toLowerCase() === tokenName,
                                 );
                                 if (detachedToken) {
                                   const tokenIndex =
@@ -1961,7 +1982,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                                     movePermanentToZone(
                                       token.tileKey,
                                       tokenIndex,
-                                      "banished"
+                                      "banished",
                                     );
                                     try {
                                       playCardFlip();
@@ -2020,7 +2041,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                     (p) =>
                       p.minion.at === t.at ||
                       (item?.instanceId &&
-                        p.minion.instanceId === item.instanceId)
+                        p.minion.instanceId === item.instanceId),
                   );
 
                   if (!pithImpEntry || pithImpEntry.hand.length === 0)
@@ -2160,7 +2181,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                             if (t.kind === "site") {
                               setSwitchSiteSource({ x: t.x, y: t.y });
                               log(
-                                "Site selected for switch. Click another tile to complete the move."
+                                "Site selected for switch. Click another tile to complete the move.",
                               );
                             }
                             onClose();
@@ -2201,6 +2222,27 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                           onClick={() => {
                             if (t.kind === "site") {
                               silenceSite(t.x, t.y);
+                              try {
+                                playCardFlip();
+                              } catch {}
+                            }
+                            onClose();
+                          }}
+                        >
+                          {action.displayText}
+                        </button>
+                      );
+                    }
+                    // Silence permanent action - place Silenced token on aura/minion/artifact
+                    if (action.actionId === "__silence_permanent__") {
+                      return (
+                        <button
+                          key={action.actionId}
+                          className="w-full text-left rounded bg-violet-600/20 hover:bg-violet-600/30 px-3 py-1"
+                          title={action.description}
+                          onClick={() => {
+                            if (t.kind === "permanent") {
+                              silencePermanent(t.at, t.index);
                               try {
                                 playCardFlip();
                               } catch {}
@@ -2409,14 +2451,14 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                           if (action.isEnabled && action.newPositionState) {
                             updatePermanentState(
                               action.targetPermanentId,
-                              action.newPositionState
+                              action.newPositionState,
                             );
                             log(
                               `${header} ${action.displayText.toLowerCase()}${
                                 action.newPositionState === "surface"
                                   ? "ed"
                                   : "ed"
-                              }`
+                              }`,
                             );
                             onClose();
                           }
