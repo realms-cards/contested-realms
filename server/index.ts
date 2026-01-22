@@ -4011,9 +4011,18 @@ io.on("connection", async (socket: SocketClient) => {
       type === "accusationBegin" ||
       type === "accusationSelectCard" ||
       type === "accusationResolve" ||
-      type === "accusationCancel"
+      type === "accusationCancel" ||
+      type === "legionOfGallBegin" ||
+      type === "legionOfGallConfirm" ||
+      type === "legionOfGallSelect" ||
+      type === "legionOfGallResolve" ||
+      type === "legionOfGallCancel" ||
+      type === "searingTruthBegin" ||
+      type === "searingTruthTarget" ||
+      type === "searingTruthResolve" ||
+      type === "searingTruthCancel"
     ) {
-      // Chaos Twister minigame and Pith Imp messages - broadcast to match room
+      // Resolver messages - broadcast to match room
       try {
         const match = await getOrLoadMatch(matchId);
         const room = `match:${matchId}`;

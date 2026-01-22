@@ -1097,7 +1097,8 @@ export default function GameToolbox({
   };
 
   const collapsed = !open;
-  const containerWidthClass = collapsed ? "w-56 sm:w-64" : "w-72 sm:w-80";
+  // More fluid widths on mobile
+  const containerWidthClass = collapsed ? "w-auto min-w-[3rem]" : "w-[90vw] sm:w-80 max-w-sm";
   const headerPaddingClass = collapsed
     ? "px-2 py-1"
     : "px-2 py-1.5 sm:px-3 sm:py-2";
@@ -1172,7 +1173,7 @@ export default function GameToolbox({
         </button>
       ) : (
         <div
-          className={`bg-black/60 backdrop-blur rounded-xl ring-1 ring-white/10 shadow-lg ${containerWidthClass} max-w-[92vw] transition-all`}
+          className={`bg-black/60 backdrop-blur rounded-xl ring-1 ring-white/10 shadow-lg ${containerWidthClass} max-h-[85vh] overflow-y-auto transition-all`}
         >
           <div
             className={`flex items-center justify-between ${headerPaddingClass} border-b border-white/10`}
@@ -1215,13 +1216,13 @@ export default function GameToolbox({
             )}
             {/* Combined pile action: Draw / Peek / Scry */}
             <div className="rounded-lg bg-white/5 ring-1 ring-white/10 p-2">
-              <div className="flex flex-wrap gap-2 mb-1">
+              <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-1.5 sm:gap-2 mb-2">
                 <select
                   value={actionType}
                   onChange={(e) =>
                     setActionType(e.target.value as typeof actionType)
                   }
-                  className="bg-white/10 rounded px-2 py-1"
+                  className="bg-white/10 rounded px-2 py-2 sm:py-1 text-sm"
                 >
                   <option value="draw">Draw</option>
                   <option value="peek">Peek</option>
@@ -1237,7 +1238,7 @@ export default function GameToolbox({
                     setRevealSeat(v);
                     setScrySeat(v);
                   }}
-                  className="bg-white/10 rounded px-2 py-1"
+                  className="bg-white/10 rounded px-2 py-2 sm:py-1 text-sm"
                 >
                   <option value="p1">{playerNames.p1}</option>
                   <option value="p2">{playerNames.p2}</option>
@@ -1251,42 +1252,44 @@ export default function GameToolbox({
                     setRevealPile(v);
                     setScryPile(v);
                   }}
-                  className="bg-white/10 rounded px-2 py-1"
+                  className="bg-white/10 rounded px-2 py-2 sm:py-1 text-sm"
                 >
                   <option value="spellbook">Spellbook</option>
                   <option value="atlas">Atlas</option>
                 </select>
-                <select
-                  value={drawFromWhere}
-                  onChange={(e) => {
-                    const v = e.target.value as "top" | "bottom";
-                    setDrawFromWhere(v);
-                    setPeekFromWhere(v);
-                    setRevealFromWhere(v);
-                  }}
-                  className={`bg-white/10 rounded px-2 py-1 ${
-                    actionType === "scry"
-                      ? "opacity-50 pointer-events-none"
-                      : ""
-                  }`}
-                >
-                  <option value="top">Top</option>
-                  <option value="bottom">Bottom</option>
-                </select>
-                <input
-                  type="number"
-                  min={1}
-                  max={20}
-                  value={drawCount}
-                  onChange={(e) => {
-                    const n = Number(e.target.value);
-                    setDrawCount(n);
-                    setPeekCount(n);
-                    setRevealCount(n);
-                    setScryCount(n);
-                  }}
-                  className="w-12 sm:w-14 bg-white/10 rounded px-2 py-1"
-                />
+                <div className="flex gap-1.5">
+                  <select
+                    value={drawFromWhere}
+                    onChange={(e) => {
+                      const v = e.target.value as "top" | "bottom";
+                      setDrawFromWhere(v);
+                      setPeekFromWhere(v);
+                      setRevealFromWhere(v);
+                    }}
+                    className={`flex-1 bg-white/10 rounded px-2 py-2 sm:py-1 text-sm ${
+                      actionType === "scry"
+                        ? "opacity-50 pointer-events-none"
+                        : ""
+                    }`}
+                  >
+                    <option value="top">Top</option>
+                    <option value="bottom">Bottom</option>
+                  </select>
+                  <input
+                    type="number"
+                    min={1}
+                    max={20}
+                    value={drawCount}
+                    onChange={(e) => {
+                      const n = Number(e.target.value);
+                      setDrawCount(n);
+                      setPeekCount(n);
+                      setRevealCount(n);
+                      setScryCount(n);
+                    }}
+                    className="w-14 bg-white/10 rounded px-2 py-2 sm:py-1 text-sm text-center"
+                  />
+                </div>
               </div>
               <button
                 className={`w-full rounded ${
@@ -1378,9 +1381,9 @@ export default function GameToolbox({
             </div>
 
             {/* Inspect Hand + D20 + D6 row */}
-            <div className="flex gap-1.5">
+            <div className="grid grid-cols-5 sm:flex gap-1.5">
               <button
-                className="flex-1 rounded bg-blue-600/90 hover:bg-blue-500 px-2 py-1.5 inline-flex items-center justify-center gap-1.5"
+                className="col-span-2 sm:flex-1 rounded bg-blue-600/90 hover:bg-blue-500 active:bg-blue-400 px-2 py-2.5 sm:py-1.5 inline-flex items-center justify-center gap-1.5"
                 onClick={handleInspectOpponentHand}
                 title={
                   isOnline
@@ -1388,20 +1391,20 @@ export default function GameToolbox({
                     : "Hotseat: opens the other hand"
                 }
               >
-                <Eye className="w-4 h-4 flex-shrink-0" />
-                <span className="text-xs whitespace-nowrap">Inspect Hand</span>
+                <Eye className="w-5 h-5 sm:w-4 sm:h-4 flex-shrink-0" />
+                <span className="text-xs whitespace-nowrap hidden sm:inline">Inspect</span>
               </button>
               <button
-                className="rounded bg-blue-600/90 hover:bg-blue-500 px-3 py-1.5 flex items-center justify-center"
+                className="rounded bg-blue-600/90 hover:bg-blue-500 active:bg-blue-400 px-3 py-2.5 sm:py-1.5 flex items-center justify-center"
                 onClick={startToolboxRoll}
                 aria-label="Roll D20"
                 title="Roll D20"
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/d20.svg" alt="D20" width={18} height={18} />
+                <img src="/d20.svg" alt="D20" width={20} height={20} className="sm:w-[18px] sm:h-[18px]" />
               </button>
               <button
-                className="rounded bg-blue-600/90 hover:bg-blue-500 px-3 py-1.5 flex items-center justify-center"
+                className="rounded bg-blue-600/90 hover:bg-blue-500 active:bg-blue-400 px-3 py-2.5 sm:py-1.5 flex items-center justify-center"
                 onClick={startD6Roll}
                 aria-label="Roll D6"
                 title="Roll D6"
@@ -1410,21 +1413,21 @@ export default function GameToolbox({
                 <img
                   src="/d6.svg"
                   alt="D6"
-                  width={18}
-                  height={18}
-                  className="invert"
+                  width={20}
+                  height={20}
+                  className="invert sm:w-[18px] sm:h-[18px]"
                 />
               </button>
               <button
-                className="rounded bg-amber-600/90 hover:bg-amber-500 px-3 py-1.5 flex items-center justify-center relative"
+                className="rounded bg-amber-600/90 hover:bg-amber-500 active:bg-amber-400 px-3 py-2.5 sm:py-1.5 flex items-center justify-center relative"
                 onClick={() => setGemColorPickerOpen(!gemColorPickerOpen)}
                 aria-label="Spawn Gem Token"
                 title="Spawn Gem Token"
               >
-                <Circle className="w-4 h-4" />
+                <Circle className="w-5 h-5 sm:w-4 sm:h-4" />
               </button>
               <button
-                className="rounded bg-violet-600/90 hover:bg-violet-500 px-2.5 py-1.5 flex items-center justify-center text-xs font-semibold"
+                className="rounded bg-violet-600/90 hover:bg-violet-500 active:bg-violet-400 px-2.5 py-2.5 sm:py-1.5 flex items-center justify-center text-xs font-semibold"
                 onClick={() => {
                   setRndResult(null);
                   setRndReceived(false);

@@ -9,6 +9,7 @@ import type {
   CardRef,
   MagicTarget,
   ServerPatchT,
+  Zones,
 } from "./types";
 import {
   getCellNumber,
@@ -1964,22 +1965,97 @@ export function handleCustomMessage(
   }
   if (t === "accusationResolve") {
     const id = (msg as { id?: unknown }).id as string | undefined;
-    const selectedCardName = (msg as { selectedCardName?: unknown })
-      .selectedCardName as string | undefined;
-    const pending = get().pendingAccusation;
-    if (!pending || (id && pending.id !== id)) return;
+    const casterSeat = (msg as { casterSeat?: unknown }).casterSeat as
+      | PlayerKey
+      | undefined;
+    const victimSeat = (msg as { victimSeat?: unknown }).victimSeat as
+      | PlayerKey
+      | undefined;
+    const selectedCardIndex = (msg as { selectedCardIndex?: unknown })
+      .selectedCardIndex as number | undefined;
+    const selectedCard = (msg as { selectedCard?: unknown }).selectedCard as
+      | CardRef
+      | undefined;
 
-    // Note: Don't call movePermanentToZone here - the caster's patch handles it.
-    // Calling it here causes race conditions since messages arrive before patches.
+    if (!id || !casterSeat || !victimSeat) return;
 
-    set({ pendingAccusation: null } as Partial<GameState> as GameState);
-    try {
-      get().log(
-        `Accusation resolved: ${
-          selectedCardName ?? "a card"
-        } banished from ${pending.victimSeat.toUpperCase()}'s hand`,
+    // Skip if we're the caster - we already handled it locally
+    const actorKey = get().actorKey;
+    if (actorKey === casterSeat) {
+      set({ pendingAccusation: null } as Partial<GameState> as GameState);
+      return;
+    }
+
+    // We are the victim - update our own zones
+    if (
+      actorKey === victimSeat &&
+      selectedCard &&
+      typeof selectedCardIndex === "number"
+    ) {
+      const zones = get().zones;
+      const hand = [...(zones[victimSeat]?.hand || [])];
+      const banished = [...(zones[victimSeat]?.banished || [])];
+
+      // Find and remove the card from hand
+      const handIndex = hand.findIndex(
+        (c) =>
+          c.cardId === selectedCard.cardId &&
+          c.slug === selectedCard.slug &&
+          c.name === selectedCard.name,
       );
-    } catch {}
+
+      if (handIndex !== -1) {
+        hand.splice(handIndex, 1);
+      }
+
+      // Add to banished
+      banished.push(selectedCard);
+
+      const zonesNext = {
+        ...zones,
+        [victimSeat]: {
+          ...zones[victimSeat],
+          hand,
+          banished,
+        },
+      };
+
+      set({
+        zones: zonesNext,
+        pendingAccusation: null,
+      } as Partial<GameState> as GameState);
+
+      // CRITICAL: Persist zone changes to server - we're updating OUR OWN seat so this is allowed
+      try {
+        get().trySendPatch({
+          zones: { [victimSeat]: zonesNext[victimSeat] } as Record<
+            PlayerKey,
+            Zones
+          >,
+        });
+      } catch {}
+
+      try {
+        get().log(
+          `Accusation resolved: ${
+            selectedCard.name ?? "a card"
+          } banished from ${victimSeat.toUpperCase()}'s hand`,
+        );
+      } catch {}
+    } else {
+      // Spectator or other case - just clear pending state
+      set({ pendingAccusation: null } as Partial<GameState> as GameState);
+      const pending = get().pendingAccusation;
+      try {
+        get().log(
+          `Accusation resolved: a card banished from ${
+            victimSeat?.toUpperCase() ??
+            pending?.victimSeat?.toUpperCase() ??
+            "opponent"
+          }'s hand`,
+        );
+      } catch {}
+    }
     return;
   }
   if (t === "accusationCancel") {
@@ -3104,6 +3180,192 @@ export function handleCustomMessage(
         `[${
           casterSeat?.toUpperCase() ?? "PLAYER"
         }] Raise Dead: Manual resolution chosen`,
+      );
+    } catch {}
+    return;
+  }
+
+  // --- Legion of Gall message handlers ---
+  if (t === "legionOfGallBegin") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const spellAny = (msg as { spell?: unknown }).spell as unknown;
+    const casterSeat = (msg as { casterSeat?: unknown }).casterSeat as
+      | PlayerKey
+      | undefined;
+    const targetSeat = (msg as { targetSeat?: unknown }).targetSeat as
+      | PlayerKey
+      | undefined;
+    if (!id || !spellAny || !casterSeat || !targetSeat) return;
+    const rec = spellAny as Record<string, unknown>;
+    set({
+      pendingLegionOfGall: {
+        id,
+        casterSeat,
+        targetSeat,
+        spell: {
+          at: rec.at as CellKey,
+          index: Number(rec.index),
+          instanceId: (rec.instanceId as string | null) ?? null,
+          owner: Number(rec.owner) as 1 | 2,
+          card: rec.card as CardRef,
+        },
+        phase: "confirming",
+        selectedIndices: [],
+        createdAt: Date.now(),
+      },
+    } as Partial<GameState> as GameState);
+    try {
+      get().log(
+        `[${casterSeat.toUpperCase()}] casts Legion of Gall - awaiting confirmation`,
+      );
+    } catch {}
+    return;
+  }
+
+  if (t === "legionOfGallConfirm") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const casterSeat = (msg as { casterSeat?: unknown }).casterSeat as
+      | PlayerKey
+      | undefined;
+    const targetSeat = (msg as { targetSeat?: unknown }).targetSeat as
+      | PlayerKey
+      | undefined;
+    const pending = get().pendingLegionOfGall;
+    if (!pending || (id && pending.id !== id)) return;
+    if (!casterSeat || !targetSeat) return;
+
+    set({
+      pendingLegionOfGall: {
+        ...pending,
+        phase: "viewing",
+      },
+    } as Partial<GameState> as GameState);
+    try {
+      get().log(
+        `[${casterSeat.toUpperCase()}] Legion of Gall: inspecting ${targetSeat.toUpperCase()}'s collection...`,
+      );
+    } catch {}
+    return;
+  }
+
+  if (t === "legionOfGallSelect") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const selectedIndices = (msg as { selectedIndices?: unknown })
+      .selectedIndices as number[] | undefined;
+    const pending = get().pendingLegionOfGall;
+    if (!pending || (id && pending.id !== id)) return;
+    if (!Array.isArray(selectedIndices)) return;
+
+    set({
+      pendingLegionOfGall: {
+        ...pending,
+        selectedIndices,
+        phase: "selecting",
+      },
+    } as Partial<GameState> as GameState);
+    return;
+  }
+
+  if (t === "legionOfGallResolve") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const casterSeat = (msg as { casterSeat?: unknown }).casterSeat as
+      | PlayerKey
+      | undefined;
+    const targetSeat = (msg as { targetSeat?: unknown }).targetSeat as
+      | PlayerKey
+      | undefined;
+    const selectedIndices = (msg as { selectedIndices?: unknown })
+      .selectedIndices as number[] | undefined;
+    const cardsToBanish = (msg as { cardsToBanish?: unknown }).cardsToBanish as
+      | CardRef[]
+      | undefined;
+
+    if (!id || !casterSeat || !targetSeat) return;
+
+    // Skip if we're the caster - we already handled it locally
+    const actorKey = get().actorKey;
+    if (actorKey === casterSeat) {
+      set({ pendingLegionOfGall: null } as Partial<GameState> as GameState);
+      return;
+    }
+
+    // We are the target (victim) - update our own zones
+    if (actorKey === targetSeat && cardsToBanish && selectedIndices) {
+      const zones = get().zones;
+      const collection = [...(zones[targetSeat]?.collection || [])];
+      const banished = [...(zones[targetSeat]?.banished || [])];
+
+      // Remove cards from collection (indices are already sorted descending)
+      selectedIndices.forEach((idx) => {
+        if (idx >= 0 && idx < collection.length) {
+          collection.splice(idx, 1);
+        }
+      });
+
+      // Add cards to banished
+      banished.push(...cardsToBanish);
+
+      const zonesNext = {
+        ...zones,
+        [targetSeat]: {
+          ...zones[targetSeat],
+          collection,
+          banished,
+        },
+      };
+
+      set({
+        zones: zonesNext,
+        pendingLegionOfGall: null,
+      } as Partial<GameState> as GameState);
+
+      // CRITICAL: Persist zone changes to server - we're updating OUR OWN seat so this is allowed
+      try {
+        get().trySendPatch({
+          zones: { [targetSeat]: zonesNext[targetSeat] } as Record<
+            PlayerKey,
+            Zones
+          >,
+        });
+      } catch {}
+
+      const cardNames = cardsToBanish
+        .map((c) => (c as CardRef).name || "Unknown")
+        .join(", ");
+      try {
+        get().log(
+          `[${casterSeat.toUpperCase()}] Legion of Gall: banished ${
+            cardsToBanish.length
+          } cards from ${targetSeat.toUpperCase()}'s collection: ${cardNames}`,
+        );
+      } catch {}
+    } else {
+      // Spectator or other case - just clear pending state
+      set({ pendingLegionOfGall: null } as Partial<GameState> as GameState);
+      try {
+        get().log(
+          `[${casterSeat?.toUpperCase() ?? "PLAYER"}] Legion of Gall: banished ${
+            selectedIndices?.length ?? 0
+          } cards from ${targetSeat?.toUpperCase() ?? "opponent"}'s collection`,
+        );
+      } catch {}
+    }
+    return;
+  }
+
+  if (t === "legionOfGallCancel") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const casterSeat = (msg as { casterSeat?: unknown }).casterSeat as
+      | PlayerKey
+      | undefined;
+    set((s) => {
+      if (!s.pendingLegionOfGall || (id && s.pendingLegionOfGall.id !== id))
+        return s as GameState;
+      return { pendingLegionOfGall: null } as Partial<GameState> as GameState;
+    });
+    try {
+      get().log(
+        `[${casterSeat?.toUpperCase() ?? "PLAYER"}] Legion of Gall cancelled`,
       );
     } catch {}
     return;
