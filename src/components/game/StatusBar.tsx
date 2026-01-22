@@ -1,6 +1,6 @@
 "use client";
 
-import { Eye, EyeOff, Grid3X3, Star } from "lucide-react";
+import { Eye, EyeOff, Grid3X3, Search, Star } from "lucide-react";
 import AudioControls from "@/components/game/AudioControls";
 import { EndTurnConfirmDialog } from "@/components/game/EndTurnConfirmDialog";
 import { FEATURE_UNDO } from "@/lib/config/features";
@@ -26,6 +26,8 @@ export default function StatusBar({ dragFromHand }: StatusBarProps) {
   const togglePlaymat = useGameStore((s) => s.togglePlaymat);
   const cardPreviewsEnabled = useGameStore((s) => s.cardPreviewsEnabled);
   const toggleCardPreviews = useGameStore((s) => s.toggleCardPreviews);
+  const uiHidden = useGameStore((s) => s.uiHidden);
+  const toggleUiHidden = useGameStore((s) => s.toggleUiHidden);
   const { enabled: colorBlindEnabled } = useColorBlind();
 
   const primaryActionButtonClass =
@@ -60,6 +62,23 @@ export default function StatusBar({ dragFromHand }: StatusBarProps) {
           <Grid3X3 className="w-4 h-4" />
         </button>
 
+        {/* UI visibility toggle (keyboard: U) */}
+        <button
+          className={`rounded-full p-1.5 transition-colors ${
+            uiHidden
+              ? "bg-amber-600/80 hover:bg-amber-500"
+              : "bg-white/10 hover:bg-white/20"
+          }`}
+          onClick={toggleUiHidden}
+          title={`UI ${uiHidden ? "Hidden" : "Visible"} (U)`}
+        >
+          {uiHidden ? (
+            <EyeOff className="w-4 h-4" />
+          ) : (
+            <Eye className="w-4 h-4" />
+          )}
+        </button>
+
         {/* Card Previews toggle (keyboard: P) */}
         <button
           className={`rounded-full p-1.5 transition-colors ${
@@ -70,11 +89,7 @@ export default function StatusBar({ dragFromHand }: StatusBarProps) {
           onClick={toggleCardPreviews}
           title={`Card Previews ${cardPreviewsEnabled ? "On" : "Off"} (P)`}
         >
-          {cardPreviewsEnabled ? (
-            <Eye className="w-4 h-4" />
-          ) : (
-            <EyeOff className="w-4 h-4" />
-          )}
+          <Search className="w-4 h-4" />
         </button>
 
         <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />

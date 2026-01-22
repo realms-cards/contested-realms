@@ -1,7 +1,6 @@
 import type { StateCreator } from "zustand";
 import { wrapInteractionMessage } from "@/lib/net/interactions";
 import type { GameTransport, CustomMessage } from "@/lib/net/transport";
-import { getEffectiveGraveyardSeatStatic } from "./specialSiteState";
 import type { GameState, PlayerKey, ServerPatchT, Zones } from "./types";
 import { clonePatchForQueue } from "./utils/patchHelpers";
 
@@ -635,45 +634,11 @@ export const createTransportSlice: StateCreator<
         // (no filtering needed for avatars)
 
         // Zones: Only include actor's own zones - these are private
-        // EXCEPTION: Allow opponent's graveyard when Mismanaged Mortuary swap is active
         if (sanitized.zones && typeof sanitized.zones === "object") {
           const z = sanitized.zones as Partial<Record<PlayerKey, Zones>>;
           const outZ: Partial<Record<PlayerKey, Zones>> = {};
           if (actorKey && z[actorKey]) {
             outZ[actorKey] = z[actorKey] as Zones;
-          }
-          // Check if Mortuary swap redirects our graveyard to opponent
-          // If so, allow sending opponent's graveyard data
-          const mortuaries = state.specialSiteState?.mismanagedMortuaries || [];
-          if (actorKey && mortuaries.length > 0) {
-            const effectiveGraveyardSeat = getEffectiveGraveyardSeatStatic(
-              actorKey,
-              mortuaries,
-              state.permanents,
-            );
-            console.log("[trySendPatch] Mortuary check:", {
-              actorKey,
-              effectiveGraveyardSeat,
-              mortuariesCount: mortuaries.length,
-            });
-            // If our effective graveyard is opponent's, include their zones (graveyard only)
-            if (
-              effectiveGraveyardSeat !== actorKey &&
-              z[effectiveGraveyardSeat]
-            ) {
-              const oppZones = z[effectiveGraveyardSeat] as Zones;
-              console.log(
-                "[trySendPatch] Including opponent graveyard in patch:",
-                effectiveGraveyardSeat,
-                "graveyard length:",
-                oppZones.graveyard?.length,
-              );
-              // Only include the graveyard - don't expose other private zones
-              outZ[effectiveGraveyardSeat] = {
-                ...((outZ[effectiveGraveyardSeat] as Zones) || {}),
-                graveyard: oppZones.graveyard,
-              } as Zones;
-            }
           }
           if (Object.keys(outZ).length > 0) {
             sanitized.zones = outZ as GameState["zones"];

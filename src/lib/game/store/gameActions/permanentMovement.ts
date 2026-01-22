@@ -1,6 +1,5 @@
 import type { StateCreator } from "zustand";
 import { isMonumentByName, isAutomatonByName } from "../omphalosState";
-import { getEffectiveGraveyardSeatStatic } from "../specialSiteState";
 import type {
   CellKey,
   GameState,
@@ -356,14 +355,6 @@ export const createPermanentMovementSlice: StateCreator<
       const owner = seatFromOwner(item.owner);
       const zonesNext = { ...state.zones } as Record<PlayerKey, Zones>;
 
-      // Check for Mismanaged Mortuary cemetery swap (silenced mortuaries don't apply)
-      const mortuaries = state.specialSiteState.mismanagedMortuaries;
-      const effectiveGraveyardSeat = getEffectiveGraveyardSeatStatic(
-        owner,
-        mortuaries,
-        state.permanents,
-      );
-
       // Create deep copy of all zone arrays to avoid mutation
       const seatZones: Zones = {
         spellbook: [...state.zones[owner].spellbook],
@@ -385,33 +376,9 @@ export const createPermanentMovementSlice: StateCreator<
       if (finalTarget === "hand")
         seatZones.hand = [...seatZones.hand, movedCard];
       else if (finalTarget === "graveyard") {
-        // Route to effective graveyard (may be swapped due to Mismanaged Mortuary)
-        if (effectiveGraveyardSeat !== owner) {
-          // Cemetery is swapped - route to opponent's graveyard
-          let oppZones: Zones;
-          if (
-            zonesNext[effectiveGraveyardSeat] ===
-            state.zones[effectiveGraveyardSeat]
-          ) {
-            oppZones = {
-              spellbook: [...state.zones[effectiveGraveyardSeat].spellbook],
-              atlas: [...state.zones[effectiveGraveyardSeat].atlas],
-              hand: [...state.zones[effectiveGraveyardSeat].hand],
-              graveyard: [...state.zones[effectiveGraveyardSeat].graveyard],
-              battlefield: [...state.zones[effectiveGraveyardSeat].battlefield],
-              collection: [...state.zones[effectiveGraveyardSeat].collection],
-              banished: [
-                ...(state.zones[effectiveGraveyardSeat].banished || []),
-              ],
-            };
-          } else {
-            oppZones = { ...zonesNext[effectiveGraveyardSeat] };
-          }
-          oppZones.graveyard = [movedCard, ...oppZones.graveyard];
-          zonesNext[effectiveGraveyardSeat] = oppZones;
-        } else {
-          seatZones.graveyard = [movedCard, ...seatZones.graveyard];
-        }
+        // Cards always go to owner's graveyard
+        // (Mortuary only affects searches/fetches, not card placement)
+        seatZones.graveyard = [movedCard, ...seatZones.graveyard];
       } else if (target === "spellbook") {
         const pile = [...seatZones.spellbook];
         if (position === "top") pile.unshift(movedCard);
@@ -433,8 +400,6 @@ export const createPermanentMovementSlice: StateCreator<
       const removedIds: string[] = [];
       const removedId = ensurePermanentInstanceId(item);
       if (removedId) removedIds.push(removedId);
-      // Track seats affected by attachment graveyard swaps
-      const attachmentGraveyardSeats: PlayerKey[] = [];
 
       for (const { item: attached } of attachmentsToRemove) {
         const attachOwner = seatFromOwner(attached.owner);
@@ -443,59 +408,38 @@ export const createPermanentMovementSlice: StateCreator<
           .toLowerCase()
           .includes("token");
 
-        // Check for Mismanaged Mortuary cemetery swap for attachment (silenced mortuaries don't apply)
-        const attachEffectiveGraveyardSeat = getEffectiveGraveyardSeatStatic(
-          attachOwner,
-          mortuaries,
-          state.permanents,
-        );
-
-        // Determine target seat for graveyard (may be swapped)
-        const graveyardTargetSeat = attachedIsToken
-          ? attachOwner
-          : attachEffectiveGraveyardSeat;
-
-        // Create deep copy of target seat's zones if not already updated
+        // Create deep copy of owner's zones if not already updated
         let attachZones: Zones;
-        if (
-          zonesNext[graveyardTargetSeat] === state.zones[graveyardTargetSeat]
-        ) {
+        if (zonesNext[attachOwner] === state.zones[attachOwner]) {
           // Not yet updated - create deep copy
           attachZones = {
-            spellbook: [...state.zones[graveyardTargetSeat].spellbook],
-            atlas: [...state.zones[graveyardTargetSeat].atlas],
-            hand: [...state.zones[graveyardTargetSeat].hand],
-            graveyard: [...state.zones[graveyardTargetSeat].graveyard],
-            battlefield: [...state.zones[graveyardTargetSeat].battlefield],
-            collection: [...state.zones[graveyardTargetSeat].collection],
-            banished: [...(state.zones[graveyardTargetSeat].banished || [])],
+            spellbook: [...state.zones[attachOwner].spellbook],
+            atlas: [...state.zones[attachOwner].atlas],
+            hand: [...state.zones[attachOwner].hand],
+            graveyard: [...state.zones[attachOwner].graveyard],
+            battlefield: [...state.zones[attachOwner].battlefield],
+            collection: [...state.zones[attachOwner].collection],
+            banished: [...(state.zones[attachOwner].banished || [])],
           };
         } else {
           // Already updated - shallow copy is fine since arrays are already new
-          attachZones = { ...zonesNext[graveyardTargetSeat] };
+          attachZones = { ...zonesNext[attachOwner] };
         }
 
         if (attachedIsToken) {
           attachZones.banished = [...attachZones.banished, attachedCard];
         } else {
-          // Non-token, non-carryable-artifact attachments go to graveyard
+          // Non-token, non-carryable-artifact attachments go to owner's graveyard
           attachZones.graveyard = [attachedCard, ...attachZones.graveyard];
         }
-        zonesNext[graveyardTargetSeat] = attachZones;
-        // Track if attachment went to a swapped graveyard
-        if (graveyardTargetSeat !== attachOwner) {
-          attachmentGraveyardSeats.push(graveyardTargetSeat);
-        }
+        zonesNext[attachOwner] = attachZones;
 
         const attachedId = ensurePermanentInstanceId(attached);
         if (attachedId) removedIds.push(attachedId);
 
         const attachPlayerNum = attachOwner === "p1" ? "1" : "2";
-        const targetPlayerNum = graveyardTargetSeat === "p1" ? "1" : "2";
         get().log(
-          `Attachment [p${attachPlayerNum}card:${
-            attached.card.name
-          }] sent to [p${targetPlayerNum}:PLAYER] ${
+          `Attachment [p${attachPlayerNum}card:${attached.card.name}] sent to ${
             attachedIsToken ? "banished" : "cemetery"
           }`,
         );
@@ -586,21 +530,13 @@ export const createPermanentMovementSlice: StateCreator<
           ? createPermanentDeltaPatch(deltaEntries)
           : null;
       const fallbackPatch = deltaPatch ? null : createPermanentsPatch(per, at);
-      // Include all affected seats in the zone patch (owner + any attachment owners + swapped graveyard seat)
+      // Include all affected seats in the zone patch (owner + any attachment owners)
       const affectedSeats = new Set<PlayerKey>([owner]);
-      // CRITICAL: Include swapped graveyard seat if Mismanaged Mortuary redirected the card
-      if (effectiveGraveyardSeat !== owner) {
-        affectedSeats.add(effectiveGraveyardSeat);
-      }
       for (const { item: attached } of attachmentsToRemove) {
         affectedSeats.add(seatFromOwner(attached.owner));
       }
       for (const { item: attached } of attachmentsToKeep) {
         affectedSeats.add(seatFromOwner(attached.owner));
-      }
-      // Include attachment graveyard target seats when swapped by Mismanaged Mortuary
-      for (const seat of attachmentGraveyardSeats) {
-        affectedSeats.add(seat);
       }
 
       // Build and send patch
@@ -619,34 +555,18 @@ export const createPermanentMovementSlice: StateCreator<
       const cardNameLower = (item.card?.name || "").toLowerCase();
 
       // Atlantean Fate: remove flood aura when leaving the board
+      // This cleans up flooded tokens and restores submerged minions
       if (cardNameLower.includes("atlantean fate")) {
         try {
-          // Find and remove the aura associated with this permanent
+          // Find the aura associated with this permanent
           const currentState = get().specialSiteState;
           const auraToRemove = currentState.atlanteanFateAuras.find(
             (aura) => aura.permanentAt === at && aura.permanentIndex === index,
           );
           if (auraToRemove) {
-            const newAuras = currentState.atlanteanFateAuras.filter(
-              (a) => a.id !== auraToRemove.id,
-            );
-            // Update state - sites are no longer flooded
-            set({
-              specialSiteState: {
-                ...currentState,
-                atlanteanFateAuras: newAuras,
-              },
-            } as Partial<GameState> as GameState);
-            // Send patch for sync
-            get().trySendPatch({
-              specialSiteState: {
-                ...currentState,
-                atlanteanFateAuras: newAuras,
-              },
-            });
-            get().log(
-              `🌊 Atlantean Fate removed - ${auraToRemove.floodedSites.length} site(s) resume normal threshold`,
-            );
+            // Use removeAtlanteanFateAura which handles full cleanup
+            // (removes flooded tokens, restores submerged minions)
+            get().removeAtlanteanFateAura(auraToRemove.id);
           }
         } catch {}
       }

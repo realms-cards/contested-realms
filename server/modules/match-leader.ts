@@ -291,68 +291,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-/**
- * Check if Mismanaged Mortuary swap is active and redirects actor's graveyard to opponent.
- * XOR logic: swap is active if exactly one player has an active (non-silenced) Mortuary.
- */
-function checkMortuarySwapActive(
-  game: MatchGameState | undefined,
-  actorSeat: Seat,
-  opponentSeat: Seat,
-): boolean {
-  if (!game) {
-    console.log("[checkMortuarySwapActive] No game state");
-    return false;
-  }
-  try {
-    const specialSiteState = game.specialSiteState as
-      | Record<string, unknown>
-      | undefined;
-    console.log(
-      "[checkMortuarySwapActive] specialSiteState:",
-      specialSiteState ? "exists" : "undefined",
-    );
-    if (!specialSiteState) return false;
-    const mortuaries = specialSiteState.mismanagedMortuaries as
-      | Array<Record<string, unknown>>
-      | undefined;
-    console.log(
-      "[checkMortuarySwapActive] mortuaries:",
-      mortuaries?.length ?? 0,
-    );
-    if (!Array.isArray(mortuaries) || mortuaries.length === 0) return false;
-
-    const permanents = (game.permanents || {}) as Record<string, unknown[]>;
-
-    // Check if a mortuary is silenced (has a Silence token)
-    const isSilenced = (cellKey: string): boolean => {
-      const perms = permanents[cellKey];
-      if (!Array.isArray(perms)) return false;
-      return perms.some((p) => {
-        const perm = p as Record<string, unknown>;
-        const card = perm?.card as Record<string, unknown> | undefined;
-        const name = card?.name;
-        return (
-          typeof name === "string" && name.toLowerCase().includes("silence")
-        );
-      });
-    };
-
-    // Filter to active (non-silenced) mortuaries
-    const activeMortuaries = mortuaries.filter((m) => {
-      const cellKey = m.cellKey as string | undefined;
-      if (!cellKey) return false;
-      return !isSilenced(cellKey);
-    });
-
-    // Swap is active if at least one active mortuary exists
-    // (Both players having mortuaries = same effect as one)
-    return activeMortuaries.length > 0;
-  } catch {
-    return false;
-  }
-}
-
 const newZoneCardInstanceId = () =>
   `card_${Math.random().toString(36).slice(2, 8)}_${Date.now().toString(36)}`;
 
@@ -1354,14 +1292,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
           const incomingZones = patchToApply.zones as ZonesState;
           const sanitizedZones: Partial<ZonesState> = {};
 
-          // Check if Mortuary swap allows opponent graveyard updates
-          const opponentSeat: Seat = actorSeat === "p1" ? "p2" : "p1";
-          const mortuarySwapActive = checkMortuarySwapActive(
-            match.game,
-            actorSeat,
-            opponentSeat,
-          );
-
+          // Only allow actor to update their own zones
           if (
             isRecord(incomingZones) &&
             "p1" in incomingZones &&
@@ -1373,44 +1304,15 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
             "p1" in incomingZones &&
             actorSeat !== "p1"
           ) {
-            const oppZones = incomingZones.p1 as PlayerZones | undefined;
-            const currentP1 = match.game?.zones?.p1 as PlayerZones | undefined;
-
-            // Allow opponent graveyard update if Mortuary swap is active
-            if (
-              mortuarySwapActive &&
-              opponentSeat === "p1" &&
-              oppZones &&
-              "graveyard" in oppZones
-            ) {
-              // Only allow graveyard field, preserve other zones from current state
-              sanitizedZones.p1 = {
-                ...(currentP1 || {
-                  spellbook: [],
-                  atlas: [],
-                  hand: [],
-                  graveyard: [],
-                  battlefield: [],
-                  collection: [],
-                  banished: [],
-                }),
-                graveyard: oppZones.graveyard,
-              };
-              console.log(
-                "[match] Mortuary swap: allowing p1 graveyard update from",
+            try {
+              console.warn("[match] dropped opponent zone update", {
+                matchId,
+                playerId,
+                seat: "p1",
                 actorSeat,
-              );
-            } else {
-              try {
-                console.warn("[match] dropped opponent zone update", {
-                  matchId,
-                  playerId,
-                  seat: "p1",
-                  actorSeat,
-                });
-              } catch {
-                // ignore
-              }
+              });
+            } catch {
+              // ignore
             }
           }
           if (
@@ -1424,44 +1326,15 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
             "p2" in incomingZones &&
             actorSeat !== "p2"
           ) {
-            const oppZones = incomingZones.p2 as PlayerZones | undefined;
-            const currentP2 = match.game?.zones?.p2 as PlayerZones | undefined;
-
-            // Allow opponent graveyard update if Mortuary swap is active
-            if (
-              mortuarySwapActive &&
-              opponentSeat === "p2" &&
-              oppZones &&
-              "graveyard" in oppZones
-            ) {
-              // Only allow graveyard field, preserve other zones from current state
-              sanitizedZones.p2 = {
-                ...(currentP2 || {
-                  spellbook: [],
-                  atlas: [],
-                  hand: [],
-                  graveyard: [],
-                  battlefield: [],
-                  collection: [],
-                  banished: [],
-                }),
-                graveyard: oppZones.graveyard,
-              };
-              console.log(
-                "[match] Mortuary swap: allowing p2 graveyard update from",
+            try {
+              console.warn("[match] dropped opponent zone update", {
+                matchId,
+                playerId,
+                seat: "p2",
                 actorSeat,
-              );
-            } else {
-              try {
-                console.warn("[match] dropped opponent zone update", {
-                  matchId,
-                  playerId,
-                  seat: "p2",
-                  actorSeat,
-                });
-              } catch {
-                // ignore logging failures
-              }
+              });
+            } catch {
+              // ignore logging failures
             }
           }
           const zoneKeys = Object.keys(sanitizedZones).filter(

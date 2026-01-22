@@ -6,6 +6,7 @@ import {
   useGraphicsSettings,
   getGraphicsSettings,
 } from "@/hooks/useGraphicsSettings";
+import { useMobileDevice } from "@/lib/hooks/useTouchDevice";
 import type { CardPreviewData } from "@/lib/game/card-preview.types";
 import { TOKEN_BY_KEY, tokenTextureUrl } from "@/lib/game/tokens";
 
@@ -47,7 +48,7 @@ function computeLayout(isSite: boolean): LayoutState {
   if (innerHeight < 460) heightCapFactor = 0.46;
   const cappedHeight = Math.max(
     (availableHeight > 0 ? availableHeight : innerHeight) * heightCapFactor,
-    0
+    0,
   );
 
   const aspectWidthOverHeight = 3 / 4;
@@ -58,8 +59,12 @@ function computeLayout(isSite: boolean): LayoutState {
   const baseVwFraction = isMobileWidth ? 0.35 : 0.21; // Larger fraction on mobile
   const heightShortness = Math.max(0, Math.min(1, (780 - innerHeight) / 360));
   const widthShortness = Math.max(0, Math.min(1, (1400 - innerWidth) / 600));
-  const heightReduction = isMobileWidth ? 0.2 * heightShortness : 0.5 * heightShortness;
-  const widthReduction = isMobileWidth ? 0.3 * widthShortness : 0.65 * widthShortness;
+  const heightReduction = isMobileWidth
+    ? 0.2 * heightShortness
+    : 0.5 * heightShortness;
+  const widthReduction = isMobileWidth
+    ? 0.3 * widthShortness
+    : 0.65 * widthShortness;
   let vwFraction =
     baseVwFraction * (1 - heightReduction) * (1 - widthReduction);
   if (preferBottomNext) {
@@ -78,16 +83,17 @@ function computeLayout(isSite: boolean): LayoutState {
   }
 
   const wideViewportRatio = Math.max(0, innerWidth - 1280) / 720;
-  const widthRatioBase = isMobileWidth ? 0.45 : (preferBottomNext ? 0.29 : 0.38);
-  const widthRatioDynamic = widthRatioBase * (1 - widthShortness * (isMobileWidth ? 0.2 : 0.45));
+  const widthRatioBase = isMobileWidth ? 0.45 : preferBottomNext ? 0.29 : 0.38;
+  const widthRatioDynamic =
+    widthRatioBase * (1 - widthShortness * (isMobileWidth ? 0.2 : 0.45));
   const widthRatio = Math.max(
     widthRatioDynamic * (1 - wideViewportRatio * 0.45),
-    isMobileWidth ? 0.35 : 0.18 // Higher floor on mobile
+    isMobileWidth ? 0.35 : 0.18, // Higher floor on mobile
   );
   const horizontalCap = Math.min(
     Math.max(innerWidth - (isMobileWidth ? 20 : 72), isMobileWidth ? 140 : 220),
     innerWidth * widthRatio,
-    absoluteMaxWidth
+    absoluteMaxWidth,
   );
   maxWidth = Math.min(maxWidth, horizontalCap);
 
@@ -151,10 +157,15 @@ export default function CardPreview({
   // Use synchronous read for initial render to avoid flash/jump when settings load
   const initialScale = useMemo(
     () => getGraphicsSettings().cardPreviewScale,
-    []
+    [],
   );
   const { settings: graphicsSettings } = useGraphicsSettings();
-  const previewScale = graphicsSettings.cardPreviewScale || initialScale;
+  const { isMobile } = useMobileDevice();
+
+  // On mobile, default to 2.5x scale for better visibility
+  // User can still override via settings
+  const baseScale = graphicsSettings.cardPreviewScale || initialScale;
+  const previewScale = isMobile && baseScale === 1.0 ? 2.5 : baseScale;
 
   // Compute layout synchronously on first render to avoid "blow up" effect
   const initialLayout = useMemo(() => computeLayout(isSite), [isSite]);

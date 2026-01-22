@@ -181,11 +181,65 @@ export function isAuraSubtype(
 }
 
 /**
+ * Complete list of Ordinary rarity sites from cards_raw.json.
+ * Used as fallback when rarity data isn't available on CardRef or metaByCardId.
+ */
+const ORDINARY_SITE_NAMES = new Set([
+  "accursed desert",
+  "accursed tower",
+  "algae bloom",
+  "arid desert",
+  "autumn bloom",
+  "autumn river",
+  "blessed village",
+  "blessed well",
+  "bog",
+  "bonfire",
+  "common village",
+  "croaking swamp",
+  "dark tower",
+  "den of evil",
+  "desert bloom",
+  "forge",
+  "gothic tower",
+  "hamlet",
+  "hillside chapel",
+  "humble village",
+  "hunter's lodge",
+  "leadworks",
+  "leyline henge",
+  "lone tower",
+  "lookout",
+  "open grave",
+  "open mausoleum",
+  "pond",
+  "red desert",
+  "remote desert",
+  "rubble",
+  "rustic village",
+  "silent hills",
+  "simple village",
+  "spire",
+  "spore spouts",
+  "spring river",
+  "stinging kelp",
+  "stream",
+  "summer river",
+  "treetop hideout",
+  "troubled town",
+  "twilight bloom",
+  "valley",
+  "vast desert",
+  "wasteland",
+  "winter river",
+]);
+
+/**
  * Check if a site is "ordinary" (basic elemental site that just provides mana/threshold).
  * In Sorcery TCG, "Ordinary" is a rarity for basic sites.
  * Non-ordinary sites have special abilities and get flooded by Atlantean Fate.
  *
- * This checks the site's rarity if available, or falls back to name matching.
+ * This checks rarity first, then falls back to the known ordinary sites list.
  */
 export function isOrdinarySite(
   siteName: string | null | undefined,
@@ -195,20 +249,22 @@ export function isOrdinarySite(
   if (siteRarity) {
     const rarityLc = siteRarity.toLowerCase().trim();
     if (rarityLc === "ordinary") return true;
+    // If we have a non-ordinary rarity, return false immediately
+    if (
+      rarityLc === "exceptional" ||
+      rarityLc === "elite" ||
+      rarityLc === "unique"
+    ) {
+      return false;
+    }
   }
 
-  // Fallback: check name for basic elemental sites
-  if (!siteName) return false;
-  const lc = siteName.toLowerCase().trim();
-
-  // Basic elemental sites (Air, Water, Earth, Fire, or with "Site" suffix)
-  const ordinaryPatterns = [
-    /^(air|water|earth|fire)$/i, // Just the element name
-    /^(air|water|earth|fire)\s+site$/i, // Element + Site
-  ];
-  for (const pattern of ordinaryPatterns) {
-    if (pattern.test(lc)) return true;
+  // Fallback: check against known ordinary site names from cards_raw.json
+  if (siteName) {
+    const nameLc = siteName.toLowerCase().trim();
+    if (ORDINARY_SITE_NAMES.has(nameLc)) return true;
   }
+
   return false;
 }
 
@@ -465,46 +521,87 @@ export const createAtlanteanFateSlice: StateCreator<
 
     // Find non-ordinary sites to flood
     // Ordinary sites (basic elemental sites with "Ordinary" rarity) are NOT flooded
+    const metaByCardId = get().metaByCardId as Record<
+      number,
+      { rarity?: string }
+    >;
     const floodedSites: CellKey[] = [];
     for (const cellKey of coveredCells) {
       const site = board.sites[cellKey];
       if (site && site.card) {
         const siteName = site.card.name;
-        const siteRarity = (site.card as { rarity?: string }).rarity;
-        if (!isOrdinarySite(siteName, siteRarity)) {
+        const cardId = (site.card as { cardId?: number }).cardId;
+        // Try CardRef rarity first, then fall back to metaByCardId cache
+        let siteRarity = (site.card as { rarity?: string }).rarity;
+        if (!siteRarity && cardId && metaByCardId[cardId]) {
+          siteRarity = metaByCardId[cardId].rarity;
+        }
+        const isOrdinary = isOrdinarySite(siteName, siteRarity);
+        console.log(
+          `[AtlanteanFate] Site ${cellKey}: name="${siteName}", cardId=${cardId}, rarity="${siteRarity}", isOrdinary=${isOrdinary}`,
+        );
+        if (!isOrdinary) {
           floodedSites.push(cellKey);
         }
       }
     }
+    console.log(`[AtlanteanFate] Flooded sites: ${floodedSites.join(", ")}`);
+    console.log(`[AtlanteanFate] Covered cells: ${coveredCells.join(", ")}`);
 
-    // Collect minions and artifacts on non-ordinary sites to submerge (send to graveyard)
-    // We need to process these before creating the aura
-    const toSubmerge: Array<{
+    // Process minions and artifacts on flooded sites:
+    // Per Atlantean Fate card text: "Genesis → Submerge all minions and artifacts atop affected sites."
+    // ALL minions and artifacts get submerged (not just those with the submerge keyword)
+    const toSubmergeState: Array<{
       cellKey: CellKey;
       index: number;
-      card: unknown;
+      instanceId: string;
+      cardName: string;
     }> = [];
 
     for (const cellKey of floodedSites) {
       const cellPermanents = permanents[cellKey] || [];
-      // Iterate in reverse to collect indices correctly
-      for (let i = cellPermanents.length - 1; i >= 0; i--) {
+      for (let i = 0; i < cellPermanents.length; i++) {
         const perm = cellPermanents[i];
-        const cardType = perm.card?.type?.toLowerCase() || "";
-        // Submerge minions and artifacts (not sites, not tokens, not avatars)
-        if (cardType === "minion" || cardType === "artifact") {
-          toSubmerge.push({ cellKey, index: i, card: perm.card });
+        const cardType = (perm.card?.type || "").toLowerCase();
+        const cardName = perm.card?.name || "";
+        const instanceId = perm.instanceId || perm.card?.instanceId || "";
+
+        // Submerge all minions and artifacts (per card rules text)
+        if (cardType.includes("minion") || cardType.includes("artifact")) {
+          if (instanceId) {
+            toSubmergeState.push({ cellKey, index: i, instanceId, cardName });
+          }
         }
       }
     }
 
-    // Submerge all collected permanents (send to graveyard)
-    // Process in reverse order of collection to maintain correct indices
+    // Put all minions and artifacts into submerged state
+    // Must initialize position first, then set ability, then update state (same as toolbox)
     let submergedCount = 0;
-    for (const item of toSubmerge) {
+    for (const item of toSubmergeState) {
       try {
-        get().movePermanentToZone(item.cellKey, item.index, "graveyard");
+        // 1. Register ability so the permanent can be in submerged state
+        get().setPermanentAbility(item.instanceId, {
+          permanentId: item.instanceId,
+          canBurrow: false,
+          canSubmerge: true,
+          requiresWaterSite: false, // Forced submerge by Atlantean Fate
+          abilitySource: `${item.cardName} - Submerged (Atlantean Fate)`,
+        });
+        // 2. Initialize position if not exists (required for visual state)
+        if (!get().permanentPositions[item.instanceId]) {
+          get().setPermanentPosition(item.instanceId, {
+            permanentId: item.instanceId,
+            state: "surface",
+            position: { x: 0, y: 0, z: 0 },
+          });
+        }
+        // 3. Update to submerged state
+        get().updatePermanentState(item.instanceId, "submerged");
         submergedCount++;
+        console.log(
+          `[AtlanteanFate] Submerged ${item.cardName} at ${item.cellKey}`,
+        );
       } catch (e) {
         console.warn("Failed to submerge permanent:", e);
       }
@@ -570,9 +667,7 @@ export const createAtlanteanFateSlice: StateCreator<
     const floodCount = floodedSites.length;
     const submergeMsg =
       submergedCount > 0
-        ? ` ${submergedCount} permanent${
-            submergedCount !== 1 ? "s" : ""
-          } submerged!`
+        ? ` ${submergedCount} permanent${submergedCount !== 1 ? "s" : ""} submerged!`
         : "";
     get().log(
       `Atlantean Fate resolved at #${cellNo}! ${floodCount} non-ordinary site${
@@ -681,30 +776,77 @@ export const createAtlanteanFateSlice: StateCreator<
   },
 
   removeAtlanteanFateAura: (auraId) => {
-    const currentState = get().specialSiteState;
+    console.log(
+      `[AtlanteanFate] removeAtlanteanFateAura called with id: ${auraId}`,
+    );
+    const state = get();
+    const currentState = state.specialSiteState;
+
+    // Find the aura being removed to get its flooded sites
+    const auraToRemove = currentState.atlanteanFateAuras.find(
+      (a) => a.id === auraId,
+    );
+    console.log(`[AtlanteanFate] Aura to remove:`, auraToRemove);
+
     const newAuras = currentState.atlanteanFateAuras.filter(
       (a) => a.id !== auraId,
     );
 
     if (newAuras.length === currentState.atlanteanFateAuras.length) {
+      console.log(
+        `[AtlanteanFate] No aura found with id ${auraId}, skipping cleanup`,
+      );
       return; // No change
     }
+    console.log(
+      `[AtlanteanFate] Removing aura, flooded sites were: ${auraToRemove?.floodedSites.join(", ")}`,
+    );
+
+    // Clean up flooded sites - remove Flooded tokens only
+    // Note: Submerged minions stay submerged (they were affected at Genesis, not ongoing)
+    if (auraToRemove) {
+      const permanents = state.permanents;
+      let permanentsNext = { ...permanents };
+      let permanentsChanged = false;
+
+      for (const cellKey of auraToRemove.floodedSites) {
+        const cellPerms = permanentsNext[cellKey];
+        if (!cellPerms) continue;
+
+        // Remove Flooded tokens from this cell
+        const filteredPerms = cellPerms.filter((perm) => {
+          const name = String(perm.card?.name || "").toLowerCase();
+          return name !== "flooded";
+        });
+
+        if (filteredPerms.length !== cellPerms.length) {
+          permanentsNext = { ...permanentsNext, [cellKey]: filteredPerms };
+          permanentsChanged = true;
+        }
+      }
+
+      // Update permanents if any Flooded tokens were removed
+      if (permanentsChanged) {
+        set({ permanents: permanentsNext } as Partial<GameState> as GameState);
+        get().trySendPatch({ permanents: permanentsNext });
+      }
+    }
+
+    // Update special site state
+    const newSpecialSiteState = {
+      ...currentState,
+      atlanteanFateAuras: newAuras,
+    };
 
     set({
-      specialSiteState: {
-        ...currentState,
-        atlanteanFateAuras: newAuras,
-      },
+      specialSiteState: newSpecialSiteState,
     } as Partial<GameState> as GameState);
 
     // Send patch for sync
     get().trySendPatch({
-      specialSiteState: {
-        ...currentState,
-        atlanteanFateAuras: newAuras,
-      },
+      specialSiteState: newSpecialSiteState,
     });
 
-    get().log("Atlantean Fate aura removed");
+    get().log("Atlantean Fate effect ended - sites unflooded");
   },
 });
