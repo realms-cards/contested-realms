@@ -619,20 +619,42 @@ export default function Hand3D({
       const isCollapsed = revealLerp.current < 0.5;
 
       // Detect hover changes for departure animation
+      // Debounce: don't trigger departure for very quick hover changes (prevents jitter)
+      const now = performance.now();
+      const timeSinceLastChange = now - hoverChangeTimeRef.current;
+      const HOVER_DEBOUNCE_MS = 80; // Minimum ms between departure triggers
+
       const prevHoverTarget = prevHoverIndexRef.current;
       if (target !== prevHoverTarget && target >= 0) {
         // New card is being hovered - mark the old one for departure
-        if (prevHoverTarget >= 0 && prevHoverTarget < n) {
-          cardDepartureRef.current.set(prevHoverTarget, 0.01); // Start departure
+        // Only trigger if enough time has passed (prevents rapid back-and-forth)
+        if (
+          prevHoverTarget >= 0 &&
+          prevHoverTarget < n &&
+          timeSinceLastChange > HOVER_DEBOUNCE_MS
+        ) {
+          // Also skip if the cards are adjacent and we're moving fast
+          const isAdjacent = Math.abs(target - prevHoverTarget) === 1;
+          const movingFast = timeSinceLastChange < 150;
+          if (
+            !(
+              isAdjacent &&
+              movingFast &&
+              cardDepartureRef.current.has(prevHoverTarget)
+            )
+          ) {
+            cardDepartureRef.current.set(prevHoverTarget, 0.01); // Start departure
+          }
         }
-        hoverChangeTimeRef.current = performance.now();
+        hoverChangeTimeRef.current = now;
         prevHoverIndexRef.current = target;
       } else if (target < 0 && prevHoverTarget >= 0) {
-        // Hover ended - mark old card for departure
+        // Hover ended - mark old card for departure (always, no debounce needed)
         if (prevHoverTarget < n) {
           cardDepartureRef.current.set(prevHoverTarget, 0.01);
         }
         prevHoverIndexRef.current = -1;
+        hoverChangeTimeRef.current = now;
       }
 
       // Animate per-card departure states

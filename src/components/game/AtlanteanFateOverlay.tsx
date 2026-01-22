@@ -16,6 +16,7 @@ export default function AtlanteanFateOverlay() {
   const actorKey = useGameStore((s) => s.actorKey);
   const board = useGameStore((s) => s.board);
   const resolveAtlanteanFate = useGameStore((s) => s.resolveAtlanteanFate);
+  const replaceAtlanteanFate = useGameStore((s) => s.replaceAtlanteanFate);
   const cancelAtlanteanFate = useGameStore((s) => s.cancelAtlanteanFate);
 
   // Calculate preview info
@@ -51,6 +52,10 @@ export default function AtlanteanFateOverlay() {
     resolveAtlanteanFate();
   }, [resolveAtlanteanFate]);
 
+  const handleReplace = useCallback(() => {
+    replaceAtlanteanFate();
+  }, [replaceAtlanteanFate]);
+
   const handleCancel = useCallback(() => {
     cancelAtlanteanFate();
   }, [cancelAtlanteanFate]);
@@ -72,6 +77,8 @@ export default function AtlanteanFateOverlay() {
             🌊 Atlantean Fate
           </span>
           <span className="opacity-80">
+            {phase === "selectingCorner" &&
+              "Click on the board to select the aura area"}
             {phase === "confirming" && "Confirm to apply flood effects"}
           </span>
         </div>
@@ -106,15 +113,22 @@ export default function AtlanteanFateOverlay() {
             <div className="flex gap-2 mt-4">
               <button
                 onClick={handleCancel}
-                className="flex-1 px-3 py-2 rounded bg-gray-600/20 hover:bg-gray-600/30 text-gray-300"
+                className="px-3 py-2 rounded bg-gray-600/20 hover:bg-gray-600/30 text-gray-300"
               >
-                Skip Effects
+                Skip
+              </button>
+              <button
+                onClick={handleReplace}
+                className="px-3 py-2 rounded bg-amber-600/20 hover:bg-amber-600/30 text-amber-300"
+                title="Choose a different position for the aura"
+              >
+                Re-place
               </button>
               <button
                 onClick={handleConfirm}
                 className="flex-1 px-3 py-2 rounded bg-cyan-600/30 hover:bg-cyan-600/50 text-cyan-300 font-semibold"
               >
-                Apply Effects
+                Apply
               </button>
             </div>
           </div>

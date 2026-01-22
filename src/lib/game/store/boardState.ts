@@ -5,8 +5,19 @@ import {
   newTokenInstanceId,
 } from "@/lib/game/tokens";
 import { getEffectiveGraveyardSeatStatic } from "./specialSiteState";
-import type { GameState, PlayerKey, ServerPatchT, Zones } from "./types";
-import { getCellNumber, seatFromOwner, toCellKey } from "./utils/boardHelpers";
+import type {
+  CellKey,
+  GameState,
+  PlayerKey,
+  ServerPatchT,
+  Zones,
+} from "./types";
+import {
+  getCellNumber,
+  parseCellKey,
+  seatFromOwner,
+  toCellKey,
+} from "./utils/boardHelpers";
 import { prepareCardForSeat } from "./utils/cardHelpers";
 import { newPermanentInstanceId } from "./utils/idHelpers";
 import { randomTilt } from "./utils/permanentHelpers";
@@ -28,6 +39,7 @@ type BoardSlice = Pick<
   | "moveSiteToGraveyardWithRubble"
   | "floodSite"
   | "silenceSite"
+  | "silencePermanent"
   | "transferSiteControl"
   | "switchSitePosition"
 >;
@@ -592,6 +604,123 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
             window.dispatchEvent(
               new CustomEvent("app:toast", {
                 detail: { message: toastMessage, cellKey: key },
+              }),
+            );
+          }
+        } catch {}
+      }
+
+      return {
+        permanents: permanentsNext,
+      } as Partial<GameState> as GameState;
+    }),
+
+  // Place a Silenced token attached to a permanent (aura or minion)
+  silencePermanent: (cellKey: CellKey, index: number) =>
+    set((state) => {
+      get().pushHistory();
+      const arr = state.permanents[cellKey];
+      if (!arr || !arr[index]) {
+        get().log("No permanent at this position to silence");
+        return state;
+      }
+
+      const item = arr[index];
+      const cardType = (item.card?.type || "").toLowerCase();
+      const cardName = item.card?.name || "Permanent";
+
+      // Check if this is a valid target (aura, minion, or artifact with ability)
+      const isAura =
+        cardType.includes("aura") ||
+        (item.card?.subTypes || "").toLowerCase().includes("aura");
+      const isMinion = cardType.includes("minion");
+      const isArtifact = cardType.includes("artifact");
+      if (!isAura && !isMinion && !isArtifact) {
+        get().log("Can only silence auras, minions, or artifacts");
+        return state;
+      }
+
+      // Ownership checks
+      const ownerKey = seatFromOwner(item.owner);
+      if (state.transport && state.actorKey) {
+        const isOwner = state.actorKey === ownerKey;
+        const isActingPlayer =
+          (state.actorKey === "p1" && state.currentPlayer === 1) ||
+          (state.actorKey === "p2" && state.currentPlayer === 2);
+        if (!isOwner && !isActingPlayer) {
+          get().log("Cannot silence opponent's permanent");
+          return state;
+        }
+      }
+
+      // Create Silenced token
+      const silencedDef = TOKEN_BY_NAME["silenced"];
+      if (!silencedDef) {
+        get().log("Silenced token definition not found");
+        return state;
+      }
+
+      const silencedCard = prepareCardForSeat(
+        {
+          cardId: newTokenInstanceId(silencedDef),
+          variantId: null,
+          name: silencedDef.name,
+          type: "Token",
+          slug: tokenSlug(silencedDef),
+          thresholds: null,
+        },
+        ownerKey,
+      );
+
+      const permanentsNext = { ...state.permanents };
+      const cellArr = [...(permanentsNext[cellKey] || [])];
+
+      // Add silenced token attached to the permanent
+      cellArr.push({
+        owner: item.owner,
+        card: silencedCard,
+        offset: null,
+        tilt: randomTilt(),
+        tapVersion: 0,
+        tapped: false,
+        version: 0,
+        instanceId: silencedCard.instanceId ?? newPermanentInstanceId(),
+        attachedTo: { at: cellKey, index },
+      });
+      permanentsNext[cellKey] = cellArr;
+
+      const { x, y } = parseCellKey(cellKey);
+      const cellNo = getCellNumber(x, y, state.board.size.w);
+      const playerNum = ownerKey === "p1" ? "1" : "2";
+      get().log(
+        `[p${playerNum}:PLAYER] places [p${playerNum}card:Silenced] on ${cardName} at #${cellNo}`,
+      );
+
+      // Send patch
+      const tr = get().transport;
+      if (tr) {
+        const patch: ServerPatchT = {
+          permanents: permanentsNext,
+        };
+        get().trySendPatch(patch);
+
+        // Send toast
+        const toastMessage = `[p${playerNum}:PLAYER] silenced ${cardName} at #${cellNo}`;
+        try {
+          tr.sendMessage?.({
+            type: "toast",
+            text: toastMessage,
+            cellKey,
+          } as never);
+        } catch {}
+      } else {
+        // Offline: show local toast
+        const toastMessage = `[p${playerNum}:PLAYER] silenced ${cardName} at #${cellNo}`;
+        try {
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(
+              new CustomEvent("app:toast", {
+                detail: { message: toastMessage, cellKey },
               }),
             );
           }

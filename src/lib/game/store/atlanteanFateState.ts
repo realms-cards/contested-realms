@@ -30,7 +30,7 @@ export function snapToIntersection(
   offsetZ: number,
   tileSize: number,
   boardWidth: number,
-  boardHeight: number
+  boardHeight: number,
 ): {
   anchorTileX: number;
   anchorTileY: number;
@@ -164,7 +164,7 @@ const SINGLE_SITE_AURA_NAMES = new Set([
  */
 export function isAuraSubtype(
   subTypes: string | null | undefined,
-  cardName?: string | null
+  cardName?: string | null,
 ): boolean {
   if (!subTypes) return false;
   if (!subTypes.toLowerCase().includes("aura")) return false;
@@ -189,7 +189,7 @@ export function isAuraSubtype(
  */
 export function isOrdinarySite(
   siteName: string | null | undefined,
-  siteRarity?: string | null
+  siteRarity?: string | null,
 ): boolean {
   // Check rarity first - "Ordinary" rarity sites are ordinary
   if (siteRarity) {
@@ -226,7 +226,7 @@ export function calculate2x2Area(
   cardX: number,
   cardY: number,
   boardWidth: number,
-  boardHeight: number
+  boardHeight: number,
 ): CellKey[] {
   const cells: CellKey[] = [];
   // Anchor tile is lower-left of 2x2 - affected tiles extend up and right
@@ -261,7 +261,7 @@ export function calculate2x2AreaWithOffset(
   offX: number,
   offZ: number,
   boardWidth: number,
-  boardHeight: number
+  boardHeight: number,
 ): CellKey[] {
   // Determine anchor tile based on which quadrant the offset is in
   const anchorX = offX >= 0 ? tileX : tileX - 1;
@@ -294,7 +294,7 @@ export function isValidCornerPosition(
   anchorX: number,
   anchorY: number,
   boardWidth: number,
-  boardHeight: number
+  boardHeight: number,
 ): boolean {
   // Check that all 4 tiles in the 2x2 area exist
   // Anchor is lower-left, tiles extend up and right
@@ -319,6 +319,7 @@ export type AtlanteanFateSlice = Pick<
   | "setAtlanteanFatePreview"
   | "selectAtlanteanFateCorner"
   | "resolveAtlanteanFate"
+  | "replaceAtlanteanFate"
   | "cancelAtlanteanFate"
   | "isSiteFlooded"
   | "removeAtlanteanFateAura"
@@ -343,7 +344,7 @@ export const createAtlanteanFateSlice: StateCreator<
     // Validate that the aura can affect exactly 4 tiles (not at edge)
     if (!isValidCornerPosition(x, y, board.size.w, board.size.h)) {
       get().log(
-        `⚠️ Atlantean Fate must be placed at an intersection of 4 tiles, not at the edge of the board`
+        `⚠️ Atlantean Fate must be placed at an intersection of 4 tiles, not at the edge of the board`,
       );
       // Don't start the flow if invalid position
       return;
@@ -377,7 +378,7 @@ export const createAtlanteanFateSlice: StateCreator<
     }
 
     get().log(
-      `[${casterSeat.toUpperCase()}] casts Atlantean Fate - confirm to apply flood effects`
+      `[${casterSeat.toUpperCase()}] casts Atlantean Fate - confirm to apply flood effects`,
     );
   },
 
@@ -441,7 +442,7 @@ export const createAtlanteanFateSlice: StateCreator<
 
     const cellNo = getCellNumber(x, y, board.size.w);
     get().log(
-      `Selected corner #${cellNo} for Atlantean Fate - click Confirm to place`
+      `Selected corner #${cellNo} for Atlantean Fate - click Confirm to place`,
     );
   },
 
@@ -459,7 +460,7 @@ export const createAtlanteanFateSlice: StateCreator<
       cornerX,
       cornerY,
       board.size.w,
-      board.size.h
+      board.size.h,
     );
 
     // Find non-ordinary sites to flood
@@ -576,7 +577,65 @@ export const createAtlanteanFateSlice: StateCreator<
     get().log(
       `Atlantean Fate resolved at #${cellNo}! ${floodCount} non-ordinary site${
         floodCount !== 1 ? "s" : ""
-      } flooded.${submergeMsg}`
+      } flooded.${submergeMsg}`,
+    );
+  },
+
+  replaceAtlanteanFate: () => {
+    const pending = get().pendingAtlanteanFate;
+    if (!pending || pending.phase !== "confirming") return;
+
+    const state = get();
+    const { spell, casterSeat } = pending;
+
+    // Remove the aura permanent from the board
+    const permanentsNext = { ...state.permanents };
+    const cellPerms = permanentsNext[spell.at];
+    if (cellPerms && cellPerms[spell.index]) {
+      const newArr = [...cellPerms];
+      newArr.splice(spell.index, 1);
+      if (newArr.length === 0) {
+        delete permanentsNext[spell.at];
+      } else {
+        permanentsNext[spell.at] = newArr;
+      }
+    }
+
+    // Return the card to the player's hand
+    const zonesNext = { ...state.zones };
+    const playerZones = { ...zonesNext[casterSeat] };
+    const handNext = [...playerZones.hand, spell.card];
+    playerZones.hand = handNext;
+    zonesNext[casterSeat] = playerZones;
+
+    // Clear pending state - card goes back to hand for replay
+    set({
+      pendingAtlanteanFate: null,
+      permanents: permanentsNext,
+      zones: zonesNext,
+    } as Partial<GameState> as GameState);
+
+    // Broadcast re-place to opponent
+    const transport = get().transport;
+    if (transport?.sendMessage) {
+      try {
+        transport.sendMessage({
+          type: "atlanteanFateReplace",
+          id: pending.id,
+          ts: Date.now(),
+        } as unknown as CustomMessage);
+      } catch {}
+    }
+
+    // Send state patch
+    get().trySendPatch({
+      permanents: permanentsNext,
+      zones: zonesNext,
+      pendingAtlanteanFate: null,
+    });
+
+    get().log(
+      "Atlantean Fate returned to hand - play it again to choose a new area",
     );
   },
 
@@ -606,8 +665,15 @@ export const createAtlanteanFateSlice: StateCreator<
   isSiteFlooded: (cellKey) => {
     const state = get();
     const auras = state.specialSiteState?.atlanteanFateAuras || [];
+    const permanents = state.permanents;
     for (const aura of auras) {
       if (aura.floodedSites.includes(cellKey)) {
+        // Check if this aura is silenced - silenced auras don't apply their effect
+        const permsAtAura = permanents[aura.permanentAt] || [];
+        const isSilenced = permsAtAura.some(
+          (p) => String(p.card?.name || "").toLowerCase() === "silenced",
+        );
+        if (isSilenced) continue; // Skip silenced auras
         return true;
       }
     }
@@ -617,7 +683,7 @@ export const createAtlanteanFateSlice: StateCreator<
   removeAtlanteanFateAura: (auraId) => {
     const currentState = get().specialSiteState;
     const newAuras = currentState.atlanteanFateAuras.filter(
-      (a) => a.id !== auraId
+      (a) => a.id !== auraId,
     );
 
     if (newAuras.length === currentState.atlanteanFateAuras.length) {

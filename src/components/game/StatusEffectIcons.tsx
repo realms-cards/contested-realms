@@ -17,6 +17,7 @@ interface StatusEffect {
   description: string;
   controllerSeat: PlayerKey;
   effectType: "mortuary" | "atlanteanFate" | "counter" | "aura";
+  isSilenced?: boolean; // Whether this effect is silenced (show strikethrough)
 }
 
 interface StatusEffectIconProps {
@@ -38,7 +39,9 @@ function StatusEffectIcon({ effect, expanded }: StatusEffectIconProps) {
     >
       {/* Circular icon with card art */}
       <div
-        className={`w-6 h-6 rounded-full overflow-hidden ring-2 ${ringColor} bg-slate-900 shadow-md flex-shrink-0`}
+        className={`relative w-6 h-6 rounded-full overflow-hidden ring-2 ${ringColor} bg-slate-900 shadow-md flex-shrink-0 ${
+          effect.isSilenced ? "opacity-60" : ""
+        }`}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
@@ -46,12 +49,24 @@ function StatusEffectIcon({ effect, expanded }: StatusEffectIconProps) {
           alt={effect.title}
           className="w-full h-full object-cover object-[center_15%] scale-[2]"
         />
+        {/* Strikethrough for silenced effects */}
+        {effect.isSilenced && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="w-full h-0.5 bg-red-500 rotate-45 shadow-sm" />
+          </div>
+        )}
       </div>
       {/* Expanded description */}
       {expanded && (
         <div className="text-white text-xs whitespace-nowrap">
-          <div className="font-medium">{effect.title}</div>
-          <div className="text-white/70 text-[10px]">{effect.description}</div>
+          <div
+            className={`font-medium ${effect.isSilenced ? "line-through opacity-70" : ""}`}
+          >
+            {effect.title}
+          </div>
+          <div className="text-white/70 text-[10px]">
+            {effect.isSilenced ? "Silenced" : effect.description}
+          </div>
         </div>
       )}
     </div>
@@ -76,9 +91,7 @@ function ClusteredIcon({ effects, isExpanded }: ClusteredIconProps) {
         <div className="flex -space-x-2">
           {visibleEffects.map((effect, idx) => {
             const ringColor =
-              effect.controllerSeat === "p1"
-                ? "ring-blue-400"
-                : "ring-red-400";
+              effect.controllerSeat === "p1" ? "ring-blue-400" : "ring-red-400";
             return (
               <div
                 key={effect.id}
@@ -164,18 +177,37 @@ export default function PlayerStatusEffects() {
     }
 
     // --- Atlantean Fate Auras ---
-    // Each active aura that has flooded sites should be shown
+    // Show all active auras (even with 0 flooded sites)
+    // Check if each aura is silenced (has Silenced token on its permanent)
     for (const aura of atlanteanFateAuras) {
-      if (aura.floodedSites.length > 0) {
-        effects.push({
-          id: `atlantean-fate-${aura.id}`,
-          imageUrl: ATLANTEAN_FATE_IMAGE_URL,
-          title: "Atlantean Fate",
-          description: `${aura.floodedSites.length} site${aura.floodedSites.length !== 1 ? "s" : ""} flooded`,
-          controllerSeat: aura.ownerSeat,
-          effectType: "atlanteanFate",
-        });
-      }
+      // Check if aura still exists on board (has a permanent)
+      const permsAtAura = permanents[aura.permanentAt] || [];
+      const auraStillExists = permsAtAura.some(
+        (p) => String(p.card?.name || "").toLowerCase() === "atlantean fate",
+      );
+      if (!auraStillExists) continue;
+
+      // Check if aura is silenced
+      const isSilenced = permsAtAura.some(
+        (p) => String(p.card?.name || "").toLowerCase() === "silenced",
+      );
+
+      const floodCount = aura.floodedSites.length;
+      const description = isSilenced
+        ? "Effect suppressed"
+        : floodCount > 0
+          ? `${floodCount} site${floodCount !== 1 ? "s" : ""} flooded`
+          : "Active (no sites flooded)";
+
+      effects.push({
+        id: `atlantean-fate-${aura.id}`,
+        imageUrl: ATLANTEAN_FATE_IMAGE_URL,
+        title: "Atlantean Fate",
+        description,
+        controllerSeat: aura.ownerSeat,
+        effectType: "atlanteanFate",
+        isSilenced,
+      });
     }
 
     // --- Cards with Counters (tracking effects) ---
@@ -207,12 +239,7 @@ export default function PlayerStatusEffects() {
     }
 
     return effects;
-  }, [
-    mismanagedMortuaries,
-    atlanteanFateAuras,
-    permanents,
-    boardSites,
-  ]);
+  }, [mismanagedMortuaries, atlanteanFateAuras, permanents, boardSites]);
 
   if (activeEffects.length === 0) return null;
 
