@@ -357,7 +357,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     } else {
       setPositionActions([]);
     }
-  }, [contextMenu, permanents, setPermanentAbility, getAvailableActions]);
+  }, [contextMenu, permanents, setPermanentAbility, getAvailableActions, board.sites]);
 
   // Handle Rubble confirmation - defined early so it can be used in early return
   const handleRubbleConfirm = (placeRubble: boolean) => {

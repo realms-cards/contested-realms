@@ -10,10 +10,10 @@ import {
 import { useRouter } from "next/navigation";
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useGraphicsSettings } from "@/hooks/useGraphicsSettings";
-import { useMobileDevice } from "@/lib/hooks/useTouchDevice";
 import { type MatchEvent, formatMatchEvent } from "@/hooks/useMatchEvents";
 import { PLAYER_COLORS } from "@/lib/game/constants";
 import { useGameStore } from "@/lib/game/store";
+import { useMobileDevice } from "@/lib/hooks/useTouchDevice";
 import type { ServerChatPayloadT, ChatScope } from "@/lib/net/protocol";
 
 interface OnlineConsoleProps {

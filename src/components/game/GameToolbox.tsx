@@ -235,7 +235,7 @@ export default function GameToolbox({
         off?.();
       } catch {}
     };
-  }, [transport]);
+  }, [transport, log]);
 
   // Keyboard shortcuts for dice rolling: "2" for D20, "6" for D6
   useEffect(() => {

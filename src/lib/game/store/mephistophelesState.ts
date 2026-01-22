@@ -548,7 +548,6 @@ export const createMephistophelesSlice: StateCreator<
 
     const adjacentCells = getAdjacentCells(avatarPos[0], avatarPos[1]);
     const board = get().board;
-    const ownerNum = who === "p1" ? 1 : 2;
     const cardHasVoidwalk = hasVoidwalk(card);
 
     // Filter to valid targets: any site (per Codex: no need to choose a location you control), or void for Voidwalk minions

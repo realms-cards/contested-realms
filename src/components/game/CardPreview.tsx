@@ -6,9 +6,9 @@ import {
   useGraphicsSettings,
   getGraphicsSettings,
 } from "@/hooks/useGraphicsSettings";
-import { useMobileDevice } from "@/lib/hooks/useTouchDevice";
 import type { CardPreviewData } from "@/lib/game/card-preview.types";
 import { TOKEN_BY_KEY, tokenTextureUrl } from "@/lib/game/tokens";
+import { useMobileDevice } from "@/lib/hooks/useTouchDevice";
 
 const SITE_SIZE_MULTIPLIER = 1.5;
 

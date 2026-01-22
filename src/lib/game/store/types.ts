@@ -1274,6 +1274,10 @@ export type GameState = {
   cardPreviewsEnabled: boolean;
   setCardPreviewsEnabled: (on: boolean) => void;
   toggleCardPreviews: () => void;
+  // UI hidden toggle (hide/show most UI elements for clean screenshots/viewing)
+  uiHidden: boolean;
+  setUiHidden: (hidden: boolean) => void;
+  toggleUiHidden: () => void;
   // Card meta cache (subset) used to detect base power and rarity
   metaByCardId: Record<
     number,

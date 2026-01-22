@@ -725,7 +725,7 @@ export default function Hand3D({
       setDepartureSnapshot(new Map(cardDepartureRef.current));
     });
     return () => cancelAnimationFrame(id);
-  });
+  }, [departureSnapshot.size]);
 
   // Unified hand fan layout: all cards in arc - always fanned out
   const handLayout = useMemo(() => {
