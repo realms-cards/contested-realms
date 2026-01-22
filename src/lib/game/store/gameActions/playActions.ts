@@ -474,6 +474,7 @@ export const createPlayActionsSlice: StateCreator<
       const isAtlanteanFate = cardNameLower === "atlantean fate";
       const isMephistopheles = cardNameLower.includes("mephistopheles");
       const isRaiseDead = cardNameLower === "raise dead";
+      const isLegionOfGall = cardNameLower === "legion of gall";
       console.log("[playActions] Card played:", {
         cardName: card.name,
         cardNameLower,
@@ -842,6 +843,23 @@ export const createPlayActionsSlice: StateCreator<
           });
         } catch (e) {
           console.error("[playActions] Error triggering Raise Dead:", e);
+        }
+      }
+      // If this is Legion of Gall, begin the collection inspection flow
+      else if (isLegionOfGall && newest) {
+        try {
+          get().beginLegionOfGall({
+            spell: {
+              at: key,
+              index: arr.length - 1,
+              instanceId: newest.instanceId ?? null,
+              owner: newest.owner,
+              card: newest.card as CardRef,
+            },
+            casterSeat: who,
+          });
+        } catch (e) {
+          console.error("[playActions] Error triggering Legion of Gall:", e);
         }
       }
       // If this is Mephistopheles (Minion), begin the avatar replacement confirmation

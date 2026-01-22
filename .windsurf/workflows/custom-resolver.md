@@ -378,17 +378,25 @@ if (t === "<cardName>Resolve") {
 
 ### File: `src/lib/game/store.ts`
 
-1. Import the slice:
+1. Import the slice (alphabetically):
 
 ```typescript
 import { create<CardName>Slice } from "./store/<cardName>State";
 ```
 
-2. Add to store creation (~line 165):
+2. Add to store creation (~line 185):
 
 ```typescript
-...create<CardName>Slice(setState, getState, store),
+...create<CardName>Slice(set, get, storeApi),
 ```
+
+3. Add to `resetGameState()` (~line 300):
+
+```typescript
+pending<CardName>: null,
+```
+
+This ensures the resolver state is cleared when starting a new match.
 
 ---
 
@@ -413,14 +421,20 @@ import <CardName>Overlay from "@/components/game/<CardName>Overlay";
 ## Checklist for New Resolver
 
 - [ ] Create state slice with begin/resolve/cancel methods
-- [ ] Add types to `types.ts`
+- [ ] Add types to `types.ts` (phase enum, pending type, GameState interface)
 - [ ] Create overlay component using `CardWithPreview`
-- [ ] Add card detection and routing in `playActions.ts`
-- [ ] Add message handlers in `customMessageHandlers.ts`
-- [ ] Import and spread slice in `store.ts`
-- [ ] Add overlay to both play pages
+- [ ] Add card detection constant in `playActions.ts` (~line 477)
+- [ ] Add trigger routing in `playActions.ts` (after other spell triggers)
+- [ ] Add message handlers in `customMessageHandlers.ts` (begin/select/resolve/cancel)
+- [ ] Import slice in `store.ts` (alphabetically)
+- [ ] Spread slice in store creation (~line 187)
+- [ ] Add `pending<CardName>: null` to `resetGameState()` (~line 302)
+- [ ] Import overlay in both play pages
+- [ ] Add overlay component to JSX in both play pages
 - [ ] Test hotseat mode (both players see correct UI)
 - [ ] Test online mode (caster controls, opponent sees status)
+- [ ] Verify zone patches send FULL seat zones
+- [ ] Check resolver respects `resolversDisabled` toggle (if applicable)
 
 ---
 
@@ -428,22 +442,455 @@ import <CardName>Overlay from "@/components/game/<CardName>Overlay";
 
 ### Zone Manipulation
 
+**CRITICAL: Always send FULL seat zones in patches to prevent data loss**
+
+#### The Seven Zones
+
+Every player has seven zones that must be managed:
+
+1. **spellbook** - Main deck of spells
+2. **atlas** - Site deck
+3. **hand** - Cards in hand
+4. **graveyard** - Discarded/destroyed cards
+5. **battlefield** - Cards on the battlefield (rarely modified directly)
+6. **collection** - Special zone for sealed/draft unplayed cards and avatar abilities
+7. **banished** - Permanently removed cards
+
+#### Pattern 1: Modifying Only Some Zones (WRONG ❌)
+
 ```typescript
-// Remove from top of spellbook
-const spellbook = [...zones[seat].spellbook];
-const revealed = spellbook.splice(0, count);
+// ❌ WRONG - Partial zones can cause data loss
+const zonesNext = {
+  ...zones,
+  [seat]: {
+    spellbook: newSpellbook,
+    hand: newHand,
+    // Missing: atlas, graveyard, battlefield, collection, banished
+  },
+};
 
-// Add to bottom of spellbook
-spellbook.push(...cards);
-
-// Add to hand
-const hand = [...zones[seat].hand, card];
-
-// Update zones and send patch
-const zonesNext = { ...zones, [seat]: { ...zones[seat], spellbook, hand } };
-set({ zones: zonesNext });
-get().trySendPatch({ zones: { [seat]: zonesNext[seat] } });
+get().trySendPatch({
+  zones: { [seat]: zonesNext[seat] },
+});
 ```
+
+**Problem:** When the opponent receives this patch, their merge logic may wipe out the missing zones (atlas, graveyard, etc.) because they weren't included.
+
+#### Pattern 2: Full Zone Patch (CORRECT ✅)
+
+```typescript
+// ✅ CORRECT - Include ALL seven zones
+const state = get();
+const zones = state.zones;
+
+// Modify only what you need
+const spellbook = [...zones[seat].spellbook];
+const hand = [...zones[seat].hand];
+spellbook.splice(0, 5); // Remove top 5
+hand.push(selectedCard); // Add to hand
+
+// Build COMPLETE zone object with ALL seven zones
+const targetZones = {
+  spellbook: spellbook,
+  atlas: [...zones[seat].atlas], // Unchanged - copy as-is
+  hand: hand,
+  graveyard: [...zones[seat].graveyard], // Unchanged - copy as-is
+  battlefield: [...zones[seat].battlefield], // Unchanged - copy as-is
+  collection: [...zones[seat].collection], // Unchanged - copy as-is
+  banished: [...zones[seat].banished], // Unchanged - copy as-is
+};
+
+const zonesNext = { ...zones, [seat]: targetZones };
+
+set({ zones: zonesNext } as Partial<GameState> as GameState);
+
+// Send FULL seat zones
+get().trySendPatch({
+  zones: { [seat]: targetZones },
+} as ServerPatchT);
+```
+
+**Why this works:** The opponent receives ALL zone data, so nothing gets lost during the merge.
+
+### Zone Manipulation Examples
+
+#### Example 1: Search and Draw (Browse, Common Sense)
+
+```typescript
+const state = get();
+const zones = state.zones;
+const spellbook = [...zones[casterSeat].spellbook];
+const hand = [...zones[casterSeat].hand];
+
+// Remove selected card from spellbook
+const cardIndex = spellbook.findIndex((c) => c.cardId === selectedCard.cardId);
+if (cardIndex !== -1) {
+  spellbook.splice(cardIndex, 1);
+  hand.push(selectedCard);
+}
+
+// Shuffle spellbook
+for (let i = spellbook.length - 1; i > 0; i--) {
+  const j = Math.floor(Math.random() * (i + 1));
+  [spellbook[i], spellbook[j]] = [spellbook[j], spellbook[i]];
+}
+
+// FULL zone patch
+const targetZones = {
+  spellbook,
+  atlas: [...zones[casterSeat].atlas],
+  hand,
+  graveyard: [...zones[casterSeat].graveyard],
+  battlefield: [...zones[casterSeat].battlefield],
+  collection: [...zones[casterSeat].collection],
+  banished: [...zones[casterSeat].banished],
+};
+
+const zonesNext = { ...zones, [casterSeat]: targetZones };
+set({ zones: zonesNext } as Partial<GameState> as GameState);
+get().trySendPatch({ zones: { [casterSeat]: targetZones } } as ServerPatchT);
+```
+
+#### Example 2: Banish from Collection (Legion of Gall)
+
+```typescript
+const state = get();
+const zones = state.zones;
+const collection = [...zones[targetSeat].collection];
+
+// Remove selected cards (in reverse order to preserve indices)
+selectedIndices
+  .sort((a, b) => b - a)
+  .forEach((idx) => {
+    if (idx >= 0 && idx < collection.length) {
+      collection.splice(idx, 1);
+    }
+  });
+
+// Add to banished
+const banished = [...zones[targetSeat].banished, ...cardsToRemove];
+
+// FULL zone patch for target seat
+const targetZones = {
+  spellbook: [...zones[targetSeat].spellbook],
+  atlas: [...zones[targetSeat].atlas],
+  hand: [...zones[targetSeat].hand],
+  graveyard: [...zones[targetSeat].graveyard],
+  battlefield: [...zones[targetSeat].battlefield],
+  collection,
+  banished,
+};
+
+const zonesNext = { ...zones, [targetSeat]: targetZones };
+set({ zones: zonesNext } as Partial<GameState> as GameState);
+get().trySendPatch({ zones: { [targetSeat]: targetZones } } as ServerPatchT);
+```
+
+#### Example 3: Reveal Top Cards (Browse)
+
+```typescript
+const state = get();
+const zones = state.zones;
+const spellbook = [...zones[casterSeat].spellbook];
+const hand = [...zones[casterSeat].hand];
+
+// Remove top 5 cards
+const revealed = spellbook.splice(0, 5);
+
+// Player selects one for hand
+if (selectedCard) {
+  hand.push(selectedCard);
+}
+
+// Put rest on bottom in specified order
+const bottomCards = pending.bottomOrder.map((i) => revealed[i]);
+spellbook.push(...bottomCards);
+
+// FULL zone patch
+const targetZones = {
+  spellbook,
+  atlas: [...zones[casterSeat].atlas],
+  hand,
+  graveyard: [...zones[casterSeat].graveyard],
+  battlefield: [...zones[casterSeat].battlefield],
+  collection: [...zones[casterSeat].collection],
+  banished: [...zones[casterSeat].banished],
+};
+
+const zonesNext = { ...zones, [casterSeat]: targetZones };
+set({ zones: zonesNext } as Partial<GameState> as GameState);
+get().trySendPatch({ zones: { [casterSeat]: targetZones } } as ServerPatchT);
+```
+
+---
+
+## Common Pitfalls and Solutions
+
+### Pitfall 1: Partial Zone Patches
+
+**Problem:** Only sending modified zones causes data loss.
+
+```typescript
+// ❌ WRONG
+get().trySendPatch({
+  zones: {
+    [seat]: {
+      spellbook: newSpellbook,
+      hand: newHand,
+    },
+  },
+});
+```
+
+**Solution:** Always include all seven zones.
+
+```typescript
+// ✅ CORRECT
+const targetZones = {
+  spellbook: newSpellbook,
+  atlas: [...zones[seat].atlas],
+  hand: newHand,
+  graveyard: [...zones[seat].graveyard],
+  battlefield: [...zones[seat].battlefield],
+  collection: [...zones[seat].collection],
+  banished: [...zones[seat].banished],
+};
+
+get().trySendPatch({ zones: { [seat]: targetZones } });
+```
+
+### Pitfall 2: Mutating Arrays Directly
+
+**Problem:** Modifying zone arrays without copying breaks immutability.
+
+```typescript
+// ❌ WRONG
+const zones = get().zones;
+zones[seat].hand.push(card); // Mutates state directly!
+```
+
+**Solution:** Always create new arrays.
+
+```typescript
+// ✅ CORRECT
+const zones = get().zones;
+const hand = [...zones[seat].hand, card];
+```
+
+### Pitfall 3: Forgetting to Update Local State
+
+**Problem:** Sending patch without updating local state causes desync.
+
+```typescript
+// ❌ WRONG
+get().trySendPatch({ zones: { [seat]: targetZones } });
+// Forgot to call set()!
+```
+
+**Solution:** Always update local state first.
+
+```typescript
+// ✅ CORRECT
+const zonesNext = { ...zones, [seat]: targetZones };
+set({ zones: zonesNext } as Partial<GameState> as GameState);
+get().trySendPatch({ zones: { [seat]: targetZones } } as ServerPatchT);
+```
+
+### Pitfall 4: Wrong Removal Order
+
+**Problem:** Removing multiple items by index without sorting causes wrong items removed.
+
+```typescript
+// ❌ WRONG - Indices shift after first removal
+selectedIndices.forEach((idx) => collection.splice(idx, 1));
+```
+
+**Solution:** Sort indices in descending order.
+
+```typescript
+// ✅ CORRECT - Remove from end to start
+selectedIndices
+  .sort((a, b) => b - a)
+  .forEach((idx) => {
+    collection.splice(idx, 1);
+  });
+```
+
+### Pitfall 5: Cross-Player Zone Updates (CRITICAL)
+
+**Problem:** Some resolvers need to modify opponent zones (Legion of Gall banishes from opponent's collection, Pith Imp steals from opponent's hand).
+
+**IMPORTANT:** The server blocks zone patches for opponent's seat! You CANNOT use `trySendPatch` to update opponent zones - the server will drop/filter these patches.
+
+**Solution:** Use **custom messages** and let the opponent update their OWN zones:
+
+```typescript
+// ❌ WRONG - Server will block this!
+get().trySendPatch({
+  zones: { [opponentSeat]: opponentZones },
+} as ServerPatchT);
+
+// ✅ CORRECT - Send custom message with full card data
+transport.sendMessage({
+  type: "legionOfGallResolve",
+  id: pending.id,
+  casterSeat,
+  targetSeat,
+  selectedIndices,
+  cardsToBanish, // Include full card data!
+  ts: Date.now(),
+} as unknown as CustomMessage);
+```
+
+**In the message handler (opponent's client):**
+
+```typescript
+if (t === "legionOfGallResolve") {
+  // Skip if we're the caster - already handled locally
+  if (actorKey === casterSeat) {
+    set({ pendingLegionOfGall: null });
+    return;
+  }
+
+  // We are the target - update OUR OWN zones
+  if (actorKey === targetSeat && cardsToBanish) {
+    const collection = [...zones[targetSeat].collection];
+    const banished = [...zones[targetSeat].banished];
+
+    // Remove from collection, add to banished
+    sortedIndices.forEach((idx) => collection.splice(idx, 1));
+    banished.push(...cardsToBanish);
+
+    set({
+      zones: {
+        ...zones,
+        [targetSeat]: { ...zones[targetSeat], collection, banished },
+      },
+    });
+  }
+}
+```
+
+**Reference implementation:** See `pithImpState.ts` lines 314-316 for the pattern note.
+
+### Pitfall 6: Server-Side Message Routing (CRITICAL)
+
+**Problem:** Custom messages are NOT automatically broadcast by the server. The server's `socket.on("message")` handler in `server/index.ts` only routes **explicitly listed message types**.
+
+**Symptom:** Caster's client sends the message successfully, but opponent's client never receives it (no handler logs fire).
+
+**Solution:** Register ALL new resolver message types in `server/index.ts` (around line 4001):
+
+```typescript
+} else if (
+  type === "chaosTwisterBegin" ||
+  // ... existing types ...
+  type === "accusationCancel" ||
+  // ADD YOUR NEW RESOLVER MESSAGE TYPES HERE:
+  type === "legionOfGallBegin" ||
+  type === "legionOfGallSelect" ||
+  type === "legionOfGallResolve" ||
+  type === "legionOfGallCancel"
+) {
+  // Resolver messages - broadcast to match room
+  // ...
+}
+```
+
+**Required message types for each resolver:**
+
+- `*Begin` - Initiates the resolver UI for all clients
+- `*Select` - (if applicable) Selection updates
+- `*Resolve` - Final resolution with card data for cross-player updates
+- `*Cancel` - Cancellation cleanup
+
+**Without this registration, cross-player synchronization will fail silently!**
+
+### Pitfall 7: Auto-Resolve Confirmation (Silence & Skip Support)
+
+**Problem:** Cards with automatic effects (Genesis abilities, on-play triggers) may be silenced or the player may want to skip the effect for tactical reasons. Without a confirmation step, the effect fires automatically with no way to decline.
+
+**Solution:** Add a `"confirming"` phase that shows a dialog before executing the effect:
+
+```typescript
+// In state file, add "confirming" to your phase type:
+export type MyResolverPhase =
+  | "confirming" // User confirms whether to auto-resolve
+  | "selecting" // Main resolver UI
+  | "resolving"
+  | "complete";
+
+// In beginMyResolver(), start in confirming phase:
+set({
+  pendingMyResolver: {
+    ...data,
+    phase: "confirming",
+  },
+});
+
+// Add confirmMyResolver() to transition to the main phase:
+confirmMyResolver: () => {
+  const pending = get().pendingMyResolver;
+  if (!pending || pending.phase !== "confirming") return;
+
+  set({
+    pendingMyResolver: { ...pending, phase: "selecting" },
+  });
+
+  // Broadcast confirmation
+  transport.sendMessage({ type: "myResolverConfirm", ... });
+},
+```
+
+**In the overlay, show confirmation dialog:**
+
+```tsx
+{
+  phase === "confirming" && isCaster && (
+    <div className="confirmation-dialog">
+      <h2>Card Name</h2>
+      <p>Effect description</p>
+      <p className="text-yellow-400">
+        Decline if silenced or you want to skip the effect.
+      </p>
+      <button onClick={cancel}>Decline (Skip)</button>
+      <button onClick={confirm}>Auto-Resolve</button>
+    </div>
+  );
+}
+```
+
+**Cards that NEED this pattern:**
+
+- **Legion of Gall** - Genesis: banish from collection (may be silenced)
+- **Raise Dead** - already has this pattern
+- **Omphalos** - end of turn draw (uses `autoResolveState.ts`)
+- **Morgana** - Genesis draw (uses `autoResolveState.ts`)
+- **Pith Imp** - Genesis steal (uses `autoResolveState.ts`)
+- Any card with Genesis, Ordain, or automatic triggers
+
+**Message types to register:** Add `*Confirm` to the server broadcast list alongside Begin/Select/Resolve/Cancel.
+
+---
+
+## Zone Manipulation Checklist
+
+When implementing zone manipulation:
+
+- [ ] Create new arrays with spread operator `[...zones[seat].zone]`
+- [ ] Modify the copies, not the originals
+- [ ] Build COMPLETE zone object with all seven zones
+- [ ] Update local state with `set({ zones: zonesNext })`
+- [ ] **For OWN seat:** Send patch with `get().trySendPatch({ zones: { [seat]: targetZones } })`
+- [ ] **For OPPONENT seat:** Use custom messages, NOT zone patches (server blocks cross-player patches!)
+- [ ] Include full card data in custom messages so opponent can update their zones
+- [ ] **CRITICAL:** After opponent updates their zones locally from a custom message, they MUST call `trySendPatch()` to persist changes to the server (updating their OWN seat is allowed)
+- [ ] **Register ALL message types in `server/index.ts`** (Begin, Select, Resolve, Cancel)
+- [ ] When removing multiple items by index, sort descending first
+- [ ] Test in both hotseat and online modes
+- [ ] Verify opponent sees correct state after resolution
+
+---
 
 ### Summoning Permanents
 
@@ -471,12 +918,36 @@ get().movePermanentToZone(spell.at, spell.index, "graveyard");
 
 ## Existing Resolvers Reference
 
-| Card              | State File                 | Overlay                       | Message Types                 |
-| ----------------- | -------------------------- | ----------------------------- | ----------------------------- |
-| Browse            | `browseState.ts`           | `BrowseOverlay.tsx`           | browseBegin, browseResolve    |
-| Common Sense      | `commonSenseState.ts`      | `CommonSenseOverlay.tsx`      | commonSenseBegin, etc.        |
-| Dhol Chants       | `dholChantsState.ts`       | `DholChantsOverlay.tsx`       | dholChantsBegin, etc.         |
-| Demonic Contract  | `demonicContractState.ts`  | `DemonicContractOverlay.tsx`  | demonicContractBegin, etc.    |
-| Highland Princess | `highlandPrincessState.ts` | `HighlandPrincessOverlay.tsx` | highlandPrincessGenesis, etc. |
+| Card              | State File                 | Overlay                       | Message Types                 | Notes                         |
+| ----------------- | -------------------------- | ----------------------------- | ----------------------------- | ----------------------------- |
+| Browse            | `browseState.ts`           | `BrowseOverlay.tsx`           | browseBegin, browseResolve    | Search top 5 spells           |
+| Common Sense      | `commonSenseState.ts`      | `CommonSenseOverlay.tsx`      | commonSenseBegin, etc.        | Search spellbook for spell    |
+| Dhol Chants       | `dholChantsState.ts`       | `DholChantsOverlay.tsx`       | dholChantsBegin, etc.         | Tap allies for damage         |
+| Demonic Contract  | `demonicContractState.ts`  | `DemonicContractOverlay.tsx`  | demonicContractBegin, etc.    | Search with rarity limit      |
+| Highland Princess | `highlandPrincessState.ts` | `HighlandPrincessOverlay.tsx` | highlandPrincessGenesis, etc. | Search for artifact ≤1        |
+| Legion of Gall    | `legionOfGallState.ts`     | `LegionOfGallOverlay.tsx`     | legionOfGallBegin, etc.       | Inspect opponent's collection |
+| Raise Dead        | `raiseDeadState.ts`        | `RaiseDeadOverlay.tsx`        | raiseDeadBegin, etc.          | Summon random dead minion     |
 
 Use these as reference implementations.
+
+---
+
+## Recent Example: Legion of Gall
+
+**Card Effect:** "Genesis → Look at a collection and banish three cards from it."
+
+**Implementation highlights:**
+
+- Reuses toolbox inspect hand permissions for opponent's collection
+- Allows selection of up to 3 cards
+- Banishes selected cards to opponent's banished zone
+- Full zone patches prevent data loss
+
+**Files:**
+
+- State: `src/lib/game/store/legionOfGallState.ts`
+- Overlay: `src/components/game/LegionOfGallOverlay.tsx`
+- Types: Added to `src/lib/game/store/types.ts` (~line 969)
+- Trigger: `src/lib/game/store/gameActions/playActions.ts` (~line 848)
+- Handlers: `src/lib/game/store/customMessageHandlers.ts` (~line 3112)
+- Store: Integrated in `src/lib/game/store.ts` (line 187, line 302)

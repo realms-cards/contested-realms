@@ -144,14 +144,19 @@ export const createSearingTruthSlice: StateCreator<
       },
     } as Partial<GameState> as GameState);
 
-    // Send zone patch
-    const zonePatch: ServerPatchT = {
-      zones: { [targetSeat]: zonesNext[targetSeat] } as Record<
-        PlayerKey,
-        Zones
-      >,
-    };
-    get().trySendPatch(zonePatch);
+    // NOTE: Do NOT send zone patches for target's seat if it's the opponent - the server will block it.
+    // The opponent updates their own zones when they receive the custom message.
+    // Only send patch if targeting self (caster)
+    const casterSeat = pending.casterSeat;
+    if (targetSeat === casterSeat) {
+      const zonePatch: ServerPatchT = {
+        zones: { [targetSeat]: zonesNext[targetSeat] } as Record<
+          PlayerKey,
+          Zones
+        >,
+      };
+      get().trySendPatch(zonePatch);
+    }
 
     // Broadcast to opponent
     const transport = get().transport;

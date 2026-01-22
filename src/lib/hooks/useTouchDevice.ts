@@ -91,12 +91,31 @@ export function useGamepadConnected(): boolean {
 }
 
 /**
+ * Initial detection for SSR-safe initial state
+ * Safari sometimes has issues with matchMedia on initial load
+ */
+function getInitialTouchState(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    // Check multiple signals for better Safari compatibility
+    const hasCoarsePointer = window.matchMedia("(pointer: coarse)").matches;
+    const hasTouchEvents = "ontouchstart" in window;
+    const hasTouchPoints = navigator.maxTouchPoints > 0;
+    // iOS Safari specific check
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    return hasCoarsePointer || (hasTouchEvents && hasTouchPoints) || isIOS;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Detects if the device primarily uses touch input (coarse pointer)
  * or has a gamepad connected (no hover capability)
  * @returns boolean - true if touch/gamepad device, false if mouse/trackpad
  */
 export function useTouchDevice(): boolean {
-  const [isNativeTouchDevice, setIsNativeTouchDevice] = useState(false);
+  const [isNativeTouchDevice, setIsNativeTouchDevice] = useState(getInitialTouchState);
   const hasGamepad = useGamepadConnected();
   const override = useSyncExternalStore(
     subscribeOverride,
@@ -110,10 +129,20 @@ export function useTouchDevice(): boolean {
 
     try {
       const mediaQuery = window.matchMedia("(pointer: coarse)");
-      setIsNativeTouchDevice(mediaQuery.matches);
+      // Also check touch events for Safari compatibility
+      const hasTouchEvents = "ontouchstart" in window;
+      const hasTouchPoints = navigator.maxTouchPoints > 0;
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
 
-      const handler = (e: MediaQueryListEvent) =>
-        setIsNativeTouchDevice(e.matches);
+      const checkTouch = () => {
+        const isCoarse = mediaQuery.matches;
+        const isTouch = isCoarse || (hasTouchEvents && hasTouchPoints) || isIOS;
+        setIsNativeTouchDevice(isTouch);
+      };
+
+      checkTouch();
+
+      const handler = () => checkTouch();
 
       // Modern browsers
       if (typeof mediaQuery.addEventListener === "function") {
@@ -123,8 +152,8 @@ export function useTouchDevice(): boolean {
 
       // Legacy browsers (Safari < 14)
       const legacyMq = mediaQuery as unknown as {
-        addListener?: (cb: (e: MediaQueryListEvent) => void) => void;
-        removeListener?: (cb: (e: MediaQueryListEvent) => void) => void;
+        addListener?: (cb: () => void) => void;
+        removeListener?: (cb: () => void) => void;
       };
       legacyMq.addListener?.(handler);
       return () => legacyMq.removeListener?.(handler);

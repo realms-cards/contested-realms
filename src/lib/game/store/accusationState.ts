@@ -1,13 +1,6 @@
 import type { StateCreator } from "zustand";
 import type { CustomMessage } from "@/lib/net/transport";
-import type {
-  CardRef,
-  CellKey,
-  GameState,
-  PlayerKey,
-  ServerPatchT,
-  Zones,
-} from "./types";
+import type { CardRef, CellKey, GameState, PlayerKey } from "./types";
 import { opponentSeat } from "./utils/boardHelpers";
 
 function newAccusationId() {
@@ -232,6 +225,7 @@ export const createAccusationSlice: StateCreator<
       return;
 
     const victimSeat = pending.victimSeat;
+    const casterSeat = pending.casterSeat;
     const zones = get().zones;
     const hand = [...(zones[victimSeat]?.hand || [])];
     const banished = [...(zones[victimSeat]?.banished || [])];
@@ -250,7 +244,7 @@ export const createAccusationSlice: StateCreator<
       banished.push(selectedCard);
     }
 
-    // Update zones
+    // Update local zones (caster's view)
     const zonesNext = {
       ...zones,
       [victimSeat]: {
@@ -265,14 +259,8 @@ export const createAccusationSlice: StateCreator<
       pendingAccusation: null,
     } as Partial<GameState> as GameState);
 
-    // Send zone patch
-    const zonePatch: ServerPatchT = {
-      zones: { [victimSeat]: zonesNext[victimSeat] } as Record<
-        PlayerKey,
-        Zones
-      >,
-    };
-    get().trySendPatch(zonePatch);
+    // NOTE: Do NOT send zone patches for victim's seat - the server will block it.
+    // Instead, the victim updates their own zones when they receive the custom message.
 
     // Move spell to graveyard
     try {
@@ -283,15 +271,18 @@ export const createAccusationSlice: StateCreator<
       );
     } catch {}
 
-    // Broadcast resolution
+    // Broadcast resolution with full card data so victim can update their own zones
     const transport = get().transport;
     if (transport?.sendMessage) {
       try {
         transport.sendMessage({
           type: "accusationResolve",
           id: pending.id,
+          casterSeat,
+          victimSeat,
           selectedCardIndex: pending.selectedCardIndex,
-          selectedCardName: selectedCard?.name,
+          // Include full card data so victim can add to their banished zone
+          selectedCard,
           ts: Date.now(),
         } as unknown as CustomMessage);
       } catch {}

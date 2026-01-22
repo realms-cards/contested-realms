@@ -9,6 +9,7 @@ import { useSound } from "@/lib/contexts/SoundContext";
 import { isMagician } from "@/lib/game/avatarAbilities";
 import { cardRefToPreview } from "@/lib/game/card-preview.types";
 import type { CardPreviewData } from "@/lib/game/card-preview.types";
+import CardBorder from "@/lib/game/components/CardBorder";
 import CardGlow from "@/lib/game/components/CardGlow";
 import CardPlane from "@/lib/game/components/CardPlane";
 import MaterialCardBack from "@/lib/game/components/MaterialCardBack";
@@ -77,7 +78,7 @@ export default function Hand3D({
   const setMouseInHandZone = useGameStore((s) => s.setMouseInHandZone);
   const setHandHoverCount = useGameStore((s) => s.setHandHoverCount);
   const getRemoteHighlightColor = useGameStore(
-    (s) => s.getRemoteHighlightColor
+    (s) => s.getRemoteHighlightColor,
   );
   const avatars = useGameStore((s) => s.avatars);
   const cardbackUrls = useGameStore((s) => s.cardbackUrls);
@@ -95,7 +96,7 @@ export default function Hand3D({
   // Detect if the hand's owner is a Magician (hide card type distinction from opponents)
   const ownerIsMagician = useMemo(
     () => isMagician(avatars[owner]?.card?.name),
-    [avatars, owner]
+    [avatars, owner],
   );
 
   // Sort hand based on user preference (sites first or spells first)
@@ -131,7 +132,7 @@ export default function Hand3D({
 
   // Track touch-selected card for mobile tap-to-select pattern
   const [touchSelectedIndex, setTouchSelectedIndex] = useState<number | null>(
-    null
+    null,
   );
   // Track if we just tapped (to distinguish tap from drag)
   const tapStartRef = useRef<{
@@ -178,7 +179,7 @@ export default function Hand3D({
   // Hand zone: portion of the screen height from the bottom that counts as "in hand zone"
   // Higher value = smaller zone (cursor must be closer to bottom)
   // On touch devices, use a larger trigger zone for easier access
-  const HAND_ZONE_TOP_FRAC = isCoarsePointer ? 0.82 : 0.95; // Mobile: bottom 18%, Desktop: bottom 12%
+  const HAND_ZONE_TOP_FRAC = isCoarsePointer ? 0.82 : 0.84; // Mobile: bottom 18%, Desktop: bottom 12%
   const HAND_ZONE_BOTTOM_FRAC = 1.0; // Allow touching very edge on mobile
   // Horizontal zone: center portion of screen width that triggers hand reveal
   // On touch devices, use wider zone for easier access
@@ -257,22 +258,28 @@ export default function Hand3D({
       }
     }
     // Handle touchend to collapse hand when tapping outside hand zone
+    // Safari-specific fix: Don't use overCardsArea in the check because
+    // Safari doesn't always fire onPointerOut events properly, leaving it stuck
     function onTouchEnd(e: TouchEvent) {
       const t = e.changedTouches?.[0];
       if (!t) return;
       const h = window.innerHeight || 1;
       const w = window.innerWidth || 1;
-      // Check if touch ended outside the hand zone
+      // Check if touch ended outside the hand zone (pure coordinate check, no overCardsArea)
       const inVerticalZone =
         t.clientY >= h * HAND_ZONE_TOP_FRAC &&
         t.clientY <= h * HAND_ZONE_BOTTOM_FRAC;
       const inHorizontalZone =
         t.clientX >= w * HAND_ZONE_LEFT_FRAC &&
         t.clientX <= w * HAND_ZONE_RIGHT_FRAC;
-      const inHandZone = (inVerticalZone && inHorizontalZone) || overCardsArea;
+      const inHandZone = inVerticalZone && inHorizontalZone;
       // If touch ended outside hand zone, collapse the hand
       if (!inHandZone) {
         setMouseInHandZone(false);
+        // Also reset forced visibility mode so hand hides
+        setHandVisibilityMode(null);
+        // Force clear overCardsArea which may be stuck on Safari
+        setOverCardsArea(false);
       }
     }
     window.addEventListener("touchstart", onTouch, {
@@ -281,16 +288,22 @@ export default function Hand3D({
     window.addEventListener("touchmove", onTouch, {
       passive: true,
     } as AddEventListenerOptions);
+    // Use capture phase to ensure we get the event before Three.js canvas (Safari fix)
     window.addEventListener("touchend", onTouchEnd, {
       passive: true,
+      capture: true,
     } as AddEventListenerOptions);
     return () => {
       window.removeEventListener("touchstart", onTouch as EventListener);
       window.removeEventListener("touchmove", onTouch as EventListener);
-      window.removeEventListener("touchend", onTouchEnd as EventListener);
+      // Must match capture: true for proper cleanup
+      window.removeEventListener("touchend", onTouchEnd as EventListener, {
+        capture: true,
+      } as EventListenerOptions);
     };
   }, [
     setMouseInHandZone,
+    setHandVisibilityMode,
     overCardsArea,
     HAND_ZONE_TOP_FRAC,
     HAND_ZONE_BOTTOM_FRAC,
@@ -331,8 +344,8 @@ export default function Hand3D({
         // Safe touch event check
         const isTouchEvent = "changedTouches" in e;
         const clientY = isTouchEvent
-          ? (e as TouchEvent).changedTouches?.[0]?.clientY ??
-            lastMousePosRef.current.y
+          ? ((e as TouchEvent).changedTouches?.[0]?.clientY ??
+            lastMousePosRef.current.y)
           : (e as MouseEvent).clientY;
         const hScr = window.innerHeight || 1;
         const inReturnZone = clientY >= hScr - 20;
@@ -351,7 +364,7 @@ export default function Hand3D({
         // If drag is still active after Board has had time to process, force clear it
         if (dragFromHand && selected && selected.who === owner) {
           console.debug(
-            "[Hand3D] Emergency drag cleanup - clearing sticky drag state"
+            "[Hand3D] Emergency drag cleanup - clearing sticky drag state",
           );
           setDragFromHand(false);
         }
@@ -424,8 +437,8 @@ export default function Hand3D({
     const targetShownCheck = isEdgePlacementCheck
       ? 1
       : overCardsArea || mouseInZone
-      ? 1
-      : 0;
+        ? 1
+        : 0;
     const handShouldBeSpreadCheck = isEdgePlacementCheck
       ? true
       : overCardsArea || mouseInZone;
@@ -547,13 +560,13 @@ export default function Hand3D({
           ? 0
           : Math.PI
         : // Player mode / non-commentator spectators: top vs bottom differ
-        placeTop
-        ? viewerPlayerNumber === 1
-          ? 0
-          : Math.PI
-        : viewerPlayerNumber === 1
-        ? Math.PI
-        : 0;
+          placeTop
+          ? viewerPlayerNumber === 1
+            ? 0
+            : Math.PI
+          : viewerPlayerNumber === 1
+            ? Math.PI
+            : 0;
       rootRef.current.rotation.set(0, rotation, 0);
     } else {
       // Overlay placement relative to camera (bottom for own, top for opponent when backs)
@@ -640,7 +653,7 @@ export default function Hand3D({
       (expandedAngleMult - collapsedAngleMult) * revealAmount;
     const maxAngle = Math.min(
       HAND_MAX_TOTAL_ANGLE * angleMult,
-      n * HAND_STEP_MAX * angleMult
+      n * HAND_STEP_MAX * angleMult,
     );
 
     // Dynamic spacing: show more of each card when few cards, compress when many
@@ -708,7 +721,7 @@ export default function Hand3D({
       // Scale effects also fade when collapsed
       const scale = Math.max(
         1 + 0.06 * w * revealAmount,
-        1.0 + 0.08 * hoverWeight
+        1.0 + 0.08 * hoverWeight,
       );
 
       return {
@@ -856,7 +869,7 @@ export default function Hand3D({
       // Fallback to legacy preview system - show immediately for responsive feel
       setPreviewCard(card);
     },
-    [setPreviewCard, HAND_PREVIEW_ENABLED, showCardPreview]
+    [setPreviewCard, HAND_PREVIEW_ENABLED, showCardPreview],
   );
   const clearHoverPreview = useCallback(() => {
     if (hoverTimer.current) window.clearTimeout(hoverTimer.current);
@@ -1066,7 +1079,7 @@ export default function Hand3D({
       if (handAreaLeaveTimeoutRef.current)
         window.clearTimeout(handAreaLeaveTimeoutRef.current);
     },
-    []
+    [],
   );
 
   // Keyboard/mouse-wheel cycling is enabled; selection still via click/drag
@@ -1134,8 +1147,8 @@ export default function Hand3D({
         const renderOrder = showCardBacks
           ? baseRenderOrder + i
           : hoverWeight > 0.5
-          ? 3000
-          : baseRenderOrder + indexForOrder;
+            ? 3000
+            : baseRenderOrder + indexForOrder;
         const handInstanceKey = `hand:${owner}:${originalIndex}`;
         const remoteHighlightColor = getRemoteHighlightColor(c, {
           instanceKey: handInstanceKey,
@@ -1146,23 +1159,34 @@ export default function Hand3D({
           ? ownerIsMagician
             ? 0 // Magician: all cards upright to hide site distinction
             : isSite
-            ? -Math.PI / 2
-            : 0
+              ? -Math.PI / 2
+              : 0
           : isSite
-          ? -rot - Math.PI / 2
-          : -rot;
+            ? -rot - Math.PI / 2
+            : -rot;
         const glowWidth = CARD_SHORT + 0.25;
         const glowHeight = CARD_LONG + 0.35;
-        // Touch-selected card gets a cyan glow on mobile
+        // Touch-selected card gets a border outline on mobile
         const isTouchSelected =
           isCoarsePointer && touchSelectedIndex === originalIndex;
-        const touchSelectColor = "#22d3ee"; // cyan-400
         return (
           <group
             key={`${c.cardId}-${owner}-${i}`}
             position={[x, y, i * 0.001]}
             scale={[scale, scale, scale]}
           >
+            {/* Touch selection border outline for mobile - tap again to play */}
+            {isTouchSelected && !remoteHighlightColor && !showCardBacks && (
+              <CardBorder
+                width={CARD_SHORT}
+                height={CARD_LONG}
+                rotationZ={cardRotationZ}
+                elevation={0.01}
+                color="#22d3ee"
+                thickness={0.05}
+                renderOrder={renderOrder + 10000 - 3}
+              />
+            )}
             {/* Remote highlight glow */}
             {remoteHighlightColor ? (
               <CardGlow
@@ -1174,17 +1198,6 @@ export default function Hand3D({
                 renderOrder={renderOrder + 10000 - 5}
               />
             ) : null}
-            {/* Touch selection glow for mobile - tap again to play */}
-            {isTouchSelected && !remoteHighlightColor && (
-              <CardGlow
-                width={glowWidth}
-                height={glowHeight}
-                rotationZ={cardRotationZ}
-                elevation={0}
-                color={touchSelectColor}
-                renderOrder={renderOrder + 10000 - 4}
-              />
-            )}
             {/* Invisible larger interaction box to ensure cards are always clickable */}
             {/* Disable during drag to prevent blocking board placement */}
             {!showCardBacks && !isDraggedCard && !isDragging && (
@@ -1226,7 +1239,7 @@ export default function Hand3D({
                   }
                   hoverTimeoutRef.current = window.setTimeout(() => {
                     setHoveredCard((prev) =>
-                      prev === originalIndex ? null : prev
+                      prev === originalIndex ? null : prev,
                     );
                   }, 30); // Small delay for smooth card-to-card transitions
 
@@ -1397,8 +1410,9 @@ export default function Hand3D({
                       ? ownerIsMagician
                         ? cardbackSpellbookUrl() // Magician: all cards look like spellbook cards
                         : isSite
-                        ? ownerCardbacks?.atlas ?? cardbackAtlasUrl()
-                        : ownerCardbacks?.spellbook ?? cardbackSpellbookUrl()
+                          ? (ownerCardbacks?.atlas ?? cardbackAtlasUrl())
+                          : (ownerCardbacks?.spellbook ??
+                            cardbackSpellbookUrl())
                       : undefined
                   }
                   forceTextureUrl={showCardBacks}

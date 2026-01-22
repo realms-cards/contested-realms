@@ -966,6 +966,31 @@ export type PendingDemonicContract = {
   createdAt: number;
 };
 
+// --- Legion of Gall State ------------------------------------------------
+// Genesis → Look at a collection and banish three cards from it.
+export type LegionOfGallPhase =
+  | "confirming" // User confirms whether to auto-resolve
+  | "viewing" // Viewing opponent's collection
+  | "selecting" // Selecting cards to banish
+  | "resolving" // Processing the banishment
+  | "complete";
+
+export type PendingLegionOfGall = {
+  id: string;
+  casterSeat: PlayerKey;
+  targetSeat: PlayerKey;
+  spell: {
+    at: CellKey;
+    index: number;
+    instanceId: string | null;
+    owner: 1 | 2;
+    card: CardRef;
+  };
+  phase: LegionOfGallPhase;
+  selectedIndices: number[];
+  createdAt: number;
+};
+
 // --- Raise Dead State ------------------------------------------------
 // "Summon a random dead minion" - looks at both players' graveyards
 export type RaiseDeadPhase = "confirming" | "resolving" | "complete";
@@ -1752,6 +1777,22 @@ export type GameState = {
   selectDemonicContractCard: (card: CardRef) => void;
   resolveDemonicContract: () => void;
   cancelDemonicContract: () => void;
+  // Legion of Gall (look at opponent's collection and banish three cards)
+  pendingLegionOfGall: PendingLegionOfGall | null;
+  beginLegionOfGall: (input: {
+    spell: {
+      at: CellKey;
+      index: number;
+      instanceId: string | null;
+      owner: 1 | 2;
+      card: CardRef;
+    };
+    casterSeat: PlayerKey;
+  }) => void;
+  confirmLegionOfGall: () => void;
+  selectLegionOfGallCard: (index: number) => void;
+  resolveLegionOfGall: () => void;
+  cancelLegionOfGall: () => void;
   // Raise Dead (summon random dead minion from any graveyard)
   pendingRaiseDead: PendingRaiseDead | null;
   beginRaiseDead: (input: {

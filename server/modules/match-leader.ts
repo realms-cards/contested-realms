@@ -1373,31 +1373,33 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
             "p1" in incomingZones &&
             actorSeat !== "p1"
           ) {
+            const oppZones = incomingZones.p1 as PlayerZones | undefined;
+            const currentP1 = match.game?.zones?.p1 as PlayerZones | undefined;
+
             // Allow opponent graveyard update if Mortuary swap is active
-            if (mortuarySwapActive && opponentSeat === "p1") {
-              const oppZones = incomingZones.p1 as PlayerZones | undefined;
-              if (oppZones && "graveyard" in oppZones) {
-                // Only allow graveyard field, preserve other zones from current state
-                const currentP1 = match.game?.zones?.p1 as
-                  | PlayerZones
-                  | undefined;
-                sanitizedZones.p1 = {
-                  ...(currentP1 || {
-                    spellbook: [],
-                    atlas: [],
-                    hand: [],
-                    graveyard: [],
-                    battlefield: [],
-                    collection: [],
-                    banished: [],
-                  }),
-                  graveyard: oppZones.graveyard,
-                };
-                console.log(
-                  "[match] Mortuary swap: allowing p1 graveyard update from",
-                  actorSeat,
-                );
-              }
+            if (
+              mortuarySwapActive &&
+              opponentSeat === "p1" &&
+              oppZones &&
+              "graveyard" in oppZones
+            ) {
+              // Only allow graveyard field, preserve other zones from current state
+              sanitizedZones.p1 = {
+                ...(currentP1 || {
+                  spellbook: [],
+                  atlas: [],
+                  hand: [],
+                  graveyard: [],
+                  battlefield: [],
+                  collection: [],
+                  banished: [],
+                }),
+                graveyard: oppZones.graveyard,
+              };
+              console.log(
+                "[match] Mortuary swap: allowing p1 graveyard update from",
+                actorSeat,
+              );
             } else {
               try {
                 console.warn("[match] dropped opponent zone update", {
@@ -1422,31 +1424,33 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
             "p2" in incomingZones &&
             actorSeat !== "p2"
           ) {
+            const oppZones = incomingZones.p2 as PlayerZones | undefined;
+            const currentP2 = match.game?.zones?.p2 as PlayerZones | undefined;
+
             // Allow opponent graveyard update if Mortuary swap is active
-            if (mortuarySwapActive && opponentSeat === "p2") {
-              const oppZones = incomingZones.p2 as PlayerZones | undefined;
-              if (oppZones && "graveyard" in oppZones) {
-                // Only allow graveyard field, preserve other zones from current state
-                const currentP2 = match.game?.zones?.p2 as
-                  | PlayerZones
-                  | undefined;
-                sanitizedZones.p2 = {
-                  ...(currentP2 || {
-                    spellbook: [],
-                    atlas: [],
-                    hand: [],
-                    graveyard: [],
-                    battlefield: [],
-                    collection: [],
-                    banished: [],
-                  }),
-                  graveyard: oppZones.graveyard,
-                };
-                console.log(
-                  "[match] Mortuary swap: allowing p2 graveyard update from",
-                  actorSeat,
-                );
-              }
+            if (
+              mortuarySwapActive &&
+              opponentSeat === "p2" &&
+              oppZones &&
+              "graveyard" in oppZones
+            ) {
+              // Only allow graveyard field, preserve other zones from current state
+              sanitizedZones.p2 = {
+                ...(currentP2 || {
+                  spellbook: [],
+                  atlas: [],
+                  hand: [],
+                  graveyard: [],
+                  battlefield: [],
+                  collection: [],
+                  banished: [],
+                }),
+                graveyard: oppZones.graveyard,
+              };
+              console.log(
+                "[match] Mortuary swap: allowing p2 graveyard update from",
+                actorSeat,
+              );
             } else {
               try {
                 console.warn("[match] dropped opponent zone update", {

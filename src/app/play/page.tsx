@@ -48,6 +48,7 @@ import PlacementDialog from "@/components/game/PlacementDialog";
 import PlayerResourcePanels from "@/components/game/PlayerResourcePanel";
 import PrivateHandTargetingOverlay from "@/components/game/PrivateHandTargetingOverlay";
 import RaiseDeadOverlay from "@/components/game/RaiseDeadOverlay";
+import LegionOfGallOverlay from "@/components/game/LegionOfGallOverlay";
 import SearingTruthOverlay from "@/components/game/SearingTruthOverlay";
 import SeerScreen from "@/components/game/SeerScreen";
 import StatusBar from "@/components/game/StatusBar";
@@ -965,6 +966,8 @@ export default function PlayPage() {
 
       {/* Raise Dead Overlay */}
       <RaiseDeadOverlay />
+      {/* Legion of Gall Overlay (inspect and banish from opponent collection) */}
+      <LegionOfGallOverlay />
       {/* Auto-Resolve Confirmation Overlay (for silence effects) */}
       <AutoResolveConfirmOverlay />
       {/* Dhol Chants Overlay */}

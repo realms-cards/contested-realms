@@ -51,6 +51,7 @@ import {
 } from "./store/imposterMaskState";
 import { createInteractionSlice } from "./store/interactionState";
 import { createInterrogatorSlice } from "./store/interrogatorState";
+import { createLegionOfGallSlice } from "./store/legionOfGallState";
 import { createLilithSlice } from "./store/lilithState";
 import { createMagicSlice } from "./store/magicState";
 import {
@@ -183,6 +184,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   ...createPigsOfTheSounderSlice(set, get, storeApi),
   ...createDemonicContractSlice(set, get, storeApi),
   ...createRaiseDeadSlice(set, get, storeApi),
+  ...createLegionOfGallSlice(set, get, storeApi),
   ...createAutoResolveSlice(set, get, storeApi),
   ...createDholChantsSlice(set, get, storeApi),
   ...createDoomsdayCultSlice(set, get, storeApi),
@@ -297,6 +299,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         pendingAtlanteanFate: null,
         pendingMephistopheles: null,
         pendingRaiseDead: null,
+        pendingLegionOfGall: null,
         pendingAutoResolve: null,
         mephistophelesSummonUsed: createInitialMephistophelesSummonUsed(),
         pendingMephistophelesSummon: null,

@@ -2,6 +2,10 @@
 
 ## January 2026
 
+### Jan 22 - Legion of Gall
+
+- **add custom resolver for Legion of Gall**
+
 ### Jan 21 - Fixes from GitHub issues
 
 - **add automatic resolver for Mismanaged Mortuary**
