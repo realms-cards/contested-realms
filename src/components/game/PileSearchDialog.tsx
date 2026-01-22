@@ -8,8 +8,8 @@ import {
   useCardHover,
   type CardPreviewData,
 } from "@/lib/game/hooks/useCardHover";
-import { useMobileDevice } from "@/lib/hooks/useTouchDevice";
 import type { CardRef } from "@/lib/game/store";
+import { useMobileDevice } from "@/lib/hooks/useTouchDevice";
 
 interface PileSearchDialogProps {
   pileName: string;
