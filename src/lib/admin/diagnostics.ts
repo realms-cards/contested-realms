@@ -4,17 +4,13 @@ import { Prisma } from "@prisma/client";
 import Redis from "ioredis";
 import { prisma } from "@/lib/prisma";
 import { getRedis } from "@/lib/redis";
-import type {
-  ConnectionTestResult,
-  AdminStats,
-  HealthSnapshot,
-} from "./types";
+import type { ConnectionTestResult, AdminStats, HealthSnapshot } from "./types";
 
 const MAX_HEALTH_HISTORY = 20;
 const healthHistory: HealthSnapshot[] = [];
 
 function cloneConnections(
-  connections: ConnectionTestResult[]
+  connections: ConnectionTestResult[],
 ): ConnectionTestResult[] {
   return connections.map((c) => ({ ...c }));
 }
@@ -28,7 +24,7 @@ function cloneStats(stats: AdminStats): AdminStats {
 
 export function recordHealthSnapshot(
   connections: ConnectionTestResult[],
-  stats: AdminStats
+  stats: AdminStats,
 ): void {
   const snapshot: HealthSnapshot = {
     id: `${Date.now()}`,
@@ -47,7 +43,9 @@ export function getHealthHistory(limit = MAX_HEALTH_HISTORY): HealthSnapshot[] {
   return healthHistory.slice(-limit).reverse();
 }
 
-function timing<T>(fn: () => Promise<T>): Promise<{ result: T; latency: number }> {
+function timing<T>(
+  fn: () => Promise<T>,
+): Promise<{ result: T; latency: number }> {
   const start = performance.now();
   return fn().then((result) => ({
     result,
@@ -86,7 +84,10 @@ function resolveSocketHealthUrl(): string | null {
     if (!url) continue;
     const healthUrl = new URL(url.toString());
     const cleanPath = healthUrl.pathname.replace(/\/+$/, "") || "";
-    if (cleanPath.toLowerCase().endsWith("/healthz") || cleanPath.toLowerCase() === "healthz") {
+    if (
+      cleanPath.toLowerCase().endsWith("/healthz") ||
+      cleanPath.toLowerCase() === "healthz"
+    ) {
       return healthUrl.toString();
     }
     if (cleanPath === "" || cleanPath === "/") {
@@ -109,7 +110,10 @@ function resolveCdnCheck(): { origin: string; path: string } | null {
   const url = toHttpUrl(rawOrigin);
   if (!url) return null;
   const path = (process.env.ADMIN_CDN_TEST_PATH || "/").trim() || "/";
-  return { origin: url.toString(), path: path.startsWith("/") ? path : `/${path}` };
+  return {
+    origin: url.toString(),
+    path: path.startsWith("/") ? path : `/${path}`,
+  };
 }
 
 async function testDatabase(): Promise<ConnectionTestResult> {
@@ -272,8 +276,7 @@ async function testCdn(): Promise<ConnectionTestResult> {
       id: "cdn",
       label: "Asset CDN",
       status: "skipped",
-      details:
-        "Set ASSET_CDN_ORIGIN or ADMIN_CDN_ORIGIN to enable this check.",
+      details: "Set ASSET_CDN_ORIGIN or ADMIN_CDN_ORIGIN to enable this check.",
     };
   }
   try {
@@ -315,7 +318,9 @@ async function testCdn(): Promise<ConnectionTestResult> {
       status: "ok",
       latencyMs: latency,
       details: `Status ${response.status}${
-        response.headers.get("server") ? ` • ${response.headers.get("server")}` : ""
+        response.headers.get("server")
+          ? ` • ${response.headers.get("server")}`
+          : ""
       }`,
     };
   } catch (error) {
@@ -346,7 +351,13 @@ export async function getAdminStats(): Promise<AdminStats> {
     replaySessionCount,
     leaderboardCount,
   ] = await Promise.all([
-    prisma.user.count(),
+    prisma.user.count({
+      where: {
+        accounts: {
+          some: {},
+        },
+      },
+    }),
     prisma.tournament.count(),
     prisma.tournament.count({
       where: {
