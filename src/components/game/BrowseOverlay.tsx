@@ -41,7 +41,7 @@ export default function BrowseOverlay({}: BrowseOverlayProps) {
       if (!isCaster || pending?.phase !== "viewing") return;
       selectBrowseCard(index);
     },
-    [isCaster, pending?.phase, selectBrowseCard]
+    [isCaster, pending?.phase, selectBrowseCard],
   );
 
   // Handle reordering cards for bottom of spellbook
@@ -51,7 +51,7 @@ export default function BrowseOverlay({}: BrowseOverlayProps) {
       setDraggedIndex(orderIndex);
       e.dataTransfer.effectAllowed = "move";
     },
-    [isCaster, pending?.phase]
+    [isCaster, pending?.phase],
   );
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -70,7 +70,7 @@ export default function BrowseOverlay({}: BrowseOverlayProps) {
       setBrowseBottomOrder(newOrder);
       setDraggedIndex(null);
     },
-    [draggedIndex, pending, setBrowseBottomOrder]
+    [draggedIndex, pending, setBrowseBottomOrder],
   );
 
   const handleDragEnd = useCallback(() => {
@@ -92,7 +92,7 @@ export default function BrowseOverlay({}: BrowseOverlayProps) {
       });
       setBrowseBottomOrder(newOrder);
     },
-    [pending, setBrowseBottomOrder]
+    [pending, setBrowseBottomOrder],
   );
 
   // Move card down in order
@@ -110,7 +110,7 @@ export default function BrowseOverlay({}: BrowseOverlayProps) {
       });
       setBrowseBottomOrder(newOrder);
     },
-    [pending, setBrowseBottomOrder]
+    [pending, setBrowseBottomOrder],
   );
 
   // Handle confirm/resolve
@@ -134,8 +134,8 @@ export default function BrowseOverlay({}: BrowseOverlayProps) {
   return (
     <div className="fixed inset-0 z-[200] pointer-events-none">
       {/* Top bar with status */}
-      <div className="fixed inset-x-0 top-6 z-[201] pointer-events-none flex justify-center">
-        <div className="pointer-events-auto px-5 py-3 rounded-full bg-black/90 text-white ring-1 ring-blue-500/50 shadow-lg text-lg md:text-xl flex items-center gap-3 select-none">
+      <div className="fixed inset-x-0 top-2 sm:top-6 z-[201] pointer-events-none flex justify-center px-2">
+        <div className="pointer-events-auto px-3 sm:px-5 py-2 sm:py-3 rounded-full bg-black/90 text-white ring-1 ring-blue-500/50 shadow-lg text-sm sm:text-lg md:text-xl flex items-center gap-2 sm:gap-3 select-none">
           <span className="text-blue-400 font-fantaisie">📜 Browse</span>
           <span className="opacity-80">
             {phase === "viewing" &&
@@ -162,14 +162,14 @@ export default function BrowseOverlay({}: BrowseOverlayProps) {
       {/* Main content area - only for caster */}
       {isCaster && (phase === "viewing" || phase === "ordering") && (
         <div className="fixed inset-0 flex items-center justify-center pointer-events-auto bg-black/70">
-          <div className="bg-black/95 rounded-xl p-6 max-w-4xl w-full mx-4 ring-1 ring-blue-500/30 max-h-[90vh] overflow-y-auto">
+          <div className="bg-black/95 rounded-xl p-3 sm:p-6 max-w-4xl w-full mx-2 sm:mx-4 ring-1 ring-blue-500/30 max-h-[90vh] overflow-y-auto">
             {phase === "viewing" && (
               <>
-                <h2 className="text-2xl font-fantaisie text-blue-400 mb-2 text-center">
+                <h2 className="text-xl sm:text-2xl font-fantaisie text-blue-400 mb-2 text-center">
                   Your Next {pending.revealedCards.length} Spell
                   {pending.revealedCards.length !== 1 ? "s" : ""}
                 </h2>
-                <p className="text-white/70 text-sm mb-6 text-center">
+                <p className="text-white/70 text-xs sm:text-sm mb-4 sm:mb-6 text-center">
                   Click a spell to put it in your hand. The rest will go to the
                   bottom of your spellbook.
                 </p>
@@ -192,10 +192,10 @@ export default function BrowseOverlay({}: BrowseOverlayProps) {
 
             {phase === "ordering" && (
               <>
-                <h2 className="text-2xl font-fantaisie text-blue-400 mb-2 text-center">
+                <h2 className="text-xl sm:text-2xl font-fantaisie text-blue-400 mb-2 text-center">
                   Arrange Bottom Order
                 </h2>
-                <p className="text-white/70 text-sm mb-4 text-center">
+                <p className="text-white/70 text-xs sm:text-sm mb-3 sm:mb-4 text-center">
                   Drag to reorder. Last card will be at the very bottom.
                 </p>
 
@@ -281,7 +281,7 @@ export default function BrowseOverlay({}: BrowseOverlayProps) {
                             </button>
                           </div>
                         </div>
-                      )
+                      ),
                     )}
                   </div>
                 </div>

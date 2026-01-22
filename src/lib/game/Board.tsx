@@ -660,6 +660,27 @@ export default function Board({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [selectedPermanent, permanents, actorKey, toggleFaceDown, playCardFlip]);
 
+  // Toggle UI visibility with 'U' key
+  const toggleUiHidden = useScopedStore((s) => s.toggleUiHidden);
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Skip if typing in an input field
+      const target = e.target as HTMLElement;
+      if (
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.isContentEditable
+      ) {
+        return;
+      }
+      if (e.key === "u" || e.key === "U") {
+        toggleUiHidden();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [toggleUiHidden]);
+
   // Attack chooser state moved to store so HUD can render at layout level
   const attackTargetChoice = useScopedStore((s) => s.attackTargetChoice);
   const setAttackChoice = useScopedStore((s) => s.setAttackChoice);

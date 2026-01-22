@@ -10,6 +10,7 @@ import {
 import { useRouter } from "next/navigation";
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useGraphicsSettings } from "@/hooks/useGraphicsSettings";
+import { useMobileDevice } from "@/lib/hooks/useTouchDevice";
 import { type MatchEvent, formatMatchEvent } from "@/hooks/useMatchEvents";
 import { PLAYER_COLORS } from "@/lib/game/constants";
 import { useGameStore } from "@/lib/game/store";
@@ -31,6 +32,7 @@ interface OnlineConsoleProps {
   position?: "bottom-left" | "top-right" | "top-left";
   matchEvents?: MatchEvent[]; // Tournament/match-level events
   playerNames?: { p1?: string; p2?: string }; // Player names to replace P1/P2
+  toastOnly?: boolean; // Only show toast notifications, hide console UI
 }
 
 type TabType = "events" | "chat";
@@ -51,14 +53,19 @@ export default function OnlineConsole({
   position = "bottom-left",
   matchEvents = [],
   playerNames,
+  toastOnly = false,
 }: OnlineConsoleProps) {
   const router = useRouter();
   const { settings: graphicsSettings } = useGraphicsSettings();
+  const { isMobile } = useMobileDevice();
 
   // Calculate font size based on uiTextScale (0.5-1.5 maps to 10px-16px)
   // Base size is 12px (text-xs), scaled with min 10px and max 16px
   const baseFontSize = 12;
-  const scaledFontSize = Math.max(10, Math.min(16, Math.round(baseFontSize * graphicsSettings.uiTextScale)));
+  const scaledFontSize = Math.max(
+    10,
+    Math.min(16, Math.round(baseFontSize * graphicsSettings.uiTextScale)),
+  );
   const fontStyle = { fontSize: `${scaledFontSize}px` };
 
   const [consoleOpen, setConsoleOpen] = useState<boolean>(defaultOpen);
@@ -157,57 +164,64 @@ export default function OnlineConsole({
     t = t.replace(
       new RegExp(
         `^\\[${oppLower}:PLAYER\\] draws \\[${oppLower}card:[^\\]]+\\] from (spellbook|atlas) to hand$`,
-        "i"
+        "i",
       ),
-      (_m, pile) => `[${oppLower}:PLAYER] just drew from ${pile}`
+      (_m, pile) => `[${oppLower}:PLAYER] just drew from ${pile}`,
     );
 
     // Legacy format (if any): "P2 draws 'CardName' from spellbook to hand"
     t = t.replace(
       new RegExp(
         `^(${opp} draws )'[^']+' from (spellbook|atlas) to hand$`,
-        "i"
+        "i",
       ),
-      (_m, _prefix, pile) => `${opp} just drew from ${pile}`
+      (_m, _prefix, pile) => `${opp} just drew from ${pile}`,
     );
 
     // Hide bulk draws from bottom (markup format)
     t = t.replace(
       new RegExp(
         `^\\[${oppLower}:PLAYER\\] draws (\\d+) from bottom of (Spellbook|Atlas)$`,
-        "i"
+        "i",
       ),
-      (_m, _n, pile) => `[${oppLower}:PLAYER] just drew from ${pile}`
+      (_m, _n, pile) => `[${oppLower}:PLAYER] just drew from ${pile}`,
     );
 
     // Hide bulk draws (markup format)
     t = t.replace(
       new RegExp(
         `^\\[${oppLower}:PLAYER\\] draws (\\d+) from (Spellbook|Atlas)$`,
-        "i"
+        "i",
       ),
-      (_m, _n, pile) => `[${oppLower}:PLAYER] just drew from ${pile}`
+      (_m, _n, pile) => `[${oppLower}:PLAYER] just drew from ${pile}`,
     );
 
     // Legacy format: bulk draws from bottom
     t = t.replace(
       new RegExp(`^${opp} draws (\\d+) from bottom of (spellbook|atlas)$`, "i"),
-      (_m, _n, pile) => `${opp} just drew from ${pile}`
+      (_m, _n, pile) => `${opp} just drew from ${pile}`,
     );
 
     // Legacy format: bulk draws
     t = t.replace(
       new RegExp(`^${opp} draws (\\d+) from (spellbook|atlas)$`, "i"),
-      (_m, _n, pile) => `${opp} just drew from ${pile}`
+      (_m, _n, pile) => `${opp} just drew from ${pile}`,
     );
 
     // Hide card names in "Cannot draw" errors for opponent
     t = t.replace(
       new RegExp(
         `^Cannot draw '.*?'( from .+: ${opp} is not the current player)$`,
-        "i"
+        "i",
       ),
-      "Cannot draw a card$1"
+      "Cannot draw a card$1",
+    );
+
+    // Hide opponent's peeked card names
+    // Format: "P2 peeked 'CardName' from Spellbook → drawn to hand"
+    t = t.replace(
+      new RegExp(`^${opp} peeked '[^']+' from (Spellbook|Atlas) → (.+)$`, "i"),
+      (_m, pile, action) => `${opp} peeked a card from ${pile} → ${action}`,
     );
 
     return t;
@@ -255,7 +269,7 @@ export default function OnlineConsole({
           className={isCard ? "font-fantaisie" : undefined}
         >
           {displayText}
-        </span>
+        </span>,
       );
       lastIndex = match.index + match[0].length;
     }
@@ -334,256 +348,306 @@ export default function OnlineConsole({
   })();
 
   const collapsed = !consoleOpen;
-  const containerWidth = collapsed ? "w-64" : "w-80";
-  const headerPadding = collapsed ? "px-2 py-1" : "px-3 py-2";
-  const tabBtnPadding = collapsed ? "px-2 py-0.5" : "px-2 py-1";
+  // Collapsed state is always compact icon-only
+  const containerWidth = collapsed ? "w-auto" : isMobile ? "w-72" : "w-80";
+  const headerPadding = collapsed ? "px-1.5 py-1" : "px-3 py-2";
+  const tabBtnPadding = "px-2 py-1";
 
   return (
     <div
       className={`absolute ${positionClasses} z-10 ${
         dragFromHand ? "pointer-events-none" : "pointer-events-auto"
-      } text-white ${containerWidth} transition-all`}
+      } text-white ${toastOnly ? "w-80" : containerWidth} transition-all`}
     >
-      <div className="bg-black/60 backdrop-blur rounded-xl ring-1 ring-white/10 shadow transition-all">
-        {/* Header with tabs */}
-        <div
-          className={`flex items-center justify-between ${headerPadding} text-sm border-b border-white/10 select-none`}
-          onContextMenu={(e) => e.preventDefault()}
-        >
-          <div className="flex items-center gap-2">
-            <button
-              className={`flex items-center gap-1 ${tabBtnPadding} rounded text-xs transition-colors ${
-                activeTab === "events"
-                  ? "bg-white/20 text-white"
-                  : "hover:bg-white/10 opacity-70"
-              }`}
-              onClick={() => {
-                setActiveTab("events");
-                if (!consoleOpen) {
-                  setConsoleOpen(true);
-                  lastOpenReasonRef.current = "manual";
-                  clearAutoCloseTimer();
-                }
-              }}
-              onContextMenu={(e) => e.preventDefault()}
-            >
-              <ScrollText className="w-3 h-3" />
-              Events
-              {events.length > 0 && (
-                <span className="bg-blue-500 text-white text-xs px-1 rounded-full">
-                  {events.length}
-                </span>
-              )}
-            </button>
-            {!hideChat && (
-              <button
-                className={`flex items-center gap-1 ${tabBtnPadding} rounded text-xs transition-colors ${
-                  activeTab === "chat"
-                    ? "bg-white/20 text-white"
-                    : "hover:bg-white/10 opacity-70"
-                }`}
-                onClick={() => {
-                  setActiveTab("chat");
-                  if (!consoleOpen) {
+      {/* Main console UI - hidden when toastOnly */}
+      {!toastOnly && (
+        <div className="bg-black/60 backdrop-blur rounded-xl ring-1 ring-white/10 shadow transition-all">
+          {/* Header with tabs - compact icon-only when collapsed */}
+          <div
+            className={`flex items-center justify-between ${headerPadding} text-sm ${!collapsed ? "border-b border-white/10" : ""} select-none`}
+            onContextMenu={(e) => e.preventDefault()}
+          >
+            {/* Collapsed: compact icon buttons with badges */}
+            {collapsed ? (
+              <div className="flex items-center gap-1">
+                <button
+                  className="rounded bg-white/10 hover:bg-white/20 p-1.5 transition-colors relative"
+                  onClick={() => {
+                    setActiveTab("events");
                     setConsoleOpen(true);
                     lastOpenReasonRef.current = "manual";
                     clearAutoCloseTimer();
-                  }
-                }}
-                onContextMenu={(e) => e.preventDefault()}
-              >
-                <MessageCircle className="w-3 h-3" />
-                Chat
-                {matchChat.length > 0 && (
-                  <span className="bg-green-500 text-white text-xs px-1 rounded-full">
-                    {matchChat.length}
-                  </span>
-                )}
-              </button>
-            )}
-          </div>
-
-          <div className="flex items-center gap-1">
-            {!hideLeaveButton && consoleOpen && (
-              <button
-                className="rounded bg-red-600/80 hover:bg-red-600 px-2 py-0.5 text-xs flex items-center gap-1 transition-colors"
-                onClick={handleLeaveMatch}
-                title="Leave match and return to lobby"
-                onContextMenu={(e) => e.preventDefault()}
-              >
-                <LogOut className="w-3 h-3" />
-                Leave
-              </button>
-            )}
-            <button
-              className="rounded bg-white/10 hover:bg-white/20 px-2 py-0.5 text-xs transition-colors"
-              onClick={() => {
-                setConsoleOpen((o) => {
-                  const next = !o;
-                  // Any explicit user toggle takes precedence over auto behavior
-                  lastOpenReasonRef.current = "manual";
-                  clearAutoCloseTimer();
-                  return next;
-                });
-              }}
-              onContextMenu={(e) => e.preventDefault()}
-            >
-              {consoleOpen ? (
-                <ChevronDown className="w-4 h-4" />
-              ) : (
-                <ChevronUp className="w-4 h-4" />
-              )}
-            </button>
-          </div>
-        </div>
-
-        {/* Content */}
-        {consoleOpen && (
-          <div className="h-64 flex flex-col">
-            {/* Events Tab */}
-            {activeTab === "events" && (
-              <div
-                ref={eventsRef}
-                data-allow-wheel="true"
-                className="flex-1 overflow-y-scroll thin-scrollbar px-3 py-3 space-y-1 min-h-0"
-                style={fontStyle}
-              >
-                {combinedEvents.length === 0 && (
-                  <div className="opacity-60">No events yet</div>
-                )}
-                {combinedEvents.slice(-100).map((item, index) => {
-                  if (item.type === "match") {
-                    // Render match/tournament event
-                    const matchEv = item.data;
-                    const formatted = formatMatchEvent(matchEv);
-                    return (
-                      <div
-                        key={`${item.id}-${index}`}
-                        className={`opacity-90 ${formatted.color || ""}`}
-                      >
-                        {formatted.icon} {formatted.text}
-                      </div>
-                    );
-                  } else {
-                    // Render game event
-                    const ev = item.data;
-                    const t = ev.text || "";
-                    const low = t.toLowerCase();
-                    // Detect warnings: messages starting with [warning], warning, cannot, or other error patterns
-                    const isWarn =
-                      low.startsWith("[warning]") ||
-                      low.startsWith("warning") ||
-                      low.startsWith("cannot") ||
-                      low.includes("cannot") ||
-                      low.startsWith("insufficient") ||
-                      low.startsWith("first site must") ||
-                      low.startsWith("new sites must") ||
-                      low.startsWith("sites cannot") ||
-                      low.startsWith("permanents can only") ||
-                      low.startsWith("avatar must");
-                    const isSearch = low.startsWith("search:");
-                    const turnPrefix = ev.turn ? `[T${ev.turn}] ` : "";
-                    // Color turn prefix by which player's turn it was
-                    const turnColor =
-                      ev.player === 1
-                        ? PLAYER_COLORS.p1
-                        : ev.player === 2
-                        ? PLAYER_COLORS.p2
-                        : undefined;
-                    return (
-                      <div
-                        key={`${item.id}-${index}`}
-                        className={`opacity-85 ${
-                          isWarn
-                            ? "text-yellow-400"
-                            : isSearch
-                            ? "text-blue-400"
-                            : ""
-                        }`}
-                      >
-                        {turnPrefix && (
-                          <span
-                            className="opacity-70"
-                            style={turnColor ? { color: turnColor } : undefined}
-                          >
-                            {turnPrefix}
-                          </span>
-                        )}
-                        • {renderColoredText(formatEventText(ev.text))}
-                      </div>
-                    );
-                  }
-                })}
-              </div>
-            )}
-
-            {/* Chat Tab */}
-            {activeTab === "chat" && !hideChat && (
-              <>
-                <div
-                  ref={chatRef}
-                  data-allow-wheel="true"
-                  className="flex-1 overflow-y-scroll thin-scrollbar px-3 py-3 space-y-1 min-h-0"
-                  style={fontStyle}
-                >
-                  {matchChat.length === 0 && (
-                    <div className="opacity-60">No messages</div>
-                  )}
-                  {matchChat.map((m, i) => (
-                    <div key={i} className="opacity-90">
-                      <span className="font-medium">
-                        {m.from?.displayName ?? "System"}
-                      </span>
-                      : {m.content}
-                    </div>
-                  ))}
-                </div>
-
-                {/* Chat input */}
-                <div
-                  className="px-3 pb-3 pt-2 border-t border-white/10 flex gap-2 select-none"
+                  }}
                   onContextMenu={(e) => e.preventDefault()}
+                  title="Events"
                 >
-                  <input
-                    className="flex-1 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1"
-                    style={fontStyle}
-                    placeholder="Type a message..."
-                    value={chatInput}
-                    onChange={(e) => setChatInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        handleSendChat();
-                      }
-                    }}
-                    disabled={!connected}
-                    onContextMenu={(e) => e.preventDefault()}
-                  />
+                  <ScrollText className="w-4 h-4" />
+                  {events.length > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-blue-500 text-white text-[9px] min-w-[14px] h-[14px] flex items-center justify-center rounded-full">
+                      {events.length > 99 ? "99+" : events.length}
+                    </span>
+                  )}
+                </button>
+                {!hideChat && (
                   <button
-                    className="rounded bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed px-3 py-1 transition-colors"
-                    style={fontStyle}
-                    onClick={handleSendChat}
-                    disabled={!connected || !chatInput.trim()}
+                    className="rounded bg-white/10 hover:bg-white/20 p-1.5 transition-colors relative"
+                    onClick={() => {
+                      setActiveTab("chat");
+                      setConsoleOpen(true);
+                      lastOpenReasonRef.current = "manual";
+                      clearAutoCloseTimer();
+                    }}
+                    onContextMenu={(e) => e.preventDefault()}
+                    title="Chat"
+                  >
+                    <MessageCircle className="w-4 h-4" />
+                    {matchChat.length > 0 && (
+                      <span className="absolute -top-1 -right-1 bg-green-500 text-white text-[9px] min-w-[14px] h-[14px] flex items-center justify-center rounded-full">
+                        {matchChat.length > 99 ? "99+" : matchChat.length}
+                      </span>
+                    )}
+                  </button>
+                )}
+                <button
+                  className="rounded bg-white/10 hover:bg-white/20 p-1 transition-colors"
+                  onClick={() => {
+                    setConsoleOpen(true);
+                    lastOpenReasonRef.current = "manual";
+                    clearAutoCloseTimer();
+                  }}
+                  onContextMenu={(e) => e.preventDefault()}
+                  title="Expand console"
+                >
+                  <ChevronUp className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              /* Expanded: full tab buttons */
+              <>
+                <div className="flex items-center gap-2">
+                  <button
+                    className={`flex items-center gap-1 ${tabBtnPadding} rounded text-xs transition-colors ${
+                      activeTab === "events"
+                        ? "bg-white/20 text-white"
+                        : "hover:bg-white/10 opacity-70"
+                    }`}
+                    onClick={() => {
+                      setActiveTab("events");
+                    }}
                     onContextMenu={(e) => e.preventDefault()}
                   >
-                    Send
+                    <ScrollText className="w-3 h-3" />
+                    Events
+                    {events.length > 0 && (
+                      <span className="bg-blue-500 text-white text-xs px-1 rounded-full">
+                        {events.length}
+                      </span>
+                    )}
+                  </button>
+                  {!hideChat && (
+                    <button
+                      className={`flex items-center gap-1 ${tabBtnPadding} rounded text-xs transition-colors ${
+                        activeTab === "chat"
+                          ? "bg-white/20 text-white"
+                          : "hover:bg-white/10 opacity-70"
+                      }`}
+                      onClick={() => {
+                        setActiveTab("chat");
+                      }}
+                      onContextMenu={(e) => e.preventDefault()}
+                    >
+                      <MessageCircle className="w-3 h-3" />
+                      Chat
+                      {matchChat.length > 0 && (
+                        <span className="bg-green-500 text-white text-xs px-1 rounded-full">
+                          {matchChat.length}
+                        </span>
+                      )}
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-1">
+                  {!hideLeaveButton && (
+                    <button
+                      className="rounded bg-red-600/80 hover:bg-red-600 px-2 py-0.5 text-xs flex items-center gap-1 transition-colors"
+                      onClick={handleLeaveMatch}
+                      title="Leave match and return to lobby"
+                      onContextMenu={(e) => e.preventDefault()}
+                    >
+                      <LogOut className="w-3 h-3" />
+                      Leave
+                    </button>
+                  )}
+                  <button
+                    className="rounded bg-white/10 hover:bg-white/20 px-2 py-0.5 text-xs transition-colors"
+                    onClick={() => {
+                      setConsoleOpen(false);
+                      lastOpenReasonRef.current = "manual";
+                      clearAutoCloseTimer();
+                    }}
+                    onContextMenu={(e) => e.preventDefault()}
+                    title="Collapse console"
+                  >
+                    <ChevronDown className="w-4 h-4" />
                   </button>
                 </div>
               </>
             )}
           </div>
-        )}
-      </div>
 
-      {/* Toast notification for chat messages when console is collapsed or chat not active */}
-      {showToast && (!consoleOpen || activeTab !== "chat") && (
+          {/* Content */}
+          {consoleOpen && (
+            <div className="h-64 flex flex-col">
+              {/* Events Tab */}
+              {activeTab === "events" && (
+                <div
+                  ref={eventsRef}
+                  data-allow-wheel="true"
+                  className="flex-1 overflow-y-scroll thin-scrollbar px-3 py-3 space-y-1 min-h-0"
+                  style={fontStyle}
+                >
+                  {combinedEvents.length === 0 && (
+                    <div className="opacity-60">No events yet</div>
+                  )}
+                  {combinedEvents.slice(-100).map((item, index) => {
+                    if (item.type === "match") {
+                      // Render match/tournament event
+                      const matchEv = item.data;
+                      const formatted = formatMatchEvent(matchEv);
+                      return (
+                        <div
+                          key={`${item.id}-${index}`}
+                          className={`opacity-90 ${formatted.color || ""}`}
+                        >
+                          {formatted.icon} {formatted.text}
+                        </div>
+                      );
+                    } else {
+                      // Render game event
+                      const ev = item.data;
+                      const t = ev.text || "";
+                      const low = t.toLowerCase();
+                      // Detect warnings: messages starting with [warning], warning, cannot, or other error patterns
+                      const isWarn =
+                        low.startsWith("[warning]") ||
+                        low.startsWith("warning") ||
+                        low.startsWith("cannot") ||
+                        low.includes("cannot") ||
+                        low.startsWith("insufficient") ||
+                        low.startsWith("first site must") ||
+                        low.startsWith("new sites must") ||
+                        low.startsWith("sites cannot") ||
+                        low.startsWith("permanents can only") ||
+                        low.startsWith("avatar must");
+                      const isSearch = low.startsWith("search:");
+                      const turnPrefix = ev.turn ? `[T${ev.turn}] ` : "";
+                      // Color turn prefix by which player's turn it was
+                      const turnColor =
+                        ev.player === 1
+                          ? PLAYER_COLORS.p1
+                          : ev.player === 2
+                            ? PLAYER_COLORS.p2
+                            : undefined;
+                      return (
+                        <div
+                          key={`${item.id}-${index}`}
+                          className={`opacity-85 ${
+                            isWarn
+                              ? "text-yellow-400"
+                              : isSearch
+                                ? "text-blue-400"
+                                : ""
+                          }`}
+                        >
+                          {turnPrefix && (
+                            <span
+                              className="opacity-70"
+                              style={
+                                turnColor ? { color: turnColor } : undefined
+                              }
+                            >
+                              {turnPrefix}
+                            </span>
+                          )}
+                          • {renderColoredText(formatEventText(ev.text))}
+                        </div>
+                      );
+                    }
+                  })}
+                </div>
+              )}
+
+              {/* Chat Tab */}
+              {activeTab === "chat" && !hideChat && (
+                <>
+                  <div
+                    ref={chatRef}
+                    data-allow-wheel="true"
+                    className="flex-1 overflow-y-scroll thin-scrollbar px-3 py-3 space-y-1 min-h-0"
+                    style={fontStyle}
+                  >
+                    {matchChat.length === 0 && (
+                      <div className="opacity-60">No messages</div>
+                    )}
+                    {matchChat.map((m, i) => (
+                      <div key={i} className="opacity-90">
+                        <span className="font-medium">
+                          {m.from?.displayName ?? "System"}
+                        </span>
+                        : {m.content}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Chat input */}
+                  <div
+                    className="px-3 pb-3 pt-2 border-t border-white/10 flex gap-2 select-none"
+                    onContextMenu={(e) => e.preventDefault()}
+                  >
+                    <input
+                      className="flex-1 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1"
+                      style={fontStyle}
+                      placeholder="Type a message..."
+                      value={chatInput}
+                      onChange={(e) => setChatInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          handleSendChat();
+                        }
+                      }}
+                      disabled={!connected}
+                      onContextMenu={(e) => e.preventDefault()}
+                    />
+                    <button
+                      className="rounded bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed px-3 py-1 transition-colors"
+                      style={fontStyle}
+                      onClick={handleSendChat}
+                      disabled={!connected || !chatInput.trim()}
+                      onContextMenu={(e) => e.preventDefault()}
+                    >
+                      Send
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Toast notification for chat messages - always shown (even in toastOnly mode) */}
+      {showToast && (toastOnly || !consoleOpen || activeTab !== "chat") && (
         <div
-          className="absolute top-[-70px] left-0 right-0 bg-black/70 rounded-lg px-4 py-3 text-sm text-white shadow-xl cursor-pointer transform transition-all duration-300 ease-out z-20"
+          className={`absolute ${toastOnly ? "top-0" : "top-[-70px]"} left-0 right-0 bg-black/70 rounded-lg px-4 py-3 text-sm text-white shadow-xl cursor-pointer transform transition-all duration-300 ease-out z-20`}
           style={{
             animation: "slideInUp 0.4s ease-out",
           }}
           onClick={() => {
-            setConsoleOpen(true);
-            setActiveTab("chat");
+            if (!toastOnly) {
+              setConsoleOpen(true);
+              setActiveTab("chat");
+            }
             setShowToast(false);
             lastOpenReasonRef.current = "manual";
             clearAutoCloseTimer();

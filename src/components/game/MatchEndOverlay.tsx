@@ -85,30 +85,30 @@ export default function MatchEndOverlay({
   const titleText = isDraw
     ? "Draw!"
     : isEarlyForfeit
-    ? "Match Ended Early"
-    : isForfeitOrDisconnect
-    ? isSpectator
-      ? winnerName
-        ? isRatedForfeit
-          ? `${winnerName} wins by forfeit`
-          : `${winnerName} left early`
-        : isRatedForfeit
-        ? "Match ended by forfeit"
-        : "Match ended early"
-      : didIWin
-      ? isRatedForfeit
-        ? "Opponent forfeited"
-        : "Opponent left"
-      : isRatedForfeit
-      ? "You forfeited the match"
-      : "You left early"
-    : isSpectator
-    ? winnerName
-      ? `${winnerName} wins!`
-      : "Match Over"
-    : didIWin
-    ? "Victory!"
-    : `${winnerName ?? "Opponent"} wins`;
+      ? "Match Ended Early"
+      : isForfeitOrDisconnect
+        ? isSpectator
+          ? winnerName
+            ? isRatedForfeit
+              ? `${winnerName} wins by forfeit`
+              : `${winnerName} left early`
+            : isRatedForfeit
+              ? "Match ended by forfeit"
+              : "Match ended early"
+          : didIWin
+            ? isRatedForfeit
+              ? "Opponent forfeited"
+              : "Opponent left"
+            : isRatedForfeit
+              ? "You forfeited the match"
+              : "You left early"
+        : isSpectator
+          ? winnerName
+            ? `${winnerName} wins!`
+            : "Match Over"
+          : didIWin
+            ? "Victory!"
+            : `${winnerName ?? "Opponent"} wins`;
 
   const content = (
     <div
@@ -116,31 +116,33 @@ export default function MatchEndOverlay({
       onClick={canContinue ? onClose : undefined}
     >
       <div
-        className="bg-zinc-900/95 text-white rounded-3xl ring-1 ring-white/20 shadow-2xl p-8 text-center max-w-md w-full mx-4"
+        className="bg-zinc-900/95 text-white rounded-2xl sm:rounded-3xl ring-1 ring-white/20 shadow-2xl p-4 sm:p-8 text-center max-w-md w-full mx-2 sm:mx-4 max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Icon */}
-        <div className="mb-6 flex justify-center">
+        <div className="mb-3 sm:mb-6 flex justify-center">
           {isDraw || isEarlyForfeit ? (
-            <Users className="w-16 h-16 text-yellow-400" />
+            <Users className="w-12 h-12 sm:w-16 sm:h-16 text-yellow-400" />
           ) : isSpectator ? (
-            <Trophy className="w-16 h-16 text-yellow-400" />
+            <Trophy className="w-12 h-12 sm:w-16 sm:h-16 text-yellow-400" />
           ) : didIWin ? (
             isRatedForfeit || (!isForfeit && !isAbandonment) ? (
-              <Trophy className="w-16 h-16 text-yellow-400" />
+              <Trophy className="w-12 h-12 sm:w-16 sm:h-16 text-yellow-400" />
             ) : (
-              <Users className="w-16 h-16 text-yellow-400" />
+              <Users className="w-12 h-12 sm:w-16 sm:h-16 text-yellow-400" />
             )
           ) : (
-            <Skull className="w-16 h-16 text-red-400" />
+            <Skull className="w-12 h-12 sm:w-16 sm:h-16 text-red-400" />
           )}
         </div>
 
         {/* Title */}
-        <h1 className="text-3xl font-bold mb-4">{titleText}</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold mb-2 sm:mb-4">
+          {titleText}
+        </h1>
 
         {/* Result Description */}
-        <div className="text-lg opacity-90 mb-6">
+        <div className="text-base sm:text-lg opacity-90 mb-4 sm:mb-6">
           {isDraw ? (
             <p>Both players died simultaneously.</p>
           ) : isEarlyForfeit ? (
@@ -236,8 +238,8 @@ export default function MatchEndOverlay({
                   winner === "p1"
                     ? "text-green-400"
                     : winner === null
-                    ? "text-yellow-400"
-                    : "text-red-400"
+                      ? "text-yellow-400"
+                      : "text-red-400"
                 }`}
               >
                 <span>
@@ -248,8 +250,8 @@ export default function MatchEndOverlay({
                   {winner === null
                     ? "Draw"
                     : winner === "p1"
-                    ? "Winner"
-                    : "Loser"}
+                      ? "Winner"
+                      : "Loser"}
                 </span>
               </div>
               <div
@@ -257,8 +259,8 @@ export default function MatchEndOverlay({
                   winner === "p2"
                     ? "text-green-400"
                     : winner === null
-                    ? "text-yellow-400"
-                    : "text-red-400"
+                      ? "text-yellow-400"
+                      : "text-red-400"
                 }`}
               >
                 <span>
@@ -269,8 +271,8 @@ export default function MatchEndOverlay({
                   {winner === null
                     ? "Draw"
                     : winner === "p2"
-                    ? "Winner"
-                    : "Loser"}
+                      ? "Winner"
+                      : "Loser"}
                 </span>
               </div>
             </div>
@@ -289,11 +291,11 @@ export default function MatchEndOverlay({
         )}
 
         {/* Action Buttons */}
-        <div className="space-y-3">
+        <div className="space-y-2 sm:space-y-3">
           {canContinue && (
             <button
               onClick={onClose}
-              className="w-full bg-zinc-700 hover:bg-zinc-600 text-white rounded-xl px-6 py-3 font-medium transition-colors"
+              className="w-full bg-zinc-700 hover:bg-zinc-600 active:bg-zinc-500 text-white rounded-lg sm:rounded-xl px-4 sm:px-6 py-2.5 sm:py-3 text-sm sm:text-base font-medium transition-colors"
             >
               Continue Examining Board
             </button>
@@ -302,14 +304,14 @@ export default function MatchEndOverlay({
           {onLeave && (
             <button
               onClick={handleLeaveMatch}
-              className="w-full bg-red-700 hover:bg-red-600 text-white rounded-xl px-6 py-3 font-medium transition-colors"
+              className="w-full bg-red-700 hover:bg-red-600 active:bg-red-500 text-white rounded-lg sm:rounded-xl px-4 sm:px-6 py-2.5 sm:py-3 text-sm sm:text-base font-medium transition-colors"
             >
-              {leaveLabel || "Leave Match & Return to Lobby"}
+              {leaveLabel || "Leave Match"}
             </button>
           )}
         </div>
 
-        <div className="mt-4 text-xs opacity-60">
+        <div className="mt-3 sm:mt-4 text-[10px] sm:text-xs opacity-60">
           {canContinue
             ? "The match has ended. Players can still examine the board."
             : "The match has ended. Please return to continue your event."}

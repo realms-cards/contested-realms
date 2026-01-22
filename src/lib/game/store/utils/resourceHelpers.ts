@@ -393,17 +393,19 @@ export const backRowSiteProvidesMana = (
 };
 
 // Count unique minions in a zone by rarity
+// Trophy Room only counts Unique MINIONS, not Unique spells or other card types
 const countUniqueMinionsInZone = (zone: CardRef[]): number => {
   let count = 0;
   for (const card of zone) {
-    // Check if this is a Unique minion
+    // Must be a minion (not spell, site, artifact, etc.)
     const type = String(card.type || "").toLowerCase();
     if (!type.includes("minion")) continue;
 
-    // Note: We'd need rarity info from card meta to check Unique rarity
-    // For now, use a heuristic based on naming conventions
-    // In practice, this should be enhanced with metaByCardId lookup
-    count += 1; // Simplified - count all minions, real impl needs rarity check
+    // Must have Unique rarity
+    const rarity = String(card.rarity || "").toLowerCase();
+    if (rarity !== "unique") continue;
+
+    count += 1;
   }
   return count;
 };

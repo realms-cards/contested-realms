@@ -120,8 +120,8 @@ export const createBrowseSlice: StateCreator<GameState, [], [], BrowseSlice> = (
       } catch {}
     }
 
-    const selectedCard = pending.revealedCards[cardIndex];
-    get().log(`Selected ${selectedCard?.name || "card"} to put in hand`);
+    // Don't log the specific card name - deck searches are private
+    get().log(`Selected a card to put in hand`);
   },
 
   setBrowseBottomOrder: (order) => {

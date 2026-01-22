@@ -1,7 +1,7 @@
 "use client";
 
 import { Skull, AlertTriangle, Users } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useGraphicsSettings } from "@/hooks/useGraphicsSettings";
 import { useGameStore } from "@/lib/game/store";
@@ -110,8 +110,8 @@ function LifeCounter({
           {spectatorMode && isMe
             ? " (Watching)"
             : showYou && isMe
-            ? " (You)"
-            : ""}
+              ? " (You)"
+              : ""}
         </div>
       )}
 
@@ -123,8 +123,8 @@ function LifeCounter({
             lifeState === "dd"
               ? "ring-orange-400/50 bg-orange-900/20"
               : lifeState === "dead"
-              ? "ring-red-400/50 bg-red-900/20"
-              : "ring-white/10"
+                ? "ring-red-400/50 bg-red-900/20"
+                : "ring-white/10"
           }`}
           onContextMenu={(e) => e.preventDefault()}
         >
@@ -250,7 +250,7 @@ function LifeCounter({
               </div>
             </div>
           </div>,
-          document.body
+          document.body,
         )}
     </div>
   );
@@ -266,6 +266,18 @@ export default function OnlineLifeCounters({
   showYouLabels = false,
   readOnly = false,
 }: OnlineLifeCountersProps) {
+  // Detect iPhone for notch compensation
+  const [isIPhone, setIsIPhone] = useState(false);
+  useEffect(() => {
+    if (typeof navigator !== "undefined") {
+      // Detect iPhone (not iPad) for notch compensation
+      // MSStream check excludes IE11 which had iPhone in UA
+      const win = window as Window & { MSStream?: unknown };
+      const isIOSPhone = /iPhone/.test(navigator.userAgent) && !win.MSStream;
+      setIsIPhone(isIOSPhone);
+    }
+  }, []);
+
   // In online multiplayer, both players can modify life totals
   const matchEnded = useGameStore((s) => s.matchEnded);
   const isHotseatMode = !myPlayerId && !opponentPlayerId && !matchId;
@@ -273,10 +285,10 @@ export default function OnlineLifeCounters({
   const p1LifeState = useGameStore((s) => s.players?.p1?.lifeState ?? "alive");
   const p2LifeState = useGameStore((s) => s.players?.p2?.lifeState ?? "alive");
   const myLife = useGameStore((s) =>
-    myPlayerKey ? s.players?.[myPlayerKey]?.life ?? 0 : 0
+    myPlayerKey ? (s.players?.[myPlayerKey]?.life ?? 0) : 0,
   );
   const myLifeState = useGameStore((s) =>
-    myPlayerKey ? s.players?.[myPlayerKey]?.lifeState ?? "alive" : "alive"
+    myPlayerKey ? (s.players?.[myPlayerKey]?.lifeState ?? "alive") : "alive",
   );
   const addLife = useGameStore((s) => s.addLife);
   const tieGame = useGameStore((s) => s.tieGame);
@@ -307,7 +319,7 @@ export default function OnlineLifeCounters({
         }
       },
     },
-    canModifyLife && gamepadLifeEnabled
+    canModifyLife && gamepadLifeEnabled,
   );
 
   const isOnline = !!myPlayerId && !!opponentPlayerId && !!matchId;
@@ -334,9 +346,14 @@ export default function OnlineLifeCounters({
     }
   };
 
+  // iPhone notch compensation: use safe-area-inset-left plus extra padding
+  const leftPosition = isIPhone
+    ? "left-[max(0.75rem,calc(env(safe-area-inset-left)+0.5rem))]"
+    : "left-3";
+
   return (
     <div
-      className={`absolute left-3 top-1/2 -translate-y-1/2 z-10 flex flex-col gap-4 ${
+      className={`absolute ${leftPosition} top-1/2 -translate-y-1/2 z-10 flex flex-col gap-4 ${
         dragFromHand ? "pointer-events-none" : "pointer-events-auto"
       } text-white select-none`}
       onContextMenu={(e) => e.preventDefault()}
@@ -383,7 +400,7 @@ export default function OnlineLifeCounters({
           className="mt-1 px-3 py-1 rounded bg-amber-600/90 hover:bg-amber-500 text-white text-sm flex items-center gap-1.5 self-start"
           onClick={() => {
             const ok = window.confirm(
-              "Declare a tie? This ends the match as a draw."
+              "Declare a tie? This ends the match as a draw.",
             );
             if (ok) requestTie();
           }}

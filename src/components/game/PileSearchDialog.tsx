@@ -8,6 +8,7 @@ import {
   useCardHover,
   type CardPreviewData,
 } from "@/lib/game/hooks/useCardHover";
+import { useMobileDevice } from "@/lib/hooks/useTouchDevice";
 import type { CardRef } from "@/lib/game/store";
 
 interface PileSearchDialogProps {
@@ -35,10 +36,11 @@ export default function PileSearchDialog({
   const dialogRef = useRef<HTMLDivElement>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const { playCardSelect } = useSound();
+  const { isMobile } = useMobileDevice();
 
   // Enhanced card preview state using the draft-3d/editor-3d pattern
   const [hoverPreview, setHoverPreview] = useState<CardPreviewData | null>(
-    null
+    null,
   );
   const { showCardPreview, hideCardPreview, clearHoverTimers } = useCardHover({
     onShow: (card: CardPreviewData) => {
@@ -89,7 +91,7 @@ export default function PileSearchDialog({
     >
       <div
         ref={dialogRef}
-        className="bg-zinc-900/95 backdrop-blur rounded-xl ring-1 ring-white/10 shadow-2xl p-6 w-96 max-h-[80vh] text-white flex flex-col"
+        className="bg-zinc-900/95 backdrop-blur rounded-xl ring-1 ring-white/10 shadow-2xl p-3 sm:p-6 w-[95vw] sm:w-96 max-h-[85vh] text-white flex flex-col"
         onContextMenu={(e) => e.preventDefault()}
       >
         <div className="flex items-center justify-between mb-4">
@@ -137,7 +139,8 @@ export default function PileSearchDialog({
             onChange={(e) => setSearchTerm(e.target.value)}
             onFocus={(e) => e.currentTarget.removeAttribute("readonly")}
             onMouseDown={(e) => e.currentTarget.removeAttribute("readonly")}
-            readOnly
+            onTouchStart={(e) => e.currentTarget.removeAttribute("readonly")}
+            readOnly={!isMobile}
             className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
             autoFocus
           />

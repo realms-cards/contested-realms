@@ -1,8 +1,11 @@
 "use client";
 
 import {
+  Eye,
+  EyeOff,
   Grid3X3,
   Mouse,
+  Search,
   Settings,
   Smartphone,
   Star,
@@ -48,6 +51,10 @@ export default function OnlineStatusBar({
   const showPlaymatOverlay = useGameStore((s) => s.showPlaymatOverlay);
   const togglePlaymatOverlay = useGameStore((s) => s.togglePlaymatOverlay);
   const togglePlaymat = useGameStore((s) => s.togglePlaymat);
+  const cardPreviewsEnabled = useGameStore((s) => s.cardPreviewsEnabled);
+  const toggleCardPreviews = useGameStore((s) => s.toggleCardPreviews);
+  const uiHidden = useGameStore((s) => s.uiHidden);
+  const toggleUiHidden = useGameStore((s) => s.toggleUiHidden);
   const { enabled: colorBlindEnabled } = useColorBlind();
   const { isNativeTouch, effectiveMode, toggleOverride } = useTouchOverride();
 
@@ -78,6 +85,36 @@ export default function OnlineStatusBar({
       onContextMenu={(e) => e.preventDefault()}
     >
       <div className="flex items-center gap-3 rounded-full bg-black/60 backdrop-blur px-4 py-1.5 text-sm text-white shadow-lg ring-1 ring-white/10">
+        {/* UI visibility toggle (keyboard: U) */}
+        <button
+          className={`rounded-full p-1.5 transition-colors ${
+            uiHidden
+              ? "bg-amber-600/80 hover:bg-amber-500"
+              : "bg-white/10 hover:bg-white/20"
+          }`}
+          onClick={toggleUiHidden}
+          title={`UI ${uiHidden ? "Hidden" : "Visible"} (U)`}
+        >
+          {uiHidden ? (
+            <EyeOff className="w-4 h-4" />
+          ) : (
+            <Eye className="w-4 h-4" />
+          )}
+        </button>
+
+        {/* Card Previews toggle (keyboard: P) */}
+        <button
+          className={`rounded-full p-1.5 transition-colors ${
+            cardPreviewsEnabled
+              ? "bg-cyan-600/80 hover:bg-cyan-500"
+              : "bg-white/10 hover:bg-white/20"
+          }`}
+          onClick={toggleCardPreviews}
+          title={`Card Previews ${cardPreviewsEnabled ? "On" : "Off"} (P)`}
+        >
+          <Search className="w-4 h-4" />
+        </button>
+
         {/* Playmat/Grid toggle - toggles between playmat (no grid) and grid (no playmat) */}
         <button
           className={`rounded-full p-1.5 transition-colors ${
@@ -104,8 +141,8 @@ export default function OnlineStatusBar({
                     ? "bg-sky-600"
                     : "bg-blue-600"
                   : colorBlindEnabled
-                  ? "bg-amber-600"
-                  : "bg-red-600"
+                    ? "bg-amber-600"
+                    : "bg-red-600"
               }`}
             >
               {myPlayerKey === "p1" ? "P1" : "P2"}: {playerNames[myPlayerKey]}

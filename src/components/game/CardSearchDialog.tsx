@@ -9,6 +9,7 @@ import {
   useCardHover,
   type CardPreviewData,
 } from "@/lib/game/hooks/useCardHover";
+import { useMobileDevice } from "@/lib/hooks/useTouchDevice";
 
 type SearchResultCard = {
   cardId: number;
@@ -41,11 +42,12 @@ export default function CardSearchDialog({
   const [loading, setLoading] = useState(false);
   const [typeFilter, setTypeFilter] = useState<string>("");
   const { playCardSelect } = useSound();
+  const { isMobile } = useMobileDevice();
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Enhanced card preview state
   const [hoverPreview, setHoverPreview] = useState<CardPreviewData | null>(
-    null
+    null,
   );
   const { showCardPreview, hideCardPreview, clearHoverTimers } = useCardHover({
     onShow: (card: CardPreviewData) => {
@@ -186,7 +188,8 @@ export default function CardSearchDialog({
               onChange={(e) => setSearchTerm(e.target.value)}
               onFocus={(e) => e.currentTarget.removeAttribute("readonly")}
               onMouseDown={(e) => e.currentTarget.removeAttribute("readonly")}
-              readOnly
+              onTouchStart={(e) => e.currentTarget.removeAttribute("readonly")}
+              readOnly={!isMobile}
               className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
               autoFocus
             />

@@ -55,16 +55,16 @@ export default function UserBadge({
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [profileName, setProfileName] = useState("");
   const [profileEmail, setProfileEmail] = useState(
-    () => (user?.email as string | undefined) ?? ""
+    () => (user?.email as string | undefined) ?? "",
   );
   const [serverEmail, setServerEmail] = useState(
-    () => (user?.email as string | undefined) ?? ""
+    () => (user?.email as string | undefined) ?? "",
   );
   const [emailVerified, setEmailVerified] = useState<boolean>(() =>
-    Boolean(userEmailVerifiedRaw)
+    Boolean(userEmailVerifiedRaw),
   );
   const [avatarDataUrl, setAvatarDataUrl] = useState<string | null | undefined>(
-    undefined
+    undefined,
   );
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileSuccess, setProfileSuccess] = useState<string | null>(null);
@@ -142,7 +142,7 @@ export default function UserBadge({
       await signOut({ callbackUrl: "/" });
     } catch (error) {
       setDeleteError(
-        error instanceof Error ? error.message : "Failed to delete account"
+        error instanceof Error ? error.message : "Failed to delete account",
       );
       setDeleteInProgress(false);
     }
@@ -306,7 +306,7 @@ export default function UserBadge({
         setVerificationSending(false);
       }
     },
-    []
+    [],
   );
 
   // When opening the menu (or on mount if already open), query current tournaments to detect membership
@@ -334,8 +334,8 @@ export default function UserBadge({
             ? list.find(
                 (t) =>
                   (t.registeredPlayers || []).some(
-                    (p) => p.id === session.user.id
-                  ) && t.status !== "completed"
+                    (p) => p.id === session.user.id,
+                  ) && t.status !== "completed",
               )
             : null;
         if (!cancelled)
@@ -378,10 +378,10 @@ export default function UserBadge({
   const shouldShowPresence = showPresence && !!onlineCtx;
 
   const previewAvatar =
-    avatarDataUrl === undefined ? user?.image ?? null : avatarDataUrl;
+    avatarDataUrl === undefined ? (user?.image ?? null) : avatarDataUrl;
 
   const handleAvatarFileChange: React.ChangeEventHandler<HTMLInputElement> = (
-    event
+    event,
   ) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -501,7 +501,7 @@ export default function UserBadge({
           } else {
             successMessage = "Profile updated.";
             setProfileError(
-              "Profile updated, but we couldn't send a verification email. Try again below."
+              "Profile updated, but we couldn't send a verification email. Try again below.",
             );
           }
         } else {
@@ -513,7 +513,7 @@ export default function UserBadge({
       setProfileSuccess(successMessage);
     } catch (error) {
       setProfileError(
-        error instanceof Error ? error.message : "Update failed."
+        error instanceof Error ? error.message : "Update failed.",
       );
     } finally {
       setProfileSaving(false);
@@ -540,7 +540,7 @@ export default function UserBadge({
       if (profileEmail !== trimmed) setProfileEmail(trimmed);
     } else {
       setProfileError(
-        "We couldn't send the verification email. Try again shortly."
+        "We couldn't send the verification email. Try again shortly.",
       );
     }
   };
@@ -551,15 +551,15 @@ export default function UserBadge({
       ? "bg-sky-500/15 text-sky-300 ring-sky-500/30"
       : "bg-emerald-500/15 text-emerald-300 ring-emerald-500/30"
     : colorBlindEnabled
-    ? "bg-amber-500/15 text-amber-300 ring-amber-500/30"
-    : "bg-rose-500/15 text-rose-300 ring-rose-500/30";
+      ? "bg-amber-500/15 text-amber-300 ring-amber-500/30"
+      : "bg-rose-500/15 text-rose-300 ring-rose-500/30";
   const presenceDotClass = connected
     ? colorBlindEnabled
       ? "bg-sky-400"
       : "bg-emerald-400"
     : colorBlindEnabled
-    ? "bg-amber-400"
-    : "bg-rose-400";
+      ? "bg-amber-400"
+      : "bg-rose-400";
   const normalizedEmailInput = profileEmail.trim().toLowerCase();
   const normalizedServerEmail = serverEmail.trim().toLowerCase();
   const emailDirty = normalizedEmailInput !== normalizedServerEmail;
@@ -663,9 +663,9 @@ export default function UserBadge({
                       voice.rtc.state === "connected"
                         ? "text-emerald-300"
                         : voice.rtc.state === "joining" ||
-                          voice.rtc.state === "negotiating"
-                        ? "text-amber-300"
-                        : "text-slate-400"
+                            voice.rtc.state === "negotiating"
+                          ? "text-amber-300"
+                          : "text-slate-400"
                     }`}
                   >
                     {voice.rtc.state}
@@ -693,7 +693,7 @@ export default function UserBadge({
                         [];
                       const myId = onlineCtx?.me?.id;
                       const opponent = currentPlayers.find(
-                        (p) => p.id !== myId
+                        (p) => p.id !== myId,
                       );
                       return opponent?.id ?? null;
                     })()}
@@ -708,7 +708,7 @@ export default function UserBadge({
                       {voice.connectedPeers
                         .map(
                           (peer) =>
-                            peer.displayName || `Player ${peer.id.slice(-4)}`
+                            peer.displayName || `Player ${peer.id.slice(-4)}`,
                         )
                         .join(", ")}
                     </span>
@@ -837,8 +837,8 @@ export default function UserBadge({
                     ? emailDirty
                       ? "Save to apply your email changes."
                       : emailVerified
-                      ? "Email verified."
-                      : "Email pending verification."
+                        ? "Email verified."
+                        : "Email pending verification."
                     : "Add an email to enable magic link sign-in."}
                 </span>
                 {canSendVerification && (
@@ -1048,7 +1048,7 @@ export default function UserBadge({
                   <input
                     type="range"
                     min="50"
-                    max="150"
+                    max="250"
                     step="10"
                     value={graphicsSettings.cardPreviewScale * 100}
                     onChange={(e) =>

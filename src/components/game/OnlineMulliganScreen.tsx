@@ -66,8 +66,8 @@ export default function OnlineMulliganScreen({
       prev.includes(index)
         ? prev.filter((i) => i !== index)
         : prev.length >= 3
-        ? prev // Maximum 3 cards can be mulliganed
-        : [...prev, index]
+          ? prev // Maximum 3 cards can be mulliganed
+          : [...prev, index],
     );
   };
 
@@ -160,7 +160,7 @@ export default function OnlineMulliganScreen({
       if (seerRevealed || seerCompleted) return;
       setSeerPile(pile);
     },
-    [seerRevealed, seerCompleted, setSeerPile]
+    [seerRevealed, seerCompleted, setSeerPile],
   );
 
   const handleSeerReveal = useCallback(() => {
@@ -193,7 +193,7 @@ export default function OnlineMulliganScreen({
       submitted,
       finalizeMulligan,
       onStartGame,
-    ]
+    ],
   );
 
   // Determine if we should show seer UI (after mulligan done, before finalize)
@@ -226,10 +226,12 @@ export default function OnlineMulliganScreen({
   ]);
 
   return (
-    <div className="w-full max-w-[95vw] sm:max-w-4xl bg-zinc-900/80 text-white rounded-xl sm:rounded-2xl ring-1 ring-white/10 p-2 sm:p-6">
+    <div className="w-full max-w-[98vw] sm:max-w-4xl bg-zinc-900/80 text-white rounded-lg sm:rounded-2xl ring-1 ring-white/10 p-2 sm:p-6 max-h-[90vh] overflow-y-auto">
       <div className="mb-2 sm:mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3">
         <div className="text-center sm:text-left">
-          <div className="text-base sm:text-lg font-semibold mb-0.5 sm:mb-1">Mulligan Phase</div>
+          <div className="text-base sm:text-lg font-semibold mb-0.5 sm:mb-1">
+            Mulligan Phase
+          </div>
           <div className="text-xs sm:text-sm opacity-80">
             Playing as:{" "}
             <span className="font-medium text-blue-400">
@@ -316,13 +318,13 @@ export default function OnlineMulliganScreen({
             {!done && myMulligans > 0
               ? "Tap cards to select (max 3)"
               : myMulligans === 0
-              ? "Mulligan used. Ready to start game."
-              : "Mulligan complete."}
+                ? "Mulligan used. Ready to start game."
+                : "Mulligan complete."}
           </div>
         )}
 
         {myHand.length > 0 ? (
-          <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto overflow-y-visible pb-2 pt-2 sm:pt-16 min-h-[120px] sm:min-h-[200px]">
+          <div className="flex flex-wrap justify-center gap-1 sm:gap-2 pb-2 pt-1 sm:pt-4 min-h-[100px] sm:min-h-[200px]">
             {myHand.map((card, i) => {
               const isSite = (card.type || "").toLowerCase().includes("site");
               const isSelected = selected.includes(i);
@@ -334,11 +336,11 @@ export default function OnlineMulliganScreen({
                   key={i}
                   className={`relative flex-shrink-0 transition-all duration-200 ${
                     !done && myMulligans > 0 && !showSeerUI
-                      ? "hover:scale-105 hover:-translate-y-4"
+                      ? "hover:scale-105 sm:hover:-translate-y-4 active:scale-95"
                       : ""
                   } ${
                     isSelected && !showSeerUI
-                      ? "ring-2 ring-red-400 -translate-y-1 sm:-translate-y-2"
+                      ? "ring-2 ring-red-400 scale-95 sm:-translate-y-2"
                       : ""
                   } ${
                     done || myMulligans === 0 || showSeerUI
@@ -352,9 +354,9 @@ export default function OnlineMulliganScreen({
                   <div
                     className={`relative ${
                       isSite
-                        ? "aspect-[4/3] w-20 sm:w-36"
-                        : "aspect-[3/4] w-16 sm:w-24"
-                    } rounded-lg overflow-hidden ring-1 ring-white/20 shadow-lg ${
+                        ? "aspect-[4/3] w-[72px] sm:w-36"
+                        : "aspect-[3/4] w-[54px] sm:w-24"
+                    } rounded-md sm:rounded-lg overflow-hidden ring-1 ring-white/20 shadow-lg ${
                       isSelected && !showSeerUI ? "opacity-70" : ""
                     } ${done || myMulligans === 0 ? "opacity-60" : ""}`}
                   >
@@ -362,14 +364,18 @@ export default function OnlineMulliganScreen({
                       src={`/api/images/${cardSlug}`}
                       alt={card.name}
                       fill
-                      sizes={isSite ? "(max-width: 640px) 80px, 144px" : "(max-width: 640px) 64px, 96px"}
+                      sizes={
+                        isSite
+                          ? "(max-width: 640px) 72px, 144px"
+                          : "(max-width: 640px) 54px, 96px"
+                      }
                       className={`${isSite ? "object-contain rotate-90 scale-[1.333] origin-center" : "object-contain"}`}
                       unoptimized
                     />
                     {isSelected && !showSeerUI && (
                       <div className="absolute inset-0 bg-red-500/30 flex items-center justify-center">
-                        <div className="text-white text-xs font-bold bg-red-600 rounded px-2 py-1">
-                          MULLIGAN
+                        <div className="text-white text-[10px] sm:text-xs font-bold bg-red-600 rounded px-1.5 py-0.5 sm:px-2 sm:py-1">
+                          ✕
                         </div>
                       </div>
                     )}
@@ -379,35 +385,36 @@ export default function OnlineMulliganScreen({
             })}
           </div>
         ) : (
-          <div className="text-center py-8 text-gray-400">No cards in hand</div>
+          <div className="text-center py-4 sm:py-8 text-gray-400 text-sm">
+            No cards in hand
+          </div>
         )}
 
         {!showSeerUI && (
-          <div className="flex justify-between items-center mt-4">
-            <div className="text-xs opacity-70">
-              {selected.length > 0 &&
-                `${selected.length} card(s) selected for mulligan`}
+          <div className="flex flex-col sm:flex-row justify-between items-center gap-2 mt-2 sm:mt-4">
+            <div className="text-[11px] sm:text-xs opacity-70 order-2 sm:order-1">
+              {selected.length > 0 && `${selected.length} card(s) selected`}
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex gap-2 order-1 sm:order-2 w-full sm:w-auto justify-center sm:justify-end">
               {!done && myMulligans > 0 && (
                 <button
-                  className="bg-orange-600 hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed rounded px-4 py-2 text-sm font-medium transition-colors"
+                  className="bg-orange-600 hover:bg-orange-700 active:bg-orange-800 disabled:opacity-50 disabled:cursor-not-allowed rounded px-3 py-2 sm:px-4 text-sm font-medium transition-colors flex-1 sm:flex-none"
                   onClick={handleMulligan}
                 >
                   {selected.length === 0
                     ? "Keep Hand"
-                    : `Mulligan ${selected.length} Cards`}
+                    : `Mulligan ${selected.length}`}
                 </button>
               )}
 
               {/* Show finalize button only when seer phase is complete (or not needed) */}
               {(done || myMulligans === 0) && (
                 <button
-                  className={`rounded px-3 py-2 sm:px-4 text-sm font-medium transition-colors ${
+                  className={`rounded px-3 py-2 text-sm font-medium transition-colors flex-1 sm:flex-none ${
                     submitted
                       ? "bg-green-700/60 cursor-not-allowed"
-                      : "bg-green-600 hover:bg-green-700"
+                      : "bg-green-600 hover:bg-green-700 active:bg-green-800"
                   }`}
                   onClick={handleFinalize}
                   disabled={submitted}
@@ -417,7 +424,7 @@ export default function OnlineMulliganScreen({
                       : undefined
                   }
                 >
-                  {submitted ? "Ready — Waiting for others…" : finalizeLabel}
+                  {submitted ? "Waiting…" : finalizeLabel}
                 </button>
               )}
             </div>
@@ -538,7 +545,11 @@ export default function OnlineMulliganScreen({
                           src={`/api/images/${topCard.slug}`}
                           alt={topCard.name}
                           fill
-                          sizes={(topCard.type || "").toLowerCase().includes("site") ? "160px" : "128px"}
+                          sizes={
+                            (topCard.type || "").toLowerCase().includes("site")
+                              ? "160px"
+                              : "128px"
+                          }
                           className={`${
                             (topCard.type || "").toLowerCase().includes("site")
                               ? "object-contain rotate-90 scale-[1.333] origin-center"
@@ -604,8 +615,8 @@ export default function OnlineMulliganScreen({
             ? "Use your Seer ability to look at the top card of a pile."
             : `Waiting for ${playerNames[secondSeat]} to use their Seer ability...`
           : submitted
-          ? "You are ready. Waiting for other players to finish mulligans…"
-          : "Other players are making their mulligan decisions..."}
+            ? "You are ready. Waiting for other players to finish mulligans…"
+            : "Other players are making their mulligan decisions..."}
       </div>
     </div>
   );

@@ -3,6 +3,7 @@ import type { CardRef, GameState, PlayerKey } from "./types";
 
 const CAMERA_MODE_KEY = "sorcery:cameraMode";
 const CARD_PREVIEWS_KEY = "sorcery:cardPreviewsEnabled";
+const UI_HIDDEN_KEY = "sorcery:uiHidden";
 
 /**
  * Load persisted camera mode preference from localStorage.
@@ -48,6 +49,27 @@ function saveCardPreviewsEnabled(enabled: boolean): void {
   } catch {}
 }
 
+/**
+ * Load UI hidden preference from localStorage.
+ * Defaults to false (UI visible).
+ */
+function loadUiHidden(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const stored = localStorage.getItem(UI_HIDDEN_KEY);
+    if (stored === "true") return true;
+  } catch {}
+  return false;
+}
+
+/** Persist UI hidden preference to localStorage */
+function saveUiHidden(hidden: boolean): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(UI_HIDDEN_KEY, String(hidden));
+  } catch {}
+}
+
 /** Persist camera mode preference to localStorage */
 function saveCameraMode(mode: GameState["cameraMode"]): void {
   if (typeof window === "undefined") return;
@@ -74,6 +96,9 @@ export type UiSlice = Pick<
   | "cardPreviewsEnabled"
   | "setCardPreviewsEnabled"
   | "toggleCardPreviews"
+  | "uiHidden"
+  | "setUiHidden"
+  | "toggleUiHidden"
   | "selectHandCard"
   | "selectAvatar"
   | "clearSelection"
@@ -115,6 +140,7 @@ type UiStateDefaults = Pick<
   | "hoverCell"
   | "previewCard"
   | "cardPreviewsEnabled"
+  | "uiHidden"
   | "switchSiteSource"
   | "showEndTurnConfirm"
 >;
@@ -134,13 +160,14 @@ export const createInitialUiState = (): UiStateDefaults => ({
   hoverCell: null,
   previewCard: null,
   cardPreviewsEnabled: loadCardPreviewsEnabled(),
+  uiHidden: loadUiHidden(),
   switchSiteSource: null,
   showEndTurnConfirm: false,
 });
 
 export const createUiSlice: StateCreator<GameState, [], [], UiSlice> = (
   set,
-  get
+  get,
 ) => ({
   ...createInitialUiState(),
 
@@ -200,7 +227,7 @@ export const createUiSlice: StateCreator<GameState, [], [], UiSlice> = (
       who: PlayerKey;
       from: "spellbook" | "atlas" | "graveyard" | "collection" | "tokens";
       card: CardRef | null;
-    } | null
+    } | null,
   ) => set({ dragFromPile: info }),
 
   setHoverCell: (x: number, y: number) => set({ hoverCell: [x, y] }),
@@ -231,6 +258,17 @@ export const createUiSlice: StateCreator<GameState, [], [], UiSlice> = (
       const newEnabled = !state.cardPreviewsEnabled;
       saveCardPreviewsEnabled(newEnabled);
       return { cardPreviewsEnabled: newEnabled };
+    }),
+
+  setUiHidden: (hidden: boolean) => {
+    saveUiHidden(hidden);
+    set({ uiHidden: hidden });
+  },
+  toggleUiHidden: () =>
+    set((state) => {
+      const newHidden = !state.uiHidden;
+      saveUiHidden(newHidden);
+      return { uiHidden: newHidden };
     }),
 
   // End turn confirmation actions

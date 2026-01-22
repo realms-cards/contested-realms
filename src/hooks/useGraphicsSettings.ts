@@ -11,7 +11,7 @@ export interface GraphicsSettings {
   lightingIntensity: number;
   /** Show the 3D table model underneath the playmat */
   showTable: boolean;
-  /** Scale multiplier for card preview size (0.5 - 1.5, default 1.0) */
+  /** Scale multiplier for card preview size (0.5 - 2.5, default 1.0, mobile default 2.5) */
   cardPreviewScale: number;
   /** Scale multiplier for console/toolbox text size (0.5 - 1.5, default 1.0) */
   uiTextScale: number;
@@ -118,7 +118,7 @@ export function useGraphicsSettings() {
         lightingIntensity: Math.max(0.5, Math.min(2.0, intensity)),
       });
     },
-    [setSettings]
+    [setSettings],
   );
 
   const toggleShowTable = useCallback(() => {
@@ -128,10 +128,10 @@ export function useGraphicsSettings() {
   const setCardPreviewScale = useCallback(
     (scale: number) => {
       setSettings({
-        cardPreviewScale: Math.max(0.5, Math.min(1.5, scale)),
+        cardPreviewScale: Math.max(0.5, Math.min(2.5, scale)),
       });
     },
-    [setSettings]
+    [setSettings],
   );
 
   const setUiTextScale = useCallback(
@@ -140,7 +140,7 @@ export function useGraphicsSettings() {
         uiTextScale: Math.max(0.5, Math.min(1.5, scale)),
       });
     },
-    [setSettings]
+    [setSettings],
   );
 
   const toggleHandSortOrder = useCallback(() => {

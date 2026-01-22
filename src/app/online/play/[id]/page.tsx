@@ -28,9 +28,12 @@ import DholChantsOverlay from "@/components/game/DholChantsOverlay";
 import DoomsdayCultOverlay from "@/components/game/DoomsdayCultOverlay";
 import EarthquakeOverlay from "@/components/game/EarthquakeOverlay";
 import { ElementChoiceOverlay } from "@/components/game/ElementChoiceOverlay";
+import { EndTurnConfirmDialog } from "@/components/game/EndTurnConfirmDialog";
 import EnhancedOnlineDraft3DScreen from "@/components/game/EnhancedOnlineDraft3DScreen";
+import AudioControls from "@/components/game/AudioControls";
 import FrontierSettlersOverlay from "@/components/game/FrontierSettlersOverlay";
 import GameToolbox from "@/components/game/GameToolbox";
+import RestoreUiButton from "@/components/game/RestoreUiButton";
 import HarbingerPortalScreen from "@/components/game/HarbingerPortalScreen";
 import HeadlessHauntOverlay from "@/components/game/HeadlessHauntOverlay";
 import HighlandPrincessOverlay from "@/components/game/HighlandPrincessOverlay";
@@ -2136,6 +2139,7 @@ export default function OnlineMatchPage() {
   const setPreviewCard = useGameStore((s) => s.setPreviewCard);
   const cardPreviewsEnabled = useGameStore((s) => s.cardPreviewsEnabled);
   const toggleCardPreviews = useGameStore((s) => s.toggleCardPreviews);
+  const uiHidden = useGameStore((s) => s.uiHidden);
   const contextMenu = useGameStore((s) => s.contextMenu);
   const closeContextMenu = useGameStore((s) => s.closeContextMenu);
   const clearSelection = useGameStore((s) => s.clearSelection);
@@ -2747,60 +2751,62 @@ export default function OnlineMatchPage() {
 
   return (
     <div className="fixed inset-0 w-screen h-screen select-none">
-      {/* Camera controls - left: reset icon + 2D/3D buttons */}
-      <div className="absolute top-2 left-2 z-30">
-        <div className="bg-black/50 rounded-lg p-1 ring-1 ring-white/10 flex items-center">
-          <button
-            onClick={resetCamera}
-            aria-label="Reset camera"
-            title="Reset camera (Tab)"
-            className="p-2 rounded-full hover:bg-white/10 text-white"
-          >
-            <svg
-              className="w-4 h-4"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
+      {/* Camera controls - left: reset icon + 2D/3D buttons (hidden when uiHidden) */}
+      {!uiHidden && (
+        <div className="absolute top-2 left-2 z-30">
+          <div className="bg-black/50 rounded-lg p-1 ring-1 ring-white/10 flex items-center">
+            <button
+              onClick={resetCamera}
+              aria-label="Reset camera"
+              title="Reset camera (Tab)"
+              className="p-2 rounded-full hover:bg-white/10 text-white"
             >
-              {/* Compass icon */}
-              <circle cx="12" cy="12" r="10" />
-              <polygon
-                points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"
-                fill="currentColor"
-              />
-            </svg>
-          </button>
-          <button
-            className={`ml-1 px-2 py-1 text-xs rounded ${
-              cameraMode === "topdown"
-                ? "bg-white/20"
-                : "bg-transparent hover:bg-white/10"
-            }`}
-            onClick={() => {
-              setCameraMode("topdown");
-            }}
-            title="Top-down 2D camera"
-          >
-            2D
-          </button>
-          <button
-            className={`ml-1 px-2 py-1 text-xs rounded ${
-              cameraMode === "orbit"
-                ? "bg-white/20"
-                : "bg-transparent hover:bg-white/10"
-            }`}
-            onClick={() => {
-              setCameraMode("orbit");
-            }}
-            title="3D orbit camera"
-          >
-            3D
-          </button>
+              <svg
+                className="w-4 h-4"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                {/* Compass icon */}
+                <circle cx="12" cy="12" r="10" />
+                <polygon
+                  points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"
+                  fill="currentColor"
+                />
+              </svg>
+            </button>
+            <button
+              className={`ml-1 px-2 py-1 text-xs rounded ${
+                cameraMode === "topdown"
+                  ? "bg-white/20"
+                  : "bg-transparent hover:bg-white/10"
+              }`}
+              onClick={() => {
+                setCameraMode("topdown");
+              }}
+              title="Top-down 2D camera"
+            >
+              2D
+            </button>
+            <button
+              className={`ml-1 px-2 py-1 text-xs rounded ${
+                cameraMode === "orbit"
+                  ? "bg-white/20"
+                  : "bg-transparent hover:bg-white/10"
+              }`}
+              onClick={() => {
+                setCameraMode("orbit");
+              }}
+              title="3D orbit camera"
+            >
+              3D
+            </button>
+          </div>
         </div>
-      </div>
+      )}
       {!inThisMatch && (
         <div className="absolute inset-0 z-30 bg-black/70 backdrop-blur-sm flex items-center justify-center p-6">
           <div className="text-center">
@@ -2985,8 +2991,8 @@ export default function OnlineMatchPage() {
               onDraftComplete={handleDraftComplete}
             />
           )}
-          {/* Online Status Bar with turn restrictions */}
-          {viewPlayerNumber && (
+          {/* Online Status Bar with turn restrictions - hidden when uiHidden */}
+          {viewPlayerNumber && !uiHidden && (
             <OnlineStatusBar
               dragFromHand={dragFromHand}
               myPlayerNumber={viewPlayerNumber}
@@ -2998,8 +3004,28 @@ export default function OnlineMatchPage() {
               myPlayerKey={viewPlayerKey}
             />
           )}
+          {/* Restore UI button - shown when uiHidden */}
+          {uiHidden && (
+            <RestoreUiButton
+              myPlayerKey={viewPlayerKey}
+              canEndTurn={
+                !isSpectatorView &&
+                !matchEnded &&
+                viewPlayerNumber === currentPlayerState
+              }
+            />
+          )}
+          {/* End Turn Confirmation Dialog - always visible (for untapped avatar warning) */}
+          <EndTurnConfirmDialog />
+          {/* Audio Controls - hidden visually when uiHidden but stays mounted to keep music playing */}
+          {uiHidden && !shouldShowDraft && (
+            <div className="sr-only">
+              <AudioControls enableMusic />
+            </div>
+          )}
           {/* Music-Game state sync for mood-based track selection */}
           {!shouldShowDraft && <MusicGameSync myPlayerKey={viewPlayerKey} />}
+          {/* Life counters - always visible */}
           <OnlineLifeCounters
             dragFromHand={dragFromHand}
             myPlayerKey={viewPlayerKey}
@@ -3012,19 +3038,21 @@ export default function OnlineMatchPage() {
             spectatorMode={isSpectatorView}
           />
 
-          {/* Mana and Thresholds panel on the right */}
-          <PlayerResourcePanels
-            myPlayerKey={viewPlayerKey}
-            playerNames={playerNames}
-            showYouLabels={!isSpectatorView}
-            readOnly={isSpectatorView}
-            dragFromHand={dragFromHand}
-          />
+          {/* Mana and Thresholds panel on the right - hidden when uiHidden */}
+          {!uiHidden && (
+            <PlayerResourcePanels
+              myPlayerKey={viewPlayerKey}
+              playerNames={playerNames}
+              showYouLabels={!isSpectatorView}
+              readOnly={isSpectatorView}
+              dragFromHand={dragFromHand}
+            />
+          )}
 
-          {/* Status effect icons (Mismanaged Mortuary, etc.) */}
-          <PlayerStatusEffects />
+          {/* Status effect icons (Mismanaged Mortuary, etc.) - hidden when uiHidden */}
+          {!uiHidden && <PlayerStatusEffects />}
 
-          {/* Online Console with Events and Chat tabs - only show when setup overlay is not visible */}
+          {/* Online Console with Events and Chat tabs - shows toasts only when uiHidden */}
           {!setupOpen && (
             <OnlineConsole
               dragFromHand={dragFromHand}
@@ -3039,11 +3067,12 @@ export default function OnlineMatchPage() {
               hideChat={isSpectatorView}
               hideLeaveButton={isSpectatorView}
               playerNames={playerNames}
+              toastOnly={uiHidden}
             />
           )}
 
-          {/* Enhanced Hover Preview Overlay - uses new CardPreview component */}
-          {cardPreviewsEnabled && hoverPreview && !contextMenu && (
+          {/* Enhanced Hover Preview Overlay - hidden when uiHidden */}
+          {cardPreviewsEnabled && hoverPreview && !contextMenu && !uiHidden && (
             <CardPreview
               card={hoverPreview}
               anchor="top-right"
@@ -3051,11 +3080,12 @@ export default function OnlineMatchPage() {
             />
           )}
 
-          {/* Legacy Preview Overlay (for compatibility with existing setPreviewCard calls) */}
+          {/* Legacy Preview Overlay (for compatibility with existing setPreviewCard calls) - hidden when uiHidden */}
           {cardPreviewsEnabled &&
             previewCard?.slug &&
             !hoverPreview &&
-            !contextMenu && (
+            !contextMenu &&
+            !uiHidden && (
               <CardPreview
                 card={{
                   slug: previewCard.slug ?? "",
@@ -3067,7 +3097,7 @@ export default function OnlineMatchPage() {
               />
             )}
 
-          {/* Context Menu */}
+          {/* Context Menu - always visible for interactions */}
           {contextMenu && (
             <ContextMenu
               onClose={() => {

@@ -4,7 +4,6 @@ import {
   newTokenInstanceId,
   tokenSlug,
 } from "@/lib/game/tokens";
-import { getEffectiveGraveyardSeatStatic } from "./specialSiteState";
 import type {
   CardRef,
   GameState,
@@ -947,61 +946,22 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
       const card = banished.splice(idx, 1)[0];
       if (!card) return state;
 
-      // Check for Mismanaged Mortuary cemetery swap (silenced mortuaries don't apply)
-      const mortuaries = state.specialSiteState.mismanagedMortuaries;
-      const effectiveGraveyardSeat = getEffectiveGraveyardSeatStatic(
-        who,
-        mortuaries,
-        state.permanents,
-      );
-
-      const affectedSeats: PlayerKey[] = [who];
-
       if (target === "hand") {
         seatZones.hand = [...seatZones.hand, card];
       } else {
-        // Route to effective graveyard (may be swapped due to Mismanaged Mortuary)
-        if (effectiveGraveyardSeat !== who) {
-          // Cemetery is swapped - route to opponent's graveyard
-          let oppZones: Zones;
-          if (
-            zonesNext[effectiveGraveyardSeat] ===
-            state.zones[effectiveGraveyardSeat]
-          ) {
-            oppZones = {
-              spellbook: [...state.zones[effectiveGraveyardSeat].spellbook],
-              atlas: [...state.zones[effectiveGraveyardSeat].atlas],
-              hand: [...state.zones[effectiveGraveyardSeat].hand],
-              graveyard: [...state.zones[effectiveGraveyardSeat].graveyard],
-              battlefield: [...state.zones[effectiveGraveyardSeat].battlefield],
-              collection: [...state.zones[effectiveGraveyardSeat].collection],
-              banished: [
-                ...(state.zones[effectiveGraveyardSeat].banished || []),
-              ],
-            };
-          } else {
-            oppZones = { ...zonesNext[effectiveGraveyardSeat] };
-          }
-          oppZones.graveyard = [card, ...oppZones.graveyard];
-          zonesNext[effectiveGraveyardSeat] = oppZones;
-          affectedSeats.push(effectiveGraveyardSeat);
-        } else {
-          seatZones.graveyard = [card, ...seatZones.graveyard];
-        }
+        // Cards always go to owner's graveyard
+        // (Mortuary only affects searches/fetches, not card placement)
+        seatZones.graveyard = [card, ...seatZones.graveyard];
       }
       seatZones.banished = banished;
       zonesNext[who] = seatZones;
       const playerNum = who === "p1" ? "1" : "2";
-      const targetPlayerNum = effectiveGraveyardSeat === "p1" ? "1" : "2";
       get().log(
         `Returned [p${playerNum}card:${card.name}] from banished to ${
-          target === "hand" ? "hand" : `[p${targetPlayerNum}:PLAYER] cemetery`
+          target === "hand" ? "hand" : "cemetery"
         }`,
       );
-      const patch = createZonesPatchFor(
-        zonesNext as GameState["zones"],
-        affectedSeats,
-      );
+      const patch = createZonesPatchFor(zonesNext as GameState["zones"], who);
       if (patch) get().trySendPatch(patch);
       return {
         zones: zonesNext as GameState["zones"],
@@ -1145,16 +1105,8 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
       const otherSeat: PlayerKey = who === "p1" ? "p2" : "p1";
       const viewerSeat = actorKey || otherSeat;
 
-      // Track which seats need patches
+      // Track affected seats for zone patch
       const affectedSeats: PlayerKey[] = [who];
-
-      // Check for Mismanaged Mortuary cemetery swap (silenced mortuaries don't apply)
-      const mortuaries = state.specialSiteState.mismanagedMortuaries;
-      const effectiveGraveyardSeat = getEffectiveGraveyardSeatStatic(
-        who,
-        mortuaries,
-        state.permanents,
-      );
 
       switch (action) {
         case "top":
@@ -1180,39 +1132,10 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
           actionDesc = "drawn to hand";
           break;
         case "graveyard":
-          // Route to effective graveyard (may be swapped due to Mismanaged Mortuary)
-          if (effectiveGraveyardSeat !== who) {
-            // Cemetery is swapped - route to opponent's graveyard
-            let oppZones: Zones;
-            if (
-              zonesNext[effectiveGraveyardSeat] ===
-              state.zones[effectiveGraveyardSeat]
-            ) {
-              oppZones = {
-                spellbook: [...state.zones[effectiveGraveyardSeat].spellbook],
-                atlas: [...state.zones[effectiveGraveyardSeat].atlas],
-                hand: [...state.zones[effectiveGraveyardSeat].hand],
-                graveyard: [...state.zones[effectiveGraveyardSeat].graveyard],
-                battlefield: [
-                  ...state.zones[effectiveGraveyardSeat].battlefield,
-                ],
-                collection: [...state.zones[effectiveGraveyardSeat].collection],
-                banished: [
-                  ...(state.zones[effectiveGraveyardSeat].banished || []),
-                ],
-              };
-            } else {
-              oppZones = { ...zonesNext[effectiveGraveyardSeat] };
-            }
-            oppZones.graveyard = [preparedCard, ...oppZones.graveyard];
-            zonesNext[effectiveGraveyardSeat] = oppZones;
-            affectedSeats.push(effectiveGraveyardSeat);
-            const targetPlayerNum = effectiveGraveyardSeat === "p1" ? "1" : "2";
-            actionDesc = `sent to [p${targetPlayerNum}:PLAYER] cemetery`;
-          } else {
-            seatZones.graveyard = [preparedCard, ...seatZones.graveyard];
-            actionDesc = "sent to cemetery";
-          }
+          // Cards always go to owner's graveyard
+          // (Mortuary only affects searches/fetches, not card placement)
+          seatZones.graveyard = [preparedCard, ...seatZones.graveyard];
+          actionDesc = "sent to cemetery";
           break;
         case "banish":
           seatZones.banished = [preparedCard, ...(seatZones.banished || [])];

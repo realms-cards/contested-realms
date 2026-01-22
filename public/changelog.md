@@ -5,6 +5,13 @@
 ### Jan 22 - Legion of Gall
 
 - **add custom resolver for Legion of Gall**
+- **add HIDE UI with "u"** or by clicking on the eye icon
+- **fix Mismanaged Mortuary** I totally got the rules wrong 😅
+- **fix card names for peek and other scenarios being transported** to opponent
+- **fix and put back Atlantean Fate resolver**
+- **fix Trophy room resolver**
+- **optimizations and fixes for mobile match view**
+- **optimizations for the hand**
 
 ### Jan 21 - Fixes from GitHub issues
 

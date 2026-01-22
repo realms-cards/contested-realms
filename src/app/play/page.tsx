@@ -25,8 +25,11 @@ import DholChantsOverlay from "@/components/game/DholChantsOverlay";
 import DoomsdayCultOverlay from "@/components/game/DoomsdayCultOverlay";
 import EarthquakeOverlay from "@/components/game/EarthquakeOverlay";
 import { ElementChoiceOverlay } from "@/components/game/ElementChoiceOverlay";
+import { EndTurnConfirmDialog } from "@/components/game/EndTurnConfirmDialog";
+import AudioControls from "@/components/game/AudioControls";
 import FrontierSettlersOverlay from "@/components/game/FrontierSettlersOverlay";
 import GameToolbox from "@/components/game/GameToolbox";
+import RestoreUiButton from "@/components/game/RestoreUiButton";
 import HarbingerPortalScreen from "@/components/game/HarbingerPortalScreen";
 import HeadlessHauntOverlay from "@/components/game/HeadlessHauntOverlay";
 import HighlandPrincessOverlay from "@/components/game/HighlandPrincessOverlay";
@@ -101,6 +104,7 @@ export default function PlayPage() {
   const setPreviewCard = useGameStore((s) => s.setPreviewCard);
   const cardPreviewsEnabled = useGameStore((s) => s.cardPreviewsEnabled);
   const toggleCardPreviews = useGameStore((s) => s.toggleCardPreviews);
+  const uiHidden = useGameStore((s) => s.uiHidden);
   const contextMenu = useGameStore((s) => s.contextMenu);
   const closeContextMenu = useGameStore((s) => s.closeContextMenu);
   const clearSelection = useGameStore((s) => s.clearSelection);
@@ -767,39 +771,41 @@ export default function PlayPage() {
 
   return (
     <div className="relative h-screen [height:100dvh] w-full select-none">
-      {/* Camera mode toggle */}
-      <div className="absolute top-2 left-2 z-30">
-        <div className="bg-black/50 rounded-lg p-1 ring-1 ring-white/10">
-          <button
-            className={`px-2 py-1 text-xs rounded ${
-              cameraMode === "topdown"
-                ? "bg-white/20"
-                : "bg-transparent hover:bg-white/10"
-            }`}
-            onClick={() => {
-              setCameraMode("topdown");
-              gotoBaseline("topdown");
-            }}
-            title="Top-down 2D camera"
-          >
-            2D
-          </button>
-          <button
-            className={`ml-1 px-2 py-1 text-xs rounded ${
-              cameraMode === "orbit"
-                ? "bg-white/20"
-                : "bg-transparent hover:bg-white/10"
-            }`}
-            onClick={() => {
-              setCameraMode("orbit");
-              gotoBaseline("orbit");
-            }}
-            title="3D orbit camera"
-          >
-            3D
-          </button>
+      {/* Camera mode toggle (hidden when uiHidden) */}
+      {!uiHidden && (
+        <div className="absolute top-2 left-2 z-30">
+          <div className="bg-black/50 rounded-lg p-1 ring-1 ring-white/10">
+            <button
+              className={`px-2 py-1 text-xs rounded ${
+                cameraMode === "topdown"
+                  ? "bg-white/20"
+                  : "bg-transparent hover:bg-white/10"
+              }`}
+              onClick={() => {
+                setCameraMode("topdown");
+                gotoBaseline("topdown");
+              }}
+              title="Top-down 2D camera"
+            >
+              2D
+            </button>
+            <button
+              className={`ml-1 px-2 py-1 text-xs rounded ${
+                cameraMode === "orbit"
+                  ? "bg-white/20"
+                  : "bg-transparent hover:bg-white/10"
+              }`}
+              onClick={() => {
+                setCameraMode("orbit");
+                gotoBaseline("orbit");
+              }}
+              title="3D orbit camera"
+            >
+              3D
+            </button>
+          </div>
         </div>
-      </div>
+      )}
       {/* Restore Game Prompt */}
       {showRestorePrompt && (
         <div className="absolute inset-0 z-30 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6">
@@ -999,11 +1005,24 @@ export default function PlayPage() {
         </div>
       )}
 
-      {/* HUD */}
-      <StatusBar dragFromHand={dragFromHand} />
+      {/* HUD - hidden when uiHidden */}
+      {!uiHidden && <StatusBar dragFromHand={dragFromHand} />}
+      {/* Restore UI button - shown when uiHidden */}
+      {uiHidden && (
+        <RestoreUiButton myPlayerKey={currentPlayerKey} canEndTurn />
+      )}
+      {/* End Turn Confirmation Dialog - always visible (for untapped avatar warning) */}
+      <EndTurnConfirmDialog />
+      {/* Audio Controls - hidden visually when uiHidden but stays mounted to keep music playing */}
+      {uiHidden && (
+        <div className="sr-only">
+          <AudioControls enableMusic />
+        </div>
+      )}
       {/* Music-Game state sync for mood-based track selection */}
       <MusicGameSync myPlayerKey={currentPlayerKey} />
 
+      {/* Life counters - always visible */}
       <OnlineLifeCounters
         dragFromHand={dragFromHand}
         myPlayerKey={currentPlayerKey}
@@ -1011,80 +1030,84 @@ export default function PlayPage() {
         showYouLabels={false}
       />
 
-      {/* Mana and Thresholds panel on the right */}
-      <PlayerResourcePanels
-        myPlayerKey={currentPlayerKey}
-        playerNames={{ p1: "Player 1", p2: "Player 2" }}
-        showYouLabels={false}
-        readOnly={false}
-        dragFromHand={dragFromHand}
-      />
+      {/* Mana and Thresholds panel on the right - hidden when uiHidden */}
+      {!uiHidden && (
+        <PlayerResourcePanels
+          myPlayerKey={currentPlayerKey}
+          playerNames={{ p1: "Player 1", p2: "Player 2" }}
+          showYouLabels={false}
+          readOnly={false}
+          dragFromHand={dragFromHand}
+        />
+      )}
 
-      {/* Status effect icons (Mismanaged Mortuary, etc.) */}
-      <PlayerStatusEffects />
+      {/* Status effect icons (Mismanaged Mortuary, etc.) - hidden when uiHidden */}
+      {!uiHidden && <PlayerStatusEffects />}
 
-      {/* Event Console */}
-      <div
-        className={`absolute left-3 bottom-2 z-10 ${
-          dragFromHand ? "pointer-events-none" : "pointer-events-auto"
-        } text-white w-80`}
-      >
-        <div className="bg-black/60 backdrop-blur rounded-xl ring-1 ring-white/10 shadow">
-          <div className="flex items-center justify-between px-3 py-2 text-sm">
-            <span className="font-semibold opacity-90">Console</span>
-            <button
-              className="rounded bg-white/10 hover:bg-white/20 px-2 py-0.5 text-xs"
-              onClick={() => setConsoleOpen((o) => !o)}
-            >
-              {consoleOpen ? "Collapse" : "Expand"}
-            </button>
-          </div>
-          {consoleOpen && (
-            <div
-              ref={eventsRef}
-              className="max-h-64 overflow-y-auto px-3 pb-3 text-xs space-y-1"
-            >
-              {events.length === 0 && (
-                <div className="opacity-60">No events yet</div>
-              )}
-              {events.slice(-100).map((ev, idx) => {
-                const t = ev.text || "";
-                const low = t.toLowerCase();
-                // Detect warnings: messages starting with [warning], warning, cannot, or other error patterns
-                const isWarn =
-                  low.startsWith("[warning]") ||
-                  low.startsWith("warning") ||
-                  low.startsWith("cannot") ||
-                  low.includes("cannot") ||
-                  low.startsWith("insufficient") ||
-                  low.startsWith("first site must") ||
-                  low.startsWith("new sites must") ||
-                  low.startsWith("sites cannot") ||
-                  low.startsWith("permanents can only") ||
-                  low.startsWith("avatar must");
-                const isSearch = low.startsWith("search:");
-                return (
-                  <div
-                    key={`${ev.id}-${ev.ts}-${idx}`}
-                    className={`opacity-85 ${
-                      isWarn
-                        ? "text-yellow-400"
-                        : isSearch
-                          ? "text-blue-400"
-                          : ""
-                    }`}
-                  >
-                    • {formatEventText(ev.text)}
-                  </div>
-                );
-              })}
+      {/* Event Console - hidden when uiHidden */}
+      {!uiHidden && (
+        <div
+          className={`absolute left-3 bottom-2 z-10 ${
+            dragFromHand ? "pointer-events-none" : "pointer-events-auto"
+          } text-white w-80`}
+        >
+          <div className="bg-black/60 backdrop-blur rounded-xl ring-1 ring-white/10 shadow">
+            <div className="flex items-center justify-between px-3 py-2 text-sm">
+              <span className="font-semibold opacity-90">Console</span>
+              <button
+                className="rounded bg-white/10 hover:bg-white/20 px-2 py-0.5 text-xs"
+                onClick={() => setConsoleOpen((o) => !o)}
+              >
+                {consoleOpen ? "Collapse" : "Expand"}
+              </button>
             </div>
-          )}
+            {consoleOpen && (
+              <div
+                ref={eventsRef}
+                className="max-h-64 overflow-y-auto px-3 pb-3 text-xs space-y-1"
+              >
+                {events.length === 0 && (
+                  <div className="opacity-60">No events yet</div>
+                )}
+                {events.slice(-100).map((ev, idx) => {
+                  const t = ev.text || "";
+                  const low = t.toLowerCase();
+                  // Detect warnings: messages starting with [warning], warning, cannot, or other error patterns
+                  const isWarn =
+                    low.startsWith("[warning]") ||
+                    low.startsWith("warning") ||
+                    low.startsWith("cannot") ||
+                    low.includes("cannot") ||
+                    low.startsWith("insufficient") ||
+                    low.startsWith("first site must") ||
+                    low.startsWith("new sites must") ||
+                    low.startsWith("sites cannot") ||
+                    low.startsWith("permanents can only") ||
+                    low.startsWith("avatar must");
+                  const isSearch = low.startsWith("search:");
+                  return (
+                    <div
+                      key={`${ev.id}-${ev.ts}-${idx}`}
+                      className={`opacity-85 ${
+                        isWarn
+                          ? "text-yellow-400"
+                          : isSearch
+                            ? "text-blue-400"
+                            : ""
+                      }`}
+                    >
+                      • {formatEventText(ev.text)}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Hover Preview Overlay (hidden if context menu visible or previews disabled) */}
-      {cardPreviewsEnabled && previewCard && !contextMenu && (
+      {/* Hover Preview Overlay (hidden if context menu visible, previews disabled, or uiHidden) */}
+      {cardPreviewsEnabled && previewCard && !contextMenu && !uiHidden && (
         <CardPreview
           card={createCardPreviewData({
             slug: previewCard.slug,
@@ -1095,6 +1118,7 @@ export default function PlayPage() {
         />
       )}
 
+      {/* Context Menu - always visible for interactions */}
       {contextMenu && (
         <ContextMenu
           onClose={() => {

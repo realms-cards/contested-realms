@@ -161,8 +161,8 @@ export const createCommonSenseSlice: StateCreator<
       } catch {}
     }
 
-    const selectedCard = pending.eligibleCards[cardIndex];
-    get().log(`Selected ${selectedCard?.name || "card"} to put in hand`);
+    // Don't log the specific card name - deck searches are private
+    get().log(`Selected a card to put in hand`);
   },
 
   resolveCommonSense: () => {
