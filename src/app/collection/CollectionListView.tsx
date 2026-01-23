@@ -466,12 +466,11 @@ export default function CollectionListView({
               />
               <SortableHeader
                 label="Rarity"
-                field="name"
+                field="rarity"
                 currentSort={sort}
                 currentOrder={order}
                 onSort={onSortChange}
                 className="hidden lg:table-cell"
-                disabled
               />
               <th className="px-3 py-3 text-left text-sm font-medium text-gray-400 hidden sm:table-cell">
                 Finish

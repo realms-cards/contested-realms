@@ -186,6 +186,8 @@ export default function CollectionFilters({
         >
           <option value="name:asc">Name (A-Z)</option>
           <option value="name:desc">Name (Z-A)</option>
+          <option value="rarity:asc">Rarity (Unique First)</option>
+          <option value="rarity:desc">Rarity (Ordinary First)</option>
           <option value="quantity:desc">Quantity (High)</option>
           <option value="quantity:asc">Quantity (Low)</option>
           <option value="recent:desc">Recently Added</option>

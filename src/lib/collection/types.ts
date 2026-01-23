@@ -195,12 +195,16 @@ export interface PriceProvider {
   getPrice(
     cardId: number,
     variantId: number | null,
-    finish: Finish
+    finish: Finish,
   ): Promise<PriceData | null>;
 
   /** Get prices for multiple cards */
   getBulkPrices(
-    cards: Array<{ cardId: number; variantId?: number | null; finish?: Finish }>
+    cards: Array<{
+      cardId: number;
+      variantId?: number | null;
+      finish?: Finish;
+    }>,
   ): Promise<Map<string, PriceData>>;
 
   /** Generate affiliate link for purchasing */
@@ -224,7 +228,12 @@ export interface CollectionFilters {
 }
 
 /** Sort options */
-export type CollectionSortField = "name" | "quantity" | "recent" | "value";
+export type CollectionSortField =
+  | "name"
+  | "quantity"
+  | "recent"
+  | "value"
+  | "rarity";
 export type SortOrder = "asc" | "desc";
 
 /** Export format options */
