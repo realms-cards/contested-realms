@@ -1,4 +1,4 @@
-import type { Finish, Prisma, Rarity } from "@prisma/client";
+import type { Finish, Prisma } from "@prisma/client";
 import { NextRequest } from "next/server";
 import { getServerAuthSession } from "@/lib/auth";
 import { CacheKeys, invalidateCache } from "@/lib/cache/redis-cache";
@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
       {
         status: 401,
         headers: { "content-type": "application/json" },
-      }
+      },
     );
   }
 
@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
     const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
     const limit = Math.min(
       100,
-      Math.max(1, parseInt(searchParams.get("limit") || "50", 10))
+      Math.max(1, parseInt(searchParams.get("limit") || "50", 10)),
     );
     const setIdParam = searchParams.get("setId");
     const setId = setIdParam ? parseInt(setIdParam, 10) : undefined;
@@ -72,14 +72,6 @@ export async function GET(req: NextRequest) {
       where.card = cardFilter;
     }
 
-    // For type and rarity, we need to filter via CardSetMetadata
-    let metaFilter: Prisma.CardSetMetadataWhereInput | undefined = undefined;
-    if (type || rarity) {
-      metaFilter = {};
-      if (type) metaFilter.type = { contains: type, mode: "insensitive" };
-      if (rarity) metaFilter.rarity = rarity as Rarity;
-    }
-
     // Build orderBy
     let orderBy: Prisma.CollectionCardOrderByWithRelationInput;
     switch (sort) {
@@ -95,28 +87,33 @@ export async function GET(req: NextRequest) {
         break;
     }
 
-    // Run count, main query, and stats in parallel
-    const [total, cards, statsAgg, uniqueCount] = await Promise.all([
-      // Get total count
-      prisma.collectionCard.count({ where }),
-      // Fetch collection cards with relations
+    // When filtering by type or rarity, we need to:
+    // 1. Fetch ALL cards (without pagination) to filter correctly
+    // 2. Apply type/rarity filters using set-specific metadata
+    // 3. THEN paginate the filtered results
+    const needsMetadataFilter = Boolean(type || rarity);
+
+    // Fetch cards - all if metadata filter needed, paginated otherwise
+    const [allCards, totalCount, statsAgg, uniqueCount] = await Promise.all([
       prisma.collectionCard.findMany({
         where,
         orderBy,
-        skip: (page - 1) * limit,
-        take: limit,
+        // Only paginate if NOT filtering by type/rarity
+        ...(needsMetadataFilter
+          ? {}
+          : { skip: (page - 1) * limit, take: limit }),
         include: {
-          card: {
-            include: {
-              meta: metaFilter ? { where: metaFilter, take: 1 } : { take: 1 },
-            },
-          },
+          card: true,
           variant: {
             include: { set: true },
           },
           set: true,
         },
       }),
+      // Get total count for pagination (only needed when NOT filtering by metadata)
+      needsMetadataFilter
+        ? Promise.resolve(0) // Will be calculated after filtering
+        : prisma.collectionCard.count({ where }),
       // Calculate stats - aggregate
       prisma.collectionCard.aggregate({
         where: { userId },
@@ -130,13 +127,57 @@ export async function GET(req: NextRequest) {
       }),
     ]);
 
-    // Post-filter for type/rarity if needed (when card's meta doesn't match)
-    const filteredCards = metaFilter
-      ? cards.filter((c) => c.card.meta.length > 0)
-      : cards;
+    // Fetch CardSetMetadata for the specific (cardId, setId) pairs
+    const metaKeys = allCards
+      .filter((c): c is typeof c & { setId: number } => c.setId != null)
+      .map((c) => ({ cardId: c.cardId, setId: c.setId }));
+
+    const metadataRecords =
+      metaKeys.length > 0
+        ? await prisma.cardSetMetadata.findMany({
+            where: { OR: metaKeys },
+          })
+        : [];
+
+    // Build lookup map: "cardId:setId" -> metadata
+    const metaByKey = new Map(
+      metadataRecords.map((m) => [`${m.cardId}:${m.setId}`, m]),
+    );
+
+    // Helper to get metadata for a collection card
+    const getMetaForCard = (c: (typeof allCards)[0]) => {
+      if (c.setId == null) return null;
+      return metaByKey.get(`${c.cardId}:${c.setId}`) ?? null;
+    };
+
+    // Apply type/rarity filters
+    let filteredCards = allCards;
+    if (type) {
+      filteredCards = filteredCards.filter((c) => {
+        const meta = getMetaForCard(c);
+        return meta?.type?.toLowerCase().includes(type.toLowerCase());
+      });
+    }
+    if (rarity) {
+      filteredCards = filteredCards.filter((c) => {
+        const meta = getMetaForCard(c);
+        return meta?.rarity === rarity;
+      });
+    }
+
+    // Calculate correct total AFTER filtering (or use DB count if not filtering)
+    // Note: Prisma count can return BigInt in some cases, ensure it's a number
+    const total = needsMetadataFilter
+      ? filteredCards.length
+      : Number(totalCount);
+
+    // Apply pagination AFTER filtering (only if we fetched all cards)
+    const paginatedCards = needsMetadataFilter
+      ? filteredCards.slice((page - 1) * limit, page * limit)
+      : filteredCards;
 
     const response: CollectionListResponse = {
-      cards: filteredCards.map((c) => ({
+      cards: paginatedCards.map((c) => ({
         id: c.id,
         cardId: c.cardId,
         variantId: c.variantId,
@@ -160,18 +201,20 @@ export async function GET(req: NextRequest) {
         set: c.set
           ? { name: c.set.name }
           : c.variant?.set
-          ? { name: c.variant.set.name }
-          : null,
-        meta: c.card.meta[0]
-          ? {
-              type: c.card.meta[0].type,
-              rarity: c.card.meta[0].rarity ?? "Unknown",
-              cost: c.card.meta[0].cost,
-              attack: c.card.meta[0].attack,
-              defence: c.card.meta[0].defence,
-              thresholds: c.card.meta[0].thresholds,
-            }
-          : null,
+            ? { name: c.variant.set.name }
+            : null,
+        meta: (() => {
+          const meta = getMetaForCard(c);
+          if (!meta) return null;
+          return {
+            type: meta.type,
+            rarity: meta.rarity ?? "Unknown",
+            cost: meta.cost,
+            attack: meta.attack,
+            defence: meta.defence,
+            thresholds: meta.thresholds,
+          };
+        })(),
         price: null, // Pricing to be added in later task
       })),
       pagination: {
@@ -214,7 +257,7 @@ export async function POST(req: NextRequest) {
       {
         status: 401,
         headers: { "content-type": "application/json" },
-      }
+      },
     );
   }
 
@@ -226,7 +269,7 @@ export async function POST(req: NextRequest) {
     if (cardsInput.length === 0) {
       return new Response(
         JSON.stringify({ error: "No cards provided", code: "INVALID_INPUT" }),
-        { status: 400, headers: { "content-type": "application/json" } }
+        { status: 400, headers: { "content-type": "application/json" } },
       );
     }
 
@@ -334,7 +377,7 @@ export async function POST(req: NextRequest) {
         existingEntries.map((e) => [
           `${e.cardId}:${e.variantId ?? ""}:${e.finish}`,
           e,
-        ])
+        ]),
       );
 
       const created: typeof response.added = [];
@@ -351,7 +394,7 @@ export async function POST(req: NextRequest) {
           if (existing) {
             const newQuantity = Math.min(
               99,
-              existing.quantity + input.quantity
+              existing.quantity + input.quantity,
             );
             const result = await tx.collectionCard.update({
               where: { id: existing.id },
@@ -382,7 +425,7 @@ export async function POST(req: NextRequest) {
               isNew: true,
             });
           }
-        })
+        }),
       );
 
       return { created, updated };
@@ -408,7 +451,7 @@ export async function POST(req: NextRequest) {
             "Your account could not be found in the database. Please sign out and sign back in.",
           code: "USER_NOT_FOUND",
         }),
-        { status: 401, headers: { "content-type": "application/json" } }
+        { status: 401, headers: { "content-type": "application/json" } },
       );
     }
     const message = e instanceof Error ? e.message : "Unknown error";
@@ -427,7 +470,7 @@ export async function DELETE() {
   if (!session?.user) {
     return new Response(
       JSON.stringify({ error: "Unauthorized", code: "UNAUTHORIZED" }),
-      { status: 401, headers: { "content-type": "application/json" } }
+      { status: 401, headers: { "content-type": "application/json" } },
     );
   }
 
@@ -442,7 +485,7 @@ export async function DELETE() {
           error: "Your account could not be found in the database.",
           code: "USER_NOT_FOUND",
         }),
-        { status: 401, headers: { "content-type": "application/json" } }
+        { status: 401, headers: { "content-type": "application/json" } },
       );
     }
 
@@ -467,7 +510,7 @@ export async function DELETE() {
         entries: result.count,
         message: "Collection deleted",
       }),
-      { status: 200, headers: { "content-type": "application/json" } }
+      { status: 200, headers: { "content-type": "application/json" } },
     );
   } catch (e) {
     logPerformance("DELETE /api/collection", performance.now() - startTime);

@@ -3,13 +3,20 @@
 import Image from "next/image";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
-import type { CollectionCardResponse } from "@/lib/collection/types";
+import type {
+  CollectionCardResponse,
+  CollectionSortField,
+  SortOrder,
+} from "@/lib/collection/types";
 import type { CardPreviewData } from "@/lib/game/card-preview.types";
 
 interface CollectionListViewProps {
   cards: CollectionCardResponse[];
   loading?: boolean;
   onQuantityChange?: () => void;
+  sort?: CollectionSortField;
+  order?: SortOrder;
+  onSortChange?: (sort: CollectionSortField, order: SortOrder) => void;
 }
 
 function getRarityColor(rarity: string): string {
@@ -26,14 +33,68 @@ function getRarityColor(rarity: string): string {
   }
 }
 
+// Sortable column header component
+function SortableHeader({
+  label,
+  field,
+  currentSort,
+  currentOrder,
+  onSort,
+  className = "",
+  disabled = false,
+  center = false,
+}: {
+  label: string;
+  field: CollectionSortField;
+  currentSort: CollectionSortField;
+  currentOrder: SortOrder;
+  onSort?: (sort: CollectionSortField, order: SortOrder) => void;
+  className?: string;
+  disabled?: boolean;
+  center?: boolean;
+}) {
+  const isActive = currentSort === field;
+  const handleClick = () => {
+    if (disabled || !onSort) return;
+    // Toggle order if same field, otherwise default to asc
+    const newOrder = isActive && currentOrder === "asc" ? "desc" : "asc";
+    onSort(field, newOrder);
+  };
+
+  return (
+    <th
+      className={`px-3 py-3 text-sm font-medium ${
+        center ? "text-center" : "text-left"
+      } ${
+        disabled
+          ? "text-gray-500 cursor-default"
+          : "text-gray-400 cursor-pointer hover:text-white transition-colors"
+      } ${className}`}
+      onClick={handleClick}
+    >
+      <span className="inline-flex items-center gap-1">
+        {label}
+        {!disabled && isActive && (
+          <span className="text-blue-400">
+            {currentOrder === "asc" ? "↑" : "↓"}
+          </span>
+        )}
+      </span>
+    </th>
+  );
+}
+
 export default function CollectionListView({
   cards,
   loading,
   onQuantityChange,
+  sort = "name",
+  order = "asc",
+  onSortChange,
 }: CollectionListViewProps) {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [localQuantities, setLocalQuantities] = useState<Map<number, number>>(
-    new Map()
+    new Map(),
   );
   const refreshDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [bulkAction, setBulkAction] = useState<string>("");
@@ -172,8 +233,8 @@ export default function CollectionListView({
         // Delete each selected card
         await Promise.all(
           Array.from(selectedIds).map((id) =>
-            fetch(`/api/collection/${id}`, { method: "DELETE" })
-          )
+            fetch(`/api/collection/${id}`, { method: "DELETE" }),
+          ),
         );
 
         setSelectedIds(new Set());
@@ -193,7 +254,7 @@ export default function CollectionListView({
               });
             }
             return Promise.resolve();
-          })
+          }),
         );
         debouncedRefresh();
       } else if (bulkAction === "decrement") {
@@ -212,7 +273,7 @@ export default function CollectionListView({
               });
             }
             return Promise.resolve();
-          })
+          }),
         );
         debouncedRefresh();
       } else if (bulkAction === "export") {
@@ -228,7 +289,7 @@ export default function CollectionListView({
               c.meta?.rarity || "",
               c.finish,
               `"${(c.notes || "").replace(/"/g, '""')}"`,
-            ].join(",")
+            ].join(","),
           ),
         ];
         const csvContent = csvRows.join("\n");
@@ -299,7 +360,7 @@ export default function CollectionListView({
                   }`}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
+                  <img
                     src={`/api/images/${previewCard.slug}`}
                     alt={previewCard.name}
                     className={`w-full h-full ${
@@ -320,7 +381,7 @@ export default function CollectionListView({
               </div>
             );
           })(),
-          document.body
+          document.body,
         )}
 
       {/* Bulk Actions Bar */}
@@ -387,21 +448,43 @@ export default function CollectionListView({
             <tr>
               <th className="w-10 px-3 py-3" />
               <th className="w-16 px-3 py-3" />
-              <th className="px-3 py-3 text-left text-sm font-medium text-gray-400">
-                Name
-              </th>
-              <th className="px-3 py-3 text-left text-sm font-medium text-gray-400 hidden md:table-cell">
-                Set
-              </th>
-              <th className="px-3 py-3 text-left text-sm font-medium text-gray-400 hidden lg:table-cell">
-                Rarity
-              </th>
+              <SortableHeader
+                label="Name"
+                field="name"
+                currentSort={sort}
+                currentOrder={order}
+                onSort={onSortChange}
+              />
+              <SortableHeader
+                label="Set"
+                field="name"
+                currentSort={sort}
+                currentOrder={order}
+                onSort={onSortChange}
+                className="hidden md:table-cell"
+                disabled
+              />
+              <SortableHeader
+                label="Rarity"
+                field="name"
+                currentSort={sort}
+                currentOrder={order}
+                onSort={onSortChange}
+                className="hidden lg:table-cell"
+                disabled
+              />
               <th className="px-3 py-3 text-left text-sm font-medium text-gray-400 hidden sm:table-cell">
                 Finish
               </th>
-              <th className="px-3 py-3 text-center text-sm font-medium text-gray-400 w-28">
-                Qty
-              </th>
+              <SortableHeader
+                label="Qty"
+                field="quantity"
+                currentSort={sort}
+                currentOrder={order}
+                onSort={onSortChange}
+                className="w-28"
+                center
+              />
               <th className="px-3 py-3 text-center text-sm font-medium text-gray-400 w-20">
                 Actions
               </th>
@@ -458,7 +541,7 @@ export default function CollectionListView({
                   </td>
                   <td
                     className={`px-3 py-2 text-sm hidden lg:table-cell ${getRarityColor(
-                      card.meta?.rarity || ""
+                      card.meta?.rarity || "",
                     )}`}
                   >
                     {card.meta?.rarity || "—"}
