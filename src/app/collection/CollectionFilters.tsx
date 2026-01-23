@@ -44,7 +44,7 @@ export default function CollectionFilters({
             data.map((s: { id: number; name: string }) => ({
               id: s.id,
               name: s.name,
-            }))
+            })),
           );
         }
       })
@@ -57,19 +57,21 @@ export default function CollectionFilters({
       });
   }, []);
 
-  // Debounced search
+  // Debounced search - only trigger when search actually changes
   useEffect(() => {
+    const currentSearch = filters.search || "";
+    // Skip if search hasn't actually changed (handles "" vs undefined)
+    if (search === currentSearch) return;
+
     const timeout = setTimeout(() => {
-      if (search !== filters.search) {
-        onFiltersChange({ ...filters, search: search || undefined });
-      }
+      onFiltersChange({ ...filters, search: search || undefined });
     }, 300);
     return () => clearTimeout(timeout);
   }, [search, filters, onFiltersChange]);
 
   const handleFilterChange = (
     key: keyof FilterType,
-    value: string | number | undefined
+    value: string | number | undefined,
   ) => {
     onFiltersChange({
       ...filters,
@@ -109,7 +111,7 @@ export default function CollectionFilters({
           onChange={(e) =>
             handleFilterChange(
               "setId",
-              e.target.value ? parseInt(e.target.value) : undefined
+              e.target.value ? parseInt(e.target.value) : undefined,
             )
           }
           className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm"
@@ -176,7 +178,7 @@ export default function CollectionFilters({
           onChange={(e) => {
             const [s, o] = e.target.value.split(":") as [
               CollectionSortField,
-              SortOrder
+              SortOrder,
             ];
             onSortChange(s, o);
           }}

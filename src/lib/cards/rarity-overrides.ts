@@ -37,7 +37,7 @@ const RARITY_OVERRIDES_LOWER = new Map<string, Rarity>(
   Object.entries(RARITY_OVERRIDES).map(([name, rarity]) => [
     name.toLowerCase(),
     rarity,
-  ])
+  ]),
 );
 
 /**
@@ -55,7 +55,7 @@ export function getRarityOverride(cardName: string): Rarity | null {
  */
 export function applyRarityOverride(
   cardName: string,
-  rarity: string | null | undefined
+  rarity: string | null | undefined,
 ): string | null {
   if (rarity) return rarity;
   return getRarityOverride(cardName);

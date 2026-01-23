@@ -39,7 +39,7 @@ export default function CollectionPage() {
   // Hydrate view preferences from localStorage after mount (avoids SSR mismatch)
   useEffect(() => {
     const savedMode = localStorage.getItem(
-      "sorcery:collectionViewMode"
+      "sorcery:collectionViewMode",
     ) as ViewMode;
     const savedZoom = localStorage.getItem("sorcery:collectionZoom");
     if (savedMode === "grid" || savedMode === "list") {
@@ -202,7 +202,7 @@ export default function CollectionPage() {
 
   const handleSortChange = (
     newSort: CollectionSortField,
-    newOrder: SortOrder
+    newOrder: SortOrder,
   ) => {
     setSort(newSort);
     setOrder(newOrder);
@@ -349,11 +349,11 @@ export default function CollectionPage() {
                             setShowDangerZone(false);
                             refreshCollection();
                             alert(
-                              `Deleted ${result.deleted} cards from your collection.`
+                              `Deleted ${result.deleted} cards from your collection.`,
                             );
                           } else {
                             alert(
-                              result.error || "Failed to delete collection"
+                              result.error || "Failed to delete collection",
                             );
                           }
                         } catch {
@@ -421,6 +421,9 @@ export default function CollectionPage() {
           cards={data?.cards || []}
           loading={loading}
           onQuantityChange={refreshCollection}
+          sort={sort}
+          order={order}
+          onSortChange={handleSortChange}
         />
       )}
 
