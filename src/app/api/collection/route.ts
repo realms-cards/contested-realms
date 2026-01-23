@@ -72,8 +72,9 @@ export async function GET(req: NextRequest) {
       where.card = cardFilter;
     }
 
-    // Build orderBy
+    // Build orderBy for DB-level sorting (rarity requires post-sort)
     let orderBy: Prisma.CollectionCardOrderByWithRelationInput;
+    const needsPostSort = sort === "rarity"; // Rarity is in CardSetMetadata, not CollectionCard
     switch (sort) {
       case "quantity":
         orderBy = { quantity: order };
@@ -81,27 +82,30 @@ export async function GET(req: NextRequest) {
       case "recent":
         orderBy = { updatedAt: order };
         break;
+      case "rarity":
+        // Will be sorted in post-processing, use name as secondary sort
+        orderBy = { card: { name: "asc" } };
+        break;
       case "name":
       default:
         orderBy = { card: { name: order } };
         break;
     }
 
-    // When filtering by type or rarity, we need to:
-    // 1. Fetch ALL cards (without pagination) to filter correctly
-    // 2. Apply type/rarity filters using set-specific metadata
-    // 3. THEN paginate the filtered results
+    // When filtering by type/rarity OR sorting by rarity, we need to:
+    // 1. Fetch ALL cards (without pagination) to filter/sort correctly
+    // 2. Apply type/rarity filters and rarity sorting using set-specific metadata
+    // 3. THEN paginate the filtered/sorted results
     const needsMetadataFilter = Boolean(type || rarity);
+    const needsAllCards = needsMetadataFilter || needsPostSort;
 
-    // Fetch cards - all if metadata filter needed, paginated otherwise
+    // Fetch cards - all if metadata filter/sort needed, paginated otherwise
     const [allCards, totalCount, statsAgg, uniqueCount] = await Promise.all([
       prisma.collectionCard.findMany({
         where,
         orderBy,
-        // Only paginate if NOT filtering by type/rarity
-        ...(needsMetadataFilter
-          ? {}
-          : { skip: (page - 1) * limit, take: limit }),
+        // Only paginate at DB level if NOT filtering/sorting by metadata fields
+        ...(needsAllCards ? {} : { skip: (page - 1) * limit, take: limit }),
         include: {
           card: true,
           variant: {
@@ -110,9 +114,9 @@ export async function GET(req: NextRequest) {
           set: true,
         },
       }),
-      // Get total count for pagination (only needed when NOT filtering by metadata)
-      needsMetadataFilter
-        ? Promise.resolve(0) // Will be calculated after filtering
+      // Get total count for pagination (only needed when NOT filtering/sorting by metadata)
+      needsAllCards
+        ? Promise.resolve(0) // Will be calculated after filtering/sorting
         : prisma.collectionCard.count({ where }),
       // Calculate stats - aggregate
       prisma.collectionCard.aggregate({
@@ -165,14 +169,31 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // Calculate correct total AFTER filtering (or use DB count if not filtering)
-    // Note: Prisma count can return BigInt in some cases, ensure it's a number
-    const total = needsMetadataFilter
-      ? filteredCards.length
-      : Number(totalCount);
+    // Apply rarity sorting if requested (post-sort since rarity is in CardSetMetadata)
+    if (needsPostSort) {
+      const rarityOrder = ["Unique", "Elite", "Exceptional", "Ordinary"];
+      filteredCards = [...filteredCards].sort((a, b) => {
+        const metaA = getMetaForCard(a);
+        const metaB = getMetaForCard(b);
+        const rarityA = metaA?.rarity ?? "Unknown";
+        const rarityB = metaB?.rarity ?? "Unknown";
+        const indexA = rarityOrder.indexOf(rarityA);
+        const indexB = rarityOrder.indexOf(rarityB);
+        // Unknown rarities go to end
+        const orderA = indexA === -1 ? 999 : indexA;
+        const orderB = indexB === -1 ? 999 : indexB;
+        const diff = orderA - orderB;
+        // Reverse for desc order (Unique first is "asc" by rarity value)
+        return order === "desc" ? -diff : diff;
+      });
+    }
 
-    // Apply pagination AFTER filtering (only if we fetched all cards)
-    const paginatedCards = needsMetadataFilter
+    // Calculate correct total AFTER filtering (or use DB count if not filtering/sorting)
+    // Note: Prisma count can return BigInt in some cases, ensure it's a number
+    const total = needsAllCards ? filteredCards.length : Number(totalCount);
+
+    // Apply pagination AFTER filtering/sorting (only if we fetched all cards)
+    const paginatedCards = needsAllCards
       ? filteredCards.slice((page - 1) * limit, page * limit)
       : filteredCards;
 
