@@ -62,6 +62,16 @@ async function ensureDir(p) {
 async function maybeFetch(baseUrl, filename, outDir) {
   const url = `${baseUrl}${filename}`;
   const dest = path.join(outDir, filename);
+
+  // Skip if file already exists (e.g., committed to repo)
+  try {
+    await fsp.access(dest);
+    console.log(`Skip ${filename}: already exists`);
+    return true;
+  } catch {
+    // File doesn't exist, proceed to download
+  }
+
   try {
     await download(url, dest);
     console.log(`Fetched ${filename}`);
