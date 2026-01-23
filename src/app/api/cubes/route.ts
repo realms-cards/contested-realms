@@ -24,14 +24,14 @@ export async function GET() {
       prisma.cube.findMany({
         where: { userId },
         orderBy: { updatedAt: "desc" },
-        include: { cards: { select: { count: true } } },
+        include: { cards: { select: { count: true, zone: true } } },
       }),
       prisma.cube.findMany({
         where: { isPublic: true, userId: { not: userId } },
         orderBy: { updatedAt: "desc" },
         take: 50,
         include: {
-          cards: { select: { count: true } },
+          cards: { select: { count: true, zone: true } },
           user: { select: { name: true } },
         },
       }),

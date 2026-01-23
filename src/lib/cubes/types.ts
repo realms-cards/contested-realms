@@ -6,6 +6,8 @@ export type CubeSummary = {
   imported: boolean;
   updatedAt: string;
   cardCount: number;
+  /** Count of sideboard/extras cards (not in draft boosters) */
+  sideboardCount: number;
   userName?: string;
   isOwner?: boolean;
 };

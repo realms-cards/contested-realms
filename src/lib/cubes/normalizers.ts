@@ -19,20 +19,37 @@ function toPositiveInteger(value: unknown): number | null {
   return null;
 }
 
-function extractCardCount(raw: CubeSummaryInput): number {
-  const direct = toPositiveInteger(raw.cardCount ?? raw["cardCount"]);
-  if (direct !== null) {
-    return direct;
+type CardCounts = { main: number; sideboard: number };
+
+function extractCardCounts(raw: CubeSummaryInput): CardCounts {
+  // Check for direct counts first
+  const directMain = toPositiveInteger(raw.cardCount ?? raw["cardCount"]);
+  const directSideboard = toPositiveInteger(raw.sideboardCount ?? raw["sideboardCount"]);
+  if (directMain !== null && directSideboard !== null) {
+    return { main: directMain, sideboard: directSideboard };
   }
+
   const cards = raw.cards ?? raw["cards"];
   if (!Array.isArray(cards)) {
-    return 0;
+    return { main: directMain ?? 0, sideboard: directSideboard ?? 0 };
   }
-  return cards.reduce((sum, entry) => {
-    if (!entry || typeof entry !== "object") return sum;
-    const count = toPositiveInteger((entry as { count?: unknown }).count);
-    return count !== null ? sum + count : sum;
-  }, 0);
+
+  let mainCount = 0;
+  let sideboardCount = 0;
+  for (const entry of cards) {
+    if (!entry || typeof entry !== "object") continue;
+    const entryObj = entry as { count?: unknown; zone?: unknown };
+    const count = toPositiveInteger(entryObj.count);
+    if (count === null || count === 0) continue;
+    const zone = typeof entryObj.zone === "string" ? entryObj.zone.toLowerCase() : "main";
+    if (zone === "sideboard") {
+      sideboardCount += count;
+    } else {
+      mainCount += count;
+    }
+  }
+
+  return { main: mainCount, sideboard: sideboardCount };
 }
 
 export function normalizeCubeSummary(
@@ -74,7 +91,7 @@ export function normalizeCubeSummary(
     updatedAt = new Date().toISOString();
   }
 
-  const cardCount = extractCardCount(raw);
+  const counts = extractCardCounts(raw);
 
   const base: CubeSummary = {
     id,
@@ -83,7 +100,8 @@ export function normalizeCubeSummary(
     isPublic,
     imported,
     updatedAt,
-    cardCount,
+    cardCount: counts.main,
+    sideboardCount: counts.sideboard,
   };
 
   return { ...base, ...overrides };
