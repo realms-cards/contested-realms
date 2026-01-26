@@ -1,4 +1,9 @@
 import type { StateCreator } from "zustand";
+import {
+  TOKEN_BY_NAME,
+  newTokenInstanceId,
+  tokenSlug,
+} from "@/lib/game/tokens";
 import type {
   BabelTowerMerge,
   CardRef,
@@ -8,6 +13,10 @@ import type {
   PlayerKey,
   ServerPatchT,
 } from "./types";
+import { parseCellKey, getCellNumber } from "./utils/boardHelpers";
+import { prepareCardForSeat } from "./utils/cardHelpers";
+import { newPermanentInstanceId } from "./utils/idHelpers";
+import { randomTilt } from "./utils/permanentHelpers";
 
 // Detection functions for Babel cards
 export function isApexOfBabel(cardName: string | null | undefined): boolean {
@@ -333,16 +342,6 @@ export const createBabelTowerSlice: StateCreator<
     // Optionally place Rubble token
     let permanentsNext = state.permanents;
     if (placeRubble) {
-      const {
-        TOKEN_BY_NAME,
-        newTokenInstanceId,
-        tokenSlug,
-      } = require("@/lib/game/tokens");
-      const { prepareCardForSeat } = require("./utils/cardHelpers");
-      const { newPermanentInstanceId } = require("./utils/idHelpers");
-      const { randomTilt } = require("./utils/permanentHelpers");
-      const { parseCellKey, getCellNumber } = require("./utils/boardHelpers");
-
       const rubbleDef = TOKEN_BY_NAME["rubble"];
       if (rubbleDef) {
         const rubbleCard = prepareCardForSeat(
@@ -369,7 +368,7 @@ export const createBabelTowerSlice: StateCreator<
           instanceId: rubbleCard.instanceId ?? newPermanentInstanceId(),
         });
         permanentsNext[cellKey] = arr;
-        const [x, y] = parseCellKey(cellKey);
+        const { x, y } = parseCellKey(cellKey);
         const playerNum = ownerSeat === "p1" ? "1" : "2";
         get().log(
           `[p${playerNum}:PLAYER] places [p${playerNum}card:Rubble] at #${getCellNumber(x, y, state.board.size.w)}`,

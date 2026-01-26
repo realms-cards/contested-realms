@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useCallback } from "react";
 import { X, Users, Hash, Eye, Check, Copy } from "lucide-react";
+import { useState, useCallback } from "react";
 import { useGameStore } from "@/lib/game/store";
 
 interface MatchInfoPopupProps {

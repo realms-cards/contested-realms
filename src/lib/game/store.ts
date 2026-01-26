@@ -2,14 +2,14 @@ import { create, type StateCreator } from "zustand";
 import { createAccusationSlice } from "./store/accusationState";
 import { createAnimistSlice } from "./store/animistState";
 import { createAnnualFairSlice } from "./store/annualFairState";
-import {
-  createBabelTowerSlice,
-  createInitialBabelTowers,
-} from "./store/babelTowerState";
 import { createAssortedAnimalsSlice } from "./store/assortedAnimalsState";
 import { createAtlanteanFateSlice } from "./store/atlanteanFateState";
 import { createAutoResolveSlice } from "./store/autoResolveState";
 import { createAvatarSlice } from "./store/avatarState";
+import {
+  createBabelTowerSlice,
+  createInitialBabelTowers,
+} from "./store/babelTowerState";
 import { createBlackMassSlice } from "./store/blackMassState";
 import { createBoardSlice, createInitialBoard } from "./store/boardState";
 import {
