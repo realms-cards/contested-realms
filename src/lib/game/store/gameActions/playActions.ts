@@ -7,8 +7,8 @@ import {
   GENESIS_MANA_SITES,
   TOWER_GENESIS_SITES,
 } from "@/lib/game/mana-providers";
-import { isApexOfBabel, isBaseOfBabel } from "../babelTowerState";
 import { TOKEN_BY_NAME } from "@/lib/game/tokens";
+import { isApexOfBabel, isBaseOfBabel } from "../babelTowerState";
 import { isMismanagedMortuary } from "../specialSiteState";
 import type {
   CardRef,
