@@ -2,6 +2,19 @@
 
 ## January 2026
 
+### Jan 26 - User requested fixes
+
+- **add custom resolvers for Sites** "Beacon" and "Annual Fair"
+- **construct the tower of babel** by playing the apex on a base
+- **harden D20 roll** for first player, should handle ties better
+- **fix inspect hand follow up actions**
+- **attack site** now only shows in right-click menu if "combat interaction guides" are on for both players
+- **fix bug in health gauge component**
+- **fix mana buttons not having an effect**
+- **fix interrogator overlay** will only work if combat interactions are enabled
+- **revisions and fixes for combat interactions** fix previews showing wrong attacker power, fix avatars attacking "here" on right click, fix avatar vs avatar combat
+- **remove spectators seeing resolver overlays**
+
 ### Jan 22 - Legion of Gall
 
 - **add custom resolver for Legion of Gall**

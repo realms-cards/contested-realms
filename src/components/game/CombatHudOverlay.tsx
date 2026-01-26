@@ -13,6 +13,7 @@ export default function CombatHudOverlay() {
   const currentPlayer = useGameStore((s) => s.currentPlayer);
   const board = useGameStore((s) => s.board);
   const permanents = useGameStore((s) => s.permanents);
+  const avatars = useGameStore((s) => s.avatars);
   const metaByCardId = useGameStore((s) => s.metaByCardId);
   const players = useGameStore((s) => s.players);
 
@@ -32,6 +33,7 @@ export default function CombatHudOverlay() {
   const autoResolveCombat = useGameStore((s) => s.autoResolveCombat);
   const cancelCombat = useGameStore((s) => s.cancelCombat);
   const offerIntercept = useGameStore((s) => s.offerIntercept);
+  const setTapPermanent = useGameStore((s) => s.setTapPermanent);
 
   const combatGuidesActive = useGameStore((s) => s.combatGuidesActive);
 
@@ -62,7 +64,7 @@ export default function CombatHudOverlay() {
           style={{ color: PLAYER_COLORS[playerKey], fontWeight: 600 }}
         >
           {cardName}
-        </span>
+        </span>,
       );
       lastIndex = match.index + match[0].length;
     }
@@ -100,7 +102,9 @@ export default function CombatHudOverlay() {
       const list = permanents[at] || [];
       const attachments = list.filter(
         (p) =>
-          p.attachedTo && p.attachedTo.at === at && p.attachedTo.index === index
+          p.attachedTo &&
+          p.attachedTo.at === at &&
+          p.attachedTo.index === index,
       );
       for (const att of attachments) {
         const name = (att.card?.name || "").toLowerCase();
@@ -133,7 +137,7 @@ export default function CombatHudOverlay() {
       if (
         hasUntrackedArtifact(
           pendingCombat.target.at,
-          pendingCombat.target.index
+          pendingCombat.target.index,
         )
       )
         return true;
@@ -146,7 +150,6 @@ export default function CombatHudOverlay() {
     const pendingCombat = useGameStore((s) => s.pendingCombat);
     const setDamageAssignment = useGameStore((s) => s.setDamageAssignment);
     const permanents = useGameStore((s) => s.permanents);
-    const metaByCardId = useGameStore((s) => s.metaByCardId);
     const [assign, setAssign] = useState<Record<string, number>>({});
 
     const pc = pendingCombat;
@@ -159,15 +162,29 @@ export default function CombatHudOverlay() {
 
     function getAtkDef(
       at: string,
-      index: number
+      index: number,
     ): { atk: number; def: number } {
       try {
-        const cardId = permanents[at]?.[index]?.card?.cardId;
-        const m = cardId ? metaByCardId[Number(cardId)] : undefined;
-        return {
-          atk: Number(m?.attack ?? 0) || 0,
-          def: Number(m?.defence ?? m?.attack ?? 0) || 0,
-        };
+        const card = permanents[at]?.[index]?.card;
+        if (!card) return { atk: 0, def: 0 };
+        const cardAtk =
+          typeof card.attack === "number" && Number.isFinite(card.attack)
+            ? card.attack
+            : null;
+        const cardDef =
+          typeof card.defence === "number" && Number.isFinite(card.defence)
+            ? card.defence
+            : null;
+        if (cardAtk != null || cardDef != null) {
+          const atk = Number(cardAtk ?? 0) || 0;
+          const def = Number(cardDef ?? cardAtk ?? 0) || 0;
+          return { atk, def };
+        }
+        const cardId = card.cardId;
+        const meta = cardId ? metaByCardId[Number(cardId)] : undefined;
+        const atk = Number(meta?.attack ?? 0) || 0;
+        const def = Number(meta?.defence ?? meta?.attack ?? 0) || 0;
+        return { atk, def };
       } catch {
         return { atk: 0, def: 0 };
       }
@@ -176,13 +193,27 @@ export default function CombatHudOverlay() {
       const list = permanents[at] || [];
       return list.filter(
         (p) =>
-          p.attachedTo && p.attachedTo.at === at && p.attachedTo.index === index
+          p.attachedTo &&
+          p.attachedTo.at === at &&
+          p.attachedTo.index === index,
       );
     }
-    function computeEffectiveAttack(a: { at: CellKey; index: number }): {
+    function computeEffectiveAttack(a: {
+      at: CellKey;
+      index: number;
+      isAvatar?: boolean;
+      avatarSeat?: "p1" | "p2";
+    }): {
       atk: number;
       firstStrike: boolean;
     } {
+      // Handle avatar attackers - get attack from avatar state
+      if (a.isAvatar && a.avatarSeat) {
+        const avatars = useGameStore.getState().avatars;
+        const avatarCard = avatars?.[a.avatarSeat]?.card;
+        const atk = Number(avatarCard?.attack ?? 1) || 1;
+        return { atk, firstStrike: false };
+      }
       const base = getAtkDef(a.at, a.index).atk;
       const attachments = getAttachments(a.at, a.index);
       let atk = base;
@@ -208,6 +239,8 @@ export default function CombatHudOverlay() {
       const eff = computeEffectiveAttack({
         at: pc.attacker.at,
         index: pc.attacker.index,
+        isAvatar: pc.attacker.isAvatar,
+        avatarSeat: pc.attacker.avatarSeat,
       });
       return Math.max(0, Math.floor(eff.atk));
     })();
@@ -221,7 +254,7 @@ export default function CombatHudOverlay() {
     }, [pc?.id]);
     const sum = Object.values(assign).reduce(
       (a, v) => a + (Number.isFinite(v) ? Math.max(0, Math.floor(v)) : 0),
-      0
+      0,
     );
     const valid = defs.length <= 1 || sum === totalAtk;
     const quickFill = () => {
@@ -277,7 +310,7 @@ export default function CombatHudOverlay() {
                     onChange={(e) => {
                       const v = Math.max(
                         0,
-                        Math.floor(Number(e.target.value || 0))
+                        Math.floor(Number(e.target.value || 0)),
                       );
                       setAssign((prev) => ({ ...prev, [d.key]: v }));
                     }}
@@ -332,14 +365,29 @@ export default function CombatHudOverlay() {
   }
 
   // Utility: compute effective attack incl. attachments (Lance +1 and First Strike, Disabled => 0)
+  // Uses card's enriched data directly (from enrichCardRefs) instead of metaByCardId lookup
   function getAtkDef(at: string, index: number): { atk: number; def: number } {
     try {
-      const cardId = permanents[at]?.[index]?.card?.cardId;
-      const m = cardId ? metaByCardId[Number(cardId)] : undefined;
-      return {
-        atk: Number(m?.attack ?? 0) || 0,
-        def: Number(m?.defence ?? m?.attack ?? 0) || 0,
-      };
+      const card = permanents[at]?.[index]?.card;
+      if (!card) return { atk: 0, def: 0 };
+      const cardAtk =
+        typeof card.attack === "number" && Number.isFinite(card.attack)
+          ? card.attack
+          : null;
+      const cardDef =
+        typeof card.defence === "number" && Number.isFinite(card.defence)
+          ? card.defence
+          : null;
+      if (cardAtk != null || cardDef != null) {
+        const atk = Number(cardAtk ?? 0) || 0;
+        const def = Number(cardDef ?? cardAtk ?? 0) || 0;
+        return { atk, def };
+      }
+      const cardId = card.cardId;
+      const meta = cardId ? metaByCardId[Number(cardId)] : undefined;
+      const atk = Number(meta?.attack ?? 0) || 0;
+      const def = Number(meta?.defence ?? meta?.attack ?? 0) || 0;
+      return { atk, def };
     } catch {
       return { atk: 0, def: 0 };
     }
@@ -348,13 +396,24 @@ export default function CombatHudOverlay() {
     const list = permanents[at] || [];
     return list.filter(
       (p) =>
-        p.attachedTo && p.attachedTo.at === at && p.attachedTo.index === index
+        p.attachedTo && p.attachedTo.at === at && p.attachedTo.index === index,
     );
   }
-  function computeEffectiveAttack(a: { at: CellKey; index: number }): {
+  function computeEffectiveAttack(a: {
+    at: CellKey;
+    index: number;
+    isAvatar?: boolean;
+    avatarSeat?: "p1" | "p2";
+  }): {
     atk: number;
     firstStrike: boolean;
   } {
+    // Handle avatar attackers - get attack from avatar state
+    if (a.isAvatar && a.avatarSeat) {
+      const avatarCard = avatars?.[a.avatarSeat]?.card;
+      const atk = Number(avatarCard?.attack ?? 1) || 1;
+      return { atk, firstStrike: false };
+    }
     const base = getAtkDef(a.at, a.index).atk;
     const attachments = getAttachments(a.at, a.index);
     let atk = base;
@@ -402,6 +461,8 @@ export default function CombatHudOverlay() {
     const eff = computeEffectiveAttack({
       at: attackConfirm.attacker.at,
       index: attackConfirm.attacker.index,
+      isAvatar: attackConfirm.attacker.isAvatar,
+      avatarSeat: attackConfirm.attacker.avatarSeat,
     });
     // Site damage suggestion follows DD rule
     if (attackConfirm.target.kind === "site") {
@@ -420,7 +481,7 @@ export default function CombatHudOverlay() {
       if (owner === 1 || owner === 2) {
         const seat: "p1" | "p2" =
           owner === 1 || owner === 2 ? seatFromOwner(owner) : "p1";
-        const dd = players[seat].lifeState === "dd";
+        const dd = players[seat]?.lifeState === "dd";
         const dmg = dd ? 0 : Math.max(0, Math.floor(eff.atk));
         return (
           <span className="opacity-80">
@@ -488,7 +549,7 @@ export default function CombatHudOverlay() {
     } else if (pendingCombat?.defenders?.length) {
       tDef = pendingCombat.defenders.reduce(
         (s, d) => s + getAtkDef(d.at, d.index).def,
-        0
+        0,
       );
     } else if (
       pendingCombat?.target &&
@@ -511,6 +572,8 @@ export default function CombatHudOverlay() {
     const a = computeEffectiveAttack({
       at: pendingCombat.attacker.at,
       index: pendingCombat.attacker.index,
+      isAvatar: pendingCombat.attacker.isAvatar,
+      avatarSeat: pendingCombat.attacker.avatarSeat,
     });
     let sumDef = 0;
     let sumAtk = 0;
@@ -562,7 +625,7 @@ export default function CombatHudOverlay() {
         const seat: "p1" | "p2" =
           owner === 1 ? "p1" : owner === 2 ? "p2" : fallbackSeat;
         if (seat === "p1" || seat === "p2") {
-          const dd = players[seat].lifeState === "dd";
+          const dd = players[seat]?.lifeState === "dd";
           const dmg = dd ? 0 : Math.max(0, Math.floor(a.atk));
           const life = Number(players[seat]?.life ?? 0);
           const after = Math.max(0, life - dmg);
@@ -672,27 +735,26 @@ export default function CombatHudOverlay() {
         // Compute target's effective stats
         const targetDef = (() => {
           try {
-            const id =
-              permanents[pendingCombat.target.at]?.[pendingCombat.target.index]
-                ?.card?.cardId;
-            const m = id ? metaByCardId[Number(id)] : undefined;
-            return Number(m?.defence ?? 0) || 0;
+            return getAtkDef(
+              pendingCombat.target.at,
+              pendingCombat.target.index,
+            ).def;
           } catch {
             return 0;
           }
         })();
         const targetEffective = computeEffectiveAttack({
           at: pendingCombat.target.at as CellKey,
-          index: pendingCombat.target.index,
+          index: pendingCombat.target.index ?? 0,
+          // Target is a permanent, not an avatar
         });
         const attackerDefence = (() => {
           try {
-            const id =
-              permanents[pendingCombat.attacker.at]?.[
-                pendingCombat.attacker.index
-              ]?.card?.cardId;
-            const m = id ? metaByCardId[Number(id)] : undefined;
-            return Number(m?.defence ?? 0) || 0;
+            if (pendingCombat.attacker.isAvatar) return 0;
+            return getAtkDef(
+              pendingCombat.attacker.at,
+              pendingCombat.attacker.index,
+            ).def;
           } catch {
             return 0;
           }
@@ -717,11 +779,11 @@ export default function CombatHudOverlay() {
     }
     const attackerDef = (() => {
       try {
-        const id =
-          permanents[pendingCombat.attacker.at]?.[pendingCombat.attacker.index]
-            ?.card?.cardId;
-        const m = id ? metaByCardId[Number(id)] : undefined;
-        return m?.defence ?? null;
+        if (pendingCombat.attacker.isAvatar) return null;
+        return getAtkDef(
+          pendingCombat.attacker.at,
+          pendingCombat.attacker.index,
+        ).def;
       } catch {
         return null;
       }
@@ -859,6 +921,14 @@ export default function CombatHudOverlay() {
               className="mx-1 rounded bg-white/15 hover:bg-white/25 px-3 py-1"
               onClick={() => {
                 try {
+                  // Tap the moved minion now that user has chosen to just move
+                  if (!attackChoice.attacker.isAvatar) {
+                    setTapPermanent(
+                      attackChoice.attacker.at as CellKey,
+                      attackChoice.attacker.index,
+                      true,
+                    );
+                  }
                   offerIntercept(attackChoice.tile, attackChoice.attacker);
                 } finally {
                   setAttackChoice(null);
@@ -870,6 +940,14 @@ export default function CombatHudOverlay() {
             <button
               className="mx-1 rounded bg-emerald-600/90 hover:bg-emerald-500 px-3 py-1"
               onClick={() => {
+                // Tap the moved minion now that user has chosen to attack
+                if (!attackChoice.attacker.isAvatar) {
+                  setTapPermanent(
+                    attackChoice.attacker.at as CellKey,
+                    attackChoice.attacker.index,
+                    true,
+                  );
+                }
                 setAttackTargetChoice({
                   tile: attackChoice.tile,
                   attacker: attackChoice.attacker,
@@ -943,7 +1021,7 @@ export default function CombatHudOverlay() {
                   declareAttack(
                     attackConfirm.tile,
                     attackConfirm.attacker,
-                    attackConfirm.target
+                    attackConfirm.target,
                   );
                 } finally {
                   setAttackConfirm(null);
@@ -1116,12 +1194,14 @@ export default function CombatHudOverlay() {
                   const eff = computeEffectiveAttack({
                     at: pendingCombat.attacker.at,
                     index: pendingCombat.attacker.index,
+                    isAvatar: pendingCombat.attacker.isAvatar,
+                    avatarSeat: pendingCombat.attacker.avatarSeat,
                   });
                   const totalAtk = Math.max(0, Math.floor(eff.atk));
                   const sum = (pendingCombat.assignment || []).reduce(
                     (s, a) =>
                       s + Math.max(0, Math.floor(Number(a.amount) || 0)),
-                    0
+                    0,
                   );
                   const valid = sum === totalAtk;
                   return (

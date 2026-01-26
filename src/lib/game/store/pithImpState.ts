@@ -248,11 +248,11 @@ export const createPithImpSlice: StateCreator<
     const pithImpHands = get().pithImpHands;
     const zones = get().zones;
 
-    // Find the Pith Imp entry
+    // Find the Pith Imp entry - prioritize instanceId (unique per card)
     const pithImpEntry = pithImpHands.find(
       (p) =>
-        p.minion.at === minionAt ||
-        (minionInstanceId && p.minion.instanceId === minionInstanceId),
+        (minionInstanceId && p.minion.instanceId === minionInstanceId) ||
+        (!minionInstanceId && p.minion.at === minionAt),
     );
 
     if (!pithImpEntry || pithImpEntry.hand.length === 0) {
@@ -286,10 +286,11 @@ export const createPithImpSlice: StateCreator<
     } as GameState["zones"];
 
     // Remove from tracking
+    // Filter out the matched Pith Imp - use same matching logic
     const remainingPithImpHands = pithImpHands.filter(
       (p) =>
-        p.minion.at !== minionAt &&
-        (!minionInstanceId || p.minion.instanceId !== minionInstanceId),
+        !(minionInstanceId && p.minion.instanceId === minionInstanceId) &&
+        !(!minionInstanceId && p.minion.at === minionAt),
     );
 
     // Remove visual attachments (stolen cards with pithImpStolen flag)
@@ -340,10 +341,11 @@ export const createPithImpSlice: StateCreator<
     minionAt: CellKey,
   ): CardRef[] => {
     const pithImpHands = get().pithImpHands;
+    // Prioritize instanceId (unique per card), fallback to position only if no instanceId
     const entry = pithImpHands.find(
       (p) =>
-        p.minion.at === minionAt ||
-        (minionInstanceId && p.minion.instanceId === minionInstanceId),
+        (minionInstanceId && p.minion.instanceId === minionInstanceId) ||
+        (!minionInstanceId && p.minion.at === minionAt),
     );
     return entry?.hand || [];
   },

@@ -459,12 +459,6 @@ export const createNetworkSlice: StateCreator<
         // CRITICAL: Filter out Searing Truth drawn cards from incoming spellbook patches
         // and ensure they're in the target's hand. Server doesn't know about local Searing Truth state.
         const pendingSearingTruth = state.pendingSearingTruth;
-        console.log("[SearingTruth] applyServerPatch filter check:", {
-          hasPending: !!pendingSearingTruth,
-          phase: pendingSearingTruth?.phase,
-          targetSeat: pendingSearingTruth?.targetSeat,
-          revealedCount: pendingSearingTruth?.revealedCards?.length,
-        });
         // Filter whenever we have revealed cards, regardless of phase
         // (the pendingSearingTruth is kept for a few seconds after resolve to protect zones)
         if (
@@ -1002,6 +996,14 @@ export const createNetworkSlice: StateCreator<
         next.gemTokens = [];
       }
 
+      // Babel Tower merge tracking (Tower of Babel = Base + Apex stacked)
+      // Always replace the array, don't merge (array of merge records)
+      if (p.babelTowers !== undefined) {
+        next.babelTowers = p.babelTowers;
+      } else if (replaceKeys.has("babelTowers")) {
+        next.babelTowers = [];
+      }
+
       // Snapshot creation is handled by GameToolbox.tsx useEffect
 
       const lastTs =
@@ -1349,6 +1351,10 @@ export const createNetworkSlice: StateCreator<
         next.specialSiteState = replaceKeys.has("specialSiteState")
           ? (p.specialSiteState as GameState["specialSiteState"])
           : (p.specialSiteState as GameState["specialSiteState"]);
+      }
+      // Babel Tower merge tracking - applyPatch version
+      if (p.babelTowers !== undefined) {
+        next.babelTowers = p.babelTowers;
       }
 
       // CRITICAL: Spread state first, then next - otherwise we lose all state not in the patch

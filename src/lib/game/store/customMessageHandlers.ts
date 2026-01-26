@@ -609,6 +609,25 @@ export function handleCustomMessage(
     }
     return;
   }
+  if (t === "combatLifeDamage") {
+    const dmgAny = (msg as { damage?: unknown }).damage as unknown;
+    if (!Array.isArray(dmgAny)) return;
+    const mySeat = get().actorKey as PlayerKey | null;
+    for (const d of dmgAny) {
+      if (!d || typeof d !== "object") continue;
+      const rec = d as Record<string, unknown>;
+      const seatRaw = rec.seat;
+      const seat =
+        seatRaw === "p1" || seatRaw === "p2" ? (seatRaw as PlayerKey) : null;
+      const amt = Number(rec.amount);
+      if (!seat || !Number.isFinite(amt)) continue;
+      if (!mySeat || seat !== mySeat) continue;
+      try {
+        get().addLife(seat, -Math.max(0, Math.floor(amt)));
+      } catch {}
+    }
+    return;
+  }
   if (t === "combatAutoApply") {
     const killsAny = (msg as { kills?: unknown }).kills as unknown;
     console.log("[combatAutoApply] Received kills:", killsAny);
@@ -1006,16 +1025,13 @@ export function handleCustomMessage(
         aAt && Number.isFinite(aIdx) && !isAvatarAttacker
           ? { at: aAt as CellKey, index: Number(aIdx) }
           : null;
-      // For avatar attackers, get attack from avatar card
+      // For avatar attackers, get attack directly from avatar card (already enriched)
       const eff = (() => {
         if (isAvatarAttacker && avatarSeat) {
           const avatarCard = get().avatars?.[avatarSeat]?.card;
-          const cardId = avatarCard?.cardId;
-          if (cardId && meta[Number(cardId)]) {
-            const atk = Number(meta[Number(cardId)].attack ?? 0) || 0;
-            return { atk, firstStrike: false };
-          }
-          return { atk: 0, firstStrike: false };
+          // Avatar attack is already on the CardRef from enrichCardRefs()
+          const atk = Number(avatarCard?.attack ?? 1) || 1;
+          return { atk, firstStrike: false };
         }
         return aCell
           ? computeEffectiveAttack(aCell)
@@ -1085,7 +1101,7 @@ export function handleCustomMessage(
         }
         if (seat) {
           targetSeat = seat as PlayerKey;
-          const dd = players[seat].lifeState === "dd";
+          const dd = players[seat]?.lifeState === "dd";
           const dmg = dd ? 0 : Math.max(0, Math.floor(eff.atk));
           const siteName = board.sites[target.at]?.card?.name || "Site";
           const ddNote = dd ? " (DD rule)" : "";
@@ -1143,7 +1159,7 @@ export function handleCustomMessage(
           if (!seat) seat = opponentSeat(actorSeat);
           if (seat) {
             targetSeat = seat as PlayerKey;
-            const dd = players[seat].lifeState === "dd";
+            const dd = players[seat]?.lifeState === "dd";
             const dmg = dd ? 0 : Math.max(0, Math.floor(eff.atk));
             const siteName = siteAtTile.card?.name || "Site";
             const ddNote = dd ? " (DD rule)" : "";
@@ -1820,6 +1836,24 @@ export function handleCustomMessage(
         },
       } as Partial<GameState> as GameState;
     });
+
+    // CRITICAL: If we're the target, we must send a zone patch to persist our zone changes.
+    // Without this, on reload the server sends the old zones (cards still in spellbook).
+    const actorKey = get().actorKey;
+    if (actorKey === targetSeat && revealedCards.length > 0) {
+      const zonesNow = get().zones;
+      const zonePatch: ServerPatchT = {
+        zones: { [targetSeat]: zonesNow[targetSeat] } as Record<
+          PlayerKey,
+          Zones
+        >,
+      };
+      console.log(
+        "[SearingTruth] Target sending zone patch to persist changes",
+      );
+      get().trySendPatch(zonePatch);
+    }
+
     const cardNames = revealedCards.map((c) => c.name || "Unknown").join(", ");
     try {
       get().log(
@@ -2238,10 +2272,11 @@ export function handleCustomMessage(
         const processed = s.processedPithImpReturns || new Set<string>();
         return {
           processedPithImpReturns: id ? new Set([...processed, id]) : processed,
+          // Filter out the matched Pith Imp - prioritize instanceId matching
           pithImpHands: s.pithImpHands.filter(
             (p) =>
-              p.minion.at !== minionAt &&
-              (!minionInstanceId || p.minion.instanceId !== minionInstanceId),
+              !(minionInstanceId && p.minion.instanceId === minionInstanceId) &&
+              !(!minionInstanceId && p.minion.at === minionAt),
           ),
         };
       }) as unknown as void;
@@ -2281,10 +2316,11 @@ export function handleCustomMessage(
       const processed = s.processedPithImpReturns || new Set<string>();
       return {
         processedPithImpReturns: id ? new Set([...processed, id]) : processed,
+        // Filter out the matched Pith Imp - prioritize instanceId matching
         pithImpHands: s.pithImpHands.filter(
           (p) =>
-            p.minion.at !== minionAt &&
-            (!minionInstanceId || p.minion.instanceId !== minionInstanceId),
+            !(minionInstanceId && p.minion.instanceId === minionInstanceId) &&
+            !(!minionInstanceId && p.minion.at === minionAt),
         ),
         permanents: permanentsNext,
         zones: zonesNext,
@@ -4227,12 +4263,22 @@ export function handleCustomMessage(
     const attackerName = (msg as { attackerName?: unknown }).attackerName as
       | string
       | undefined;
+    const pendingCombatDamage = (
+      msg as {
+        pendingCombatDamage?: {
+          targetSeat: PlayerKey;
+          amount: number;
+          isDD: boolean;
+        } | null;
+      }
+    ).pendingCombatDamage;
 
     console.log("[interrogatorTrigger] Received:", {
       id,
       interrogatorSeat,
       victimSeat,
       attackerName,
+      pendingCombatDamage,
     });
 
     if (!id || !interrogatorSeat || !victimSeat) return;
@@ -4256,6 +4302,7 @@ export function handleCustomMessage(
         phase: "pending",
         choice: null,
         createdAt: Date.now(),
+        pendingCombatDamage: pendingCombatDamage || null,
       },
     } as Partial<GameState> as GameState);
 
@@ -4712,6 +4759,157 @@ export function handleCustomMessage(
         `[${pending.ownerSeat.toUpperCase()}] Pathfinder play cancelled`,
       );
     } catch {}
+    return;
+  }
+
+  // --- Babel Tower message handlers ---
+  if (t === "babelPlacementBegin") {
+    const pending = (msg as { pending?: unknown }).pending as
+      | {
+          id: string;
+          casterSeat: PlayerKey;
+          apex: CardRef;
+          handIndex: number;
+          phase: "selectingTarget";
+          validVoidCells: CellKey[];
+          validBaseCells: CellKey[];
+          createdAt: number;
+        }
+      | undefined;
+
+    if (!pending) return;
+
+    // Skip if we're the caster - we already set the state locally
+    const actorKey = get().actorKey;
+    if (actorKey === pending.casterSeat) return;
+
+    set({ pendingBabelPlacement: pending } as Partial<GameState> as GameState);
+
+    try {
+      get().log(
+        `[${pending.casterSeat.toUpperCase()}] Playing ${pending.apex?.name} - selecting target`,
+      );
+    } catch {}
+    return;
+  }
+
+  if (t === "babelPlacementResolve") {
+    const targetCell = (msg as { targetCell?: unknown }).targetCell as
+      | CellKey
+      | undefined;
+    const mergeWithBase = (msg as { mergeWithBase?: unknown }).mergeWithBase as
+      | boolean
+      | undefined;
+    const casterSeat = (msg as { casterSeat?: unknown }).casterSeat as
+      | PlayerKey
+      | undefined;
+
+    if (!targetCell || !casterSeat) return;
+
+    // Clear the pending state for opponent
+    const pending = get().pendingBabelPlacement;
+    if (!pending) return;
+
+    // Skip if we're the caster - we already have the state
+    const actorKey = get().actorKey;
+    if (actorKey === pending.casterSeat) return;
+
+    set({ pendingBabelPlacement: null } as Partial<GameState> as GameState);
+
+    try {
+      if (mergeWithBase) {
+        get().log(
+          `[${casterSeat.toUpperCase()}] Building Tower of Babel at ${targetCell}`,
+        );
+      } else {
+        get().log(
+          `[${casterSeat.toUpperCase()}] Playing ${pending.apex?.name} normally`,
+        );
+      }
+    } catch {}
+    return;
+  }
+
+  if (t === "babelPlacementCancel") {
+    const pending = get().pendingBabelPlacement;
+    if (!pending) return;
+
+    // Skip if we're the caster - we already have the state
+    const actorKey = get().actorKey;
+    if (actorKey === pending.casterSeat) return;
+
+    set({ pendingBabelPlacement: null } as Partial<GameState> as GameState);
+
+    try {
+      get().log(
+        `[${pending.casterSeat.toUpperCase()}] Babel placement cancelled`,
+      );
+    } catch {}
+    return;
+  }
+
+  // --- Hand Peek Action message handler ---
+  // Handles actions taken on opponent's hand during peek (online sync)
+  if (t === "handPeekAction") {
+    const who = (msg as { who?: unknown }).who as PlayerKey | undefined;
+    const pile = (msg as { pile?: unknown }).pile as string | undefined;
+    const instanceId = (msg as { instanceId?: unknown }).instanceId as
+      | string
+      | undefined;
+    const action = (msg as { action?: unknown }).action as string | undefined;
+    const cardName = (msg as { cardName?: unknown }).cardName as
+      | string
+      | undefined;
+    const zonesData = (msg as { zones?: unknown }).zones as
+      | Record<string, Zones>
+      | undefined;
+
+    if (!who || !pile || !instanceId || !action) return;
+
+    const actorKey = get().actorKey;
+
+    // If we're the hand owner (whose hand was inspected), apply the zone changes
+    // The inspector already applied changes locally, but zone patches are filtered
+    // by trySendPatch for security, so we receive changes via this message
+    if (actorKey === who && zonesData && zonesData[who]) {
+      const incomingZones = zonesData[who];
+      set((state) => {
+        const updatedZones = {
+          ...state.zones,
+          [who]: {
+            ...state.zones[who],
+            hand: incomingZones.hand || state.zones[who].hand,
+            spellbook: incomingZones.spellbook || state.zones[who].spellbook,
+            atlas: incomingZones.atlas || state.zones[who].atlas,
+            graveyard: incomingZones.graveyard || state.zones[who].graveyard,
+            banished: incomingZones.banished || state.zones[who].banished,
+            battlefield:
+              incomingZones.battlefield || state.zones[who].battlefield,
+            collection: incomingZones.collection || state.zones[who].collection,
+          },
+        };
+        return { zones: updatedZones } as Partial<GameState> as GameState;
+      });
+
+      // Log the action for visibility
+      try {
+        const actionDesc =
+          action === "topOfSpellbook"
+            ? "put on top of spellbook"
+            : action === "bottomOfSpellbook"
+              ? "put on bottom of spellbook"
+              : action === "steal"
+                ? "taken"
+                : action === "graveyard"
+                  ? "sent to cemetery"
+                  : action === "banish"
+                    ? "banished"
+                    : action;
+        get().log(
+          `[${who.toUpperCase()}] '${cardName || "Card"}' from Hand → ${actionDesc}`,
+        );
+      } catch {}
+    }
     return;
   }
 }

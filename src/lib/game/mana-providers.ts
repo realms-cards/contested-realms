@@ -67,6 +67,10 @@ export const TOWER_GENESIS_SITES = new Set<string>([
   "accursed tower",
 ]);
 
+// Sites with genesis effects that depend on nearby enemy units
+// "Beacon" - Genesis → Gain (1) for each nearby site with an enemy atop it.
+export const BEACON_GENESIS_SITES = new Set<string>(["beacon"]);
+
 // Sites with conditional threshold based on nearby units/state
 // These need special runtime checks
 export const CONDITIONAL_THRESHOLD_SITES = {

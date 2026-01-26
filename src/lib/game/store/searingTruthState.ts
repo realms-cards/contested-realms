@@ -199,6 +199,7 @@ export const createSearingTruthSlice: StateCreator<
     if (damageAmount > 0) {
       const players = get().players;
       const targetPlayer = players[targetSeat];
+      if (!targetPlayer) return;
       const newLife = targetPlayer.life - damageAmount;
 
       // Determine life state

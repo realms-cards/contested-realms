@@ -247,6 +247,7 @@ export default function Board({
   const _destroyGemToken = useScopedStore((s) => s.destroyGemToken);
   const portalState = useScopedStore((s) => s.portalState);
   const stolenCards = useScopedStore((s) => s.stolenCards);
+  const babelTowers = useScopedStore((s) => s.babelTowers);
   const pendingPrivateHandCast = useScopedStore(
     (s) => s.pendingPrivateHandCast,
   );
@@ -1333,6 +1334,7 @@ export default function Board({
               cardScale={cardScale}
               stolenCards={stolenCards}
               metaByCardId={metaByCardId}
+              babelTowers={babelTowers}
             />
           );
         })}

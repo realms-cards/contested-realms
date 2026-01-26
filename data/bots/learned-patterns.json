@@ -1,0 +1,237 @@
+{
+  "meta": {
+    "analyzedAt": "2026-01-25T19:09:55.477Z",
+    "replayCount": 100,
+    "winnerGames": 100,
+    "loserGames": 100,
+    "source": "cache"
+  },
+  "winnerPatterns": {
+    "turn1Actions": {
+      "play_site": 45,
+      "draw": 43,
+      "play_unit": 12,
+      "attack_or_move": 1
+    },
+    "turn2Actions": {
+      "play_site": 22,
+      "draw": 46,
+      "play_unit": 31,
+      "attack_or_move": 1
+    },
+    "turn3Actions": {
+      "play_unit": 35,
+      "draw": 30,
+      "play_site": 26,
+      "attack_or_move": 9
+    },
+    "turn4Actions": {
+      "play_site": 13,
+      "play_unit": 40,
+      "draw": 37,
+      "attack_or_move": 10
+    },
+    "avgSitesByTurn": [
+      null,
+      1.6,
+      3,
+      4,
+      5,
+      6,
+      7,
+      7.9,
+      9.1
+    ],
+    "drawSourceRatio": {
+      "spellbook": 3845,
+      "atlas": 0,
+      "spellbookPercent": 100,
+      "atlasPercent": 0
+    },
+    "avgGameLength": 13.2,
+    "turnActions": {
+      "turn1": {
+        "play_site": 100,
+        "draw": 95,
+        "play_unit": 26,
+        "attack_or_move": 2
+      },
+      "turn2": {
+        "play_site": 50,
+        "draw": 106,
+        "play_unit": 70,
+        "attack_or_move": 3
+      },
+      "turn3": {
+        "play_unit": 82,
+        "draw": 69,
+        "play_site": 60,
+        "attack_or_move": 20
+      },
+      "turn4": {
+        "play_site": 46,
+        "play_unit": 141,
+        "draw": 129,
+        "attack_or_move": 34
+      },
+      "turn5": {
+        "play_unit": 145,
+        "draw": 162,
+        "attack_or_move": 79,
+        "play_site": 62
+      },
+      "turn6": {
+        "play_site": 53,
+        "play_unit": 164,
+        "draw": 178,
+        "attack_or_move": 98
+      }
+    },
+    "turn5Actions": {
+      "play_unit": 145,
+      "draw": 162,
+      "attack_or_move": 79,
+      "play_site": 62
+    },
+    "turn6Actions": {
+      "play_site": 53,
+      "play_unit": 164,
+      "draw": 178,
+      "attack_or_move": 98
+    },
+    "sitesAtTurn4": 4
+  },
+  "loserPatterns": {
+    "turn1Actions": {
+      "play_site": 39,
+      "draw": 40,
+      "play_unit": 19,
+      "attack_or_move": 2
+    },
+    "turn2Actions": {
+      "draw": 44,
+      "play_site": 30,
+      "play_unit": 24,
+      "attack_or_move": 1
+    },
+    "turn3Actions": {
+      "play_site": 16,
+      "draw": 36,
+      "play_unit": 39,
+      "attack_or_move": 9
+    },
+    "turn4Actions": {
+      "play_unit": 33,
+      "draw": 30,
+      "play_site": 25,
+      "attack_or_move": 12
+    },
+    "avgSitesByTurn": [
+      null,
+      1.5,
+      3,
+      4,
+      5,
+      6,
+      7.1,
+      7.9,
+      9.2
+    ],
+    "drawSourceRatio": {
+      "spellbook": 3906,
+      "atlas": 0,
+      "spellbookPercent": 100,
+      "atlasPercent": 0
+    },
+    "avgGameLength": 13.3,
+    "turnActions": {
+      "turn1": {
+        "play_site": 100,
+        "draw": 103,
+        "play_unit": 50,
+        "attack_or_move": 5
+      },
+      "turn2": {
+        "draw": 88,
+        "play_site": 61,
+        "play_unit": 49,
+        "attack_or_move": 3
+      },
+      "turn3": {
+        "play_site": 46,
+        "draw": 104,
+        "play_unit": 112,
+        "attack_or_move": 27
+      },
+      "turn4": {
+        "play_unit": 83,
+        "draw": 75,
+        "play_site": 64,
+        "attack_or_move": 30
+      },
+      "turn5": {
+        "play_site": 50,
+        "play_unit": 150,
+        "draw": 162,
+        "attack_or_move": 95
+      },
+      "turn6": {
+        "play_unit": 168,
+        "draw": 205,
+        "attack_or_move": 86,
+        "play_site": 64
+      }
+    },
+    "turn5Actions": {
+      "play_site": 50,
+      "play_unit": 150,
+      "draw": 162,
+      "attack_or_move": 95
+    },
+    "turn6Actions": {
+      "play_unit": 168,
+      "draw": 205,
+      "attack_or_move": 86,
+      "play_site": 64
+    },
+    "sitesAtTurn4": 4
+  },
+  "recommendations": [
+    {
+      "rule": "turn_1_site_priority",
+      "confidence": "medium",
+      "reason": "Winners play site on turn 1 45% of the time",
+      "action": "Strongly prioritize site play on turn 1"
+    },
+    {
+      "rule": "turn_1_avoid_overextend",
+      "confidence": "high",
+      "reason": "Losers play 50 units on turn 1 vs winners 26 (192% more). Overextending early correlates with losing.",
+      "action": "Avoid playing too many cheap units on turn 1 - prioritize site + draw"
+    },
+    {
+      "rule": "turn_1_site_universal",
+      "confidence": "high",
+      "reason": "Both winners (100) and losers (100) play exactly 1 site on turn 1. This is mandatory.",
+      "action": "Turn 1 site under avatar is non-negotiable"
+    },
+    {
+      "rule": "turn_3_loser_rush",
+      "confidence": "medium",
+      "reason": "Losers deploy 112 units on turn 3 vs winners 82. Rushing units without board development may indicate overaggression.",
+      "action": "Balance unit deployment with site development through turn 3"
+    },
+    {
+      "rule": "prefer_spellbook_draws",
+      "confidence": "medium",
+      "reason": "Winners draw from spellbook 100% vs atlas 0%",
+      "action": "Winners prefer spell draws - may indicate established mana bases"
+    },
+    {
+      "rule": "game_length_insight",
+      "confidence": "info",
+      "reason": "Average game reaches turn 13.2 (based on site development)",
+      "action": "Plan for mid-game around turn 5-6"
+    }
+  ]
+}

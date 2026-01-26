@@ -2,7 +2,7 @@ import type { CardRef, PlayerKey, Thresholds } from "../types";
 import { newZoneCardInstanceId } from "./idHelpers";
 
 export function ensureCardInstanceId(
-  card: CardRef | null | undefined
+  card: CardRef | null | undefined,
 ): CardRef | null {
   if (!card) return null;
   if (card.instanceId && card.instanceId.length > 0) {
@@ -32,8 +32,8 @@ export function normalizeCardRefEntry(candidate: unknown): CardRef | null {
     typeof rawCardId === "number"
       ? rawCardId
       : typeof rawCardId === "string"
-      ? Number(rawCardId)
-      : NaN;
+        ? Number(rawCardId)
+        : NaN;
   if (!Number.isFinite(cardId)) {
     return null;
   }
@@ -59,8 +59,8 @@ export function normalizeCardRefEntry(candidate: unknown): CardRef | null {
     typeof src.name === "string"
       ? src.name
       : src.name != null
-      ? String(src.name)
-      : "";
+        ? String(src.name)
+        : "";
 
   const type =
     typeof src.type === "string" ? src.type : src.type === null ? null : null;
@@ -76,16 +76,44 @@ export function normalizeCardRefEntry(candidate: unknown): CardRef | null {
     typeof src.cost === "number"
       ? src.cost
       : src.cost === null
-      ? null
-      : undefined;
+        ? null
+        : undefined;
 
   // Preserve subTypes if present
   const subTypes =
     typeof src.subTypes === "string"
       ? src.subTypes
       : src.subTypes === null
-      ? null
-      : undefined;
+        ? null
+        : undefined;
+
+  const text =
+    typeof src.text === "string"
+      ? src.text
+      : src.text === null
+        ? null
+        : undefined;
+
+  const attack =
+    typeof src.attack === "number"
+      ? src.attack
+      : src.attack === null
+        ? null
+        : undefined;
+
+  const defence =
+    typeof src.defence === "number"
+      ? src.defence
+      : src.defence === null
+        ? null
+        : undefined;
+
+  const rarity =
+    typeof src.rarity === "string"
+      ? src.rarity
+      : src.rarity === null
+        ? null
+        : undefined;
 
   return {
     cardId,
@@ -98,12 +126,16 @@ export function normalizeCardRefEntry(candidate: unknown): CardRef | null {
     instanceId,
     ...(cost !== undefined && { cost }),
     ...(subTypes !== undefined && { subTypes }),
+    ...(text !== undefined && { text }),
+    ...(attack !== undefined && { attack }),
+    ...(defence !== undefined && { defence }),
+    ...(rarity !== undefined && { rarity }),
   };
 }
 
 export function normalizeCardRefList(
   candidate: unknown,
-  fallback: CardRef[]
+  fallback: CardRef[],
 ): CardRef[] {
   const source = Array.isArray(candidate) ? candidate : fallback;
   const normalized: CardRef[] = [];
@@ -134,7 +166,7 @@ export function normalizeCardRefList(
       console.error(
         `[CARD_VALIDATION_BULK_FAIL] ${failedCount}/${
           source.length
-        } cards failed validation (${Math.round(failRate * 100)}%)`
+        } cards failed validation (${Math.round(failRate * 100)}%)`,
       );
     }
   }

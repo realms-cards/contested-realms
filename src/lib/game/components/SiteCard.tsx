@@ -5,6 +5,7 @@ import CardOutline from "@/lib/game/components/CardOutline";
 import CardPlane from "@/lib/game/components/CardPlane";
 import { CARD_LONG, CARD_SHORT, PLAYER_COLORS } from "@/lib/game/constants";
 import type {
+  BabelTowerMerge,
   CardRef,
   CellKey,
   GameState,
@@ -55,7 +56,7 @@ export type SiteCardProps = {
   beginHoverPreview: (card?: CardRef | null, sourceKey?: string | null) => void;
   clearHoverPreviewDebounced: (
     sourceKey?: string | null,
-    delay?: number
+    delay?: number,
   ) => void;
   clearTouchTimers: () => void;
   emitBoardPing: (pos: { x: number; z: number }) => void;
@@ -69,6 +70,8 @@ export type SiteCardProps = {
   // Switch site position selection
   switchSiteSource: GameState["switchSiteSource"];
   onCompleteSwitchSite?: (targetX: number, targetY: number) => void;
+  // Babel Tower tracking for stacked card rendering
+  babelTowers: BabelTowerMerge[];
 };
 
 export function SiteCard({
@@ -109,6 +112,7 @@ export function SiteCard({
   computeProjectileFirstHits,
   switchSiteSource,
   onCompleteSwitchSite,
+  babelTowers,
 }: SiteCardProps) {
   // These props are kept for future re-enablement of magic targeting hints
   void magicGuidesActive;
@@ -129,7 +133,7 @@ export function SiteCard({
   const playerPos = playerPositions[ownerSeat];
   const edgeOffset = calculateEdgePosition(
     { x: tileX, z: tileY },
-    playerPos.position
+    playerPos.position,
   );
   const siteInstanceKey = `site:${tileX},${tileY}`;
   const siteRemoteColor = getRemoteHighlightColor(site.card ?? null, {
@@ -209,7 +213,7 @@ export function SiteCard({
       touchContextTimerRef.current = window.setTimeout(() => {
         openContextMenu(
           { kind: "site", x: tileX, y: tileY },
-          { x: e.clientX, y: e.clientY }
+          { x: e.clientX, y: e.clientY },
         );
       }, 500) as unknown as number;
     }
@@ -278,6 +282,11 @@ export function SiteCard({
 
   const highlight = highlightColor();
 
+  // Check if this is a merged Tower of Babel (Base + Apex stacked)
+  // Match by cellKey - Tower of Babel is a concept, not a separate card
+  const towerMerge = babelTowers.find((t) => t.cellKey === tileKey);
+  const CARD_STACK_OFFSET = 0.008; // Vertical offset between stacked cards
+
   return (
     <group>
       {renderSiteGlow && (
@@ -305,7 +314,101 @@ export function SiteCard({
           />
         </group>
       )}
-      {site.card?.slug ? (
+      {/* Tower of Babel: render both Base (bottom) and Apex (top) cards stacked */}
+      {/* Base is offset slightly so both cards are visible when stacked */}
+      {towerMerge && towerMerge.baseCard && towerMerge.apexCard ? (
+        <group position={[edgeOffset.x, 0, edgeOffset.z]}>
+          {/* Base of Babel (bottom card - offset to show card bottom text under Apex) */}
+          <group position={[0, 0, -0.06]}>
+            <CardPlane
+              slug={towerMerge.baseCard.slug || ""}
+              width={CARD_SHORT}
+              height={CARD_LONG}
+              depthWrite
+              depthTest
+              rotationZ={rotZ}
+              elevation={BASE_CARD_ELEVATION}
+              renderOrder={9}
+              onPointerDown={(e) => {
+                handlePointerDown(e);
+                handleBeginSiteDrag(e);
+              }}
+              onPointerUp={handlePointerUp}
+              onPointerMove={(e) => {
+                const pe = e.nativeEvent as PointerEvent | undefined;
+                if (pe && pe.pointerType === "touch") clearTouchTimers();
+              }}
+              onPointerOver={(e) => {
+                if (dragFromHand || dragFromPile) return;
+                e.stopPropagation();
+                if (towerMerge.baseCard)
+                  beginHoverPreview(towerMerge.baseCard, tileKey);
+              }}
+              onPointerOut={(e) => {
+                if (dragFromHand || dragFromPile) return;
+                e.stopPropagation();
+                clearTouchTimers();
+                clearHoverPreviewDebounced(tileKey);
+              }}
+              onContextMenu={(e) => {
+                if (isSpectator) return;
+                e.stopPropagation();
+                e.nativeEvent.preventDefault();
+                openContextMenu(
+                  { kind: "site", x: tileX, y: tileY },
+                  { x: e.clientX, y: e.clientY },
+                );
+              }}
+            />
+          </group>
+          {/* Apex of Babel (top card) */}
+          <CardPlane
+            slug={towerMerge.apexCard.slug || ""}
+            width={CARD_SHORT}
+            height={CARD_LONG}
+            depthWrite
+            depthTest
+            rotationZ={rotZ}
+            elevation={BASE_CARD_ELEVATION + CARD_STACK_OFFSET}
+            renderOrder={10}
+            onPointerDown={(e) => {
+              handlePointerDown(e);
+              handleBeginSiteDrag(e);
+            }}
+            onPointerUp={handlePointerUp}
+            onPointerMove={(e) => {
+              const pe = e.nativeEvent as PointerEvent | undefined;
+              if (pe && pe.pointerType === "touch") clearTouchTimers();
+            }}
+            onPointerOver={(e) => {
+              if (dragFromHand || dragFromPile) return;
+              e.stopPropagation();
+              if (towerMerge.apexCard)
+                beginHoverPreview(towerMerge.apexCard, tileKey);
+            }}
+            onPointerOut={(e) => {
+              if (dragFromHand || dragFromPile) return;
+              e.stopPropagation();
+              clearTouchTimers();
+              clearHoverPreviewDebounced(tileKey);
+            }}
+            onDoubleClick={(e) => {
+              if (!canInteract) return;
+              e.stopPropagation();
+              emitBoardPing({ x: e.point.x, z: e.point.z });
+            }}
+            onContextMenu={(e) => {
+              if (isSpectator) return;
+              e.stopPropagation();
+              e.nativeEvent.preventDefault();
+              openContextMenu(
+                { kind: "site", x: tileX, y: tileY },
+                { x: e.clientX, y: e.clientY },
+              );
+            }}
+          />
+        </group>
+      ) : site.card ? (
         <group position={[edgeOffset.x, 0, edgeOffset.z]}>
           <CardPlane
             slug={site.card.slug || ""}
@@ -348,7 +451,7 @@ export function SiteCard({
               e.nativeEvent.preventDefault();
               openContextMenu(
                 { kind: "site", x: tileX, y: tileY },
-                { x: e.clientX, y: e.clientY }
+                { x: e.clientX, y: e.clientY },
               );
             }}
           />

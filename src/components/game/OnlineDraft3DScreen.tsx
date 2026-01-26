@@ -475,10 +475,6 @@ export default function OnlineDraft3DScreen({
   const myPicks = (draftState.picks[myPlayerIndex] || []) as DraftCard[];
   const oppPicks = (draftState.picks[1 - myPlayerIndex] || []) as DraftCard[];
 
-  console.log(
-    `[DraftClient 3D] Component state - myPlayerKey:${myPlayerKey} packChoiceOverlay:${packChoiceOverlay} packIndex:${draftState.packIndex} myPackSize:${myPack.length}`
-  );
-
   // Initialize draft state from match on component mount (for rejoining players)
   useEffect(() => {
     if (match?.draftState) {

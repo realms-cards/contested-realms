@@ -104,6 +104,9 @@ export default function OnlineD20Screen({
   // This is a local guard that persists even if store state resets
   const hasInitiatedRollRef = useRef(false);
 
+  // Track rollKey for forcing animation restart on ties (same value rerolls)
+  const [rollKey, setRollKey] = useState(0);
+
   // Track retry state for UI feedback
   const [retryCount, setRetryCount] = useState(0);
   const [waitingForOpponent, setWaitingForOpponent] = useState(false);
@@ -132,8 +135,21 @@ export default function OnlineD20Screen({
     }
   }, [phase, setupWinner, choiceMade, onRollingComplete]);
 
+  // Track previous roll values to detect tie resets
+  const prevMyRollRef = useRef<number | null>(myRoll);
+  const prevOpponentRollRef = useRef<number | null>(opponentRoll);
+
   // Reset dice completion when rolls are reset (for ties)
+  // Use layout effect to ensure ref reset happens BEFORE next click handler
   useEffect(() => {
+    const wasMyRollSet = prevMyRollRef.current !== null;
+    const wasOpponentRollSet = prevOpponentRollRef.current !== null;
+    const bothWereSet = wasMyRollSet && wasOpponentRollSet;
+    const bothAreNowNull = myRoll === null && opponentRoll === null;
+
+    // Detect tie reset: both rolls were set, now both are null
+    const isTieReset = bothWereSet && bothAreNowNull;
+
     if (myRoll === null) {
       setMyDiceComplete(false);
       // CRITICAL: Reset the roll guard so player can roll again after a tie
@@ -143,12 +159,22 @@ export default function OnlineD20Screen({
       setOpponentDiceComplete(false);
     }
     // Reset choice state when dice are reset
-    if (myRoll === null && opponentRoll === null) {
+    if (bothAreNowNull) {
       setChoiceMade(false);
       setRetryCount(0);
       setWaitingForOpponent(false);
       waitStartRef.current = null;
+
+      // Increment rollKey on tie reset to force dice animation restart
+      if (isTieReset) {
+        setRollKey((k) => k + 1);
+        console.log("[OnlineD20Screen] Tie reset detected, incrementing rollKey");
+      }
     }
+
+    // Update refs for next comparison
+    prevMyRollRef.current = myRoll;
+    prevOpponentRollRef.current = opponentRoll;
   }, [myRoll, opponentRoll]);
 
   // Retry logic: exponential backoff if we have a pending roll and haven't received acknowledgment
@@ -279,7 +305,14 @@ export default function OnlineD20Screen({
   const handleRoll = useCallback(() => {
     // Guard against double-clicking: check both local ref AND store roll value
     // The ref persists even if game state resets mid-flow
-    if (myRoll == null && !hasInitiatedRollRef.current) {
+    // IMPORTANT: After tie reset, we need to allow rolling even if ref wasn't reset yet
+    // This handles the race condition where click happens before useEffect runs
+    if (myRoll == null) {
+      // If myRoll is null but ref says we initiated, this is likely a tie reset race
+      // Reset the ref here as a fallback
+      if (hasInitiatedRollRef.current) {
+        console.log("[OnlineD20Screen] Resetting roll guard (tie reset race condition)");
+      }
       hasInitiatedRollRef.current = true;
       rollD20(myPlayerKey);
     }
@@ -360,6 +393,7 @@ export default function OnlineD20Screen({
                 ? handleMyDiceComplete
                 : handleOpponentDiceComplete
             }
+            rollKey={rollKey}
           />
 
           {/* Player 2 die - right side */}
@@ -375,6 +409,7 @@ export default function OnlineD20Screen({
                 ? handleMyDiceComplete
                 : handleOpponentDiceComplete
             }
+            rollKey={rollKey}
           />
         </Canvas>
       </div>

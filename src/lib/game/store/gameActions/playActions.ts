@@ -1,11 +1,13 @@
 import type { StateCreator } from "zustand";
 import { isAnimist } from "@/lib/game/avatarAbilities";
 import {
+  BEACON_GENESIS_SITES,
   ELEMENT_CHOICE_SITES,
   GENESIS_BLOOM_SITES,
   GENESIS_MANA_SITES,
   TOWER_GENESIS_SITES,
 } from "@/lib/game/mana-providers";
+import { isApexOfBabel, isBaseOfBabel } from "../babelTowerState";
 import { TOKEN_BY_NAME } from "@/lib/game/tokens";
 import { isMismanagedMortuary } from "../specialSiteState";
 import type {
@@ -19,7 +21,12 @@ import type {
   Zones,
 } from "../types";
 import { evaluateInstantPermission, expireInteractionGrant } from "./helpers";
-import { getCellNumber, ownerFromSeat, toCellKey } from "../utils/boardHelpers";
+import {
+  getCellNumber,
+  getNearbyCells,
+  ownerFromSeat,
+  toCellKey,
+} from "../utils/boardHelpers";
 import { prepareCardForSeat } from "../utils/cardHelpers";
 import { newPermanentInstanceId } from "../utils/idHelpers";
 import {
@@ -94,6 +101,51 @@ const triggerSiteGenesis = (
       state.log(
         `${siteName} Genesis: You control ${towerCount} copies - no bonus`,
       );
+    }
+    return;
+  }
+
+  // Beacon - Genesis → Gain (1) for each nearby site with an enemy atop it.
+  // "Nearby" means 8 directions (orthogonal + diagonals)
+  if (BEACON_GENESIS_SITES.has(lc)) {
+    const boardWidth = state.board.size.w;
+    const boardHeight = state.board.size.h;
+    const nearbyCells = getNearbyCells(cellKey, boardWidth, boardHeight);
+    const enemyOwner = owner === 1 ? 2 : 1;
+
+    let enemyOccupiedSites = 0;
+    for (const nearbyCell of nearbyCells) {
+      // Check if there's a site at this cell (not void)
+      const site = state.board.sites[nearbyCell];
+      if (!site) continue; // Skip void cells
+
+      // Check for enemy minions/avatars at this site
+      const permsAtCell = state.permanents[nearbyCell] || [];
+      const hasEnemyMinion = permsAtCell.some((p) => {
+        if (!p || p.owner !== enemyOwner) return false;
+        const cardType = String(p.card?.type || "").toLowerCase();
+        return cardType.includes("minion");
+      });
+
+      // Check for enemy avatar at this site
+      const enemyAvatarKey = enemyOwner === 1 ? "p1" : "p2";
+      const enemyAvatar = state.avatars[enemyAvatarKey];
+      const hasEnemyAvatar =
+        enemyAvatar?.pos &&
+        `${enemyAvatar.pos[0]},${enemyAvatar.pos[1]}` === nearbyCell;
+
+      if (hasEnemyMinion || hasEnemyAvatar) {
+        enemyOccupiedSites++;
+      }
+    }
+
+    if (enemyOccupiedSites > 0) {
+      state.registerGenesisMana(cellKey, siteName, enemyOccupiedSites, owner);
+      state.log(
+        `${siteName} Genesis: ${enemyOccupiedSites} nearby enemy-occupied site(s) - gain (${enemyOccupiedSites}) this turn`,
+      );
+    } else {
+      state.log(`${siteName} Genesis: No nearby enemy-occupied sites`);
     }
     return;
   }
@@ -256,6 +308,67 @@ export const createPlayActionsSlice: StateCreator<
       const key: CellKey = toCellKey(x, y);
       const cellNo = getCellNumber(x, y, state.board.size.w);
       if (type.includes("site")) {
+        // Check for Apex of Babel special placement
+        if (isApexOfBabel(card.name)) {
+          // Check if dropping directly onto a Base of Babel - auto-merge
+          const targetSite = state.board.sites[key];
+          if (
+            targetSite &&
+            targetSite.owner === ownerFromSeat(who) &&
+            isBaseOfBabel(targetSite.card?.name)
+          ) {
+            // Direct drop on Base - trigger merge immediately
+            setTimeout(() => {
+              get().mergeBabelTower(key, card, who, index);
+            }, 0);
+            return state;
+          }
+
+          // Find all valid void cells and Base of Babel cells for overlay
+          const validVoidCells: CellKey[] = [];
+          const validBaseCells: CellKey[] = [];
+
+          for (let cy = 0; cy < state.board.size.h; cy++) {
+            for (let cx = 0; cx < state.board.size.w; cx++) {
+              const cellKey = toCellKey(cx, cy);
+              const existingSite = state.board.sites[cellKey];
+              if (!existingSite) {
+                validVoidCells.push(cellKey);
+              } else if (
+                existingSite.owner === ownerFromSeat(who) &&
+                isBaseOfBabel(existingSite.card?.name)
+              ) {
+                validBaseCells.push(cellKey);
+              }
+            }
+          }
+
+          // If there are Base of Babel cells, show the placement overlay
+          if (validBaseCells.length > 0) {
+            // Restore the hand (we removed too early)
+            const restoredHand = [...state.zones[who].hand];
+            restoredHand.splice(index, 0, card);
+
+            // Trigger the babel placement flow
+            setTimeout(() => {
+              get().beginBabelPlacement({
+                apex: card,
+                casterSeat: who,
+                handIndex: index,
+                validVoidCells,
+                validBaseCells,
+              });
+            }, 0);
+
+            // Return state unchanged, waiting for player choice
+            return {
+              ...state,
+              selectedCard: sel, // Keep selection for visual feedback
+            } as GameState;
+          }
+          // No Base of Babel on board - fall through to normal site placement
+        }
+
         if (state.board.sites[key]) {
           get().log(
             `Cannot play site '${card.name}': #${cellNo} already occupied`,

@@ -1160,6 +1160,21 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
             actionDesc = `taken by ${viewerSeat.toUpperCase()}`;
           }
           break;
+        case "topOfSpellbook":
+          // Move card from hand to top of owner's spellbook
+          if (pile === "hand") {
+            seatZones.spellbook = [preparedCard, ...seatZones.spellbook];
+            actionDesc = "put on top of spellbook";
+          }
+          break;
+        case "bottomOfSpellbook":
+          // Move card from hand to bottom of owner's spellbook
+          if (pile === "hand") {
+            seatZones.spellbook = [...seatZones.spellbook, preparedCard];
+            actionDesc = "put on bottom of spellbook";
+          }
+          break;
+        default:
       }
 
       // Update owner's zones (card removed from source pile)
@@ -1174,37 +1189,52 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
         zonesNext as GameState["zones"],
         affectedSeats,
       );
-      console.log(
-        "[handlePeekedCard] action:",
-        action,
-        "who:",
-        who,
-        "affectedSeats:",
-        affectedSeats,
-      );
-      console.log(
-        "[handlePeekedCard] seatZones.hand length:",
-        seatZones.hand.length,
-      );
-      console.log(
-        "[handlePeekedCard] seatZones.graveyard length:",
-        seatZones.graveyard.length,
-      );
-      console.log(
-        "[handlePeekedCard] seatZones.banished length:",
-        seatZones.banished?.length,
-      );
       // Send zones patch - DO NOT use __replaceKeys here!
       // The patch only contains partial zones (affected seats), so using __replaceKeys
       // would wipe the other player's zones. The client's deepMergeReplaceArrays
       // will correctly merge partial zone updates.
-      if (zonePatch) {
-        console.log(
-          "[handlePeekedCard] Sending zones patch (no __replaceKeys) for:",
-          affectedSeats,
-        );
+      // IMPORTANT: For hand peek actions on opponent zones, DON'T send zone patch!
+      // The patch gets filtered by trySendPatch (security), but the server round-trip
+      // causes stale data to overwrite our local changes. Use custom message instead.
+      const isModifyingOpponentZones = isHandPeek && state.actorKey !== who;
+      if (zonePatch && !isModifyingOpponentZones) {
         get().trySendPatch(zonePatch);
       }
+
+      // Send custom message to notify opponent about hand peek action
+      // This ensures the opponent's client updates properly for online play
+      // IMPORTANT: Zone patches for opponent seats are filtered out by trySendPatch
+      // (security feature), so we need to send zone changes via custom message
+      const transport = get().transport;
+      if (transport?.sendMessage && isHandPeek) {
+        try {
+          // Include the updated zones in the message so opponent can apply them
+          transport.sendMessage({
+            type: "handPeekAction",
+            who,
+            pile,
+            instanceId,
+            action,
+            cardName: card.name,
+            // Include zone data for opponent to apply
+            zones: {
+              [who]: {
+                hand: seatZones.hand,
+                spellbook: seatZones.spellbook,
+                atlas: seatZones.atlas,
+                graveyard: seatZones.graveyard,
+                banished: seatZones.banished,
+                battlefield: seatZones.battlefield,
+                collection: seatZones.collection,
+              },
+            },
+            ts: Date.now(),
+          } as unknown as import("@/lib/net/transport").CustomMessage);
+        } catch (e) {
+          console.error("[handlePeekedCard] Failed to send message:", e);
+        }
+      }
+
       return {
         zones: zonesNext as GameState["zones"],
       } as Partial<GameState> as GameState;

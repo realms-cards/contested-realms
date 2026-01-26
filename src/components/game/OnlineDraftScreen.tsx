@@ -48,9 +48,6 @@ export default function OnlineDraftScreen({
   playerNames,
   onDraftComplete,
 }: OnlineDraftScreenProps) {
-  console.log(
-    `[DraftClient 2D] Component mounted - myPlayerKey:${myPlayerKey}`
-  );
   const { transport, match, me } = useOnline();
   const matchId = match?.id ?? null;
   const router = useRouter();

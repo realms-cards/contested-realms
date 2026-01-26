@@ -3095,6 +3095,8 @@ io.on("connection", async (socket: SocketClient) => {
             index?: unknown;
             instanceId?: unknown;
             owner?: unknown;
+            isAvatar?: unknown;
+            avatarSeat?: unknown;
           };
           target?: { kind?: unknown; at?: unknown; index?: unknown };
         };
@@ -3140,6 +3142,16 @@ io.on("connection", async (socket: SocketClient) => {
             }
           }
         } catch {}
+        const isAvatarAttacker =
+          typeof msg.attacker?.isAvatar === "boolean"
+            ? (msg.attacker.isAvatar as boolean)
+            : undefined;
+        const avatarSeat =
+          typeof msg.attacker?.avatarSeat === "string" &&
+          (msg.attacker.avatarSeat === "p1" || msg.attacker.avatarSeat === "p2")
+            ? (msg.attacker.avatarSeat as "p1" | "p2")
+            : undefined;
+
         const out = {
           type: "attackDeclare",
           id,
@@ -3152,6 +3164,8 @@ io.on("connection", async (socket: SocketClient) => {
                 ? (msg.attacker?.instanceId as string)
                 : null,
             owner: Number(ownerVal) as 1 | 2,
+            ...(isAvatarAttacker ? { isAvatar: true } : {}),
+            ...(avatarSeat ? { avatarSeat } : {}),
           },
           ...(target ? { target } : {}),
           playerKey,
@@ -3175,6 +3189,8 @@ io.on("connection", async (socket: SocketClient) => {
             index?: unknown;
             instanceId?: unknown;
             owner?: unknown;
+            isAvatar?: unknown;
+            avatarSeat?: unknown;
           };
         };
         const id = typeof msg.id === "string" ? msg.id : rid("cmb");
@@ -3198,6 +3214,16 @@ io.on("connection", async (socket: SocketClient) => {
           !Number.isFinite(ownerVal)
         )
           return;
+        const isAvatarAttacker =
+          typeof msg.attacker?.isAvatar === "boolean"
+            ? (msg.attacker.isAvatar as boolean)
+            : undefined;
+        const avatarSeat =
+          typeof msg.attacker?.avatarSeat === "string" &&
+          (msg.attacker.avatarSeat === "p1" || msg.attacker.avatarSeat === "p2")
+            ? (msg.attacker.avatarSeat as "p1" | "p2")
+            : undefined;
+
         const out = {
           type: "interceptOffer",
           id,
@@ -3207,6 +3233,8 @@ io.on("connection", async (socket: SocketClient) => {
             index: Number(indexVal),
             instanceId,
             owner: Number(ownerVal) as 1 | 2,
+            ...(isAvatarAttacker ? { isAvatar: true } : {}),
+            ...(avatarSeat ? { avatarSeat } : {}),
           },
           playerKey,
           ts: Date.now(),
@@ -3274,6 +3302,8 @@ io.on("connection", async (socket: SocketClient) => {
             index?: unknown;
             instanceId?: unknown;
             owner?: unknown;
+            isAvatar?: unknown;
+            avatarSeat?: unknown;
           };
           defenders?: unknown[];
         };
@@ -3287,9 +3317,34 @@ io.on("connection", async (socket: SocketClient) => {
             ? (msg.attacker?.at as string)
             : null;
         const indexVal = Number(msg.attacker?.index);
+
+        const instanceId =
+          typeof msg.attacker?.instanceId === "string"
+            ? (msg.attacker.instanceId as string)
+            : null;
+        const ownerVal = Number(msg.attacker?.owner);
+        const owner =
+          ownerVal === 1 || ownerVal === 2 ? (ownerVal as 1 | 2) : undefined;
+        const isAvatarAttacker =
+          typeof msg.attacker?.isAvatar === "boolean"
+            ? (msg.attacker.isAvatar as boolean)
+            : undefined;
+        const avatarSeat =
+          typeof msg.attacker?.avatarSeat === "string" &&
+          (msg.attacker.avatarSeat === "p1" || msg.attacker.avatarSeat === "p2")
+            ? (msg.attacker.avatarSeat as "p1" | "p2")
+            : undefined;
+
         const attacker =
           at && Number.isFinite(indexVal)
-            ? { at, index: Number(indexVal) }
+            ? {
+                at,
+                index: Number(indexVal),
+                ...(instanceId ? { instanceId } : { instanceId: null }),
+                ...(owner ? { owner } : {}),
+                ...(isAvatarAttacker ? { isAvatar: true } : {}),
+                ...(avatarSeat ? { avatarSeat } : {}),
+              }
             : undefined;
         const raw = Array.isArray(msg.defenders)
           ? (msg.defenders as unknown[])
@@ -3515,6 +3570,45 @@ io.on("connection", async (socket: SocketClient) => {
           io.to(`spectate:${matchId}`).emit("message", out);
         } catch {}
       } catch {}
+    } else if (type === "combatLifeDamage") {
+      try {
+        const match = await getOrLoadMatch(matchId);
+        const room = `match:${matchId}`;
+        const playerKey = getSeatForPlayer(match, player.id) || "p1";
+        const msg = payload as { id?: unknown; damage?: unknown };
+        const id = typeof msg.id === "string" ? msg.id : rid("cmb");
+        const raw = Array.isArray(msg.damage) ? (msg.damage as unknown[]) : [];
+        const records = raw
+          .map((d) =>
+            d && typeof d === "object" ? (d as Record<string, unknown>) : null,
+          )
+          .filter((d): d is Record<string, unknown> => Boolean(d));
+        const damage = records
+          .map((d) => {
+            const seatRaw = d.seat;
+            const seat =
+              seatRaw === "p1" || seatRaw === "p2"
+                ? (seatRaw as "p1" | "p2")
+                : null;
+            const amount = Number(d.amount);
+            if (!seat || !Number.isFinite(amount)) return null;
+            return { seat, amount: Math.max(0, Math.floor(amount)) };
+          })
+          .filter((entry): entry is { seat: "p1" | "p2"; amount: number } =>
+            Boolean(entry),
+          );
+        const out = {
+          type: "combatLifeDamage",
+          id,
+          damage,
+          playerKey,
+          ts: Date.now(),
+        } as const;
+        io.to(room).emit("message", out);
+        try {
+          io.to(`spectate:${matchId}`).emit("message", out);
+        } catch {}
+      } catch {}
     } else if (type === "guidePref") {
       try {
         const match = await getOrLoadMatch(matchId);
@@ -3545,6 +3639,44 @@ io.on("connection", async (socket: SocketClient) => {
         const text = typeof raw === "string" ? raw.slice(0, 200) : null;
         if (!text) return;
         const out = { type: "toast", text, playerKey, ts: Date.now() } as const;
+        io.to(room).emit("message", out);
+        try {
+          io.to(`spectate:${matchId}`).emit("message", out);
+        } catch {}
+      } catch {}
+    } else if (type === "handPeekAction") {
+      // Broadcast hand peek actions (top/bottom of spellbook, graveyard, banish, steal)
+      // to other players in the match for online synchronization
+      try {
+        const match = await getOrLoadMatch(matchId);
+        const room = `match:${matchId}`;
+        const msg = payload as {
+          who?: unknown;
+          pile?: unknown;
+          instanceId?: unknown;
+          action?: unknown;
+          cardName?: unknown;
+          zones?: unknown;
+        };
+        const who = typeof msg.who === "string" ? msg.who : null;
+        const pile = typeof msg.pile === "string" ? msg.pile : null;
+        const instanceId =
+          typeof msg.instanceId === "string" ? msg.instanceId : null;
+        const action = typeof msg.action === "string" ? msg.action : null;
+        const cardName = typeof msg.cardName === "string" ? msg.cardName : null;
+        const zones =
+          msg.zones && typeof msg.zones === "object" ? msg.zones : null;
+        if (!who || !pile || !instanceId || !action) return;
+        const out = {
+          type: "handPeekAction",
+          who,
+          pile,
+          instanceId,
+          action,
+          cardName,
+          zones,
+          ts: Date.now(),
+        };
         io.to(room).emit("message", out);
         try {
           io.to(`spectate:${matchId}`).emit("message", out);
@@ -4020,7 +4152,9 @@ io.on("connection", async (socket: SocketClient) => {
       type === "searingTruthBegin" ||
       type === "searingTruthTarget" ||
       type === "searingTruthResolve" ||
-      type === "searingTruthCancel"
+      type === "searingTruthCancel" ||
+      type === "interrogatorTrigger" ||
+      type === "interrogatorResolve"
     ) {
       // Resolver messages - broadcast to match room
       try {

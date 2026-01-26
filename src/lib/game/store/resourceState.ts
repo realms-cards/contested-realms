@@ -27,7 +27,7 @@ export const createResourceSlice: StateCreator<
     const state = get();
     const owner = who === "p1" ? 1 : 2;
     return Object.entries(state.board.sites).filter(
-      ([, site]) => site && site.owner === owner
+      ([, site]) => site && site.owner === owner,
     ) as Array<[CellKey, SiteTile]>;
   },
 
@@ -77,7 +77,7 @@ export const createResourceSlice: StateCreator<
       who,
       state.zones,
       state.specialSiteState,
-      thresholds
+      thresholds,
     );
     const offset = Number(state.players[who]?.mana || 0);
     return Math.max(0, base + offset);
@@ -90,21 +90,26 @@ export const createResourceSlice: StateCreator<
 
   addMana: (who, delta) =>
     set((state) => {
-      const current = Number(state.players[who]?.mana || 0);
+      const playerState = state.players[who];
+      if (!playerState) {
+        console.warn("[addMana] Player state not initialized for", who);
+        return state;
+      }
+      const current = Number(playerState.mana || 0);
       const next = current + delta;
-      if (next === current) return state as GameState;
+      if (next === current) return state;
 
       const newState = {
         players: {
           ...state.players,
           [who]: {
-            ...state.players[who],
+            ...playerState,
             mana: next,
           },
         },
-      } as Partial<GameState> as GameState;
+      };
 
-      // Only send the affected player's data to avoid overwriting opponent's state
+      // Send patch (same pattern as addLife)
       const patch: ServerPatchT = {
         players: { [who]: newState.players[who] } as GameState["players"],
       };
@@ -141,8 +146,8 @@ export const createResourceSlice: StateCreator<
         const changeText = delta > 0 ? `gains` : `loses`;
         get().log(
           `${who.toUpperCase()} ${changeText} ${Math.abs(
-            delta
-          )} ${element} threshold (${currentThreshold} → ${newThreshold})`
+            delta,
+          )} ${element} threshold (${currentThreshold} → ${newThreshold})`,
         );
       }
 

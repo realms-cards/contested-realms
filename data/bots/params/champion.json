@@ -1,9 +1,9 @@
 {
   "meta": {
-    "id": "refined/v7-balanced-aggressive",
-    "description": "Balanced aggressive: maintains hand size while prioritizing board development",
-    "version": "7.0.0",
-    "created": "2025-10-15",
+    "id": "refined/v9-learned-patterns",
+    "description": "Self-correcting strategy with learned patterns from 100 production replays",
+    "version": "9.0.0",
+    "created": "2026-01-25",
     "changes": [
       "T002: Added cost and threshold validation",
       "T004-T008: Added board development, mana efficiency, threat deployment, life pressure features",
@@ -13,7 +13,11 @@
       "T048: Increased early mana development priority (w_sites 2.0→3.5, extended establish_mana_base to turn 6)",
       "T061: AGGRESSIVE TUNING - penalize drawing (w_hand: -0.1), boost sites (5.0), board development (1.5), life pressure (2.0), add 'draw' modifier to discourage spam",
       "T073: ULTRA-AGGRESSIVE - massive draw penalty (0.01-0.05), extreme site priority (5.0→8.0 modifier), punish card hoarding (-0.5)",
-      "T078: BALANCED - moderate hand penalty (-0.2), tactical draw modifiers (0.1-0.2), conditional draw generation (hand<6)"
+      "T078: BALANCED - moderate hand penalty (-0.2), tactical draw modifiers (0.1-0.2), conditional draw generation (hand<6)",
+      "T100: DETERMINISTIC RULES - Turn 1 ALWAYS plays site, Turn 2-3 strongly prefer sites, bypasses scoring for obvious plays",
+      "T101: ATTACK PRIORITY - Sites first for mana denial, lethal always taken, avatar chip damage lowest priority",
+      "T102: THRESHOLD-AWARE DRAWING - Analyzes hand for missing thresholds, prefers atlas when fixing thresholds needed",
+      "T103: LEARNED PATTERNS - Analyzed 100 production replays. Key findings: losers play 192% more units on turn 1 (overextending), losers rush 37% more units on turn 3. Updated modifiers to penalize early unit spam."
     ]
   },
   "search": {
@@ -83,15 +87,26 @@
     "legal_move_fallback": "pass_or_minimal"
   },
   "strategic_modifiers": {
-    "_comment": "Phase-based strategy (T078: BALANCED - strong site/unit priority with tactical draw options)",
+    "_comment": "Phase-based strategy (T103: LEARNED PATTERNS - winners play fewer units on T1, avoid overextending)",
+    "turn_1_mandatory_site": {
+      "condition": "turnNumber === 1 && ownedSites === 0",
+      "modifiers": {
+        "play_site": 10.0,
+        "play_unit": 0.1,
+        "play_minion": 0.1,
+        "draw": 0.3
+      },
+      "_comment": "T103: Losers play 192% more units on turn 1. Site is mandatory, penalize unit plays heavily."
+    },
     "establish_mana_base": {
-      "condition": "turnNumber <= 3 && ownedSites < 3",
+      "condition": "turnNumber <= 3 && ownedSites < 3 && ownedSites >= 1",
       "modifiers": {
         "play_site": 5.0,
-        "play_unit": 0.3,
-        "play_minion": 0.3,
-        "draw": 0.2
-      }
+        "play_unit": 0.2,
+        "play_minion": 0.2,
+        "draw": 0.25
+      },
+      "_comment": "T103: Reduced unit modifier from 0.3 to 0.2 based on loser patterns showing early unit overextension"
     },
     "expand_toward_opponent": {
       "condition": "ownedSites >= 3 && ownedSites < 8",
@@ -135,6 +150,87 @@
     "expected_meaningful_actions_percent": "70-85%",
     "expected_avg_game_length": "15-25 turns",
     "expected_eval_variance": "> 2.0",
-    "expected_mana_wasted_turns_5plus": "< 3.0"
+    "expected_mana_wasted_turns_5plus": "< 3.0",
+    "expected_turn1_site_rate": "100% (deterministic)",
+    "expected_turn4_site_count": ">= 3.5 average",
+    "expected_site_attack_rate": ">= 60% of early attacks"
+  },
+  "deterministic_rules": {
+    "_comment": "T100: Rules that bypass scoring entirely - obvious plays",
+    "turn_1": {
+      "rule": "ALWAYS play site under avatar",
+      "condition": "turnNumber === 1 && sites === 0 && hasSiteInHand",
+      "exception": "None - this is mandatory"
+    },
+    "turn_2": {
+      "rule": "Play site unless 1-cost creature is playable",
+      "condition": "turnNumber === 2 && sites < 2 && hasSiteInHand && !oneCostPlayable",
+      "exception": "If 1-cost creature can be played, use scoring to decide"
+    },
+    "turn_3": {
+      "rule": "Play site to reach 3 mana base",
+      "condition": "turnNumber === 3 && sites < 3 && hasSiteInHand",
+      "exception": "None - 3 mana is critical threshold"
+    }
+  },
+  "attack_priority": {
+    "_comment": "T101: Attack target priority order",
+    "order": [
+      "1. Avatar (if lethal - ALWAYS take the kill)",
+      "2. Sites (mana denial - highest value early game)",
+      "3. Enemy units (clear blockers)",
+      "4. Avatar (chip damage - lowest priority)"
+    ],
+    "rationale": "Destroying sites early denies opponent mana, which compounds over the game"
+  },
+  "draw_selection": {
+    "_comment": "T102: Threshold-aware draw source selection",
+    "rules": [
+      "Turn 4 with < 4 sites: Draw site (reach 4 mana)",
+      "Missing threshold for hand cards: Draw site",
+      "Have 4+ sites and full threshold: Draw spell",
+      "Default before 5 sites: Draw site"
+    ]
+  },
+  "learned_patterns": {
+    "_comment": "T103: Patterns extracted from 100 production replays (2026-01-25)",
+    "data_source": "data/bots/learned-patterns.json",
+    "key_insights": [
+      {
+        "finding": "Turn 1 site is universal",
+        "evidence": "Both winners (100) and losers (100) play exactly 1 site on turn 1",
+        "action": "Deterministic rule: ALWAYS play site on turn 1"
+      },
+      {
+        "finding": "Losers overextend on turn 1",
+        "evidence": "Losers play 50 units on turn 1 vs winners 26 (192% more)",
+        "action": "Heavily penalize unit plays on turn 1 (modifier: 0.1)"
+      },
+      {
+        "finding": "Losers rush units on turn 3",
+        "evidence": "Losers deploy 112 units on turn 3 vs winners 82 (37% more)",
+        "action": "Reduced unit modifier in establish_mana_base phase (0.3→0.2)"
+      },
+      {
+        "finding": "Winners draw more spells",
+        "evidence": "100% spellbook draws for winners (may indicate established mana bases)",
+        "action": "After 4+ sites, prefer spellbook draws"
+      },
+      {
+        "finding": "Average game length is 13 turns",
+        "evidence": "Winners avg 13.2 turns, losers avg 13.3 turns",
+        "action": "Plan for mid-game aggression around turn 5-6"
+      }
+    ],
+    "winner_turn1_breakdown": {
+      "play_site": "45%",
+      "draw": "43%",
+      "play_unit": "12%"
+    },
+    "loser_turn1_breakdown": {
+      "play_site": "39%",
+      "draw": "40%",
+      "play_unit": "19%"
+    }
   }
 }

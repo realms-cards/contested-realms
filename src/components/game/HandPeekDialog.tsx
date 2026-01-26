@@ -18,7 +18,15 @@ export interface HandPeekDialogProps {
   onClose: () => void;
 }
 
-type PeekAction = "top" | "bottom" | "hand" | "graveyard" | "banish" | "steal";
+type PeekAction =
+  | "top"
+  | "bottom"
+  | "hand"
+  | "graveyard"
+  | "banish"
+  | "steal"
+  | "topOfSpellbook"
+  | "bottomOfSpellbook";
 
 const GRID_CARD_WIDTH = CARD_SHORT * 0.55;
 const GRID_CARD_HEIGHT = CARD_LONG * 0.55;
@@ -103,7 +111,7 @@ export default function HandPeekDialog({
       const instanceId = card.instanceId;
       if (!instanceId) {
         console.log(
-          "[HandPeekDialog] ABORT: card has no instanceId, falling back to cardId"
+          "[HandPeekDialog] ABORT: card has no instanceId, falling back to cardId",
         );
         // Fallback: use cardId if instanceId not available
         const cardId = card.cardId;
@@ -116,17 +124,17 @@ export default function HandPeekDialog({
       const identifier = instanceId || String(card.cardId);
       console.log(
         "[HandPeekDialog] Calling handlePeekedCard with identifier:",
-        identifier
+        identifier,
       );
       handlePeekedCard(source.seat, source.pile, identifier, action);
       console.log(
-        "[HandPeekDialog] handlePeekedCard returned, marking card as removed"
+        "[HandPeekDialog] handlePeekedCard returned, marking card as removed",
       );
       // Mark this card as removed from the peek view (don't close dialog)
       setRemovedIndices((prev) => new Set([...prev, contextMenu.cardIndex]));
       setContextMenu(null);
     },
-    [contextMenu, source, handlePeekedCard]
+    [contextMenu, source, handlePeekedCard],
   );
 
   // Whether actions are available (only for pile peeks, not hand peeks)
@@ -157,7 +165,7 @@ export default function HandPeekDialog({
           <div className="text-xs text-zinc-400 -mt-1">
             Right-click a card for actions
             {source?.pile === "hand"
-              ? " (take, discard, banish)"
+              ? " (take, top/bottom of pile, discard, banish)"
               : " (draw, bottom, cemetery)"}
           </div>
         )}
@@ -173,7 +181,7 @@ export default function HandPeekDialog({
               style={{
                 gridTemplateColumns: `repeat(${Math.min(
                   cardsToRender.length,
-                  5
+                  5,
                 )}, minmax(120px, max-content))`,
               }}
               onMouseLeave={() => setPreviewCard(null)}
@@ -286,12 +294,26 @@ export default function HandPeekDialog({
           )}
           {/* Hand peek actions - take to your hand */}
           {source?.pile === "hand" && (
-            <button
-              className="w-full px-3 py-1.5 text-sm text-left hover:bg-white/10 transition-colors text-emerald-400"
-              onClick={() => handleAction("steal")}
-            >
-              ✋ Take to your hand
-            </button>
+            <>
+              <button
+                className="w-full px-3 py-1.5 text-sm text-left hover:bg-white/10 transition-colors text-emerald-400"
+                onClick={() => handleAction("steal")}
+              >
+                ✋ Take to your hand
+              </button>
+              <button
+                className="w-full px-3 py-1.5 text-sm text-left hover:bg-white/10 transition-colors text-cyan-400"
+                onClick={() => handleAction("topOfSpellbook")}
+              >
+                ↑ Put top of spellbook
+              </button>
+              <button
+                className="w-full px-3 py-1.5 text-sm text-left hover:bg-white/10 transition-colors text-amber-400"
+                onClick={() => handleAction("bottomOfSpellbook")}
+              >
+                ↓ Put bottom of spellbook
+              </button>
+            </>
           )}
           {/* Common actions for both pile and hand peeks */}
           <button
