@@ -1,6 +1,7 @@
 "use client";
 
-import { X, Users, Hash } from "lucide-react";
+import { useState, useCallback } from "react";
+import { X, Users, Hash, Eye, Check, Copy } from "lucide-react";
 import { useGameStore } from "@/lib/game/store";
 
 interface MatchInfoPopupProps {
@@ -40,6 +41,30 @@ export default function MatchInfoPopup({
   const cardPreviewsEnabled = useGameStore((s) => s.cardPreviewsEnabled);
   const setCardPreviewsEnabled = useGameStore((s) => s.setCardPreviewsEnabled);
 
+  const [linkCopied, setLinkCopied] = useState(false);
+
+  const copySpectateLink = useCallback(() => {
+    if (!matchId) return;
+    const url = `${window.location.origin}/online/play/${matchId}?watch=1`;
+    navigator.clipboard
+      .writeText(url)
+      .then(() => {
+        setLinkCopied(true);
+        setTimeout(() => setLinkCopied(false), 2000);
+      })
+      .catch(() => {
+        // Fallback: select text for manual copy
+        const input = document.createElement("input");
+        input.value = url;
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand("copy");
+        document.body.removeChild(input);
+        setLinkCopied(true);
+        setTimeout(() => setLinkCopied(false), 2000);
+      });
+  }, [matchId]);
+
   if (!isOpen) return null;
 
   return (
@@ -58,6 +83,39 @@ export default function MatchInfoPopup({
 
         {/* Content */}
         <div className="p-4 space-y-4">
+          {/* Spectate Link */}
+          {!spectatorMode && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-sm">
+                <Eye className="w-4 h-4 opacity-60" />
+                <span className="opacity-70">Share Spectate Link:</span>
+              </div>
+              <button
+                onClick={copySpectateLink}
+                className={`w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  linkCopied
+                    ? "bg-green-600/90 text-white"
+                    : "bg-purple-600/80 hover:bg-purple-500 text-white"
+                }`}
+              >
+                {linkCopied ? (
+                  <>
+                    <Check className="w-4 h-4" />
+                    Link Copied!
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-4 h-4" />
+                    Copy Spectate Link
+                  </>
+                )}
+              </button>
+              <p className="text-xs opacity-50 text-center">
+                Anyone with this link can watch your match live
+              </p>
+            </div>
+          )}
+
           {/* Match Details */}
           <div className="space-y-3">
             <div className="flex items-center gap-2 text-sm">

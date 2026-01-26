@@ -4,6 +4,7 @@
 
 ### Jan 26 - User requested fixes
 
+- **add generate spectate link** from Match Info
 - **add custom resolvers for Sites** "Beacon" and "Annual Fair"
 - **construct the tower of babel** by playing the apex on a base
 - **harden D20 roll** for first player, should handle ties better
@@ -14,6 +15,8 @@
 - **fix interrogator overlay** will only work if combat interactions are enabled
 - **revisions and fixes for combat interactions** fix previews showing wrong attacker power, fix avatars attacking "here" on right click, fix avatar vs avatar combat
 - **remove spectators seeing resolver overlays**
+- **isolate pith imp state per instance** enabling correct resolution for multiple Imps on the board
+- **fix Searing Truth** server patch
 
 ### Jan 22 - Legion of Gall
 
