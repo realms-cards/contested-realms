@@ -154,13 +154,11 @@ export default function Hand3D({
   const hoverLerpRef = useRef(-1);
   const [hoverLerp, setHoverLerp] = useState(-1);
 
-  // Track previous hovered card for realistic departure animation
+  // Track previous hovered card for arrival animation
   const prevHoverIndexRef = useRef(-1);
-  // Per-card departure animation progress: 0 = in position, 1 = fully departed (out to side)
-  // Each card has its own departure state for smooth independent animations
-  const cardDepartureRef = useRef<Map<number, number>>(new Map());
-  // Track when hover changes to trigger departure animation
-  const hoverChangeTimeRef = useRef(0);
+  // Per-card arrival animation progress: 0 = just started (behind/below), 1 = fully arrived (in hover position)
+  // The arriving card animates UP and OVER the previous card
+  const cardArrivalRef = useRef<Map<number, number>>(new Map());
 
   // Track whether the pointer is over any card area (aggregated)
   const [overCardsArea, setOverCardsArea] = useState(false);
@@ -618,67 +616,28 @@ export default function Hand3D({
       // When collapsed (revealLerp < 0.5), don't preserve hover state
       const isCollapsed = revealLerp.current < 0.5;
 
-      // Detect hover changes for departure animation
-      // Debounce: don't trigger departure for very quick hover changes (prevents jitter)
-      const now = performance.now();
-      const timeSinceLastChange = now - hoverChangeTimeRef.current;
-      const HOVER_DEBOUNCE_MS = 80; // Minimum ms between departure triggers
-
+      // Detect hover changes for arrival animation
       const prevHoverTarget = prevHoverIndexRef.current;
       if (target !== prevHoverTarget && target >= 0) {
-        // New card is being hovered - mark the old one for departure
-        // Only trigger if enough time has passed (prevents rapid back-and-forth)
-        if (
-          prevHoverTarget >= 0 &&
-          prevHoverTarget < n &&
-          timeSinceLastChange > HOVER_DEBOUNCE_MS
-        ) {
-          // Also skip if the cards are adjacent and we're moving fast
-          const isAdjacent = Math.abs(target - prevHoverTarget) === 1;
-          const movingFast = timeSinceLastChange < 150;
-          if (
-            !(
-              isAdjacent &&
-              movingFast &&
-              cardDepartureRef.current.has(prevHoverTarget)
-            )
-          ) {
-            cardDepartureRef.current.set(prevHoverTarget, 0.01); // Start departure
-          }
-        }
-        hoverChangeTimeRef.current = now;
+        // New card is being hovered - start its arrival animation (up and over)
+        cardArrivalRef.current.set(target, 0.01); // Start arrival at 0
         prevHoverIndexRef.current = target;
       } else if (target < 0 && prevHoverTarget >= 0) {
-        // Hover ended - mark old card for departure (always, no debounce needed)
-        if (prevHoverTarget < n) {
-          cardDepartureRef.current.set(prevHoverTarget, 0.01);
-        }
         prevHoverIndexRef.current = -1;
-        hoverChangeTimeRef.current = now;
       }
 
-      // Animate per-card departure states
-      // Phase: 0->0.5 = slide out sideways, 0.5->1.0 = slide behind and tuck back
-      const animSpeed = 0.12; // Unified animation speed for smooth interpolation
-      cardDepartureRef.current.forEach((progress, cardIndex) => {
+      // Animate per-card arrival states
+      // Progress: 0 = starting (behind/below), 1 = fully arrived at hover position
+      const animSpeed = 0.08; // Smooth animation speed
+      cardArrivalRef.current.forEach((progress, cardIndex) => {
         const isCurrentlyHovered = cardIndex === target;
-        if (isCurrentlyHovered) {
-          // Card is now hovered again - quickly reset
-          const newProgress = Math.max(0, progress - 0.2);
-          if (newProgress <= 0) {
-            cardDepartureRef.current.delete(cardIndex);
-          } else {
-            cardDepartureRef.current.set(cardIndex, newProgress);
-          }
-        } else {
-          // Animate through all phases at consistent speed
-          const newProgress = progress + animSpeed;
-          if (newProgress >= 1) {
-            // Animation complete - remove tracking
-            cardDepartureRef.current.delete(cardIndex);
-          } else {
-            cardDepartureRef.current.set(cardIndex, newProgress);
-          }
+        if (isCurrentlyHovered && progress < 1) {
+          // Animate toward fully arrived
+          const newProgress = Math.min(1, progress + animSpeed);
+          cardArrivalRef.current.set(cardIndex, newProgress);
+        } else if (!isCurrentlyHovered) {
+          // No longer hovered - remove tracking (card snaps back)
+          cardArrivalRef.current.delete(cardIndex);
         }
       });
 
@@ -707,25 +666,28 @@ export default function Hand3D({
     return map;
   }, [sortedHand, hand]);
 
-  // Get current departure states for layout calculation (forces re-render when animations are active)
-  const [departureSnapshot, setDepartureSnapshot] = useState<
-    Map<number, number>
-  >(new Map());
+  // Get current arrival states for layout calculation (forces re-render when animations are active)
+  const [arrivalSnapshot, setArrivalSnapshot] = useState<Map<number, number>>(
+    new Map(),
+  );
+  // Counter to force continuous updates while animating
+  const [animationTick, setAnimationTick] = useState(0);
 
-  // Update departure snapshot periodically when animations are running
+  // Update arrival snapshot continuously while animations are running
   useEffect(() => {
-    if (cardDepartureRef.current.size === 0) {
-      if (departureSnapshot.size > 0) {
-        setDepartureSnapshot(new Map());
+    if (cardArrivalRef.current.size === 0) {
+      if (arrivalSnapshot.size > 0) {
+        setArrivalSnapshot(new Map());
       }
       return;
     }
-    // Force re-render while animations are active
+    // Continuously re-render while animations are active
     const id = requestAnimationFrame(() => {
-      setDepartureSnapshot(new Map(cardDepartureRef.current));
+      setArrivalSnapshot(new Map(cardArrivalRef.current));
+      setAnimationTick((t) => t + 1); // Force next frame
     });
     return () => cancelAnimationFrame(id);
-  }, [departureSnapshot.size]);
+  }, [arrivalSnapshot.size, animationTick]);
 
   // Unified hand fan layout: all cards in arc - always fanned out
   const handLayout = useMemo(() => {
@@ -739,7 +701,7 @@ export default function Hand3D({
         scale: number;
         originalIndex: number;
         hoverWeight: number;
-        departureProgress: number;
+        arrivalProgress: number;
       }[];
 
     // Reduce fan angle when collapsed to make titles more readable
@@ -770,9 +732,6 @@ export default function Hand3D({
     // Check sort direction for site positioning
     const sitesFirst = graphicsSettings.handSortOrder !== "spellsFirst";
 
-    // Get current hover target for departure direction calculation
-    const currentHoverIndex = hoverLerp >= 0 ? Math.round(hoverLerp) : -1;
-
     return new Array(n).fill(0).map((_, i) => {
       // Map sorted index back to original hand index
       const sortedCard = sortedHand[i];
@@ -794,45 +753,24 @@ export default function Hand3D({
         baseX += sitesFirst ? -siteOuterOffset : siteOuterOffset;
       }
 
-      // Check if this card has departure animation
-      const departureProgress = departureSnapshot.get(i) ?? 0;
+      // Check if this card has arrival animation (sliding in from side)
+      const arrivalProgress = arrivalSnapshot.get(i) ?? 1; // Default to 1 = fully arrived
 
-      // Calculate departure offsets for realistic card shuffling
-      // Phase 1 (0-0.5): Slide sideways away from new hover position
-      // Phase 2 (0.5-1.0): Move behind other cards (negative Z)
-      // Phase 3 (1.0-2.0): Tuck back into normal position
-      let departureX = 0;
-      let departureZ = 0;
-      let departureY = 0;
+      // Calculate arrival offsets - card slides in horizontally from the side
+      // Progress: 0 = starting position (offset to side), 1 = final position
+      let arrivalX = 0;
 
-      if (departureProgress > 0) {
-        // Direction: slide away from current hover (or toward edge if no hover)
-        const slideDirection =
-          currentHoverIndex >= 0
-            ? i < currentHoverIndex
-              ? -1
-              : 1 // Slide away from hover
-            : i < n / 2
-              ? -1
-              : 1; // Slide toward nearest edge
+      if (arrivalProgress < 1) {
+        const t = arrivalProgress;
+        const slideAmount = CARD_SHORT * 0.3; // How far to slide from
 
-        const slideAmount = CARD_SHORT * 0.25; // How far to slide sideways
-        const behindAmount = 0.012; // How far behind (Z depth)
-        const dipAmount = CARD_LONG * 0.02; // Slight dip during transition
-
-        // Smooth bell curve for the whole animation (0 to 1)
-        // Use sine for smooth in-out: peaks at 0.5, returns to 0 at 1.0
-        const smoothOut = Math.sin(departureProgress * Math.PI); // 0->1->0
-
-        // Slide sideways: quick out, smooth back
-        departureX = slideDirection * slideAmount * smoothOut;
-        // Z depth: dip behind at the peak of the animation
-        departureZ = -behindAmount * smoothOut;
-        // Y dip: slight downward motion during transition
-        departureY = -dipAmount * smoothOut;
+        // Slide in from the side with ease-out
+        // Card starts offset and slides to its final position
+        const slideEase = 1 - Math.pow(1 - t, 2); // Ease out
+        arrivalX = slideAmount * (1 - slideEase);
       }
 
-      const x = baseX + departureX;
+      const x = baseX + arrivalX;
 
       // Y position: arc + hover pop-up
       const arcY = -Math.abs(Math.sin(angle)) * HAND_FAN_ARC_Y * 1.5;
@@ -856,21 +794,32 @@ export default function Hand3D({
         arcY +
         liftFromFocus +
         CARD_LONG * 0.08 * hoverWeight +
-        siteCollapsedLift +
-        departureY;
+        siteCollapsedLift;
 
-      // Z position: base stacking + departure animation
-      const baseZ = i * 0.001;
-      const z = baseZ + departureZ;
+      // Z position: hovered card on top, stacking down from it on both sides
+      // When a card is hovered, it's on top (highest Z)
+      // Cards further from the hovered card are lower in the stack
+      const currentHoverIndex = hoverLerp >= 0 ? Math.round(hoverLerp) : -1;
+      let stackZ: number;
+      if (currentHoverIndex >= 0) {
+        // Distance from hovered card determines depth
+        const distFromHover = Math.abs(i - currentHoverIndex);
+        // Hovered card at max Z, others decrease based on distance
+        stackZ = (n - distFromHover) * 0.002;
+      } else {
+        // No hover - use index-based stacking (center on top)
+        const distFromCenter = Math.abs(i - (n - 1) / 2);
+        stackZ = (n - distFromCenter) * 0.001;
+      }
+      // Hovered card gets extra forward push
+      const hoverForwardZ = hoverWeight * 0.03;
+      const z = stackZ + hoverForwardZ;
 
       // Scale: hovered card slightly bigger with smoother scaling
-      // Scale effects also fade when collapsed
-      // Departing cards scale down slightly
-      const departureScale =
-        departureProgress > 0 ? 1 - 0.03 * Math.min(departureProgress, 1) : 1;
-      const scale =
-        Math.max(1 + 0.06 * w * revealAmount, 1.0 + 0.08 * hoverWeight) *
-        departureScale;
+      const scale = Math.max(
+        1 + 0.06 * w * revealAmount,
+        1.0 + 0.08 * hoverWeight,
+      );
 
       return {
         x,
@@ -881,7 +830,7 @@ export default function Hand3D({
         scale,
         originalIndex,
         hoverWeight,
-        departureProgress,
+        arrivalProgress,
       };
     });
   }, [
@@ -892,7 +841,7 @@ export default function Hand3D({
     focusLerp,
     hoverLerp,
     graphicsSettings.handSortOrder,
-    departureSnapshot,
+    arrivalSnapshot,
   ]);
 
   // Clamp focus to hand size changes

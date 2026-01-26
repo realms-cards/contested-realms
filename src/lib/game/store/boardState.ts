@@ -4,6 +4,7 @@ import {
   tokenSlug,
   newTokenInstanceId,
 } from "@/lib/game/tokens";
+import { isMergedTower } from "./babelTowerState";
 import type {
   CellKey,
   GameState,
@@ -61,6 +62,24 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
       const key = toCellKey(x, y);
       const site = state.board.sites[key];
       if (!site || !site.card) return state;
+
+      // Check if this is a merged Tower of Babel (Base + Apex stacked)
+      const towerMerge = isMergedTower(key, state.babelTowers);
+      if (towerMerge) {
+        if (target === "graveyard" || target === "banished") {
+          // Use the dedicated Tower destruction handler - both cards to graveyard
+          setTimeout(() => {
+            get().destroyBabelTower(key);
+          }, 0);
+          return state;
+        } else if (target === "hand") {
+          // Tower bounced to hand - return BOTH cards to hand and clean up
+          setTimeout(() => {
+            get().returnBabelTowerToHand(key);
+          }, 0);
+          return state;
+        }
+      }
       // Only enforce ownership checks in online mode when actorKey is set
       // In hotseat mode (actorKey is null), allow all actions
       if (state.transport && state.actorKey) {
@@ -183,6 +202,18 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
       const key = toCellKey(x, y);
       const site = state.board.sites[key];
       if (!site || !site.card) return state;
+
+      // Check if this is a merged Tower of Babel (Base + Apex stacked)
+      // If so, use destroyBabelTower which handles both cards going to graveyard
+      const towerMerge = isMergedTower(key, state.babelTowers);
+      if (towerMerge) {
+        // Use the dedicated Tower destruction handler - both cards to graveyard
+        // Pass placeRubble flag so Rubble token can be placed if requested
+        setTimeout(() => {
+          get().destroyBabelTower(key, placeRubble);
+        }, 0);
+        return state;
+      }
 
       // Ownership checks (same as moveSiteToZone)
       if (state.transport && state.actorKey) {

@@ -17,7 +17,7 @@ export default function PithImpOverlay() {
 
   // Track newly stolen cards to show notification
   const [notification, setNotification] = useState<NotificationData | null>(
-    null
+    null,
   );
   const [prevHandsCount, setPrevHandsCount] = useState(0);
 
@@ -71,11 +71,11 @@ export default function PithImpOverlay() {
                 ? isOwner
                   ? "You stole a card from your opponent!"
                   : isVictim
-                  ? "Your opponent stole a card from you!"
-                  : `${notification.ownerSeat.toUpperCase()} stole from ${notification.victimSeat.toUpperCase()}`
+                    ? "Your opponent stole a card from you!"
+                    : `${notification.ownerSeat.toUpperCase()} stole from ${notification.victimSeat.toUpperCase()}`
                 : isOwner
-                ? "No spells to steal from opponent's hand"
-                : "No spells in your hand to steal"}
+                  ? "No spells to steal from opponent's hand"
+                  : "No spells in your hand to steal"}
             </p>
           </div>
         </div>
@@ -98,8 +98,8 @@ export default function PithImpOverlay() {
             ? isOwner
               ? "This card is hidden under your Pith Imp. It will return to your opponent if the Imp leaves the realm."
               : isVictim
-              ? "Your card is hidden under the opponent's Pith Imp. It will return when the Imp leaves the realm."
-              : "Click to dismiss"
+                ? "Your card is hidden under the opponent's Pith Imp. It will return when the Imp leaves the realm."
+                : "Click to dismiss"
             : "The Pith Imp enters the realm but finds no spells to steal."}
         </p>
 
@@ -123,11 +123,11 @@ export function StolenCardIndicator({
   const pithImpHands = useGameStore((s) => s.pithImpHands);
   const actorKey = useGameStore((s) => s.actorKey);
 
-  // Find stolen cards for this minion
+  // Find stolen cards for this minion - prioritize instanceId (unique per card)
   const stolen = pithImpHands.filter(
     (h) =>
-      h.minion.at === minionAt ||
-      (minionInstanceId && h.minion.instanceId === minionInstanceId)
+      (minionInstanceId && h.minion.instanceId === minionInstanceId) ||
+      (!minionInstanceId && h.minion.at === minionAt),
   );
 
   if (stolen.length === 0) return null;

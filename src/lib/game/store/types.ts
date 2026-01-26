@@ -186,6 +186,13 @@ export type PendingInterrogatorChoice = {
   // The choice made by the victim (null if not yet decided)
   choice: "pay" | "allow" | null;
   createdAt: number;
+  // Combat damage to apply AFTER the choice is resolved
+  // This allows Interrogator ability to trigger BEFORE damage
+  pendingCombatDamage?: {
+    targetSeat: PlayerKey;
+    amount: number;
+    isDD: boolean; // Death's Door state - only 1 damage applies
+  } | null;
 };
 
 // --- Animist Cast Choice --------------------------------
@@ -365,6 +372,32 @@ export type PendingPathfinderPlay = {
   phase: PathfinderPhase;
   topSite: CardRef | null; // The site that will be played
   validTargets: CellKey[]; // Adjacent void or Rubble tiles
+  createdAt: number;
+};
+
+// --- Babel Tower State (Apex + Base merge into Tower) --------------------------------
+// When Apex of Babel is played onto Base of Babel, they merge into Tower of Babel.
+// Tower provides 2 mana, is both Unique and Exceptional.
+// When destroyed, both cards go to graveyard.
+export type BabelPlacementPhase = "selectingTarget" | "complete";
+
+export type PendingBabelPlacement = {
+  id: string;
+  casterSeat: PlayerKey;
+  apex: CardRef; // The Apex of Babel card being played
+  handIndex: number; // Index in hand
+  phase: BabelPlacementPhase;
+  validVoidCells: CellKey[]; // Normal void cells where Apex can be played
+  validBaseCells: CellKey[]; // Cells containing Base of Babel
+  createdAt: number;
+};
+
+export type BabelTowerMerge = {
+  cellKey: CellKey;
+  baseCard: CardRef; // The original Base of Babel
+  apexCard: CardRef; // The Apex of Babel that was played
+  towerCard: CardRef | null; // Deprecated - Tower is a concept, not a card
+  owner: 1 | 2;
   createdAt: number;
 };
 
@@ -1083,6 +1116,15 @@ export type PendingDholChants = {
   createdAt: number;
 };
 
+// --- Annual Fair State ---------------------------------------------------
+// Activated ability: (1) → Gain (A), (E), (F), or (W) this turn.
+export type PendingAnnualFair = {
+  id: string;
+  cellKey: CellKey;
+  ownerSeat: PlayerKey;
+  createdAt: number;
+};
+
 // --- Headless Haunt State ------------------------------------------------
 // At start of turn, Headless Haunt/Haunless Head move to random tile
 // Exception: If Kythera Mechanism attached to avatar, player chooses (can skip)
@@ -1454,6 +1496,11 @@ export type GameState = {
     interrogatorSeat: PlayerKey,
     victimSeat: PlayerKey,
     attackerName: string,
+    pendingCombatDamage?: {
+      targetSeat: PlayerKey;
+      amount: number;
+      isDD: boolean;
+    } | null,
   ) => void;
   resolveInterrogatorChoice: (choice: "pay" | "allow") => void;
   // Chaos Twister minigame flow
@@ -1866,6 +1913,11 @@ export type GameState = {
   selectDholChantsSpell: (card: CardRef) => void;
   resolveDholChants: () => void;
   cancelDholChants: () => void;
+  // Annual Fair activated ability: (1) → Gain (A), (E), (F), or (W) this turn.
+  pendingAnnualFair: PendingAnnualFair | null;
+  beginAnnualFair: (cellKey: CellKey, ownerSeat: PlayerKey) => void;
+  completeAnnualFair: (element: ElementChoice) => void;
+  cancelAnnualFair: () => void;
   // Doomsday Cult (continuous: reveal top spellbook, cast Evil from spellbook)
   getActiveDoomsdayCults: () => DoomsdayCultInfo[];
   isDoomsdayCultActive: () => boolean;
@@ -2110,7 +2162,15 @@ export type GameState = {
     who: PlayerKey,
     pile: "spellbook" | "atlas" | "hand",
     instanceId: string,
-    action: "top" | "bottom" | "hand" | "graveyard" | "banish" | "steal",
+    action:
+      | "top"
+      | "bottom"
+      | "hand"
+      | "graveyard"
+      | "banish"
+      | "steal"
+      | "topOfSpellbook"
+      | "bottomOfSpellbook",
   ) => void;
   // Transfer control
   transferPermanentControl: (at: CellKey, index: number, to?: 1 | 2) => void;
@@ -2249,6 +2309,41 @@ export type GameState = {
   selectPathfinderTarget: (targetCell: CellKey) => void;
   // Cancel the play flow
   cancelPathfinderPlay: () => void;
+  // Babel Tower State (Apex + Base merge)
+  // Tracks merged towers for destruction handling
+  babelTowers: BabelTowerMerge[];
+  // Interactive placement flow when Apex is played and Base exists
+  pendingBabelPlacement: PendingBabelPlacement | null;
+  // Begin the interactive placement flow
+  beginBabelPlacement: (input: {
+    apex: CardRef;
+    casterSeat: PlayerKey;
+    handIndex: number;
+    validVoidCells: CellKey[];
+    validBaseCells: CellKey[];
+  }) => void;
+  // Select target during placement flow
+  selectBabelTarget: (targetCell: CellKey, mergeWithBase: boolean) => void;
+  // Cancel the placement flow
+  cancelBabelPlacement: () => void;
+  // Merge Apex onto Base to create Tower
+  mergeBabelTower: (
+    targetCell: CellKey,
+    apexCard: CardRef,
+    casterSeat: PlayerKey,
+    handIndex: number,
+  ) => void;
+  // Handle Tower destruction (both cards to graveyard, optionally place Rubble)
+  destroyBabelTower: (cellKey: CellKey, placeRubble?: boolean) => boolean;
+  // Place Apex as normal site (bypasses Babel detection loop)
+  placeApexAsNormalSite: (
+    targetCell: CellKey,
+    apex: CardRef,
+    casterSeat: PlayerKey,
+    handIndex: number,
+  ) => void;
+  // Return Tower to hand (both Base and Apex cards)
+  returnBabelTowerToHand: (cellKey: CellKey) => void;
   // Headless Haunt State (Gothic expansion)
   // Tracks Headless Haunt/Haunless Head minions for start-of-turn movement
   headlessHaunts: HeadlessHauntEntry[];
@@ -2547,6 +2642,8 @@ export type ServerPatchT = Partial<{
   pendingMephistophelesSummon: GameState["pendingMephistophelesSummon"];
   pathfinderUsed: GameState["pathfinderUsed"];
   pendingPathfinderPlay: GameState["pendingPathfinderPlay"];
+  babelTowers: GameState["babelTowers"];
+  pendingBabelPlacement: GameState["pendingBabelPlacement"];
   resolversDisabled: GameState["resolversDisabled"];
   gemTokens: GameState["gemTokens"];
   __replaceKeys: string[];

@@ -1,6 +1,11 @@
 import { create, type StateCreator } from "zustand";
 import { createAccusationSlice } from "./store/accusationState";
 import { createAnimistSlice } from "./store/animistState";
+import { createAnnualFairSlice } from "./store/annualFairState";
+import {
+  createBabelTowerSlice,
+  createInitialBabelTowers,
+} from "./store/babelTowerState";
 import { createAssortedAnimalsSlice } from "./store/assortedAnimalsState";
 import { createAtlanteanFateSlice } from "./store/atlanteanFateState";
 import { createAutoResolveSlice } from "./store/autoResolveState";
@@ -187,6 +192,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   ...createLegionOfGallSlice(set, get, storeApi),
   ...createAutoResolveSlice(set, get, storeApi),
   ...createDholChantsSlice(set, get, storeApi),
+  ...createAnnualFairSlice(set, get, storeApi),
   ...createDoomsdayCultSlice(set, get, storeApi),
   ...createPreferenceSlice(set, get, storeApi),
   ...createCardMetaSlice(set, get, storeApi),
@@ -208,6 +214,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   ...createAtlanteanFateSlice(set, get, storeApi),
   ...createMephistophelesSlice(set, get, storeApi),
   ...createPathfinderSlice(set, get, storeApi),
+  ...createBabelTowerSlice(set, get, storeApi),
   ...createGemTokenSlice(set, get, storeApi),
   cardScale: 1,
 
@@ -305,6 +312,8 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         pendingMephistophelesSummon: null,
         pathfinderUsed: createInitialPathfinderUsed(),
         pendingPathfinderPlay: null,
+        babelTowers: createInitialBabelTowers(),
+        pendingBabelPlacement: null,
         portalState: null,
         seerState: null,
         imposterMasks: createInitialImposterMasks(),

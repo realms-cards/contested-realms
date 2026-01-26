@@ -236,6 +236,7 @@ export function PlayerResourceColumn({
   // Get mana data
   const addMana = useGameStore((s) => s.addMana);
   const actorKey = useGameStore((s) => s.actorKey);
+  const manaOffset = useGameStore((s) => s.players[player]?.mana ?? 0);
 
   // Subscribe to granular state slices for threshold reactivity
   const boardSize = useGameStore((s) => s.board.size);
@@ -289,7 +290,7 @@ export function PlayerResourceColumn({
       specialSiteState,
       thresholds,
     );
-    return { baseMana: total, mana: available };
+    return { baseMana: total, mana: Math.max(0, available + manaOffset) };
   }, [
     boardSites,
     boardSize,
@@ -299,6 +300,7 @@ export function PlayerResourceColumn({
     zones,
     specialSiteState,
     thresholds,
+    manaOffset,
   ]);
 
   // Can adjust if we're the actor (or offline) and not dragging

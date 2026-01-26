@@ -976,11 +976,38 @@ function generateMoveCandidates(state, seat) {
 
   const candidates = [];
 
-  // Prioritize: 1. Enemy units/avatar, 2. Enemy sites (if not death's door), 3. Move toward target
-  const priorityTargets = [
-    ...intoEnemy,
-    ...intoSite.filter((k) => !intoEnemy.includes(k)),
-  ];
+  // T101: Attack priority - sites FIRST for mana denial (except lethal)
+  // Check if we can deliver lethal to avatar
+  const chosenAtk = Number(chosen.item?.card?.attack || 0);
+  const canDeliverLethal = oppAtDeathsDoor || chosenAtk >= oppLife;
+
+  // Separate avatar from other enemy targets
+  const intoAvatar = intoEnemy.filter((k) => {
+    const oppAvatarKey = `${oppPos[0]},${oppPos[1]}`;
+    return k === oppAvatarKey;
+  });
+  const intoOtherEnemy = intoEnemy.filter((k) => {
+    const oppAvatarKey = `${oppPos[0]},${oppPos[1]}`;
+    return k !== oppAvatarKey;
+  });
+
+  // Priority order (T101):
+  // 1. Avatar if lethal (always take the kill)
+  // 2. Sites (mana denial - very high value)
+  // 3. Enemy units (clear blockers)
+  // 4. Avatar for chip damage (lower priority than sites)
+  let priorityTargets = [];
+  if (canDeliverLethal && intoAvatar.length > 0) {
+    // Always take lethal
+    priorityTargets = intoAvatar;
+  } else {
+    // Sites first, then units, then avatar for chip
+    priorityTargets = [
+      ...intoSite.filter((k) => !intoEnemy.includes(k)),
+      ...intoOtherEnemy,
+      ...intoAvatar, // Avatar last (chip damage)
+    ];
+  }
 
   if (priorityTargets.length > 0) {
     for (const k of priorityTargets.slice(0, 2)) {
@@ -1554,6 +1581,312 @@ function getStrategicModifiers(state, seat, _theta) {
   return modifiers;
 }
 
+// =============================================================================
+// DETERMINISTIC RULES MODULE (T100)
+// These bypass scoring for obviously correct plays - Turn 1 is ALWAYS site
+// =============================================================================
+
+/**
+ * Analyze threshold requirements for cards in hand
+ * Returns what elements we're missing to play our cards
+ */
+function analyzeThresholdNeeds(state, seat) {
+  const zones = getZones(state, seat);
+  const hand = Array.isArray(zones.hand) ? zones.hand : [];
+
+  // Get current thresholds
+  const thresholds = countThresholdsForSeat(state, seat);
+  const currentThresholds = {
+    air: Number(thresholds.air || 0),
+    water: Number(thresholds.water || 0),
+    earth: Number(thresholds.earth || 0),
+    fire: Number(thresholds.fire || 0),
+  };
+
+  const needs = { air: 0, water: 0, earth: 0, fire: 0 };
+  const unplayableCards = [];
+
+  for (const card of hand) {
+    if (!card || isSiteCard(card)) continue;
+
+    // Check threshold requirements
+    const threshold = card.threshold || {};
+    let canPlay = true;
+
+    for (const [element, required] of Object.entries(threshold)) {
+      const have = currentThresholds[element.toLowerCase()] || 0;
+      const need = Number(required) || 0;
+      if (need > have) {
+        const missing = need - have;
+        needs[element.toLowerCase()] = Math.max(
+          needs[element.toLowerCase()] || 0,
+          missing
+        );
+        canPlay = false;
+      }
+    }
+
+    if (!canPlay) {
+      unplayableCards.push(card.name);
+    }
+  }
+
+  const hasMissingThresholds = Object.values(needs).some((v) => v > 0);
+  const primaryNeed = Object.entries(needs)
+    .filter(([, v]) => v > 0)
+    .sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+
+  return {
+    hasMissingThresholds,
+    missingElements: needs,
+    unplayableCards,
+    currentThresholds,
+    shouldDrawSite: hasMissingThresholds,
+    primaryNeed,
+  };
+}
+
+/**
+ * Determine the best draw source based on current needs
+ */
+function selectDrawSource(state, seat) {
+  const sites = countOwnedManaSites(state, seat);
+  const stateModel = buildGameStateModel(state, seat);
+  const turnNumber = stateModel.turnState.turnNumber;
+  const thresholdAnalysis = analyzeThresholdNeeds(state, seat);
+
+  // Rule 1: Turn 4 site draw rule - reach 4 mana for playability
+  if (turnNumber === 4 && sites < 4) {
+    return {
+      source: "atlas",
+      reason: "turn_4_mana_development",
+    };
+  }
+
+  // Rule 2: Missing threshold for cards in hand
+  if (thresholdAnalysis.hasMissingThresholds && sites < 6) {
+    return {
+      source: "atlas",
+      reason: "fix_threshold",
+    };
+  }
+
+  // Rule 3: Have enough mana, looking for action
+  if (sites >= 4 && !thresholdAnalysis.hasMissingThresholds) {
+    return {
+      source: "spellbook",
+      reason: "have_mana_need_action",
+    };
+  }
+
+  // Rule 4: Default - prefer site until 5 mana
+  if (sites < 5) {
+    return {
+      source: "atlas",
+      reason: "mana_development",
+    };
+  }
+
+  return {
+    source: "spellbook",
+    reason: "default_late_game",
+  };
+}
+
+/**
+ * Find a 1-cost creature that can be played
+ */
+function findPlayableOneCost(hand, state, seat) {
+  for (const card of hand) {
+    if (!card) continue;
+    if (isSiteCard(card)) continue;
+
+    const cost = Number(card.cost || card.manaCost || 0);
+    if (cost !== 1) continue;
+    if (!canAffordCard(state, seat, card)) continue;
+
+    const cardType = (card.type || "").toLowerCase();
+    if (
+      cardType.includes("minion") ||
+      cardType.includes("unit") ||
+      cardType.includes("creature")
+    ) {
+      return card;
+    }
+  }
+  return null;
+}
+
+/**
+ * Check if hand has a site card
+ */
+function hasSiteInHand(hand) {
+  return hand.some((c) => c && isSiteCard(c));
+}
+
+/**
+ * Choose best site from hand based on threshold needs
+ */
+function chooseBestSiteFromHand(hand, thresholdNeeds) {
+  const sites = hand.filter((c) => c && isSiteCard(c));
+  if (sites.length === 0) return null;
+
+  // If we have threshold needs, prefer sites that provide those elements
+  if (thresholdNeeds && thresholdNeeds.primaryNeed) {
+    const targetElement = thresholdNeeds.primaryNeed.toLowerCase();
+
+    for (const site of sites) {
+      const siteName = (site.name || "").toLowerCase();
+      // Check if site name suggests it provides the needed element
+      if (siteName.includes(targetElement)) {
+        return site;
+      }
+      // Check for common naming patterns
+      if (targetElement === "earth" && siteName.includes("valley")) return site;
+      if (targetElement === "water" && siteName.includes("lake")) return site;
+      if (targetElement === "fire" && siteName.includes("volcano")) return site;
+      if (targetElement === "air" && siteName.includes("peak")) return site;
+    }
+  }
+
+  return sites[0];
+}
+
+/**
+ * Get deterministic action if one exists (T100)
+ *
+ * These are plays so obviously correct they bypass scoring:
+ * - Turn 1: ALWAYS play site under avatar
+ * - Turn 2: Play site unless 1-cost creature is playable
+ * - Turn 3: Play site if < 3 sites
+ *
+ * Returns null if no deterministic action (fall through to scoring)
+ */
+function getDeterministicAction(state, seat) {
+  const stateModel = buildGameStateModel(state, seat);
+  const turnNumber = stateModel.turnState.turnNumber;
+  const sites = countOwnedManaSites(state, seat);
+  const zones = getZones(state, seat);
+  const hand = Array.isArray(zones.hand) ? zones.hand : [];
+
+  // TURN 1: ALWAYS play site under avatar (no exceptions)
+  if (turnNumber === 1 && sites === 0 && hasSiteInHand(hand)) {
+    console.log("[Bot Engine] T100: Turn 1 deterministic site play");
+    const thresholdNeeds = analyzeThresholdNeeds(state, seat);
+    const site = chooseBestSiteFromHand(hand, thresholdNeeds);
+    if (site) {
+      return {
+        type: "play_site",
+        card: site,
+        reason: "turn_1_mandatory_site",
+      };
+    }
+  }
+
+  // TURN 2: Play site unless 1-cost creature is playable AND we have 1 site
+  if (turnNumber === 2 && sites < 2 && hasSiteInHand(hand)) {
+    const oneCost = findPlayableOneCost(hand, state, seat);
+
+    // If we have a 1-cost and exactly 1 site, let scoring decide
+    // Otherwise, play the site
+    if (!oneCost) {
+      console.log("[Bot Engine] T100: Turn 2 deterministic site play");
+      const thresholdNeeds = analyzeThresholdNeeds(state, seat);
+      const site = chooseBestSiteFromHand(hand, thresholdNeeds);
+      if (site) {
+        return {
+          type: "play_site",
+          card: site,
+          reason: "turn_2_continue_mana",
+        };
+      }
+    }
+  }
+
+  // TURN 3: Play site if < 3 sites (need 3 mana base)
+  if (turnNumber === 3 && sites < 3 && hasSiteInHand(hand)) {
+    console.log(`[Bot Engine] T100: Turn 3 deterministic site play (${sites} sites)`);
+    const thresholdNeeds = analyzeThresholdNeeds(state, seat);
+    const site = chooseBestSiteFromHand(hand, thresholdNeeds);
+    if (site) {
+      return {
+        type: "play_site",
+        card: site,
+        reason: "turn_3_reach_3_mana",
+      };
+    }
+  }
+
+  // No deterministic action - use scoring
+  return null;
+}
+
+/**
+ * Convert deterministic action to a patch
+ */
+function createPatchFromDeterministicAction(action, state, seat) {
+  if (!action) return null;
+
+  if (action.type === "play_site") {
+    // Use the existing playSitePatch but try to use the specific card
+    const patch = playSitePatch(state, seat);
+    if (patch) {
+      // Log the deterministic decision
+      console.log(
+        `[Bot Engine] T100: Deterministic action: ${action.reason}`
+      );
+    }
+    return patch;
+  }
+
+  return null;
+}
+
+/**
+ * Score attack targets with proper priority (T101)
+ *
+ * Priority order:
+ * 1. Lethal on avatar (100+ points)
+ * 2. Undefended sites (8-10 points) - mana denial is huge
+ * 3. Defended sites (5-7 points)
+ * 4. Units blocking avatar path (3-5 points)
+ * 5. Direct avatar damage (1-3 points)
+ */
+function scoreAttackTarget(attacker, target, state, seat) {
+  let score = 0;
+  const stateModel = buildGameStateModel(state, seat);
+  const turnNumber = stateModel.turnState.turnNumber;
+  const attackerAtk = Number(attacker.card?.attack || attacker.attack || 0);
+
+  if (target.type === "site") {
+    score += 6.0; // Base site value - mana denial
+
+    // Early game site destruction compounds
+    if (turnNumber <= 6) {
+      score += 2.5;
+    }
+  }
+
+  if (target.type === "unit" || target.type === "minion") {
+    score += 2.0;
+  }
+
+  if (target.type === "avatar") {
+    const targetLife = Number(target.life || 20);
+    if (attackerAtk >= targetLife) {
+      score += 100.0; // ALWAYS take lethal
+    } else {
+      score += 1.0 + attackerAtk * 0.2;
+    }
+  }
+
+  return score;
+}
+
+// =============================================================================
+// END DETERMINISTIC RULES MODULE
+// =============================================================================
+
 function extractFeatures(prevState, nextState, seat) {
   const me = seat;
   const opp = otherSeat(seat);
@@ -1998,7 +2331,7 @@ function generateCandidates(state, seat, options = {}) {
     }
   }
 
-  // T076/T078: Draw candidates - only generate when hand is small OR no playable actions available
+  // T076/T078/T100: Draw candidates - threshold-aware draw selection
   // Check if there are actually sites in hand before considering site-playing as an action
   const sitesInHand = hand.filter((c) => isSiteCard(c)).length;
   const hasSiteToPlay =
@@ -2009,8 +2342,19 @@ function generateCandidates(state, seat, options = {}) {
   const shouldGenerateDraws = handSize < 6 || !hasPlayableActions;
 
   if (shouldGenerateDraws) {
-    if (drawSpell) moves.push(seq([drawSpell]));
-    if (drawAtlas) moves.push(seq([drawAtlas]));
+    // T100: Use threshold-aware draw selection to prioritize the right source
+    const drawRecommendation = selectDrawSource(base, seat);
+
+    // Add preferred draw source FIRST (will be scored higher due to position)
+    if (drawRecommendation.source === "atlas") {
+      // Prefer site draw - add atlas first
+      if (drawAtlas) moves.push(seq([drawAtlas]));
+      if (drawSpell) moves.push(seq([drawSpell]));
+    } else {
+      // Prefer spell draw - add spellbook first
+      if (drawSpell) moves.push(seq([drawSpell]));
+      if (drawAtlas) moves.push(seq([drawAtlas]));
+    }
   }
 
   // Pass candidate (always include)
@@ -2037,6 +2381,25 @@ function search(state, seat, theta, rng, options) {
   const budgetMs = Math.max(1, Number(conf.budgetMs || 60) || 60);
   const gamma = typeof conf.gamma === "number" ? conf.gamma : 0.6;
   const softDeadline = start + Math.floor(budgetMs * 2); // soft budget, never hard-fail
+
+  // T100: Check for deterministic actions FIRST (bypass scoring for obvious plays)
+  const deterministicAction = getDeterministicAction(state, seat);
+  if (deterministicAction) {
+    const patch = createPatchFromDeterministicAction(deterministicAction, state, seat);
+    if (patch) {
+      // Log deterministic decision if telemetry enabled
+      if (options && typeof options.logger === "function") {
+        options.logger({
+          mode: options.mode || "evaluate",
+          deterministic: true,
+          deterministicReason: deterministicAction.reason,
+          timeMs: Date.now() - start,
+          t: Date.now(),
+        });
+      }
+      return patch;
+    }
+  }
 
   // T015: Collect generation stats for telemetry
   const collectStats = options && typeof options.logger === "function";

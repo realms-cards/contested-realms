@@ -21,7 +21,12 @@ export const createInterrogatorSlice: StateCreator<
   triggerInterrogatorChoice: (
     interrogatorSeat: PlayerKey,
     victimSeat: PlayerKey,
-    attackerName: string
+    attackerName: string,
+    pendingCombatDamage?: {
+      targetSeat: PlayerKey;
+      amount: number;
+      isDD: boolean;
+    } | null,
   ) => {
     const id = `intg_${Date.now().toString(36)}_${Math.random()
       .toString(36)
@@ -35,6 +40,7 @@ export const createInterrogatorSlice: StateCreator<
       phase: "pending",
       choice: null,
       createdAt: Date.now(),
+      pendingCombatDamage: pendingCombatDamage || null,
     };
 
     set({ pendingInterrogatorChoice: pending });
@@ -49,12 +55,13 @@ export const createInterrogatorSlice: StateCreator<
           interrogatorSeat,
           victimSeat,
           attackerName,
+          pendingCombatDamage: pendingCombatDamage || null,
           ts: Date.now(),
         } as unknown as CustomMessage);
       } catch (error) {
         console.error(
           "[triggerInterrogatorChoice] Error sending interrogatorTrigger:",
-          error
+          error,
         );
       }
     }
@@ -66,7 +73,7 @@ export const createInterrogatorSlice: StateCreator<
       get().log(
         `[p${
           interrogatorSeat === "p1" ? "1" : "2"
-        }:${interrogatorAvatarName}] ability triggers: ${victimSeat.toUpperCase()} must pay ${INTERROGATOR_LIFE_COST} life or allow a spell draw`
+        }:${interrogatorAvatarName}] ability triggers: ${victimSeat.toUpperCase()} must pay ${INTERROGATOR_LIFE_COST} life or allow a spell draw`,
       );
     } catch {}
   },
@@ -84,12 +91,12 @@ export const createInterrogatorSlice: StateCreator<
       } catch (error) {
         console.error(
           "[resolveInterrogatorChoice] Error applying life cost:",
-          error
+          error,
         );
       }
       try {
         get().log(
-          `${victimSeat.toUpperCase()} pays ${INTERROGATOR_LIFE_COST} life to prevent Interrogator's draw`
+          `${victimSeat.toUpperCase()} pays ${INTERROGATOR_LIFE_COST} life to prevent Interrogator's draw`,
         );
       } catch {}
     } else {
@@ -99,15 +106,18 @@ export const createInterrogatorSlice: StateCreator<
       } catch (error) {
         console.error(
           "[resolveInterrogatorChoice] Error drawing spell:",
-          error
+          error,
         );
       }
       try {
         get().log(
-          `${victimSeat.toUpperCase()} allows Interrogator's draw - ${interrogatorSeat.toUpperCase()} draws a spell`
+          `${victimSeat.toUpperCase()} allows Interrogator's draw - ${interrogatorSeat.toUpperCase()} draws a spell`,
         );
       } catch {}
     }
+
+    // Note: Combat damage is applied during normal combat resolution
+    // Interrogator ability now triggers at attack declaration, before combat overlays
 
     // Update state to resolved
     set({
@@ -131,7 +141,7 @@ export const createInterrogatorSlice: StateCreator<
       } catch (error) {
         console.error(
           "[resolveInterrogatorChoice] Error sending interrogatorResolve:",
-          error
+          error,
         );
       }
     }

@@ -120,7 +120,9 @@ export const createCoreSlice: StateCreator<
           d20Rolls: newRolls,
         };
         get().trySendD20Patch(tiePatch);
-        set({ d20Rolls: newRolls, setupWinner: null });
+        // IMPORTANT: Clear pending roll on tie to prevent stale retries
+        // The server will reset both rolls to null, so we shouldn't retry the old value
+        set({ d20Rolls: newRolls, setupWinner: null, d20PendingRoll: null });
         return;
       }
 
@@ -135,8 +137,8 @@ export const createCoreSlice: StateCreator<
           newRolls.p1 > newRolls.p2 ? "1" : "2"
         } wins the roll (${Math.max(newRolls.p1, newRolls.p2)} vs ${Math.min(
           newRolls.p1,
-          newRolls.p2
-        )})!`
+          newRolls.p2,
+        )})!`,
       );
     } else {
       const patch: ServerPatchT = { d20Rolls: newRolls };
@@ -177,8 +179,8 @@ export const createCoreSlice: StateCreator<
         ? 1
         : 2
       : winner === "p1"
-      ? 2
-      : 1;
+        ? 2
+        : 1;
 
     const patch: ServerPatchT = {
       phase: "Start",
@@ -190,7 +192,7 @@ export const createCoreSlice: StateCreator<
     const winnerNum = winner === "p1" ? 1 : 2;
     const choiceText = wantsToGoFirst ? "goes first" : "goes second";
     get().log(
-      `Player ${winnerNum} chooses to ${choiceText}. Player ${firstPlayer} starts!`
+      `Player ${winnerNum} chooses to ${choiceText}. Player ${firstPlayer} starts!`,
     );
   },
 
@@ -198,8 +200,8 @@ export const createCoreSlice: StateCreator<
   winner: null,
   checkMatchEnd: () => {
     const state = get();
-    const p1LifeState = state.players.p1.lifeState;
-    const p2LifeState = state.players.p2.lifeState;
+    const p1LifeState = state.players?.p1?.lifeState;
+    const p2LifeState = state.players?.p2?.lifeState;
 
     if (p1LifeState === "dead" && p2LifeState !== "dead") {
       set({ matchEnded: true, winner: "p2" });
@@ -225,10 +227,10 @@ export const createCoreSlice: StateCreator<
 
   tieGame: () =>
     set((state) => {
-      const p1 = state.players.p1;
-      const p2 = state.players.p2;
+      const p1 = state.players?.p1;
+      const p2 = state.players?.p2;
       if (state.matchEnded) return state as GameState;
-      if (!(p1.lifeState === "dd" && p2.lifeState === "dd")) {
+      if (!(p1?.lifeState === "dd" && p2?.lifeState === "dd")) {
         return state as GameState;
       }
       const nextPlayers = {
@@ -250,7 +252,7 @@ export const createCoreSlice: StateCreator<
     get().log(
       disabled
         ? "Card resolvers DISABLED for this match"
-        : "Card resolvers ENABLED for this match"
+        : "Card resolvers ENABLED for this match",
     );
   },
 
@@ -262,7 +264,7 @@ export const createCoreSlice: StateCreator<
     get().log(
       enabled
         ? "Goldfish mode ENABLED: hands will shuffle back at turn start"
-        : "Goldfish mode DISABLED"
+        : "Goldfish mode DISABLED",
     );
   },
   setGoldfishHandSize: (size: number) => {
@@ -316,7 +318,7 @@ export const createCoreSlice: StateCreator<
 
     const playerNum = who === "p1" ? "1" : "2";
     get().log(
-      `[p${playerNum}:PLAYER] shuffles hand back into piles (Goldfish)`
+      `[p${playerNum}:PLAYER] shuffles hand back into piles (Goldfish)`,
     );
 
     // Draw fresh hand (respecting goldfishHandSize)
@@ -330,7 +332,7 @@ export const createCoreSlice: StateCreator<
     const sitesToDraw = Math.min(2, atlasMut.length);
     const spellsToDrawCount = Math.min(
       handSize - sitesToDraw,
-      spellbookMut.length
+      spellbookMut.length,
     );
 
     for (let i = 0; i < spellsToDrawCount; i++) {
@@ -363,8 +365,8 @@ export const createCoreSlice: StateCreator<
 
   addLife: (who, delta) =>
     set((state) => {
-      const currentLife = state.players[who].life;
-      const currentLifeState = state.players[who].lifeState;
+      const currentLife = state.players[who]?.life ?? 20;
+      const currentLifeState = state.players[who]?.lifeState ?? "alive";
       let newLife = currentLife + delta;
       let newLifeState: LifeState = currentLifeState;
 
@@ -410,7 +412,7 @@ export const createCoreSlice: StateCreator<
         const changeText =
           delta > 0 ? `gains ${delta}` : `loses ${Math.abs(delta)}`;
         get().log(
-          `[p${playerNum}:PLAYER] ${changeText} life (${currentLife} → ${newLife})`
+          `[p${playerNum}:PLAYER] ${changeText} life (${currentLife} → ${newLife})`,
         );
       }
 

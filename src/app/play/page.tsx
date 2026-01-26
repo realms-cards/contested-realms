@@ -7,6 +7,7 @@ import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import AccusationOverlay from "@/components/game/AccusationOverlay";
 import { AnimistCastChoiceOverlay } from "@/components/game/AnimistCastChoiceOverlay";
+import AnnualFairOverlay from "@/components/game/AnnualFairOverlay";
 import AssortedAnimalsOverlay from "@/components/game/AssortedAnimalsOverlay";
 import AtlanteanFateOverlay from "@/components/game/AtlanteanFateOverlay";
 import AudioControls from "@/components/game/AudioControls";
@@ -44,6 +45,7 @@ import MusicGameSync from "@/components/game/MusicGameSync";
 import OfflineMulliganScreen from "@/components/game/OfflineMulliganScreen";
 import OnlineLifeCounters from "@/components/game/OnlineLifeCounters";
 import PathfinderPlayOverlay from "@/components/game/PathfinderPlayOverlay";
+import BabelTowerOverlay from "@/components/game/BabelTowerOverlay";
 import PigsOfTheSounderOverlay from "@/components/game/PigsOfTheSounderOverlay";
 import PileSearchDialog from "@/components/game/PileSearchDialog";
 import PithImpOverlay from "@/components/game/PithImpOverlay";
@@ -952,6 +954,9 @@ export default function PlayPage() {
       {/* Pathfinder Play Overlay (reveal and play site) */}
       <PathfinderPlayOverlay />
 
+      {/* Babel Tower Overlay (Apex of Babel placement choice) */}
+      <BabelTowerOverlay />
+
       {/* Black Mass Overlay (search for Evil minions) */}
       <BlackMassOverlay />
 
@@ -978,6 +983,9 @@ export default function PlayPage() {
       <AutoResolveConfirmOverlay />
       {/* Dhol Chants Overlay */}
       <DholChantsOverlay />
+
+      {/* Annual Fair Overlay (activated ability element choice) */}
+      <AnnualFairOverlay />
 
       {/* Doomsday Cult Overlay (continuous reveal) */}
       <DoomsdayCultOverlay />

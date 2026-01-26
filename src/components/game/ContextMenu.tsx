@@ -38,6 +38,7 @@ import {
   toCellKey,
   opponentOwner,
 } from "@/lib/game/store/utils/boardHelpers";
+import { isMergedTower } from "@/lib/game/store/babelTowerState";
 import {
   TOKEN_BY_NAME,
   newTokenInstanceId,
@@ -53,6 +54,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   const { playCardFlip, playCardShuffle, playCardSelect } = useSound();
   const contextMenu = useGameStore((s) => s.contextMenu);
   const board = useGameStore((s) => s.board);
+  const babelTowers = useGameStore((s) => s.babelTowers);
   const permanents = useGameStore((s) => s.permanents);
   const avatars = useGameStore((s) => s.avatars);
   const zones = useGameStore((s) => s.zones);
@@ -119,12 +121,14 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   const druidFlipped = useGameStore((s) => s.druidFlipped);
   const flipDruid = useGameStore((s) => s.flipDruid);
   const getAvailableMana = useGameStore((s) => s.getAvailableMana);
+  const beginAnnualFair = useGameStore((s) => s.beginAnnualFair);
   const triggerFrontierSettlersAbility = useGameStore(
     (s) => s.triggerFrontierSettlersAbility,
   );
   const _hasFrontierSettlersAbility = useGameStore(
     (s) => s.hasFrontierSettlersAbility,
   );
+  const interactionGuides = useGameStore((s) => s.interactionGuides);
 
   // Permanent position management (burrow/submerge)
   const getAvailableActions = useGameStore((s) => s.getAvailableActions);
@@ -357,7 +361,13 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     } else {
       setPositionActions([]);
     }
-  }, [contextMenu, permanents, setPermanentAbility, getAvailableActions, board.sites]);
+  }, [
+    contextMenu,
+    permanents,
+    setPermanentAbility,
+    getAvailableActions,
+    board.sites,
+  ]);
 
   // Handle Rubble confirmation - defined early so it can be used in early return
   const handleRubbleConfirm = (placeRubble: boolean) => {
@@ -464,8 +474,11 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   if (t.kind === "site") {
     const key = toCellKey(t.x, t.y);
     const site = board.sites[key];
-    header =
-      site?.card?.name || `Site #${getCellNumber(t.x, t.y, board.size.w)}`;
+    // Check if this is a merged Tower of Babel (Base + Apex stacked)
+    const towerMerge = isMergedTower(key, babelTowers);
+    header = towerMerge
+      ? "The Tower of Babel"
+      : site?.card?.name || `Site #${getCellNumber(t.x, t.y, board.size.w)}`;
     tapped = !!site?.tapped;
     // Sites do not tap in Sorcery: never show a toggle for sites
     hasToggle = false;
@@ -575,6 +588,23 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         targetPermanentId: "",
         description:
           "Place a Silenced token on this site (removes mana and threshold).",
+      });
+    }
+
+    // Annual Fair - activated ability: (1) → Gain (A), (E), (F), or (W) this turn
+    const siteName = site?.card?.name || "";
+    if (
+      isMine &&
+      siteName.toLowerCase() === "annual fair" &&
+      getAvailableMana(ownerKey || "p1") >= 1
+    ) {
+      extraActions.push({
+        actionId: "__annual_fair_activate__",
+        displayText: "🎪 Activate (1)",
+        isEnabled: true,
+        targetPermanentId: "",
+        description:
+          "Pay (1) to gain Air, Water, Earth, or Fire threshold this turn.",
       });
     }
   } else if (t.kind === "permanent") {
@@ -930,7 +960,16 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
           : false;
       const siteHereEnemy =
         enemyOwner != null ? board.sites[tileKey]?.owner === enemyOwner : false;
-      const canAttackHere = canAct && !tapped && (unitsHere || siteHereEnemy);
+      // Also check for enemy avatar on the same tile
+      const enemyAvatarHere = (() => {
+        if (enemyOwner == null) return false;
+        const enemySeat = enemyOwner === 1 ? "p1" : "p2";
+        const av = avatars?.[enemySeat];
+        if (!av || !Array.isArray(av.pos) || av.pos.length !== 2) return false;
+        return av.pos[0] === x && av.pos[1] === y;
+      })();
+      const canAttackHere =
+        canAct && !tapped && (unitsHere || siteHereEnemy || enemyAvatarHere);
       const isRanged = !!(
         item?.card?.name && detectRangedAbilitySync(item.card.name)
       );
@@ -951,19 +990,18 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
             })
           : [];
 
-      if (canAttackHere && item) {
+      if (canAttackHere && item && interactionGuides) {
         // Insert button to render later
         extraActions.push({
           actionId: "__attack_here__",
-          displayText:
-            siteHereEnemy && !unitsHere ? "Attack site here" : "Attack here",
+          displayText: "Attack here",
           isEnabled: true,
           targetPermanentId: "",
           description: "Start an attack on this tile",
         });
       }
 
-      if (rangedTargets.length > 0 && item) {
+      if (rangedTargets.length > 0 && item && interactionGuides) {
         for (const p of rangedTargets) {
           const cellNo = getCellNumber(p.x, p.y, board.size.w);
           extraActions.push({
@@ -1156,6 +1194,43 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         targetPermanentId: "",
         description: drawDescription,
       });
+    }
+
+    // Avatar "Attack here" action - same as minions
+    const avatarPos2 =
+      Array.isArray(a?.pos) && a.pos.length === 2 ? a.pos : null;
+    if (isMine && avatarPos2 && interactionGuides) {
+      const [avX, avY] = avatarPos2;
+      const avatarTileKey2 = toCellKey(avX, avY);
+      const avatarOwner2: 1 | 2 = t.who === "p1" ? 1 : 2;
+      const enemyOwner2: 1 | 2 = avatarOwner2 === 1 ? 2 : 1;
+      const tilePermanents2 = permanents[avatarTileKey2] || [];
+      const enemyUnitsHere = tilePermanents2.some(
+        (p) => p && p.owner === enemyOwner2,
+      );
+      const enemySiteHere = board.sites[avatarTileKey2]?.owner === enemyOwner2;
+      // Also check for enemy avatar on the same tile
+      const enemyAvatarHere2 = (() => {
+        const enemySeat2 = enemyOwner2 === 1 ? "p1" : "p2";
+        const av2 = avatars?.[enemySeat2];
+        if (!av2 || !Array.isArray(av2.pos) || av2.pos.length !== 2)
+          return false;
+        return av2.pos[0] === avX && av2.pos[1] === avY;
+      })();
+      const canAvatarAttackHere =
+        !tapped &&
+        isMyTurn &&
+        (enemyUnitsHere || enemySiteHere || enemyAvatarHere2);
+
+      if (canAvatarAttackHere) {
+        extraActions.push({
+          actionId: "__avatar_attack_here__",
+          displayText: "Attack here",
+          isEnabled: true,
+          targetPermanentId: "",
+          description: "Start an attack from this avatar on this tile",
+        });
+      }
     }
 
     // Find artifacts attached to this avatar (attachedTo.index === -1)
@@ -1363,11 +1438,6 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     setAttachmentDialog(null);
     onClose(); // Close context menu on cancel
   };
-
-  console.log(
-    "[ContextMenu] Rendering, attachmentDialog:",
-    attachmentDialog ? "SET" : "null",
-  );
 
   return (
     <>
@@ -2037,11 +2107,12 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                   if (!cardName.includes("pith imp")) return null;
 
                   const pithImpHands = useGameStore.getState().pithImpHands;
+                  // Prioritize instanceId (unique per card), fallback to position only if no instanceId
                   const pithImpEntry = pithImpHands.find(
                     (p) =>
-                      p.minion.at === t.at ||
                       (item?.instanceId &&
-                        p.minion.instanceId === item.instanceId),
+                        p.minion.instanceId === item.instanceId) ||
+                      (!item?.instanceId && p.minion.at === t.at),
                   );
 
                   if (!pithImpEntry || pithImpEntry.hand.length === 0)
@@ -2170,6 +2241,44 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                         </button>
                       );
                     }
+                    // Avatar attack here action
+                    if (action.actionId === "__avatar_attack_here__") {
+                      return (
+                        <button
+                          key={action.actionId}
+                          className="w-full text-left rounded bg-emerald-600/20 hover:bg-emerald-600/30 px-3 py-1"
+                          onClick={() => {
+                            if (t.kind === "avatar") {
+                              const avatar = avatars[t.who];
+                              if (
+                                avatar &&
+                                Array.isArray(avatar.pos) &&
+                                avatar.pos.length === 2
+                              ) {
+                                const [avX, avY] = avatar.pos;
+                                const avatarOwner: 1 | 2 =
+                                  t.who === "p1" ? 1 : 2;
+                                setAttackTargetChoice({
+                                  tile: { x: avX, y: avY },
+                                  attacker: {
+                                    at: toCellKey(avX, avY),
+                                    index: -1,
+                                    instanceId: null,
+                                    owner: avatarOwner,
+                                    isAvatar: true,
+                                    avatarSeat: t.who,
+                                  },
+                                  candidates: [],
+                                });
+                              }
+                            }
+                            onClose();
+                          }}
+                        >
+                          {action.displayText}
+                        </button>
+                      );
+                    }
                     // Switch Site Position action
                     if (action.actionId === "__switch_site_position__") {
                       return (
@@ -2225,6 +2334,29 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                               try {
                                 playCardFlip();
                               } catch {}
+                            }
+                            onClose();
+                          }}
+                        >
+                          {action.displayText}
+                        </button>
+                      );
+                    }
+                    // Annual Fair activated ability - pay 1 mana, choose element threshold
+                    if (action.actionId === "__annual_fair_activate__") {
+                      return (
+                        <button
+                          key={action.actionId}
+                          className="w-full text-left rounded bg-amber-600/20 hover:bg-amber-600/30 px-3 py-1"
+                          title={action.description}
+                          onClick={() => {
+                            if (t.kind === "site") {
+                              const key = toCellKey(t.x, t.y);
+                              const site = board.sites[key];
+                              const ownerSeat = site
+                                ? seatFromOwner(site.owner)
+                                : "p1";
+                              beginAnnualFair(key, ownerSeat);
                             }
                             onClose();
                           }}

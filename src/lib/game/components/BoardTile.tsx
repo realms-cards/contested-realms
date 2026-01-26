@@ -18,6 +18,7 @@ import {
 } from "@/lib/game/components/TileInteractionPlane";
 import type { BoardDragControls } from "@/lib/game/hooks/useBoardDragControls";
 import type {
+  BabelTowerMerge,
   BoardState,
   CellKey,
   GameState,
@@ -109,6 +110,8 @@ type BoardTileProps = {
   stolenCards: GameState["stolenCards"];
   // Card metadata for Aura preview
   metaByCardId: GameState["metaByCardId"];
+  // Babel Tower tracking for stacked card rendering
+  babelTowers: BabelTowerMerge[];
 };
 
 export function BoardTile({
@@ -175,6 +178,7 @@ export function BoardTile({
   cardScale,
   stolenCards,
   metaByCardId,
+  babelTowers,
 }: BoardTileProps) {
   const items = permanents[tileKey] || [];
   const cellNumber = (boardSize.h - 1 - tileY) * boardSize.w + tileX + 1;
@@ -317,6 +321,7 @@ export function BoardTile({
         computeProjectileFirstHits={magicContext.computeProjectileFirstHits}
         switchSiteSource={switchSiteSource}
         onCompleteSwitchSite={onCompleteSwitchSite}
+        babelTowers={babelTowers}
       />
 
       <PermanentStack

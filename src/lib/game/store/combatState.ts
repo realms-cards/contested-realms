@@ -41,7 +41,7 @@ type CombatSlice = Pick<
 
 export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
   set,
-  get
+  get,
 ) => ({
   pendingCombat: null,
   attackChoice: null,
@@ -95,19 +95,40 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
 
     function getAtkDef(
       at: string,
-      index: number
+      index: number,
     ): { atk: number; def: number } {
       try {
-        const cardId =
-          (permanents as Permanents)[at]?.[index]?.card?.cardId ?? null;
-        const meta = cardId
-          ? (
-              metaByCardId as Record<
-                number,
-                { attack: number | null; defence: number | null }
-              >
-            )[Number(cardId)]
-          : undefined;
+        const card = (permanents as Permanents)[at]?.[index]?.card;
+        if (!card) return { atk: 0, def: 0 };
+        const cardAtk =
+          typeof card.attack === "number" && Number.isFinite(card.attack)
+            ? card.attack
+            : null;
+        const cardDef =
+          typeof card.defence === "number" && Number.isFinite(card.defence)
+            ? card.defence
+            : null;
+        if (cardAtk != null || cardDef != null) {
+          const atk = Number(cardAtk ?? 0) || 0;
+          const def = Number(cardDef ?? cardAtk ?? 0) || 0;
+          return { atk, def };
+        }
+        const cardId = card.cardId;
+        const meta =
+          cardId &&
+          (
+            metaByCardId as Record<
+              number,
+              { attack: number | null; defence: number | null }
+            >
+          )[Number(cardId)]
+            ? (
+                metaByCardId as Record<
+                  number,
+                  { attack: number | null; defence: number | null }
+                >
+              )[Number(cardId)]
+            : undefined;
         const atk = Number(meta?.attack ?? 0) || 0;
         const def = Number(meta?.defence ?? meta?.attack ?? 0) || 0;
         return { atk, def };
@@ -120,7 +141,9 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
       const list = (permanents as Permanents)[at] || [];
       return list.filter(
         (p) =>
-          p.attachedTo && p.attachedTo.at === at && p.attachedTo.index === index
+          p.attachedTo &&
+          p.attachedTo.at === at &&
+          p.attachedTo.index === index,
       );
     }
 
@@ -154,7 +177,7 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
     });
     if (!Array.isArray(assignment)) return false;
     const defenderKeys = new Set(
-      (pending.defenders || []).map((d) => `${d.at}:${d.index}`)
+      (pending.defenders || []).map((d) => `${d.at}:${d.index}`),
     );
     let sum = 0;
     for (const entry of assignment) {
@@ -196,7 +219,7 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
       } catch (error) {
         console.error(
           "[setDamageAssignment] Error sending combatAssign:",
-          error
+          error,
         );
       }
     }
@@ -279,7 +302,7 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
             (p) =>
               p.attachedTo &&
               p.attachedTo.at === at &&
-              p.attachedTo.index === index
+              p.attachedTo.index === index,
           );
           for (const att of attachments) {
             const name = (att.card?.name || "").toLowerCase();
@@ -344,6 +367,45 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
       } catch {
         // no-op
       }
+
+      // --- Interrogator Avatar Ability (Gothic expansion) ---
+      // Trigger: Whenever an ally strikes an enemy Avatar
+      // Effect: Draw a spell unless they pay 3 life
+      // IMPORTANT: Must trigger BEFORE combat overlays appear
+      if (target?.kind === "avatar") {
+        try {
+          const attackerSeat = seatFromOwner(attacker.owner);
+          const attackerAvatarName =
+            get().avatars?.[attackerSeat]?.card?.name ?? null;
+          if (isInterrogator(attackerAvatarName)) {
+            const victimSeat = opponentSeat(attackerSeat);
+            // Get attacker name for the UI
+            let attackerNameForUI: string;
+            if (attacker.isAvatar) {
+              attackerNameForUI = attackerAvatarName ?? "Avatar";
+            } else {
+              const attackerPermanent = (get().permanents as Permanents)[
+                attacker.at
+              ]?.[attacker.index];
+              attackerNameForUI = attackerPermanent?.card?.name ?? "Minion";
+            }
+            // Trigger Interrogator choice BEFORE combat proceeds
+            // Combat damage will be applied during normal resolution
+            get().triggerInterrogatorChoice(
+              attackerSeat,
+              victimSeat,
+              attackerNameForUI,
+              null, // No deferred damage - it will apply during normal combat resolution
+            );
+          }
+        } catch (error) {
+          console.error(
+            "[declareAttack] Error triggering Interrogator ability:",
+            error,
+          );
+        }
+      }
+
       return { pendingCombat: combatState } as Partial<GameState> as GameState;
     }),
 
@@ -353,7 +415,7 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
       const key = toCellKey(tile.x, tile.y);
       const allPermanents = get().permanents as Permanents;
       const unitsHere = (allPermanents[key] || []).filter(
-        (p) => p && p.owner === opponentOwner(attacker.owner) && !p.tapped
+        (p) => p && p.owner === opponentOwner(attacker.owner) && !p.tapped,
       );
       let avatarHere = false;
       try {
@@ -389,7 +451,7 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
         } catch (error) {
           console.error(
             "[offerIntercept] Error sending interceptOffer:",
-            error
+            error,
           );
         }
       }
@@ -434,7 +496,7 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
       } catch (error) {
         console.error(
           "[setDefenderSelection] Error sending combatSetDefenders:",
-          error
+          error,
         );
       }
     }
@@ -456,10 +518,25 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
 
     function getAtkDef(
       at: string,
-      index: number
+      index: number,
     ): { atk: number; def: number } {
       try {
-        const cardId = permanents[at]?.[index]?.card?.cardId;
+        const card = permanents[at]?.[index]?.card;
+        if (!card) return { atk: 0, def: 0 };
+        const cardAtk =
+          typeof card.attack === "number" && Number.isFinite(card.attack)
+            ? card.attack
+            : null;
+        const cardDef =
+          typeof card.defence === "number" && Number.isFinite(card.defence)
+            ? card.defence
+            : null;
+        if (cardAtk != null || cardDef != null) {
+          const atk = Number(cardAtk ?? 0) || 0;
+          const def = Number(cardDef ?? cardAtk ?? 0) || 0;
+          return { atk, def };
+        }
+        const cardId = card.cardId;
         const info = cardId ? meta[Number(cardId)] : undefined;
         const atk = Number(info?.attack ?? 0) || 0;
         const def = Number(info?.defence ?? info?.attack ?? 0) || 0;
@@ -473,7 +550,9 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
       const list = permanents[at] || [];
       return list.filter(
         (p) =>
-          p.attachedTo && p.attachedTo.at === at && p.attachedTo.index === index
+          p.attachedTo &&
+          p.attachedTo.at === at &&
+          p.attachedTo.index === index,
       );
     }
 
@@ -532,14 +611,10 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
     // Compute effective attack - handle avatar attackers specially
     const eff = (() => {
       if (pending.attacker.isAvatar && pending.attacker.avatarSeat) {
-        // Avatar attack power comes from the avatar card
+        // Avatar attack power comes directly from the enriched avatar card
         const avatarCard = get().avatars?.[pending.attacker.avatarSeat]?.card;
-        const cardId = avatarCard?.cardId;
-        if (cardId && meta[Number(cardId)]) {
-          const atk = Number(meta[Number(cardId)].attack ?? 0) || 0;
-          return { atk, firstStrike: false };
-        }
-        return { atk: 0, firstStrike: false };
+        const atk = Number(avatarCard?.attack ?? 1) || 1;
+        return { atk, firstStrike: false };
       }
       return computeEffectiveAttack({
         at: pending.attacker.at,
@@ -565,7 +640,7 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
         return getCellNumber(
           pending.tile.x,
           pending.tile.y,
-          get().board.size.w
+          get().board.size.w,
         );
       } catch {
         return null;
@@ -582,7 +657,7 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
           : (pending.defenderSeat as PlayerKey);
       if (seat) {
         targetSeat = seat;
-        const dd = players[seat].lifeState === "dd";
+        const dd = players[seat]?.lifeState === "dd";
         const dmg = dd ? 0 : Math.max(0, Math.floor(eff.atk));
         const siteName = board.sites[pending.target.at]?.card?.name || "Site";
         const ddNote = dd ? " (DD rule)" : "";
@@ -640,7 +715,7 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
         }
         if (seat) {
           targetSeat = seat as PlayerKey;
-          const dd = players[seat].lifeState === "dd";
+          const dd = players[seat]?.lifeState === "dd";
           const dmg = dd ? 0 : Math.max(0, Math.floor(eff.atk));
           const siteName = siteAtTile.card?.name || "Site";
           const ddNote = dd ? " (DD rule)" : "";
@@ -662,7 +737,7 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
             return pending.defenders.reduce(
               (sum, defender) =>
                 sum + getAtkDef(defender.at, defender.index).def,
-              0
+              0,
             );
           }
           return 0;
@@ -673,11 +748,11 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
           pending.target.index != null
             ? getPermanentName(pending.target.at, pending.target.index)
             : pending.defenders?.length
-            ? pending.defenders
-                .map((d) => getPermanentName(d.at, d.index))
-                .slice(0, 3)
-                .join(", ") + (pending.defenders.length > 3 ? ", …" : "")
-            : "target";
+              ? pending.defenders
+                  .map((d) => getPermanentName(d.at, d.index))
+                  .slice(0, 3)
+                  .join(", ") + (pending.defenders.length > 3 ? ", …" : "")
+              : "target";
         const kills = attackerAttack >= targetDefense;
         targetSeat = pending.defenderSeat as PlayerKey;
         summary = `Attacker ${attackerName}${effectText}${fsTag} vs ${targetName} @#${
@@ -741,7 +816,7 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
       console.log(
         "[autoResolveCombat] Status is",
         pending.status,
-        "not committed, returning"
+        "not committed, returning",
       );
       return;
     }
@@ -761,15 +836,15 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
       "attackerSeat:",
       attackerSeat,
       "isIntercept:",
-      isIntercept
+      isIntercept,
     );
     if (actor) {
       const defenderMayResolve = Boolean(
-        isIntercept && defenderSeat && actor === defenderSeat
+        isIntercept && defenderSeat && actor === defenderSeat,
       );
       if (!defenderMayResolve && actor !== attackerSeat) {
         console.log(
-          "[autoResolveCombat] Actor not allowed to resolve, returning"
+          "[autoResolveCombat] Actor not allowed to resolve, returning",
         );
         return;
       }
@@ -777,13 +852,48 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
     console.log("[autoResolveCombat] Proceeding with resolution");
     const { permanents, metaByCardId, board, players } = get();
 
+    const tr = get().transport;
+    const isLocalTransport = tr?.isLocal === true;
+    const applyLifeDamage = (seat: PlayerKey, amount: number) => {
+      const dmg = Math.max(0, Math.floor(Number(amount) || 0));
+      if (dmg <= 0) return;
+      if (!tr || isLocalTransport) {
+        try {
+          get().addLife(seat, -dmg);
+        } catch {}
+        return;
+      }
+      try {
+        tr.sendMessage?.({
+          type: "combatLifeDamage",
+          id: pending.id,
+          damage: [{ seat, amount: dmg }],
+          ts: Date.now(),
+        } as unknown as CustomMessage);
+      } catch {}
+    };
+
     function getAtkDef(
       at: string,
-      index: number
+      index: number,
     ): { atk: number; def: number } {
       try {
-        const cardId =
-          (permanents as Permanents)[at]?.[index]?.card?.cardId ?? null;
+        const card = (permanents as Permanents)[at]?.[index]?.card;
+        if (!card) return { atk: 0, def: 0 };
+        const cardAtk =
+          typeof card.attack === "number" && Number.isFinite(card.attack)
+            ? card.attack
+            : null;
+        const cardDef =
+          typeof card.defence === "number" && Number.isFinite(card.defence)
+            ? card.defence
+            : null;
+        if (cardAtk != null || cardDef != null) {
+          const atk = Number(cardAtk ?? 0) || 0;
+          const def = Number(cardDef ?? cardAtk ?? 0) || 0;
+          return { atk, def };
+        }
+        const cardId = card.cardId;
         const meta = cardId
           ? (
               metaByCardId as Record<
@@ -804,7 +914,9 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
       const list = (permanents as Permanents)[at] || [];
       return list.filter(
         (p) =>
-          p.attachedTo && p.attachedTo.at === at && p.attachedTo.index === index
+          p.attachedTo &&
+          p.attachedTo.at === at &&
+          p.attachedTo.index === index,
       );
     }
 
@@ -839,28 +951,21 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
     }
 
     // For avatar attackers, don't use computeEffectiveAttack (avatars aren't permanents)
-    // Just get avatar's base attack power directly
+    // Just get avatar's base attack power directly from the enriched card data
     const eff = pending.attacker.isAvatar
       ? (() => {
           const avatarCard =
             get().avatars?.[pending.attacker.avatarSeat as PlayerKey]?.card;
-          const avatarCardId = avatarCard?.cardId;
-          const avatarMeta = avatarCardId
-            ? (metaByCardId as Record<number, { attack: number | null }>)[
-                Number(avatarCardId)
-              ]
-            : undefined;
-          // Default avatar attack to 1 if metadata not loaded (most avatars have 1 attack)
-          const atk = Number(avatarMeta?.attack ?? 1) || 1;
+          // Avatar attack is already on the CardRef from enrichCardRefs()
+          // Default to 1 if not set (most avatars have 1 attack)
+          const atk = Number(avatarCard?.attack ?? 1) || 1;
           console.log(
             "[autoResolveCombat] Avatar attacker:",
             avatarCard?.name,
-            "cardId:",
-            avatarCardId,
-            "meta:",
-            avatarMeta,
+            "attack from card:",
+            avatarCard?.attack,
             "atk:",
-            atk
+            atk,
           );
           // Avatars don't have attachments, so no first strike or artifacts
           return { atk, firstStrike: false, hasUntrackedArtifact: false };
@@ -910,11 +1015,11 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
     if (hasUntrackedArtifacts) {
       // Log that we're resolving with base stats (user was warned in UI)
       console.log(
-        "[autoResolveCombat] Resolving with base stats - artifact modifiers not calculated"
+        "[autoResolveCombat] Resolving with base stats - artifact modifiers not calculated",
       );
       try {
         get().log(
-          "⚠️ Resolving with base stats - artifact effects not calculated"
+          "⚠️ Resolving with base stats - artifact effects not calculated",
         );
       } catch {}
       // Continue with resolution using base stats
@@ -970,9 +1075,9 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
         const actorSeatCurrent = actor as PlayerKey | null;
         const defenderResolving = Boolean(
           isIntercept &&
-            actorSeatCurrent &&
-            defenderSeat &&
-            actorSeatCurrent === defenderSeat
+          actorSeatCurrent &&
+          defenderSeat &&
+          actorSeatCurrent === defenderSeat,
         );
         if (defenderResolving) {
           const max = Math.floor(eff.atk);
@@ -1002,7 +1107,7 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
     let attackerAlive = true;
     let damageToAvatarOwner = 0; // Track damage dealt to avatar (goes to player life)
     const aliveDefenders = new Set(
-      defenders.map((defender) => `${defender.at}:${defender.index}`)
+      defenders.map((defender) => `${defender.at}:${defender.index}`),
     );
 
     if (eff.firstStrike || defenders.some((defender) => defender.fs)) {
@@ -1032,7 +1137,7 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
         .filter(
           (defender) =>
             defender.fs &&
-            aliveDefenders.has(`${defender.at}:${defender.index}`)
+            aliveDefenders.has(`${defender.at}:${defender.index}`),
         )
         .reduce((sum, defender) => sum + defender.atk, 0);
       // For avatar attackers, FS damage goes to player life
@@ -1075,22 +1180,22 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
         const nonFsAlive = defenders.filter(
           (defender) =>
             !defender.fs &&
-            aliveDefenders.has(`${defender.at}:${defender.index}`)
+            aliveDefenders.has(`${defender.at}:${defender.index}`),
         );
         defenderAtkSum = nonFsAlive.reduce(
           (sum, defender) => sum + defender.atk,
-          0
+          0,
         );
       } else {
         defenderAtkSum = defenders.reduce(
           (sum, defender) => sum + defender.atk,
-          0
+          0,
         );
       }
 
       // For avatar attackers, damage goes to player life
       if (pending.attacker.isAvatar && pending.attacker.avatarSeat) {
-        damageToAvatarOwner = defenderAtkSum;
+        damageToAvatarOwner += defenderAtkSum;
       } else if (defenderAtkSum >= attackerDef && attackerDef > 0) {
         attackerAlive = false;
       }
@@ -1108,11 +1213,7 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
 
     // Apply damage to avatar owner's life
     if (damageToAvatarOwner > 0 && pending.attacker.avatarSeat) {
-      try {
-        get().addLife(pending.attacker.avatarSeat, -damageToAvatarOwner);
-      } catch {
-        // ignore
-      }
+      applyLifeDamage(pending.attacker.avatarSeat, damageToAvatarOwner);
     }
 
     for (const dmg of damageList) {
@@ -1139,7 +1240,7 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
       "[autoResolveCombat] defenders.length:",
       defenders.length,
       "pending.target:",
-      pending.target
+      pending.target,
     );
     if (defenders.length === 0) {
       if (pending.target && pending.target.kind === "site") {
@@ -1150,16 +1251,10 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
         if (owner === 1 || owner === 2) {
           const seat = seatFromOwner(owner);
           targetSeat = seat;
-          const dd = players[seat].lifeState === "dd";
+          const dd = players[seat]?.lifeState === "dd";
           if (!dd) {
             const dmg = Math.max(0, Math.floor(eff.atk));
-            if (dmg > 0) {
-              try {
-                get().addLife(seat as PlayerKey, -dmg);
-              } catch {
-                // ignore
-              }
-            }
+            applyLifeDamage(seat as PlayerKey, dmg);
           }
         }
       } else if (!pending.target && siteAtTile && siteAtTile.card && tileKey) {
@@ -1168,76 +1263,23 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
         if (owner === 1 || owner === 2) {
           const seat = seatFromOwner(owner);
           targetSeat = seat;
-          const dd = players[seat].lifeState === "dd";
+          const dd = players[seat]?.lifeState === "dd";
           if (!dd) {
             const dmg = Math.max(0, Math.floor(eff.atk));
-            if (dmg > 0) {
-              try {
-                get().addLife(seat as PlayerKey, -dmg);
-              } catch {
-                // ignore
-              }
-            }
+            applyLifeDamage(seat as PlayerKey, dmg);
           }
         }
       } else if (pending.target && pending.target.kind === "avatar") {
         const seat = opponentSeat(attackerSeat);
         targetSeat = seat;
-        const isDD = players[seat].lifeState === "dd";
+        const isDD = players[seat]?.lifeState === "dd";
         const dmg = Math.max(0, Math.floor(eff.atk));
+
+        // Apply damage to avatar (Interrogator was already triggered at declaration time)
         if (isDD) {
-          try {
-            get().addLife(seat, -1);
-          } catch {
-            // ignore
-          }
+          applyLifeDamage(seat, 1);
         } else if (dmg > 0) {
-          try {
-            get().addLife(seat, -dmg);
-          } catch {
-            // ignore
-          }
-        }
-
-        // --- Interrogator Avatar Ability (Gothic expansion) ---
-        // Trigger: Whenever an ally strikes an enemy Avatar
-        // Effect: Draw a spell unless they pay 3 life
-        // Triggers for both minions AND the Interrogator's own avatar striking
-        console.log(
-          "[autoResolveCombat] Avatar strike detected - checking Interrogator",
-          { attackerSeat, target: pending.target }
-        );
-        try {
-          const attackerAvatarName =
-            get().avatars?.[attackerSeat]?.card?.name ?? null;
-          console.log(
-            "[autoResolveCombat] Attacker avatar name:",
-            attackerAvatarName,
-            "isInterrogator:",
-            isInterrogator(attackerAvatarName)
-          );
-          if (isInterrogator(attackerAvatarName)) {
-            // Get attacker name for the UI
-            let attackerName: string;
-            if (pending.attacker.isAvatar) {
-              // Avatar itself is attacking
-              attackerName = attackerAvatarName ?? "Avatar";
-            } else {
-              // Minion is attacking
-              const attackerPermanent = (get().permanents as Permanents)[
-                pending.attacker.at
-              ]?.[pending.attacker.index];
-              attackerName = attackerPermanent?.card?.name ?? "Minion";
-            }
-
-            // Trigger the Interrogator choice for the victim
-            get().triggerInterrogatorChoice(attackerSeat, seat, attackerName);
-          }
-        } catch (error) {
-          console.error(
-            "[autoResolveCombat] Error triggering Interrogator ability:",
-            error
-          );
+          applyLifeDamage(seat, dmg);
         }
       }
     }
@@ -1245,7 +1287,7 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
     // Helper to find current index of a permanent by instanceId
     function findIndexByInstanceId(
       at: CellKey,
-      instanceId: string | null
+      instanceId: string | null,
     ): number {
       if (!instanceId) return -1;
       const list = (get().permanents as Permanents)[at] || [];
@@ -1292,7 +1334,7 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
           } else {
             console.warn(
               "[autoResolveCombat] Permanent not found by instanceId, using original index:",
-              kill
+              kill,
             );
           }
         }
@@ -1307,14 +1349,14 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
       "[autoResolveCombat] killList:",
       killList,
       "transport:",
-      !!transport?.sendMessage
+      !!transport?.sendMessage,
     );
     if (transport?.sendMessage && killList.length > 0) {
       try {
         console.log(
           "[autoResolveCombat] Sending combatAutoApply with",
           killList.length,
-          "kills"
+          "kills",
         );
         transport.sendMessage({
           type: "combatAutoApply",
@@ -1325,12 +1367,12 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
       } catch (error) {
         console.error(
           "[autoResolveCombat] Error sending combatAutoApply:",
-          error
+          error,
         );
       }
     } else {
       console.log(
-        "[autoResolveCombat] NOT sending combatAutoApply - killList empty or no transport"
+        "[autoResolveCombat] NOT sending combatAutoApply - killList empty or no transport",
       );
     }
     if (transport?.sendMessage && damageList.length > 0) {
@@ -1377,7 +1419,8 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
 
     const attackerDied = killList.some(
       (kill) =>
-        kill.at === pending.attacker.at && kill.index === pending.attacker.index
+        kill.at === pending.attacker.at &&
+        kill.index === pending.attacker.index,
     );
 
     let damageFromFirstStrike = 0;
@@ -1389,7 +1432,7 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
         .filter(
           (defender) =>
             defender.fs &&
-            aliveDefenders.has(`${defender.at}:${defender.index}`)
+            aliveDefenders.has(`${defender.at}:${defender.index}`),
         )
         .reduce((sum, defender) => sum + defender.atk, 0);
       damageFromFirstStrike = fsContrib;
@@ -1399,7 +1442,7 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
             .filter(
               (defender) =>
                 !defender.fs &&
-                aliveDefenders.has(`${defender.at}:${defender.index}`)
+                aliveDefenders.has(`${defender.at}:${defender.index}`),
             )
             .reduce((sum, defender) => sum + defender.atk, 0);
           damageFromSimultaneous = nonFsAlive;
@@ -1407,7 +1450,7 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
       } else {
         damageFromSimultaneous = defenders.reduce(
           (sum, defender) => sum + defender.atk,
-          0
+          0,
         );
       }
     } catch {
@@ -1424,7 +1467,7 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
 
     if ((pending.defenders?.length || 0) > 0) {
       const defenderNames = (pending.defenders || []).map((defender) =>
-        getColoredNameAt(defender.at, defender.index)
+        getColoredNameAt(defender.at, defender.index),
       );
       // Get the target name for narrative context
       const targetDesc = (() => {
@@ -1481,7 +1524,7 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
         });
         text = damageDescriptions.length
           ? `${attackerName} attacked ${targetDesc}; damage dealt: ${damageDescriptions.join(
-              ", "
+              ", ",
             )}`
           : `${attackerName} attacked ${targetDesc}; no casualties`;
       }
@@ -1489,7 +1532,7 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
       const seat: PlayerKey = opponentSeat(attackerSeat);
       const before = Number((players as GameState["players"])[seat]?.life ?? 0);
       const after = Number(
-        (get().players as GameState["players"])[seat]?.life ?? before
+        (get().players as GameState["players"])[seat]?.life ?? before,
       );
       const dmg = Math.max(0, before - after);
       const avatarName = (() => {
@@ -1523,10 +1566,10 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
       })();
       if (seat) {
         const before = Number(
-          (players as GameState["players"])[seat]?.life ?? 0
+          (players as GameState["players"])[seat]?.life ?? 0,
         );
         const after = Number(
-          (get().players as GameState["players"])[seat]?.life ?? before
+          (get().players as GameState["players"])[seat]?.life ?? before,
         );
         const dmg = Math.max(0, before - after);
         text = `Attacker "${attackerName}" strikes Site "${siteName}" for ${dmg} damage (${seat.toUpperCase()} life ${before} -> ${after})`;
@@ -1541,10 +1584,10 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
       const siteName = siteAtTile.card?.name || "Site";
       if (seat) {
         const before = Number(
-          (players as GameState["players"])[seat]?.life ?? 0
+          (players as GameState["players"])[seat]?.life ?? 0,
         );
         const after = Number(
-          (get().players as GameState["players"])[seat]?.life ?? before
+          (get().players as GameState["players"])[seat]?.life ?? before,
         );
         const dmg = Math.max(0, before - after);
         text = `Attacker "${attackerName}" strikes Site "${siteName}" for ${dmg} damage (${seat.toUpperCase()} life ${before} -> ${after})`;
@@ -1559,10 +1602,10 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
       // Attacking a unit (permanent) directly - no explicit defenders assigned
       const targetName = getColoredNameAt(
         pending.target.at,
-        pending.target.index
+        pending.target.index,
       );
       const targetDied = killList.some(
-        (k) => k.at === pending.target?.at && k.index === pending.target?.index
+        (k) => k.at === pending.target?.at && k.index === pending.target?.index,
       );
       if (attackerDied && targetDied) {
         text = `"${attackerName}" and "${targetName}" destroy each other`;
@@ -1608,12 +1651,12 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
       } catch (error) {
         console.error(
           "[autoResolveCombat] Error sending combatSummary:",
-          error
+          error,
         );
       }
     } else {
       console.log(
-        "[autoResolveCombat] NOT sending combatSummary - no transport"
+        "[autoResolveCombat] NOT sending combatSummary - no transport",
       );
     }
 

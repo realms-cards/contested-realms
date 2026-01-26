@@ -15,6 +15,7 @@ import {
   THRESHOLD_GRANT_BY_NAME,
   VOID_MANA_PROVIDERS,
 } from "@/lib/game/mana-providers";
+import { isTowerOfBabel } from "../babelTowerState";
 import { getAdjacentCells, parseCellKey } from "./boardHelpers";
 import type {
   AvatarState,
@@ -505,6 +506,12 @@ export const computeAvailableMana = (
     // The temporary bonus is added below
     if (siteName in GENESIS_MANA_SITES) {
       // No base mana from Ghost Town
+      continue;
+    }
+
+    // Tower of Babel provides 2 mana (merged from Base + Apex)
+    if (isTowerOfBabel(siteName)) {
+      mana += 2;
       continue;
     }
 

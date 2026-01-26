@@ -55,9 +55,10 @@ export default function D20Dice({
     "/3dmodels/rpg-dice/textures/RPGDiceSet_m.webp",
   ]);
 
-  // Track the previous isRolling state and rollKey to detect when a new roll starts
+  // Track the previous isRolling state, rollKey, and roll value to detect changes
   const prevIsRollingRef = useRef(isRolling);
   const prevRollKeyRef = useRef(rollKey);
+  const prevRollRef = useRef(roll);
 
   // Start rolling when isRolling becomes true (edge trigger) OR when rollKey changes (explicit reroll signal)
   useEffect(() => {
@@ -78,6 +79,21 @@ export default function D20Dice({
     prevIsRollingRef.current = isRolling;
     prevRollKeyRef.current = rollKey;
   }, [isRolling, rollKey]);
+
+  // Reset dice visual state when roll changes from a number to null (tie reset)
+  useEffect(() => {
+    const wasRolled = prevRollRef.current !== null;
+    const isNowNull = roll === null;
+
+    if (wasRolled && isNowNull && groupRef.current) {
+      // Reset to a neutral position when tie reset occurs
+      groupRef.current.rotation.set(0, 0, 0);
+      setHasCompletedRoll(false);
+      onRollCompleteCalledRef.current = false;
+    }
+
+    prevRollRef.current = roll;
+  }, [roll]);
 
   // Color based on player or custom override
   const defaultColor = player === "p1" ? "#3b82f6" : "#ef4444"; // blue or red
