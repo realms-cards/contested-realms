@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useOnline } from "@/app/online/online-context";
 import LobbyList from "@/components/online/LobbyList";
+import { CustomSelect } from "@/components/ui/CustomSelect";
 
 export default function LobbiesPanel() {
   const {
@@ -86,16 +87,16 @@ export default function LobbiesPanel() {
             value={lobbyQuery}
             onChange={(e) => setLobbyQuery(e.target.value)}
           />
-          <select
-            className="bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
+          <CustomSelect
+            className="min-w-[100px]"
             value={sortKey}
-            onChange={(e) => setSortKey(e.target.value as typeof sortKey)}
-            title="Sort lobbies"
-          >
-            <option value="status">Status</option>
-            <option value="playersAsc">Players ↑</option>
-            <option value="playersDesc">Players ↓</option>
-          </select>
+            onChange={(v) => setSortKey(v as typeof sortKey)}
+            options={[
+              { value: "status", label: "Status" },
+              { value: "playersAsc", label: "Players ↑" },
+              { value: "playersDesc", label: "Players ↓" },
+            ]}
+          />
         </div>
         <div className="flex flex-wrap gap-3">
           <label className="text-xs flex items-center gap-1 opacity-80">

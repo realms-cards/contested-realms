@@ -3,6 +3,7 @@
 import { Grid3X3, List as ListIcon } from "lucide-react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
+import { CustomSelect } from "@/components/ui/CustomSelect";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import AuthButton from "@/components/auth/AuthButton";
 import OnlinePageShell from "@/components/online/OnlinePageShell";
@@ -298,29 +299,29 @@ export default function CubesPage() {
             </div>
 
             {/* Sort dropdown */}
-            <select
+            <CustomSelect
               value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as SortOption)}
-              className="rounded-md bg-slate-800/60 border-0 py-1.5 px-3 text-sm text-slate-200 ring-1 ring-slate-700/50 focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="date-desc">Newest</option>
-              <option value="date-asc">Oldest</option>
-              <option value="name-asc">A-Z</option>
-              <option value="name-desc">Z-A</option>
-              <option value="count-desc">Most Cards</option>
-              <option value="count-asc">Least Cards</option>
-            </select>
+              onChange={(v) => setSortBy(v as SortOption)}
+              options={[
+                { value: "date-desc", label: "Newest" },
+                { value: "date-asc", label: "Oldest" },
+                { value: "name-asc", label: "A-Z" },
+                { value: "name-desc", label: "Z-A" },
+                { value: "count-desc", label: "Most Cards" },
+                { value: "count-asc", label: "Least Cards" },
+              ]}
+            />
 
             {/* Filter dropdown */}
-            <select
+            <CustomSelect
               value={filterSource}
-              onChange={(e) => setFilterSource(e.target.value as FilterSource)}
-              className="rounded-md bg-slate-800/60 border-0 py-1.5 px-3 text-sm text-slate-200 ring-1 ring-slate-700/50 focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">All Sources</option>
-              <option value="imported">Imported</option>
-              <option value="created">Created</option>
-            </select>
+              onChange={(v) => setFilterSource(v as FilterSource)}
+              options={[
+                { value: "all", label: "All Sources" },
+                { value: "imported", label: "Imported" },
+                { value: "created", label: "Created" },
+              ]}
+            />
 
             {/* Clear filters */}
             {hasActiveFilters && (

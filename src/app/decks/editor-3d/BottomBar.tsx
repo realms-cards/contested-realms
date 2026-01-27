@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { CustomSelect } from "@/components/ui/CustomSelect";
 import type { SearchResult, SearchType } from "@/lib/deckEditor/search";
 import { getBoosterAssetName } from "@/lib/utils/booster-assets";
 
@@ -415,14 +416,13 @@ export default function BottomBar(props: BottomBarProps) {
                     {/* Free mode booster opening */}
                     {isFreeMode && showBoosterControls && onOpenFreeBooster && (
                       <div className="flex items-center gap-2 bg-black/40 rounded-lg px-3 py-1.5 border border-white/10">
-                        <select
+                        <CustomSelect
                           value={
                             freeBoosterCubeId
                               ? `cube:${freeBoosterCubeId}`
-                              : freeBoosterSet
+                              : freeBoosterSet || ""
                           }
-                          onChange={(e) => {
-                            const val = e.target.value;
+                          onChange={(val) => {
                             // Check if it's a cube ID (starts with non-set prefix)
                             if (val.startsWith("cube:")) {
                               onFreeBoosterCubeChange?.(
@@ -434,27 +434,17 @@ export default function BottomBar(props: BottomBarProps) {
                               onFreeBoosterCubeChange?.("");
                             }
                           }}
-                          className="border rounded px-2 py-1.5 bg-black/60 text-white text-sm border-white/20 focus:border-emerald-400 focus:outline-none transition-all"
-                          title="Select set or cube for booster"
-                        >
-                          <optgroup label="Sets">
-                            <option value="Gothic">Gothic</option>
-                            <option value="Arthurian Legends">
-                              Arthurian Legends
-                            </option>
-                            <option value="Beta">Beta</option>
-                            <option value="Alpha">Alpha</option>
-                          </optgroup>
-                          {availableCubes.length > 0 && (
-                            <optgroup label="Cubes">
-                              {availableCubes.map((cube) => (
-                                <option key={cube.id} value={`cube:${cube.id}`}>
-                                  {cube.name} ({cube.cardCount} cards)
-                                </option>
-                              ))}
-                            </optgroup>
-                          )}
-                        </select>
+                          options={[
+                            { value: "Gothic", label: "Gothic" },
+                            { value: "Arthurian Legends", label: "Arthurian Legends" },
+                            { value: "Beta", label: "Beta" },
+                            { value: "Alpha", label: "Alpha" },
+                            ...availableCubes.map((cube) => ({
+                              value: `cube:${cube.id}`,
+                              label: `[Cube] ${cube.name} (${cube.cardCount})`,
+                            })),
+                          ]}
+                        />
                         <button
                           onClick={onOpenFreeBooster}
                           disabled={freeBoosterLoading}
@@ -637,32 +627,27 @@ export default function BottomBar(props: BottomBarProps) {
                         autoFocus
                       />
                     )}
-                    <select
+                    <CustomSelect
                       value={typeFilter}
-                      onChange={(e) =>
-                        setTypeFilter(e.target.value as SearchType)
-                      }
-                      className="border rounded-lg px-3 py-2 bg-black/60 text-white border-white/20 focus:border-blue-400 focus:outline-none transition-all"
-                    >
-                      <option value="all">All Types</option>
-                      <option value="avatar">Avatars</option>
-                      <option value="site">Sites</option>
-                      <option value="spell">Spells</option>
-                    </select>
-                    <select
+                      onChange={(v) => setTypeFilter(v as SearchType)}
+                      options={[
+                        { value: "all", label: "All Types" },
+                        { value: "avatar", label: "Avatars" },
+                        { value: "site", label: "Sites" },
+                        { value: "spell", label: "Spells" },
+                      ]}
+                    />
+                    <CustomSelect
                       value={searchSetName}
-                      onChange={(e) => setSearchSetName(e.target.value)}
-                      className="border rounded-lg px-3 py-2 bg-black/60 text-white border-white/20 focus:border-blue-400 focus:outline-none transition-all"
-                      title="Select set to search"
-                    >
-                      <option value="">All Sets</option>
-                      <option value="Alpha">Alpha</option>
-                      <option value="Beta">Beta</option>
-                      <option value="Arthurian Legends">
-                        Arthurian Legends
-                      </option>
-                      <option value="Dragonlord">Dragonlord</option>
-                    </select>
+                      onChange={(v) => setSearchSetName(v)}
+                      placeholder="All Sets"
+                      options={[
+                        { value: "Alpha", label: "Alpha" },
+                        { value: "Beta", label: "Beta" },
+                        { value: "Arthurian Legends", label: "Arthurian Legends" },
+                        { value: "Dragonlord", label: "Dragonlord" },
+                      ]}
+                    />
                   </div>
                   {/* Live search results - show inline for free mode */}
                   {isFreeMode && liveSearchResults.length > 0 && (

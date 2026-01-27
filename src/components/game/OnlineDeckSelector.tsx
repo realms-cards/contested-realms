@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { CustomSelect } from "@/components/ui/CustomSelect";
 import type { PlayerKey } from "@/lib/game/store";
 
 type MyDeckInfo = {
@@ -262,51 +263,38 @@ export default function OnlineDeckSelector({
             </div>
           ) : isPrecon ? (
             /* Precon mode: only show precon decks */
-            <select
-              className="w-full bg-zinc-800/80 ring-1 ring-zinc-700 rounded px-3 py-2 text-white"
+            <CustomSelect
+              className="w-full"
               value={selectedDeck}
-              onChange={(e) => setSelectedDeck(e.target.value)}
+              onChange={(v) => setSelectedDeck(v)}
               disabled={isLoading}
-            >
-              <option value="">Select a precon deck...</option>
-              {preconDecks.length > 0 ? (
-                preconDecks.map((deck) => (
-                  <option key={deck.id} value={deck.id}>
-                    {deck.name}
-                  </option>
-                ))
-              ) : (
-                <option disabled>No precon decks available</option>
-              )}
-            </select>
+              placeholder={preconDecks.length > 0 ? "Select a precon deck..." : "No precon decks available"}
+              options={preconDecks.map((deck) => ({
+                value: deck.id,
+                label: deck.name,
+              }))}
+            />
           ) : (
             /* Normal mode: show user's decks and optionally public decks */
-            <select
-              className="w-full bg-zinc-800/80 ring-1 ring-zinc-700 rounded px-3 py-2 text-white"
+            <CustomSelect
+              className="w-full"
               value={selectedDeck}
-              onChange={(e) => setSelectedDeck(e.target.value)}
+              onChange={(v) => setSelectedDeck(v)}
               disabled={isLoading}
-            >
-              <option value="">Select a deck...</option>
-              {myDecks.length > 0 && (
-                <optgroup label="My Decks">
-                  {myDecks.map((deck) => (
-                    <option key={deck.id} value={deck.id}>
-                      {deck.name} ({deck.format})
-                    </option>
-                  ))}
-                </optgroup>
-              )}
-              {includePublic && publicDecks.length > 0 && (
-                <optgroup label="Precon Decks">
-                  {publicDecks.map((deck) => (
-                    <option key={deck.id} value={deck.id}>
-                      {deck.name} ({deck.format})
-                    </option>
-                  ))}
-                </optgroup>
-              )}
-            </select>
+              placeholder="Select a deck..."
+              options={[
+                ...myDecks.map((deck) => ({
+                  value: deck.id,
+                  label: `${deck.name} (${deck.format})`,
+                })),
+                ...(includePublic
+                  ? publicDecks.map((deck) => ({
+                      value: deck.id,
+                      label: `[Precon] ${deck.name} (${deck.format})`,
+                    }))
+                  : []),
+              ]}
+            />
           )}
         </div>
 

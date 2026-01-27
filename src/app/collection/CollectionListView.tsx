@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
+import { CustomSelect } from "@/components/ui/CustomSelect";
 import type {
   CollectionCardResponse,
   CollectionSortField,
@@ -411,17 +412,17 @@ export default function CollectionListView({
 
         {selectedIds.size > 0 && (
           <>
-            <select
+            <CustomSelect
               value={bulkAction}
-              onChange={(e) => setBulkAction(e.target.value)}
-              className="bg-gray-700 border border-gray-600 rounded px-3 py-1.5 text-sm"
-            >
-              <option value="">Choose action...</option>
-              <option value="increment">+1 Quantity</option>
-              <option value="decrement">-1 Quantity</option>
-              <option value="export">Export CSV</option>
-              <option value="delete">Delete</option>
-            </select>
+              onChange={(v) => setBulkAction(v)}
+              placeholder="Choose action..."
+              options={[
+                { value: "increment", label: "+1 Quantity" },
+                { value: "decrement", label: "-1 Quantity" },
+                { value: "export", label: "Export CSV" },
+                { value: "delete", label: "Delete" },
+              ]}
+            />
 
             <button
               onClick={handleBulkAction}

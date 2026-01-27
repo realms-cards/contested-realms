@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { createPortal } from "react-dom";
+import { CustomSelect } from "@/components/ui/CustomSelect";
 
 interface CreateCubeFromCollectionProps {
   onClose?: () => void;
@@ -248,22 +249,18 @@ export default function CreateCubeFromCollection({
                       </p>
                     ) : (
                       <>
-                        <select
-                          value={selectedCubeId || ""}
-                          onChange={(e) =>
-                            setSelectedCubeId(
-                              e.target.value ? Number(e.target.value) : null
-                            )
+                        <CustomSelect
+                          value={selectedCubeId ? String(selectedCubeId) : ""}
+                          onChange={(v) =>
+                            setSelectedCubeId(v ? Number(v) : null)
                           }
-                          className="w-full bg-gray-800 rounded px-3 py-2 text-sm"
-                        >
-                          <option value="">Select a cube...</option>
-                          {existingCubes.map((cube) => (
-                            <option key={cube.id} value={cube.id}>
-                              {cube.name} ({cube.cardCount} cards)
-                            </option>
-                          ))}
-                        </select>
+                          placeholder="Select a cube..."
+                          className="w-full"
+                          options={existingCubes.map((cube) => ({
+                            value: String(cube.id),
+                            label: `${cube.name} (${cube.cardCount} cards)`,
+                          }))}
+                        />
                         <button
                           onClick={handleUpdate}
                           disabled={loading || !selectedCubeId}

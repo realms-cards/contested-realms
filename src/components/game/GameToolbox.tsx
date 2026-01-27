@@ -7,6 +7,7 @@ import { useEffect, useRef, useState, useMemo } from "react";
 import BugReportModal from "@/components/game/BugReportModal";
 import CardSearchDialog from "@/components/game/CardSearchDialog";
 import HandPeekDialog from "@/components/game/HandPeekDialog";
+import { CustomSelect } from "@/components/ui/CustomSelect";
 import { useGraphicsSettings } from "@/hooks/useGraphicsSettings";
 import D20Dice from "@/lib/game/components/D20Dice";
 import D6Dice from "@/lib/game/components/D6Dice";
@@ -1217,64 +1218,62 @@ export default function GameToolbox({
             {/* Combined pile action: Draw / Peek / Scry */}
             <div className="rounded-lg bg-white/5 ring-1 ring-white/10 p-2">
               <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-1.5 sm:gap-2 mb-2">
-                <select
+                <CustomSelect
                   value={actionType}
-                  onChange={(e) =>
-                    setActionType(e.target.value as typeof actionType)
+                  onChange={(v) =>
+                    setActionType(v as typeof actionType)
                   }
-                  className="bg-white/10 rounded px-2 py-2 sm:py-1 text-sm"
-                >
-                  <option value="draw">Draw</option>
-                  <option value="peek">Peek</option>
-                  <option value="reveal">Reveal</option>
-                  <option value="scry">Scry</option>
-                </select>
-                <select
+                  options={[
+                    { value: "draw", label: "Draw" },
+                    { value: "peek", label: "Peek" },
+                    { value: "reveal", label: "Reveal" },
+                    { value: "scry", label: "Scry" },
+                  ]}
+                />
+                <CustomSelect
                   value={drawSeat}
-                  onChange={(e) => {
-                    const v = e.target.value as PlayerKey;
-                    setDrawSeat(v);
-                    setPeekSeat(v);
-                    setRevealSeat(v);
-                    setScrySeat(v);
+                  onChange={(v) => {
+                    const val = v as PlayerKey;
+                    setDrawSeat(val);
+                    setPeekSeat(val);
+                    setRevealSeat(val);
+                    setScrySeat(val);
                   }}
-                  className="bg-white/10 rounded px-2 py-2 sm:py-1 text-sm"
-                >
-                  <option value="p1">{playerNames.p1}</option>
-                  <option value="p2">{playerNames.p2}</option>
-                </select>
-                <select
+                  options={[
+                    { value: "p1", label: playerNames.p1 },
+                    { value: "p2", label: playerNames.p2 },
+                  ]}
+                />
+                <CustomSelect
                   value={drawPile}
-                  onChange={(e) => {
-                    const v = e.target.value as "spellbook" | "atlas";
-                    setDrawPile(v);
-                    setPeekPile(v);
-                    setRevealPile(v);
-                    setScryPile(v);
+                  onChange={(v) => {
+                    const val = v as "spellbook" | "atlas";
+                    setDrawPile(val);
+                    setPeekPile(val);
+                    setRevealPile(val);
+                    setScryPile(val);
                   }}
-                  className="bg-white/10 rounded px-2 py-2 sm:py-1 text-sm"
-                >
-                  <option value="spellbook">Spellbook</option>
-                  <option value="atlas">Atlas</option>
-                </select>
+                  options={[
+                    { value: "spellbook", label: "Spellbook" },
+                    { value: "atlas", label: "Atlas" },
+                  ]}
+                />
                 <div className="flex gap-1.5">
-                  <select
+                  <CustomSelect
                     value={drawFromWhere}
-                    onChange={(e) => {
-                      const v = e.target.value as "top" | "bottom";
-                      setDrawFromWhere(v);
-                      setPeekFromWhere(v);
-                      setRevealFromWhere(v);
+                    onChange={(v) => {
+                      const val = v as "top" | "bottom";
+                      setDrawFromWhere(val);
+                      setPeekFromWhere(val);
+                      setRevealFromWhere(val);
                     }}
-                    className={`flex-1 bg-white/10 rounded px-2 py-2 sm:py-1 text-sm ${
-                      actionType === "scry"
-                        ? "opacity-50 pointer-events-none"
-                        : ""
-                    }`}
-                  >
-                    <option value="top">Top</option>
-                    <option value="bottom">Bottom</option>
-                  </select>
+                    options={[
+                      { value: "top", label: "Top" },
+                      { value: "bottom", label: "Bottom" },
+                    ]}
+                    disabled={actionType === "scry"}
+                    className="flex-1"
+                  />
                   <input
                     type="number"
                     min={1}
@@ -1589,28 +1588,24 @@ export default function GameToolbox({
                   {/* Return from Banished */}
                   <div className="rounded-lg bg-white/5 ring-1 ring-white/10 p-2">
                     <div className="flex gap-2 mb-1">
-                      <select
+                      <CustomSelect
                         value={unbanishSeat}
-                        onChange={(e) =>
-                          setUnbanishSeat(e.target.value as PlayerKey)
-                        }
-                        className="bg-white/10 rounded px-2 py-1"
-                      >
-                        <option value="p1">P1</option>
-                        <option value="p2">P2</option>
-                      </select>
-                      <select
+                        onChange={(v) => setUnbanishSeat(v as PlayerKey)}
+                        options={[
+                          { value: "p1", label: "P1" },
+                          { value: "p2", label: "P2" },
+                        ]}
+                      />
+                      <CustomSelect
                         value={unbanishTarget}
-                        onChange={(e) =>
-                          setUnbanishTarget(
-                            e.target.value as "hand" | "graveyard",
-                          )
+                        onChange={(v) =>
+                          setUnbanishTarget(v as "hand" | "graveyard")
                         }
-                        className="bg-white/10 rounded px-2 py-1"
-                      >
-                        <option value="hand">Hand</option>
-                        <option value="graveyard">Cemetery</option>
-                      </select>
+                        options={[
+                          { value: "hand", label: "Hand" },
+                          { value: "graveyard", label: "Cemetery" },
+                        ]}
+                      />
                     </div>
                     <button
                       className="w-full rounded bg-emerald-600/90 hover:bg-emerald-500 py-1"
@@ -1672,21 +1667,17 @@ export default function GameToolbox({
                   {/* Snapshots */}
                   <div className="rounded-lg bg-white/5 ring-1 ring-white/10 p-2">
                     {autoSnapshots.length > 0 && (
-                      <select
-                        className="w-full mb-1 rounded bg-white/10 hover:bg-white/15 py-1 text-xs"
+                      <CustomSelect
+                        className="w-full mb-1"
                         value={selectedAutoId ?? ""}
-                        onChange={(e) =>
-                          setSelectedAutoId(e.target.value || null)
-                        }
-                      >
-                        {autoSnapshots
+                        onChange={(v) => setSelectedAutoId(v || null)}
+                        options={autoSnapshots
                           .slice(Math.max(autoSnapshots.length - 5, 0))
-                          .map((s) => (
-                            <option key={s.id} value={s.id}>
-                              {new Date(s.ts).toLocaleTimeString()} · {s.title}
-                            </option>
-                          ))}
-                      </select>
+                          .map((s) => ({
+                            value: s.id,
+                            label: `${new Date(s.ts).toLocaleTimeString()} · ${s.title}`,
+                          }))}
+                      />
                     )}
                     <button
                       className="w-full rounded bg-emerald-600/90 hover:bg-emerald-500 py-1 disabled:opacity-40"

@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { CustomSelect } from "@/components/ui/CustomSelect";
 
 interface DeckOption {
   id: string;
@@ -458,21 +459,16 @@ export default function DeckDiff() {
                             <label className="text-sm text-gray-300">
                               Select a deck:
                             </label>
-                            <select
+                            <CustomSelect
                               value={selectedDeckId}
-                              onChange={(e) =>
-                                setSelectedDeckId(e.target.value)
-                              }
-                              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white"
-                            >
-                              <option value="">-- Choose a deck --</option>
-                              {decks.map((d) => (
-                                <option key={d.id} value={d.id}>
-                                  {d.name}
-                                  {d.format ? ` (${d.format})` : ""}
-                                </option>
-                              ))}
-                            </select>
+                              onChange={(v) => setSelectedDeckId(v)}
+                              placeholder="-- Choose a deck --"
+                              className="w-full"
+                              options={decks.map((d) => ({
+                                value: d.id,
+                                label: d.name + (d.format ? ` (${d.format})` : ""),
+                              }))}
+                            />
                             <button
                               onClick={compareDeck}
                               disabled={loading || !selectedDeckId}

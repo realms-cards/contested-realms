@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { CustomSelect } from "@/components/ui/CustomSelect";
 import type {
   CollectionFilters as FilterType,
   CollectionSortField,
@@ -106,93 +107,81 @@ export default function CollectionFilters({
       {/* Filters Row */}
       <div className="flex flex-wrap gap-3">
         {/* Set Filter */}
-        <select
-          value={filters.setId || ""}
-          onChange={(e) =>
+        <CustomSelect
+          value={filters.setId ? String(filters.setId) : ""}
+          onChange={(v) =>
             handleFilterChange(
               "setId",
-              e.target.value ? parseInt(e.target.value) : undefined,
+              v ? parseInt(v) : undefined,
             )
           }
-          className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm"
-        >
-          <option value="">All Sets</option>
-          {sets.map((set) => (
-            <option key={set.id} value={set.id}>
-              {set.name}
-            </option>
-          ))}
-        </select>
+          placeholder="All Sets"
+          options={sets.map((set) => ({
+            value: String(set.id),
+            label: set.name,
+          }))}
+        />
 
         {/* Element Filter */}
-        <select
+        <CustomSelect
           value={filters.element || ""}
-          onChange={(e) =>
-            handleFilterChange("element", e.target.value || undefined)
+          onChange={(v) =>
+            handleFilterChange("element", v || undefined)
           }
-          className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm"
-        >
-          <option value="">All Elements</option>
-          {ELEMENTS.map((el) => (
-            <option key={el} value={el}>
-              {el}
-            </option>
-          ))}
-        </select>
+          placeholder="All Elements"
+          options={ELEMENTS.map((el) => ({
+            value: el,
+            label: el,
+          }))}
+        />
 
         {/* Type Filter */}
-        <select
+        <CustomSelect
           value={filters.type || ""}
-          onChange={(e) =>
-            handleFilterChange("type", e.target.value || undefined)
+          onChange={(v) =>
+            handleFilterChange("type", v || undefined)
           }
-          className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm"
-        >
-          <option value="">All Types</option>
-          {TYPES.map((type) => (
-            <option key={type} value={type}>
-              {type}
-            </option>
-          ))}
-        </select>
+          placeholder="All Types"
+          options={TYPES.map((type) => ({
+            value: type,
+            label: type,
+          }))}
+        />
 
         {/* Rarity Filter */}
-        <select
+        <CustomSelect
           value={filters.rarity || ""}
-          onChange={(e) =>
-            handleFilterChange("rarity", e.target.value || undefined)
+          onChange={(v) =>
+            handleFilterChange("rarity", v || undefined)
           }
-          className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm"
-        >
-          <option value="">All Rarities</option>
-          {RARITIES.map((rarity) => (
-            <option key={rarity} value={rarity}>
-              {rarity}
-            </option>
-          ))}
-        </select>
+          placeholder="All Rarities"
+          options={RARITIES.map((rarity) => ({
+            value: rarity,
+            label: rarity,
+          }))}
+        />
 
         {/* Sort */}
-        <select
+        <CustomSelect
           value={`${sort}:${order}`}
-          onChange={(e) => {
-            const [s, o] = e.target.value.split(":") as [
+          onChange={(v) => {
+            const [s, o] = v.split(":") as [
               CollectionSortField,
               SortOrder,
             ];
             onSortChange(s, o);
           }}
-          className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm"
-        >
-          <option value="name:asc">Name (A-Z)</option>
-          <option value="name:desc">Name (Z-A)</option>
-          <option value="rarity:asc">Rarity (Unique First)</option>
-          <option value="rarity:desc">Rarity (Ordinary First)</option>
-          <option value="quantity:desc">Quantity (High)</option>
-          <option value="quantity:asc">Quantity (Low)</option>
-          <option value="recent:desc">Recently Added</option>
-          <option value="recent:asc">Oldest First</option>
-        </select>
+          options={[
+            { value: "name:asc", label: "Name (A-Z)" },
+            { value: "name:desc", label: "Name (Z-A)" },
+            { value: "rarity:asc", label: "Rarity (Unique First)" },
+            { value: "rarity:desc", label: "Rarity (Ordinary First)" },
+            { value: "quantity:desc", label: "Quantity (High)" },
+            { value: "quantity:asc", label: "Quantity (Low)" },
+            { value: "recent:desc", label: "Recently Added" },
+            { value: "recent:asc", label: "Oldest First" },
+          ]}
+        />
 
         {/* Clear Filters */}
         {hasActiveFilters && (

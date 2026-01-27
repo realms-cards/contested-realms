@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { TournamentControls } from "@/components/deck-editor";
+import { CustomSelect } from "@/components/ui/CustomSelect";
 
 // Stable constant for standard site names
 const STANDARD_SITE_NAMES = ["Spire", "Stream", "Valley", "Wasteland"] as const;
@@ -642,23 +643,20 @@ export default function DeckEditorPage() {
         <label className="flex flex-col gap-1">
           <span className="text-xs uppercase opacity-70">Deck</span>
           <div className="flex gap-2">
-            <select
+            <CustomSelect
               value={deckId || ""}
-              onChange={(e) => {
-                const v = e.target.value;
+              onChange={(v) => {
                 if (v) loadDeck(v);
                 else clearEditor();
               }}
               disabled={loadingDecks}
-              className="border rounded px-3 py-2 bg-transparent min-w-56 disabled:opacity-60"
-            >
-              <option value="">— New Deck —</option>
-              {decks.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name} • {d.format}
-                </option>
-              ))}
-            </select>
+              className="min-w-56"
+              placeholder="— New Deck —"
+              options={decks.map((d) => ({
+                value: d.id,
+                label: `${d.name} • ${d.format}`,
+              }))}
+            />
             <button
               onClick={clearEditor}
               disabled={loadingDecks}
@@ -683,16 +681,16 @@ export default function DeckEditorPage() {
 
         <label className="flex flex-col gap-1">
           <span className="text-xs uppercase opacity-70">Set</span>
-          <select
+          <CustomSelect
             value={setName}
-            onChange={(e) => setSetName(e.target.value)}
-            className="border rounded px-3 py-2 bg-transparent"
-          >
-            <option value="Alpha">Alpha</option>
-            <option value="Beta">Beta</option>
-            <option value="Arthurian Legends">Arthurian Legends</option>
-            <option value="Dragonlord">Dragonlord</option>
-          </select>
+            onChange={(v) => setSetName(v)}
+            options={[
+              { value: "Alpha", label: "Alpha" },
+              { value: "Beta", label: "Beta" },
+              { value: "Arthurian Legends", label: "Arthurian Legends" },
+              { value: "Dragonlord", label: "Dragonlord" },
+            ]}
+          />
         </label>
 
         <div className="ml-auto flex items-center gap-3 text-sm">
@@ -997,16 +995,16 @@ export default function DeckEditorPage() {
                   className="border rounded px-3 py-2 bg-transparent w-48"
                   placeholder="Name contains..."
                 />
-                <select
+                <CustomSelect
                   value={typeFilter}
-                  onChange={(e) => setTypeFilter(e.target.value as SearchType)}
-                  className="border rounded px-3 py-2 bg-transparent"
-                >
-                  <option value="all">All</option>
-                  <option value="avatar">Avatar</option>
-                  <option value="site">Sites</option>
-                  <option value="spell">Spellbook</option>
-                </select>
+                  onChange={(v) => setTypeFilter(v as SearchType)}
+                  options={[
+                    { value: "all", label: "All" },
+                    { value: "avatar", label: "Avatar" },
+                    { value: "site", label: "Sites" },
+                    { value: "spell", label: "Spellbook" },
+                  ]}
+                />
                 <button
                   onClick={doSearch}
                   disabled={searching}
