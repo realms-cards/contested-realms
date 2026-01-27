@@ -43,6 +43,18 @@ function suffixDirFromBasename(base: string): string | null {
   return `${a}_${b}`;
 }
 
+// Promo card fallbacks: map promo slugs to standard set equivalents when promo art is unavailable
+function getPromoFallbackSlug(normalizedSlug: string): string | null {
+  // City of Glass promo -> Gothic set standard version
+  if (
+    normalizedSlug.startsWith("pro_") &&
+    normalizedSlug.includes("city_of_glass")
+  ) {
+    return "got_city_of_glass_b_s";
+  }
+  return null;
+}
+
 // Handle CORS preflight for KTX2 loader
 export async function OPTIONS() {
   return new Response(null, {
@@ -58,7 +70,7 @@ export async function OPTIONS() {
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: Promise<{ slug: string }> }
+  { params }: { params: Promise<{ slug: string }> },
 ) {
   try {
     const { slug: slugRaw } = await params;
@@ -69,12 +81,18 @@ export async function GET(
     // Convert finish suffix separators: card-b-s -> card_b_s, card-pd-s -> card_pd_s, card-bt-s -> card_bt_s
     slug = slug.replace(/-([a-z]{1,2})-([sfea])$/, "_$1_$2");
 
+    // Check for promo fallback (e.g., City of Glass promo -> Gothic version)
+    const fallbackSlug = getPromoFallbackSlug(slug);
+    if (fallbackSlug) {
+      slug = fallbackSlug;
+    }
+
     if (!slug || !/^[a-z]{3}_[a-z0-9_]+$/.test(slug)) {
       console.warn(
         "[api/images] Bad slug after normalization:",
         slugRaw,
         "->",
-        slug
+        slug,
       );
       return new Response("Bad slug", { status: 400 });
     }
@@ -138,7 +156,7 @@ export async function GET(
     }
     if (process.env.NODE_ENV !== "development") {
       console.error(
-        "[api/images] Missing ASSET_CDN_ORIGIN or NEXT_PUBLIC_TEXTURE_ORIGIN in production; set one to serve textures without bundling local assets."
+        "[api/images] Missing ASSET_CDN_ORIGIN or NEXT_PUBLIC_TEXTURE_ORIGIN in production; set one to serve textures without bundling local assets.",
       );
       return new Response("Texture CDN not configured", { status: 502 });
     }

@@ -24,6 +24,31 @@ const SET_DIR_MAP: Record<string, string> = {
 // Sets that use suffix subdirectories (e.g., alpha/b_s/cardname.webp)
 const SETS_WITH_SUFFIX_DIRS = new Set(["alpha", "beta", "arthurian_legends"]);
 
+// Promo card fallbacks: map promo slugs to standard set equivalents when promo art is unavailable
+const PROMO_FALLBACK_MAP: Record<string, string> = {
+  // City of Glass promo -> Gothic set standard version
+  pro_city_of_glass_scg_f: "got_city_of_glass_b_s",
+};
+
+/**
+ * Check if a slug matches a promo card that needs fallback (case-insensitive, partial match).
+ * Returns the fallback slug or null if no fallback needed.
+ */
+function getPromoFallbackSlug(normalizedSlug: string): string | null {
+  // Direct match first
+  if (PROMO_FALLBACK_MAP[normalizedSlug]) {
+    return PROMO_FALLBACK_MAP[normalizedSlug];
+  }
+  // Check if it's a city_of_glass promo variant (any finish)
+  if (
+    normalizedSlug.startsWith("pro_") &&
+    normalizedSlug.includes("city_of_glass")
+  ) {
+    return "got_city_of_glass_b_s";
+  }
+  return null;
+}
+
 /**
  * Check if CDN direct loading is enabled.
  * Returns true if NEXT_PUBLIC_TEXTURE_ORIGIN is set.
@@ -48,7 +73,7 @@ export function getCdnOrigin(): string {
  */
 export function getCardImageCdnUrl(
   slug: string,
-  preferKtx2 = false
+  preferKtx2 = false,
 ): string | null {
   if (!isCdnEnabled()) return null;
 
@@ -58,6 +83,12 @@ export function getCardImageCdnUrl(
   normalizedSlug = normalizedSlug.replace(/^([a-z]{3})-/, "$1_");
   // Convert finish suffix separators: card-b-s -> card_b_s
   normalizedSlug = normalizedSlug.replace(/-([a-z]{1,2})-([sfea])$/, "_$1_$2");
+
+  // Check for promo fallback (e.g., City of Glass promo -> Gothic version)
+  const fallbackSlug = getPromoFallbackSlug(normalizedSlug);
+  if (fallbackSlug) {
+    normalizedSlug = fallbackSlug;
+  }
 
   // Extract set code (first 3 chars)
   const setCode = normalizedSlug.slice(0, 3);
