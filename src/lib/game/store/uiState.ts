@@ -118,6 +118,8 @@ export type UiSlice = Pick<
   | "toggleCameraMode"
   | "switchSiteSource"
   | "setSwitchSiteSource"
+  | "switchSitePending"
+  | "setSwitchSitePending"
   | "showEndTurnConfirm"
   | "requestEndTurn"
   | "confirmEndTurn"
@@ -142,6 +144,7 @@ type UiStateDefaults = Pick<
   | "cardPreviewsEnabled"
   | "uiHidden"
   | "switchSiteSource"
+  | "switchSitePending"
   | "showEndTurnConfirm"
 >;
 
@@ -162,6 +165,7 @@ export const createInitialUiState = (): UiStateDefaults => ({
   cardPreviewsEnabled: loadCardPreviewsEnabled(),
   uiHidden: loadUiHidden(),
   switchSiteSource: null,
+  switchSitePending: null,
   showEndTurnConfirm: false,
 });
 
@@ -248,6 +252,13 @@ export const createUiSlice: StateCreator<GameState, [], [], UiSlice> = (
 
   setSwitchSiteSource: (source: { x: number; y: number } | null) =>
     set({ switchSiteSource: source }),
+
+  setSwitchSitePending: (
+    pending: {
+      source: { x: number; y: number };
+      target: { x: number; y: number };
+    } | null,
+  ) => set({ switchSitePending: pending }),
 
   setCardPreviewsEnabled: (enabled: boolean) => {
     saveCardPreviewsEnabled(enabled);

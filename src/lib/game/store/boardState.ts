@@ -40,6 +40,7 @@ type BoardSlice = Pick<
   | "floodSite"
   | "silenceSite"
   | "silencePermanent"
+  | "disableSite"
   | "transferSiteControl"
   | "switchSitePosition"
 >;
@@ -491,7 +492,7 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
       const siteOwner = site.owner;
       const owner = seatFromOwner(siteOwner);
 
-      // Create Silenced token
+      // Create Silenced token - uses Silence spell card art
       const silencedDef = TOKEN_BY_NAME["silenced"];
       if (!silencedDef) {
         get().log("Silenced token definition not found");
@@ -504,7 +505,8 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
           variantId: null,
           name: silencedDef.name,
           type: "Token",
-          slug: tokenSlug(silencedDef),
+          // Use Silence spell slug for proper card preview image
+          slug: "alp_silence_b_s",
           thresholds: null,
         },
         owner,
@@ -551,6 +553,109 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
       } else {
         // Offline: show local toast
         const toastMessage = `[p${playerNum}:PLAYER] silenced site at #${cellNo}`;
+        try {
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(
+              new CustomEvent("app:toast", {
+                detail: { message: toastMessage, cellKey: key },
+              }),
+            );
+          }
+        } catch {}
+      }
+
+      return {
+        permanents: permanentsNext,
+      } as Partial<GameState> as GameState;
+    }),
+
+  // Place a Disabled token on top of a site (removes mana, threshold, and abilities)
+  disableSite: (x: number, y: number) =>
+    set((state) => {
+      get().pushHistory();
+      const key = toCellKey(x, y);
+      const site = state.board.sites[key];
+      if (!site) {
+        get().log("No site at this position to disable");
+        return state;
+      }
+
+      // Ownership checks
+      if (state.transport && state.actorKey) {
+        const ownerKey = seatFromOwner(site.owner);
+        const isOwner = state.actorKey === ownerKey;
+        const isActingPlayer =
+          (state.actorKey === "p1" && state.currentPlayer === 1) ||
+          (state.actorKey === "p2" && state.currentPlayer === 2);
+        if (!isOwner && !isActingPlayer) {
+          get().log("Cannot disable opponent's site");
+          return state;
+        }
+      }
+
+      const siteOwner = site.owner;
+      const owner = seatFromOwner(siteOwner);
+
+      // Create Disabled token
+      const disabledDef = TOKEN_BY_NAME["disabled"];
+      if (!disabledDef) {
+        get().log("Disabled token definition not found");
+        return state;
+      }
+
+      const disabledCard = prepareCardForSeat(
+        {
+          cardId: newTokenInstanceId(disabledDef),
+          variantId: null,
+          name: disabledDef.name,
+          type: "Token",
+          slug: tokenSlug(disabledDef),
+          thresholds: null,
+        },
+        owner,
+      );
+
+      const permanentsNext = { ...state.permanents };
+      const arr = [...(permanentsNext[key] || [])];
+      arr.push({
+        owner: siteOwner,
+        card: disabledCard,
+        offset: null,
+        tilt: randomTilt(),
+        tapVersion: 0,
+        tapped: false,
+        version: 0,
+        instanceId: disabledCard.instanceId ?? newPermanentInstanceId(),
+      });
+      permanentsNext[key] = arr;
+
+      const cellNo = getCellNumber(x, y, state.board.size.w);
+      const playerNum = owner === "p1" ? "1" : "2";
+      get().log(
+        `[p${playerNum}:PLAYER] places [p${playerNum}card:Disabled] on site at #${cellNo}`,
+      );
+
+      // Send patch
+      const tr = get().transport;
+      if (tr) {
+        const patch: ServerPatchT = {
+          permanents: permanentsNext,
+        };
+        get().trySendPatch(patch);
+
+        // Send toast
+        const toastMessage = `[p${playerNum}:PLAYER] disabled site at #${cellNo}`;
+        try {
+          tr.sendMessage?.({
+            type: "toast",
+            text: toastMessage,
+            cellKey: key,
+            seat: owner,
+          } as never);
+        } catch {}
+      } else {
+        // Offline: show local toast
+        const toastMessage = `[p${playerNum}:PLAYER] disabled site at #${cellNo}`;
         try {
           if (typeof window !== "undefined") {
             window.dispatchEvent(

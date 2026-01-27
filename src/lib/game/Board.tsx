@@ -269,6 +269,8 @@ export default function Board({
   );
   const switchSiteSource = useScopedStore((s) => s.switchSiteSource);
   const setSwitchSiteSource = useScopedStore((s) => s.setSwitchSiteSource);
+  const switchSitePending = useScopedStore((s) => s.switchSitePending);
+  const setSwitchSitePending = useScopedStore((s) => s.setSwitchSitePending);
   const switchSitePosition = useScopedStore((s) => s.switchSitePosition);
   const log = useScopedStore((s) => s.log);
   // Online mode consent infrastructure
@@ -542,6 +544,9 @@ export default function Board({
   const onCompleteSwitchSite = useCallback(
     (targetX: number, targetY: number) => {
       if (!switchSiteSource) return;
+      // Block if already waiting for approval
+      if (switchSitePending) return;
+
       const { x: sourceX, y: sourceY } = switchSiteSource;
       // Don't allow switching to the same cell
       if (sourceX === targetX && sourceY === targetY) {
@@ -552,6 +557,7 @@ export default function Board({
       const apply = () => {
         switchSitePosition(sourceX, sourceY, targetX, targetY);
         setSwitchSiteSource(null);
+        setSwitchSitePending(null);
       };
 
       // In online mode, request consent
@@ -608,7 +614,14 @@ export default function Board({
           },
         });
 
+        // Set pending state and clear source to prevent additional clicks
+        setSwitchSitePending({
+          source: { x: sourceX, y: sourceY },
+          target: { x: targetX, y: targetY },
+        });
+        setSwitchSiteSource(null);
         log(`Requesting consent: ${description}`);
+
         // Listen for approval
         const checkApproval = setInterval(() => {
           const entry = resolvedStoreApi.getState().interactionLog[rid];
@@ -620,7 +633,7 @@ export default function Board({
             (entry.status === "declined" || entry.status === "cancelled")
           ) {
             clearInterval(checkApproval);
-            setSwitchSiteSource(null);
+            setSwitchSitePending(null);
             log("Site switch request declined");
           }
         }, 300);
@@ -631,8 +644,10 @@ export default function Board({
     },
     [
       switchSiteSource,
+      switchSitePending,
       switchSitePosition,
       setSwitchSiteSource,
+      setSwitchSitePending,
       log,
       transport,
       localPlayerId,

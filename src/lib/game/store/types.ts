@@ -1983,7 +1983,7 @@ export type GameState = {
   // D20 patches bypass batching and send immediately for reliability
   trySendD20Patch: (patch: ServerPatchT) => boolean;
   flushPendingPatches: () => void;
-  addLife: (who: PlayerKey, delta: number) => void;
+  addLife: (who: PlayerKey, delta: number, isAvatarDamage?: boolean) => void;
   addMana: (who: PlayerKey, delta: number) => void;
   addThreshold: (
     who: PlayerKey,
@@ -2148,6 +2148,7 @@ export type GameState = {
   ) => void;
   floodSite: (x: number, y: number) => void;
   silenceSite: (x: number, y: number) => void;
+  disableSite: (x: number, y: number) => void;
   silencePermanent: (cellKey: CellKey, index: number) => void;
   moveFromBanishedToZone: (
     who: PlayerKey,
@@ -2463,6 +2464,17 @@ export type GameState = {
   // Switch site position selection (Earthquake, Rift Valley)
   switchSiteSource: { x: number; y: number } | null;
   setSwitchSiteSource: (source: { x: number; y: number } | null) => void;
+  // Track pending switch site request awaiting opponent approval
+  switchSitePending: {
+    source: { x: number; y: number };
+    target: { x: number; y: number };
+  } | null;
+  setSwitchSitePending: (
+    pending: {
+      source: { x: number; y: number };
+      target: { x: number; y: number };
+    } | null,
+  ) => void;
   // Placement dialog for cards to piles
   placementDialog: {
     cardName: string;
