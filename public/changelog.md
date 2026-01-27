@@ -2,6 +2,10 @@
 
 ## January 2026
 
+### Jan 27 - Quality of Life
+
+- **auto-banish rubble when placing a site** - placing a site on a tile with Rubble automatically banishes the Rubble
+
 ### Jan 26 - User requested fixes
 
 - **add generate spectate link** from Match Info

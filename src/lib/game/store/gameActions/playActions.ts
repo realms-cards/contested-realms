@@ -25,6 +25,7 @@ import {
   getCellNumber,
   getNearbyCells,
   ownerFromSeat,
+  seatFromOwner,
   toCellKey,
 } from "../utils/boardHelpers";
 import { prepareCardForSeat } from "../utils/cardHelpers";
@@ -375,6 +376,45 @@ export const createPlayActionsSlice: StateCreator<
           );
           return state;
         }
+
+        // Check for Rubble tokens on this tile and auto-banish them
+        let permanentsNext = state.permanents;
+        const rubbleBanished: { owner: 1 | 2; card: CardRef; instanceId: string }[] = [];
+        const cellPerms = state.permanents[key] || [];
+        if (cellPerms.length > 0) {
+          const rubbleIndices: number[] = [];
+          cellPerms.forEach((perm, idx) => {
+            const name = perm.card?.name?.toLowerCase() || "";
+            if (name === "rubble") {
+              rubbleIndices.push(idx);
+              rubbleBanished.push({
+                owner: perm.owner,
+                card: perm.card,
+                instanceId: perm.instanceId || perm.card?.instanceId || "",
+              });
+            }
+          });
+          if (rubbleIndices.length > 0) {
+            permanentsNext = { ...state.permanents };
+            const filteredPerms = cellPerms.filter(
+              (_, idx) => !rubbleIndices.includes(idx),
+            );
+            if (filteredPerms.length === 0) {
+              delete permanentsNext[key];
+            } else {
+              permanentsNext[key] = filteredPerms;
+            }
+            // Log the rubble banishment
+            rubbleBanished.forEach((rb) => {
+              const rbOwnerSeat = seatFromOwner(rb.owner);
+              const rbPlayerNum = rbOwnerSeat === "p1" ? "1" : "2";
+              get().log(
+                `[p${rbPlayerNum}:PLAYER]'s [p${rbPlayerNum}card:Rubble] at #${cellNo} is banished`,
+              );
+            });
+          }
+        }
+
         const sites = {
           ...state.board.sites,
           [key]: { owner: ownerFromSeat(who), tapped: false, card },
@@ -422,10 +462,55 @@ export const createPlayActionsSlice: StateCreator<
               banished: [...(state.zones[who].banished || [])],
             },
           } as GameState["zones"];
+          // Add banished rubble to the appropriate owners' zones
+          rubbleBanished.forEach((rb) => {
+            const rbOwnerSeat = seatFromOwner(rb.owner);
+            if (!zonesNext[rbOwnerSeat]) {
+              zonesNext[rbOwnerSeat] = { ...state.zones[rbOwnerSeat] };
+            }
+            zonesNext[rbOwnerSeat] = {
+              ...zonesNext[rbOwnerSeat],
+              banished: [...(zonesNext[rbOwnerSeat].banished || []), rb.card],
+            };
+          });
           const zonePatch = createZonesPatchFor(zonesNext, who);
+          // Also include opponent zones if rubble was banished from them
+          const affectedSeats = new Set([who]);
+          rubbleBanished.forEach((rb) => affectedSeats.add(seatFromOwner(rb.owner)));
+          let combinedZonePatch = zonePatch;
+          affectedSeats.forEach((seat) => {
+            if (seat !== who) {
+              const otherPatch = createZonesPatchFor(zonesNext, seat);
+              if (otherPatch?.zones) {
+                combinedZonePatch = {
+                  zones: { ...combinedZonePatch?.zones, ...otherPatch.zones },
+                };
+              }
+            }
+          });
+          // Build permanents patch using delta removal for rubble
+          let permanentsPatch: ServerPatchT["permanents"] | undefined;
+          if (rubbleBanished.length > 0) {
+            const deltaUpdates = rubbleBanished
+              .filter((rb) => rb.instanceId)
+              .map((rb) => ({
+                at: key,
+                entry: { instanceId: rb.instanceId },
+                remove: true,
+              }));
+            if (deltaUpdates.length > 0) {
+              const deltaPatch = createPermanentDeltaPatch(deltaUpdates);
+              permanentsPatch = deltaPatch?.permanents;
+            }
+            // Fallback to full cell state if delta patch failed
+            if (!permanentsPatch) {
+              permanentsPatch = { [key]: permanentsNext[key] || [] } as ServerPatchT["permanents"];
+            }
+          }
           const patch: ServerPatchT = {
-            ...(zonePatch?.zones ? { zones: zonePatch.zones } : {}),
+            ...(combinedZonePatch?.zones ? { zones: combinedZonePatch.zones } : {}),
             board: { ...state.board, sites } as GameState["board"],
+            ...(permanentsPatch ? { permanents: permanentsPatch } : {}),
           };
           get().trySendPatch(patch);
         }
@@ -446,20 +531,34 @@ export const createPlayActionsSlice: StateCreator<
           state,
           consumeInstantId,
         );
+        // Build final zones with rubble banishment
+        const finalZones = {
+          ...state.zones,
+          [who]: {
+            spellbook: [...state.zones[who].spellbook],
+            atlas: [...state.zones[who].atlas],
+            hand,
+            graveyard: [...state.zones[who].graveyard],
+            battlefield: [...state.zones[who].battlefield],
+            collection: [...state.zones[who].collection],
+            banished: [...(state.zones[who].banished || [])],
+          },
+        } as GameState["zones"];
+        // Add banished rubble to the appropriate owners' zones
+        rubbleBanished.forEach((rb) => {
+          const rbOwnerSeat = seatFromOwner(rb.owner);
+          if (!finalZones[rbOwnerSeat]) {
+            finalZones[rbOwnerSeat] = { ...state.zones[rbOwnerSeat] };
+          }
+          finalZones[rbOwnerSeat] = {
+            ...finalZones[rbOwnerSeat],
+            banished: [...(finalZones[rbOwnerSeat].banished || []), rb.card],
+          };
+        });
         return {
-          zones: {
-            ...state.zones,
-            [who]: {
-              spellbook: [...state.zones[who].spellbook],
-              atlas: [...state.zones[who].atlas],
-              hand,
-              graveyard: [...state.zones[who].graveyard],
-              battlefield: [...state.zones[who].battlefield],
-              collection: [...state.zones[who].collection],
-              banished: [...(state.zones[who].banished || [])],
-            },
-          } as GameState["zones"],
+          zones: finalZones,
           board: { ...state.board, sites },
+          permanents: permanentsNext,
           selectedCard: null,
           selectedPermanent: null,
           ...(nextInteractionLog ? { interactionLog: nextInteractionLog } : {}),
