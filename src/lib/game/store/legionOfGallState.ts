@@ -223,14 +223,27 @@ export const createLegionOfGallSlice: StateCreator<
     const pending = get().pendingLegionOfGall;
     if (!pending) return;
 
-    get().movePermanentToZone(
-      pending.spell.at,
-      pending.spell.index,
-      "graveyard",
-    );
+    // User declined auto-resolve - card stays on board for manual resolution
+    // The spell is already on the board, so we just clear the pending state
+    // (do NOT move to graveyard - that's the player's choice during manual resolution)
 
     set({ pendingLegionOfGall: null } as Partial<GameState> as GameState);
 
-    get().log(`[${pending.casterSeat.toUpperCase()}] Legion of Gall cancelled`);
+    get().log(
+      `[${pending.casterSeat.toUpperCase()}] Legion of Gall: Manual resolution chosen - spell remains on board`,
+    );
+
+    // Broadcast cancellation
+    const transport = get().transport;
+    if (transport?.sendMessage) {
+      try {
+        transport.sendMessage({
+          type: "legionOfGallCancel",
+          id: pending.id,
+          casterSeat: pending.casterSeat,
+          ts: Date.now(),
+        } as unknown as CustomMessage);
+      } catch {}
+    }
   },
 });

@@ -1292,11 +1292,18 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
           const incomingZones = patchToApply.zones as ZonesState;
           const sanitizedZones: Partial<ZonesState> = {};
 
-          // Only allow actor to update their own zones
+          // Check for __allowZoneSeats - allows actor to update opponent zones
+          // (used when destroying opponent cards, transferring control, etc.)
+          const patchRecord = patchToApply as Record<string, unknown>;
+          const allowedZoneSeats = Array.isArray(patchRecord.__allowZoneSeats)
+            ? (patchRecord.__allowZoneSeats as string[])
+            : [];
+
+          // Only allow actor to update their own zones, or zones explicitly allowed via __allowZoneSeats
           if (
             isRecord(incomingZones) &&
             "p1" in incomingZones &&
-            actorSeat === "p1"
+            (actorSeat === "p1" || allowedZoneSeats.includes("p1"))
           ) {
             sanitizedZones.p1 = ensurePlayerZones(incomingZones.p1, "p1");
           } else if (
@@ -1318,7 +1325,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
           if (
             isRecord(incomingZones) &&
             "p2" in incomingZones &&
-            actorSeat === "p2"
+            (actorSeat === "p2" || allowedZoneSeats.includes("p2"))
           ) {
             sanitizedZones.p2 = ensurePlayerZones(incomingZones.p2, "p2");
           } else if (
@@ -1336,6 +1343,10 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
             } catch {
               // ignore logging failures
             }
+          }
+          // Remove __allowZoneSeats from patch before applying (internal flag only)
+          if (patchRecord.__allowZoneSeats) {
+            delete patchRecord.__allowZoneSeats;
           }
           const zoneKeys = Object.keys(sanitizedZones).filter(
             (key) => sanitizedZones[key as keyof ZonesState],

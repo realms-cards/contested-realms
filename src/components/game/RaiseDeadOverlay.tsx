@@ -99,7 +99,7 @@ export default function RaiseDeadOverlay() {
             </div>
 
             <p className="text-gray-500 text-xs text-center mt-4">
-              Declining will send Raise Dead to graveyard without effect.
+              Declining keeps the spell on board for manual resolution.
             </p>
           </div>
         </div>

@@ -551,7 +551,15 @@ export const createPermanentMovementSlice: StateCreator<
       if (deltaPatch?.permanents) patch.permanents = deltaPatch.permanents;
       else if (fallbackPatch?.permanents)
         patch.permanents = fallbackPatch.permanents;
-      if (zonePatch?.zones) patch.zones = zonePatch.zones;
+      if (zonePatch?.zones) {
+        patch.zones = zonePatch.zones;
+        // Include __allowZoneSeats to allow actor to update opponent zones
+        // (e.g., when destroying opponent's cards)
+        if (affectedSeats.size > 0) {
+          (patch as Record<string, unknown>).__allowZoneSeats =
+            Array.from(affectedSeats);
+        }
+      }
       if (Object.keys(patch).length > 0) get().trySendPatch(patch);
 
       // Cleanup for special minions/artifacts leaving the realm
@@ -575,24 +583,42 @@ export const createPermanentMovementSlice: StateCreator<
       }
 
       // Pith Imp: return stolen cards when leaving (uses private hand approach)
+      // Trigger after state update with setTimeout to ensure state is committed
+      // (otherwise zones update from removePithImpHand gets overwritten by this set() return)
       if (cardNameLower.includes("pith imp")) {
-        try {
-          get().removePithImpHand(item.instanceId ?? null, at);
-        } catch {}
+        const pithImpInstanceId = item.instanceId ?? null;
+        const pithImpAt = at;
+        setTimeout(() => {
+          try {
+            get().removePithImpHand(pithImpInstanceId, pithImpAt);
+          } catch {}
+        }, 0);
       }
 
       // Morgana le Fay: discard private hand when leaving
+      // Trigger after state update with setTimeout to ensure state is committed
+      // (otherwise zones update from removeMorganaHand gets overwritten by this set() return)
       if (cardNameLower.includes("morgana le fay")) {
-        try {
-          get().removeMorganaHand(item.instanceId ?? null, at);
-        } catch {}
+        const morganaInstanceId = item.instanceId ?? null;
+        const morganaAt = at;
+        setTimeout(() => {
+          try {
+            get().removeMorganaHand(morganaInstanceId, morganaAt);
+          } catch {}
+        }, 0);
       }
 
       // Omphalos: discard private hand when leaving
+      // Trigger after state update with setTimeout to ensure state is committed
+      // (otherwise zones update from removeOmphalosHand gets overwritten by this set() return)
       if (cardNameLower.includes("omphalos")) {
-        try {
-          get().removeOmphalosHand(item.instanceId ?? null, at);
-        } catch {}
+        const omphalosInstanceId = item.instanceId ?? null;
+        const omphalosAt = at;
+        setTimeout(() => {
+          try {
+            get().removeOmphalosHand(omphalosInstanceId, omphalosAt);
+          } catch {}
+        }, 0);
       }
 
       // Deathrite triggers when going to graveyard:

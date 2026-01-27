@@ -25,6 +25,7 @@ import AttachmentTargetSelectionDialog, {
 } from "@/lib/game/components/AttachmentTargetSelectionDialog";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef } from "@/lib/game/store";
+import { isMergedTower } from "@/lib/game/store/babelTowerState";
 import { isMasked } from "@/lib/game/store/imposterMaskState";
 import {
   isMonumentByName,
@@ -38,7 +39,6 @@ import {
   toCellKey,
   opponentOwner,
 } from "@/lib/game/store/utils/boardHelpers";
-import { isMergedTower } from "@/lib/game/store/babelTowerState";
 import {
   TOKEN_BY_NAME,
   newTokenInstanceId,
@@ -1183,13 +1183,17 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     // Available for most avatars except Magician (who has no atlas)
     if (isMine && hasTapToDrawSite(effectiveAvatarName)) {
       const atlasCount = zones[t.who]?.atlas?.length ?? 0;
-      const canDraw = atlasCount > 0;
-      const drawDescription =
-        atlasCount > 0 ? "Draw the top site from your Atlas" : "Atlas is empty";
+      const avatarAlreadyTapped = tapped;
+      const canDraw = atlasCount > 0 && !avatarAlreadyTapped;
+      const drawDescription = avatarAlreadyTapped
+        ? "Avatar is already tapped"
+        : atlasCount > 0
+          ? "Tap avatar to draw the top site from your Atlas"
+          : "Atlas is empty";
 
       extraActions.push({
         actionId: "__tap_draw_site__",
-        displayText: "Draw Site",
+        displayText: "Tap & Draw Site",
         isEnabled: canDraw,
         targetPermanentId: "",
         description: drawDescription,
@@ -2510,7 +2514,9 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                           disabled={!action.isEnabled}
                           onClick={() => {
                             if (t.kind === "avatar" && action.isEnabled) {
-                              // Draw from atlas to hand (drawFromPileToHand handles tapping the avatar)
+                              // Tap the avatar first (this is the avatar's tap ability)
+                              toggleTapAvatar(t.who);
+                              // Then draw from atlas to hand
                               const atlas = zones[t.who]?.atlas;
                               if (atlas && atlas.length > 0) {
                                 const topCard = atlas[0];

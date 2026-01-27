@@ -987,7 +987,11 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
       const playerNum = who === "p1" ? "1" : "2";
       get().log(`Banished [p${playerNum}card:${card.name}] from cemetery`);
       const patch = createZonesPatchFor(zonesNext as GameState["zones"], who);
-      if (patch) get().trySendPatch(patch);
+      if (patch) {
+        // Allow actor to update opponent's zones (e.g., banishing opponent's graveyard cards)
+        (patch as Record<string, unknown>).__allowZoneSeats = [who];
+        get().trySendPatch(patch);
+      }
       return {
         zones: zonesNext as GameState["zones"],
       } as Partial<GameState> as GameState;
@@ -1009,7 +1013,11 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
         `[p${playerNum}:PLAYER] banished entire cemetery (${graveyard.length} cards)`,
       );
       const patch = createZonesPatchFor(zonesNext as GameState["zones"], who);
-      if (patch) get().trySendPatch(patch);
+      if (patch) {
+        // Allow actor to update opponent's zones (e.g., banishing opponent's graveyard)
+        (patch as Record<string, unknown>).__allowZoneSeats = [who];
+        get().trySendPatch(patch);
+      }
       return {
         zones: zonesNext as GameState["zones"],
       } as Partial<GameState> as GameState;

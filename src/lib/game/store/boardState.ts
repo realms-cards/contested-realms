@@ -157,6 +157,10 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
           board: { ...boardNext, sites: sitesPatch as typeof boardNext.sites },
           ...(zonePatch?.zones ? { zones: zonePatch.zones } : {}),
         };
+        // Allow actor to update site owner's zones (e.g., when destroying opponent's site)
+        if (zonePatch?.zones) {
+          (patch as Record<string, unknown>).__allowZoneSeats = [owner];
+        }
         console.log(
           "[moveSiteToZone] final patch zones keys:",
           patch.zones ? Object.keys(patch.zones) : "none",
@@ -311,6 +315,10 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
           ...(zonePatch?.zones ? { zones: zonePatch.zones } : {}),
           ...(placeRubble ? { permanents: permanentsNext } : {}),
         };
+        // Allow actor to update site owner's zones (e.g., when destroying opponent's site)
+        if (zonePatch?.zones) {
+          (patch as Record<string, unknown>).__allowZoneSeats = [owner];
+        }
         get().trySendPatch(patch);
 
         // Send toast
@@ -731,6 +739,13 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
           board: boardNext,
           ...(zonePatch?.zones ? { zones: zonePatch.zones } : {}),
         };
+        // Allow actor to update affected seats' zones (e.g., when transferring site control)
+        if (zonePatch?.zones) {
+          const affectedSeats = changedSeats.length
+            ? changedSeats
+            : [newOwnerSeat];
+          (patch as Record<string, unknown>).__allowZoneSeats = affectedSeats;
+        }
         get().trySendPatch(patch);
       }
       return {
