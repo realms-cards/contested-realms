@@ -21,7 +21,8 @@ function getRedis(): Redis {
     const url = process.env.REDIS_URL || "redis://localhost:6379";
 
     // Parse Redis URL to extract password if present
-    let redisConfig: any = url;
+    let redisConfig: string | { host: string; port: number; password: string } =
+      url;
     try {
       const parsedUrl = new URL(url);
       if (parsedUrl.password) {
@@ -32,7 +33,7 @@ function getRedis(): Redis {
           password: parsedUrl.password,
         };
       }
-    } catch (err) {
+    } catch (_err) {
       // If URL parsing fails, fall back to string URL
       console.warn("[leader-lock] Failed to parse REDIS_URL, using as-is");
     }
