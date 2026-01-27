@@ -3,6 +3,7 @@
 import clsx from "clsx";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { CustomSelect } from "@/components/ui/CustomSelect";
 import type {
   ActiveMatchInfo,
   AdminActionResult,
@@ -1580,30 +1581,20 @@ export default function AdminDashboard({
                         {formatNumber(user.tournamentRegistrations)}
                       </td>
                       <td className="px-3 py-2">
-                        <select
+                        <CustomSelect
                           value={user.patronTier ?? ""}
-                          onChange={(e) => {
-                            const value = e.target.value || null;
+                          onChange={(v) => {
+                            const value = v || null;
                             updatePatronTier(user.id, value);
                           }}
                           disabled={updatingPatronTier === user.id}
-                          className={clsx(
-                            "rounded border px-2 py-1 text-[11px] bg-slate-800 border-slate-700",
-                            user.patronTier === "kingofthe"
-                              ? "text-emerald-400"
-                              : user.patronTier === "grandmaster"
-                              ? "text-amber-400"
-                              : user.patronTier === "apprentice"
-                              ? "text-blue-400"
-                              : "text-slate-400",
-                            updatingPatronTier === user.id && "opacity-50"
-                          )}
-                        >
-                          <option value="">None</option>
-                          <option value="apprentice">Apprentice</option>
-                          <option value="grandmaster">Grandmaster</option>
-                          <option value="kingofthe">KingOfThe</option>
-                        </select>
+                          placeholder="None"
+                          options={[
+                            { value: "apprentice", label: "Apprentice" },
+                            { value: "grandmaster", label: "Grandmaster" },
+                            { value: "kingofthe", label: "KingOfThe" },
+                          ]}
+                        />
                       </td>
                     </tr>
                   ))}

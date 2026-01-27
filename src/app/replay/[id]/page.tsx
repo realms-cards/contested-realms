@@ -4,6 +4,7 @@ import { OrbitControls } from "@react-three/drei";
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useState, useEffect, useCallback } from "react";
+import { CustomSelect } from "@/components/ui/CustomSelect";
 import { useOnline } from "@/app/online/online-context";
 import CardPreview from "@/components/game/CardPreview";
 import { ClientCanvas } from "@/components/game/ClientCanvas";
@@ -516,16 +517,16 @@ export default function ReplayViewerPage() {
             {/* Speed Control */}
             <div className="ml-4 flex items-center gap-2">
               <span className="text-sm text-slate-400">Speed:</span>
-              <select
-                value={playbackSpeed}
-                onChange={(e) => setPlaybackSpeed(parseFloat(e.target.value))}
-                className="bg-slate-700 text-white rounded px-2 py-1 text-sm"
-              >
-                <option value={0.5}>0.5x</option>
-                <option value={1}>1x</option>
-                <option value={2}>2x</option>
-                <option value={4}>4x</option>
-              </select>
+              <CustomSelect
+                value={String(playbackSpeed)}
+                onChange={(v) => setPlaybackSpeed(parseFloat(v))}
+                options={[
+                  { value: "0.5", label: "0.5x" },
+                  { value: "1", label: "1x" },
+                  { value: "2", label: "2x" },
+                  { value: "4", label: "4x" },
+                ]}
+              />
             </div>
           </div>
         </div>

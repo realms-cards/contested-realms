@@ -6,6 +6,7 @@ import { useSession } from "next-auth/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import AuthButton from "@/components/auth/AuthButton";
 import OnlinePageShell from "@/components/online/OnlinePageShell";
+import { CustomSelect } from "@/components/ui/CustomSelect";
 import DeckImportCuriosa from "./DeckImportCuriosa";
 import DeckImportText from "./DeckImportText";
 import DeckItem from "./DeckItem";
@@ -499,20 +500,17 @@ export default function DecksPage() {
                         >
                           Sort:
                         </label>
-                        <select
-                          id="sort-decks"
+                        <CustomSelect
                           value={sortBy}
-                          onChange={(e) =>
-                            setSortBy(e.target.value as typeof sortBy)
-                          }
-                          className="rounded-md bg-slate-800/80 border border-slate-700 px-2 py-1 text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                        >
-                          <option value="date-desc">Newest</option>
-                          <option value="date-asc">Oldest</option>
-                          <option value="name-asc">A-Z</option>
-                          <option value="name-desc">Z-A</option>
-                          <option value="format">Format</option>
-                        </select>
+                          onChange={(v) => setSortBy(v as typeof sortBy)}
+                          options={[
+                            { value: "date-desc", label: "Newest" },
+                            { value: "date-asc", label: "Oldest" },
+                            { value: "name-asc", label: "A-Z" },
+                            { value: "name-desc", label: "Z-A" },
+                            { value: "format", label: "Format" },
+                          ]}
+                        />
                       </div>
                     </div>
                   </div>
@@ -521,43 +519,38 @@ export default function DecksPage() {
                   <div className="flex flex-wrap items-center gap-2 text-xs">
                     <span className="text-slate-400">Filter:</span>
 
-                    <select
+                    <CustomSelect
                       value={filterFormat}
-                      onChange={(e) => setFilterFormat(e.target.value)}
-                      className="rounded-md bg-slate-800/80 border border-slate-700 px-2 py-1 text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    >
-                      <option value="all">All Formats</option>
-                      {uniqueFormats.map((f) => (
-                        <option key={f} value={f}>
-                          {f}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={(v) => setFilterFormat(v)}
+                      placeholder="All Formats"
+                      options={uniqueFormats.map((f) => ({
+                        value: f,
+                        label: f,
+                      }))}
+                    />
 
-                    <select
+                    <CustomSelect
                       value={filterAvatar}
-                      onChange={(e) => setFilterAvatar(e.target.value)}
-                      className="rounded-md bg-slate-800/80 border border-slate-700 px-2 py-1 text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500 max-w-[140px]"
-                    >
-                      <option value="all">All Avatars</option>
-                      {uniqueAvatars.map((a) => (
-                        <option key={a} value={a}>
-                          {a}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={(v) => setFilterAvatar(v)}
+                      className="max-w-[140px]"
+                      placeholder="All Avatars"
+                      options={uniqueAvatars.map((a) => ({
+                        value: a,
+                        label: a,
+                      }))}
+                    />
 
-                    <select
+                    <CustomSelect
                       value={filterSource}
-                      onChange={(e) =>
-                        setFilterSource(e.target.value as typeof filterSource)
+                      onChange={(v) =>
+                        setFilterSource(v as typeof filterSource)
                       }
-                      className="rounded-md bg-slate-800/80 border border-slate-700 px-2 py-1 text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    >
-                      <option value="all">All Sources</option>
-                      <option value="imported">Imported</option>
-                      <option value="created">Created</option>
-                    </select>
+                      options={[
+                        { value: "all", label: "All Sources" },
+                        { value: "imported", label: "Imported" },
+                        { value: "created", label: "Created" },
+                      ]}
+                    />
 
                     {hasActiveFilters && (
                       <button

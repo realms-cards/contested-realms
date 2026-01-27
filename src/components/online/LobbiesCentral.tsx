@@ -6,6 +6,7 @@
 import { RefreshCw, Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState, useRef } from "react";
+import { CustomSelect } from "@/components/ui/CustomSelect";
 import type { VoiceOutgoingRequest } from "@/app/online/online-context";
 import type { SoatcStatus } from "@/lib/hooks/useSoatcStatus";
 import type { TournamentInfo, LobbyInfo } from "@/lib/net/protocol";
@@ -830,16 +831,16 @@ export default function LobbiesCentral({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
-        <select
-          className="bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
+        <CustomSelect
+          className="min-w-[100px]"
           value={sortKey}
-          onChange={(e) => setSortKey(e.target.value as typeof sortKey)}
-          title="Sort lobbies"
-        >
-          <option value="status">Status</option>
-          <option value="playersAsc">Players ↑</option>
-          <option value="playersDesc">Players ↓</option>
-        </select>
+          onChange={(v) => setSortKey(v as typeof sortKey)}
+          options={[
+            { value: "status", label: "Status" },
+            { value: "playersAsc", label: "Players ↑" },
+            { value: "playersDesc", label: "Players ↓" },
+          ]}
+        />
       </div>
       <div className="flex flex-wrap gap-3 items-center">
         <div className="flex items-center gap-2">
@@ -1982,23 +1983,22 @@ export default function LobbiesCentral({
                             <div className="text-xs text-slate-400 w-16">
                               Pack {idx + 1}
                             </div>
-                            <select
+                            <CustomSelect
                               value={setName}
-                              onChange={(e) => {
+                              onChange={(v) => {
                                 setSealedBoosters((prev) => {
                                   const next = [...prev];
-                                  next[idx] = e.target.value;
+                                  next[idx] = v;
                                   return next;
                                 });
                               }}
-                              className="flex-1 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-xs"
-                            >
-                              <option value="Beta">Beta</option>
-                              <option value="Arthurian Legends">
-                                Arthurian Legends
-                              </option>
-                              <option value="Alpha">Alpha</option>
-                            </select>
+                              className="flex-1"
+                              options={[
+                                { value: "Beta", label: "Beta" },
+                                { value: "Arthurian Legends", label: "Arthurian Legends" },
+                                { value: "Alpha", label: "Alpha" },
+                              ]}
+                            />
                           </div>
                         ))}
                       </div>
@@ -2021,18 +2021,16 @@ export default function LobbiesCentral({
                             sealed.
                           </div>
                         ) : (
-                          <select
+                          <CustomSelect
                             value={sealedCubeId}
-                            onChange={(e) => setSealedCubeId(e.target.value)}
-                            className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
-                          >
-                            <option value="">-- Select a cube --</option>
-                            {userCubes.map((cube) => (
-                              <option key={cube.id} value={cube.id}>
-                                {cube.name} ({cube.cardCount} cards)
-                              </option>
-                            ))}
-                          </select>
+                            onChange={(v) => setSealedCubeId(v)}
+                            className="w-full"
+                            placeholder="-- Select a cube --"
+                            options={userCubes.map((cube) => ({
+                              value: cube.id,
+                              label: `${cube.name} (${cube.cardCount} cards)`,
+                            }))}
+                          />
                         )}
                         <p className="text-xs text-slate-400 mt-1">
                           Choose one of your cubes for this sealed tournament
@@ -2200,23 +2198,22 @@ export default function LobbiesCentral({
                             <div className="text-xs text-slate-400 w-16">
                               Pack {idx + 1}
                             </div>
-                            <select
+                            <CustomSelect
                               value={setName}
-                              onChange={(e) => {
+                              onChange={(v) => {
                                 setDraftBoosters((prev) => {
                                   const next = [...prev];
-                                  next[idx] = e.target.value;
+                                  next[idx] = v;
                                   return next;
                                 });
                               }}
-                              className="flex-1 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-xs"
-                            >
-                              <option value="Beta">Beta</option>
-                              <option value="Arthurian Legends">
-                                Arthurian Legends
-                              </option>
-                              <option value="Alpha">Alpha</option>
-                            </select>
+                              className="flex-1"
+                              options={[
+                                { value: "Beta", label: "Beta" },
+                                { value: "Arthurian Legends", label: "Arthurian Legends" },
+                                { value: "Alpha", label: "Alpha" },
+                              ]}
+                            />
                           </div>
                         ))}
                       </div>
@@ -2239,18 +2236,16 @@ export default function LobbiesCentral({
                             drafting.
                           </div>
                         ) : (
-                          <select
+                          <CustomSelect
                             value={draftCubeId}
-                            onChange={(e) => setDraftCubeId(e.target.value)}
-                            className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
-                          >
-                            <option value="">-- Select a cube --</option>
-                            {userCubes.map((cube) => (
-                              <option key={cube.id} value={cube.id}>
-                                {cube.name} ({cube.cardCount} cards)
-                              </option>
-                            ))}
-                          </select>
+                            onChange={(v) => setDraftCubeId(v)}
+                            className="w-full"
+                            placeholder="-- Select a cube --"
+                            options={userCubes.map((cube) => ({
+                              value: cube.id,
+                              label: `${cube.name} (${cube.cardCount} cards)`,
+                            }))}
+                          />
                         )}
                         <p className="text-xs text-slate-400 mt-1">
                           Choose one of your cubes for this draft tournament
@@ -2353,19 +2348,18 @@ export default function LobbiesCentral({
                     className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-3 py-2 text-sm"
                   />
                 ) : (
-                  <select
-                    value={tournamentMaxPlayers}
-                    onChange={(e) =>
-                      setTournamentMaxPlayers(parseInt(e.target.value))
-                    }
-                    className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-3 py-2 text-sm"
-                  >
-                    <option value={2}>2 Players</option>
-                    <option value={4}>4 Players</option>
-                    <option value={8}>8 Players</option>
-                    <option value={16}>16 Players</option>
-                    <option value={32}>32 Players</option>
-                  </select>
+                  <CustomSelect
+                    value={String(tournamentMaxPlayers)}
+                    onChange={(v) => setTournamentMaxPlayers(parseInt(v))}
+                    className="w-full"
+                    options={[
+                      { value: "2", label: "2 Players" },
+                      { value: "4", label: "4 Players" },
+                      { value: "8", label: "8 Players" },
+                      { value: "16", label: "16 Players" },
+                      { value: "32", label: "32 Players" },
+                    ]}
+                  />
                 )}
                 {tournamentOpenSeat && (
                   <p className="text-xs text-slate-400 mt-1">
@@ -2693,17 +2687,18 @@ function TournamentSettingsForm({
             className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-3 py-2 text-sm"
           />
         ) : (
-          <select
-            value={maxPlayers}
-            onChange={(e) => setMaxPlayers(Number(e.target.value))}
-            className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-3 py-2 text-sm"
-          >
-            <option value={2}>2 Players</option>
-            <option value={4}>4 Players</option>
-            <option value={8}>8 Players</option>
-            <option value={16}>16 Players</option>
-            <option value={32}>32 Players</option>
-          </select>
+          <CustomSelect
+            value={String(maxPlayers)}
+            onChange={(v) => setMaxPlayers(Number(v))}
+            className="w-full"
+            options={[
+              { value: "2", label: "2 Players" },
+              { value: "4", label: "4 Players" },
+              { value: "8", label: "8 Players" },
+              { value: "16", label: "16 Players" },
+              { value: "32", label: "32 Players" },
+            ]}
+          />
         )}
         {maxPlayers < activeCount && (
           <p className="text-red-400 text-xs mt-1">

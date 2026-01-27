@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { CustomSelect } from "@/components/ui/CustomSelect";
 
 type CardStat = {
   cardId: number;
@@ -423,17 +424,17 @@ export default function PublicMetaDashboard() {
             <div className="flex flex-wrap items-center gap-2 text-xs">
               <label className="flex items-center gap-1">
                 <span className="text-slate-300">Order</span>
-                <select
+                <CustomSelect
                   value={cardStatsOrder}
-                  onChange={(e) =>
-                    setCardStatsOrder(e.target.value as typeof cardStatsOrder)
+                  onChange={(v) =>
+                    setCardStatsOrder(v as typeof cardStatsOrder)
                   }
-                  className="rounded border border-slate-600 bg-slate-900 px-2 py-1 text-slate-200"
-                >
-                  <option value="plays">plays</option>
-                  <option value="wins">wins</option>
-                  <option value="winRate">win rate</option>
-                </select>
+                  options={[
+                    { value: "plays", label: "plays" },
+                    { value: "wins", label: "wins" },
+                    { value: "winRate", label: "win rate" },
+                  ]}
+                />
               </label>
               <label className="flex items-center gap-1">
                 <span className="text-slate-300">Limit</span>

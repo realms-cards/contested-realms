@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
+import { CustomSelect } from "@/components/ui/CustomSelect";
 import {
   type BoosterCard,
   type Rarity,
@@ -202,15 +203,15 @@ export default function DraftPage() {
       <div className="flex flex-wrap items-end gap-4">
         <label className="flex flex-col gap-1">
           <span className="text-sm opacity-80">Set</span>
-          <select
+          <CustomSelect
             value={setName}
-            onChange={(e) => setSetName(e.target.value)}
-            className="border rounded px-3 py-2 bg-transparent"
-          >
-            <option value="Alpha">Alpha</option>
-            <option value="Beta">Beta</option>
-            <option value="Arthurian Legends">Arthurian Legends</option>
-          </select>
+            onChange={(v) => setSetName(v)}
+            options={[
+              { value: "Alpha", label: "Alpha" },
+              { value: "Beta", label: "Beta" },
+              { value: "Arthurian Legends", label: "Arthurian Legends" },
+            ]}
+          />
         </label>
 
         <label className="flex flex-col gap-1">

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { CustomSelect } from "@/components/ui/CustomSelect";
 
 type MyDeckInfo = {
   id: string;
@@ -135,31 +136,24 @@ export default function DeckSelector({ onPrepareComplete }: DeckSelectorProps) {
             Loading decks...
           </div>
         ) : (
-          <select
-            className="w-full bg-black/40 rounded px-3 py-2 outline-none"
+          <CustomSelect
+            className="w-full"
             value={deckIdP1}
-            onChange={(e) => setDeckIdP1(e.target.value)}
-          >
-            <option value="">Select…</option>
-            {myDecks.length > 0 && (
-              <optgroup label="My Decks">
-                {myDecks.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.name} ({d.format})
-                  </option>
-                ))}
-              </optgroup>
-            )}
-            {includePublic && publicDecks.length > 0 && (
-              <optgroup label="Precon Decks">
-                {publicDecks.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.name} ({d.format})
-                  </option>
-                ))}
-              </optgroup>
-            )}
-          </select>
+            onChange={(v) => setDeckIdP1(v)}
+            placeholder="Select…"
+            options={[
+              ...myDecks.map((d) => ({
+                value: d.id,
+                label: `${d.name} (${d.format})`,
+              })),
+              ...(includePublic
+                ? publicDecks.map((d) => ({
+                    value: d.id,
+                    label: `[Precon] ${d.name} (${d.format})`,
+                  }))
+                : []),
+            ]}
+          />
         )}
         {deckErrP1 && (
           <div className="text-red-300 text-xs mt-2">{deckErrP1}</div>
@@ -179,31 +173,24 @@ export default function DeckSelector({ onPrepareComplete }: DeckSelectorProps) {
             Loading decks...
           </div>
         ) : (
-          <select
-            className="w-full bg-black/40 rounded px-3 py-2 outline-none"
+          <CustomSelect
+            className="w-full"
             value={deckIdP2}
-            onChange={(e) => setDeckIdP2(e.target.value)}
-          >
-            <option value="">Select…</option>
-            {myDecks.length > 0 && (
-              <optgroup label="My Decks">
-                {myDecks.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.name} ({d.format})
-                  </option>
-                ))}
-              </optgroup>
-            )}
-            {includePublic && publicDecks.length > 0 && (
-              <optgroup label="Precon Decks">
-                {publicDecks.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.name} ({d.format})
-                  </option>
-                ))}
-              </optgroup>
-            )}
-          </select>
+            onChange={(v) => setDeckIdP2(v)}
+            placeholder="Select…"
+            options={[
+              ...myDecks.map((d) => ({
+                value: d.id,
+                label: `${d.name} (${d.format})`,
+              })),
+              ...(includePublic
+                ? publicDecks.map((d) => ({
+                    value: d.id,
+                    label: `[Precon] ${d.name} (${d.format})`,
+                  }))
+                : []),
+            ]}
+          />
         )}
         {deckErrP2 && (
           <div className="text-red-300 text-xs mt-2">{deckErrP2}</div>

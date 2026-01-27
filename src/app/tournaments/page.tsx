@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useState, useEffect } from "react";
+import { CustomSelect } from "@/components/ui/CustomSelect";
 import { useRealtimeTournaments } from "@/contexts/RealtimeTournamentContext";
 import {
   useAvailableSets,
@@ -842,23 +843,20 @@ export default function TournamentsPage() {
                     <label className="block text-slate-300 text-sm font-medium mb-1">
                       Format
                     </label>
-                    <select
+                    <CustomSelect
                       value={form.format}
-                      onChange={(e) =>
+                      onChange={(v) =>
                         setForm((prev) => ({
                           ...prev,
-                          format: e.target.value as
-                            | "sealed"
-                            | "draft"
-                            | "constructed",
+                          format: v as "sealed" | "draft" | "constructed",
                         }))
                       }
-                      className="bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="constructed">Constructed</option>
-                      <option value="sealed">Sealed</option>
-                      <option value="draft">Draft</option>
-                    </select>
+                      options={[
+                        { value: "constructed", label: "Constructed" },
+                        { value: "sealed", label: "Sealed" },
+                        { value: "draft", label: "Draft" },
+                      ]}
+                    />
                   </div>
                   <div>
                     <label className="block text-slate-300 text-sm font-medium mb-1">
@@ -884,47 +882,47 @@ export default function TournamentsPage() {
                         className="w-20 bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
                     ) : (
-                      <select
-                        value={form.maxPlayers}
-                        onChange={(e) =>
+                      <CustomSelect
+                        value={String(form.maxPlayers)}
+                        onChange={(v) =>
                           setForm((prev) => ({
                             ...prev,
-                            maxPlayers: parseInt(e.target.value),
+                            maxPlayers: parseInt(v),
                           }))
                         }
-                        className="bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value={2}>2</option>
-                        <option value={4}>4</option>
-                        <option value={8}>8</option>
-                        <option value={16}>16</option>
-                        <option value={32}>32</option>
-                        <option value={64}>64</option>
-                      </select>
+                        options={[
+                          { value: "2", label: "2" },
+                          { value: "4", label: "4" },
+                          { value: "8", label: "8" },
+                          { value: "16", label: "16" },
+                          { value: "32", label: "32" },
+                          { value: "64", label: "64" },
+                        ]}
+                      />
                     )}
                   </div>
                   <div>
                     <label className="block text-slate-300 text-sm font-medium mb-1">
                       Rounds
                     </label>
-                    <select
-                      value={form.settings.totalRounds || 3}
-                      onChange={(e) =>
+                    <CustomSelect
+                      value={String(form.settings.totalRounds || 3)}
+                      onChange={(v) =>
                         setForm((prev) => ({
                           ...prev,
                           settings: {
                             ...prev.settings,
-                            totalRounds: parseInt(e.target.value),
+                            totalRounds: parseInt(v),
                           },
                         }))
                       }
-                      className="bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value={2}>2</option>
-                      <option value={3}>3</option>
-                      <option value={4}>4</option>
-                      <option value={5}>5</option>
-                    </select>
+                      options={[
+                        { value: "2", label: "2" },
+                        { value: "3", label: "3" },
+                        { value: "4", label: "4" },
+                        { value: "5", label: "5" },
+                      ]}
+                    />
                   </div>
                 </div>
 
@@ -951,25 +949,17 @@ export default function TournamentsPage() {
                           <label className="block text-slate-300 text-sm font-medium mb-2">
                             Select Cube
                           </label>
-                          <select
+                          <CustomSelect
                             value={sealedCubeId}
-                            onChange={(e) => setSealedCubeId(e.target.value)}
+                            onChange={(v) => setSealedCubeId(v)}
                             disabled={cubes.length === 0}
-                            className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white disabled:opacity-50"
-                          >
-                            {cubes.length === 0 ? (
-                              <option value="">No cubes available</option>
-                            ) : (
-                              <>
-                                <option value="">-- Select a cube --</option>
-                                {cubes.map((cube) => (
-                                  <option key={cube.id} value={cube.id}>
-                                    {cube.name}
-                                  </option>
-                                ))}
-                              </>
-                            )}
-                          </select>
+                            className="w-full"
+                            placeholder={cubes.length === 0 ? "No cubes available" : "-- Select a cube --"}
+                            options={cubes.map((cube) => ({
+                              value: cube.id,
+                              label: cube.name,
+                            }))}
+                          />
                         </div>
                         <div className="flex items-center gap-3">
                           <label className="block text-slate-300 text-sm font-medium">
@@ -1073,23 +1063,21 @@ export default function TournamentsPage() {
                               <div className="text-slate-400 text-sm w-16 shrink-0">
                                 Pack {idx + 1}
                               </div>
-                              <select
+                              <CustomSelect
                                 value={setName}
-                                onChange={(e) => {
+                                onChange={(v) => {
                                   setSealedBoosters((prev) => {
                                     const next = [...prev];
-                                    next[idx] = e.target.value;
+                                    next[idx] = v;
                                     return next;
                                   });
                                 }}
-                                className="flex-1 bg-slate-700 border border-slate-600 rounded px-2 py-1.5 text-white text-sm"
-                              >
-                                {draftableSets.map((name) => (
-                                  <option key={name} value={name}>
-                                    {name}
-                                  </option>
-                                ))}
-                              </select>
+                                className="flex-1"
+                                options={draftableSets.map((name) => ({
+                                  value: name,
+                                  label: name,
+                                }))}
+                              />
                             </div>
                           ))}
                         </div>
@@ -1162,22 +1150,17 @@ export default function TournamentsPage() {
                           <label className="block text-slate-300 text-sm font-medium mb-2">
                             Select Cube
                           </label>
-                          <select
+                          <CustomSelect
                             value={cubeId}
-                            onChange={(e) => setCubeId(e.target.value)}
+                            onChange={(v) => setCubeId(v)}
                             disabled={cubes.length === 0}
-                            className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white disabled:opacity-50"
-                          >
-                            {cubes.length === 0 ? (
-                              <option value="">No cubes available</option>
-                            ) : (
-                              cubes.map((cube) => (
-                                <option key={cube.id} value={cube.id}>
-                                  {cube.name}
-                                </option>
-                              ))
-                            )}
-                          </select>
+                            className="w-full"
+                            placeholder={cubes.length === 0 ? "No cubes available" : "-- Select a cube --"}
+                            options={cubes.map((cube) => ({
+                              value: cube.id,
+                              label: cube.name,
+                            }))}
+                          />
                         </div>
                         <label className="flex items-start gap-2 text-slate-300 text-xs cursor-pointer">
                           <input
@@ -1252,23 +1235,21 @@ export default function TournamentsPage() {
                               <div className="text-slate-400 text-sm w-16 shrink-0">
                                 Pack {idx + 1}
                               </div>
-                              <select
+                              <CustomSelect
                                 value={setName}
-                                onChange={(e) => {
+                                onChange={(v) => {
                                   setDraftBoosters((prev) => {
                                     const next = [...prev];
-                                    next[idx] = e.target.value;
+                                    next[idx] = v;
                                     return next;
                                   });
                                 }}
-                                className="flex-1 bg-slate-700 border border-slate-600 rounded px-2 py-1.5 text-white text-sm"
-                              >
-                                {draftableSets.map((name) => (
-                                  <option key={name} value={name}>
-                                    {name}
-                                  </option>
-                                ))}
-                              </select>
+                                className="flex-1"
+                                options={draftableSets.map((name) => ({
+                                  value: name,
+                                  label: name,
+                                }))}
+                              />
                             </div>
                           ))}
                         </div>

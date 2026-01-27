@@ -14,6 +14,7 @@ import PlayersInvitePanel from "@/components/online/PlayersInvitePanel";
 import { SoatcLeagueCheckbox } from "@/components/online/SoatcLeagueBadge";
 import ChangelogOverlay from "@/components/ui/ChangelogOverlay";
 import CombinedMarquee from "@/components/ui/CombinedMarquee";
+import { CustomSelect } from "@/components/ui/CustomSelect";
 import ManualOverlay from "@/components/ui/ManualOverlay";
 import { useRealtimeTournaments } from "@/contexts/RealtimeTournamentContext";
 import { tournamentFeatures } from "@/lib/config/features";
@@ -1799,22 +1800,16 @@ function LobbyPageContent({
                                 <label className="block text-xs font-medium mb-1">
                                   Select cube
                                 </label>
-                                <select
+                                <CustomSelect
                                   value={selectedCubeId ?? ""}
-                                  onChange={(e) =>
-                                    onCubeSelectChange(e.target.value)
-                                  }
-                                  className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
-                                >
-                                  <option value="" disabled>
-                                    Choose a cube…
-                                  </option>
-                                  {availableCubes.map((cube) => (
-                                    <option key={cube.id} value={cube.id}>
-                                      {cube.name} ({cube.cardCount} cards)
-                                    </option>
-                                  ))}
-                                </select>
+                                  onChange={(v) => onCubeSelectChange(v)}
+                                  className="w-full"
+                                  placeholder="Choose a cube…"
+                                  options={availableCubes.map((cube) => ({
+                                    value: cube.id,
+                                    label: `${cube.name} (${cube.cardCount} cards)`,
+                                  }))}
+                                />
                                 {selectedCubeId && !cubeError ? (
                                   <div className="text-xs text-slate-300/90">
                                     Packs will be generated from{" "}
@@ -1869,10 +1864,10 @@ function LobbyPageContent({
                         <label className="block text-xs font-medium mb-2">
                           Number of Packs
                         </label>
-                        <select
-                          value={draftConfig.packCount}
-                          onChange={(e) => {
-                            const nextCount = parseInt(e.target.value) || 3;
+                        <CustomSelect
+                          value={String(draftConfig.packCount)}
+                          onChange={(v) => {
+                            const nextCount = parseInt(v) || 3;
                             setDraftConfig((prev) => {
                               if (draftUseCube) {
                                 const cube =
@@ -1926,11 +1921,12 @@ function LobbyPageContent({
                               };
                             });
                           }}
-                          className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
-                        >
-                          <option value={3}>3 Packs</option>
-                          <option value={4}>4 Packs</option>
-                        </select>
+                          className="w-full"
+                          options={[
+                            { value: "3", label: "3 Packs" },
+                            { value: "4", label: "4 Packs" },
+                          ]}
+                        />
                       </div>
                       {!draftUseCube && (
                         <div>
@@ -2120,10 +2116,9 @@ function LobbyPageContent({
                                 <label className="block text-xs font-medium mb-1">
                                   Select cube
                                 </label>
-                                <select
+                                <CustomSelect
                                   value={sealedConfig.cubeId ?? ""}
-                                  onChange={(e) => {
-                                    const cubeId = e.target.value;
+                                  onChange={(cubeId) => {
                                     const cube =
                                       availableCubes.find(
                                         (c) => c.id === cubeId
@@ -2137,17 +2132,13 @@ function LobbyPageContent({
                                         : {},
                                     }));
                                   }}
-                                  className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
-                                >
-                                  <option value="" disabled>
-                                    Choose a cube…
-                                  </option>
-                                  {availableCubes.map((cube) => (
-                                    <option key={cube.id} value={cube.id}>
-                                      {cube.name} ({cube.cardCount} cards)
-                                    </option>
-                                  ))}
-                                </select>
+                                  className="w-full"
+                                  placeholder="Choose a cube…"
+                                  options={availableCubes.map((cube) => ({
+                                    value: cube.id,
+                                    label: `${cube.name} (${cube.cardCount} cards)`,
+                                  }))}
+                                />
                                 {sealedConfig.cubeId && (
                                   <div className="text-xs text-slate-300/90">
                                     Packs will be generated from{" "}

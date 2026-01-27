@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useCallback, useEffect, useState } from "react";
+import { CustomSelect } from "@/components/ui/CustomSelect";
 import { getImageSlug } from "@/lib/utils/cardSlug";
 import AddCardModal from "./AddCardModal";
 
@@ -309,33 +310,29 @@ export default function CardBrowser({ onCardAdded }: CardBrowserProps) {
           {/* Set Filter */}
           <div>
             <label className="block text-sm text-gray-400 mb-1">Set</label>
-            <select
+            <CustomSelect
               value={selectedSet}
-              onChange={(e) => setSelectedSet(e.target.value)}
-              className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              {SETS.map((set) => (
-                <option key={set} value={set}>
-                  {set}
-                </option>
-              ))}
-            </select>
+              onChange={(v) => setSelectedSet(v)}
+              className="w-full"
+              options={SETS.map((set) => ({
+                value: set,
+                label: set,
+              }))}
+            />
           </div>
 
           {/* Type Filter */}
           <div>
             <label className="block text-sm text-gray-400 mb-1">Type</label>
-            <select
+            <CustomSelect
               value={selectedType}
-              onChange={(e) => setSelectedType(e.target.value)}
-              className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              {CARD_TYPES.map((type) => (
-                <option key={type} value={type}>
-                  {type}
-                </option>
-              ))}
-            </select>
+              onChange={(v) => setSelectedType(v)}
+              className="w-full"
+              options={CARD_TYPES.map((type) => ({
+                value: type,
+                label: type,
+              }))}
+            />
           </div>
 
           {/* Subtype Filter */}
@@ -343,17 +340,15 @@ export default function CardBrowser({ onCardAdded }: CardBrowserProps) {
             <label className="block text-sm text-gray-400 mb-1">
               Subtype/Keyword
             </label>
-            <select
+            <CustomSelect
               value={selectedSubtype}
-              onChange={(e) => setSelectedSubtype(e.target.value)}
-              className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              {SUBTYPES.map((subtype) => (
-                <option key={subtype} value={subtype}>
-                  {subtype}
-                </option>
-              ))}
-            </select>
+              onChange={(v) => setSelectedSubtype(v)}
+              className="w-full"
+              options={SUBTYPES.map((subtype) => ({
+                value: subtype,
+                label: subtype,
+              }))}
+            />
           </div>
 
           {/* Clear Filters */}

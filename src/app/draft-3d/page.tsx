@@ -12,6 +12,7 @@ import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import DraggableCard3D from "@/app/decks/editor-3d/DraggableCard3D";
 import CardPreviewOverlay from "@/components/game/CardPreviewOverlay";
 import { ClientCanvas } from "@/components/game/ClientCanvas";
+import { CustomSelect } from "@/components/ui/CustomSelect";
 import { DynamicBoard as Board } from "@/components/game/dynamic-3d";
 import { NumberBadge } from "@/components/game/manacost";
 import type { Digit } from "@/components/game/manacost";
@@ -1220,22 +1221,16 @@ export default function Draft3DPage() {
               {useCube ? (
                 <label className="flex flex-col gap-1 text-white">
                   <span className="text-xs opacity-80">Select Cube</span>
-                  <select
+                  <CustomSelect
                     value={cubeId}
-                    onChange={(e) => setCubeId(e.target.value)}
+                    onChange={(v) => setCubeId(v)}
                     disabled={cubes.length === 0}
-                    className="rounded px-3 py-2 bg-black/70 text-white ring-1 ring-white/20 backdrop-blur disabled:opacity-50"
-                  >
-                    {cubes.length === 0 ? (
-                      <option value="">No cubes available</option>
-                    ) : (
-                      cubes.map((cube) => (
-                        <option key={cube.id} value={cube.id}>
-                          {cube.name}
-                        </option>
-                      ))
-                    )}
-                  </select>
+                    placeholder={cubes.length === 0 ? "No cubes available" : "Select a cube..."}
+                    options={cubes.map((cube) => ({
+                      value: cube.id,
+                      label: cube.name,
+                    }))}
+                  />
                 </label>
               ) : (
                 <div className="flex flex-wrap items-end gap-3 text-white">
@@ -1244,23 +1239,20 @@ export default function Draft3DPage() {
                       <span className="text-xs opacity-80">
                         Pack {i + 1} Set
                       </span>
-                      <select
+                      <CustomSelect
                         value={setNames[i]}
-                        onChange={(e) =>
+                        onChange={(v) =>
                           setSetNames((prev) => {
                             const next = [...prev];
-                            next[i] = e.target.value;
+                            next[i] = v;
                             return next;
                           })
                         }
-                        className="rounded px-3 py-2 bg-black/70 text-white ring-1 ring-white/20 backdrop-blur"
-                      >
-                        {DEFAULT_DRAFTABLE_SETS.map((setName) => (
-                          <option key={setName} value={setName}>
-                            {setName}
-                          </option>
-                        ))}
-                      </select>
+                        options={DEFAULT_DRAFTABLE_SETS.map((setName) => ({
+                          value: setName,
+                          label: setName,
+                        }))}
+                      />
                     </label>
                   ))}
                 </div>

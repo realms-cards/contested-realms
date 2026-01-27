@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useMemo, useState } from "react";
+import { CustomSelect } from "@/components/ui/CustomSelect";
 
 type Rarity = "Ordinary" | "Exceptional" | "Elite" | "Unique";
 type Finish = "Standard" | "Foil";
@@ -166,15 +167,15 @@ export default function SealedPage() {
       <div className="flex flex-wrap items-end gap-4">
         <label className="flex flex-col gap-1">
           <span className="text-sm opacity-80">Set</span>
-          <select
+          <CustomSelect
             value={setName}
-            onChange={(e) => setSetName(e.target.value)}
-            className="border rounded px-3 py-2 bg-transparent"
-          >
-            <option value="Alpha">Alpha</option>
-            <option value="Beta">Beta</option>
-            <option value="Arthurian Legends">Arthurian Legends</option>
-          </select>
+            onChange={(v) => setSetName(v)}
+            options={[
+              { value: "Alpha", label: "Alpha" },
+              { value: "Beta", label: "Beta" },
+              { value: "Arthurian Legends", label: "Arthurian Legends" },
+            ]}
+          />
         </label>
 
         <label className="flex flex-col gap-1">
@@ -344,15 +345,15 @@ export default function SealedPage() {
               <div className="font-semibold">{it.name}</div>
               <div className="opacity-80">{it.rarity}</div>
               <div className="flex items-center gap-2">
-                <select
+                <CustomSelect
                   value={it.zone}
-                  onChange={(e) => changeZone(key, e.target.value as Zone)}
-                  className="border rounded px-2 py-1"
-                >
-                  <option value="Spellbook">Spellbook</option>
-                  <option value="Atlas">Atlas</option>
-                  <option value="Sideboard">Sideboard</option>
-                </select>
+                  onChange={(v) => changeZone(key, v as Zone)}
+                  options={[
+                    { value: "Spellbook", label: "Spellbook" },
+                    { value: "Atlas", label: "Atlas" },
+                    { value: "Sideboard", label: "Sideboard" },
+                  ]}
+                />
                 <div className="ml-auto flex items-center gap-2">
                   <button
                     className="px-2 py-1 border rounded"

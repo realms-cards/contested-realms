@@ -2,6 +2,7 @@
 
 import { Camera, CameraOff, Mic, MicOff, RefreshCw, Settings, Video, PhoneOff, Volume2, VolumeX, Phone } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { CustomSelect } from "@/components/ui/CustomSelect";
 import { FEATURE_AUDIO_ONLY } from '@/lib/flags';
 
 // Minimal shape expected from useMatchWebRTC
@@ -233,52 +234,43 @@ export default function SeatMediaControls({
           >
             <div className="flex items-center gap-2 mb-2">
               <span className="text-[10px] uppercase tracking-wide text-white/60">Mic</span>
-              <select
-                className="flex-1 text-xs bg-slate-800 text-slate-100 rounded px-1 py-0.5"
+              <CustomSelect
+                className="flex-1"
                 value={rtc.audioDeviceId ?? ""}
-                onChange={(e) => rtc.setAudioDeviceId(e.target.value || null)}
-                title="Select microphone"
-              >
-                <option value="">Default</option>
-                {rtc.audioDevices.map((d) => (
-                  <option key={d.deviceId} value={d.deviceId}>
-                    {d.label || `Microphone ${d.deviceId.slice(0, 6)}`}
-                  </option>
-                ))}
-              </select>
+                onChange={(v) => rtc.setAudioDeviceId(v || null)}
+                placeholder="Default"
+                options={rtc.audioDevices.map((d) => ({
+                  value: d.deviceId,
+                  label: d.label || `Microphone ${d.deviceId.slice(0, 6)}`,
+                }))}
+              />
             </div>
             <div className="flex items-center gap-2">
               <span className="text-[10px] uppercase tracking-wide text-white/60">Output</span>
-              <select
-                className="flex-1 text-xs bg-slate-800 text-slate-100 rounded px-1 py-0.5"
+              <CustomSelect
+                className="flex-1"
                 value={rtc.audioOutputDeviceId ?? ""}
-                onChange={(e) => rtc.setAudioOutputDeviceId(e.target.value || null)}
-                title="Select speakers"
-              >
-                <option value="">System default</option>
-                {rtc.audioOutputDevices.map((d) => (
-                  <option key={d.deviceId} value={d.deviceId}>
-                    {d.label || `Output ${d.deviceId.slice(0, 6)}`}
-                  </option>
-                ))}
-              </select>
+                onChange={(v) => rtc.setAudioOutputDeviceId(v || null)}
+                placeholder="System default"
+                options={rtc.audioOutputDevices.map((d) => ({
+                  value: d.deviceId,
+                  label: d.label || `Output ${d.deviceId.slice(0, 6)}`,
+                }))}
+              />
             </div>
             {!FEATURE_AUDIO_ONLY && (
               <div className="flex items-center gap-2 mt-2">
                 <span className="text-[10px] uppercase tracking-wide text-white/60">Cam</span>
-                <select
-                  className="flex-1 text-xs bg-slate-800 text-slate-100 rounded px-1 py-0.5"
+                <CustomSelect
+                  className="flex-1"
                   value={rtc.videoDeviceId ?? ""}
-                  onChange={(e) => rtc.setVideoDeviceId(e.target.value || null)}
-                  title="Select camera"
-                >
-                  <option value="">Default</option>
-                  {rtc.videoDevices.map((d) => (
-                    <option key={d.deviceId} value={d.deviceId}>
-                      {d.label || `Camera ${d.deviceId.slice(0, 6)}`}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(v) => rtc.setVideoDeviceId(v || null)}
+                  placeholder="Default"
+                  options={rtc.videoDevices.map((d) => ({
+                    value: d.deviceId,
+                    label: d.label || `Camera ${d.deviceId.slice(0, 6)}`,
+                  }))}
+                />
               </div>
             )}
             <div className="flex items-center justify-end mt-2">
