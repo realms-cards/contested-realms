@@ -11,7 +11,7 @@ function json(data: unknown, status = 200): Response {
 
 export async function GET(
   _req: Request,
-  { params }: { params: Promise<{ userId: string }> }
+  { params }: { params: Promise<{ userId: string }> },
 ): Promise<Response> {
   try {
     const { userId } = await params;
@@ -22,8 +22,17 @@ export async function GET(
       select: { selectedPlaymatRef: true },
     });
 
-    if (!user) return json({ error: "User not found" }, 404);
+    if (!user) {
+      console.log("[Playmat API] User not found:", userId);
+      return json({ error: "User not found" }, 404);
+    }
 
+    console.log(
+      "[Playmat API] Returning playmat for user:",
+      userId,
+      "ref:",
+      user.selectedPlaymatRef,
+    );
     return json({
       selectedPlaymatRef: user.selectedPlaymatRef ?? null,
     });
@@ -32,8 +41,8 @@ export async function GET(
       e instanceof Error
         ? e.message
         : typeof e === "string"
-        ? e
-        : "Unknown error";
+          ? e
+          : "Unknown error";
     return json({ error: message }, 500);
   }
 }

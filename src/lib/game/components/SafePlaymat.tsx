@@ -90,7 +90,7 @@ export function SafePlaymat({
   // For custom playmats, we validate first. For default, render immediately.
   const [customValidated, setCustomValidated] = useState<boolean | null>(null);
   const [validationAttempted, setValidationAttempted] = useState<string | null>(
-    null
+    null,
   );
 
   // Validate custom playmat URLs
@@ -104,6 +104,7 @@ export function SafePlaymat({
     // Already validated this URL
     if (validationAttempted === url) return;
 
+    console.log("[SafePlaymat] Validating custom playmat URL:", url);
     setValidationAttempted(url);
     setCustomValidated(null); // Reset while validating
 
@@ -118,21 +119,17 @@ export function SafePlaymat({
       clearTimeout(timeoutId);
       img.onload = null;
       img.onerror = null;
+      console.log("[SafePlaymat] Custom playmat validated successfully:", url);
       setCustomValidated(true);
     };
 
-    img.onerror = () => {
+    img.onerror = (err) => {
       if (cancelled) return;
       cancelled = true;
       clearTimeout(timeoutId);
       img.onload = null;
       img.onerror = null;
-      if (process.env.NODE_ENV !== "production") {
-        console.warn(
-          "[SafePlaymat] Failed to load custom playmat, using default:",
-          url
-        );
-      }
+      console.warn("[SafePlaymat] Failed to load custom playmat:", url, err);
       onLoadError?.(url, new Error("Failed to load playmat image"));
       setCustomValidated(false);
     };
@@ -146,7 +143,7 @@ export function SafePlaymat({
       if (process.env.NODE_ENV !== "production") {
         console.warn(
           "[SafePlaymat] Timeout loading custom playmat, using default:",
-          url
+          url,
         );
       }
       onLoadError?.(url, new Error("Playmat load timeout"));
@@ -179,7 +176,8 @@ export function SafePlaymat({
     finalUrl = DEFAULT_PLAYMAT;
   }
 
-  return <PlaymatMesh matW={matW} matH={matH} url={finalUrl} />;
+  // Key forces React to remount PlaymatMesh when URL changes, ensuring texture updates
+  return <PlaymatMesh key={finalUrl} matW={matW} matH={matH} url={finalUrl} />;
 }
 
 export default SafePlaymat;
