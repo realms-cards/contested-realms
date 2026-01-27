@@ -25,6 +25,8 @@
 - **fix Searing Truth** server patch
 - **fix changing life not showing in console**
 - **add sounds to health gauge**
+- **fix imposter and pathfinder**
+- **add guard against more than one click when swapping sites**
 
 ### Jan 22 - Legion of Gall
 
