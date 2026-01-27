@@ -186,6 +186,19 @@ export default function Board({
   const playmatUrls = useScopedStore((s) => s.playmatUrls);
   const activePlaymatOwner = useScopedStore((s) => s.activePlaymatOwner);
   const setPlaymatUrl = useScopedStore((s) => s.setPlaymatUrl);
+
+  // Debug: log playmat state
+  useEffect(() => {
+    console.log("[Board] Playmat state:", {
+      playmatUrl,
+      playmatUrls,
+      activePlaymatOwner,
+      effectiveUrl:
+        activePlaymatOwner && playmatUrls[activePlaymatOwner]
+          ? playmatUrls[activePlaymatOwner]
+          : playmatUrl,
+    });
+  }, [playmatUrl, playmatUrls, activePlaymatOwner]);
   const allowSiteDrag = useScopedStore((s) => s.allowSiteDrag);
   const showOwnershipOverlay = useScopedStore((s) => s.showOwnershipOverlay);
   const cardScale = useScopedStore((s) => s.cardScale);
@@ -362,7 +375,12 @@ export default function Board({
     };
   }, [clearTouchTimers]);
 
+  // Fetch playmat selection for solo/hotseat mode only
+  // In online mode, the play page handles playmat fetching for both players
   useEffect(() => {
+    // Skip in online mode - play page handles this
+    if (localPlayerId) return;
+
     const controller = new AbortController();
 
     const apply = async () => {
@@ -400,7 +418,7 @@ export default function Board({
 
     void apply();
     return () => controller.abort();
-  }, [setPlaymatUrl]);
+  }, [setPlaymatUrl, localPlayerId]);
 
   // Fetch cardback selection for solo/hotseat mode (apply only to local player p2)
   const setCardbackUrls = useGameStore((s) => s.setCardbackUrls);

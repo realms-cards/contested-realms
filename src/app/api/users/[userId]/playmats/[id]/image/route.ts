@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: Promise<{ userId: string; id: string }> }
+  { params }: { params: Promise<{ userId: string; id: string }> },
 ): Promise<Response> {
   try {
     const { userId, id } = await params;
@@ -31,6 +31,7 @@ export async function GET(
         headers: {
           etag,
           "Cache-Control": "public, max-age=3600, stale-while-revalidate=86400",
+          "Access-Control-Allow-Origin": "*",
         },
       });
     }
@@ -40,6 +41,7 @@ export async function GET(
       headers: {
         "Content-Type": found.mimeType,
         "Cache-Control": "public, max-age=3600, stale-while-revalidate=86400",
+        "Access-Control-Allow-Origin": "*",
         etag,
       },
     });

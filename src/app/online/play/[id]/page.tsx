@@ -404,28 +404,47 @@ export default function OnlineMatchPage() {
       // Fetch opponent's playmat (if allowed and opponent exists)
       if (showOpponentPlaymat && opponentSeat && opponentPlayerId) {
         try {
+          console.log(
+            "[Playmat] Fetching opponent playmat for:",
+            opponentPlayerId,
+          );
           const res = await fetch(`/api/users/${opponentPlayerId}/playmats`, {
             cache: "no-store",
             signal: controller.signal,
           });
+          console.log(
+            "[Playmat] Opponent playmat response status:",
+            res.status,
+          );
           if (res.ok) {
             const data = (await res.json()) as { selectedPlaymatRef?: string };
             const ref = data.selectedPlaymatRef;
+            console.log("[Playmat] Opponent selectedPlaymatRef:", ref);
             if (ref?.startsWith("custom:")) {
               const id = ref.slice("custom:".length);
               if (id) {
-                setPlaymatUrlFor(
+                const imageUrl = `/api/users/${opponentPlayerId}/playmats/${id}/image`;
+                console.log(
+                  "[Playmat] Setting opponent playmat URL:",
+                  imageUrl,
+                  "for seat:",
                   opponentSeat,
-                  `/api/users/${opponentPlayerId}/playmats/${id}/image`,
                 );
+                setPlaymatUrlFor(opponentSeat, imageUrl);
                 // Show opponent's playmat by default when they have a custom one
                 setActivePlaymatOwner(opponentSeat);
               }
             }
           }
-        } catch {
-          // Ignore fetch errors
+        } catch (err) {
+          console.error("[Playmat] Error fetching opponent playmat:", err);
         }
+      } else {
+        console.log("[Playmat] Skipping opponent playmat fetch:", {
+          showOpponentPlaymat,
+          opponentSeat,
+          opponentPlayerId,
+        });
       }
 
       // Also set the legacy playmatUrl for own playmat (fallback)
