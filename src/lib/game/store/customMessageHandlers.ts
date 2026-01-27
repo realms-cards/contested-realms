@@ -141,7 +141,7 @@ export function handleCustomMessage(
         const seat = (rec.seat as PlayerKey | undefined) ?? undefined;
         if (seat && mySeat && seat === mySeat) {
           try {
-            get().addLife(seat, -Math.max(0, Math.floor(amt)));
+            get().addLife(seat, -Math.max(0, Math.floor(amt)), true);
           } catch {}
         }
       }
@@ -620,10 +620,11 @@ export function handleCustomMessage(
       const seat =
         seatRaw === "p1" || seatRaw === "p2" ? (seatRaw as PlayerKey) : null;
       const amt = Number(rec.amount);
+      const isAvatarDamage = rec.isAvatarDamage === true;
       if (!seat || !Number.isFinite(amt)) continue;
       if (!mySeat || seat !== mySeat) continue;
       try {
-        get().addLife(seat, -Math.max(0, Math.floor(amt)));
+        get().addLife(seat, -Math.max(0, Math.floor(amt)), isAvatarDamage);
       } catch {}
     }
     return;
@@ -4732,7 +4733,53 @@ export function handleCustomMessage(
     const actorKey = get().actorKey;
     if (actorKey === pending.ownerSeat) return;
 
-    set({ pendingPathfinderPlay: null } as Partial<GameState> as GameState);
+    const state = get();
+    const who = pending.ownerSeat;
+    const ownerNum: 1 | 2 = who === "p1" ? 1 : 2;
+
+    // Parse target cell to get avatar position
+    const [targetX, targetY] = targetCell.split(",").map(Number) as [
+      number,
+      number,
+    ];
+
+    // Place site at target cell
+    const newSites = {
+      ...state.board.sites,
+      [targetCell]: {
+        owner: ownerNum,
+        card: {
+          ...topSite,
+          instanceId:
+            topSite.instanceId ||
+            `pathfinder_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        },
+        tapped: false,
+      },
+    };
+
+    // Move and tap avatar
+    const avatar = state.avatars[who];
+    const newAvatars = avatar
+      ? {
+          ...state.avatars,
+          [who]: {
+            ...avatar,
+            pos: [targetX, targetY] as [number, number],
+            tapped: true,
+          },
+        }
+      : state.avatars;
+
+    // Mark ability as used
+    const updatedUsed = { ...state.pathfinderUsed, [who]: true };
+
+    set({
+      pendingPathfinderPlay: null,
+      board: { ...state.board, sites: newSites },
+      avatars: newAvatars,
+      pathfinderUsed: updatedUsed,
+    } as Partial<GameState> as GameState);
 
     try {
       get().log(

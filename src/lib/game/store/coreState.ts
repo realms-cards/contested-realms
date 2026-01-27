@@ -13,6 +13,7 @@ import {
 } from "./utils/patchHelpers";
 import { bumpPermanentVersion } from "./utils/permanentHelpers";
 import { phases } from "./utils/resourceHelpers";
+import { soundManager } from "@/lib/audio/soundManager";
 
 export const createInitialPlayers = (): GameState["players"] => ({
   p1: {
@@ -363,18 +364,14 @@ export const createCoreSlice: StateCreator<
     get().log(`[p${playerNum}:PLAYER] draws ${drawn.length} cards (Goldfish)`);
   },
 
-  addLife: (who, delta) =>
+  addLife: (who, delta, _isAvatarDamage) =>
     set((state) => {
       const currentLife = state.players[who]?.life ?? 20;
       const currentLifeState = state.players[who]?.lifeState ?? "alive";
       let newLife = currentLife + delta;
       let newLifeState: LifeState = currentLifeState;
 
-      // Break Imposter mask when taking damage (delta < 0)
-      if (delta < 0 && state.imposterMasks[who]) {
-        // Schedule mask break after this state update completes
-        setTimeout(() => get().breakMask(who), 0);
-      }
+      // Imposter mask breaking is manual only - no automatic triggers
 
       if (newLife > 20) {
         newLife = 20;
@@ -411,13 +408,21 @@ export const createCoreSlice: StateCreator<
         eventMessages.push(
           `[p${playerNum}:PLAYER] ${changeText} life (${currentLife} → ${newLife})`,
         );
+        // Play health change sound effect
+        if (delta > 0) {
+          soundManager.play("healthPlus");
+        } else {
+          soundManager.play("healthMinus");
+        }
       }
 
       if (currentLifeState !== newLifeState) {
         if (newLifeState === "dd") {
           eventMessages.push(`[p${playerNum}:PLAYER] enters Death's Door!`);
         } else if (newLifeState === "alive" && currentLifeState === "dd") {
-          eventMessages.push(`[p${playerNum}:PLAYER] recovers from Death's Door`);
+          eventMessages.push(
+            `[p${playerNum}:PLAYER] recovers from Death's Door`,
+          );
         } else if (newLifeState === "dead") {
           eventMessages.push(`[p${playerNum}:PLAYER] has died! Match ended.`);
         }
@@ -440,7 +445,9 @@ export const createCoreSlice: StateCreator<
       const allEvents = [...state.events, ...newEvents];
       const MAX_EVENTS = 200;
       const trimmedEvents =
-        allEvents.length > MAX_EVENTS ? allEvents.slice(-MAX_EVENTS) : allEvents;
+        allEvents.length > MAX_EVENTS
+          ? allEvents.slice(-MAX_EVENTS)
+          : allEvents;
 
       // Only send the affected player's data to avoid overwriting opponent's mana
       // Include events in the patch so they are synced to the opponent

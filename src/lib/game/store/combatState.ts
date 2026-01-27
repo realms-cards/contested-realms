@@ -854,12 +854,16 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
 
     const tr = get().transport;
     const isLocalTransport = tr?.isLocal === true;
-    const applyLifeDamage = (seat: PlayerKey, amount: number) => {
+    const applyLifeDamage = (
+      seat: PlayerKey,
+      amount: number,
+      isAvatarDamage = false,
+    ) => {
       const dmg = Math.max(0, Math.floor(Number(amount) || 0));
       if (dmg <= 0) return;
       if (!tr || isLocalTransport) {
         try {
-          get().addLife(seat, -dmg);
+          get().addLife(seat, -dmg, isAvatarDamage);
         } catch {}
         return;
       }
@@ -867,7 +871,7 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
         tr.sendMessage?.({
           type: "combatLifeDamage",
           id: pending.id,
-          damage: [{ seat, amount: dmg }],
+          damage: [{ seat, amount: dmg, isAvatarDamage }],
           ts: Date.now(),
         } as unknown as CustomMessage);
       } catch {}
@@ -1211,9 +1215,9 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
       });
     }
 
-    // Apply damage to avatar owner's life
+    // Apply damage to avatar owner's life (avatar attacking takes counter-damage)
     if (damageToAvatarOwner > 0 && pending.attacker.avatarSeat) {
-      applyLifeDamage(pending.attacker.avatarSeat, damageToAvatarOwner);
+      applyLifeDamage(pending.attacker.avatarSeat, damageToAvatarOwner, true);
     }
 
     for (const dmg of damageList) {
@@ -1277,9 +1281,9 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
 
         // Apply damage to avatar (Interrogator was already triggered at declaration time)
         if (isDD) {
-          applyLifeDamage(seat, 1);
+          applyLifeDamage(seat, 1, true);
         } else if (dmg > 0) {
-          applyLifeDamage(seat, dmg);
+          applyLifeDamage(seat, dmg, true);
         }
       }
     }

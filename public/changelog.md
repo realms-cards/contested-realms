@@ -5,7 +5,13 @@
 ### Jan 26 - User requested fixes
 
 - **add generate spectate link** from Match Info
+- **add disable to site right click menu**
 - **add custom resolvers for Sites** "Beacon" and "Annual Fair"
+- **fix opponents moving my card to my cemetery**
+- **fix patreon playmat display**
+- **fix cancelling resolver moves card to cemetery**
+- **avatar taps now when drawing a site via rightclick menu from avatar**
+- **fix discord bot challenge and queue commands**
 - **construct the tower of babel** by playing the apex on a base
 - **harden D20 roll** for first player, should handle ties better
 - **fix inspect hand follow up actions**
@@ -15,8 +21,10 @@
 - **fix interrogator overlay** will only work if combat interactions are enabled
 - **revisions and fixes for combat interactions** fix previews showing wrong attacker power, fix avatars attacking "here" on right click, fix avatar vs avatar combat
 - **remove spectators seeing resolver overlays**
-- **isolate pith imp state per instance** enabling correct resolution for multiple Imps on the board
+- **isolate pith imp state per instance** enabling correct resolution for multiple Imps on the board and correctly return card when it dies
 - **fix Searing Truth** server patch
+- **fix changing life not showing in console**
+- **add sounds to health gauge**
 
 ### Jan 22 - Legion of Gall
 

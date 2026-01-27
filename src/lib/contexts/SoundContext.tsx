@@ -19,6 +19,8 @@ export type SoundContextValue = {
   playCardShuffle: () => void;
   playPing: () => void;
   playTurnGong: () => void;
+  playHealthPlus: () => void;
+  playHealthMinus: () => void;
 };
 
 const SoundContext = React.createContext<SoundContextValue | undefined>(undefined);
@@ -80,6 +82,8 @@ export function SoundProvider({ children }: { children: React.ReactNode }) {
     playCardShuffle: () => play("cardShuffle"),
     playPing: () => play("ping"),
     playTurnGong: () => play("turnGong"),
+    playHealthPlus: () => play("healthPlus"),
+    playHealthMinus: () => play("healthMinus"),
   }), [play, setVolume, volume]);
 
   return <SoundContext.Provider value={value}>{children}</SoundContext.Provider>;

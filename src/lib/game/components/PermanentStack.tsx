@@ -1,4 +1,7 @@
 import { Text } from "@react-three/drei";
+
+// Silenced token uses the Silence spell's card art
+const SILENCE_SPELL_TEXTURE_URL = "/api/images/alp_silence_b_s";
 import type { ThreeEvent } from "@react-three/fiber";
 import { CuboidCollider, RigidBody } from "@react-three/rapier";
 import {
@@ -457,10 +460,13 @@ export function PermanentStack({
           selectedPermanent.index === idx;
         const cardType = (p.card.type || "").toLowerCase();
         const isToken = cardType.includes("token");
-        const tokenDef = isToken
-          ? TOKEN_BY_NAME[(p.card.name || "").toLowerCase()]
-          : undefined;
+        const tokenName = (p.card.name || "").toLowerCase();
+        const tokenDef = isToken ? TOKEN_BY_NAME[tokenName] : undefined;
         const tokenSiteReplace = !!tokenDef?.siteReplacement;
+        // Silenced tokens use the Silence spell card art
+        const isSilencedToken = isToken && tokenName === "silenced";
+        // Disabled tokens use the Disabled token texture
+        const isDisabledToken = isToken && tokenName === "disabled";
         const marginZ = baseMarginZ + (avatarOnThisTile ? TILE_SIZE * 0.08 : 0);
         const avatarShiftZ = avatarOnThisTile
           ? owner === 1
@@ -478,8 +484,16 @@ export function PermanentStack({
           (tokenSiteReplace ? -Math.PI / 2 : 0) +
           (p.tapped ? -Math.PI / 2 : 0) +
           (p.tilt || 0);
-        const offX = p.offset?.[0] ?? 0;
-        const offZ = p.offset?.[1] ?? 0;
+        const baseOffX = p.offset?.[0] ?? 0;
+        const baseOffZ = p.offset?.[1] ?? 0;
+        // Add offsets for silenced/disabled tokens so they don't overlap
+        const tokenOffsetX = isSilencedToken
+          ? CARD_SHORT * 0.3
+          : isDisabledToken
+            ? -CARD_SHORT * 0.3
+            : 0;
+        const offX = baseOffX + tokenOffsetX;
+        const offZ = baseOffZ;
 
         // Use instanceId for stable position state lookup (prevents state leakage on card movement)
         const permId = (p.instanceId ?? `perm:${key}:${idx}`) as string;
@@ -1244,7 +1258,28 @@ export function PermanentStack({
                   );
                 }}
               >
-                {isToken ? (
+                {isSilencedToken ? (
+                  /* Silenced token: uses Silence spell card art */
+                  <CardPlane
+                    slug=""
+                    textureUrl={SILENCE_SPELL_TEXTURE_URL}
+                    forceTextureUrl
+                    width={CARD_SHORT * 0.5}
+                    height={CARD_LONG * 0.5}
+                    rotationZ={rotZ}
+                    elevation={0}
+                    depthWrite
+                    depthTest
+                    polygonOffset
+                    polygonOffsetFactor={-1}
+                    polygonOffsetUnits={-1}
+                    renderOrder={
+                      isDraggingPermanent || isSel || isLastTouched
+                        ? 1000
+                        : 100
+                    }
+                  />
+                ) : isToken ? (
                   <CardPlane
                     slug=""
                     textureUrl={

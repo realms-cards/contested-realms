@@ -189,6 +189,7 @@ export const siteHasFloodedToken = (
 };
 
 // Check if a site has a Silenced token on it
+// NOTE: Silenced sites lose their textbox ability but STILL provide mana and threshold
 export const siteHasSilencedToken = (
   cellKey: string,
   permanents: Permanents,
@@ -198,6 +199,21 @@ export const siteHasSilencedToken = (
   for (const perm of permsAtCell) {
     const name = String(perm.card?.name || "").toLowerCase();
     if (name === "silenced") return true;
+  }
+  return false;
+};
+
+// Check if a site has a Disabled token on it
+// NOTE: Disabled sites lose their textbox ability AND provide neither mana nor threshold
+export const siteHasDisabledToken = (
+  cellKey: string,
+  permanents: Permanents,
+): boolean => {
+  const permsAtCell = permanents[cellKey];
+  if (!permsAtCell) return false;
+  for (const perm of permsAtCell) {
+    const name = String(perm.card?.name || "").toLowerCase();
+    if (name === "disabled") return true;
   }
   return false;
 };
@@ -243,9 +259,10 @@ export const computeThresholdTotals = (
       // So we don't continue here - let it fall through to normal calculation
     }
 
-    // Check if site is silenced - silenced sites provide no threshold
-    if (siteHasSilencedToken(cellKey, permanents)) {
-      continue; // Skip threshold calculation for silenced sites
+    // Check if site is disabled - disabled sites provide no threshold
+    // (Silenced sites still provide threshold, they only lose textbox abilities)
+    if (siteHasDisabledToken(cellKey, permanents)) {
+      continue; // Skip threshold calculation for disabled sites
     }
 
     // Check back-row-only sites
@@ -435,8 +452,9 @@ export const computeAvailableMana = (
     if (tile?.tapped) continue;
     if (!siteProvidesMana(tile?.card ?? null)) continue;
 
-    // Check if site is silenced - silenced sites provide no mana
-    if (siteHasSilencedToken(cellKey, permanents)) {
+    // Check if site is disabled - disabled sites provide no mana
+    // (Silenced sites still provide mana, they only lose textbox abilities)
+    if (siteHasDisabledToken(cellKey, permanents)) {
       continue;
     }
 

@@ -7,6 +7,8 @@ const SOUND_SOURCES = {
   cardShuffle: "/sounds/card-shuffle.wav",
   ping: "/sounds/ping.wav",
   turnGong: "/sounds/gong.wav",
+  healthPlus: "/sounds/healthplus.wav",
+  healthMinus: "/sounds/healthminus.wav",
 } as const;
 
 const DEFAULT_VOLUME = 0.7;

@@ -40,6 +40,10 @@ import {
   opponentOwner,
 } from "@/lib/game/store/utils/boardHelpers";
 import {
+  siteHasSilencedToken,
+  siteHasDisabledToken,
+} from "@/lib/game/store/utils/resourceHelpers";
+import {
   TOKEN_BY_NAME,
   newTokenInstanceId,
   tokenSlug,
@@ -74,6 +78,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   );
   const floodSite = useGameStore((s) => s.floodSite);
   const silenceSite = useGameStore((s) => s.silenceSite);
+  const disableSite = useGameStore((s) => s.disableSite);
   const silencePermanent = useGameStore((s) => s.silencePermanent);
   const movePermanentToZone = useGameStore((s) => s.movePermanentToZone);
   const transferSiteControl = useGameStore((s) => s.transferSiteControl);
@@ -579,7 +584,19 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
       });
     }
 
-    // Silence - place a Silenced token on this site (removes site abilities)
+    // Disable - place a Disabled token on this site (removes mana, threshold, and abilities)
+    if (site && (isMine || isActingPlayer)) {
+      extraActions.push({
+        actionId: "__disable_site__",
+        displayText: "Disable",
+        isEnabled: true,
+        targetPermanentId: "",
+        description:
+          "Place a Disabled token on this site (removes mana and threshold).",
+      });
+    }
+
+    // Silence - place a Silenced token on this site (removes textbox abilities only)
     if (site && (isMine || isActingPlayer)) {
       extraActions.push({
         actionId: "__silence_site__",
@@ -587,7 +604,32 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         isEnabled: true,
         targetPermanentId: "",
         description:
-          "Place a Silenced token on this site (removes mana and threshold).",
+          "Place a Silenced token on this site (removes textbox abilities only, still provides mana).",
+      });
+    }
+
+    // Unsilence - remove Silenced token from this site
+    const cellKey = site ? toCellKey(t.x, t.y) : "";
+    if (site && (isMine || isActingPlayer) && siteHasSilencedToken(cellKey, permanents)) {
+      extraActions.push({
+        actionId: "__unsilence_site__",
+        displayText: "Unsilence",
+        isEnabled: true,
+        targetPermanentId: "",
+        description:
+          "Remove the Silenced token from this site (banish it).",
+      });
+    }
+
+    // Undisable - remove Disabled token from this site
+    if (site && (isMine || isActingPlayer) && siteHasDisabledToken(cellKey, permanents)) {
+      extraActions.push({
+        actionId: "__undisable_site__",
+        displayText: "Undisable",
+        isEnabled: true,
+        targetPermanentId: "",
+        description:
+          "Remove the Disabled token from this site (banish it).",
       });
     }
 
@@ -2325,8 +2367,8 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                         </button>
                       );
                     }
-                    // Silence site action - place Silenced token on site
-                    if (action.actionId === "__silence_site__") {
+                    // Disable site action - place Disabled token on site
+                    if (action.actionId === "__disable_site__") {
                       return (
                         <button
                           key={action.actionId}
@@ -2334,10 +2376,89 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                           title={action.description}
                           onClick={() => {
                             if (t.kind === "site") {
+                              disableSite(t.x, t.y);
+                              try {
+                                playCardFlip();
+                              } catch {}
+                            }
+                            onClose();
+                          }}
+                        >
+                          {action.displayText}
+                        </button>
+                      );
+                    }
+                    // Silence site action - place Silenced token on site (textbox only)
+                    if (action.actionId === "__silence_site__") {
+                      return (
+                        <button
+                          key={action.actionId}
+                          className="w-full text-left rounded bg-purple-600/20 hover:bg-purple-600/30 px-3 py-1"
+                          title={action.description}
+                          onClick={() => {
+                            if (t.kind === "site") {
                               silenceSite(t.x, t.y);
                               try {
                                 playCardFlip();
                               } catch {}
+                            }
+                            onClose();
+                          }}
+                        >
+                          {action.displayText}
+                        </button>
+                      );
+                    }
+                    // Unsilence site action - remove Silenced token from site
+                    if (action.actionId === "__unsilence_site__") {
+                      return (
+                        <button
+                          key={action.actionId}
+                          className="w-full text-left rounded bg-purple-600/20 hover:bg-purple-600/30 px-3 py-1"
+                          title={action.description}
+                          onClick={() => {
+                            if (t.kind === "site") {
+                              const key = toCellKey(t.x, t.y);
+                              const perms = permanents[key] || [];
+                              // Find the silenced token index
+                              const tokenIdx = perms.findIndex(
+                                (p) => (p.card?.name || "").toLowerCase() === "silenced"
+                              );
+                              if (tokenIdx >= 0) {
+                                movePermanentToZone(key, tokenIdx, "banished");
+                                try {
+                                  playCardFlip();
+                                } catch {}
+                              }
+                            }
+                            onClose();
+                          }}
+                        >
+                          {action.displayText}
+                        </button>
+                      );
+                    }
+                    // Undisable site action - remove Disabled token from site
+                    if (action.actionId === "__undisable_site__") {
+                      return (
+                        <button
+                          key={action.actionId}
+                          className="w-full text-left rounded bg-violet-600/20 hover:bg-violet-600/30 px-3 py-1"
+                          title={action.description}
+                          onClick={() => {
+                            if (t.kind === "site") {
+                              const key = toCellKey(t.x, t.y);
+                              const perms = permanents[key] || [];
+                              // Find the disabled token index
+                              const tokenIdx = perms.findIndex(
+                                (p) => (p.card?.name || "").toLowerCase() === "disabled"
+                              );
+                              if (tokenIdx >= 0) {
+                                movePermanentToZone(key, tokenIdx, "banished");
+                                try {
+                                  playCardFlip();
+                                } catch {}
+                              }
                             }
                             onClose();
                           }}
