@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
     if (!challengerDiscordId || !challengeeDiscordId) {
       return NextResponse.json(
         { error: "challengerDiscordId and challengeeDiscordId are required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -53,14 +53,14 @@ export async function POST(request: NextRequest) {
     if (!challenger) {
       return NextResponse.json(
         { error: "Challenger has not linked their Discord account" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
     if (!challengee) {
       return NextResponse.json(
         { error: "Challenged user has not linked their Discord account" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
           error: "A pending challenge already exists",
           challengeId: existingChallenge.id,
         },
-        { status: 409 }
+        { status: 409 },
       );
     }
 
@@ -101,13 +101,15 @@ export async function POST(request: NextRequest) {
       challengerId: challenge.challengerId,
       challengeeId: challenge.challengeeId,
       format: challenge.format,
+      status: challenge.status,
+      matchId: challenge.matchId,
       expiresAt: challenge.expiresAt.toISOString(),
     });
   } catch (error) {
     console.error("[bot/challenges] Create error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

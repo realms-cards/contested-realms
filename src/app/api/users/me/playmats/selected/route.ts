@@ -13,9 +13,10 @@ function json(data: unknown, status = 200): Response {
   });
 }
 
-async function requirePatronUser(): Promise<{
+async function requireAuthenticatedUser(): Promise<{
   id: string;
   selectedPlaymatRef: string | null;
+  isPatron: boolean;
 } | null> {
   const session = await getServerAuthSession();
   if (!session?.user?.id) return null;
@@ -26,11 +27,11 @@ async function requirePatronUser(): Promise<{
   });
 
   if (!me?.id) return null;
-  if (!me.patronTier) return null;
 
   return {
     id: me.id,
     selectedPlaymatRef: me.selectedPlaymatRef ?? null,
+    isPatron: Boolean(me.patronTier),
   };
 }
 
@@ -42,34 +43,38 @@ function isValidStandardRef(ref: string): boolean {
 
 export async function GET(): Promise<Response> {
   try {
-    const me = await requirePatronUser();
-    // Return null for non-patrons/unauthenticated - client uses default playmat
+    const me = await requireAuthenticatedUser();
+    // Return null for unauthenticated - client uses default playmat
     // Using 200 instead of 401 avoids noisy console errors for regular users
     if (!me) return json({ selectedPlaymatRef: null });
+    // Return the selected playmat ref regardless of patron status
+    // If they have a custom playmat from when they were a patron, they should still see it
     return json({ selectedPlaymatRef: me.selectedPlaymatRef });
   } catch (e: unknown) {
     const message =
       e instanceof Error
         ? e.message
         : typeof e === "string"
-        ? e
-        : "Unknown error";
+          ? e
+          : "Unknown error";
     return json({ error: message }, 500);
   }
 }
 
 export async function PATCH(req: NextRequest): Promise<Response> {
   try {
-    const me = await requirePatronUser();
+    const me = await requireAuthenticatedUser();
     if (!me) return json({ error: "Unauthorized" }, 401);
+    // Require patron status to modify playmat selection
+    if (!me.isPatron) return json({ error: "Patron status required" }, 403);
 
     const body = await req.json().catch(() => ({}));
     const refRaw =
       typeof body?.selectedPlaymatRef === "string"
         ? String(body.selectedPlaymatRef).trim()
         : body?.selectedPlaymatRef === null
-        ? null
-        : undefined;
+          ? null
+          : undefined;
 
     if (typeof refRaw === "undefined") {
       return json({ error: 'Missing "selectedPlaymatRef"' }, 400);
@@ -127,8 +132,8 @@ export async function PATCH(req: NextRequest): Promise<Response> {
       e instanceof Error
         ? e.message
         : typeof e === "string"
-        ? e
-        : "Unknown error";
+          ? e
+          : "Unknown error";
     return json({ error: message }, 500);
   }
 }

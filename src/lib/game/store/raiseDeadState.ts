@@ -93,7 +93,7 @@ export const createRaiseDeadSlice: StateCreator<
     // If no minions in any graveyard, spell fizzles
     if (eligibleMinions.length === 0) {
       get().log(
-        `[${casterSeat.toUpperCase()}] Raise Dead: No minions in any graveyard`
+        `[${casterSeat.toUpperCase()}] Raise Dead: No minions in any graveyard`,
       );
       // Move spell to graveyard
       get().movePermanentToZone(spell.at, spell.index, "graveyard");
@@ -117,7 +117,7 @@ export const createRaiseDeadSlice: StateCreator<
     get().log(
       `[${casterSeat.toUpperCase()}] casts Raise Dead - ${
         eligibleMinions.length
-      } dead minion(s) found`
+      } dead minion(s) found`,
     );
 
     // Broadcast to opponent
@@ -167,7 +167,7 @@ export const createRaiseDeadSlice: StateCreator<
       (c) =>
         c.cardId === selectedMinion.cardId &&
         c.slug === selectedMinion.slug &&
-        c.name === selectedMinion.name
+        c.name === selectedMinion.name,
     );
 
     if (minionIndex !== -1) {
@@ -250,7 +250,7 @@ export const createRaiseDeadSlice: StateCreator<
     get().log(
       `[${casterSeat.toUpperCase()}] Raise Dead summons ${
         selectedMinion.name
-      } from ${fromPlayerStr} graveyard!`
+      } from ${fromPlayerStr} graveyard!`,
     );
 
     // Broadcast resolution
@@ -283,18 +283,17 @@ export const createRaiseDeadSlice: StateCreator<
     const pending = get().pendingRaiseDead;
     if (!pending) return;
 
-    const { spell, casterSeat, id } = pending;
+    const { casterSeat, id } = pending;
 
-    // User declined auto-resolve - card stays on board but nothing happens
+    // User declined auto-resolve - card stays on board for manual resolution
     // The spell is already on the board, so we just clear the pending state
-    get().log(
-      `[${casterSeat.toUpperCase()}] Raise Dead: Manual resolution chosen - spell remains on board`
-    );
-
-    // Move spell to graveyard since it's been cast (even without auto-resolve)
-    get().movePermanentToZone(spell.at, spell.index, "graveyard");
+    // (do NOT move to graveyard - that's the player's choice during manual resolution)
 
     set({ pendingRaiseDead: null } as Partial<GameState> as GameState);
+
+    get().log(
+      `[${casterSeat.toUpperCase()}] Raise Dead: Manual resolution chosen - spell remains on board`,
+    );
 
     // Broadcast cancellation
     const transport = get().transport;

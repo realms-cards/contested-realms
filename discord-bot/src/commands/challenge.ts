@@ -23,7 +23,7 @@ export const challengeCommand = {
       option
         .setName("opponent")
         .setDescription("The player you want to challenge")
-        .setRequired(true)
+        .setRequired(true),
     )
     .addStringOption((option) =>
       option
@@ -33,8 +33,8 @@ export const challengeCommand = {
         .addChoices(
           { name: "Constructed", value: "constructed" },
           { name: "Sealed", value: "sealed" },
-          { name: "Draft", value: "draft" }
-        )
+          { name: "Draft", value: "draft" },
+        ),
     ) as SlashCommandBuilder,
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -90,7 +90,7 @@ export const challengeCommand = {
         opponent.id,
         format,
         interaction.guildId || "",
-        interaction.channelId
+        interaction.channelId,
       );
 
       // Build challenge embed
@@ -98,7 +98,7 @@ export const challengeCommand = {
         .setColor(0x7c3aed)
         .setTitle("⚔️ Match Challenge!")
         .setDescription(
-          `**${interaction.user.displayName}** has challenged **${opponent.displayName}** to a ${format} match!`
+          `**${interaction.user.displayName}** has challenged **${opponent.displayName}** to a ${format} match!`,
         )
         .addFields(
           { name: "Format", value: format, inline: true },
@@ -107,7 +107,7 @@ export const challengeCommand = {
             value: `<@${interaction.user.id}>`,
             inline: true,
           },
-          { name: "Challenged", value: `<@${opponent.id}>`, inline: true }
+          { name: "Challenged", value: `<@${opponent.id}>`, inline: true },
         )
         .setFooter({ text: "Challenge expires in 5 minutes" })
         .setTimestamp();
@@ -123,7 +123,7 @@ export const challengeCommand = {
           .setCustomId(`challenge_decline:${challenge.id}`)
           .setLabel("Decline")
           .setStyle(ButtonStyle.Danger)
-          .setEmoji("❌")
+          .setEmoji("❌"),
       );
 
       const reply = await interaction.editReply({
@@ -162,7 +162,7 @@ export const challengeCommand = {
               voiceInfo = await voiceCoordinator.requestVoiceChannel(
                 match.matchId,
                 match.challenger.id,
-                match.challengee.id
+                match.challengee.id,
               );
             } catch (err) {
               console.log("[challenge] Voice channel creation skipped:", err);
@@ -172,7 +172,7 @@ export const challengeCommand = {
               .setColor(0x22c55e)
               .setTitle("✅ Challenge Accepted!")
               .setDescription(
-                `The match is ready! Click the links below to join.`
+                `The match is ready! Click the links below to join.`,
               )
               .addFields(
                 {
@@ -184,7 +184,7 @@ export const challengeCommand = {
                   name: `${opponent.displayName}'s Link`,
                   value: `[Join Match](${match.joinUrlP2})`,
                   inline: true,
-                }
+                },
               );
 
             // Add voice channel info if created
@@ -231,7 +231,7 @@ export const challengeCommand = {
             .setColor(0xef4444)
             .setTitle("❌ Challenge Declined")
             .setDescription(
-              `**${opponent.displayName}** declined the challenge.`
+              `**${opponent.displayName}** declined the challenge.`,
             );
 
           await buttonInteraction.update({
@@ -258,6 +258,19 @@ export const challengeCommand = {
       });
     } catch (err) {
       console.error("[challenge] Create failed:", err);
+
+      // Check for 409 conflict (pending challenge exists)
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      if (
+        errorMessage.includes("409") &&
+        errorMessage.includes("pending challenge")
+      ) {
+        await interaction.editReply({
+          content: `❌ You already have a pending challenge with <@${opponent.id}>. Wait for them to accept or decline, or try again after it expires (5 minutes).`,
+        });
+        return;
+      }
+
       await interaction.editReply({
         content: "❌ Failed to create challenge. Please try again.",
       });

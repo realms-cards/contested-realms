@@ -10,7 +10,7 @@ import { prisma } from "@/lib/prisma";
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   if (!validateBotAuth(request)) {
     return botAuthError();
@@ -27,14 +27,14 @@ export async function POST(
     if (!challenge) {
       return NextResponse.json(
         { error: "Challenge not found" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
     if (challenge.status !== "pending") {
       return NextResponse.json(
         { error: `Challenge already ${challenge.status}` },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -45,7 +45,7 @@ export async function POST(
       });
       return NextResponse.json(
         { error: "Challenge has expired" },
-        { status: 410 }
+        { status: 410 },
       );
     }
 
@@ -64,7 +64,7 @@ export async function POST(
     if (!challenger || !challengee) {
       return NextResponse.json(
         { error: "One or both users no longer have linked accounts" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
@@ -87,11 +87,18 @@ export async function POST(
     const joinUrlP1 = `${baseUrl}/online/lobby?join=${lobbyId}&format=${challenge.format}&discord=1`;
     const joinUrlP2 = `${baseUrl}/online/lobby?join=${lobbyId}&format=${challenge.format}&discord=1`;
 
+    // Generate join tokens for each player
+    const joinTokenP1 = randomBytes(16).toString("hex");
+    const joinTokenP2 = randomBytes(16).toString("hex");
+
     return NextResponse.json({
       matchId: lobbyId,
-      format: challenge.format,
+      lobbyId,
+      joinTokenP1,
+      joinTokenP2,
       joinUrlP1,
       joinUrlP2,
+      format: challenge.format,
       challenger: {
         id: challenger.id,
         name: challenger.name,
@@ -107,7 +114,7 @@ export async function POST(
     console.error("[bot/challenges/accept] Error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

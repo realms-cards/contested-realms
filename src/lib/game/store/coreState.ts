@@ -401,35 +401,65 @@ export const createCoreSlice: StateCreator<
         },
       };
 
-      // Only send the affected player's data to avoid overwriting opponent's mana
-      const patch: ServerPatchT = {
-        players: { [who]: newState.players[who] } as GameState["players"],
-      };
-      get().trySendPatch(patch);
+      // Build event messages for life changes
+      const eventMessages: string[] = [];
+      const playerNum = who === "p1" ? "1" : "2";
 
       if (currentLife !== newLife) {
-        const playerNum = who === "p1" ? "1" : "2";
         const changeText =
           delta > 0 ? `gains ${delta}` : `loses ${Math.abs(delta)}`;
-        get().log(
+        eventMessages.push(
           `[p${playerNum}:PLAYER] ${changeText} life (${currentLife} → ${newLife})`,
         );
       }
 
       if (currentLifeState !== newLifeState) {
-        const playerNum = who === "p1" ? "1" : "2";
         if (newLifeState === "dd") {
-          get().log(`[p${playerNum}:PLAYER] enters Death's Door!`);
+          eventMessages.push(`[p${playerNum}:PLAYER] enters Death's Door!`);
         } else if (newLifeState === "alive" && currentLifeState === "dd") {
-          get().log(`[p${playerNum}:PLAYER] recovers from Death's Door`);
+          eventMessages.push(`[p${playerNum}:PLAYER] recovers from Death's Door`);
         } else if (newLifeState === "dead") {
-          get().log(`[p${playerNum}:PLAYER] has died! Match ended.`);
+          eventMessages.push(`[p${playerNum}:PLAYER] has died! Match ended.`);
         }
       }
 
+      // Create events and include them in the patch
+      // This ensures life changes are logged even when it's not the player's turn
+      let nextEventSeq = state.eventSeq;
+      const newEvents = eventMessages.map((text) => {
+        nextEventSeq += 1;
+        return {
+          id: nextEventSeq,
+          ts: Date.now(),
+          text,
+          turn: state.turn || 1,
+          player: state.currentPlayer,
+        };
+      });
+
+      const allEvents = [...state.events, ...newEvents];
+      const MAX_EVENTS = 200;
+      const trimmedEvents =
+        allEvents.length > MAX_EVENTS ? allEvents.slice(-MAX_EVENTS) : allEvents;
+
+      // Only send the affected player's data to avoid overwriting opponent's mana
+      // Include events in the patch so they are synced to the opponent
+      const patch: ServerPatchT = {
+        players: { [who]: newState.players[who] } as GameState["players"],
+        ...(newEvents.length > 0
+          ? { events: trimmedEvents, eventSeq: nextEventSeq }
+          : {}),
+      };
+      get().trySendPatch(patch);
+
       setTimeout(() => get().checkMatchEnd(), 0);
 
-      return newState;
+      return {
+        ...newState,
+        ...(newEvents.length > 0
+          ? { events: trimmedEvents, eventSeq: nextEventSeq }
+          : {}),
+      };
     }),
 
   nextPhase: () => {

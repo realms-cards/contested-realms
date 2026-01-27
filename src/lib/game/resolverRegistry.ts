@@ -261,7 +261,7 @@ export function getAllResolverIds(): string[] {
  * Get resolvers by category.
  */
 export function getResolversByCategory(
-  category: ResolverCategory
+  category: ResolverCategory,
 ): ResolverEntry[] {
   return RESOLVER_REGISTRY.filter((r) => r.category === category);
 }
@@ -278,4 +278,30 @@ export function hasResolver(id: string): boolean {
  */
 export function getResolverCount(): number {
   return RESOLVER_REGISTRY.length;
+}
+
+/**
+ * Check if a card name has a custom resolver.
+ * Used to suppress magic guides for cards with special resolution UI.
+ */
+export function hasCustomResolver(
+  cardName: string | null | undefined,
+): boolean {
+  if (!cardName) return false;
+  const nameLower = cardName.toLowerCase();
+  return RESOLVER_REGISTRY.some((r) => {
+    // Handle multi-name entries like "Headless Haunt / Hauntless Head"
+    const names = r.cardName.toLowerCase().split(/\s*\/\s*/);
+    return names.some((n) => nameLower.includes(n) || n.includes(nameLower));
+  });
+}
+
+/**
+ * Get list of card names that have custom resolvers (for spell/minion categories only).
+ * Avatar abilities are excluded as they don't go through magic cast flow.
+ */
+export function getSpellAndMinionResolverNames(): string[] {
+  return RESOLVER_REGISTRY.filter(
+    (r) => r.category === "spell" || r.category === "minion",
+  ).map((r) => r.cardName);
 }

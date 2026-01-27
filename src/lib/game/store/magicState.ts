@@ -1,5 +1,6 @@
 import type { StateCreator } from "zustand";
 import { extractMagicTargetingHintsSync } from "@/lib/game/cardAbilities";
+import { hasCustomResolver } from "@/lib/game/resolverRegistry";
 import type { CustomMessage } from "@/lib/net/transport";
 import type { CellKey, GameState } from "./types";
 import { getCellNumber, seatFromOwner } from "./utils/boardHelpers";
@@ -23,7 +24,7 @@ export type MagicSlice = Pick<
 
 export const createMagicSlice: StateCreator<GameState, [], [], MagicSlice> = (
   set,
-  get
+  get,
 ) => ({
   pendingMagic: null,
 
@@ -61,6 +62,10 @@ export const createMagicSlice: StateCreator<GameState, [], [], MagicSlice> = (
     // NOTE: Targeting hints may not be accurate for every spell type yet.
     // See reference/SorceryRulebook.pdf for spell targeting rules.
     // Guides only show when both players have opted in (magicGuidesActive).
+
+    // Suppress guides for cards with custom resolvers - they have their own UI
+    const cardHasResolver = hasCustomResolver(spell.card?.name);
+
     set({
       pendingMagic: {
         id,
@@ -71,7 +76,7 @@ export const createMagicSlice: StateCreator<GameState, [], [], MagicSlice> = (
         status: "choosingTarget",
         hints,
         createdAt,
-        guidesSuppressed: false,
+        guidesSuppressed: cardHasResolver,
       },
     } as Partial<GameState> as GameState);
     // Prefetch rules text early to avoid delay later
@@ -81,7 +86,7 @@ export const createMagicSlice: StateCreator<GameState, [], [], MagicSlice> = (
         void (async () => {
           try {
             const res = await fetch(
-              `/api/cards/rules?name=${encodeURIComponent(cardName)}`
+              `/api/cards/rules?name=${encodeURIComponent(cardName)}`,
             );
             if (!res.ok) return;
             const data = (await res.json()) as { rulesText?: string | null };
@@ -209,7 +214,7 @@ export const createMagicSlice: StateCreator<GameState, [], [], MagicSlice> = (
         if (rulesText === null) {
           try {
             const res = await fetch(
-              `/api/cards/rules?name=${encodeURIComponent(nm)}`
+              `/api/cards/rules?name=${encodeURIComponent(nm)}`,
             );
             if (res.ok) {
               const data = (await res.json()) as { rulesText?: string | null };
@@ -265,7 +270,7 @@ export const createMagicSlice: StateCreator<GameState, [], [], MagicSlice> = (
         const fetchRulesText = async (name: string): Promise<string | null> => {
           try {
             const res = await fetch(
-              `/api/cards/rules?name=${encodeURIComponent(name)}`
+              `/api/cards/rules?name=${encodeURIComponent(name)}`,
             );
             if (!res.ok) return null;
             const data = (await res.json()) as { rulesText?: string | null };
@@ -276,7 +281,7 @@ export const createMagicSlice: StateCreator<GameState, [], [], MagicSlice> = (
         };
         const parseDamageAmount = (
           text: string | null,
-          fallback = 1
+          fallback = 1,
         ): number => {
           if (!text) return fallback;
           const m =
@@ -323,7 +328,7 @@ export const createMagicSlice: StateCreator<GameState, [], [], MagicSlice> = (
           const permanents = get().permanents;
           const checkTile = (
             tx: number,
-            ty: number
+            ty: number,
           ): {
             kind: "permanent" | "avatar";
             at: CellKey;
@@ -497,7 +502,7 @@ export const createMagicSlice: StateCreator<GameState, [], [], MagicSlice> = (
             let rulesText: string | null = null;
             try {
               const res = await fetch(
-                `/api/cards/rules?name=${encodeURIComponent(nm)}`
+                `/api/cards/rules?name=${encodeURIComponent(nm)}`,
               );
               if (res.ok) {
                 const data = (await res.json()) as {
@@ -528,7 +533,7 @@ export const createMagicSlice: StateCreator<GameState, [], [], MagicSlice> = (
       get().movePermanentToZone(
         pending.spell.at as CellKey,
         Number(pending.spell.index),
-        "hand"
+        "hand",
       );
     } catch {}
     const transport = get().transport;

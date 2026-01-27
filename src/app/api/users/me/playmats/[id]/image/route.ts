@@ -12,24 +12,21 @@ function json(data: unknown, status = 200): Response {
 
 export async function GET(
   _req: Request,
-  ctx: { params: Promise<{ id: string }> }
+  ctx: { params: Promise<{ id: string }> },
 ): Promise<Response> {
   try {
     const session = await getServerAuthSession();
     if (!session?.user?.id) return json({ error: "Unauthorized" }, 401);
 
-    const me = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { id: true, patronTier: true },
-    });
-
-    if (!me?.id || !me.patronTier) return json({ error: "Unauthorized" }, 401);
+    // Note: We don't check patronTier here - if user owns the playmat, they can view it.
+    // Patron check is only at upload time, not view time.
+    const userId = session.user.id;
 
     const { id } = await ctx.params;
     if (!id) return json({ error: "Missing id" }, 400);
 
     const found = await prisma.customPlaymat.findFirst({
-      where: { id, userId: me.id },
+      where: { id, userId },
       select: { data: true, mimeType: true, updatedAt: true },
     });
 
@@ -58,8 +55,8 @@ export async function GET(
       e instanceof Error
         ? e.message
         : typeof e === "string"
-        ? e
-        : "Unknown error";
+          ? e
+          : "Unknown error";
     return json({ error: message }, 500);
   }
 }
