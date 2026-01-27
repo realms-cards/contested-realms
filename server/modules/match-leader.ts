@@ -1299,6 +1299,16 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
             ? (patchRecord.__allowZoneSeats as string[])
             : [];
 
+          // DEBUG: Log zone update handling
+          console.log("[match-leader] Zone update received:", {
+            matchId,
+            actorSeat,
+            incomingZoneKeys: Object.keys(incomingZones),
+            allowedZoneSeats,
+            hasP1: "p1" in incomingZones,
+            hasP2: "p2" in incomingZones,
+          });
+
           // Only allow actor to update their own zones, or zones explicitly allowed via __allowZoneSeats
           if (
             isRecord(incomingZones) &&

@@ -560,6 +560,16 @@ export const createPermanentMovementSlice: StateCreator<
             Array.from(affectedSeats);
         }
       }
+      // DEBUG: Log patch being sent for zone updates
+      if (patch.zones) {
+        console.log("[movePermanentToZone] Sending patch with zones:", {
+          zoneKeys: Object.keys(patch.zones),
+          allowZoneSeats: (patch as Record<string, unknown>).__allowZoneSeats,
+          affectedSeats: Array.from(affectedSeats),
+          ownerSeat: owner,
+          actorKey: state.actorKey,
+        });
+      }
       if (Object.keys(patch).length > 0) get().trySendPatch(patch);
 
       // Cleanup for special minions/artifacts leaving the realm
