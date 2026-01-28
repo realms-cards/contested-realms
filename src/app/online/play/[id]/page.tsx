@@ -1436,14 +1436,18 @@ export default function OnlineMatchPage() {
         const detail = await res.json();
         const list: Array<{ cardId: string; quantity: number }> | undefined =
           detail?.viewerDeck;
+        const sideboardList:
+          | Array<{ cardId: string; quantity: number }>
+          | undefined = detail?.viewerSideboard;
         if (!Array.isArray(list) || list.length === 0) return;
 
+        // Collect all card IDs from both deck and sideboard
+        const allIds = [
+          ...list.map((entry) => Number(entry.cardId)),
+          ...(sideboardList || []).map((entry) => Number(entry.cardId)),
+        ];
         const ids = Array.from(
-          new Set(
-            list
-              .map((entry) => Number(entry.cardId))
-              .filter((n) => Number.isFinite(n) && n > 0),
-          ),
+          new Set(allIds.filter((n) => Number.isFinite(n) && n > 0)),
         );
         if (ids.length === 0) return;
 
@@ -1535,7 +1539,37 @@ export default function OnlineMatchPage() {
           }
         }
 
-        console.log("[match] Built deck with", deck.length, "cards");
+        // Add sideboard cards as collection (per limited rules: unplayed cards in card pool)
+        if (Array.isArray(sideboardList) && sideboardList.length > 0) {
+          for (const entry of sideboardList) {
+            const idNum = Number(entry.cardId);
+            const meta = byId.get(idNum);
+            if (!meta) continue;
+            const quantity = Math.max(1, Number(entry.quantity) || 0);
+            for (let i = 0; i < quantity; i++) {
+              deck.push({
+                id: String(idNum),
+                cardId: idNum,
+                name: meta.name,
+                slug: meta.slug,
+                set: meta.setName,
+                type: meta.type || "",
+                subTypes: meta.subTypes || null,
+                thresholds: meta.thresholds || null,
+                zone: "collection",
+              });
+            }
+          }
+          console.log(
+            `[match] Added ${sideboardList.reduce((sum, e) => sum + (Number(e.quantity) || 1), 0)} sideboard cards as collection`,
+          );
+        }
+
+        console.log(
+          "[match] Built deck with",
+          deck.length,
+          "cards (including collection)",
+        );
         if (cancelled) return;
         if (deck.length === 0) {
           // Graceful, bounded retry to handle brief propagation delays
