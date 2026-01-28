@@ -2016,6 +2016,7 @@ export type GameState = {
   gridColor: "white" | "black";
   gridBlend: "normal" | "subtract";
   allowSiteDrag: boolean;
+  autoTapOnMove: boolean;
   showOwnershipOverlay: boolean;
   cardScale: number; // Scale factor for cards on board (0.25 to 1)
   draggingSite: {
@@ -2036,6 +2037,7 @@ export type GameState = {
   setGridBlend: (blend: "normal" | "subtract") => void;
   togglePlaymatOverlay: () => void;
   toggleAllowSiteDrag: () => void;
+  toggleAutoTapOnMove: () => void;
   toggleOwnershipOverlay: () => void;
   setCardScale: (scale: number) => void;
   setDraggingSite: (
