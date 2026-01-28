@@ -6,6 +6,9 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
+# Copy scripts before npm ci so postinstall can find fetch-ktx2-transcoder.js
+COPY scripts/ ./scripts/
+
 # Install dependencies
 RUN npm ci --only=production
 

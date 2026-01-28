@@ -9,6 +9,9 @@ RUN apk add --no-cache libc6-compat
 # Copy package files first for layer caching
 COPY package.json package-lock.json ./
 
+# Copy scripts before npm ci so postinstall can find fetch-ktx2-transcoder.js
+COPY scripts ./scripts
+
 # Install all dependencies (including devDeps for build)
 RUN npm ci
 
