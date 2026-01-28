@@ -51,43 +51,43 @@ export function createSocketRateLimits(): SocketRateLimits {
   // Chat: 5 messages per 10 seconds, burst 5
   const chatCapacity = parseInt(
     process.env.RATE_LIMIT_CHAT_CAPACITY ?? "5",
-    10
+    10,
   );
   const chatRefillRate = parseInt(
     process.env.RATE_LIMIT_CHAT_REFILL ?? "5",
-    10
+    10,
   );
   const chatInterval = parseInt(
     process.env.RATE_LIMIT_CHAT_INTERVAL ?? "10000",
-    10
+    10,
   );
 
   // Cursor: 30 updates per second, burst 30
   const cursorCapacity = parseInt(
     process.env.RATE_LIMIT_CURSOR_CAPACITY ?? "30",
-    10
+    10,
   );
   const cursorRefillRate = parseInt(
     process.env.RATE_LIMIT_CURSOR_REFILL ?? "30",
-    10
+    10,
   );
   const cursorInterval = parseInt(
     process.env.RATE_LIMIT_CURSOR_INTERVAL ?? "1000",
-    10
+    10,
   );
 
   // Generic message: 50 per 10 seconds, burst 50
   const messageCapacity = parseInt(
     process.env.RATE_LIMIT_MESSAGE_CAPACITY ?? "50",
-    10
+    10,
   );
   const messageRefillRate = parseInt(
     process.env.RATE_LIMIT_MESSAGE_REFILL ?? "50",
-    10
+    10,
   );
   const messageInterval = parseInt(
     process.env.RATE_LIMIT_MESSAGE_INTERVAL ?? "10000",
-    10
+    10,
   );
 
   return {
@@ -146,18 +146,18 @@ interface UserConnectionLimit {
 
 const userConnectionLimits = new Map<string, UserConnectionLimit>();
 
-// Default: 5 connections per 30 seconds, burst 5
+// Default: 20 connections per 30 seconds, burst 20 (increased for dev with hot reload)
 const CONNECTION_CAPACITY = parseInt(
-  process.env.RATE_LIMIT_CONN_CAPACITY ?? "5",
-  10
+  process.env.RATE_LIMIT_CONN_CAPACITY ?? "20",
+  10,
 );
 const CONNECTION_REFILL_RATE = parseInt(
-  process.env.RATE_LIMIT_CONN_REFILL ?? "2",
-  10
+  process.env.RATE_LIMIT_CONN_REFILL ?? "5",
+  10,
 );
 const CONNECTION_INTERVAL = parseInt(
   process.env.RATE_LIMIT_CONN_INTERVAL ?? "30000",
-  10
+  10,
 );
 const WARNING_COOLDOWN_MS = 60000; // Only log warning once per minute per user
 
@@ -191,7 +191,7 @@ export function checkUserConnectionLimit(userId: string): {
   // Rate limited - calculate wait time
   const waitMs = Math.ceil(
     (limit.bucket.refillInterval / limit.bucket.refillRate) *
-      (1 - limit.bucket.tokens)
+      (1 - limit.bucket.tokens),
   );
 
   // Log warning (with cooldown to prevent log spam)
@@ -202,7 +202,7 @@ export function checkUserConnectionLimit(userId: string): {
     console.warn(
       `[rate-limit] User ${userId} connection rate limited (attempt #${
         limit.warningCount
-      }, wait ${Math.round(waitMs / 1000)}s)`
+      }, wait ${Math.round(waitMs / 1000)}s)`,
     );
   }
 

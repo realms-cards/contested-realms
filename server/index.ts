@@ -574,6 +574,10 @@ const rtcParticipants: Map<string, Set<string>> = new Map();
 const participantDetails: Map<string, VoiceParticipant> = new Map();
 const pendingVoiceRequests: Map<string, PendingVoiceRequest> = new Map();
 
+// Short-lived cache for user names to avoid excessive DB queries during rapid reconnects
+const USER_NAME_CACHE_TTL_MS = 30000; // 30 seconds
+const userNameCache = new Map<string, { name: string; ts: number }>();
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Redis State Manager (Horizontal Scaling)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2196,13 +2200,38 @@ io.on("connection", async (socket: SocketClient) => {
         ? payload.displayName
         : "";
     let displayName = (rawName.trim() || "Player").slice(0, 40);
-    if (authUser && authUser.name) {
-      displayName = String(authUser.name).slice(0, 40);
-    }
     const providedId =
       payload && payload.playerId ? String(payload.playerId) : null;
     const tokenId = authUser && authUser.id ? String(authUser.id) : null;
     const playerId = tokenId || providedId || rid("p");
+
+    // Fetch the latest name from the database for authenticated users
+    // Uses a short-lived cache (30s) to avoid excessive DB queries during rapid reconnects
+    // This ensures profile name changes are reflected without JWT refresh
+    if (tokenId) {
+      const cached = userNameCache.get(tokenId);
+      if (cached && Date.now() - cached.ts < USER_NAME_CACHE_TTL_MS) {
+        displayName = cached.name;
+      } else {
+        try {
+          const dbUser = await prisma.user.findUnique({
+            where: { id: tokenId },
+            select: { name: true },
+          });
+          if (dbUser?.name) {
+            displayName = String(dbUser.name).slice(0, 40);
+            userNameCache.set(tokenId, { name: displayName, ts: Date.now() });
+          }
+        } catch {
+          // Fallback to JWT name if DB lookup fails
+          if (authUser && authUser.name) {
+            displayName = String(authUser.name).slice(0, 40);
+          }
+        }
+      }
+    } else if (authUser && authUser.name) {
+      displayName = String(authUser.name).slice(0, 40);
+    }
 
     // Per-user connection rate limiting - prevents outlier users from spamming
     const connLimit = checkUserConnectionLimit(playerId);
@@ -2365,6 +2394,56 @@ io.on("connection", async (socket: SocketClient) => {
         }
       } catch {}
     }
+  });
+
+  // --- Update display name (after profile save) ---
+  socket.on("updateDisplayName", async (payload?: { displayName?: string }) => {
+    if (!authed) return;
+    const playerId = playerIdBySocket.get(socket.id);
+    if (!playerId) return;
+
+    const newName = payload?.displayName;
+    if (typeof newName !== "string" || !newName.trim()) return;
+
+    const sanitizedName = newName.trim().slice(0, 40);
+
+    // Invalidate name cache so next hello fetches fresh from DB
+    userNameCache.delete(playerId);
+
+    // Update in player registry or local map
+    if (REDIS_STATE_ENABLED) {
+      const player = await playerRegistry.getPlayer(playerId);
+      if (player) {
+        player.displayName = sanitizedName;
+        await redisState.setPlayerState(playerId, {
+          displayName: sanitizedName,
+          lastSeen: Date.now(),
+        });
+      }
+    } else {
+      const player = players.get(playerId);
+      if (player) {
+        player.displayName = sanitizedName;
+      }
+      // Update Redis cache for cross-instance lookups
+      try {
+        if (storeRedis) {
+          await storeRedis.hset(`player:${playerId}`, {
+            displayName: sanitizedName,
+          });
+        }
+      } catch {}
+    }
+
+    console.log(
+      `[auth] displayName updated for ${playerId}: "${sanitizedName}"`,
+    );
+
+    // Broadcast updated player list to all clients
+    broadcastPlayers();
+
+    // Ack the update
+    socket.emit("displayNameUpdated", { displayName: sanitizedName });
   });
 
   // --- Tournament Draft session rooms + presence ---

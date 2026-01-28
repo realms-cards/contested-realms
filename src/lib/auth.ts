@@ -19,7 +19,7 @@ import { prisma } from "@/lib/prisma";
 
 // Build providers list, always include Discord and optionally 2FA test provider
 function parseCookies(
-  header: string | null | undefined
+  header: string | null | undefined,
 ): Record<string, string> {
   const out: Record<string, string> = {};
   if (!header) return out;
@@ -39,7 +39,7 @@ function b64urlToBuffer(b64url: string): Buffer {
 }
 
 function parseTransportsCsv(
-  csv: string | null | undefined
+  csv: string | null | undefined,
 ): AuthenticatorTransportFuture[] | undefined {
   if (!csv) return undefined;
   const valid: AuthenticatorTransportFuture[] = [
@@ -115,14 +115,14 @@ const emailServer = process.env.EMAIL_SERVER;
 if (!emailFrom || !emailServer) {
   if (process.env.NODE_ENV !== "production") {
     console.warn(
-      "EMAIL_FROM and EMAIL_SERVER are not fully configured; email magic links will be disabled."
+      "EMAIL_FROM and EMAIL_SERVER are not fully configured; email magic links will be disabled.",
     );
   }
 }
 
 function buildConfirmMagicLink(
   originalUrl: string,
-  identifier: string
+  identifier: string,
 ): string {
   try {
     const base = new URL(originalUrl);
@@ -403,7 +403,7 @@ const providers = [
 
               // Find matching test user
               const testUser = testUsers.find(
-                (user) => user.code === submitted
+                (user) => user.code === submitted,
               );
               if (!testUser) {
                 return null;
@@ -521,7 +521,7 @@ export const authOptions: NextAuthOptions = {
               token.email = null;
             }
             const safeImage = sanitizeUserImage(
-              user.image as string | null | undefined
+              user.image as string | null | undefined,
             );
             (token as Record<string, unknown>).picture = safeImage ?? null;
             const userEmailVerified = (user as { emailVerified?: Date | null })

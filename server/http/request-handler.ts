@@ -21,38 +21,38 @@ export interface RequestHandlerDeps {
     emitTournamentUpdate: (
       io: import("socket.io").Server,
       tournamentId: string,
-      data: AnyRecord
+      data: AnyRecord,
     ) => void;
     emitPhaseChanged: (
       io: import("socket.io").Server,
       tournamentId: string,
       newPhase: string,
-      additionalData?: AnyRecord
+      additionalData?: AnyRecord,
     ) => void;
     emitRoundStarted: (
       io: import("socket.io").Server,
       tournamentId: string,
       roundNumber: number,
-      matches: unknown
+      matches: unknown,
     ) => void;
     emitPlayerJoined: (
       io: import("socket.io").Server,
       tournamentId: string,
       playerId: string | undefined,
       playerName: string | undefined,
-      currentPlayerCount: number | undefined
+      currentPlayerCount: number | undefined,
     ) => void;
     emitPlayerLeft: (
       io: import("socket.io").Server,
       tournamentId: string,
       playerId: string | undefined,
       playerName: string | undefined,
-      currentPlayerCount: number | undefined
+      currentPlayerCount: number | undefined,
     ) => void;
     emitDraftReady: (
       io: import("socket.io").Server,
       tournamentId: string,
-      payload: AnyRecord
+      payload: AnyRecord,
     ) => void;
     emitPreparationUpdate: (
       io: import("socket.io").Server,
@@ -61,12 +61,12 @@ export interface RequestHandlerDeps {
       preparationStatus: string | undefined,
       readyPlayerCount: number | undefined,
       totalPlayerCount: number | undefined,
-      deckSubmitted?: boolean | undefined
+      deckSubmitted?: boolean | undefined,
     ) => void;
     emitStatisticsUpdate: (
       io: import("socket.io").Server,
       tournamentId: string,
-      statistics: AnyRecord
+      statistics: AnyRecord,
     ) => void;
   };
   normalizeTournamentBroadcastData: (input: unknown) => AnyRecord;
@@ -127,13 +127,13 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
 
   function allowCorsForOptions(
     res: ServerResponse,
-    reqOrigin: string | null
+    reqOrigin: string | null,
   ): void {
     allowCors(res, reqOrigin);
     res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
     res.setHeader(
       "Access-Control-Allow-Headers",
-      "Content-Type, Authorization"
+      "Content-Type, Authorization",
     );
   }
 
@@ -172,7 +172,7 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
 
   return async function handleRequest(
     req: IncomingMessage,
-    res: ServerResponse
+    res: ServerResponse,
   ): Promise<void> {
     try {
       const reqOrigin = (req && req.headers && req.headers.origin) || null;
@@ -258,7 +258,7 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
         } catch (err) {
           console.error(
             "[http] /admin/scaling/health error:",
-            safeErrorMessage(err)
+            safeErrorMessage(err),
           );
           res.statusCode = 500;
           res.setHeader("Content-Type", "application/json");
@@ -266,7 +266,7 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
             JSON.stringify({
               error: "Failed to get scaling health",
               details: String(safeErrorMessage(err)),
-            })
+            }),
           );
         }
         return;
@@ -282,7 +282,7 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
         res.statusCode = 200;
         res.setHeader(
           "Content-Type",
-          "text/plain; version=0.0.4; charset=utf-8"
+          "text/plain; version=0.0.4; charset=utf-8",
         );
         res.end(text);
         return;
@@ -323,7 +323,7 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
         const limitRaw = Number(u.searchParams.get("limit") || 100);
         const limit = Math.max(
           1,
-          Math.min(100, Number.isFinite(limitRaw) ? limitRaw : 100)
+          Math.min(100, Number.isFinite(limitRaw) ? limitRaw : 100),
         );
         let offset = Number(u.searchParams.get("cursor") || 0);
         if (!Number.isFinite(offset) || offset < 0) offset = 0;
@@ -335,7 +335,7 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
           if (match && process.env.NEXTAUTH_SECRET) {
             const payload = jwt.verify(
               match[1],
-              process.env.NEXTAUTH_SECRET
+              process.env.NEXTAUTH_SECRET,
             ) as NextAuthJwtPayload;
             requesterId =
               (payload && payload.userId && String(payload.userId)) ||
@@ -351,7 +351,7 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
           console.info(
             `[http] GET /players/available q="${qRaw}" sort=${sort} limit=${limit} cursor=${offset} requester=${
               requesterId ? String(requesterId).slice(-6) : "anon"
-            }`
+            }`,
           );
         } catch {
           // Ignore logging errors
@@ -378,10 +378,12 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
         const ids = candidates.map((c) => c.id);
         // Fetch users who are publicly visible (presenceHidden: false)
         // OR the requester themselves (so they always see themselves in the list)
+        // Also fetch `name` to ensure we always show the latest display name from DB
         const publicUsers: Array<{
           id: string;
           shortId: string | null;
           image: string | null;
+          name: string | null;
         }> =
           ids.length > 0
             ? await prisma.user.findMany({
@@ -393,7 +395,7 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
                     ...(requesterId ? [{ id: requesterId }] : []),
                   ],
                 },
-                select: { id: true, shortId: true, image: true },
+                select: { id: true, shortId: true, image: true, name: true },
               })
             : [];
         // Debug: Also fetch requester's presenceHidden status to verify
@@ -415,11 +417,16 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
             requesterId?.slice(-6) || "anon"
           } requesterHidden=${requesterHidden} candidates=${
             candidates.length
-          } publicUsers=${publicUsers.length} visible_ids=${debugHiddenStatus}`
+          } publicUsers=${publicUsers.length} visible_ids=${debugHiddenStatus}`,
         );
         const publicMap = new Map<
           string,
-          { id: string; shortId: string | null; image: string | null }
+          {
+            id: string;
+            shortId: string | null;
+            image: string | null;
+            name: string | null;
+          }
         >(publicUsers.map((user) => [user.id, user]));
         const visible = candidates.filter((c) => publicMap.has(c.id));
 
@@ -435,8 +442,8 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
             });
           friendSet = new Set(
             friendships.map(
-              (entry: { targetUserId: string }) => entry.targetUserId
-            )
+              (entry: { targetUserId: string }) => entry.targetUserId,
+            ),
           );
         }
 
@@ -463,8 +470,8 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
               const arr = Array.isArray(raw)
                 ? raw
                 : typeof raw === "string"
-                ? JSON.parse(raw)
-                : [];
+                  ? JSON.parse(raw)
+                  : [];
               if (Array.isArray(arr)) {
                 for (const info of arr) {
                   if (!info || typeof info !== "object") continue;
@@ -508,6 +515,7 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
                 id: string;
                 shortId: string | null;
                 image: string | null;
+                name: string | null;
               }
             | undefined;
           const matchCount = freq.has(candidate.id)
@@ -522,10 +530,16 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
           const location = candidate.inMatch
             ? "match"
             : player?.location || null;
+          // Use DB name (always fresh) instead of cached displayName
+          const displayName = (
+            user?.name ||
+            candidate.displayName ||
+            "Player"
+          ).slice(0, 40);
           return {
             userId: candidate.id,
             shortUserId: (user && user.shortId) || candidate.id.slice(-8),
-            displayName: candidate.displayName,
+            displayName,
             avatarUrl: (user && user.image) || null,
             presence: { online: true, inMatch: candidate.inMatch, location },
             isFriend: requesterId ? friendSet.has(candidate.id) : false,
@@ -536,7 +550,7 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
 
         const alphaSort = (
           a: { displayName: string; userId: string },
-          b: { displayName: string; userId: string }
+          b: { displayName: string; userId: string },
         ): number => {
           const an = (a.displayName || "").toLowerCase();
           const bn = (b.displayName || "").toLowerCase();
@@ -552,7 +566,7 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
           const groupA = items.filter(
             (item) =>
               typeof item.matchCountInLast10 === "number" &&
-              (item.matchCountInLast10 || 0) > 0
+              (item.matchCountInLast10 || 0) > 0,
           );
           const groupB = items.filter((item) => !groupA.includes(item));
           groupA.sort((x, y) => {
@@ -599,12 +613,12 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
               throw new Error(
                 `Missing or invalid event${
                   typeof rawEvent === "string" ? `: ${rawEvent}` : ""
-                }`
+                }`,
               );
             }
 
             const data = normalizeTournamentBroadcastData(
-              (parsed && (parsed.data ?? parsed.payload)) as unknown
+              (parsed && (parsed.data ?? parsed.payload)) as unknown,
             );
 
             switch (event) {
@@ -628,7 +642,7 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
                     deps.io,
                     tournamentId,
                     newPhase,
-                    additionalData
+                    additionalData,
                   );
                 }
                 break;
@@ -644,7 +658,7 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
                     deps.io,
                     tournamentId,
                     roundNumber,
-                    matchesPayload
+                    matchesPayload,
                   );
                 }
                 break;
@@ -662,7 +676,7 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
                     tournamentId,
                     playerId,
                     playerName,
-                    currentPlayerCount
+                    currentPlayerCount,
                   );
                 }
                 break;
@@ -680,7 +694,7 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
                     tournamentId,
                     playerId,
                     playerName,
-                    currentPlayerCount
+                    currentPlayerCount,
                   );
                 }
                 break;
@@ -693,7 +707,7 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
                   tournamentBroadcast.emitDraftReady(
                     deps.io,
                     tournamentId,
-                    rest
+                    rest,
                   );
                 }
                 break;
@@ -719,7 +733,7 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
                     preparationStatus,
                     readyPlayerCount,
                     totalPlayerCount,
-                    deckSubmitted
+                    deckSubmitted,
                   );
                 }
                 break;
@@ -730,7 +744,7 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
                   tournamentBroadcast.emitStatisticsUpdate(
                     deps.io,
                     tournamentId,
-                    data
+                    data,
                   );
                 }
                 break;
@@ -786,7 +800,7 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
                     const reason =
                       toOptionalString(data.reason) ?? "unknown_reason";
                     console.log(
-                      `[Match] Ended match ${matchId} due to ${reason}`
+                      `[Match] Ended match ${matchId} due to ${reason}`,
                     );
                   }
                 }
@@ -803,7 +817,7 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
           } catch (err) {
             console.error(
               "[Tournament] Broadcast error:",
-              safeErrorMessage(err)
+              safeErrorMessage(err),
             );
             try {
               metricsInc("http.tournament.broadcast.error", 1);
@@ -814,7 +828,7 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
                 JSON.stringify({
                   error: "Invalid request",
                   details: String(safeErrorMessage(err)),
-                })
+                }),
               );
             }
           }
@@ -924,7 +938,7 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
               JSON.stringify({
                 matches: activeMatches,
                 total: activeMatches.length,
-              })
+              }),
             );
           }
         } catch (err) {
@@ -933,7 +947,7 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
             res.statusCode = 500;
             res.setHeader("Content-Type", "application/json");
             res.end(
-              JSON.stringify({ error: "Failed to fetch active matches" })
+              JSON.stringify({ error: "Failed to fetch active matches" }),
             );
           }
         }
@@ -996,7 +1010,7 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
               reason = "deaths_door_timeout";
               message = "Match ended: Player 1 was on Death's Door";
               console.log(
-                `[Admin] Match ${matchId}: P1 on Death's Door, P2 wins`
+                `[Admin] Match ${matchId}: P1 on Death's Door, P2 wins`,
               );
             } else if (p2LifeState === "dd" && p1LifeState !== "dd") {
               // P2 is on Death's Door, P1 wins
@@ -1005,14 +1019,14 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
               reason = "deaths_door_timeout";
               message = "Match ended: Player 2 was on Death's Door";
               console.log(
-                `[Admin] Match ${matchId}: P2 on Death's Door, P1 wins`
+                `[Admin] Match ${matchId}: P2 on Death's Door, P1 wins`,
               );
             } else if (p1LifeState === "dd" && p2LifeState === "dd") {
               // Both on Death's Door - it's a draw
               reason = "deaths_door_draw";
               message = "Match ended: Both players were on Death's Door (draw)";
               console.log(
-                `[Admin] Match ${matchId}: Both on Death's Door, draw`
+                `[Admin] Match ${matchId}: Both on Death's Door, draw`,
               );
             }
 
@@ -1047,7 +1061,7 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
             console.log(
               `[Admin] Cleaned up match ${matchId}${
                 winnerId ? ` (winner: ${winnerId})` : ""
-              }`
+              }`,
             );
 
             if (!res.writableEnded) {
@@ -1058,7 +1072,7 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
           } catch (err) {
             console.error(
               "[http] /matches/cleanup error:",
-              safeErrorMessage(err)
+              safeErrorMessage(err),
             );
             if (!res.writableEnded) {
               res.statusCode = 500;
@@ -1082,13 +1096,13 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
             JSON.stringify({
               error: "internal_error",
               message: String(safeErrorMessage(e)),
-            })
+            }),
           );
         } catch {}
       } else {
         console.error(
           "[http] Error after response ended:",
-          safeErrorMessage(e)
+          safeErrorMessage(e),
         );
       }
     }
