@@ -379,7 +379,11 @@ export const createPlayActionsSlice: StateCreator<
 
         // Check for Rubble tokens on this tile and auto-banish them
         let permanentsNext = state.permanents;
-        const rubbleBanished: { owner: 1 | 2; card: CardRef; instanceId: string }[] = [];
+        const rubbleBanished: {
+          owner: 1 | 2;
+          card: CardRef;
+          instanceId: string;
+        }[] = [];
         const cellPerms = state.permanents[key] || [];
         if (cellPerms.length > 0) {
           const rubbleIndices: number[] = [];
@@ -476,7 +480,9 @@ export const createPlayActionsSlice: StateCreator<
           const zonePatch = createZonesPatchFor(zonesNext, who);
           // Also include opponent zones if rubble was banished from them
           const affectedSeats = new Set([who]);
-          rubbleBanished.forEach((rb) => affectedSeats.add(seatFromOwner(rb.owner)));
+          rubbleBanished.forEach((rb) =>
+            affectedSeats.add(seatFromOwner(rb.owner)),
+          );
           let combinedZonePatch = zonePatch;
           affectedSeats.forEach((seat) => {
             if (seat !== who) {
@@ -504,11 +510,15 @@ export const createPlayActionsSlice: StateCreator<
             }
             // Fallback to full cell state if delta patch failed
             if (!permanentsPatch) {
-              permanentsPatch = { [key]: permanentsNext[key] || [] } as ServerPatchT["permanents"];
+              permanentsPatch = {
+                [key]: permanentsNext[key] || [],
+              } as ServerPatchT["permanents"];
             }
           }
           const patch: ServerPatchT = {
-            ...(combinedZonePatch?.zones ? { zones: combinedZonePatch.zones } : {}),
+            ...(combinedZonePatch?.zones
+              ? { zones: combinedZonePatch.zones }
+              : {}),
             board: { ...state.board, sites } as GameState["board"],
             ...(permanentsPatch ? { permanents: permanentsPatch } : {}),
           };
@@ -578,6 +588,7 @@ export const createPlayActionsSlice: StateCreator<
         version: 0,
         instanceId: cardWithId.instanceId ?? newPermanentInstanceId(),
         faceDown: isFaceDown || undefined,
+        enteredOnTurn: state.turn, // Track when this permanent entered (for Savior ward ability)
       });
       // Reset dragFaceDown after use
       if (isFaceDown) {
@@ -1366,6 +1377,7 @@ export const createPlayActionsSlice: StateCreator<
         version: 0,
         instanceId: cardWithId.instanceId ?? newPermanentInstanceId(),
         faceDown: isFaceDown || undefined,
+        enteredOnTurn: state.turn, // Track when this permanent entered (for Savior ward ability)
       });
       // Reset dragFaceDown after use
       if (isFaceDown) {

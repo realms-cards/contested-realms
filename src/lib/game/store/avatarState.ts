@@ -21,7 +21,7 @@ type AvatarSlice = Pick<
 
 export const createAvatarSlice: StateCreator<GameState, [], [], AvatarSlice> = (
   set,
-  get
+  get,
 ) => ({
   avatars: createDefaultAvatars(),
 
@@ -29,7 +29,7 @@ export const createAvatarSlice: StateCreator<GameState, [], [], AvatarSlice> = (
     set((state) => {
       const playerNum = who === "p1" ? "1" : "2";
       get().log(
-        `[p${playerNum}:PLAYER] sets Avatar to [p${playerNum}card:${card.name}]`
+        `[p${playerNum}:PLAYER] sets Avatar to [p${playerNum}card:${card.name}]`,
       );
       const avatarsNext = {
         ...state.avatars,
@@ -50,7 +50,7 @@ export const createAvatarSlice: StateCreator<GameState, [], [], AvatarSlice> = (
       if (champion) {
         const playerNum = who === "p1" ? "1" : "2";
         get().log(
-          `[p${playerNum}:PLAYER] sets Dragonlord Champion to [p${playerNum}card:${champion.name}]`
+          `[p${playerNum}:PLAYER] sets Dragonlord Champion to [p${playerNum}card:${champion.name}]`,
         );
       }
       const avatarsNext = {
@@ -102,7 +102,9 @@ export const createAvatarSlice: StateCreator<GameState, [], [], AvatarSlice> = (
       const newKey = `${x},${y}` as CellKey;
       const isCrossTileMove = oldKey && oldKey !== newKey;
       const currentAvatar = state.avatars[who];
-      const shouldTap = Boolean(isCrossTileMove && !currentAvatar?.tapped);
+      const shouldTap = Boolean(
+        state.autoTapOnMove && isCrossTileMove && !currentAvatar?.tapped,
+      );
       let avatars = buildAvatarUpdate(state, who, [x, y], null);
       if (shouldTap) {
         avatars = { ...avatars, [who]: { ...avatars[who], tapped: true } };
@@ -115,16 +117,18 @@ export const createAvatarSlice: StateCreator<GameState, [], [], AvatarSlice> = (
           state.permanents,
           oldKey as CellKey,
           newKey,
-          avatarOwner as 1 | 2
+          avatarOwner as 1 | 2,
         );
         permanents = result.permanents;
         // Track moved artifact instanceIds for removal markers in patch
         movedArtifactIds = result.movedArtifacts
           .map((a) => a.instanceId || a.card?.instanceId)
-          .filter((id): id is string => typeof id === "string" && id.length > 0);
+          .filter(
+            (id): id is string => typeof id === "string" && id.length > 0,
+          );
         if (result.movedArtifacts.length > 0) {
           get().log(
-            `Moved ${result.movedArtifacts.length} attached artifact(s) with avatar`
+            `Moved ${result.movedArtifacts.length} attached artifact(s) with avatar`,
           );
         }
       }
@@ -180,7 +184,9 @@ export const createAvatarSlice: StateCreator<GameState, [], [], AvatarSlice> = (
       const newKey = `${x},${y}` as CellKey;
       const isCrossTileMove = oldKey && oldKey !== newKey;
       const currentAvatar = state.avatars[who];
-      const shouldTap = Boolean(isCrossTileMove && !currentAvatar?.tapped);
+      const shouldTap = Boolean(
+        state.autoTapOnMove && isCrossTileMove && !currentAvatar?.tapped,
+      );
       let avatars = buildAvatarUpdate(state, who, [x, y], offset);
       if (shouldTap) {
         avatars = { ...avatars, [who]: { ...avatars[who], tapped: true } };
@@ -193,16 +199,18 @@ export const createAvatarSlice: StateCreator<GameState, [], [], AvatarSlice> = (
           state.permanents,
           oldKey as CellKey,
           newKey,
-          avatarOwner as 1 | 2
+          avatarOwner as 1 | 2,
         );
         permanents = result.permanents;
         // Track moved artifact instanceIds for removal markers in patch
         movedArtifactIds = result.movedArtifacts
           .map((a) => a.instanceId || a.card?.instanceId)
-          .filter((id): id is string => typeof id === "string" && id.length > 0);
+          .filter(
+            (id): id is string => typeof id === "string" && id.length > 0,
+          );
         if (result.movedArtifacts.length > 0) {
           get().log(
-            `Moved ${result.movedArtifacts.length} attached artifact(s) with avatar`
+            `Moved ${result.movedArtifacts.length} attached artifact(s) with avatar`,
           );
         }
       }
@@ -288,7 +296,7 @@ export const createAvatarSlice: StateCreator<GameState, [], [], AvatarSlice> = (
       const cur = state.avatars[who];
       const next: AvatarState = { ...cur, tapped: !cur.tapped };
       get().log(
-        `${who.toUpperCase()} ${next.tapped ? "taps" : "untaps"} Avatar`
+        `${who.toUpperCase()} ${next.tapped ? "taps" : "untaps"} Avatar`,
       );
       const avatarsNext = {
         ...state.avatars,
@@ -323,7 +331,7 @@ export const createAvatarSlice: StateCreator<GameState, [], [], AvatarSlice> = (
       get().log(
         `${who.toUpperCase()} ${
           cur?.counters ? "increments" : "adds"
-        } avatar counter (now ${nextCount})`
+        } avatar counter (now ${nextCount})`,
       );
       const patch: ServerPatchT = {
         avatars: { [who]: { counters: nextCount } } as GameState["avatars"],
@@ -342,7 +350,7 @@ export const createAvatarSlice: StateCreator<GameState, [], [], AvatarSlice> = (
         [who]: next,
       } as GameState["avatars"];
       get().log(
-        `${who.toUpperCase()} increments avatar counter (now ${nextCount})`
+        `${who.toUpperCase()} increments avatar counter (now ${nextCount})`,
       );
       const patch: ServerPatchT = {
         avatars: { [who]: { counters: nextCount } } as GameState["avatars"],
@@ -378,7 +386,7 @@ export const createAvatarSlice: StateCreator<GameState, [], [], AvatarSlice> = (
         } as GameState["avatars"];
         const playerNum2 = who === "p1" ? "1" : "2";
         get().log(
-          `[p${playerNum2}:PLAYER] decrements avatar counter (now ${nextCount})`
+          `[p${playerNum2}:PLAYER] decrements avatar counter (now ${nextCount})`,
         );
         const patch: ServerPatchT = {
           avatars: { [who]: { counters: nextCount } } as GameState["avatars"],

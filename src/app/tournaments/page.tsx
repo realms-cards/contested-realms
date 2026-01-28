@@ -88,10 +88,15 @@ export default function TournamentsPage() {
     registrationLocked: false,
     settings: {
       totalRounds: 3,
-      roundDuration: 60,
+      roundDuration: 45, // Default 45 minutes per round
       allowSpectators: true,
     },
   });
+
+  // Host-only mode (creator doesn't play)
+  const [hostOnlyMode, setHostOnlyMode] = useState(false);
+  // Round time limit in minutes
+  const [roundTimeLimit, setRoundTimeLimit] = useState(45);
 
   // Fetch available sets from the database
   const { setNames: availableSetNames } = useAvailableSets();
@@ -105,11 +110,11 @@ export default function TournamentsPage() {
   // New format: array of set names, one per booster
   const [sealedBoosterCount, setSealedBoosterCount] = useState<number>(6);
   const [sealedBoosters, setSealedBoosters] = useState<string[]>(() =>
-    Array(6).fill(DEFAULT_SET)
+    Array(6).fill(DEFAULT_SET),
   );
   const [draftBoosterCount, setDraftBoosterCount] = useState<number>(3);
   const [draftBoosters, setDraftBoosters] = useState<string[]>(() =>
-    Array(3).fill(DEFAULT_SET)
+    Array(3).fill(DEFAULT_SET),
   );
 
   // Time limit configuration
@@ -134,6 +139,9 @@ export default function TournamentsPage() {
   const [sealedFreeAvatars, setSealedFreeAvatars] = useState<boolean>(false);
   const [draftFreeAvatars, setDraftFreeAvatars] = useState<boolean>(false);
 
+  // Pod size for draft tournaments (4-8, for tournaments with more than 8 players)
+  const [draftPodSize, setDraftPodSize] = useState<number>(8);
+
   // Type guard helpers
   function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null;
@@ -145,7 +153,7 @@ export default function TournamentsPage() {
     const rp = (t as Record<string, unknown>).registeredPlayers;
     if (Array.isArray(rp)) {
       return rp.filter(
-        (p) => (p as { seatStatus?: string }).seatStatus !== "vacant"
+        (p) => (p as { seatStatus?: string }).seatStatus !== "vacant",
       ).length;
     }
     return 0;
@@ -177,7 +185,7 @@ export default function TournamentsPage() {
             name: c.name,
           })),
           ...(data.publicCubes || []).map(
-            (c: { id: string; name: string }) => ({ id: c.id, name: c.name })
+            (c: { id: string; name: string }) => ({ id: c.id, name: c.name }),
           ),
         ];
         setCubes(allCubes);
@@ -234,7 +242,7 @@ export default function TournamentsPage() {
         }
       } catch (e) {
         setLocalError(
-          e instanceof Error ? e.message : "Failed to fetch tournaments"
+          e instanceof Error ? e.message : "Failed to fetch tournaments",
         );
         setLocalTournaments([]);
       } finally {
@@ -260,6 +268,19 @@ export default function TournamentsPage() {
           mode: form.registrationMode,
           locked: form.registrationLocked,
         },
+        // Round time limit (default 45 minutes)
+        roundTimeLimit,
+        matchTimeLimit: roundTimeLimit,
+        // Host-only mode (creator doesn't play, just manages)
+        creatorParticipates: !hostOnlyMode,
+        // Tiebreaker settings for tournament matches
+        tiebreakerSettings: {
+          extraTurns: 5, // 5 extra turns after time expires
+          preventForcedDraws: true, // No simultaneous death
+          allowDrawAgreement: false, // No draw agreements
+        },
+        // Disable forfeits by default
+        allowForfeit: false,
       };
       if (form.format === "sealed") {
         if (sealedUseCube && sealedCubeId) {
@@ -294,6 +315,7 @@ export default function TournamentsPage() {
             constructionTimeLimit: draftConstructionTimeLimit,
             includeCubeSideboardInStandard: includeCubeSideboard,
             freeAvatars: draftFreeAvatars,
+            podSize: draftPodSize, // Pod size for large tournaments
           };
         } else {
           // Regular set-based draft
@@ -307,6 +329,7 @@ export default function TournamentsPage() {
             pickTimeLimit: draftPickTimeLimit,
             constructionTimeLimit: draftConstructionTimeLimit,
             freeAvatars: draftFreeAvatars,
+            podSize: draftPodSize, // Pod size for large tournaments
           };
         }
       }
@@ -351,7 +374,7 @@ export default function TournamentsPage() {
     } catch (err) {
       console.error("Failed to create tournament:", err);
       setError(
-        err instanceof Error ? err.message : "Failed to create tournament"
+        err instanceof Error ? err.message : "Failed to create tournament",
       );
     } finally {
       setCreating(false);
@@ -369,7 +392,7 @@ export default function TournamentsPage() {
     } catch (err) {
       console.error("Failed to join tournament:", err);
       setError(
-        err instanceof Error ? err.message : "Failed to join tournament"
+        err instanceof Error ? err.message : "Failed to join tournament",
       );
     }
   };
@@ -565,8 +588,8 @@ export default function TournamentsPage() {
           viewFilter === "active"
             ? tournaments.length === 0
             : loadingLocal
-            ? false
-            : localTournaments.length === 0
+              ? false
+              : localTournaments.length === 0
         ) ? (
           <div className="text-center py-12">
             <div className="text-6xl mb-4">🏆</div>
@@ -610,7 +633,7 @@ export default function TournamentsPage() {
                 const vacantCount = Math.max(
                   0,
                   registeredPlayers.filter((p) => p.seatStatus === "vacant")
-                    .length
+                    .length,
                 );
                 const canJoin = isOpenSeat
                   ? vacantCount > 0 ||
@@ -649,7 +672,7 @@ export default function TournamentsPage() {
                       </div>
                       <span
                         className={`px-2 py-1 rounded-full text-xs font-medium border capitalize ${getStatusBadgeColor(
-                          tournament.status
+                          tournament.status,
                         )}`}
                       >
                         {tournament.status}
@@ -671,7 +694,7 @@ export default function TournamentsPage() {
                           style={{
                             width: `${Math.min(
                               (activeCount / tournament.maxPlayers) * 100,
-                              100
+                              100,
                             )}%`,
                           }}
                         />
@@ -690,7 +713,7 @@ export default function TournamentsPage() {
                           <span className="text-slate-400">Started:</span>
                           <span className="text-white">
                             {new Date(
-                              tournament.startedAt
+                              tournament.startedAt,
                             ).toLocaleDateString()}
                           </span>
                         </div>
@@ -716,7 +739,7 @@ export default function TournamentsPage() {
                     </div>
                   </div>
                 );
-              }
+              },
             )}
           </div>
         )}
@@ -875,7 +898,7 @@ export default function TournamentsPage() {
                             ...prev,
                             maxPlayers: Math.max(
                               2,
-                              Math.min(128, parseInt(e.target.value) || 2)
+                              Math.min(128, parseInt(e.target.value) || 2),
                             ),
                           }))
                         }
@@ -924,6 +947,42 @@ export default function TournamentsPage() {
                       ]}
                     />
                   </div>
+                  <div>
+                    <label className="block text-slate-300 text-sm font-medium mb-1">
+                      Round Time
+                    </label>
+                    <CustomSelect
+                      value={String(roundTimeLimit)}
+                      onChange={(v) => setRoundTimeLimit(parseInt(v))}
+                      options={[
+                        { value: "30", label: "30 min" },
+                        { value: "45", label: "45 min" },
+                        { value: "60", label: "60 min" },
+                        { value: "90", label: "90 min" },
+                      ]}
+                    />
+                  </div>
+                </div>
+
+                {/* Host-Only Mode */}
+                <div className="bg-slate-700/50 rounded-lg p-3 border border-slate-600">
+                  <label className="flex items-start gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={hostOnlyMode}
+                      onChange={(e) => setHostOnlyMode(e.target.checked)}
+                      className="mt-0.5 w-4 h-4 rounded border-slate-600 bg-slate-700 text-blue-600 focus:ring-2 focus:ring-blue-500"
+                    />
+                    <div>
+                      <span className="text-slate-200 text-sm font-medium">
+                        Host Only Mode
+                      </span>
+                      <p className="text-slate-400 text-xs mt-0.5">
+                        You will manage the tournament but not participate as a
+                        player.
+                      </p>
+                    </div>
+                  </label>
                 </div>
 
                 {/* Sealed Booster Configuration */}
@@ -954,7 +1013,11 @@ export default function TournamentsPage() {
                             onChange={(v) => setSealedCubeId(v)}
                             disabled={cubes.length === 0}
                             className="w-full"
-                            placeholder={cubes.length === 0 ? "No cubes available" : "-- Select a cube --"}
+                            placeholder={
+                              cubes.length === 0
+                                ? "No cubes available"
+                                : "-- Select a cube --"
+                            }
                             options={cubes.map((cube) => ({
                               value: cube.id,
                               label: cube.name,
@@ -982,7 +1045,7 @@ export default function TournamentsPage() {
                               type="button"
                               onClick={() =>
                                 setSealedBoosterCount((c) =>
-                                  Math.min(10, c + 1)
+                                  Math.min(10, c + 1),
                                 )
                               }
                               className="px-3 py-1 bg-slate-700 hover:bg-slate-600 rounded text-white font-bold"
@@ -1019,11 +1082,11 @@ export default function TournamentsPage() {
                               onClick={() => {
                                 const newCount = Math.max(
                                   1,
-                                  sealedBoosterCount - 1
+                                  sealedBoosterCount - 1,
                                 );
                                 setSealedBoosterCount(newCount);
                                 setSealedBoosters((prev) =>
-                                  prev.slice(0, newCount)
+                                  prev.slice(0, newCount),
                                 );
                               }}
                               className="px-3 py-1 bg-slate-700 hover:bg-slate-600 rounded text-white font-bold"
@@ -1038,13 +1101,13 @@ export default function TournamentsPage() {
                               onClick={() => {
                                 const newCount = Math.min(
                                   10,
-                                  sealedBoosterCount + 1
+                                  sealedBoosterCount + 1,
                                 );
                                 setSealedBoosterCount(newCount);
                                 setSealedBoosters((prev) => [
                                   ...prev,
                                   ...Array(newCount - prev.length).fill(
-                                    defaultSetName
+                                    defaultSetName,
                                   ),
                                 ]);
                               }}
@@ -1099,8 +1162,8 @@ export default function TournamentsPage() {
                           setSealedTimeLimit(
                             Math.max(
                               10,
-                              Math.min(90, parseInt(e.target.value) || 40)
-                            )
+                              Math.min(90, parseInt(e.target.value) || 40),
+                            ),
                           )
                         }
                         className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -1155,7 +1218,11 @@ export default function TournamentsPage() {
                             onChange={(v) => setCubeId(v)}
                             disabled={cubes.length === 0}
                             className="w-full"
-                            placeholder={cubes.length === 0 ? "No cubes available" : "-- Select a cube --"}
+                            placeholder={
+                              cubes.length === 0
+                                ? "No cubes available"
+                                : "-- Select a cube --"
+                            }
                             options={cubes.map((cube) => ({
                               value: cube.id,
                               label: cube.name,
@@ -1191,11 +1258,11 @@ export default function TournamentsPage() {
                               onClick={() => {
                                 const newCount = Math.max(
                                   1,
-                                  draftBoosterCount - 1
+                                  draftBoosterCount - 1,
                                 );
                                 setDraftBoosterCount(newCount);
                                 setDraftBoosters((prev) =>
-                                  prev.slice(0, newCount)
+                                  prev.slice(0, newCount),
                                 );
                               }}
                               className="px-3 py-1 bg-slate-700 hover:bg-slate-600 rounded text-white font-bold"
@@ -1210,13 +1277,13 @@ export default function TournamentsPage() {
                               onClick={() => {
                                 const newCount = Math.min(
                                   5,
-                                  draftBoosterCount + 1
+                                  draftBoosterCount + 1,
                                 );
                                 setDraftBoosterCount(newCount);
                                 setDraftBoosters((prev) => [
                                   ...prev,
                                   ...Array(newCount - prev.length).fill(
-                                    defaultSetName
+                                    defaultSetName,
                                   ),
                                 ]);
                               }}
@@ -1272,8 +1339,8 @@ export default function TournamentsPage() {
                             setDraftPickTimeLimit(
                               Math.max(
                                 30,
-                                Math.min(300, parseInt(e.target.value) || 60)
-                              )
+                                Math.min(300, parseInt(e.target.value) || 60),
+                              ),
                             )
                           }
                           className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -1296,8 +1363,8 @@ export default function TournamentsPage() {
                             setDraftConstructionTimeLimit(
                               Math.max(
                                 10,
-                                Math.min(60, parseInt(e.target.value) || 20)
-                              )
+                                Math.min(60, parseInt(e.target.value) || 20),
+                              ),
                             )
                           }
                           className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -1321,6 +1388,30 @@ export default function TournamentsPage() {
                         editor)
                       </span>
                     </label>
+
+                    {/* Pod Size for large tournaments */}
+                    {form.maxPlayers > 8 && (
+                      <div className="mt-3 bg-amber-900/20 border border-amber-700/50 rounded-lg p-3">
+                        <label className="block text-amber-200 text-sm font-medium mb-2">
+                          Draft Pod Size
+                        </label>
+                        <p className="text-amber-200/70 text-xs mb-2">
+                          For tournaments with more than 8 players, players will
+                          be split into pods.
+                        </p>
+                        <CustomSelect
+                          value={String(draftPodSize)}
+                          onChange={(v) => setDraftPodSize(parseInt(v))}
+                          options={[
+                            { value: "4", label: "4 players per pod" },
+                            { value: "5", label: "5 players per pod" },
+                            { value: "6", label: "6 players per pod" },
+                            { value: "7", label: "7 players per pod" },
+                            { value: "8", label: "8 players per pod" },
+                          ]}
+                        />
+                      </div>
+                    )}
                   </div>
                 )}
 

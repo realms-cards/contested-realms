@@ -2,6 +2,16 @@
 
 ## January 2026
 
+### Jan 28 - Tournament fixes and performance
+
+- **Savior: add pay 1 to ward** to right click menu of minions cast this turn
+- **correct player hand orientation**
+- **when hand is hidden show a red hand icon**
+- **allow card previews when ui is hidden**
+- **smooth out Tournament flow** add round time setting, add tiebreaker rules and remove draw, better flow, add pods, add bracket view
+- **add new lite mode** to support machines with old graphic chips
+- **various perfomance improvements** for all graphic modes
+
 ### Jan 27 - Quality of Life
 
 - **auto-banish rubble when placing a site** - placing a site on a tile with Rubble automatically banishes the Rubble

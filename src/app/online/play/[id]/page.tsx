@@ -3092,8 +3092,8 @@ export default function OnlineMatchPage() {
             />
           )}
 
-          {/* Enhanced Hover Preview Overlay - hidden when uiHidden */}
-          {cardPreviewsEnabled && hoverPreview && !contextMenu && !uiHidden && (
+          {/* Enhanced Hover Preview Overlay - visible even when uiHidden */}
+          {cardPreviewsEnabled && hoverPreview && !contextMenu && (
             <CardPreview
               card={hoverPreview}
               anchor="top-right"
@@ -3101,12 +3101,11 @@ export default function OnlineMatchPage() {
             />
           )}
 
-          {/* Legacy Preview Overlay (for compatibility with existing setPreviewCard calls) - hidden when uiHidden */}
+          {/* Legacy Preview Overlay (for compatibility with existing setPreviewCard calls) - visible even when uiHidden */}
           {cardPreviewsEnabled &&
             previewCard?.slug &&
             !hoverPreview &&
-            !contextMenu &&
-            !uiHidden && (
+            !contextMenu && (
               <CardPreview
                 card={{
                   slug: previewCard.slug ?? "",
@@ -3601,7 +3600,7 @@ export default function OnlineMatchPage() {
 
 function KeyboardPanControls({
   enabled = true,
-  step = 0.4,
+  step = 0.8,
   viewPlayerNumber = 1,
 }: {
   enabled?: boolean;

@@ -1,9 +1,6 @@
 "use client";
 
-import { Canvas } from "@react-three/fiber";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import CardPlane from "@/lib/game/components/CardPlane";
-import { CARD_LONG, CARD_SHORT } from "@/lib/game/constants";
 import type { CardRef, PlayerKey } from "@/lib/game/store";
 import { useGameStore } from "@/lib/game/store";
 
@@ -28,8 +25,9 @@ type PeekAction =
   | "topOfSpellbook"
   | "bottomOfSpellbook";
 
-const GRID_CARD_WIDTH = CARD_SHORT * 0.55;
-const GRID_CARD_HEIGHT = CARD_LONG * 0.55;
+// Card dimensions for grid display (in pixels)
+const GRID_CARD_WIDTH = 120;
+const GRID_CARD_HEIGHT = 167; // ~3:4 aspect ratio
 
 export default function HandPeekDialog({
   title = "Opponent Hand",
@@ -193,7 +191,6 @@ export default function HandPeekDialog({
                 const isSite =
                   typeof card.type === "string" &&
                   card.type.toLowerCase().includes("site");
-                const rotationZ = isSite ? -Math.PI / 2 : 0;
                 const slug = card.slug ?? "";
                 const isRemoved = removedIndices.has(idx);
 
@@ -221,25 +218,22 @@ export default function HandPeekDialog({
                       });
                     }}
                   >
-                    <div className="relative w-[120px] aspect-[3/4]">
-                      <Canvas
-                        orthographic
-                        camera={{ position: [0, 0, 5], zoom: 260 }}
-                        gl={{ alpha: true, antialias: true }}
-                        className="absolute inset-0"
-                      >
-                        <ambientLight intensity={1} />
-                        <CardPlane
-                          slug={slug}
-                          width={GRID_CARD_WIDTH}
-                          height={GRID_CARD_HEIGHT}
-                          rotationZ={rotationZ}
-                          upright
-                          depthWrite={false}
-                          interactive={false}
-                          preferRaster
-                        />
-                      </Canvas>
+                    <div
+                      className="relative overflow-hidden rounded"
+                      style={{
+                        width: isSite ? GRID_CARD_HEIGHT : GRID_CARD_WIDTH,
+                        height: isSite ? GRID_CARD_WIDTH : GRID_CARD_HEIGHT,
+                      }}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={`/api/images/${slug}`}
+                        alt={card.name || slug}
+                        className={`w-full h-full object-contain ${
+                          isSite ? "rotate-90 scale-[1.333] origin-center" : ""
+                        }`}
+                        loading="lazy"
+                      />
                     </div>
                   </button>
                 );

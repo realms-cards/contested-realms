@@ -8,6 +8,7 @@ import {
   hasTapToDrawSite,
   isMephistopheles,
   isPathfinder,
+  isSavior,
 } from "@/lib/game/avatarAbilities";
 import {
   detectBurrowSubmergeAbilities,
@@ -26,12 +27,16 @@ import AttachmentTargetSelectionDialog, {
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef } from "@/lib/game/store";
 import { isMergedTower } from "@/lib/game/store/babelTowerState";
+import { GEM_COLORS } from "@/lib/game/store/gemTokenState";
 import { isMasked } from "@/lib/game/store/imposterMaskState";
 import {
   isMonumentByName,
   isAutomatonByName,
 } from "@/lib/game/store/omphalosState";
-import { NECROMANCER_SKELETON_COST } from "@/lib/game/store/types";
+import {
+  NECROMANCER_SKELETON_COST,
+  SAVIOR_WARD_COST,
+} from "@/lib/game/store/types";
 import {
   getCellNumber,
   parseCellKey,
@@ -63,6 +68,8 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   const avatars = useGameStore((s) => s.avatars);
   const zones = useGameStore((s) => s.zones);
   const currentPlayer = useGameStore((s) => s.currentPlayer);
+  const turn = useGameStore((s) => s.turn);
+  const players = useGameStore((s) => s.players);
   const actorKey = useGameStore((s) => s.actorKey);
   const toggleTapPermanent = useGameStore((s) => s.toggleTapPermanent);
   const toggleFaceDown = useGameStore((s) => s.toggleFaceDown);
@@ -134,6 +141,11 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     (s) => s.hasFrontierSettlersAbility,
   );
   const interactionGuides = useGameStore((s) => s.interactionGuides);
+
+  // Gem token actions
+  const gemTokens = useGameStore((s) => s.gemTokens);
+  const duplicateGemToken = useGameStore((s) => s.duplicateGemToken);
+  const destroyGemToken = useGameStore((s) => s.destroyGemToken);
 
   // Permanent position management (burrow/submerge)
   const getAvailableActions = useGameStore((s) => s.getAvailableActions);
@@ -610,26 +622,32 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
 
     // Unsilence - remove Silenced token from this site
     const cellKey = site ? toCellKey(t.x, t.y) : "";
-    if (site && (isMine || isActingPlayer) && siteHasSilencedToken(cellKey, permanents)) {
+    if (
+      site &&
+      (isMine || isActingPlayer) &&
+      siteHasSilencedToken(cellKey, permanents)
+    ) {
       extraActions.push({
         actionId: "__unsilence_site__",
         displayText: "Unsilence",
         isEnabled: true,
         targetPermanentId: "",
-        description:
-          "Remove the Silenced token from this site (banish it).",
+        description: "Remove the Silenced token from this site (banish it).",
       });
     }
 
     // Undisable - remove Disabled token from this site
-    if (site && (isMine || isActingPlayer) && siteHasDisabledToken(cellKey, permanents)) {
+    if (
+      site &&
+      (isMine || isActingPlayer) &&
+      siteHasDisabledToken(cellKey, permanents)
+    ) {
       extraActions.push({
         actionId: "__undisable_site__",
         displayText: "Undisable",
         isEnabled: true,
         targetPermanentId: "",
-        description:
-          "Remove the Disabled token from this site (banish it).",
+        description: "Remove the Disabled token from this site (banish it).",
       });
     }
 
@@ -1453,6 +1471,13 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
       });
       onClose();
     };
+  } else if (t.kind === "gemToken") {
+    // Find the gem token by ID
+    const gemToken = gemTokens.find((g) => g.id === t.tokenId);
+    const colorInfo = GEM_COLORS.find((c) => c.id === gemToken?.color);
+    header = gemToken
+      ? `${colorInfo?.label || gemToken.color} Gem`
+      : "Gem Token";
   }
 
   const label = tapped ? "Untap" : "Tap";
@@ -1600,6 +1625,30 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                 >
                   Copy (token)
                 </button>
+              )}
+
+              {/* Gem token actions - Copy and Delete */}
+              {t.kind === "gemToken" && (
+                <>
+                  <button
+                    className="w-full text-left rounded bg-cyan-900/30 hover:bg-cyan-900/50 px-3 py-1"
+                    onClick={() => {
+                      duplicateGemToken(t.tokenId);
+                      onClose();
+                    }}
+                  >
+                    Copy
+                  </button>
+                  <button
+                    className="w-full text-left rounded bg-red-900/30 hover:bg-red-900/50 px-3 py-1"
+                    onClick={() => {
+                      destroyGemToken(t.tokenId);
+                      onClose();
+                    }}
+                  >
+                    Delete
+                  </button>
+                </>
               )}
 
               {/* Ward - for sites with ward keyword */}
@@ -1856,6 +1905,185 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                     }}
                   >
                     Ward
+                  </button>
+                )}
+
+              {/* Savior Ward - for minions that entered this turn when player has Savior avatar */}
+              {t.kind === "permanent" &&
+                (() => {
+                  const arr = permanents[t.at] || [];
+                  const item = arr[t.index];
+                  if (!item) return false;
+
+                  // Check if this is a minion
+                  const permanentType = (item.card?.type || "").toLowerCase();
+                  const isMinion = permanentType.includes("minion");
+                  if (!isMinion) return false;
+
+                  // Check if minion entered this turn
+                  if (item.enteredOnTurn !== turn) return false;
+
+                  // Check if the current player's avatar is Savior
+                  const currentSeat = currentPlayer === 1 ? "p1" : "p2";
+                  const myAvatar = avatars[currentSeat];
+                  const maskedState = imposterMasks[currentSeat];
+                  const effectiveAvatarName =
+                    maskedState?.maskAvatar?.name ?? myAvatar?.card?.name;
+                  if (!isSavior(effectiveAvatarName)) return false;
+
+                  // Only show if it's my turn and I control the minion or it's on my side
+                  const minionOwnerSeat = seatFromOwner(item.owner);
+                  const isMyMinion = minionOwnerSeat === currentSeat;
+                  if (!isMyMinion) return false;
+
+                  return true;
+                })() && (
+                  <button
+                    className={`w-full text-left rounded px-3 py-1 ${
+                      (() => {
+                        const arr = permanents[t.at] || [];
+                        const attachedTokens = arr.filter(
+                          (p) =>
+                            p.attachedTo?.at === t.at &&
+                            p.attachedTo?.index === t.index,
+                        );
+                        const alreadyHasWard = attachedTokens.some(
+                          (tk) => tk.card.name.toLowerCase() === "ward",
+                        );
+                        return alreadyHasWard;
+                      })()
+                        ? "bg-gray-700/50 text-gray-500 cursor-not-allowed"
+                        : "bg-cyan-900/30 hover:bg-cyan-900/50"
+                    }`}
+                    disabled={(() => {
+                      const arr = permanents[t.at] || [];
+                      const attachedTokens = arr.filter(
+                        (p) =>
+                          p.attachedTo?.at === t.at &&
+                          p.attachedTo?.index === t.index,
+                      );
+                      const alreadyHasWard = attachedTokens.some(
+                        (tk) => tk.card.name.toLowerCase() === "ward",
+                      );
+                      return alreadyHasWard;
+                    })()}
+                    onClick={() => {
+                      const arr = permanents[t.at] || [];
+                      const perm = arr[t.index];
+                      if (!perm) {
+                        onClose();
+                        return;
+                      }
+
+                      // Check if already warded
+                      const attachedTokens = arr.filter(
+                        (p) =>
+                          p.attachedTo?.at === t.at &&
+                          p.attachedTo?.index === t.index,
+                      );
+                      const alreadyHasWard = attachedTokens.some(
+                        (tk) => tk.card.name.toLowerCase() === "ward",
+                      );
+                      if (alreadyHasWard) {
+                        log("This minion is already warded");
+                        onClose();
+                        return;
+                      }
+
+                      // Check and spend mana
+                      const currentSeat = currentPlayer === 1 ? "p1" : "p2";
+                      const availableMana = getAvailableMana(currentSeat);
+                      if (availableMana < SAVIOR_WARD_COST) {
+                        log(
+                          `Not enough mana to ward (need ${SAVIOR_WARD_COST}, have ${availableMana})`,
+                        );
+                        // Don't block the action, just warn
+                      }
+
+                      // Spawn ward token and attach
+                      const wardDef = TOKEN_BY_NAME["ward"];
+                      if (!wardDef) {
+                        log("Ward token definition not found");
+                        onClose();
+                        return;
+                      }
+
+                      const ownerNum = perm.owner;
+                      const ownerKey = seatFromOwner(ownerNum);
+                      const instanceId = `ward-${Date.now()}-${Math.random()
+                        .toString(36)
+                        .slice(2, 8)}`;
+
+                      // Create ward token card
+                      const wardCard = {
+                        cardId: newTokenInstanceId(wardDef),
+                        variantId: null,
+                        name: wardDef.name,
+                        type: "Token",
+                        slug: tokenSlug(wardDef),
+                        thresholds: null,
+                        instanceId,
+                      };
+
+                      // Create the permanent item for the token
+                      const wardPermanent = {
+                        owner: ownerNum,
+                        card: wardCard,
+                        offset: null,
+                        tilt: 0,
+                        tapVersion: 0,
+                        tapped: false,
+                        version: 0,
+                        instanceId,
+                        attachedTo: { at: t.at, index: t.index },
+                      };
+
+                      // Add to permanents
+                      const permanentsNext = { ...permanents };
+                      const tileArr = [...(permanentsNext[t.at] || [])];
+                      tileArr.push(wardPermanent);
+                      permanentsNext[t.at] = tileArr;
+
+                      // Spend mana (reduce available mana by increasing offset)
+                      const playersNext = {
+                        ...players,
+                        [currentSeat]: {
+                          ...players[currentSeat],
+                          mana:
+                            (players[currentSeat]?.mana || 0) -
+                            SAVIOR_WARD_COST,
+                        },
+                      };
+
+                      // Update store
+                      useGameStore.setState({
+                        permanents: permanentsNext,
+                        players: playersNext,
+                      });
+
+                      // Send patch to server
+                      const state = useGameStore.getState();
+                      if (state.transport) {
+                        state.trySendPatch({
+                          permanents: permanentsNext,
+                          players: {
+                            [currentSeat]: playersNext[currentSeat],
+                          } as typeof state.players,
+                        });
+                      }
+
+                      const playerNum = ownerKey === "p1" ? "1" : "2";
+                      log(
+                        `[Savior] wards [p${playerNum}card:${perm.card.name}] for ${SAVIOR_WARD_COST} mana`,
+                      );
+
+                      try {
+                        playCardFlip();
+                      } catch {}
+                      onClose();
+                    }}
+                  >
+                    Ward ({SAVIOR_WARD_COST} mana)
                   </button>
                 )}
 
@@ -2422,7 +2650,9 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                               const perms = permanents[key] || [];
                               // Find the silenced token index
                               const tokenIdx = perms.findIndex(
-                                (p) => (p.card?.name || "").toLowerCase() === "silenced"
+                                (p) =>
+                                  (p.card?.name || "").toLowerCase() ===
+                                  "silenced",
                               );
                               if (tokenIdx >= 0) {
                                 movePermanentToZone(key, tokenIdx, "banished");
@@ -2451,7 +2681,9 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                               const perms = permanents[key] || [];
                               // Find the disabled token index
                               const tokenIdx = perms.findIndex(
-                                (p) => (p.card?.name || "").toLowerCase() === "disabled"
+                                (p) =>
+                                  (p.card?.name || "").toLowerCase() ===
+                                  "disabled",
                               );
                               if (tokenIdx >= 0) {
                                 movePermanentToZone(key, tokenIdx, "banished");

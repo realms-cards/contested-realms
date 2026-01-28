@@ -9,6 +9,7 @@ import type {
   Zones,
 } from "./types";
 import type { PlayerPositionReference } from "../types";
+import { soundManager } from "@/lib/audio/soundManager";
 import { createInitialPlayers } from "./coreState";
 import { filterEchoPatchIfAny } from "./transportState";
 import { normalizeAvatars } from "./utils/avatarHelpers";
@@ -159,6 +160,21 @@ export const createNetworkSlice: StateCreator<
             resultManaP2: next.players?.p2?.mana,
           });
         } catch {}
+
+        // Play health sounds for life changes from incoming patches
+        // This ensures both players hear sounds when either player's life changes
+        for (const seat of ["p1", "p2"] as const) {
+          const oldLife = state.players?.[seat]?.life ?? 20;
+          const newLife = next.players?.[seat]?.life ?? 20;
+          if (newLife !== oldLife) {
+            const delta = newLife - oldLife;
+            if (delta > 0) {
+              soundManager.play("healthPlus");
+            } else {
+              soundManager.play("healthMinus");
+            }
+          }
+        }
       } else if (replaceKeys.has("players")) {
         // Server snapshot requested players replacement but didn't include players data
         // Reset to initial state to ensure consistent mana tracking

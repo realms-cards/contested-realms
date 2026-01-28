@@ -63,9 +63,11 @@ function CursorMarker({ entry }: { entry: RemoteCursorState }) {
 
   if (!entry.position) return null;
 
+  const rotationZ = entry.playerKey === "p1" ? Math.PI : 0;
+
   return (
     <group ref={pointerRef}>
-      <group rotation-x={-Math.PI / 2}>
+      <group rotation-x={-Math.PI / 2} rotation-z={rotationZ}>
         <mesh renderOrder={6}>
           <planeGeometry args={[0.36, 0.36]} />
           <shaderMaterial

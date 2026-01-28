@@ -1099,7 +1099,9 @@ export default function GameToolbox({
 
   const collapsed = !open;
   // More fluid widths on mobile
-  const containerWidthClass = collapsed ? "w-auto min-w-[3rem]" : "w-[90vw] sm:w-80 max-w-sm";
+  const containerWidthClass = collapsed
+    ? "w-auto min-w-[3rem]"
+    : "w-[90vw] sm:w-80 max-w-sm";
   const headerPaddingClass = collapsed
     ? "px-2 py-1"
     : "px-2 py-1.5 sm:px-3 sm:py-2";
@@ -1220,9 +1222,7 @@ export default function GameToolbox({
               <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-1.5 sm:gap-2 mb-2">
                 <CustomSelect
                   value={actionType}
-                  onChange={(v) =>
-                    setActionType(v as typeof actionType)
-                  }
+                  onChange={(v) => setActionType(v as typeof actionType)}
                   options={[
                     { value: "draw", label: "Draw" },
                     { value: "peek", label: "Peek" },
@@ -1391,7 +1391,9 @@ export default function GameToolbox({
                 }
               >
                 <Eye className="w-5 h-5 sm:w-4 sm:h-4 flex-shrink-0" />
-                <span className="text-xs whitespace-nowrap hidden sm:inline">Inspect</span>
+                <span className="text-xs whitespace-nowrap hidden sm:inline">
+                  Inspect
+                </span>
               </button>
               <button
                 className="rounded bg-blue-600/90 hover:bg-blue-500 active:bg-blue-400 px-3 py-2.5 sm:py-1.5 flex items-center justify-center"
@@ -1400,7 +1402,13 @@ export default function GameToolbox({
                 title="Roll D20"
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/d20.svg" alt="D20" width={20} height={20} className="sm:w-[18px] sm:h-[18px]" />
+                <img
+                  src="/d20.svg"
+                  alt="D20"
+                  width={20}
+                  height={20}
+                  className="sm:w-[18px] sm:h-[18px]"
+                />
               </button>
               <button
                 className="rounded bg-blue-600/90 hover:bg-blue-500 active:bg-blue-400 px-3 py-2.5 sm:py-1.5 flex items-center justify-center"

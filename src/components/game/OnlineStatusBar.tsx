@@ -4,6 +4,7 @@ import {
   Eye,
   EyeOff,
   Grid3X3,
+  Hand,
   Mouse,
   Search,
   Settings,
@@ -55,6 +56,8 @@ export default function OnlineStatusBar({
   const toggleCardPreviews = useGameStore((s) => s.toggleCardPreviews);
   const uiHidden = useGameStore((s) => s.uiHidden);
   const toggleUiHidden = useGameStore((s) => s.toggleUiHidden);
+  const handVisibilityMode = useGameStore((s) => s.handVisibilityMode);
+  const toggleHandVisibility = useGameStore((s) => s.toggleHandVisibility);
   const { enabled: colorBlindEnabled } = useColorBlind();
   const { isNativeTouch, effectiveMode, toggleOverride } = useTouchOverride();
 
@@ -114,6 +117,17 @@ export default function OnlineStatusBar({
         >
           <Search className="w-4 h-4" />
         </button>
+
+        {/* Hand visibility indicator - shows red when hand is hidden (Space key) */}
+        {handVisibilityMode === "hidden" && (
+          <button
+            className="rounded-full p-1.5 transition-colors bg-red-600/80 hover:bg-red-500"
+            onClick={toggleHandVisibility}
+            title="Show Hand (Space)"
+          >
+            <Hand className="w-4 h-4" />
+          </button>
+        )}
 
         {/* Playmat/Grid toggle - toggles between playmat (no grid) and grid (no playmat) */}
         <button

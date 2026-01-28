@@ -167,6 +167,9 @@ export const IMPOSTER_MASK_COST = 3; // Mana cost to mask yourself
 // --- Necromancer Mana Cost --------------------------------
 export const NECROMANCER_SKELETON_COST = 1; // Mana cost to summon a Skeleton token
 
+// --- Savior Mana Cost --------------------------------
+export const SAVIOR_WARD_COST = 1; // Mana cost to ward a minion that entered this turn
+
 // --- Interrogator Ability --------------------------------
 // Whenever an ally strikes an enemy Avatar, draw a spell unless they pay 3 life.
 export const INTERROGATOR_LIFE_COST = 3; // Life cost to prevent the spell draw
@@ -451,6 +454,7 @@ export type PermanentItem = EntityBase<CardRef> & {
   damage?: number | null;
   faceDown?: boolean; // Card is flipped face-down (hidden from opponent)
   isCopy?: boolean; // Token copy - goes to banished instead of graveyard when leaving
+  enteredOnTurn?: number; // Turn number when this permanent entered the realm (for Savior ward ability)
 };
 export type Permanents = Record<CellKey, PermanentItem[]>;
 

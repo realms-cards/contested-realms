@@ -223,7 +223,6 @@ export default function CardOutline({
       rotation-x={-Math.PI / 2}
       rotation-z={rotationZ}
       position={[0, elevation, 0]}
-      renderOrder={renderOrder}
     >
       {/* Outermost glow layer (faintest) */}
       <mesh
@@ -231,6 +230,7 @@ export default function CardOutline({
         geometry={glow3Geom}
         material={glow3Mat}
         position={[0, 0, -0.003]}
+        renderOrder={renderOrder}
         raycast={noopRaycast}
       />
       {/* Middle glow layer */}
@@ -239,6 +239,7 @@ export default function CardOutline({
         geometry={glow2Geom}
         material={glow2Mat}
         position={[0, 0, -0.002]}
+        renderOrder={renderOrder}
         raycast={noopRaycast}
       />
       {/* Inner glow layer */}
@@ -247,6 +248,7 @@ export default function CardOutline({
         geometry={glow1Geom}
         material={glow1Mat}
         position={[0, 0, -0.001]}
+        renderOrder={renderOrder}
         raycast={noopRaycast}
       />
       {/* Crisp outline (brightest) */}
@@ -254,6 +256,7 @@ export default function CardOutline({
         ref={outlineMeshRef}
         geometry={outlineGeom}
         material={outlineMat}
+        renderOrder={renderOrder}
         raycast={noopRaycast}
       />
     </group>

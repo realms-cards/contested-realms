@@ -23,6 +23,7 @@ export type AvatarAbility =
   | "interrogator"
   | "mephistopheles"
   | "pathfinder"
+  | "savior"
   | null;
 
 /**
@@ -131,7 +132,7 @@ export function isInterrogator(avatarName: string | null | undefined): boolean {
  * Mephistopheles: Cast to Avatar's location to replace them. Once per turn, summon Evil minion to adjacent site.
  */
 export function isMephistopheles(
-  avatarName: string | null | undefined
+  avatarName: string | null | undefined,
 ): boolean {
   if (!avatarName) return false;
   return avatarName.toLowerCase().includes("mephistopheles");
@@ -149,12 +150,22 @@ export function isPathfinder(avatarName: string | null | undefined): boolean {
 }
 
 /**
+ * Check if an avatar name indicates Savior (Gothic expansion)
+ * Uses case-insensitive matching
+ * Savior: Pay (1) to ward a minion that entered the realm this turn.
+ */
+export function isSavior(avatarName: string | null | undefined): boolean {
+  if (!avatarName) return false;
+  return avatarName.toLowerCase().includes("savior");
+}
+
+/**
  * Check if an avatar has the "Tap → Play or draw a site" ability.
  * Most avatars have this standard ability, but some special avatars do not:
  * - Magician: No atlas (all cards in spellbook, including sites)
  */
 export function hasTapToDrawSite(
-  avatarName: string | null | undefined
+  avatarName: string | null | undefined,
 ): boolean {
   if (!avatarName) return false;
   // Magician doesn't have atlas - sites are in spellbook
@@ -168,7 +179,7 @@ export function hasTapToDrawSite(
  * Returns null if no special ability detected
  */
 export function getAvatarAbility(
-  avatarName: string | null | undefined
+  avatarName: string | null | undefined,
 ): AvatarAbility {
   if (!avatarName) return null;
   const name = avatarName.toLowerCase();
@@ -185,6 +196,7 @@ export function getAvatarAbility(
   if (name.includes("interrogator")) return "interrogator";
   if (name.includes("mephistopheles")) return "mephistopheles";
   if (name.includes("pathfinder")) return "pathfinder";
+  if (name.includes("savior")) return "savior";
 
   return null;
 }
@@ -193,7 +205,7 @@ export function getAvatarAbility(
  * Get the ability type from an avatar state object
  */
 export function getAvatarAbilityFromState(
-  avatarState: AvatarState | null | undefined
+  avatarState: AvatarState | null | undefined,
 ): AvatarAbility {
   return getAvatarAbility(avatarState?.card?.name);
 }
@@ -202,7 +214,7 @@ export function getAvatarAbilityFromState(
  * Check if an avatar state represents a Harbinger
  */
 export function isAvatarHarbinger(
-  avatarState: AvatarState | null | undefined
+  avatarState: AvatarState | null | undefined,
 ): boolean {
   return isHarbinger(avatarState?.card?.name);
 }
@@ -212,7 +224,7 @@ export function isAvatarHarbinger(
  * Returns array of PlayerKeys for players with Harbinger
  */
 export function detectHarbingerSeats(
-  avatars: Record<PlayerKey, AvatarState>
+  avatars: Record<PlayerKey, AvatarState>,
 ): PlayerKey[] {
   const harbingerSeats: PlayerKey[] = [];
 
@@ -230,7 +242,7 @@ export function detectHarbingerSeats(
  * Check if any player has a Harbinger avatar
  */
 export function hasAnyHarbinger(
-  avatars: Record<PlayerKey, AvatarState>
+  avatars: Record<PlayerKey, AvatarState>,
 ): boolean {
   return detectHarbingerSeats(avatars).length > 0;
 }
@@ -239,7 +251,7 @@ export function hasAnyHarbinger(
  * Get avatar display info for ability UI
  */
 export function getAvatarAbilityInfo(
-  avatarState: AvatarState | null | undefined
+  avatarState: AvatarState | null | undefined,
 ): {
   name: string;
   ability: AvatarAbility;

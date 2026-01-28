@@ -84,8 +84,8 @@ export const createPermanentMovementSlice: StateCreator<
       const finalUpdated = updated;
       let finalAdded = added;
       // When combat interactions are ON, don't tap on move - tap happens after selecting combat option
-      // When combat interactions are OFF, tap normally on move
-      const shouldTapOnMove = !state.interactionGuides;
+      // When combat interactions are OFF, tap normally on move (unless autoTapOnMove is disabled)
+      const shouldTapOnMove = state.autoTapOnMove && !state.interactionGuides;
       if (fromKey !== toKey && newIndex >= 0) {
         const movedUnit = finalPer[toKey]?.[newIndex];
         if (shouldTapOnMove && movedUnit && !movedUnit.tapped) {

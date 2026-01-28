@@ -48,7 +48,7 @@ export const createNecromancerSlice: StateCreator<
 
     if (!isNecromancer(effectiveAvatarName)) {
       get().log(
-        `Cannot summon skeleton: ${who.toUpperCase()} is not a Necromancer`
+        `Cannot summon skeleton: ${who.toUpperCase()} is not a Necromancer`,
       );
       return false;
     }
@@ -70,7 +70,7 @@ export const createNecromancerSlice: StateCreator<
     const availableMana = get().getAvailableMana(who);
     if (availableMana < NECROMANCER_SKELETON_COST) {
       get().log(
-        `Cannot summon skeleton: not enough mana (need ${NECROMANCER_SKELETON_COST}, have ${availableMana})`
+        `Cannot summon skeleton: not enough mana (need ${NECROMANCER_SKELETON_COST}, have ${availableMana})`,
       );
       return false;
     }
@@ -102,7 +102,7 @@ export const createNecromancerSlice: StateCreator<
         slug: tokenSlug(skeletonDef),
         thresholds: null,
       },
-      who
+      who,
     );
 
     const skeletonPermanent: PermanentItem = {
@@ -114,6 +114,7 @@ export const createNecromancerSlice: StateCreator<
       tapped: false,
       version: 0,
       instanceId: skeletonCard.instanceId ?? newPermanentInstanceId(),
+      enteredOnTurn: state.turn, // Track when this minion token entered (for Savior ward ability)
     };
 
     // Update permanents
@@ -140,7 +141,7 @@ export const createNecromancerSlice: StateCreator<
     // Log the action
     const playerNum = who === "p1" ? "1" : "2";
     get().log(
-      `[p${playerNum}:PLAYER] summons [p${playerNum}card:Skeleton] at avatar's location (paid ${NECROMANCER_SKELETON_COST} mana)`
+      `[p${playerNum}:PLAYER] summons [p${playerNum}card:Skeleton] at avatar's location (paid ${NECROMANCER_SKELETON_COST} mana)`,
     );
 
     // Send patch to server

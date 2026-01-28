@@ -19,6 +19,8 @@ export interface GraphicsSettings {
   handSortOrder: HandSortOrder;
   /** Enable gamepad shoulder buttons (LB/RB) for life adjustment */
   gamepadLifeControls: boolean;
+  /** Use raster textures (WebP/PNG) instead of KTX2 - reduces CPU load on older devices */
+  preferRaster: boolean;
 }
 
 const STORAGE_KEY = "sorcery-graphics-settings";
@@ -31,6 +33,7 @@ const DEFAULT_SETTINGS: GraphicsSettings = {
   uiTextScale: 1.0,
   handSortOrder: "sitesFirst",
   gamepadLifeControls: false,
+  preferRaster: false,
 };
 
 function loadSettings(): GraphicsSettings {
@@ -154,6 +157,10 @@ export function useGraphicsSettings() {
     setSettings({ gamepadLifeControls: !settings.gamepadLifeControls });
   }, [settings.gamepadLifeControls, setSettings]);
 
+  const togglePreferRaster = useCallback(() => {
+    setSettings({ preferRaster: !settings.preferRaster });
+  }, [settings.preferRaster, setSettings]);
+
   return {
     settings,
     isLoaded,
@@ -165,6 +172,7 @@ export function useGraphicsSettings() {
     setUiTextScale,
     toggleHandSortOrder,
     toggleGamepadLifeControls,
+    togglePreferRaster,
   };
 }
 

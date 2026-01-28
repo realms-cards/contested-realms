@@ -806,6 +806,16 @@ export function createInteractionModule({
     }
     if (kind === "tieGame") {
       try {
+        // Block tie game in tournament matches - forced draws are not allowed
+        if (match.tournamentId) {
+          return {
+            ...resultBase,
+            success: false,
+            message:
+              "Tie games are not allowed in tournament matches. The game must continue until a winner is determined.",
+          };
+        }
+
         const g = match.game || {};
         const players =
           g.players && typeof g.players === "object" ? g.players : {};
