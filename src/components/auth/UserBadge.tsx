@@ -85,6 +85,7 @@ export default function UserBadge({
     setUiTextScale,
     toggleHandSortOrder,
     toggleGamepadLifeControls,
+    togglePreferRaster,
   } = useGraphicsSettings();
   const [showOpponentPlaymat, setShowOpponentPlaymat] = useState(true);
   const [playmatPrefLoading, setPlaymatPrefLoading] = useState(false);
@@ -1027,6 +1028,33 @@ export default function UserBadge({
                     className={`shrink-0 w-2.5 h-2.5 rounded-full ${
                       graphicsSettings.gamepadLifeControls
                         ? "bg-cyan-300"
+                        : "bg-slate-500"
+                    }`}
+                  />
+                </button>
+
+                {/* Performance: Prefer Raster Textures */}
+                <button
+                  type="button"
+                  onClick={togglePreferRaster}
+                  className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg ring-1 transition-colors text-left ${
+                    graphicsSettings.preferRaster
+                      ? "bg-orange-500/20 ring-orange-500/40"
+                      : "bg-slate-800 ring-slate-600"
+                  }`}
+                >
+                  <div className="min-w-0">
+                    <div className="text-xs text-slate-200 font-medium">
+                      Lite Textures
+                    </div>
+                    <div className="text-[10px] text-slate-400 truncate">
+                      Faster on old hardware
+                    </div>
+                  </div>
+                  <span
+                    className={`shrink-0 w-2.5 h-2.5 rounded-full ${
+                      graphicsSettings.preferRaster
+                        ? "bg-orange-300"
                         : "bg-slate-500"
                     }`}
                   />

@@ -1,6 +1,6 @@
 "use client";
 
-import { Eye, EyeOff, Grid3X3, Search, Star } from "lucide-react";
+import { Eye, EyeOff, Grid3X3, Hand, Search, Star } from "lucide-react";
 import AudioControls from "@/components/game/AudioControls";
 import { EndTurnConfirmDialog } from "@/components/game/EndTurnConfirmDialog";
 import { FEATURE_UNDO } from "@/lib/config/features";
@@ -28,6 +28,8 @@ export default function StatusBar({ dragFromHand }: StatusBarProps) {
   const toggleCardPreviews = useGameStore((s) => s.toggleCardPreviews);
   const uiHidden = useGameStore((s) => s.uiHidden);
   const toggleUiHidden = useGameStore((s) => s.toggleUiHidden);
+  const handVisibilityMode = useGameStore((s) => s.handVisibilityMode);
+  const toggleHandVisibility = useGameStore((s) => s.toggleHandVisibility);
   const { enabled: colorBlindEnabled } = useColorBlind();
 
   const primaryActionButtonClass =
@@ -91,6 +93,17 @@ export default function StatusBar({ dragFromHand }: StatusBarProps) {
         >
           <Search className="w-4 h-4" />
         </button>
+
+        {/* Hand visibility indicator - shows red when hand is hidden (Space key) */}
+        {handVisibilityMode === "hidden" && (
+          <button
+            className="rounded-full p-1.5 transition-colors bg-red-600/80 hover:bg-red-500"
+            onClick={toggleHandVisibility}
+            title="Show Hand (Space)"
+          >
+            <Hand className="w-4 h-4" />
+          </button>
+        )}
 
         <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
 

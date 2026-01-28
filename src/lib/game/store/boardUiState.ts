@@ -23,6 +23,7 @@ type BoardUiDefaults = Pick<
   | "gridColor"
   | "gridBlend"
   | "allowSiteDrag"
+  | "autoTapOnMove"
   | "showOwnershipOverlay"
   | "cardScale"
   | "boardPings"
@@ -52,6 +53,7 @@ export const createInitialBoardUiState = (): BoardUiDefaults => ({
   gridColor: "white",
   gridBlend: "normal",
   allowSiteDrag: false, // Default: sites cannot be freely dragged on board
+  autoTapOnMove: true, // Default: auto-tap avatars/minions when moved across tiles
   showOwnershipOverlay: false, // Default: no ownership highlight on cards
   cardScale: 1, // Default: full size cards (range 0.25 to 1)
   boardPings: [],
@@ -71,11 +73,13 @@ export type BoardUiSlice = Pick<
   | "gridColor"
   | "gridBlend"
   | "allowSiteDrag"
+  | "autoTapOnMove"
   | "showOwnershipOverlay"
   | "toggleGridOverlay"
   | "togglePlaymat"
   | "togglePlaymatOverlay"
   | "toggleAllowSiteDrag"
+  | "toggleAutoTapOnMove"
   | "toggleOwnershipOverlay"
   | "setCardScale"
   | "setPlaymatUrl"
@@ -110,6 +114,8 @@ export const createBoardUiSlice: StateCreator<
     set((state) => ({ showPlaymatOverlay: !state.showPlaymatOverlay })),
   toggleAllowSiteDrag: () =>
     set((state) => ({ allowSiteDrag: !state.allowSiteDrag })),
+  toggleAutoTapOnMove: () =>
+    set((state) => ({ autoTapOnMove: !state.autoTapOnMove })),
   toggleOwnershipOverlay: () =>
     set((state) => ({ showOwnershipOverlay: !state.showOwnershipOverlay })),
   setCardScale: (scale: number) => {

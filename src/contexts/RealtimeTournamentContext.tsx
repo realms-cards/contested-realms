@@ -67,15 +67,15 @@ interface RealtimeTournamentContextValue {
   endTournament: (tournamentId: string) => Promise<void>;
   updateTournamentSettings: (
     tournamentId: string,
-    settings: Record<string, unknown>
+    settings: Record<string, unknown>,
   ) => Promise<void>;
   toggleTournamentRegistrationLock: (
     tournamentId: string,
-    locked: boolean
+    locked: boolean,
   ) => Promise<void>;
   toggleTournamentReady: (
     tournamentId: string,
-    ready: boolean
+    ready: boolean,
   ) => Promise<void>;
   sendTournamentChat: (tournamentId: string, content: string) => void;
 
@@ -188,7 +188,7 @@ export function RealtimeTournamentProvider({
         });
       }
     },
-    []
+    [],
   );
 
   const activeTournamentId =
@@ -210,7 +210,7 @@ export function RealtimeTournamentProvider({
     typeof useTournamentStatistics
   > | null>(null);
   const phasesHookRef = useRef<ReturnType<typeof useTournamentPhases> | null>(
-    null
+    null,
   );
   const statsRefreshQueueRef = useRef<{
     standings: boolean;
@@ -265,7 +265,7 @@ export function RealtimeTournamentProvider({
       if (queue.timer != null) return;
       queue.timer = window.setTimeout(run, 250);
     },
-    []
+    [],
   );
 
   useEffect(() => {
@@ -283,7 +283,7 @@ export function RealtimeTournamentProvider({
     (
       id: string | null | undefined,
       delay = 200,
-      opts?: { force?: boolean }
+      opts?: { force?: boolean },
     ) => {
       if (!id) return;
       if (typeof window === "undefined") {
@@ -308,13 +308,13 @@ export function RealtimeTournamentProvider({
             setCurrentTournamentState((prev) =>
               prev && prev.id === (detail as TournamentInfo).id
                 ? (detail as TournamentInfo)
-                : prev
+                : prev,
             );
           })
           .catch((err) => {
             console.warn(
               "[RealtimeTournamentContext] Failed to refresh tournament detail",
-              err
+              err,
             );
           });
         return;
@@ -360,13 +360,13 @@ export function RealtimeTournamentProvider({
         } catch (err) {
           console.warn(
             "[RealtimeTournamentContext] Failed to refresh tournament detail",
-            err
+            err,
           );
         }
       }, delay);
       timers[id] = handle;
     },
-    []
+    [],
   );
 
   useEffect(() => {
@@ -403,7 +403,7 @@ export function RealtimeTournamentProvider({
         refreshTournamentDetail(id, 100, { force: true });
       }
     },
-    [tournaments, refreshTournamentDetail]
+    [tournaments, refreshTournamentDetail],
   );
 
   const handleDraftReady = useCallback(
@@ -416,10 +416,10 @@ export function RealtimeTournamentProvider({
       try {
         const submitted =
           localStorage.getItem(
-            `draft_submitted_tournament_${data.tournamentId}`
+            `draft_submitted_tournament_${data.tournamentId}`,
           ) === "true" ||
           localStorage.getItem(
-            `sealed_submitted_tournament_${data.tournamentId}`
+            `sealed_submitted_tournament_${data.tournamentId}`,
           ) === "true";
         if (submitted) {
           return;
@@ -457,7 +457,7 @@ export function RealtimeTournamentProvider({
 
       router.replace(`${targetPath}?tournament=${data.tournamentId}`);
     },
-    [activeTournamentId, currentTournament, currentUserId, pathname, router]
+    [activeTournamentId, currentTournament, currentUserId, pathname, router],
   );
 
   useEffect(() => {
@@ -482,7 +482,7 @@ export function RealtimeTournamentProvider({
       // Only fetch active tournaments (registering, preparing, active)
       // Limit to recent 6 tournaments to avoid loading all history
       const response = await fetch(
-        "/api/tournaments?status=registering,preparing,active&limit=6"
+        "/api/tournaments?status=registering,preparing,active&limit=6",
       );
       if (!response.ok) {
         const error = await response.json();
@@ -534,7 +534,7 @@ export function RealtimeTournamentProvider({
         void refreshTournaments();
       }, delay);
     },
-    [refreshTournaments]
+    [refreshTournaments],
   );
 
   const handleTournamentUpdated = useCallback(
@@ -557,7 +557,7 @@ export function RealtimeTournamentProvider({
             next.status = data.status as TournamentInfo["status"];
           }
           return next as TournamentInfo;
-        })
+        }),
       );
       // Trust socket data - no HTTP refresh needed
 
@@ -578,7 +578,7 @@ export function RealtimeTournamentProvider({
       // Trust socket data - no HTTP refresh needed
       setLastUpdated(new Date().toISOString());
     },
-    []
+    [],
   );
 
   const handlePresenceUpdated = useCallback(
@@ -597,7 +597,7 @@ export function RealtimeTournamentProvider({
       }));
       setLastUpdated(new Date().toISOString());
     },
-    []
+    [],
   );
 
   const handlePhaseChanged = useCallback(
@@ -614,8 +614,8 @@ export function RealtimeTournamentProvider({
         prev.map((t) =>
           t.id === data.tournamentId
             ? { ...t, status: data.newStatus as TournamentInfo["status"] }
-            : t
-        )
+            : t,
+        ),
       );
 
       // Update current tournament & phase state
@@ -645,7 +645,7 @@ export function RealtimeTournamentProvider({
           localStorage.setItem("app:toast", msg);
           if (typeof window !== "undefined") {
             window.dispatchEvent(
-              new CustomEvent("app:toast", { detail: { message: msg } })
+              new CustomEvent("app:toast", { detail: { message: msg } }),
             );
           }
         }
@@ -654,7 +654,7 @@ export function RealtimeTournamentProvider({
       // Update phase hook
       if (phasesHookRef.current && data.tournamentId === preparationId) {
         phasesHookRef.current.actions.updatePhase(
-          data.newStatus as TournamentInfo["status"]
+          data.newStatus as TournamentInfo["status"],
         );
       }
 
@@ -676,7 +676,7 @@ export function RealtimeTournamentProvider({
         lastEventTime: data.timestamp,
       }));
     },
-    [preparationId, queueStatisticsRefresh]
+    [preparationId, queueStatisticsRefresh],
   );
 
   const handlePlayerJoined = useCallback(
@@ -710,7 +710,7 @@ export function RealtimeTournamentProvider({
             currentPlayers: data.currentPlayerCount,
             registeredPlayers: updated,
           } as unknown as TournamentInfo;
-        })
+        }),
       );
       // Trust socket data - no HTTP refresh needed
       // Update current tournament if it matches
@@ -745,7 +745,7 @@ export function RealtimeTournamentProvider({
       }));
       // Trust socket data - no HTTP refresh needed
     },
-    []
+    [],
   );
 
   const handlePlayerLeft = useCallback(
@@ -775,7 +775,7 @@ export function RealtimeTournamentProvider({
             currentPlayers: data.currentPlayerCount,
             registeredPlayers: updated,
           } as unknown as TournamentInfo;
-        })
+        }),
       );
       // Trust socket data - no HTTP refresh needed
       setCurrentTournamentState((prev) => {
@@ -808,7 +808,7 @@ export function RealtimeTournamentProvider({
           localStorage.setItem("app:toast", msg);
           if (typeof window !== "undefined") {
             window.dispatchEvent(
-              new CustomEvent("app:toast", { detail: { message: msg } })
+              new CustomEvent("app:toast", { detail: { message: msg } }),
             );
           }
         }
@@ -820,7 +820,7 @@ export function RealtimeTournamentProvider({
         lastEventTime: new Date().toISOString(),
       }));
     },
-    [currentTournament?.creatorId, currentTournament?.id, currentUserId]
+    [currentTournament?.creatorId, currentTournament?.id, currentUserId],
   );
 
   const handlePreparationUpdate = useCallback(
@@ -856,13 +856,13 @@ export function RealtimeTournamentProvider({
                   ready: isReady,
                   deckSubmitted: Boolean(data.deckSubmitted),
                 }
-              : p
+              : p,
           );
           return {
             ...(t as unknown as Record<string, unknown>),
             registeredPlayers: updated,
           } as unknown as TournamentInfo;
-        })
+        }),
       );
       // Trust socket data - no HTTP refresh needed
       // Update current tournament mirror if present
@@ -885,7 +885,7 @@ export function RealtimeTournamentProvider({
                   ready: isReady,
                   deckSubmitted: Boolean(data.deckSubmitted),
                 }
-              : p
+              : p,
           );
           setCurrentTournamentState({
             ...(currentTournament as unknown as Record<string, unknown>),
@@ -908,7 +908,7 @@ export function RealtimeTournamentProvider({
       }));
       // Trust socket data - no HTTP refresh needed
     },
-    [currentTournament]
+    [currentTournament],
   );
 
   const handleStatisticsUpdated = useCallback(
@@ -930,7 +930,7 @@ export function RealtimeTournamentProvider({
       }
       setLastUpdated(new Date().toISOString());
     },
-    [currentTournament?.id, queueStatisticsRefresh]
+    [currentTournament?.id, queueStatisticsRefresh],
   );
 
   const handleRoundStarted = useCallback(
@@ -955,7 +955,7 @@ export function RealtimeTournamentProvider({
         if (currentUserId) {
           const mine = data.matches.find(
             (m) =>
-              m.player1Id === currentUserId || m.player2Id === currentUserId
+              m.player1Id === currentUserId || m.player2Id === currentUserId,
           );
           if (mine) {
             const opp =
@@ -970,7 +970,7 @@ export function RealtimeTournamentProvider({
         }
       }
     },
-    [currentTournament, currentUserId, queueStatisticsRefresh]
+    [currentTournament, currentUserId, queueStatisticsRefresh],
   );
 
   const handleMatchAssigned = useCallback(
@@ -1002,12 +1002,12 @@ export function RealtimeTournamentProvider({
                 matchId: data.matchId,
                 opponentName: data.opponentName ?? null,
               },
-            })
+            }),
           );
         }
       } catch {}
     },
-    [currentTournament, queueStatisticsRefresh]
+    [currentTournament, queueStatisticsRefresh],
   );
 
   const handleSocketError = useCallback(
@@ -1016,7 +1016,7 @@ export function RealtimeTournamentProvider({
       setConnectionError(error.message);
       setError(error.message);
     },
-    []
+    [],
   );
 
   // Initialize socket and socket-aware hooks
@@ -1105,7 +1105,7 @@ export function RealtimeTournamentProvider({
         timestamp: Date.now(),
       });
     },
-    [socket]
+    [socket],
   );
 
   // Fallback polling: keep list fresh even if socket events are missed
@@ -1124,6 +1124,22 @@ export function RealtimeTournamentProvider({
     }, 45000); // 45s for cost savings - WebSocket is primary mechanism
     return () => clearInterval(id);
   }, [isConnected, isOnTournamentPage, refreshTournaments]);
+
+  // Refresh tournament list when entering the /tournaments route
+  // This fixes the issue where players have to reload the window to see currently open tournaments
+  const prevIsOnTournamentPageRef = useRef(isOnTournamentPage);
+  useEffect(() => {
+    const wasOnPage = prevIsOnTournamentPageRef.current;
+    prevIsOnTournamentPageRef.current = isOnTournamentPage;
+
+    // If we just navigated TO a tournament page, refresh the list
+    if (isOnTournamentPage && !wasOnPage) {
+      console.log(
+        "[RealtimeTournamentContext] Entered tournament page, refreshing list",
+      );
+      void refreshTournaments();
+    }
+  }, [isOnTournamentPage, refreshTournaments]);
 
   // Auto-join current tournament when socket connects or when the id changes
   useEffect(() => {
@@ -1209,7 +1225,7 @@ export function RealtimeTournamentProvider({
       isConnected,
       refreshTournamentsDebounced,
       setCurrentTournament,
-    ]
+    ],
   );
 
   const joinTournament = useCallback(
@@ -1261,7 +1277,7 @@ export function RealtimeTournamentProvider({
       isConnected,
       refreshTournamentsDebounced,
       setCurrentTournament,
-    ]
+    ],
   );
 
   const leaveTournament = useCallback(
@@ -1302,7 +1318,7 @@ export function RealtimeTournamentProvider({
         setLoading(false);
       }
     },
-    [currentTournament, socketLeaveTournament, setCurrentTournament]
+    [currentTournament, socketLeaveTournament, setCurrentTournament],
   );
 
   const startTournament = useCallback(
@@ -1345,7 +1361,7 @@ export function RealtimeTournamentProvider({
         setLoading(false);
       }
     },
-    [socketJoinTournament, setCurrentTournament]
+    [socketJoinTournament, setCurrentTournament],
   );
 
   const endTournament = useCallback(
@@ -1379,7 +1395,7 @@ export function RealtimeTournamentProvider({
         setLoading(false);
       }
     },
-    [isConnected, refreshTournamentsDebounced]
+    [isConnected, refreshTournamentsDebounced],
   );
 
   const updateTournamentSettings = useCallback(
@@ -1399,13 +1415,13 @@ export function RealtimeTournamentProvider({
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(settings),
-          }
+          },
         );
 
         if (!response.ok) {
           const error = await response.json();
           throw new Error(
-            error.error || "Failed to update tournament settings"
+            error.error || "Failed to update tournament settings",
           );
         }
 
@@ -1424,7 +1440,7 @@ export function RealtimeTournamentProvider({
         setLoading(false);
       }
     },
-    [isConnected, refreshTournamentsDebounced]
+    [isConnected, refreshTournamentsDebounced],
   );
 
   const toggleTournamentRegistrationLock = useCallback(
@@ -1439,7 +1455,7 @@ export function RealtimeTournamentProvider({
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ locked }),
-          }
+          },
         );
 
         if (!response.ok) {
@@ -1461,7 +1477,7 @@ export function RealtimeTournamentProvider({
         setLoading(false);
       }
     },
-    [isConnected, refreshTournamentsDebounced]
+    [isConnected, refreshTournamentsDebounced],
   );
 
   const toggleTournamentReady = useCallback(
@@ -1499,7 +1515,7 @@ export function RealtimeTournamentProvider({
         setLoading(false);
       }
     },
-    [isConnected, refreshTournamentsDebounced]
+    [isConnected, refreshTournamentsDebounced],
   );
 
   // Auto-fetch tournaments on mount and when socket connects
@@ -1556,7 +1572,7 @@ export function useRealtimeTournaments() {
   const context = useContext(RealtimeTournamentContext);
   if (!context) {
     throw new Error(
-      "useRealtimeTournaments must be used within a RealtimeTournamentProvider"
+      "useRealtimeTournaments must be used within a RealtimeTournamentProvider",
     );
   }
   return context;

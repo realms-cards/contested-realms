@@ -11,6 +11,7 @@ import {
   type WebGLRenderer,
 } from "three";
 import { KTX2Loader } from "three/examples/jsm/loaders/KTX2Loader.js";
+import { getGraphicsSettings } from "@/hooks/useGraphicsSettings";
 import {
   getCardImageCdnUrl,
   getAssetUrl,
@@ -114,7 +115,7 @@ function assertBlockAligned(tex: Texture, url: string) {
 function normalizeTexture(
   t: Texture,
   kind: "ktx2" | "raster",
-  gl?: WebGLRenderer
+  gl?: WebGLRenderer,
 ) {
   let changed = false;
   // Color space consistency
@@ -189,12 +190,17 @@ function normalizeTexture(
     changed = true;
   }
 
-  // Improve readability of card text/details (use higher anisotropy to reduce ripple at angles)
+  // Improve readability of card text/details (use anisotropy to reduce ripple at angles)
+  // Default to 4x anisotropy - good balance between quality and GPU performance
+  // Higher values (8x, 16x) strain integrated GPUs significantly during drag operations
   if (gl) {
     try {
       const maxAniso = gl.capabilities.getMaxAnisotropy();
-      // Use max available anisotropy for best quality at oblique angles
-      const desired = maxAniso && maxAniso > 1 ? Math.min(16, maxAniso) : 0;
+      const envAniso = Number(process.env.NEXT_PUBLIC_MAX_ANISOTROPY || "");
+      const configuredMax =
+        Number.isFinite(envAniso) && envAniso > 0 ? envAniso : 4;
+      const desired =
+        maxAniso && maxAniso > 1 ? Math.min(configuredMax, maxAniso) : 0;
       if (desired && t.anisotropy !== desired) {
         t.anisotropy = desired;
         changed = true;
@@ -269,15 +275,15 @@ function enforceCacheSizeLimit() {
     console.log(
       `[texture-cache] Evicted ${Math.min(
         toEvict,
-        unreferenced.length
-      )} textures (cache: ${textureCache.size}/${MAX_CACHE_SIZE})`
+        unreferenced.length,
+      )} textures (cache: ${textureCache.size}/${MAX_CACHE_SIZE})`,
     );
   }
 }
 
 async function acquire(
   url: string,
-  load: () => Promise<Texture>
+  load: () => Promise<Texture>,
 ): Promise<Texture> {
   const cached = textureCache.get(url);
   if (cached) {
@@ -336,12 +342,17 @@ function release(url: string | null) {
 export function useCardTexture({
   slug,
   textureUrl,
-  preferRaster,
+  preferRaster: preferRasterProp,
 }: UseCardTextureOptions) {
   const { gl } = useThree();
   const [tex, setTex] = useState<Texture | null>(null);
   // Track which cache key (URL) we currently hold a ref for.
   const heldKeyRef = useRef<string | null>(null);
+
+  // Respect both the prop and the global graphics setting
+  // Global setting allows users to force raster textures for better performance
+  const globalPreferRaster = getGraphicsSettings().preferRaster;
+  const preferRaster = preferRasterProp || globalPreferRaster;
 
   const baseUrl = useMemo(() => {
     // ALWAYS prioritize textureUrl when provided, even if empty string
@@ -387,7 +398,7 @@ export function useCardTexture({
         baseUrl,
         typeof window !== "undefined"
           ? window.location.origin
-          : "http://localhost"
+          : "http://localhost",
       );
 
       // Force specific assets to only use regular images (not ktx2)
@@ -413,7 +424,7 @@ export function useCardTexture({
         .some(
           (segment) =>
             dataOnlyAssets.has(segment) ||
-            dataOnlyAssets.has(segment.replace(/\.[^.]+$/, ".png"))
+            dataOnlyAssets.has(segment.replace(/\.[^.]+$/, ".png")),
         );
 
       if (shouldForceDataOnly) {
@@ -545,7 +556,7 @@ export function useCardTexture({
 // Returns a promise that resolves when all preloads complete (or fail gracefully).
 export async function preloadCardbackTextures(
   gl: WebGLRenderer,
-  urls: string[]
+  urls: string[],
 ): Promise<void> {
   const loader = new TextureLoader();
   loader.setCrossOrigin("anonymous");

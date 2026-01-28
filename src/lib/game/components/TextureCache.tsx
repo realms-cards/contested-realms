@@ -16,9 +16,10 @@ function PreloadTexture({ slug, textureUrl }: PreloadTextureProps) {
   return null;
 }
 
-// Invisible component that preloads textures for ALL cards in the match
+// Invisible component that preloads textures for cards in the match
+// Default to "smart" mode for better performance - only preloads visible/near cards
 export default function TextureCache({
-  mode = "all",
+  mode = "smart",
   topN = 5,
   includeOpponent = false,
 }: {

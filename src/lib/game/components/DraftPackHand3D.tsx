@@ -7,7 +7,14 @@ import type { Group, PerspectiveCamera, Object3D, Intersection } from "three";
 import { Vector3, Plane, Raycaster, Vector2 } from "three";
 import type { BoosterCard } from "@/lib/game/cardSorting";
 import CardPlane from "@/lib/game/components/CardPlane";
-import { CARD_LONG, CARD_SHORT, HAND_DIST, HAND_BOTTOM_MARGIN, DRAG_HOLD_MS } from "@/lib/game/constants";
+import {
+  CARD_LONG,
+  CARD_SHORT,
+  HAND_DIST,
+  HAND_BOTTOM_MARGIN,
+  DRAG_HOLD_MS,
+} from "@/lib/game/constants";
+import { throttle } from "@/lib/utils/throttle";
 
 // Row card scale bounds relative to board card size (1.0 = board size)
 const ROW_MIN_SCALE = 0.55;
@@ -32,12 +39,14 @@ export interface DraftPackHand3DProps {
     index: number,
     wx: number,
     wz: number,
-    wasDragging: boolean
+    wasDragging: boolean,
   ) => void;
   // Render-order helper so dragged cards come to front
   getTopRenderOrder?: () => number;
   // Hover info hook for preview overlays
-  onHoverInfo?: (info: { slug: string; name: string; type: string | null } | null) => void;
+  onHoverInfo?: (
+    info: { slug: string; name: string; type: string | null } | null,
+  ) => void;
   // If true, suppress hover previews
   orbitLocked?: boolean;
   // Controlled selection from parent for persistent preview/indicator
@@ -87,7 +96,13 @@ export default function DraftPackHand3D({
     elapsed: number;
     duration: number;
     dir: "left" | "right";
-  }>({ active: false, t: 1, elapsed: 0, duration: transitionDurationMs, dir: passDirection });
+  }>({
+    active: false,
+    t: 1,
+    elapsed: 0,
+    duration: transitionDurationMs,
+    dir: passDirection,
+  });
   const [shieldActive, setShieldActive] = useState(false);
   const shieldTimerRef = useRef<number | null>(null);
 
@@ -100,9 +115,14 @@ export default function DraftPackHand3D({
   const focusTimerRef = useRef<number | null>(null);
   const mouseYRef = useRef<number>(0);
   React.useEffect(() => {
-    const onMove = (e: MouseEvent) => (mouseYRef.current = e.clientY);
+    const onMoveRaw = (e: MouseEvent) => (mouseYRef.current = e.clientY);
+    // Throttle to 30ms - this is only used for Y position tracking
+    const onMove = throttle(onMoveRaw, 30);
     window.addEventListener("mousemove", onMove, { passive: true });
-    return () => window.removeEventListener("mousemove", onMove);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      onMove.cancel();
+    };
   }, []);
   React.useEffect(() => {
     focusIndexRef.current = focusIndex;
@@ -116,7 +136,8 @@ export default function DraftPackHand3D({
     const cam = camera as PerspectiveCamera;
     const fov = (cam.fov * Math.PI) / 180;
     const worldH = 2 * Math.tan(fov / 2) * dist;
-    const bottomY = -worldH / 2 + HAND_BOTTOM_MARGIN + CARD_LONG * ROW_MIN_SCALE * 0.5;
+    const bottomY =
+      -worldH / 2 + HAND_BOTTOM_MARGIN + CARD_LONG * ROW_MIN_SCALE * 0.5;
 
     rootRef.current.position.copy(cam.position);
     rootRef.current.quaternion.copy(cam.quaternion);
@@ -159,7 +180,7 @@ export default function DraftPackHand3D({
       const nextSet = new Set(next.map((c) => c?.slug).filter(Boolean));
       let shared = 0;
       for (const s of prevSet) if (nextSet.has(s)) shared += 1;
-      const diffCount = (prevSet.size - shared) + (nextSet.size - shared);
+      const diffCount = prevSet.size - shared + (nextSet.size - shared);
       const looksLikePass = prev.length > 0 && next.length > 0 && diffCount > 2; // >2 changes suggests a new pack
       const outOnly = prev.length > 0 && next.length === 0; // momentary empty next pack
       if (looksLikePass || outOnly) {
@@ -174,10 +195,13 @@ export default function DraftPackHand3D({
         // Keep an invisible shield after pass to avoid board capturing during brief gaps
         setShieldActive(true);
         if (shieldTimerRef.current) window.clearTimeout(shieldTimerRef.current);
-        shieldTimerRef.current = window.setTimeout(() => {
-          setShieldActive(false);
-          shieldTimerRef.current = null;
-        }, Math.max(transitionDurationMs + 120, 650));
+        shieldTimerRef.current = window.setTimeout(
+          () => {
+            setShieldActive(false);
+            shieldTimerRef.current = null;
+          },
+          Math.max(transitionDurationMs + 120, 650),
+        );
       } else {
         setOutCards(null);
         transitionRef.current.active = false;
@@ -192,7 +216,13 @@ export default function DraftPackHand3D({
     } else {
       prevCardsRef.current = cards;
     }
-  }, [transitionKey, transitionEnabled, cards, passDirection, transitionDurationMs]);
+  }, [
+    transitionKey,
+    transitionEnabled,
+    cards,
+    passDirection,
+    transitionDurationMs,
+  ]);
 
   // Keyboard and wheel browsing (arrow keys or wheel in bottom zone)
   React.useEffect(() => {
@@ -208,14 +238,22 @@ export default function DraftPackHand3D({
       const vis = visibleIndices;
       const n = vis.length;
       if (n === 0) return;
-      const start = focusIndexRef.current != null ? focusIndexRef.current : hoverIndexRef.current;
+      const start =
+        focusIndexRef.current != null
+          ? focusIndexRef.current
+          : hoverIndexRef.current;
       const curPos = start == null ? -1 : vis.indexOf(start);
       const nextPos = (curPos + dir + n) % n;
       const nextIdx = vis[nextPos] ?? null;
       setFocusIndex(nextIdx);
       if (nextIdx != null && !orbitLocked) {
         const c = cards[nextIdx];
-        if (c) onHoverInfo?.({ slug: c.slug, name: c.cardName, type: c.type ?? null });
+        if (c)
+          onHoverInfo?.({
+            slug: c.slug,
+            name: c.cardName,
+            type: c.type ?? null,
+          });
         bumpFocusTimer();
       }
     };
@@ -229,7 +267,10 @@ export default function DraftPackHand3D({
         pickNext(-1);
       } else if (e.key === "Enter") {
         // Stage focused card via parent onSelectIndex
-        const idx = focusIndexRef.current != null ? focusIndexRef.current : hoverIndexRef.current;
+        const idx =
+          focusIndexRef.current != null
+            ? focusIndexRef.current
+            : hoverIndexRef.current;
         if (idx != null) {
           e.preventDefault();
           onSelectIndex?.(idx);
@@ -267,17 +308,24 @@ export default function DraftPackHand3D({
   // Basic straight-line layout (no fan) for visible cards only, with dynamic scaling as pack shrinks
   const layout = useMemo(() => {
     const n = visibleIndices.length;
-    if (n === 0) return [] as { originalIndex: number; x: number; z: number; scale: number }[];
+    if (n === 0)
+      return [] as {
+        originalIndex: number;
+        x: number;
+        z: number;
+        scale: number;
+      }[];
 
     // Fit target: occupy ~85% of viewport width at HAND_DIST
     const gapFrac = 0.08; // 8% of card width
 
-    // Estimate available world width at HAND_DIST (use 85% of viewport width)
+    // Estimate available world width at HAND_DIST (use 78% of viewport width for edge padding)
     const cam = camera as PerspectiveCamera;
     const fov = (cam.fov * Math.PI) / 180;
     const worldH = 2 * Math.tan(fov / 2) * HAND_DIST;
-    const aspect = size.width > 0 && size.height > 0 ? size.width / size.height : 16 / 9;
-    const worldW = worldH * aspect * 0.85; // 85% safety margin
+    const aspect =
+      size.width > 0 && size.height > 0 ? size.width / size.height : 16 / 9;
+    const worldW = worldH * aspect * 0.78; // 78% to ensure 15-card packs stay on screen
 
     // Solve for scale to fit worldW (with constant gap fraction)
     const denom = CARD_SHORT * (n + (n - 1) * gapFrac);
@@ -299,20 +347,30 @@ export default function DraftPackHand3D({
   const outLayout = useMemo(() => {
     const list = outCards || [];
     const n = list.length;
-    if (n === 0) return [] as { index: number; x: number; z: number; scale: number }[];
+    if (n === 0)
+      return [] as { index: number; x: number; z: number; scale: number }[];
     const cam = camera as PerspectiveCamera;
     const fov = (cam.fov * Math.PI) / 180;
     const worldH = 2 * Math.tan(fov / 2) * HAND_DIST;
-    const aspect = size.width > 0 && size.height > 0 ? size.width / size.height : 16 / 9;
-    const worldW = worldH * aspect * 0.85;
+    const aspect =
+      size.width > 0 && size.height > 0 ? size.width / size.height : 16 / 9;
+    const worldW = worldH * aspect * 0.78; // Match main layout margin
     const gapFrac = 0.08;
     const denom = CARD_SHORT * (n + (n - 1) * gapFrac);
-    const scale = Math.max(ROW_MIN_SCALE, Math.min(ROW_MAX_SCALE, denom > 0 ? worldW / denom : ROW_MIN_SCALE));
+    const scale = Math.max(
+      ROW_MIN_SCALE,
+      Math.min(ROW_MAX_SCALE, denom > 0 ? worldW / denom : ROW_MIN_SCALE),
+    );
     const cardW = CARD_SHORT * scale;
     const realGap = CARD_SHORT * gapFrac * scale;
     const total = n * cardW + (n - 1) * realGap;
     const startX = -total / 2 + cardW / 2;
-    return new Array(n).fill(0).map((_, i) => ({ index: i, x: startX + i * (cardW + realGap), z: i * 0.001, scale }));
+    return new Array(n).fill(0).map((_, i) => ({
+      index: i,
+      x: startX + i * (cardW + realGap),
+      z: i * 0.001,
+      scale,
+    }));
   }, [outCards, camera, size.width, size.height]);
 
   // Row widths for transition offset
@@ -323,7 +381,7 @@ export default function DraftPackHand3D({
     const maxX = Math.max(...xs);
     const scale = layout[0]?.scale ?? ROW_MIN_SCALE;
     const cardW = CARD_SHORT * scale;
-    return (maxX - minX) + cardW + 0.4;
+    return maxX - minX + cardW + 0.4;
   }, [layout]);
   const outRowWidth = useMemo(() => {
     if (!outLayout.length) return 0.0;
@@ -332,7 +390,7 @@ export default function DraftPackHand3D({
     const maxX = Math.max(...xs);
     const scale = outLayout[0]?.scale ?? ROW_MIN_SCALE;
     const cardW = CARD_SHORT * scale;
-    return (maxX - minX) + cardW + 0.4;
+    return maxX - minX + cardW + 0.4;
   }, [outLayout]);
 
   // Drive pass animation
@@ -386,8 +444,12 @@ export default function DraftPackHand3D({
               hoverAnyRef.current = false;
               // Don't immediately clear - let hover timeout handle it
             }}
-            onPointerDown={(e) => { e.stopPropagation(); }}
-            onPointerUp={(e) => { e.stopPropagation(); }}
+            onPointerDown={(e) => {
+              e.stopPropagation();
+            }}
+            onPointerUp={(e) => {
+              e.stopPropagation();
+            }}
           >
             {(() => {
               const xs = layout.map((e) => e.x);
@@ -395,7 +457,7 @@ export default function DraftPackHand3D({
               const maxX = Math.max(...xs);
               const scale = layout[0] ? layout[0].scale : ROW_MIN_SCALE;
               const cardW = CARD_SHORT * scale;
-              const rowW = (maxX - minX) + cardW + 0.4; // add margin
+              const rowW = maxX - minX + cardW + 0.4; // add margin
               // During pass animation, widen the intercept plane to cover the whole sweep path
               const sweep = Math.max(rowWidth, outRowWidth) + 0.8;
               const planeW = isTransitioning ? Math.max(rowW, sweep) : rowW;
@@ -403,50 +465,79 @@ export default function DraftPackHand3D({
               return (
                 <>
                   <planeGeometry args={[planeW, rowD]} />
-                  <meshBasicMaterial transparent opacity={0} depthWrite={false} depthTest={false} />
+                  <meshBasicMaterial
+                    transparent
+                    opacity={0}
+                    depthWrite={false}
+                    depthTest={false}
+                  />
                 </>
               );
             })()}
           </mesh>
         )}
-        {layout.length === 0 && (isTransitioning || shieldActive || (outCards && outCards.length > 0)) && (
-          <mesh
-            position={[0, -0.004, 0]}
-            rotation-x={-Math.PI / 2}
-            raycast={noRaycast ? () => [] : undefined}
-            onPointerMove={(e) => { e.stopPropagation(); }}
-            onPointerOver={(e) => { e.stopPropagation(); }}
-            onPointerOut={(e) => { e.stopPropagation(); }}
-            onPointerDown={(e) => { e.stopPropagation(); }}
-            onPointerUp={(e) => { e.stopPropagation(); }}
-          >
-            {(() => {
-              // Estimate available world width at HAND_DIST (85% of viewport width)
-              const cam = camera as PerspectiveCamera;
-              const fov = (cam.fov * Math.PI) / 180;
-              const worldH = 2 * Math.tan(fov / 2) * HAND_DIST;
-              const aspect = size.width > 0 && size.height > 0 ? size.width / size.height : 16 / 9;
-              const worldW = worldH * aspect * 0.85;
-              const fallbackScale = ROW_MIN_SCALE;
-              const rowD = CARD_LONG * fallbackScale * 1.6;
-              const sweep = Math.max(rowWidth, outRowWidth) + 0.8;
-              const planeW = Math.max(worldW, sweep);
-              return (
-                <>
-                  <planeGeometry args={[planeW, rowD]} />
-                  <meshBasicMaterial transparent opacity={0} depthWrite={false} depthTest={false} />
-                </>
-              );
-            })()}
-          </mesh>
-        )}
+        {layout.length === 0 &&
+          (isTransitioning ||
+            shieldActive ||
+            (outCards && outCards.length > 0)) && (
+            <mesh
+              position={[0, -0.004, 0]}
+              rotation-x={-Math.PI / 2}
+              raycast={noRaycast ? () => [] : undefined}
+              onPointerMove={(e) => {
+                e.stopPropagation();
+              }}
+              onPointerOver={(e) => {
+                e.stopPropagation();
+              }}
+              onPointerOut={(e) => {
+                e.stopPropagation();
+              }}
+              onPointerDown={(e) => {
+                e.stopPropagation();
+              }}
+              onPointerUp={(e) => {
+                e.stopPropagation();
+              }}
+            >
+              {(() => {
+                // Estimate available world width at HAND_DIST (85% of viewport width)
+                const cam = camera as PerspectiveCamera;
+                const fov = (cam.fov * Math.PI) / 180;
+                const worldH = 2 * Math.tan(fov / 2) * HAND_DIST;
+                const aspect =
+                  size.width > 0 && size.height > 0
+                    ? size.width / size.height
+                    : 16 / 9;
+                const worldW = worldH * aspect * 0.85;
+                const fallbackScale = ROW_MIN_SCALE;
+                const rowD = CARD_LONG * fallbackScale * 1.6;
+                const sweep = Math.max(rowWidth, outRowWidth) + 0.8;
+                const planeW = Math.max(worldW, sweep);
+                return (
+                  <>
+                    <planeGeometry args={[planeW, rowD]} />
+                    <meshBasicMaterial
+                      transparent
+                      opacity={0}
+                      depthWrite={false}
+                      depthTest={false}
+                    />
+                  </>
+                );
+              })()}
+            </mesh>
+          )}
         {/* Incoming/current pack (flies in from opposite side) */}
         <group ref={inGroupRef}>
           {layout.map((entry) => {
             const { originalIndex, x, z, scale } = entry;
             const c = cards[originalIndex] ?? cards[0];
             const isSite = (c.type || "").toLowerCase().includes("site");
-            const key = c.variantId != null ? `v-${c.variantId}-${originalIndex}` : `c-${c.cardId}-${originalIndex}`;
+            const key =
+              c.variantId != null
+                ? `v-${c.variantId}-${originalIndex}`
+                : `c-${c.cardId}-${originalIndex}`;
             return (
               <PackCard3D
                 key={key}
@@ -458,16 +549,23 @@ export default function DraftPackHand3D({
                 x={x}
                 z={z}
                 scale={scale}
-                disabled={(disabled && !allowHoverWhenDisabled)}
+                disabled={disabled && !allowHoverWhenDisabled}
                 opacity={opacity}
-                onDragChange={disabled || isTransitioning ? undefined : ((drag) => onDragChange?.(drag))}
-                onDragMove={disabled || isTransitioning ? undefined : onDragMove}
+                onDragChange={
+                  disabled || isTransitioning
+                    ? undefined
+                    : (drag) => onDragChange?.(drag)
+                }
+                onDragMove={
+                  disabled || isTransitioning ? undefined : onDragMove
+                }
                 onRelease={disabled ? undefined : onRelease}
                 getTopRenderOrder={getTopRenderOrder}
                 onHoverInfo={(info) => {
                   onHoverInfo?.(info);
                   if (info) {
-                    if (hoverClearTimerRef.current) window.clearTimeout(hoverClearTimerRef.current);
+                    if (hoverClearTimerRef.current)
+                      window.clearTimeout(hoverClearTimerRef.current);
                     hoverClearTimerRef.current = null;
                   }
                 }}
@@ -475,7 +573,8 @@ export default function DraftPackHand3D({
                   hoverIndexRef.current = i;
                   hoverAnyRef.current = i != null;
                   if (i != null) {
-                    if (hoverClearTimerRef.current) window.clearTimeout(hoverClearTimerRef.current);
+                    if (hoverClearTimerRef.current)
+                      window.clearTimeout(hoverClearTimerRef.current);
                     hoverClearTimerRef.current = null;
                   } else {
                     // Don't clear preview immediately - let the parent handle it with its longer delay
@@ -498,7 +597,9 @@ export default function DraftPackHand3D({
           <group ref={outGroupRef}>
             {outLayout.map((entry) => {
               const { index, x, z, scale } = entry;
-              const base = (outCards && outCards.length > 0 ? outCards[0] : undefined) as BoosterCard | undefined;
+              const base = (
+                outCards && outCards.length > 0 ? outCards[0] : undefined
+              ) as BoosterCard | undefined;
               const c = outCards[index] ?? base;
               const isSite = (c.type || "").toLowerCase().includes("site");
               const key = `out-${c?.cardId ?? 0}-${index}`;
@@ -575,9 +676,16 @@ function PackCard3D({
   opacity?: number;
   onDragChange?: (dragging: boolean) => void;
   onDragMove?: (index: number, wx: number, wz: number) => void;
-  onRelease?: (index: number, wx: number, wz: number, wasDragging: boolean) => void;
+  onRelease?: (
+    index: number,
+    wx: number,
+    wz: number,
+    wasDragging: boolean,
+  ) => void;
   getTopRenderOrder?: () => number;
-  onHoverInfo?: (info: { slug: string; name: string; type: string | null } | null) => void;
+  onHoverInfo?: (
+    info: { slug: string; name: string; type: string | null } | null,
+  ) => void;
   orbitLocked?: boolean;
   rootRef: React.MutableRefObject<Group | null>;
   worldLayerRef: React.MutableRefObject<Group | null>;
@@ -591,7 +699,11 @@ function PackCard3D({
   void orbitLocked;
   const ref = useRef<Group | null>(null);
   const roRef = useRef<number>(1500);
-  const dragStart = useRef<{ time: number; screenX: number; screenY: number } | null>(null);
+  const dragStart = useRef<{
+    time: number;
+    screenX: number;
+    screenY: number;
+  } | null>(null);
   const dragging = useRef(false);
   const upCleanupRef = useRef<(() => void) | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -602,21 +714,20 @@ function PackCard3D({
   const tmpWorldRef = useRef<Vector3>(new Vector3());
   // No separate ghost; move the group to track pointer while dragging
   const lastWorldPosRef = useRef<{ x: number; z: number } | null>(null);
-  const targetLocalRef = useRef<{ x: number; z: number; y: number } | null>(null);
+  const targetLocalRef = useRef<{ x: number; z: number; y: number } | null>(
+    null,
+  );
   const moveCleanupRef = useRef<(() => void) | null>(null);
   const raycasterRef = useRef<Raycaster>(new Raycaster());
   const ndcRef = useRef<Vector2>(new Vector2());
   const three = useThree();
-  const dragScreenRef = useRef<{x:number;y:number}|null>(null);
+  const dragScreenRef = useRef<{ x: number; y: number } | null>(null);
 
   // Helper to set local position (coordinates relative to rootRef)
-  const setLocalPos = useCallback(
-    (lx: number, lz: number, lift = false) => {
-      if (!ref.current) return;
-      ref.current.position.set(lx, lift ? 0.25 : 0.002, lz);
-    },
-    []
-  );
+  const setLocalPos = useCallback((lx: number, lz: number, lift = false) => {
+    if (!ref.current) return;
+    ref.current.position.set(lx, lift ? 0.25 : 0.002, lz);
+  }, []);
 
   // Reset to initial anchored row position when not dragging
   const resetToRow = useCallback(() => {
@@ -629,7 +740,11 @@ function PackCard3D({
   }, [resetToRow]);
 
   // Disable raycast on visual-only meshes (like selection overlay)
-  function noopRaycast(this: Object3D, _ray: Raycaster, _isects: Intersection[]) {
+  function noopRaycast(
+    this: Object3D,
+    _ray: Raycaster,
+    _isects: Intersection[],
+  ) {
     void _ray;
     void _isects;
   }
@@ -638,10 +753,19 @@ function PackCard3D({
   useFrame(() => {
     if (!ref.current) return;
     // Determine target position & scale
-    const baseLiftY = focused ? 0.16 : selected ? 0.12 : (hoveringRef.current ? 0.06 : 0.002);
+    const baseLiftY = focused
+      ? 0.16
+      : selected
+        ? 0.12
+        : hoveringRef.current
+          ? 0.06
+          : 0.002;
     const baseTarget = { x, z, y: baseLiftY };
     if (!inWorldRef.current) {
-      const t = dragging.current && targetLocalRef.current ? targetLocalRef.current : baseTarget;
+      const t =
+        dragging.current && targetLocalRef.current
+          ? targetLocalRef.current
+          : baseTarget;
       const p = ref.current.position;
       if (dragging.current && targetLocalRef.current) {
         // While dragging in local space, pin exactly under cursor (no smoothing)
@@ -655,7 +779,8 @@ function PackCard3D({
     }
 
     // Scale animation
-    let sTarget = (focused || selected || hoveringRef.current) ? 1.1 * scale : scale;
+    let sTarget =
+      focused || selected || hoveringRef.current ? 1.1 * scale : scale;
     if (inWorldRef.current) {
       // When dragging in world space, use board size unless pointer is back in bottom hand zone
       const rect = three.gl.domElement.getBoundingClientRect();
@@ -770,7 +895,10 @@ function PackCard3D({
                 const ndc = ndcRef.current;
                 ndc.set(ndcX, ndcY);
                 rc.setFromCamera(ndc, three.camera as PerspectiveCamera);
-                const hit = rc.ray.intersectPlane(groundPlaneRef.current, tmpWorldRef.current);
+                const hit = rc.ray.intersectPlane(
+                  groundPlaneRef.current,
+                  tmpWorldRef.current,
+                );
                 if (!hit) return;
                 const wx = hit.x;
                 const wz = hit.z;
@@ -791,10 +919,14 @@ function PackCard3D({
                 onDragMove?.(index, wx, wz);
               };
               window.addEventListener("pointermove", handleMove);
-              moveCleanupRef.current = () => window.removeEventListener("pointermove", handleMove);
+              moveCleanupRef.current = () =>
+                window.removeEventListener("pointermove", handleMove);
             }
             // On drag start: reparent to world layer and snap under cursor
-            const hit = e.ray.intersectPlane(groundPlaneRef.current, tmpWorldRef.current);
+            const hit = e.ray.intersectPlane(
+              groundPlaneRef.current,
+              tmpWorldRef.current,
+            );
             if (hit && worldLayerRef.current && ref.current) {
               inWorldRef.current = true;
               worldLayerRef.current.attach(ref.current);
@@ -804,7 +936,10 @@ function PackCard3D({
           if (dragging.current) {
             e.stopPropagation();
             // Convert ray to ground-plane intersection in world space (y=0)
-            const hit = e.ray.intersectPlane(groundPlaneRef.current, tmpWorldRef.current);
+            const hit = e.ray.intersectPlane(
+              groundPlaneRef.current,
+              tmpWorldRef.current,
+            );
             if (!hit) return;
             dragScreenRef.current = { x: e.clientX, y: e.clientY };
             const wx = hit.x;
@@ -832,9 +967,12 @@ function PackCard3D({
           if (disabled) return;
           if (e.nativeEvent.button !== 0) return;
           const wasDragging = dragging.current;
-          const hit = e.ray.intersectPlane(groundPlaneRef.current, tmpWorldRef.current);
-          const wx = (hit?.x ?? e.point.x);
-          const wz = (hit?.z ?? e.point.z);
+          const hit = e.ray.intersectPlane(
+            groundPlaneRef.current,
+            tmpWorldRef.current,
+          );
+          const wx = hit?.x ?? e.point.x;
+          const wz = hit?.z ?? e.point.z;
           dragStart.current = null;
           dragging.current = false;
           setIsDragging(false);
@@ -895,7 +1033,13 @@ function PackCard3D({
         {selected && !isDragging && (
           <mesh position={[0, 0.001, 0]} rotation-x={0} raycast={noopRaycast}>
             <planeGeometry args={[CARD_SHORT, CARD_LONG]} />
-            <meshBasicMaterial color="#ffffff" opacity={0.16} transparent depthWrite={false} depthTest={false} />
+            <meshBasicMaterial
+              color="#ffffff"
+              opacity={0.16}
+              transparent
+              depthWrite={false}
+              depthTest={false}
+            />
           </mesh>
         )}
         <CardPlane
@@ -910,6 +1054,8 @@ function PackCard3D({
           interactive={false}
           elevation={0.002 + (hoverWeightForRow(scale, isDragging) ? 0.018 : 0)}
           opacity={opacity}
+          castShadow={false}
+          receiveShadow={false}
         />
       </group>
     </group>

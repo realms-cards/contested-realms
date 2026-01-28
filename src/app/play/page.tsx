@@ -1114,8 +1114,8 @@ export default function PlayPage() {
         </div>
       )}
 
-      {/* Hover Preview Overlay (hidden if context menu visible, previews disabled, or uiHidden) */}
-      {cardPreviewsEnabled && previewCard && !contextMenu && !uiHidden && (
+      {/* Hover Preview Overlay (visible even when uiHidden) */}
+      {cardPreviewsEnabled && previewCard && !contextMenu && (
         <CardPreview
           card={createCardPreviewData({
             slug: previewCard.slug,
@@ -1290,7 +1290,7 @@ export default function PlayPage() {
 
 function KeyboardPanControls({
   enabled = true,
-  step = 0.4,
+  step = 0.8,
   viewPlayerNumber = 1,
 }: {
   enabled?: boolean;

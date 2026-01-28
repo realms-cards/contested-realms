@@ -11,13 +11,14 @@ import FloatingChat from "@/components/chat/FloatingChat";
 import CardPreview from "@/components/game/CardPreview";
 import type { Digit } from "@/components/game/manacost";
 import { NumberBadge } from "@/components/game/manacost";
+import TournamentBracket from "@/components/tournament/TournamentBracket";
 import TournamentRoster from "@/components/tournament/TournamentRoster";
 import { useRealtimeTournaments } from "@/contexts/RealtimeTournamentContext";
 import type { CardPreviewData } from "@/lib/game/card-preview.types";
 
 const TournamentInviteModal = dynamic(
   () => import("@/components/tournament/TournamentInviteModal"),
-  { ssr: false }
+  { ssr: false },
 );
 
 interface Tournament {
@@ -77,7 +78,7 @@ export default function TournamentDetailsPage() {
   const [startingRound, setStartingRound] = useState(false);
   const [endingRound, setEndingRound] = useState(false);
   const [invalidatingMatchId, setInvalidatingMatchId] = useState<string | null>(
-    null
+    null,
   );
   const [lockingRegistration, setLockingRegistration] = useState(false);
   // Only block with a full-screen loading overlay on the very first load
@@ -106,12 +107,12 @@ export default function TournamentDetailsPage() {
     };
     window.addEventListener(
       "tournament:matchAssigned",
-      handler as EventListener
+      handler as EventListener,
     );
     return () =>
       window.removeEventListener(
         "tournament:matchAssigned",
-        handler as EventListener
+        handler as EventListener,
       );
   }, [tournamentId]);
 
@@ -181,7 +182,7 @@ export default function TournamentDetailsPage() {
             setFallbackTournament(data as Tournament);
             // Add tournament to context so event handlers can update it
             setCurrentTournament(
-              data as unknown as Parameters<typeof setCurrentTournament>[0]
+              data as unknown as Parameters<typeof setCurrentTournament>[0],
             );
           }
         })
@@ -237,19 +238,19 @@ export default function TournamentDetailsPage() {
   // Derived helpers: my standing and match id (with rank calculation)
   const myStanding = useMemo(() => {
     const standing = statistics?.standings?.find(
-      (s) => s.playerId === session?.user?.id
+      (s) => s.playerId === session?.user?.id,
     );
     if (!standing) return null;
     const rank =
       (statistics?.standings?.findIndex(
-        (s) => s.playerId === session?.user?.id
+        (s) => s.playerId === session?.user?.id,
       ) ?? -1) + 1;
     return { ...standing, rank };
   }, [statistics?.standings, session?.user?.id]);
   const myMatchId = useMemo(
     () =>
       myStanding?.currentMatchId ? String(myStanding.currentMatchId) : null,
-    [myStanding?.currentMatchId]
+    [myStanding?.currentMatchId],
   );
   // Round helpers
   const rounds = useMemo(() => statistics?.rounds || [], [statistics?.rounds]);
@@ -258,15 +259,15 @@ export default function TournamentDetailsPage() {
   const maxRoundNumber = rounds.length
     ? Math.max(
         ...rounds.map((r) =>
-          typeof r.roundNumber === "number" ? r.roundNumber : 0
-        )
+          typeof r.roundNumber === "number" ? r.roundNumber : 0,
+        ),
       )
     : 0;
   const lastCompletedRoundNumber = useMemo(() => {
     const list = (rounds || [])
       .map((r) => r as unknown as { roundNumber?: number; status?: string })
       .filter(
-        (r) => r.status === "completed" && typeof r.roundNumber === "number"
+        (r) => r.status === "completed" && typeof r.roundNumber === "number",
       )
       .map((r) => r.roundNumber as number);
     return list.length ? Math.max(...list) : 0;
@@ -288,7 +289,7 @@ export default function TournamentDetailsPage() {
         }
       )?.matches || [];
     const viaRound = matchesInRound.find(
-      (m) => Array.isArray(m.players) && m.players.some((p) => p.id === uid)
+      (m) => Array.isArray(m.players) && m.players.some((p) => p.id === uid),
     );
     if (viaRound) return String(viaRound.id);
     // Fallback to global matches filtered by round number
@@ -298,7 +299,7 @@ export default function TournamentDetailsPage() {
         (m) =>
           m.roundNumber === activeRoundNumber &&
           Array.isArray(m.players) &&
-          m.players.some((p) => p.id === uid)
+          m.players.some((p) => p.id === uid),
       );
       if (viaGlobal) return String(viaGlobal.id);
     }
@@ -317,14 +318,14 @@ export default function TournamentDetailsPage() {
     const mid = rtAssignedMatchId || myAssignedMatchId;
     if (!mid) return;
     const match = (statistics?.matches || []).find(
-      (m) => String(m.id) === String(mid)
+      (m) => String(m.id) === String(mid),
     );
     const players = Array.isArray(
       (match as { players?: Array<{ id: string; name?: string }> } | null)
-        ?.players
+        ?.players,
     )
-      ? ((match as { players?: Array<{ id: string; name?: string }> } | null)
-          ?.players as Array<{ id: string; name?: string }>) ?? []
+      ? (((match as { players?: Array<{ id: string; name?: string }> } | null)
+          ?.players as Array<{ id: string; name?: string }>) ?? [])
       : [];
     const me = session?.user?.id || null;
     const opp = players.find((p) => p.id !== me)?.name || null;
@@ -348,14 +349,14 @@ export default function TournamentDetailsPage() {
       const mid = assigned?.matchId || rtAssignedMatchId || myAssignedMatchId;
       if (!mid) return;
       const match = (statistics?.matches || []).find(
-        (m) => String(m.id) === String(mid)
+        (m) => String(m.id) === String(mid),
       );
       const players = Array.isArray(
         (match as { players?: Array<{ id: string; name?: string }> } | null)
-          ?.players
+          ?.players,
       )
-        ? ((match as { players?: Array<{ id: string; name?: string }> } | null)
-            ?.players as Array<{ id: string; name?: string }>) ?? []
+        ? (((match as { players?: Array<{ id: string; name?: string }> } | null)
+            ?.players as Array<{ id: string; name?: string }>) ?? [])
         : [];
       const me = session?.user?.id || null;
       const opp = players.find((p) => p.id !== me)?.name || null;
@@ -432,7 +433,7 @@ export default function TournamentDetailsPage() {
           registeredPlayers?: Array<{ id: string; seatStatus?: string | null }>;
         }
       )?.registeredPlayers || [],
-    [tournament]
+    [tournament],
   );
   const registrationSettings = (
     tournament?.settings as Record<string, unknown> | undefined
@@ -451,7 +452,7 @@ export default function TournamentDetailsPage() {
       .registeredPlayers;
     if (!Array.isArray(rp)) return 0;
     return rp.filter(
-      (p) => (p as { seatStatus?: string }).seatStatus !== "vacant"
+      (p) => (p as { seatStatus?: string }).seatStatus !== "vacant",
     ).length;
   }
 
@@ -468,8 +469,8 @@ export default function TournamentDetailsPage() {
     // Fallback for active phase when registrations may not be present
     return Boolean(
       statistics?.standings?.some(
-        (s) => s.playerId === userId && !s.isEliminated
-      )
+        (s) => s.playerId === userId && !s.isEliminated,
+      ),
     );
   }, [tournament, statistics?.standings, session?.user?.id, registeredPlayers]);
 
@@ -488,6 +489,18 @@ export default function TournamentDetailsPage() {
 
   // Check if current user is the creator
   const isCreator = tournament && session?.user?.id === tournament.creatorId;
+
+  // Set rounds tab as default for host when tournament is active
+  const hasSetDefaultTabRef = useRef(false);
+  useEffect(() => {
+    if (hasSetDefaultTabRef.current) return;
+    if (!tournament || !isCreator) return;
+    // Set rounds tab as default for host in active tournaments
+    if (tournament.status === "active" || tournament.status === "preparing") {
+      setActiveTab("rounds");
+      hasSetDefaultTabRef.current = true;
+    }
+  }, [tournament, isCreator]);
 
   const canJoinTournament = useMemo(() => {
     if (!tournament || isRegistered) return false;
@@ -637,7 +650,7 @@ export default function TournamentDetailsPage() {
           quantity: Math.max(0, Number(it.quantity) || 0),
         }));
         const hash = JSON.stringify(
-          [...deck].sort((a, b) => a.cardId.localeCompare(b.cardId))
+          [...deck].sort((a, b) => a.cardId.localeCompare(b.cardId)),
         );
         if (viewerDeckHashRef.current === hash) {
           if (!viewerDeckLoaded) setViewerDeckLoaded(true);
@@ -649,8 +662,8 @@ export default function TournamentDetailsPage() {
           new Set(
             deck
               .map((it) => Number(it.cardId))
-              .filter((n) => Number.isFinite(n) && n > 0)
-          )
+              .filter((n) => Number.isFinite(n) && n > 0),
+          ),
         );
         if (!ids.length) {
           setViewerDeckCards([]);
@@ -658,7 +671,7 @@ export default function TournamentDetailsPage() {
           return;
         }
         const res = await fetch(
-          `/api/cards/by-id?ids=${encodeURIComponent(ids.join(","))}`
+          `/api/cards/by-id?ids=${encodeURIComponent(ids.join(","))}`,
         );
         const data = await res.json();
         if (!res.ok)
@@ -757,15 +770,15 @@ export default function TournamentDetailsPage() {
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-            }
+            },
           );
         } catch {}
         const res = await fetch(
           `/api/tournaments/${encodeURIComponent(
-            tId
+            tId,
           )}/preparation/constructed/decks?includePublic=${
             includePublicDecks ? "true" : "false"
-          }`
+          }`,
         );
         const data = await res.json();
         if (!res.ok)
@@ -777,12 +790,12 @@ export default function TournamentDetailsPage() {
               format?: string;
             }>)
           : Array.isArray(data?.availableDecks)
-          ? (data.availableDecks as Array<{
-              id: string;
-              name: string;
-              format?: string;
-            }>)
-          : [];
+            ? (data.availableDecks as Array<{
+                id: string;
+                name: string;
+                format?: string;
+              }>)
+            : [];
         const pubDecks = Array.isArray(data?.publicDecks)
           ? (data.publicDecks as Array<{
               id: string;
@@ -802,7 +815,7 @@ export default function TournamentDetailsPage() {
         setConstructedAllowedFormats(allowed);
       } catch (e) {
         setConstructedError(
-          e instanceof Error ? e.message : "Failed to load constructed decks"
+          e instanceof Error ? e.message : "Failed to load constructed decks",
         );
         setConstructedDecks([]);
         setConstructedPublicDecks([]);
@@ -814,7 +827,7 @@ export default function TournamentDetailsPage() {
 
   const handleSubmitConstructedDeck = async (
     deckId: string,
-    isPublic: boolean = false
+    isPublic: boolean = false,
   ) => {
     if (!tournament) return;
     setConstructedError(null);
@@ -824,9 +837,9 @@ export default function TournamentDetailsPage() {
       try {
         await fetch(
           `/api/tournaments/${encodeURIComponent(
-            tournament.id
+            tournament.id,
           )}/preparation/start`,
-          { method: "POST", headers: { "Content-Type": "application/json" } }
+          { method: "POST", headers: { "Content-Type": "application/json" } },
         );
       } catch {}
       let finalDeckId = deckId;
@@ -834,13 +847,13 @@ export default function TournamentDetailsPage() {
         // Clone and select via constructed/decks POST (handles cloning and updating preparation data)
         const selectRes = await fetch(
           `/api/tournaments/${encodeURIComponent(
-            tournament.id
+            tournament.id,
           )}/preparation/constructed/decks`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ deckId }),
-          }
+          },
         );
         const selData = await selectRes.json();
         if (!selectRes.ok)
@@ -850,7 +863,7 @@ export default function TournamentDetailsPage() {
         try {
           await fetch(
             `/api/tournaments/${encodeURIComponent(
-              tournament.id
+              tournament.id,
             )}/preparation/submit`,
             {
               method: "POST",
@@ -864,14 +877,14 @@ export default function TournamentDetailsPage() {
                   },
                 },
               }),
-            }
+            },
           );
         } catch {}
       } else {
         // Owned deck: submit constructed selection so server can transition when all submitted
         const submitRes = await fetch(
           `/api/tournaments/${encodeURIComponent(
-            tournament.id
+            tournament.id,
           )}/preparation/submit`,
           {
             method: "POST",
@@ -885,7 +898,7 @@ export default function TournamentDetailsPage() {
                 },
               },
             }),
-          }
+          },
         );
         const submitData = await submitRes.json();
         if (!submitRes.ok)
@@ -895,12 +908,12 @@ export default function TournamentDetailsPage() {
       try {
         localStorage.setItem(
           `constructed_submitted_tournament_${tournament.id}`,
-          "true"
+          "true",
         );
         window.dispatchEvent(
           new CustomEvent("app:toast", {
             detail: { message: "Constructed deck submitted!" },
-          })
+          }),
         );
       } catch {}
       // Ask stats to refresh
@@ -909,7 +922,7 @@ export default function TournamentDetailsPage() {
       } catch {}
     } catch (e) {
       setConstructedError(
-        e instanceof Error ? e.message : "Failed to submit deck"
+        e instanceof Error ? e.message : "Failed to submit deck",
       );
     } finally {
       setConstructedLoading(false);
@@ -922,7 +935,7 @@ export default function TournamentDetailsPage() {
     try {
       // Load matches to find roster for this match
       const res = await fetch(
-        `/api/tournaments/${encodeURIComponent(tournament.id)}/matches`
+        `/api/tournaments/${encodeURIComponent(tournament.id)}/matches`,
       );
       if (res.ok) {
         const data = await res.json();
@@ -946,7 +959,7 @@ export default function TournamentDetailsPage() {
           if (!sealedConfig && !draftConfig) {
             try {
               const detailRes = await fetch(
-                `/api/tournaments/${encodeURIComponent(tournament.id)}`
+                `/api/tournaments/${encodeURIComponent(tournament.id)}`,
               );
               if (detailRes.ok) {
                 const detail = await detailRes.json();
@@ -974,7 +987,7 @@ export default function TournamentDetailsPage() {
           try {
             localStorage.setItem(
               `tournamentMatchBootstrap_${matchId}`,
-              JSON.stringify(payload)
+              JSON.stringify(payload),
             );
           } catch {}
         }
@@ -996,7 +1009,7 @@ export default function TournamentDetailsPage() {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-        }
+        },
       );
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Failed to start next round");
@@ -1004,7 +1017,7 @@ export default function TournamentDetailsPage() {
         const msg = `Round ${data?.roundNumber ?? ""} started`;
         localStorage.setItem("app:toast", msg);
         window.dispatchEvent(
-          new CustomEvent("app:toast", { detail: { message: msg } })
+          new CustomEvent("app:toast", { detail: { message: msg } }),
         );
       } catch {}
       try {
@@ -1013,7 +1026,7 @@ export default function TournamentDetailsPage() {
     } catch (err) {
       console.error("Failed to start next round:", err);
       setError(
-        err instanceof Error ? err.message : "Failed to start next round"
+        err instanceof Error ? err.message : "Failed to start next round",
       );
     } finally {
       setStartingRound(false);
@@ -1030,12 +1043,12 @@ export default function TournamentDetailsPage() {
       try {
         localStorage.setItem("app:toast", msg);
         window.dispatchEvent(
-          new CustomEvent("app:toast", { detail: { message: msg } })
+          new CustomEvent("app:toast", { detail: { message: msg } }),
         );
       } catch {}
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Failed to update registration"
+        err instanceof Error ? err.message : "Failed to update registration",
       );
     } finally {
       setLockingRegistration(false);
@@ -1055,7 +1068,7 @@ export default function TournamentDetailsPage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ roundId }),
-        }
+        },
       );
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Failed to end round");
@@ -1065,7 +1078,7 @@ export default function TournamentDetailsPage() {
           : `Round ${data?.roundNumber ?? ""} ended`;
         localStorage.setItem("app:toast", msg);
         window.dispatchEvent(
-          new CustomEvent("app:toast", { detail: { message: msg } })
+          new CustomEvent("app:toast", { detail: { message: msg } }),
         );
       } catch {}
       try {
@@ -1081,7 +1094,7 @@ export default function TournamentDetailsPage() {
   const handleInvalidateMatch = async (
     matchId: string,
     mode: "invalid" | "bye",
-    winnerId?: string
+    winnerId?: string,
   ) => {
     if (!tournament || !isCreator) return;
     const confirmMessage =
@@ -1101,7 +1114,7 @@ export default function TournamentDetailsPage() {
             mode,
             winnerId,
           }),
-        }
+        },
       );
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Failed to invalidate match");
@@ -1110,7 +1123,7 @@ export default function TournamentDetailsPage() {
           mode === "bye" ? "Bye awarded for match" : "Match marked invalid";
         localStorage.setItem("app:toast", msg);
         window.dispatchEvent(
-          new CustomEvent("app:toast", { detail: { message: msg } })
+          new CustomEvent("app:toast", { detail: { message: msg } }),
         );
       } catch {}
       try {
@@ -1118,7 +1131,7 @@ export default function TournamentDetailsPage() {
       } catch {}
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Failed to invalidate match"
+        err instanceof Error ? err.message : "Failed to invalidate match",
       );
     } finally {
       setInvalidatingMatchId(null);
@@ -1136,7 +1149,7 @@ export default function TournamentDetailsPage() {
     } catch (err) {
       console.error("Failed to join tournament:", err);
       setError(
-        err instanceof Error ? err.message : "Failed to join tournament"
+        err instanceof Error ? err.message : "Failed to join tournament",
       );
     } finally {
       setJoining(false);
@@ -1155,13 +1168,13 @@ export default function TournamentDetailsPage() {
         window.dispatchEvent(
           new CustomEvent("app:toast", {
             detail: { message: "Tournament started" },
-          })
+          }),
         );
       } catch {}
     } catch (err) {
       console.error("Failed to start tournament:", err);
       setError(
-        err instanceof Error ? err.message : "Failed to start tournament"
+        err instanceof Error ? err.message : "Failed to start tournament",
       );
     } finally {
       setStarting(false);
@@ -1172,7 +1185,7 @@ export default function TournamentDetailsPage() {
     if (!session || !tournament || !isCreator) return;
 
     const ok = window.confirm(
-      "End this tournament now? This cannot be undone."
+      "End this tournament now? This cannot be undone.",
     );
     if (!ok) return;
 
@@ -1184,7 +1197,7 @@ export default function TournamentDetailsPage() {
         window.dispatchEvent(
           new CustomEvent("app:toast", {
             detail: { message: "Tournament ended" },
-          })
+          }),
         );
       } catch {}
       // Redirect actor to tournaments list after ending
@@ -1390,7 +1403,7 @@ export default function TournamentDetailsPage() {
               </div>
             </div>
           </div>,
-          document.body
+          document.body,
         )}
 
       <div className="max-w-5xl mx-auto p-6 space-y-6">
@@ -1422,8 +1435,8 @@ export default function TournamentDetailsPage() {
                 {lockingRegistration
                   ? "Updating…"
                   : isRegistrationLocked
-                  ? "Unlock Seats"
-                  : "Lock Seats"}
+                    ? "Unlock Seats"
+                    : "Lock Seats"}
               </button>
             </div>
           )}
@@ -1486,7 +1499,7 @@ export default function TournamentDetailsPage() {
                 <div className="flex items-center space-x-4 mt-1">
                   <span
                     className={`px-3 py-1 rounded-full text-sm font-medium border capitalize ${getStatusBadgeColor(
-                      tournament.status
+                      tournament.status,
                     )}`}
                   >
                     {tournament.status}
@@ -1521,8 +1534,8 @@ export default function TournamentDetailsPage() {
                   {joining
                     ? "Joining..."
                     : isSeatVacant
-                    ? "Rejoin Tournament"
-                    : "Join Tournament"}
+                      ? "Rejoin Tournament"
+                      : "Join Tournament"}
                 </button>
               )}
 
@@ -1547,16 +1560,16 @@ export default function TournamentDetailsPage() {
               ).registeredPlayers || [];
             const mine = rp.find((p) => p.id === meId);
             const serverSubmitted = Boolean(
-              (mine as { deckSubmitted?: boolean })?.deckSubmitted
+              (mine as { deckSubmitted?: boolean })?.deckSubmitted,
             );
             let optimistic = false;
             try {
               optimistic =
                 localStorage.getItem(
-                  `sealed_submitted_tournament_${tournament.id}`
+                  `sealed_submitted_tournament_${tournament.id}`,
                 ) === "true" ||
                 localStorage.getItem(
-                  `draft_submitted_tournament_${tournament.id}`
+                  `draft_submitted_tournament_${tournament.id}`,
                 ) === "true";
             } catch {}
             const hasDeck = viewerDeckCards.length > 0;
@@ -1565,7 +1578,7 @@ export default function TournamentDetailsPage() {
 
             const totalCards = viewerDeckCards.reduce(
               (sum, c) => sum + (Number(c.quantity) || 0),
-              0
+              0,
             );
 
             return (
@@ -1603,7 +1616,7 @@ export default function TournamentDetailsPage() {
                           const thresholds: Record<string, number> = {};
                           if (c.thresholds) {
                             for (const [k, v] of Object.entries(
-                              c.thresholds as Record<string, number>
+                              c.thresholds as Record<string, number>,
                             )) {
                               const key = k.toLowerCase();
                               if (
@@ -1690,7 +1703,7 @@ export default function TournamentDetailsPage() {
                                               />
                                             ))}
                                           </span>
-                                        ) : null
+                                        ) : null,
                                       )}
                                     </div>
                                     {c.cost != null && !isSite && (
@@ -1757,12 +1770,12 @@ export default function TournamentDetailsPage() {
                     try {
                       optimisticSubmitted =
                         localStorage.getItem(
-                          `draft_submitted_tournament_${tournament.id}`
+                          `draft_submitted_tournament_${tournament.id}`,
                         ) === "true";
                     } catch {}
                     const submitted =
                       Boolean(
-                        (mine as { deckSubmitted?: boolean })?.deckSubmitted
+                        (mine as { deckSubmitted?: boolean })?.deckSubmitted,
                       ) ||
                       optimisticSubmitted ||
                       viewerDeckCards.length > 0;
@@ -1778,16 +1791,32 @@ export default function TournamentDetailsPage() {
                         </div>
                       );
                     }
+                    // Check if draft session is ready before allowing navigation
+                    const draftSessionId = (
+                      tournament as unknown as { draftSessionId?: string }
+                    ).draftSessionId;
+                    const isDraftReady = Boolean(draftSessionId);
                     return (
                       <button
-                        onClick={() => {
+                        onClick={async () => {
+                          if (!isDraftReady) {
+                            // Wait a moment and retry - draft engine might still be initializing
+                            await new Promise((resolve) =>
+                              setTimeout(resolve, 1000),
+                            );
+                          }
                           try {
                             window.location.href = `/tournaments/${tournament.id}/draft`;
                           } catch {}
                         }}
-                        className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm"
+                        disabled={!isDraftReady}
+                        className={`px-4 py-2 rounded-md text-sm ${
+                          isDraftReady
+                            ? "bg-blue-600 hover:bg-blue-700 text-white"
+                            : "bg-slate-600 text-slate-300 cursor-wait"
+                        }`}
                       >
-                        Enter Draft
+                        {isDraftReady ? "Enter Draft" : "Preparing Draft..."}
                       </button>
                     );
                   })()}
@@ -1811,12 +1840,12 @@ export default function TournamentDetailsPage() {
                     try {
                       optimisticSubmitted =
                         localStorage.getItem(
-                          `sealed_submitted_tournament_${tournament.id}`
+                          `sealed_submitted_tournament_${tournament.id}`,
                         ) === "true";
                     } catch {}
                     const submitted =
                       Boolean(
-                        (mine as { deckSubmitted?: boolean })?.deckSubmitted
+                        (mine as { deckSubmitted?: boolean })?.deckSubmitted,
                       ) ||
                       optimisticSubmitted ||
                       viewerDeckCards.length > 0;
@@ -1838,17 +1867,17 @@ export default function TournamentDetailsPage() {
                           try {
                             const res = await fetch(
                               `/api/tournaments/${encodeURIComponent(
-                                tournament.id
+                                tournament.id,
                               )}/preparation/start`,
                               {
                                 method: "POST",
                                 headers: { "Content-Type": "application/json" },
-                              }
+                              },
                             );
                             const data = await res.json();
                             if (!res.ok)
                               throw new Error(
-                                data?.error || "Failed to start preparation"
+                                data?.error || "Failed to start preparation",
                               );
                             const sealedData = data?.preparationData?.sealed as
                               | {
@@ -1873,13 +1902,13 @@ export default function TournamentDetailsPage() {
                               try {
                                 localStorage.setItem(
                                   `sealedPacks_tournament_${tournament.id}`,
-                                  JSON.stringify(storePacks)
+                                  JSON.stringify(storePacks),
                                 );
                                 // Store cube name for display if available
                                 if (sealedData?.cubeName) {
                                   localStorage.setItem(
                                     `sealedCubeName_tournament_${tournament.id}`,
-                                    sealedData.cubeName
+                                    sealedData.cubeName,
                                   );
                                 }
                                 // Store cube sideboard setting if available
@@ -1893,7 +1922,7 @@ export default function TournamentDetailsPage() {
                                       cubeId: sealedData.cubeId,
                                       includeSideboard:
                                         sealedData.includeCubeSideboardInStandard,
-                                    })
+                                    }),
                                   );
                                 }
                               } catch {}
@@ -1917,10 +1946,10 @@ export default function TournamentDetailsPage() {
                               ).settings?.sealedConfig || {};
                             const packCount =
                               Object.values(
-                                cfg.packCounts || { Beta: 6 }
+                                cfg.packCounts || { Beta: 6 },
                               ).reduce((a, b) => a + (b || 0), 0) || 6;
                             const setMix = Object.entries(
-                              cfg.packCounts || { Beta: 6 }
+                              cfg.packCounts || { Beta: 6 },
                             )
                               .filter(([, c]) => (c || 0) > 0)
                               .map(([s]) => s);
@@ -2001,7 +2030,7 @@ export default function TournamentDetailsPage() {
                       try {
                         localStorage.setItem(
                           "sorcery:includePublicDecks",
-                          next ? "1" : "0"
+                          next ? "1" : "0",
                         );
                       } catch {}
                     }}
@@ -2049,12 +2078,12 @@ export default function TournamentDetailsPage() {
                                   body: JSON.stringify({
                                     url: curiosaUrl.trim(),
                                   }),
-                                }
+                                },
                               );
                               const data = await res.json().catch(() => ({}));
                               if (!res.ok) {
                                 throw new Error(
-                                  (data && data.error) || "Import failed"
+                                  (data && data.error) || "Import failed",
                                 );
                               }
                               // Success - clear input and refresh deck list
@@ -2064,20 +2093,20 @@ export default function TournamentDetailsPage() {
                               try {
                                 const refreshRes = await fetch(
                                   `/api/tournaments/${encodeURIComponent(
-                                    tournament?.id || ""
+                                    tournament?.id || "",
                                   )}/preparation/constructed/decks?includePublic=${
                                     includePublicDecks ? "true" : "false"
-                                  }`
+                                  }`,
                                 );
                                 const refreshData = await refreshRes.json();
                                 if (refreshRes.ok) {
                                   const decks = Array.isArray(
-                                    refreshData?.myDecks
+                                    refreshData?.myDecks,
                                   )
                                     ? refreshData.myDecks
                                     : [];
                                   const pubDecks = Array.isArray(
-                                    refreshData?.publicDecks
+                                    refreshData?.publicDecks,
                                   )
                                     ? refreshData.publicDecks
                                     : [];
@@ -2090,11 +2119,13 @@ export default function TournamentDetailsPage() {
                                   detail: {
                                     message: "Deck imported successfully!",
                                   },
-                                })
+                                }),
                               );
                             } catch (e) {
                               setCuriosaError(
-                                e instanceof Error ? e.message : "Import failed"
+                                e instanceof Error
+                                  ? e.message
+                                  : "Import failed",
                               );
                             } finally {
                               setCuriosaImporting(false);
@@ -2161,9 +2192,9 @@ export default function TournamentDetailsPage() {
                                 )}
                                 <Link
                                   href={`/decks/editor-3d?id=${encodeURIComponent(
-                                    d.id
+                                    d.id,
                                   )}&tournament=${encodeURIComponent(
-                                    tournament.id
+                                    tournament.id,
                                   )}`}
                                   className="text-xs text-emerald-200 underline"
                                 >
@@ -2215,9 +2246,9 @@ export default function TournamentDetailsPage() {
                                   )}
                                   <Link
                                     href={`/decks/editor-3d?id=${encodeURIComponent(
-                                      d.id
+                                      d.id,
                                     )}&tournament=${encodeURIComponent(
-                                      tournament.id
+                                      tournament.id,
                                     )}`}
                                     className="text-xs text-emerald-200 underline"
                                   >
@@ -2261,7 +2292,7 @@ export default function TournamentDetailsPage() {
             // Check if this match is completed
             const globalMatches = statistics?.matches || [];
             const myMatch = globalMatches.find(
-              (m) => String(m.id) === String(mid)
+              (m) => String(m.id) === String(mid),
             );
             const isCompleted =
               myMatch &&
@@ -2309,7 +2340,7 @@ export default function TournamentDetailsPage() {
                 const fallback = (statistics?.matches || []).filter(
                   (m) =>
                     m.roundNumber ===
-                    (activeRound as { roundNumber?: number }).roundNumber
+                    (activeRound as { roundNumber?: number }).roundNumber,
                 );
                 const list = embedded.length > 0 ? embedded : fallback;
                 if (!Array.isArray(list) || list.length === 0) {
@@ -2371,7 +2402,7 @@ export default function TournamentDetailsPage() {
                             )}
                           </div>
                         );
-                      }
+                      },
                     )}
                   </div>
                 );
@@ -2399,6 +2430,80 @@ export default function TournamentDetailsPage() {
             </div>
           </div>
         )}
+
+        {/* Draft Pod Size Configuration for large tournaments */}
+        {canStartTournament &&
+          tournament.format === "draft" &&
+          activeCount > 8 && (
+            <div className="mb-4 bg-amber-900/20 border border-amber-700/50 rounded-lg p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-amber-200 font-medium">
+                    Draft Pod Configuration
+                  </h4>
+                  <p className="text-amber-200/70 text-sm mt-1">
+                    {activeCount} players will be split into pods for drafting.
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <label className="text-amber-200/80 text-sm">Pod Size:</label>
+                  <select
+                    className="bg-slate-800 border border-amber-600/50 rounded px-3 py-1.5 text-white text-sm"
+                    defaultValue={
+                      ((
+                        (tournament.settings as Record<string, unknown>)
+                          ?.draftConfig as Record<string, unknown>
+                      )?.podSize as number) || 8
+                    }
+                    onChange={async (e) => {
+                      const newPodSize = parseInt(e.target.value);
+                      try {
+                        await fetch(`/api/tournaments/${tournament.id}`, {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            settings: {
+                              ...tournament.settings,
+                              draftConfig: {
+                                ...((
+                                  tournament.settings as Record<string, unknown>
+                                )?.draftConfig || {}),
+                                podSize: newPodSize,
+                              },
+                            },
+                          }),
+                        });
+                      } catch (err) {
+                        console.error("Failed to update pod size:", err);
+                      }
+                    }}
+                  >
+                    <option value="4">4 players</option>
+                    <option value="5">5 players</option>
+                    <option value="6">6 players</option>
+                    <option value="7">7 players</option>
+                    <option value="8">8 players</option>
+                  </select>
+                </div>
+              </div>
+              <div className="text-amber-200/60 text-xs mt-2">
+                Pods: ~
+                {Math.ceil(
+                  activeCount /
+                    (((
+                      (tournament.settings as Record<string, unknown>)
+                        ?.draftConfig as Record<string, unknown>
+                    )?.podSize as number) || 8),
+                )}{" "}
+                (
+                {((
+                  (tournament.settings as Record<string, unknown>)
+                    ?.draftConfig as Record<string, unknown>
+                )?.podSize as number) || 8}{" "}
+                players each)
+              </div>
+            </div>
+          )}
 
         {/* Spectacular Start Tournament Button */}
         {canStartTournament && (
@@ -2452,7 +2557,7 @@ export default function TournamentDetailsPage() {
                   style={{
                     width: `${Math.min(
                       (activeCount / tournament.maxPlayers) * 100,
-                      100
+                      100,
                     )}%`,
                   }}
                 />
@@ -2736,7 +2841,7 @@ export default function TournamentDetailsPage() {
                       }`
                     : `Tournament is accepting new players. ${Math.max(
                         0,
-                        tournament.maxPlayers - activeCount
+                        tournament.maxPlayers - activeCount,
                       )} spots remaining.`}
                 </p>
                 {isCreator && (
@@ -2821,167 +2926,68 @@ export default function TournamentDetailsPage() {
 
         {activeTab === "rounds" && (
           <div className="space-y-6">
-            {statistics && statistics.rounds && statistics.rounds.length > 0 ? (
-              statistics.rounds.map((round) => (
-                <div
-                  key={round.id}
-                  className="bg-slate-800 border border-slate-700 rounded-lg p-6"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-                    <div className="flex items-center gap-3">
-                      <h3 className="text-lg font-semibold text-white">
-                        Round {round.roundNumber}
-                      </h3>
-                      {round.readyToEnd && round.status === "active" && (
-                        <span className="text-xs uppercase tracking-wide text-emerald-300 border border-emerald-500/40 bg-emerald-900/30 px-2 py-1 rounded-full">
-                          Ready to end
-                        </span>
-                      )}
+            {/* Round Controls for Creator */}
+            {isCreator &&
+              statistics?.rounds &&
+              statistics.rounds.length > 0 && (
+                <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="text-sm text-slate-300">
+                      Round Management
                     </div>
                     <div className="flex items-center gap-2">
-                      <span
-                        className={`px-3 py-1 rounded-full text-sm font-medium border capitalize ${
-                          round.status === "completed"
-                            ? "bg-gray-100 text-gray-800 border-gray-200"
-                            : round.status === "active"
-                            ? "bg-blue-100 text-blue-800 border-blue-200"
-                            : "bg-yellow-100 text-yellow-800 border-yellow-200"
-                        }`}
-                      >
-                        {round.status}
-                      </span>
-                      {isCreator && round.status === "pending" && (
+                      {statistics.rounds.some(
+                        (r) => r.status === "pending",
+                      ) && (
                         <button
                           onClick={handleStartNextRound}
                           disabled={startingRound}
-                          className="bg-indigo-500 hover:bg-indigo-400 text-white px-3 py-1.5 rounded-md text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="bg-indigo-500 hover:bg-indigo-400 text-white px-3 py-1.5 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          {startingRound ? "Starting…" : "Start round"}
+                          {startingRound ? "Starting…" : "Start Next Round"}
                         </button>
                       )}
-                      {isCreator &&
-                        round.status === "active" &&
-                        round.readyToEnd && (
-                          <button
-                            onClick={() => handleEndRound(round.id)}
-                            disabled={endingRound}
-                            className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-md text-xs disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            {endingRound ? "Ending…" : "End round"}
-                          </button>
-                        )}
+                      {statistics.rounds.some(
+                        (r) => r.status === "active" && r.readyToEnd,
+                      ) && (
+                        <button
+                          onClick={() => {
+                            const activeRound = statistics.rounds.find(
+                              (r) => r.status === "active" && r.readyToEnd,
+                            );
+                            if (activeRound) handleEndRound(activeRound.id);
+                          }}
+                          disabled={endingRound}
+                          className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {endingRound ? "Ending…" : "End Current Round"}
+                        </button>
+                      )}
                     </div>
                   </div>
-
-                  <div className="text-sm text-slate-400">
-                    {round.startedAt && (
-                      <div>
-                        Started: {new Date(round.startedAt).toLocaleString()}
-                      </div>
-                    )}
-                    {round.completedAt && (
-                      <div>
-                        Completed:{" "}
-                        {new Date(round.completedAt).toLocaleString()}
-                      </div>
-                    )}
-                    {round.statistics && (
-                      <div className="mt-2">
-                        Matches resolved:{" "}
-                        {round.statistics.resolvedMatches ?? 0}/
-                        {round.statistics.totalMatches ?? 0} • Pending:{" "}
-                        {round.statistics.pendingMatches ?? 0} • Active:{" "}
-                        {round.statistics.activeMatches ?? 0}
-                      </div>
-                    )}
-                  </div>
-
-                  {Array.isArray(round.matches) && round.matches.length > 0 && (
-                    <div className="mt-4 space-y-3">
-                      {round.matches.map((match) => {
-                        const matchPlayers = Array.isArray(match.players)
-                          ? match.players
-                          : [];
-                        const player1 = matchPlayers[0];
-                        const player2 = matchPlayers[1];
-                        const isResolving = invalidatingMatchId === match.id;
-                        return (
-                          <div
-                            key={match.id}
-                            className="border border-slate-700 rounded-md p-3"
-                          >
-                            <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-                              <div className="text-slate-200">
-                                {player1?.name || "Player 1"}
-                                {player2
-                                  ? ` vs ${player2.name || "Player 2"}`
-                                  : " (bye)"}
-                              </div>
-                              <div className="flex items-center gap-2 text-xs">
-                                {match.bye && (
-                                  <span className="text-amber-300">bye</span>
-                                )}
-                                {match.invalid && (
-                                  <span className="text-red-300">invalid</span>
-                                )}
-                                <span className="text-slate-400">
-                                  {match.status}
-                                </span>
-                              </div>
-                            </div>
-                            {isCreator &&
-                              round.status === "active" &&
-                              (match.status === "pending" ||
-                                match.status === "active") && (
-                                <div className="mt-2 flex flex-wrap gap-2">
-                                  <button
-                                    onClick={() =>
-                                      handleInvalidateMatch(match.id, "invalid")
-                                    }
-                                    disabled={isResolving}
-                                    className="bg-red-700/70 hover:bg-red-600 text-white px-2 py-1 rounded text-xs disabled:opacity-50 disabled:cursor-not-allowed"
-                                  >
-                                    Invalidate
-                                  </button>
-                                  {player1 && player2 && (
-                                    <>
-                                      <button
-                                        onClick={() =>
-                                          handleInvalidateMatch(
-                                            match.id,
-                                            "bye",
-                                            player1.id
-                                          )
-                                        }
-                                        disabled={isResolving}
-                                        className="bg-amber-600/80 hover:bg-amber-500 text-white px-2 py-1 rounded text-xs disabled:opacity-50 disabled:cursor-not-allowed"
-                                      >
-                                        Bye: {player1.name}
-                                      </button>
-                                      <button
-                                        onClick={() =>
-                                          handleInvalidateMatch(
-                                            match.id,
-                                            "bye",
-                                            player2.id
-                                          )
-                                        }
-                                        disabled={isResolving}
-                                        className="bg-amber-600/80 hover:bg-amber-500 text-white px-2 py-1 rounded text-xs disabled:opacity-50 disabled:cursor-not-allowed"
-                                      >
-                                        Bye: {player2.name}
-                                      </button>
-                                    </>
-                                  )}
-                                </div>
-                              )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
                 </div>
-              ))
+              )}
+
+            {/* Bracket View */}
+            {statistics && statistics.rounds && statistics.rounds.length > 0 ? (
+              <TournamentBracket
+                rounds={statistics.rounds.map((round) => ({
+                  ...round,
+                  status: round.status as "pending" | "active" | "completed",
+                  matches: (round.matches || []).map((match) => ({
+                    ...match,
+                    status: match.status as
+                      | "pending"
+                      | "active"
+                      | "completed"
+                      | "cancelled",
+                    players: Array.isArray(match.players) ? match.players : [],
+                  })),
+                }))}
+                currentUserId={session?.user?.id}
+                isCreator={isCreator ?? false}
+                onInvalidateMatch={handleInvalidateMatch}
+              />
             ) : (
               <div className="bg-slate-800 border border-slate-700 rounded-lg p-6">
                 <div className="text-center py-8 text-slate-400">
@@ -2989,6 +2995,47 @@ export default function TournamentDetailsPage() {
                 </div>
               </div>
             )}
+
+            {/* Round Details */}
+            {statistics?.rounds?.map((round) => (
+              <div
+                key={round.id}
+                className="bg-slate-800/50 border border-slate-700 rounded-lg p-4"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-sm font-medium text-slate-300">
+                    Round {round.roundNumber} Details
+                  </h4>
+                  {round.readyToEnd && round.status === "active" && (
+                    <span className="text-xs uppercase tracking-wide text-emerald-300 border border-emerald-500/40 bg-emerald-900/30 px-2 py-1 rounded-full">
+                      Ready to end
+                    </span>
+                  )}
+                </div>
+                <div className="text-xs text-slate-400 space-y-1">
+                  {round.startedAt && (
+                    <div>
+                      Started: {new Date(round.startedAt).toLocaleString()}
+                    </div>
+                  )}
+                  {round.completedAt && (
+                    <div>
+                      Completed: {new Date(round.completedAt).toLocaleString()}
+                    </div>
+                  )}
+                  {round.statistics && (
+                    <div>
+                      Matches: {round.statistics.resolvedMatches ?? 0}/
+                      {round.statistics.totalMatches ?? 0} resolved
+                      {(round.statistics.activeMatches ?? 0) > 0 &&
+                        ` • ${round.statistics.activeMatches} active`}
+                      {(round.statistics.pendingMatches ?? 0) > 0 &&
+                        ` • ${round.statistics.pendingMatches} pending`}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
         )}
         {/* Bottom actions: Forfeit/End */}
@@ -3006,12 +3053,12 @@ export default function TournamentDetailsPage() {
                       try {
                         const res = await fetch(
                           `/api/tournaments/${encodeURIComponent(
-                            tournament.id
+                            tournament.id,
                           )}/forfeit`,
                           {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
-                          }
+                          },
                         );
                         const data = await res.json();
                         if (!res.ok)
@@ -3019,14 +3066,14 @@ export default function TournamentDetailsPage() {
                         try {
                           localStorage.setItem(
                             "app:toast",
-                            "You forfeited the tournament"
+                            "You forfeited the tournament",
                           );
                           window.dispatchEvent(
                             new CustomEvent("app:toast", {
                               detail: {
                                 message: "You forfeited the tournament",
                               },
-                            })
+                            }),
                           );
                           try {
                             await refreshTournaments?.();
@@ -3042,7 +3089,7 @@ export default function TournamentDetailsPage() {
                         setError(
                           err instanceof Error
                             ? err.message
-                            : "Failed to forfeit"
+                            : "Failed to forfeit",
                         );
                       }
                     }}
@@ -3107,17 +3154,17 @@ export default function TournamentDetailsPage() {
                         try {
                           localStorage.setItem(
                             "sorcery:includePublicDecks",
-                            next ? "1" : "0"
+                            next ? "1" : "0",
                           );
                         } catch {}
                         try {
                           setConstructedLoading(true);
                           const res = await fetch(
                             `/api/tournaments/${encodeURIComponent(
-                              tournament.id
+                              tournament.id,
                             )}/preparation/constructed/decks?includePublic=${
                               e.target.checked ? "true" : "false"
-                            }`
+                            }`,
                           );
                           const data = await res.json();
                           if (res.ok) {
@@ -3128,12 +3175,12 @@ export default function TournamentDetailsPage() {
                                   format?: string;
                                 }>)
                               : Array.isArray(data?.availableDecks)
-                              ? (data.availableDecks as Array<{
-                                  id: string;
-                                  name: string;
-                                  format?: string;
-                                }>)
-                              : [];
+                                ? (data.availableDecks as Array<{
+                                    id: string;
+                                    name: string;
+                                    format?: string;
+                                  }>)
+                                : [];
                             const pubDecks = Array.isArray(data?.publicDecks)
                               ? (data.publicDecks as Array<{
                                   id: string;
@@ -3190,7 +3237,7 @@ export default function TournamentDetailsPage() {
                                     onClick={async () => {
                                       await handleSubmitConstructedDeck(
                                         d.id,
-                                        false
+                                        false,
                                       );
                                       setConstructedModalOpen(false);
                                     }}
@@ -3238,7 +3285,7 @@ export default function TournamentDetailsPage() {
                                       onClick={async () => {
                                         await handleSubmitConstructedDeck(
                                           d.id,
-                                          true
+                                          true,
                                         );
                                         setConstructedModalOpen(false);
                                       }}
@@ -3291,10 +3338,10 @@ export default function TournamentDetailsPage() {
                     {myStanding.rank === 1
                       ? "🏆"
                       : myStanding.rank === 2
-                      ? "🥈"
-                      : myStanding.rank === 3
-                      ? "🥉"
-                      : "🎯"}
+                        ? "🥈"
+                        : myStanding.rank === 3
+                          ? "🥉"
+                          : "🎯"}
                   </div>
                   <h2 className="text-3xl font-bold text-white mb-2">
                     {myStanding.rank === 1
@@ -3314,10 +3361,10 @@ export default function TournamentDetailsPage() {
                       {myStanding.rank === 1
                         ? "1st Place"
                         : myStanding.rank === 2
-                        ? "2nd Place"
-                        : myStanding.rank === 3
-                        ? "3rd Place"
-                        : `${myStanding.rank}th Place`}
+                          ? "2nd Place"
+                          : myStanding.rank === 3
+                            ? "3rd Place"
+                            : `${myStanding.rank}th Place`}
                     </div>
                   </div>
 
@@ -3338,7 +3385,7 @@ export default function TournamentDetailsPage() {
                       <div className="text-2xl font-bold text-white">
                         {myStanding.gameWinPercentage
                           ? `${(myStanding.gameWinPercentage * 100).toFixed(
-                              0
+                              0,
                             )}%`
                           : "0%"}
                       </div>

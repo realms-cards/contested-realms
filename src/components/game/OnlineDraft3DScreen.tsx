@@ -1382,7 +1382,8 @@ export default function OnlineDraft3DScreen({
             touches={{ TWO: TOUCH.PAN }}
           />
           <ClampOrbitTarget bounds={{ minX: -8, maxX: 8, minZ: -6, maxZ: 6 }} />
-          <KeyboardPanControls enabled={!orbitLocked} />
+          {/* Disable keyboard pan in draft - arrow keys are used for card cycling */}
+          <KeyboardPanControls enabled={false} />
           <TrackpadOrbitAdapter />
         </Canvas>
       </div>
@@ -1410,15 +1411,15 @@ export default function OnlineDraft3DScreen({
             </div>
             {pick3D.length > 0 && (
               <button
-                className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+                className={`text-xs px-2 py-1 rounded ring-1 transition ${
                   isSortingEnabled
-                    ? "bg-green-600 text-white"
-                    : "bg-slate-700 text-slate-300 hover:bg-slate-600"
+                    ? "bg-emerald-500 text-black ring-emerald-400 hover:bg-emerald-400"
+                    : "bg-white/15 text-white ring-white/30 hover:bg-white/25"
                 }`}
                 onClick={() => setIsSortingEnabled(!isSortingEnabled)}
-                title="Sort picked cards by type"
+                title={isSortingEnabled ? "Disable auto-stacking" : "Enable auto-stacking"}
               >
-                Sort: {isSortingEnabled ? "ON" : "OFF"}
+                {isSortingEnabled ? "Auto-stack: On" : "Auto-stack: Off"}
               </button>
             )}
           </div>
@@ -1737,7 +1738,7 @@ function ClampOrbitTarget({
 
 function KeyboardPanControls({
   enabled = true,
-  step = 0.4,
+  step = 0.8,
 }: {
   enabled?: boolean;
   step?: number;

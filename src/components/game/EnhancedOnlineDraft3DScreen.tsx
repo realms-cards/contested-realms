@@ -2514,7 +2514,7 @@ function ClampOrbitTarget({
 
 function KeyboardPanControls({
   enabled = true,
-  step = 0.4,
+  step = 0.8,
 }: {
   enabled?: boolean;
   step?: number;

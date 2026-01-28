@@ -28,6 +28,7 @@ import { DRAG_HOLD_MS } from "@/lib/game/constants";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef, PlayerKey } from "@/lib/game/store";
 import { useTouchDevice } from "@/lib/hooks/useTouchDevice";
+import { throttle } from "@/lib/utils/throttle";
 
 export interface Hand3DProps {
   matW: number;
@@ -62,6 +63,7 @@ export default function Hand3D({
   void _matW;
   void _matH;
   void _hideCardPreview; // Debounced version not used - we use immediate for snappy clear
+
   const zones = useGameStore((s) => s.zones);
   const selected = useGameStore((s) => s.selectedCard);
   const selectedPermanent = useGameStore((s) => s.selectedPermanent);
@@ -194,7 +196,7 @@ export default function Hand3D({
   const HAND_ZONE_RIGHT_FRAC = isCoarsePointer ? 0.85 : 0.75; // Mobile: 85%, Desktop: 75%
 
   useEffect(() => {
-    function onMove(e: MouseEvent) {
+    function onMoveRaw(e: MouseEvent) {
       const h = window.innerHeight || 1;
       const w = window.innerWidth || 1;
       // Vertical: between 80% and 95% of screen height (a narrow band near bottom)
@@ -224,9 +226,12 @@ export default function Hand3D({
       // Don't clear based on zone - let overCardsArea handle visibility
       // Zone is just for initial trigger to show the cards
     }
+    // Throttle to 30ms (~33fps) to reduce CPU load during drag operations
+    const onMove = throttle(onMoveRaw, 30);
     window.addEventListener("mousemove", onMove, { passive: true });
     return () => {
       window.removeEventListener("mousemove", onMove);
+      onMove.cancel();
       if (hoverCleanupTimeoutRef.current) {
         window.clearTimeout(hoverCleanupTimeoutRef.current);
       }

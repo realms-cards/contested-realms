@@ -60,7 +60,7 @@ function renderColoredText(text: string): React.ReactNode {
       parts.push(
         <span key={key++} className="font-fantaisie">
           {name}
-        </span>
+        </span>,
       );
     } else if (tag === "p1card" || tag === "p2card") {
       // Card name with player color and fantasy font
@@ -71,7 +71,7 @@ function renderColoredText(text: string): React.ReactNode {
           style={{ color, fontFamily: "var(--font-fantaisie, inherit)" }}
         >
           {name}
-        </span>
+        </span>,
       );
     } else {
       // Player name with color (p1 or p2)
@@ -83,7 +83,7 @@ function renderColoredText(text: string): React.ReactNode {
           style={{ color, fontFamily: "var(--font-fantaisie, inherit)" }}
         >
           {name}
-        </span>
+        </span>,
       );
     }
     lastIndex = regex.lastIndex;
@@ -121,7 +121,7 @@ export default function OnlineProvider({
   const [players, setPlayers] = useState<PlayerInfo[]>([]);
   // HTTP-available players list (rich data)
   const [availablePlayers, setAvailablePlayers] = useState<AvailablePlayer[]>(
-    []
+    [],
   );
   const [availablePlayersNextCursor, setAvailablePlayersNextCursor] = useState<
     string | null
@@ -161,7 +161,7 @@ export default function OnlineProvider({
     string | null
   >(null);
   const [matchmakingIsHost, setMatchmakingIsHost] = useState<boolean | null>(
-    null
+    null,
   );
   const [matchmakingQueueSize, setMatchmakingQueueSize] = useState<
     number | null
@@ -211,7 +211,7 @@ export default function OnlineProvider({
     const showConnToast = (
       message: string,
       tone: "info" | "error",
-      duration = 4000
+      duration = 4000,
     ) => {
       setConnToast({ message, tone });
       window.setTimeout(() => {
@@ -359,7 +359,7 @@ export default function OnlineProvider({
   }, [voiceParticipantIds]);
 
   const previousVoiceParticipantCountRef = useRef<number>(
-    voiceParticipantIds.length
+    voiceParticipantIds.length,
   );
 
   const voiceFeatureEnabled = voiceRtc.featureEnabled;
@@ -440,7 +440,7 @@ export default function OnlineProvider({
       lobby?.id,
       match?.id,
       voiceParticipantIdSet,
-    ]
+    ],
   );
 
   const respondToVoiceRequest = useCallback(
@@ -486,7 +486,7 @@ export default function OnlineProvider({
       attemptVoiceConnection,
       setVoicePlaybackEnabled,
       voiceRtc.state,
-    ]
+    ],
   );
 
   const dismissOutgoingRequest = useCallback(() => {
@@ -541,7 +541,7 @@ export default function OnlineProvider({
       })
       .filter(
         (peer, index, self) =>
-          peer.id && self.findIndex((p) => p.id === peer.id) === index
+          peer.id && self.findIndex((p) => p.id === peer.id) === index,
       );
   }, [voiceParticipantIds, knownVoicePeers]);
 
@@ -574,7 +574,7 @@ export default function OnlineProvider({
       outgoingVoiceRequest,
       voiceParticipantIds,
       voiceConnectedPeers,
-    ]
+    ],
   );
 
   useEffect(() => {
@@ -836,7 +836,7 @@ export default function OnlineProvider({
         }
       });
     },
-    [isHotseatPage]
+    [isHotseatPage],
   );
 
   // Inject transport into store once; remove on unmount
@@ -913,7 +913,7 @@ export default function OnlineProvider({
           // Fallback to P1/P2 if no match context
           resolvedMessage = resolvedMessage.replace(
             /PLAYER/g,
-            detail.seat?.toUpperCase() || "Player"
+            detail.seat?.toUpperCase() || "Player",
           );
         }
         setAppToast(resolvedMessage);
@@ -922,7 +922,7 @@ export default function OnlineProvider({
           window.dispatchEvent(
             new CustomEvent("app:highlight-cell", {
               detail: { cellKey: detail.cellKey },
-            })
+            }),
           );
         }
         window.setTimeout(() => {
@@ -932,7 +932,7 @@ export default function OnlineProvider({
             window.dispatchEvent(
               new CustomEvent("app:highlight-cell", {
                 detail: { cellKey: null },
-              })
+              }),
             );
           }
         }, 3500);
@@ -963,7 +963,7 @@ export default function OnlineProvider({
 
     if (!user.id) {
       console.error(
-        "User ID is missing from session, cannot connect to online services."
+        "User ID is missing from session, cannot connect to online services.",
       );
       return;
     }
@@ -1003,24 +1003,24 @@ export default function OnlineProvider({
         if (isHost && prevLobby) {
           const prevPlayerIds = new Set(prevLobby.players.map((pl) => pl.id));
           const newPlayers = p.lobby.players.filter(
-            (pl) => !prevPlayerIds.has(pl.id) && pl.id !== you.id
+            (pl) => !prevPlayerIds.has(pl.id) && pl.id !== you.id,
           );
           for (const newPlayer of newPlayers) {
             const notified = notifyPlayerJoinedLobby(
               newPlayer.displayName,
-              p.lobby.name ?? undefined
+              p.lobby.name ?? undefined,
             );
             console.log(
               `[Lobby] Player ${newPlayer.displayName} joined. Notification ${
                 notified ? "sent" : "skipped (permission not granted)"
-              }`
+              }`,
             );
           }
         }
 
         setLobby(p.lobby);
         setReady(
-          you ? p.lobby.readyPlayerIds?.includes(you.id) ?? false : false
+          you ? (p.lobby.readyPlayerIds?.includes(you.id) ?? false) : false,
         );
       }),
       transport.on("lobbiesUpdated", (p) => {
@@ -1083,7 +1083,7 @@ export default function OnlineProvider({
                 .log(
                   `Match started with ${p.match.players
                     .map((pl) => pl.displayName)
-                    .join(" and ")}`
+                    .join(" and ")}`,
                 );
             }
           } catch {}
@@ -1168,7 +1168,7 @@ export default function OnlineProvider({
           });
           if (exists) return prev;
           return [...prev, p];
-        })
+        }),
       ),
       transport.on("chatHistory", (p) => {
         // Update pagination state and clear loading
@@ -1181,8 +1181,8 @@ export default function OnlineProvider({
             prev.map((m) =>
               m.ts
                 ? `${m.from?.id ?? "system"}:${m.ts}`
-                : `${m.from?.id ?? "system"}:${m.content}`
-            )
+                : `${m.from?.id ?? "system"}:${m.content}`,
+            ),
           );
           const newMessages = p.messages.filter((m) => {
             const key = m.ts
@@ -1212,7 +1212,9 @@ export default function OnlineProvider({
           setLobby(snap.lobby);
           const you = meRef.current;
           setReady(
-            you ? snap.lobby.readyPlayerIds?.includes(you.id) ?? false : false
+            you
+              ? (snap.lobby.readyPlayerIds?.includes(you.id) ?? false)
+              : false,
           );
         }
 
@@ -1272,7 +1274,7 @@ export default function OnlineProvider({
             // This is a full snapshot from the server (not a partial patch), so we should
             // replace rather than merge to avoid duplicate permanents causing mana/threshold accumulation
             console.log(
-              "[game] Applying server snapshot with full replacement"
+              "[game] Applying server snapshot with full replacement",
             );
             const gameSnapshot = snap.game as Record<string, unknown>;
 
@@ -1302,7 +1304,7 @@ export default function OnlineProvider({
 
             // Only include keys that exist in the snapshot AND are safe to replace
             const replaceKeys = safeToReplaceKeys.filter(
-              (key) => key in gameSnapshot
+              (key) => key in gameSnapshot,
             );
 
             const snapshotWithReplace = {
@@ -1312,7 +1314,7 @@ export default function OnlineProvider({
 
             queueServerPatch(
               snapshotWithReplace,
-              typeof snap.t === "number" ? snap.t : undefined
+              typeof snap.t === "number" ? snap.t : undefined,
             );
           } catch (e) {
             console.warn("Failed to apply resync game snapshot", e);
@@ -1328,7 +1330,7 @@ export default function OnlineProvider({
               try {
                 console.debug(
                   "[online] resync stop ignored (newer resync started)",
-                  { gen, current: resyncGenRef.current }
+                  { gen, current: resyncGenRef.current },
                 );
               } catch {}
               return;
@@ -1346,7 +1348,7 @@ export default function OnlineProvider({
             try {
               console.debug(
                 "[online] resync stop immediate ignored (superseded)",
-                { gen, current: resyncGenRef.current }
+                { gen, current: resyncGenRef.current },
               );
             } catch {}
           }
@@ -1427,7 +1429,7 @@ export default function OnlineProvider({
             if (msg) {
               localStorage.setItem("app:toast", msg);
               window.dispatchEvent(
-                new CustomEvent("app:toast", { detail: { message: msg } })
+                new CustomEvent("app:toast", { detail: { message: msg } }),
               );
             }
           } catch {}
@@ -1455,10 +1457,10 @@ export default function OnlineProvider({
             window.clearTimeout(socialErrorTimer.current);
           socialErrorTimer.current = window.setTimeout(
             () => setSocialError(null),
-            3000
+            3000,
           );
         } catch {}
-      })
+      }),
     );
 
     // Matchmaking event handler via onGeneric for server-only events
@@ -1524,8 +1526,8 @@ export default function OnlineProvider({
       ) {
         console.log(
           `[online] requestPlayers rate limited (${Math.round(
-            timeSinceLastRequest / 1000
-          )}s since last)`
+            timeSinceLastRequest / 1000,
+          )}s since last)`,
         );
         return;
       }
@@ -1538,7 +1540,7 @@ export default function OnlineProvider({
         "recent") as "recent" | "alphabetical";
       const cursor = opts?.reset
         ? null
-        : opts?.cursor ?? availablePlayersNextCursor ?? null;
+        : (opts?.cursor ?? availablePlayersNextCursor ?? null);
       availableQueryRef.current = { q, sort };
 
       (async () => {
@@ -1555,9 +1557,8 @@ export default function OnlineProvider({
           try {
             const token = await fetchSocketToken();
             if (token) {
-              (
-                headers as Record<string, string>
-              ).Authorization = `Bearer ${token}`;
+              (headers as Record<string, string>).Authorization =
+                `Bearer ${token}`;
             }
           } catch {}
           const res = await fetch(url.toString(), {
@@ -1596,7 +1597,7 @@ export default function OnlineProvider({
         }
       })();
     },
-    [availablePlayersNextCursor, getSocketHttpOrigin]
+    [availablePlayersNextCursor, getSocketHttpOrigin],
   );
 
   // Stable ref to avoid re-subscribing socket handlers when pagination state changes
@@ -1712,7 +1713,7 @@ export default function OnlineProvider({
           try {
             console.debug(
               "[online] resync fallback clear (no server response)",
-              { gen }
+              { gen },
             );
           } catch {}
           setResyncing(false);
@@ -1763,7 +1764,7 @@ export default function OnlineProvider({
     },
     dismissInvite: (lobbyId: string, fromId: string) => {
       setInvites((prev) =>
-        prev.filter((i) => !(i.lobbyId === lobbyId && i.from.id === fromId))
+        prev.filter((i) => !(i.lobbyId === lobbyId && i.from.id === fromId)),
       );
     },
     addCpuBot: (displayName?: string) => {
@@ -1788,7 +1789,7 @@ export default function OnlineProvider({
       queueSize: matchmakingQueueSize,
     },
     joinMatchmaking: (
-      matchTypes: Array<"constructed" | "sealed" | "draft" | "precon">
+      matchTypes: Array<"constructed" | "sealed" | "draft" | "precon">,
     ) => {
       try {
         transport.emit("joinMatchmaking", { preferences: { matchTypes } });

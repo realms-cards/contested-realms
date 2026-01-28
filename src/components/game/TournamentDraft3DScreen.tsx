@@ -1938,7 +1938,8 @@ export default function TournamentDraft3DScreen({
             touches={{ TWO: TOUCH.PAN }}
           />
           <ClampOrbitTarget bounds={{ minX: -8, maxX: 8, minZ: -6, maxZ: 6 }} />
-          <KeyboardPanControls enabled={!orbitLocked} />
+          {/* Disable keyboard pan in draft - arrow keys are used for card cycling */}
+          <KeyboardPanControls enabled={false} />
           <TrackpadOrbitAdapter />
         </Canvas>
       </div>
@@ -2434,7 +2435,7 @@ function ClampOrbitTarget({
 
 function KeyboardPanControls({
   enabled = true,
-  step = 0.4,
+  step = 0.8,
 }: {
   enabled?: boolean;
   step?: number;

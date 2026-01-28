@@ -4,6 +4,7 @@ import { useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { createCardPreviewData } from "@/lib/game/card-preview.types";
+import { throttle } from "@/lib/utils/throttle";
 
 interface MouseTrackerProps {
   cards: Array<{
@@ -12,7 +13,7 @@ interface MouseTrackerProps {
     y?: number;
   }>;
   onHover: (
-    card: { slug: string; name: string; type: string | null } | null
+    card: { slug: string; name: string; type: string | null } | null,
   ) => void;
 }
 
@@ -28,7 +29,7 @@ export default function MouseTracker({ cards, onHover }: MouseTrackerProps) {
   const lastHoveredSlug = useRef<string | null>(null);
   const cardSignature = useMemo(
     () => cards.map((card) => card.id).join("|"),
-    [cards]
+    [cards],
   );
 
   const interactableObjects = useMemo(() => {
@@ -135,9 +136,12 @@ export default function MouseTracker({ cards, onHover }: MouseTrackerProps) {
     const canvas = gl?.domElement ?? null;
     if (!canvas) return undefined;
 
-    canvas.addEventListener("mousemove", handleMouseMove);
+    // Throttle to 30ms (~33fps) - raycasting is expensive, especially during drag
+    const throttledHandler = throttle(handleMouseMove, 30);
+    canvas.addEventListener("mousemove", throttledHandler);
     return () => {
-      canvas.removeEventListener("mousemove", handleMouseMove);
+      canvas.removeEventListener("mousemove", throttledHandler);
+      throttledHandler.cancel();
       lastHoveredSlug.current = null;
     };
   }, [

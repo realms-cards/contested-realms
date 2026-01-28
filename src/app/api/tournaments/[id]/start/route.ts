@@ -7,15 +7,22 @@ import { getServerAuthSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { tournamentSocketService } from "@/lib/services/tournament-broadcast";
 import { TournamentDraftEngine } from "@/lib/services/tournament-draft-engine";
-import { deriveDraftSetupFromSettings } from "@/lib/tournament/draft-config";
-import { getRegistrationSettings, isActiveSeat } from "@/lib/tournament/registration";
+import {
+  deriveDraftSetupFromSettings,
+  assignPlayersToPods,
+  DEFAULT_POD_SIZE,
+} from "@/lib/tournament/draft-config";
+import {
+  getRegistrationSettings,
+  isActiveSeat,
+} from "@/lib/tournament/registration";
 
 export const dynamic = "force-dynamic";
 
 // POST /api/tournaments/[id]/start
 export async function POST(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
   const session = await getServerAuthSession();
@@ -43,14 +50,14 @@ export async function POST(
         JSON.stringify({
           error: "Only tournament creator can start the tournament",
         }),
-        { status: 403 }
+        { status: 403 },
       );
     }
 
     if (tournament.status !== DBTournamentStatus.registering) {
       return new Response(
         JSON.stringify({ error: "Tournament already started" }),
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -62,7 +69,7 @@ export async function POST(
           JSON.stringify({
             error: "At least 2 active players are required to start",
           }),
-          { status: 400 }
+          { status: 400 },
         );
       }
     } else if (activeRegistrations.length !== tournament.maxPlayers) {
@@ -70,7 +77,7 @@ export async function POST(
         JSON.stringify({
           error: `All players must join before starting (${activeRegistrations.length}/${tournament.maxPlayers})`,
         }),
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -90,7 +97,7 @@ export async function POST(
             tournamentId: id,
             status: "waiting",
             packConfiguration: JSON.parse(
-              JSON.stringify(draftSetup.packConfiguration)
+              JSON.stringify(draftSetup.packConfiguration),
             ),
             settings: JSON.parse(
               JSON.stringify({
@@ -99,7 +106,16 @@ export async function POST(
                 cubeId: draftSetup.cubeId, // Include cube ID for cube drafts
                 includeCubeSideboardInStandard:
                   draftSetup.includeCubeSideboardInStandard === true,
-              })
+                podSize: draftSetup.podSize || DEFAULT_POD_SIZE, // Pod size for large tournaments
+                // Assign players to pods if more than 8 players
+                pods:
+                  activeRegistrations.length > DEFAULT_POD_SIZE
+                    ? assignPlayersToPods(
+                        activeRegistrations.map((r) => r.playerId),
+                        draftSetup.podSize || DEFAULT_POD_SIZE,
+                      )
+                    : null,
+              }),
             ),
           },
           include: { participants: true },
@@ -109,7 +125,7 @@ export async function POST(
       draftSessionId = draftSession.id;
 
       const participantsByPlayer = new Map(
-        draftSession.participants.map((p) => [p.playerId, p])
+        draftSession.participants.map((p) => [p.playerId, p]),
       );
       const sortedRegistrations = [...activeRegistrations].sort((a, b) => {
         const aTime =
@@ -174,7 +190,7 @@ export async function POST(
               JSON.stringify({
                 ...currentPrep,
                 draft: nextDraftData,
-              })
+              }),
             ),
           },
         });
@@ -184,11 +200,11 @@ export async function POST(
 
       const txOps = [
         ...participantCreates.map((args) =>
-          prisma.draftParticipant.create(args)
+          prisma.draftParticipant.create(args),
         ),
         ...participantOps.map((args) => prisma.draftParticipant.update(args)),
         ...registrationOps.map((args) =>
-          prisma.tournamentRegistration.update(args)
+          prisma.tournamentRegistration.update(args),
         ),
       ];
       if (txOps.length > 0) {
@@ -227,16 +243,16 @@ export async function POST(
     });
 
     // Broadcast phase change event via Socket.io (fire-and-forget so API response is instant)
-        tournamentSocketService
-          .broadcastPhaseChanged(id, nextStatus, {
-            previousStatus: tournament.status,
-            startedAt: updatedTournament.startedAt?.toISOString(),
-            format: tournament.format,
-            totalPlayers: activeRegistrations.length,
-          })
-          .catch((socketError) => {
-            console.warn("Failed to broadcast phase changed event:", socketError);
-          });
+    tournamentSocketService
+      .broadcastPhaseChanged(id, nextStatus, {
+        previousStatus: tournament.status,
+        startedAt: updatedTournament.startedAt?.toISOString(),
+        format: tournament.format,
+        totalPlayers: activeRegistrations.length,
+      })
+      .catch((socketError) => {
+        console.warn("Failed to broadcast phase changed event:", socketError);
+      });
     // Also broadcast a full tournament snapshot so lists sync immediately
     tournamentSocketService
       .broadcastTournamentUpdateById(id)
@@ -268,15 +284,15 @@ export async function POST(
       {
         status: 200,
         headers: { "content-type": "application/json" },
-      }
+      },
     );
   } catch (e: unknown) {
     const message =
       e instanceof Error
         ? e.message
         : typeof e === "string"
-        ? e
-        : "Unknown error";
+          ? e
+          : "Unknown error";
     return new Response(JSON.stringify({ error: message }), { status: 500 });
   }
 }
