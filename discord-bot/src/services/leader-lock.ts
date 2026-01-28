@@ -38,7 +38,7 @@ function getRedis(): Redis {
       console.warn("[leader-lock] Failed to parse REDIS_URL, using as-is");
     }
 
-    redis = new Redis(redisConfig, {
+    const redisOptions = {
       maxRetriesPerRequest: 3,
       retryStrategy: (times: number) => {
         if (times > 5) {
@@ -50,7 +50,13 @@ function getRedis(): Redis {
         return Math.min(times * 200, 3000);
       },
       lazyConnect: false,
-    });
+    };
+
+    if (typeof redisConfig === "string") {
+      redis = new Redis(redisConfig, redisOptions);
+    } else {
+      redis = new Redis({ ...redisConfig, ...redisOptions });
+    }
 
     redis.on("connect", () => {
       console.log("[leader-lock] Redis connected");
