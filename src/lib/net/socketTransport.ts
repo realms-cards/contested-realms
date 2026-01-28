@@ -35,10 +35,10 @@ import {
 } from "./socketTokenCache";
 
 const RECONNECT_ATTEMPTS_ENV = Number(
-  process.env.NEXT_PUBLIC_WS_RECONNECT_ATTEMPTS
+  process.env.NEXT_PUBLIC_WS_RECONNECT_ATTEMPTS,
 );
 const RECONNECT_DELAY_MAX_ENV = Number(
-  process.env.NEXT_PUBLIC_WS_RECONNECT_DELAY_MAX
+  process.env.NEXT_PUBLIC_WS_RECONNECT_DELAY_MAX,
 );
 const WS_TIMEOUT_ENV = Number(process.env.NEXT_PUBLIC_WS_TIMEOUT_MS);
 
@@ -62,13 +62,13 @@ function normalizeSealedConfigClient(sc: unknown): unknown {
     Number.isFinite(rawPackCount) && rawPackCount > 0
       ? Math.floor(rawPackCount)
       : sum > 0
-      ? sum
-      : 6;
+        ? sum
+        : 6;
   // Clamp to protocol bounds (3..8)
   const packCount = Math.max(3, Math.min(8, candidatePackCount));
   let setMix: string[] = Array.isArray(obj.setMix)
     ? ((obj.setMix as unknown[]).filter(
-        (s) => typeof s === "string"
+        (s) => typeof s === "string",
       ) as string[])
     : [];
   if (setMix.length === 0) setMix = ["Beta"];
@@ -86,7 +86,7 @@ function normalizeSealedConfigClient(sc: unknown): unknown {
   // Keep original packCounts if it was an object; otherwise omit
   const pcOut = Object.keys(packCounts).length
     ? Object.fromEntries(
-        entries.map(([k, v]) => [String(k), Number(n(v)) || 0])
+        entries.map(([k, v]) => [String(k), Number(n(v)) || 0]),
       )
     : undefined;
   return {
@@ -100,7 +100,7 @@ function normalizeSealedConfigClient(sc: unknown): unknown {
 }
 
 function normalizeMatchInfoClient(
-  input: unknown
+  input: unknown,
 ): Record<string, unknown> | null {
   if (!input || typeof input !== "object") return null;
   const match = { ...(input as Record<string, unknown>) };
@@ -163,7 +163,7 @@ function normalizeMatchInfoClient(
         (item): item is [string, unknown] =>
           Array.isArray(item) &&
           item.length === 2 &&
-          typeof item[0] === "string"
+          typeof item[0] === "string",
       );
       if (entries.length > 0) return Object.fromEntries(entries);
       return undefined;
@@ -334,7 +334,7 @@ export class SocketTransport implements GameTransport {
   private getAuthBackoffDelay(): number {
     const index = Math.min(
       this.authFailureCount,
-      AUTH_BACKOFF_DELAYS.length - 1
+      AUTH_BACKOFF_DELAYS.length - 1,
     );
     return AUTH_BACKOFF_DELAYS[index];
   }
@@ -364,7 +364,7 @@ export class SocketTransport implements GameTransport {
       console.warn(
         `[Transport] Auth failure #${
           this.authFailureCount
-        }/${MAX_AUTH_FAILURES}, backing off for ${delay / 1000}s`
+        }/${MAX_AUTH_FAILURES}, backing off for ${delay / 1000}s`,
       );
     }
     return delay;
@@ -412,7 +412,7 @@ export class SocketTransport implements GameTransport {
         } catch (e) {
           console.warn(
             "[Transport] Failed to refresh token on visibility change:",
-            e
+            e,
           );
           // Still try to reconnect with existing auth
           this.connectionState = "reconnecting";
@@ -553,7 +553,7 @@ export class SocketTransport implements GameTransport {
           Protocol.HelloPayload.parse({
             displayName: finalName,
             playerId: opts.playerId,
-          })
+          }),
         );
       };
       const onError = (err: unknown) => {
@@ -581,47 +581,50 @@ export class SocketTransport implements GameTransport {
 
       // Wire server events
       socket.on("welcome", (payload) =>
-        this.dispatch("welcome", Protocol.WelcomePayload.parse(payload))
+        this.dispatch("welcome", Protocol.WelcomePayload.parse(payload)),
       );
       socket.on("lobbyUpdated", (payload) =>
         this.dispatch(
           "lobbyUpdated",
-          Protocol.LobbyUpdatedPayload.parse(payload)
-        )
+          Protocol.LobbyUpdatedPayload.parse(payload),
+        ),
       );
       socket.on("joinedLobby", (payload) =>
         this.dispatch(
           "lobbyUpdated",
-          Protocol.JoinedLobbyPayload.parse(payload)
-        )
+          Protocol.JoinedLobbyPayload.parse(payload),
+        ),
       );
       socket.on("lobbiesUpdated", (payload) =>
         this.dispatch(
           "lobbiesUpdated",
-          Protocol.LobbiesUpdatedPayload.parse(payload)
-        )
+          Protocol.LobbiesUpdatedPayload.parse(payload),
+        ),
       );
       socket.on("playerList", (payload) =>
-        this.dispatch("playerList", Protocol.PlayerListPayload.parse(payload))
+        this.dispatch("playerList", Protocol.PlayerListPayload.parse(payload)),
       );
       socket.on("lobbyInvite", (payload) =>
-        this.dispatch("lobbyInvite", Protocol.LobbyInvitePayload.parse(payload))
+        this.dispatch(
+          "lobbyInvite",
+          Protocol.LobbyInvitePayload.parse(payload),
+        ),
       );
       socket.on("inviteResponseReceived", (payload) =>
         this.dispatch(
           "inviteResponseReceived",
-          Protocol.InviteResponsePayload.parse(payload)
-        )
+          Protocol.InviteResponsePayload.parse(payload),
+        ),
       );
       socket.on("matchStarted", (payload) => {
         const fixed = normalizeMatchStartedPayload(payload);
         this.dispatch(
           "matchStarted",
-          Protocol.MatchStartedPayload.parse(fixed)
+          Protocol.MatchStartedPayload.parse(fixed),
         );
       });
       socket.on("statePatch", (payload) =>
-        this.dispatch("statePatch", Protocol.StatePatchPayload.parse(payload))
+        this.dispatch("statePatch", Protocol.StatePatchPayload.parse(payload)),
       );
       // D20 acknowledgment - server confirms receipt of D20 roll
       socket.on("d20Ack", (payload) => {
@@ -646,15 +649,15 @@ export class SocketTransport implements GameTransport {
             s?.packIndex
           } pick=${s?.pickNumber} waitingFor=${
             (s?.waitingFor || []).length
-          } (p1 pack ~${myPackSize})`
+          } (p1 pack ~${myPackSize})`,
         );
         this.dispatch(
           "draftUpdate",
-          payload as unknown as TransportEventMap["draftUpdate"]
+          payload as unknown as TransportEventMap["draftUpdate"],
         );
       });
       socket.on("chat", (payload) =>
-        this.dispatch("chat", Protocol.ServerChatPayload.parse(payload))
+        this.dispatch("chat", Protocol.ServerChatPayload.parse(payload)),
       );
       socket.on("chatHistory", (payload) => {
         const p = payload as {
@@ -673,7 +676,7 @@ export class SocketTransport implements GameTransport {
             })
             .filter(
               (m): m is import("@/lib/net/protocol").ServerChatPayloadT =>
-                m !== null
+                m !== null,
             );
           this.dispatch("chatHistory", {
             messages,
@@ -688,19 +691,19 @@ export class SocketTransport implements GameTransport {
       socket.on("interaction:request", (payload) => {
         this.dispatch(
           "interaction:request",
-          payload as InteractionRequestMessage
+          payload as InteractionRequestMessage,
         );
       });
       socket.on("interaction:response", (payload) => {
         this.dispatch(
           "interaction:response",
-          payload as InteractionResponseMessage
+          payload as InteractionResponseMessage,
         );
       });
       socket.on("interaction:result", (payload) => {
         this.dispatch(
           "interaction:result",
-          payload as TransportEventMap["interaction:result"]
+          payload as TransportEventMap["interaction:result"],
         );
       });
       // Generic lightweight messages (e.g., draft ready toggles)
@@ -720,7 +723,7 @@ export class SocketTransport implements GameTransport {
         this.dispatch("resync", Protocol.ResyncResponsePayload.parse(fixed));
       });
       socket.on("error", (payload) =>
-        this.dispatch("error", Protocol.ErrorPayload.parse(payload))
+        this.dispatch("error", Protocol.ErrorPayload.parse(payload)),
       );
       socket.on("connect_error", (err: unknown) => {
         console.warn(`[Transport] Connection error:`, err);
@@ -730,46 +733,46 @@ export class SocketTransport implements GameTransport {
 
       // Draft-3D enhanced events for online integration
       socket.on("draft:card:preview", (payload) =>
-        this.dispatch("draft:card:preview", payload)
+        this.dispatch("draft:card:preview", payload),
       );
       socket.on("draft:card:preview_update", (payload) =>
-        this.dispatch("draft:card:preview_update", payload)
+        this.dispatch("draft:card:preview_update", payload),
       );
       socket.on("draft:stack:interact", (payload) =>
-        this.dispatch("draft:stack:interact", payload)
+        this.dispatch("draft:stack:interact", payload),
       );
       socket.on("draft:stack:interaction_result", (payload) =>
-        this.dispatch("draft:stack:interaction_result", payload)
+        this.dispatch("draft:stack:interaction_result", payload),
       );
       socket.on("draft:stack:state_sync", (payload) =>
-        this.dispatch("draft:stack:state_sync", payload)
+        this.dispatch("draft:stack:state_sync", payload),
       );
       socket.on("draft:ui:update", (payload) =>
-        this.dispatch("draft:ui:update", payload)
+        this.dispatch("draft:ui:update", payload),
       );
       socket.on("draft:ui:sync_batch", (payload) =>
-        this.dispatch("draft:ui:sync_batch", payload)
+        this.dispatch("draft:ui:sync_batch", payload),
       );
       socket.on("draft:session:join", (payload) =>
-        this.dispatch("draft:session:join", payload)
+        this.dispatch("draft:session:join", payload),
       );
       socket.on("draft:session:joined", (payload) =>
-        this.dispatch("draft:session:joined", payload)
+        this.dispatch("draft:session:joined", payload),
       );
       socket.on("draft:session:leave", (payload) =>
-        this.dispatch("draft:session:leave", payload)
+        this.dispatch("draft:session:leave", payload),
       );
       socket.on("draft:session:presence", (payload) =>
         this.dispatch(
           "draft:session:presence",
-          payload as TransportEventMap["draft:session:presence"]
-        )
+          payload as TransportEventMap["draft:session:presence"],
+        ),
       );
       socket.on("draft:error", (payload) =>
-        this.dispatch("draft:error", payload)
+        this.dispatch("draft:error", payload),
       );
       socket.on("draft:system:reconnect", (payload) =>
-        this.dispatch("draft:system:reconnect", payload)
+        this.dispatch("draft:system:reconnect", payload),
       );
 
       // Lightweight deck submission acknowledgement
@@ -782,7 +785,7 @@ export class SocketTransport implements GameTransport {
           ts?: number;
         };
         console.log(
-          `[Transport] deckAccepted <= mode=${p?.mode} match=${p?.matchId} player=${p?.playerId}`
+          `[Transport] deckAccepted <= mode=${p?.mode} match=${p?.matchId} player=${p?.playerId}`,
         );
         this.dispatch("message", {
           type: "deckAccepted",
@@ -792,31 +795,31 @@ export class SocketTransport implements GameTransport {
 
       // Tournament events
       socket.on("tournamentCreated", (payload) =>
-        this.dispatch("tournamentCreated", payload)
+        this.dispatch("tournamentCreated", payload),
       );
       socket.on("tournamentUpdated", (payload) =>
-        this.dispatch("tournamentUpdated", payload)
+        this.dispatch("tournamentUpdated", payload),
       );
       socket.on("tournamentJoined", (payload) =>
-        this.dispatch("tournamentJoined", payload)
+        this.dispatch("tournamentJoined", payload),
       );
       socket.on("tournamentLeft", (payload) =>
-        this.dispatch("tournamentLeft", payload)
+        this.dispatch("tournamentLeft", payload),
       );
       socket.on("tournamentStarted", (payload) =>
-        this.dispatch("tournamentStarted", payload)
+        this.dispatch("tournamentStarted", payload),
       );
       socket.on("tournamentRoundStarted", (payload) =>
-        this.dispatch("tournamentRoundStarted", payload)
+        this.dispatch("tournamentRoundStarted", payload),
       );
       socket.on("tournamentMatchReady", (payload) =>
-        this.dispatch("tournamentMatchReady", payload)
+        this.dispatch("tournamentMatchReady", payload),
       );
       socket.on("tournamentCompleted", (payload) =>
-        this.dispatch("tournamentCompleted", payload)
+        this.dispatch("tournamentCompleted", payload),
       );
       socket.on("tournamentsListUpdated", (payload) =>
-        this.dispatch("tournamentsListUpdated", payload)
+        this.dispatch("tournamentsListUpdated", payload),
       );
     });
 
@@ -899,7 +902,7 @@ export class SocketTransport implements GameTransport {
   leaveLobby(): void {
     this.requireSocket().emit(
       "leaveLobby",
-      Protocol.LeaveLobbyPayload.parse({})
+      Protocol.LeaveLobbyPayload.parse({}),
     );
   }
 
@@ -947,7 +950,7 @@ export class SocketTransport implements GameTransport {
       s.on("joinedLobby", onJoin);
       s.emit(
         "createLobby",
-        Protocol.CreateLobbyPayload.parse({ name, visibility, maxPlayers })
+        Protocol.CreateLobbyPayload.parse({ name, visibility, maxPlayers }),
       );
     });
   }
@@ -989,7 +992,7 @@ export class SocketTransport implements GameTransport {
   leaveMatch(): void {
     this.requireSocket().emit(
       "leaveMatch",
-      Protocol.LeaveMatchPayload.parse({})
+      Protocol.LeaveMatchPayload.parse({}),
     );
   }
 
@@ -1000,14 +1003,14 @@ export class SocketTransport implements GameTransport {
   startMatch(matchConfig?: StartMatchConfig): void {
     this.requireSocket().emit(
       "startMatch",
-      matchConfig ? matchConfig : Protocol.StartMatchPayload.parse({})
+      matchConfig ? matchConfig : Protocol.StartMatchPayload.parse({}),
     );
   }
 
   sendAction(action: unknown): void {
     this.requireSocket().emit(
       "action",
-      Protocol.ActionPayload.parse({ action })
+      Protocol.ActionPayload.parse({ action }),
     );
   }
 
@@ -1015,14 +1018,14 @@ export class SocketTransport implements GameTransport {
   mulliganDone(): void {
     this.requireSocket().emit(
       "mulliganDone",
-      Protocol.MulliganDonePayload.parse({})
+      Protocol.MulliganDonePayload.parse({}),
     );
   }
 
   sendChat(content: string, scope?: ChatScope): void {
     this.requireSocket().emit(
       "chat",
-      Protocol.ChatPayload.parse({ content, scope })
+      Protocol.ChatPayload.parse({ content, scope }),
     );
   }
 
@@ -1054,35 +1057,35 @@ export class SocketTransport implements GameTransport {
   resync(): void {
     this.requireSocket().emit(
       "resyncRequest",
-      Protocol.ResyncRequestPayload.parse({})
+      Protocol.ResyncRequestPayload.parse({}),
     );
   }
 
   requestLobbies(): void {
     this.requireSocket().emit(
       "requestLobbies",
-      Protocol.RequestLobbiesPayload.parse({})
+      Protocol.RequestLobbiesPayload.parse({}),
     );
   }
 
   requestPlayers(): void {
     this.requireSocket().emit(
       "requestPlayers",
-      Protocol.RequestPlayersPayload.parse({})
+      Protocol.RequestPlayersPayload.parse({}),
     );
   }
 
   setLobbyVisibility(visibility: LobbyVisibility): void {
     this.requireSocket().emit(
       "setLobbyVisibility",
-      Protocol.SetLobbyVisibilityPayload.parse({ visibility })
+      Protocol.SetLobbyVisibilityPayload.parse({ visibility }),
     );
   }
 
   inviteToLobby(targetPlayerId: string, lobbyId?: string): void {
     this.requireSocket().emit(
       "inviteToLobby",
-      Protocol.InviteToLobbyPayload.parse({ targetPlayerId, lobbyId })
+      Protocol.InviteToLobbyPayload.parse({ targetPlayerId, lobbyId }),
     );
   }
 
@@ -1097,7 +1100,7 @@ export class SocketTransport implements GameTransport {
   setLobbyPlan(planned: "constructed" | "sealed" | "draft"): void {
     this.requireSocket().emit(
       "setLobbyPlan",
-      Protocol.SetLobbyPlanPayload.parse({ plannedMatchType: planned })
+      Protocol.SetLobbyPlanPayload.parse({ plannedMatchType: planned }),
     );
   }
 
@@ -1128,8 +1131,8 @@ export class SocketTransport implements GameTransport {
     // Server currently derives match by socket's player; payload is optional
     console.log(
       `[Transport] startDraft -> match=${config.matchId} cfg=${JSON.stringify(
-        config.draftConfig
-      )}`
+        config.draftConfig,
+      )}`,
     );
     this.requireSocket().emit("startDraft", config);
   }
@@ -1141,7 +1144,7 @@ export class SocketTransport implements GameTransport {
     pickNumber: number;
   }): void {
     console.log(
-      `[Transport] makeDraftPick -> cardId=${config.cardId} pack=${config.packIndex} pick=${config.pickNumber} match=${config.matchId}`
+      `[Transport] makeDraftPick -> cardId=${config.cardId} pack=${config.packIndex} pick=${config.pickNumber} match=${config.matchId}`,
     );
     this.requireSocket().emit("makeDraftPick", config);
   }
@@ -1152,7 +1155,7 @@ export class SocketTransport implements GameTransport {
     packIndex: number;
   }): void {
     console.log(
-      `[Transport] chooseDraftPack -> pack=${config.packIndex} choice=${config.setChoice} match=${config.matchId}`
+      `[Transport] chooseDraftPack -> pack=${config.packIndex} choice=${config.setChoice} match=${config.matchId}`,
     );
     this.requireSocket().emit("chooseDraftPack", config);
   }
@@ -1160,7 +1163,7 @@ export class SocketTransport implements GameTransport {
   // Draft-3D enhanced methods for online integration
   sendCardPreview(event: CardPreviewEvent): void {
     console.log(
-      `[Transport] sendCardPreview -> cardId=${event.cardId} playerId=${event.playerId} type=${event.previewType}`
+      `[Transport] sendCardPreview -> cardId=${event.cardId} playerId=${event.playerId} type=${event.previewType}`,
     );
     this.requireSocket().emit("draft:card:preview", event);
   }
@@ -1169,14 +1172,14 @@ export class SocketTransport implements GameTransport {
     console.log(
       `[Transport] sendStackInteraction -> type=${
         event.interactionType
-      } cardIds=[${event.cardIds.join(",")}] playerId=${event.playerId}`
+      } cardIds=[${event.cardIds.join(",")}] playerId=${event.playerId}`,
     );
     this.requireSocket().emit("draft:stack:interact", event);
   }
 
   sendUIUpdate(event: UIUpdateEvent): void {
     console.log(
-      `[Transport] sendUIUpdate -> playerId=${event.playerId} updates=${event.uiUpdates.length}`
+      `[Transport] sendUIUpdate -> playerId=${event.playerId} updates=${event.uiUpdates.length}`,
     );
     this.requireSocket().emit("draft:ui:update", event);
   }
@@ -1209,7 +1212,7 @@ export class SocketTransport implements GameTransport {
 
   async joinTournament(
     tournamentId: string,
-    displayName?: string
+    displayName?: string,
   ): Promise<void> {
     const s = this.requireSocket();
     return new Promise((resolve, reject) => {
@@ -1277,7 +1280,7 @@ export class SocketTransport implements GameTransport {
 
   on<E extends TransportEvent>(
     event: E,
-    handler: TransportHandler<E>
+    handler: TransportHandler<E>,
   ): () => void {
     const set = (this.handlers[event] ??= new Set());
     // Store as unknown-typed wrapper to satisfy our internal map
@@ -1289,7 +1292,7 @@ export class SocketTransport implements GameTransport {
 
   private dispatch<E extends TransportEvent>(
     event: E,
-    payload: TransportEventMap[E]
+    payload: TransportEventMap[E],
   ) {
     const set = this.handlers[event];
     if (!set) return;
@@ -1298,7 +1301,7 @@ export class SocketTransport implements GameTransport {
 
   private setupReconnectionHandlers(
     socket: Socket,
-    opts: { playerId?: string; displayName: string }
+    opts: { playerId?: string; displayName: string },
   ): void {
     socket.on("disconnect", (reason: string) => {
       // Disconnect reason logged only for debugging
@@ -1322,7 +1325,7 @@ export class SocketTransport implements GameTransport {
       // CRITICAL: If server says client is outdated, force page refresh immediately
       if (msg.includes("version_outdated") || msg.includes("client_outdated")) {
         console.error(
-          "[Transport] Client version outdated - forcing page refresh"
+          "[Transport] Client version outdated - forcing page refresh",
         );
         if (typeof window !== "undefined") {
           // Force hard refresh to get new client code
@@ -1341,7 +1344,7 @@ export class SocketTransport implements GameTransport {
       // CRITICAL: If we've exceeded max auth failures, stop immediately
       if (isAuthError && this.hasExceededMaxAuthFailures()) {
         console.error(
-          "[Transport] Max auth failures already reached - ignoring connect_error"
+          "[Transport] Max auth failures already reached - ignoring connect_error",
         );
         return;
       }
@@ -1397,14 +1400,14 @@ export class SocketTransport implements GameTransport {
         } else {
           // Token fetch failed (likely 401) - record failure and back off
           console.warn(
-            "[Transport] Token fetch failed - user may not be authenticated"
+            "[Transport] Token fetch failed - user may not be authenticated",
           );
           this.recordAuthFailure();
 
           // CRITICAL: Stop trying after too many auth failures to prevent infinite loops
           if (this.hasExceededMaxAuthFailures()) {
             console.error(
-              `[Transport] Max auth failures (${MAX_AUTH_FAILURES}) reached - stopping reconnection. User must refresh page.`
+              `[Transport] Max auth failures (${MAX_AUTH_FAILURES}) reached - stopping reconnection. User must refresh page.`,
             );
             this.connectionState = "disconnected";
             mgr.reconnection = false;
@@ -1482,12 +1485,12 @@ export class SocketTransport implements GameTransport {
         this.connect(opts).catch((error) => {
           console.warn(
             `[Transport] Reconnection attempt ${this.reconnectionAttempts} failed:`,
-            error
+            error,
           );
           // Exponential backoff
           this.reconnectionDelay = Math.min(
             this.reconnectionDelay * 1.5,
-            this.reconnectionDelayMax
+            this.reconnectionDelayMax,
           );
           this.connectionState = "reconnecting";
         });
@@ -1505,6 +1508,30 @@ export class SocketTransport implements GameTransport {
   // Generic methods for replay and other custom events
   emit(event: string, payload?: unknown): void {
     this.requireSocket().emit(event, payload);
+  }
+
+  /**
+   * Emit an event only if the socket is connected.
+   * Returns true if emitted, false if socket not available.
+   */
+  emitIfConnected(event: string, payload?: unknown): boolean {
+    if (this.socket?.connected) {
+      this.socket.emit(event, payload);
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Update the stored display name and emit to server if connected.
+   * This ensures reconnects use the new name.
+   */
+  updateDisplayName(newName: string): boolean {
+    const trimmed = (newName || "").trim().slice(0, 40) || "Player";
+    if (this.connectionOpts) {
+      this.connectionOpts.displayName = trimmed;
+    }
+    return this.emitIfConnected("updateDisplayName", { displayName: trimmed });
   }
 
   // Generic on/off methods for arbitrary events (used by replay functionality)

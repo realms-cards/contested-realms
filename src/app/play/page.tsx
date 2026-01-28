@@ -1038,16 +1038,14 @@ export default function PlayPage() {
         showYouLabels={false}
       />
 
-      {/* Mana and Thresholds panel on the right - hidden when uiHidden */}
-      {!uiHidden && (
-        <PlayerResourcePanels
-          myPlayerKey={currentPlayerKey}
-          playerNames={{ p1: "Player 1", p2: "Player 2" }}
-          showYouLabels={false}
-          readOnly={false}
-          dragFromHand={dragFromHand}
-        />
-      )}
+      {/* Mana and Thresholds panel on the right - always visible */}
+      <PlayerResourcePanels
+        myPlayerKey={currentPlayerKey}
+        playerNames={{ p1: "Player 1", p2: "Player 2" }}
+        showYouLabels={false}
+        readOnly={false}
+        dragFromHand={dragFromHand}
+      />
 
       {/* Status effect icons (Mismanaged Mortuary, etc.) - hidden when uiHidden */}
       {!uiHidden && <PlayerStatusEffects />}

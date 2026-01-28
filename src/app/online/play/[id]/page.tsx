@@ -3059,16 +3059,14 @@ export default function OnlineMatchPage() {
             spectatorMode={isSpectatorView}
           />
 
-          {/* Mana and Thresholds panel on the right - hidden when uiHidden */}
-          {!uiHidden && (
-            <PlayerResourcePanels
-              myPlayerKey={viewPlayerKey}
-              playerNames={playerNames}
-              showYouLabels={!isSpectatorView}
-              readOnly={isSpectatorView}
-              dragFromHand={dragFromHand}
-            />
-          )}
+          {/* Mana and Thresholds panel on the right - always visible */}
+          <PlayerResourcePanels
+            myPlayerKey={viewPlayerKey}
+            playerNames={playerNames}
+            showYouLabels={!isSpectatorView}
+            readOnly={isSpectatorView}
+            dragFromHand={dragFromHand}
+          />
 
           {/* Status effect icons (Mismanaged Mortuary, etc.) - hidden when uiHidden */}
           {!uiHidden && <PlayerStatusEffects />}
