@@ -48,7 +48,7 @@ const BottomBar = dynamic(() => import("@/app/decks/editor-3d/BottomBar"), {
 });
 const TournamentPresenceOverlay = dynamic(
   () => import("@/components/tournament/TournamentPresenceOverlay"),
-  { ssr: false }
+  { ssr: false },
 );
 
 // Lazy load the Canvas/three stack to trim initial JS and avoid SSR
@@ -58,7 +58,7 @@ const EditorCanvas = dynamic(
     ssr: false,
     // Keep simple to avoid heavy loaders on first paint
     loading: () => null,
-  }
+  },
 );
 
 // Stable constant for standard site names (tournament legal)
@@ -69,15 +69,15 @@ const KNOWN_AVATARS = ["dragonlord", "spellslinger"];
 
 function pickStandardSiteResult(
   results: SearchResult[],
-  name: (typeof STANDARD_SITE_NAMES)[number]
+  name: (typeof STANDARD_SITE_NAMES)[number],
 ): SearchResult | null {
   const normalized = name.toLowerCase();
   const betaExact = results.find(
-    (card) => card.cardName.toLowerCase() === normalized && card.set === "Beta"
+    (card) => card.cardName.toLowerCase() === normalized && card.set === "Beta",
   );
   if (betaExact) return betaExact;
   const anyExact = results.find(
-    (card) => card.cardName.toLowerCase() === normalized
+    (card) => card.cardName.toLowerCase() === normalized,
   );
   return anyExact ?? null;
 }
@@ -154,7 +154,7 @@ function AuthenticatedDeckEditor() {
     (async () => {
       try {
         const res = await fetch(
-          `/api/tournaments/${encodeURIComponent(String(tournamentId))}`
+          `/api/tournaments/${encodeURIComponent(String(tournamentId))}`,
         );
         if (!res.ok) return;
         const detail = await res.json();
@@ -175,10 +175,10 @@ function AuthenticatedDeckEditor() {
     const pickCount = Object.keys(picks).length;
     const totalCards = Object.values(picks).reduce(
       (sum, item) => sum + item.count,
-      0
+      0,
     );
     console.log(
-      `Picks changed: ${pickCount} unique cards, ${totalCards} total cards`
+      `Picks changed: ${pickCount} unique cards, ${totalCards} total cards`,
     );
   }, [picks]);
 
@@ -206,11 +206,11 @@ function AuthenticatedDeckEditor() {
   > | null>(null);
   const handleEditorStoreReady = useCallback(
     (
-      storeApi: ReturnType<typeof import("@/lib/game/store").createGameStore>
+      storeApi: ReturnType<typeof import("@/lib/game/store").createGameStore>,
     ) => {
       editorStoreRef.current = storeApi;
     },
-    []
+    [],
   );
   const handleTogglePlaymat = useCallback(() => {
     if (editorStoreRef.current) {
@@ -241,7 +241,7 @@ function AuthenticatedDeckEditor() {
 
   // Prefetch Spellslinger avatar
   const [spellslingerCard, setSpellslingerCard] = useState<SearchResult | null>(
-    null
+    null,
   );
 
   // (prefetch moved below after isDraftMode / isSealed declarations)
@@ -295,7 +295,7 @@ function AuthenticatedDeckEditor() {
   const cardLookupCacheRef = useRef(new Map<string, SearchResult | null>());
   // Cube draft helper: when true and a supported cube was used, expose its sideboard cards as standard options
   const [cubeStandardCards, setCubeStandardCards] = useState<SearchResult[]>(
-    []
+    [],
   );
   const sealedReplaceAvatars = sealedConfig?.replaceAvatars ?? false;
   const sealedFreeAvatars = sealedConfig?.freeAvatars ?? false;
@@ -329,7 +329,7 @@ function AuthenticatedDeckEditor() {
   const { search: localCardSearch, ready: localSearchReady } = useCardSearch();
   const [liveSearchQuery, setLiveSearchQuery] = useState("");
   const [liveSearchResults, setLiveSearchResults] = useState<SearchResult[]>(
-    []
+    [],
   );
   const [liveSearchLoading, setLiveSearchLoading] = useState(false);
 
@@ -404,7 +404,7 @@ function AuthenticatedDeckEditor() {
         } catch {}
       }
     },
-    [router]
+    [router],
   );
 
   // Draft picks resolution progress (when opening editor in draft mode)
@@ -446,7 +446,7 @@ function AuthenticatedDeckEditor() {
         return next;
       });
     },
-    [setPicks]
+    [setPicks],
   );
 
   const fetchSearchResult = useCallback(
@@ -473,8 +473,8 @@ function AuthenticatedDeckEditor() {
         if (trimmedSlug) {
           const res = await fetch(
             `/api/cards/search?q=${encodeURIComponent(
-              trimmedSlug
-            )}&set=${encodeURIComponent(set)}&type=all`
+              trimmedSlug,
+            )}&set=${encodeURIComponent(set)}&type=all`,
           );
           const data = (await res.json()) as SearchResult[];
           hit = res.ok ? data[0] || null : null;
@@ -482,8 +482,8 @@ function AuthenticatedDeckEditor() {
         if (!hit && trimmedName) {
           const res = await fetch(
             `/api/cards/search?q=${encodeURIComponent(
-              trimmedName
-            )}&set=${encodeURIComponent(set)}&type=all`
+              trimmedName,
+            )}&set=${encodeURIComponent(set)}&type=all`,
           );
           const data = (await res.json()) as SearchResult[];
           hit = res.ok ? data[0] || null : null;
@@ -501,13 +501,13 @@ function AuthenticatedDeckEditor() {
       }
       return hit;
     },
-    []
+    [],
   );
 
   const convertCardDataToSearchResult = useCallback(
     (
       card: Record<string, unknown>,
-      fallbackSet: string
+      fallbackSet: string,
     ): SearchResult | null => {
       const slugRaw = card.slug;
       const nameRaw = (card.cardName ?? card.name) as unknown;
@@ -547,7 +547,7 @@ function AuthenticatedDeckEditor() {
       cardLookupCacheRef.current.set(nameKey, sr);
       return sr;
     },
-    []
+    [],
   );
 
   const resolveCardsForPack = useCallback(
@@ -576,8 +576,8 @@ function AuthenticatedDeckEditor() {
             typeof card.cardName === "string"
               ? card.cardName
               : typeof card.name === "string"
-              ? card.name
-              : "";
+                ? card.name
+                : "";
           if (!slugVal && !nameVal) continue;
           const hit = await fetchSearchResult({
             slug: slugVal,
@@ -592,8 +592,8 @@ function AuthenticatedDeckEditor() {
           // Pass sealed=true to allow Dragonlord and other mini-sets
           const res = await fetch(
             `/api/booster?set=${encodeURIComponent(
-              pack.set
-            )}&count=1&sealed=true${avatarParam}`
+              pack.set,
+            )}&count=1&sealed=true${avatarParam}`,
           );
           const data = await res.json();
           if (res.ok) {
@@ -611,8 +611,8 @@ function AuthenticatedDeckEditor() {
                 typeof card.cardName === "string"
                   ? card.cardName
                   : typeof card.name === "string"
-                  ? card.name
-                  : "";
+                    ? card.name
+                    : "";
               if (!slugVal && !nameVal) continue;
               const hit = await fetchSearchResult({
                 slug: slugVal,
@@ -625,7 +625,7 @@ function AuthenticatedDeckEditor() {
         } catch (err) {
           console.error(
             "Booster fallback failed while resolving sealed pack",
-            err
+            err,
           );
         }
       }
@@ -637,7 +637,7 @@ function AuthenticatedDeckEditor() {
       setPackCardCache((prev) => ({ ...prev, [pack.id]: resolved }));
       return resolved;
     },
-    [convertCardDataToSearchResult, fetchSearchResult, sealedReplaceAvatars]
+    [convertCardDataToSearchResult, fetchSearchResult, sealedReplaceAvatars],
   );
 
   useEffect(() => {
@@ -664,10 +664,10 @@ function AuthenticatedDeckEditor() {
     }
 
     const alreadyReady = packsToLoad.filter((p) =>
-      Boolean(packCardCacheRef.current[p.id])
+      Boolean(packCardCacheRef.current[p.id]),
     );
     const remaining = packsToLoad.filter(
-      (p) => !packCardCacheRef.current[p.id]
+      (p) => !packCardCacheRef.current[p.id],
     );
 
     if (!remaining.length) {
@@ -788,19 +788,19 @@ function AuthenticatedDeckEditor() {
           STANDARD_SITE_NAMES.map(async (name) => {
             const res = await fetch(
               `/api/cards/search?q=${encodeURIComponent(
-                name
-              )}${setParam}&type=site`
+                name,
+              )}${setParam}&type=site`,
             );
             const data = (await res.json()) as SearchResult[];
             const match = res.ok ? pickStandardSiteResult(data, name) : null;
             return [name, match] as const;
-          })
+          }),
         );
 
         let spells: SearchResult | null = null;
         try {
           const res = await fetch(
-            `/api/cards/search?q=spellslinger&type=avatar`
+            `/api/cards/search?q=spellslinger&type=avatar`,
           );
           const data = (await res.json()) as SearchResult[];
           spells = res.ok ? data[0] || null : null;
@@ -887,7 +887,7 @@ function AuthenticatedDeckEditor() {
       const config = {
         timeLimit: parseInt(timeLimit || "40"),
         constructionStartTime: parseInt(
-          constructionStartTime || Date.now().toString()
+          constructionStartTime || Date.now().toString(),
         ),
         packCount: parseInt(searchParams?.get("packCount") || "6"),
         setMix: searchParams?.get("setMix")
@@ -932,7 +932,7 @@ function AuthenticatedDeckEditor() {
         }
         console.log(
           "[Sealed] Generated packs from packCounts:",
-          generatedPacks.map((p) => p.set)
+          generatedPacks.map((p) => p.set),
         );
       } else {
         // Fallback: random selection from setMix
@@ -947,7 +947,7 @@ function AuthenticatedDeckEditor() {
         }
         console.log(
           "[Sealed] Generated packs randomly from setMix:",
-          generatedPacks.map((p) => p.set)
+          generatedPacks.map((p) => p.set),
         );
       }
       setPacks(generatedPacks);
@@ -1017,7 +1017,7 @@ function AuthenticatedDeckEditor() {
 
     if (!Array.isArray(stored) || stored.length === 0) {
       console.log(
-        "[Sealed Init] No valid stored packs, falling back to generation"
+        "[Sealed Init] No valid stored packs, falling back to generation",
       );
       setSealedInitDone(true);
       return;
@@ -1039,7 +1039,7 @@ function AuthenticatedDeckEditor() {
         set: p.set,
         cardCount: (p.cards as unknown[])?.length ?? 0,
         opened: p.opened,
-      }))
+      })),
     );
     setPacks(serverPacks);
 
@@ -1047,7 +1047,7 @@ function AuthenticatedDeckEditor() {
     const openedPacks = serverPacks.filter((p) => p.opened);
     if (openedPacks.length > 0) {
       console.log(
-        `[Sealed Init] Restoring cards from ${openedPacks.length} already-opened packs`
+        `[Sealed Init] Restoring cards from ${openedPacks.length} already-opened packs`,
       );
       // We need to restore the cards to sideboard - they will be resolved when pack loading runs
       // Mark these packs as needing card restoration
@@ -1163,13 +1163,13 @@ function AuthenticatedDeckEditor() {
       if (sessionIdParam) {
         console.log(
           "[Draft Init] No local data, fetching from server:",
-          sessionIdParam
+          sessionIdParam,
         );
         (async () => {
           try {
             const res = await fetch(
               `/api/draft-sessions/${sessionIdParam}/state`,
-              { cache: "no-store" }
+              { cache: "no-store" },
             );
             if (res.ok) {
               const payload = await res.json();
@@ -1193,7 +1193,7 @@ function AuthenticatedDeckEditor() {
                 console.log(
                   "[Draft Init] Resolving",
                   myPicks.length,
-                  "cards from server"
+                  "cards from server",
                 );
                 try {
                   const bySet = new Map<string | null, Set<string>>();
@@ -1222,7 +1222,7 @@ function AuthenticatedDeckEditor() {
                     requests.push(
                       fetch(`/api/cards/meta-by-variant?${params.toString()}`)
                         .then((r) => r.json())
-                        .catch(() => [])
+                        .catch(() => []),
                     );
                   }
                   const chunks = await Promise.all(requests);
@@ -1267,18 +1267,18 @@ function AuthenticatedDeckEditor() {
                     console.log(
                       "[Draft Init] Resolved",
                       resolved.length,
-                      "cards, loading into editor"
+                      "cards, loading into editor",
                     );
 
                     try {
                       localStorage.setItem(
                         `draftedCardsResolved_${storageSuffix}`,
-                        JSON.stringify(resolved)
+                        JSON.stringify(resolved),
                       );
                       if (playerIdParam) {
                         localStorage.setItem(
                           `draftedCardsResolved_${draftId}`,
-                          JSON.stringify(resolved)
+                          JSON.stringify(resolved),
                         );
                       }
                     } catch {}
@@ -1330,7 +1330,7 @@ function AuthenticatedDeckEditor() {
                       }
                       setDraftInitDone(true);
                       console.log(
-                        "[Draft Init] Done! Cards loaded into editor"
+                        "[Draft Init] Done! Cards loaded into editor",
                       );
                       return;
                     }
@@ -1338,7 +1338,7 @@ function AuthenticatedDeckEditor() {
                 } catch (err) {
                   console.warn(
                     "[Draft Init] Failed to pre-resolve cards:",
-                    err
+                    err,
                   );
                 }
               } else {
@@ -1381,7 +1381,7 @@ function AuthenticatedDeckEditor() {
       if (Array.isArray(parsed)) {
         // Handle both formats: array of slug strings OR array of DraftCardLike objects
         drafted = parsed.map((item) =>
-          typeof item === "string" ? { slug: item } : (item as DraftCardLike)
+          typeof item === "string" ? { slug: item } : (item as DraftCardLike),
         );
       }
     } catch (e) {
@@ -1411,7 +1411,7 @@ function AuthenticatedDeckEditor() {
           ? (resolvedParsed as SearchResult[])
           : [];
         const allPositiveIds = resolvedList.every(
-          (r) => Number.isFinite(r.cardId) && Number(r.cardId) > 0
+          (r) => Number.isFinite(r.cardId) && Number(r.cardId) > 0,
         );
         if (resolvedList.length > 0 && allPositiveIds) {
           if (resolvedList.length !== drafted.length) {
@@ -1423,7 +1423,7 @@ function AuthenticatedDeckEditor() {
           console.log(
             "[Draft Init] Loading",
             resolvedList.length,
-            "cards from resolved cache"
+            "cards from resolved cache",
           );
 
           // Load layout positions to determine zones BEFORE setting picks
@@ -1442,7 +1442,7 @@ function AuthenticatedDeckEditor() {
               }>;
               console.log(
                 `[Draft Init] Loaded ${parsed.length} layout entries from ${layoutKey}`,
-                parsed.slice(0, 3)
+                parsed.slice(0, 3),
               );
               layoutMap = new Map<string, { x: number; z: number }>();
               for (const entry of parsed) {
@@ -1464,13 +1464,13 @@ function AuthenticatedDeckEditor() {
                 }
               }
               console.log(
-                `[Draft Init] Layout map has ${layoutMap.size} entries for zone inference`
+                `[Draft Init] Layout map has ${layoutMap.size} entries for zone inference`,
               );
             }
           } catch (err) {
             console.warn(
               "[Draft Init] Failed to load layout for zone inference:",
-              err
+              err,
             );
           }
 
@@ -1479,11 +1479,11 @@ function AuthenticatedDeckEditor() {
             // This prevents double-adding in React StrictMode
             const prevCount = Object.values(prev).reduce(
               (sum, p) => sum + p.count,
-              0
+              0,
             );
             if (prevCount >= resolvedList.length) {
               console.log(
-                "[Draft Init] Picks already populated, skipping duplicate add"
+                "[Draft Init] Picks already populated, skipping duplicate add",
               );
               return prev;
             }
@@ -1492,7 +1492,7 @@ function AuthenticatedDeckEditor() {
             console.log(
               "[Draft Init] Prev picks has",
               Object.keys(prev).length,
-              "items"
+              "items",
             );
 
             for (const r of resolvedList) {
@@ -1534,7 +1534,7 @@ function AuthenticatedDeckEditor() {
             console.log(
               "[Draft Init] After adding, picks has",
               Object.keys(next).length,
-              "items"
+              "items",
             );
             return next;
           });
@@ -1644,7 +1644,7 @@ function AuthenticatedDeckEditor() {
         const runInBatches = async <T,>(
           fns: Array<() => Promise<T>>,
           limit = 8,
-          onProgress?: (done: number, total: number) => void
+          onProgress?: (done: number, total: number) => void,
         ) => {
           const out: T[] = [];
           let idx = 0;
@@ -1673,8 +1673,8 @@ function AuthenticatedDeckEditor() {
           4,
           Math.min(
             24,
-            Number(process.env.NEXT_PUBLIC_EDITOR_LOOKUP_CONCURRENCY ?? "12")
-          )
+            Number(process.env.NEXT_PUBLIC_EDITOR_LOOKUP_CONCURRENCY ?? "12"),
+          ),
         );
         // Initialize progress indicator
         const hits = await runInBatches<ResolvedEntry>(
@@ -1684,15 +1684,15 @@ function AuthenticatedDeckEditor() {
             const cardsResolved =
               done <= 0
                 ? 0
-                : cumulativeCounts[
+                : (cumulativeCounts[
                     Math.min(done, cumulativeCounts.length) - 1
-                  ] ?? 0;
+                  ] ?? 0);
             setDraftLoadProgress({
               processed: Math.min(cardsResolved, totalDraftedCards),
               total: totalDraftedCards,
               inProgress: cardsResolved < totalDraftedCards,
             });
-          }
+          },
         );
         for (const entry of hits) {
           if (!entry) continue;
@@ -1701,7 +1701,7 @@ function AuthenticatedDeckEditor() {
           } else {
             console.warn(
               "[Draft Init] Failed to resolve drafted card lookup",
-              entry.lookup
+              entry.lookup,
             );
           }
         }
@@ -1744,7 +1744,7 @@ function AuthenticatedDeckEditor() {
         } catch (err) {
           console.warn(
             "[Draft Init] Failed to load layout for zone inference:",
-            err
+            err,
           );
         }
 
@@ -1753,25 +1753,25 @@ function AuthenticatedDeckEditor() {
         const expandedResolved: SearchResult[] = [];
         const expectedTotal = resolvedEntries.reduce(
           (sum, e) => sum + Math.max(e.lookup.count, 1),
-          0
+          0,
         );
         setPicks((prev) => {
           // Guard: if picks already have cards, don't add duplicates
           // This prevents double-adding in React StrictMode
           const prevCount = Object.values(prev).reduce(
             (sum, p) => sum + p.count,
-            0
+            0,
           );
           if (prevCount >= expectedTotal) {
             console.log(
-              "[Draft Init] Picks already populated, skipping duplicate add"
+              "[Draft Init] Picks already populated, skipping duplicate add",
             );
             return prev;
           }
 
           const next = { ...prev } as Record<PickKey, PickItem>;
           console.log(
-            `[Draft Init] Preserving ${Object.keys(prev).length} existing picks`
+            `[Draft Init] Preserving ${Object.keys(prev).length} existing picks`,
           );
 
           for (const { lookup, result } of resolvedEntries) {
@@ -1810,7 +1810,7 @@ function AuthenticatedDeckEditor() {
           console.log(
             `[Draft Init] After adding drafted cards: ${
               Object.keys(next).length
-            } total picks`
+            } total picks`,
           );
           return next;
         });
@@ -1823,14 +1823,14 @@ function AuthenticatedDeckEditor() {
             if (playerIdParam) {
               localStorage.setItem(
                 `draftedCardsResolved_${draftId}`,
-                JSON.stringify(expandedResolved)
+                JSON.stringify(expandedResolved),
               );
             }
           }
         } catch (storageError) {
           console.warn(
             "[Draft Init] Unable to cache resolved draft cards",
-            storageError
+            storageError,
           );
         }
 
@@ -1914,7 +1914,7 @@ function AuthenticatedDeckEditor() {
       let raw: string | null = null;
       try {
         raw = localStorage.getItem(
-          `sealedCubeSideboard_tournament_${tournamentId}`
+          `sealedCubeSideboard_tournament_${tournamentId}`,
         );
       } catch {
         raw = null;
@@ -1944,7 +1944,7 @@ function AuthenticatedDeckEditor() {
     (async () => {
       try {
         const res = await fetch(
-          `/api/cubes/${encodeURIComponent(fetchCubeId)}`
+          `/api/cubes/${encodeURIComponent(fetchCubeId)}`,
         );
         if (!res.ok) {
           if (!cancelled) setCubeStandardCards([]);
@@ -1990,7 +1990,7 @@ function AuthenticatedDeckEditor() {
               type: c.type,
               rarity: c.rarity,
             } as unknown as Record<string, unknown>,
-            c.setName ?? "Beta"
+            c.setName ?? "Beta",
           );
           if (sr) converted.push(sr);
         }
@@ -2058,7 +2058,7 @@ function AuthenticatedDeckEditor() {
               type: c.type,
               rarity: c.rarity,
             } as unknown as Record<string, unknown>,
-            c.setName ?? "Beta"
+            c.setName ?? "Beta",
           );
           if (sr) converted.push(sr);
         }
@@ -2073,7 +2073,7 @@ function AuthenticatedDeckEditor() {
           });
           setFreeAvatarsCards(deduped);
           console.log(
-            `[Free Avatars] Loaded ${deduped.length} avatars as extras`
+            `[Free Avatars] Loaded ${deduped.length} avatars as extras`,
           );
         }
       } catch {
@@ -2139,7 +2139,7 @@ function AuthenticatedDeckEditor() {
   } | null>(null);
 
   const [metaByCardId, setMetaByCardId] = useState<Record<number, CardMeta>>(
-    {}
+    {},
   );
 
   // Convert picks to Pick3D format (exact same structure as draft-3d)
@@ -2150,10 +2150,10 @@ function AuthenticatedDeckEditor() {
   const openContextMenuForCard = useCallback(
     (cardId: number, cardName: string, clientX: number, clientY: number) => {
       const deckCards = pick3D.filter(
-        (p) => p.card.cardId === cardId && p.zone === "Deck"
+        (p) => p.card.cardId === cardId && p.zone === "Deck",
       );
       const sideboardCards = pick3D.filter(
-        (p) => p.card.cardId === cardId && p.zone === "Sideboard"
+        (p) => p.card.cardId === cardId && p.zone === "Sideboard",
       );
       let collectionCopies = 0;
       let totalCollection = 0;
@@ -2174,12 +2174,12 @@ function AuthenticatedDeckEditor() {
         totalCollection,
       });
     },
-    [pick3D, picks]
+    [pick3D, picks],
   );
 
   // Hover preview state (modeled after match Board hover behavior)
   const [hoverPreview, setHoverPreview] = useState<CardPreviewData | null>(
-    null
+    null,
   );
   const hoverPreviewSourceRef = useRef<string | null>(null);
   const hoverPreviewClearTimerRef = useRef<number | null>(null);
@@ -2194,7 +2194,7 @@ function AuthenticatedDeckEditor() {
       hoverPreviewSourceRef.current = sourceKey ?? null;
       setHoverPreview(card);
     },
-    []
+    [],
   );
 
   const clearHoverPreview = useCallback((sourceKey?: string | null) => {
@@ -2219,12 +2219,15 @@ function AuthenticatedDeckEditor() {
         window.clearTimeout(hoverPreviewClearTimerRef.current);
         hoverPreviewClearTimerRef.current = null;
       }
-      hoverPreviewClearTimerRef.current = window.setTimeout(() => {
-        hoverPreviewClearTimerRef.current = null;
-        clearHoverPreview(sourceKey);
-      }, Math.max(0, delay)) as unknown as number;
+      hoverPreviewClearTimerRef.current = window.setTimeout(
+        () => {
+          hoverPreviewClearTimerRef.current = null;
+          clearHoverPreview(sourceKey);
+        },
+        Math.max(0, delay),
+      ) as unknown as number;
     },
-    [clearHoverPreview]
+    [clearHoverPreview],
   );
 
   // Cleanup hover timer on unmount
@@ -2254,10 +2257,10 @@ function AuthenticatedDeckEditor() {
       currentHoverSlugRef.current = card.slug;
       beginHoverPreviewRef.current(
         { slug: card.slug, name: card.name, type: card.type },
-        `card:${card.slug}`
+        `card:${card.slug}`,
       );
     },
-    []
+    [],
   );
 
   const stableOnHoverEnd = useCallback(() => {
@@ -2305,7 +2308,8 @@ function AuthenticatedDeckEditor() {
   // (type check is optional since the local search index doesn't include type info)
   const hasDragonlordAvatar = useMemo(() => {
     return pick3D.some(
-      (p) => p.zone === "Deck" && p.card.cardName.toLowerCase() === "dragonlord"
+      (p) =>
+        p.zone === "Deck" && p.card.cardName.toLowerCase() === "dragonlord",
     );
   }, [pick3D]);
 
@@ -2359,7 +2363,7 @@ function AuthenticatedDeckEditor() {
       if (!seenCards.has(p.card.cardId)) {
         seenCards.add(p.card.cardId);
         const count = pick3D.filter(
-          (item) => item.card.cardId === p.card.cardId
+          (item) => item.card.cardId === p.card.cardId,
         ).length;
         counts.push({
           cardId: p.card.cardId,
@@ -2423,7 +2427,7 @@ function AuthenticatedDeckEditor() {
       setPick3D((prev) => {
         const updated = [...prev];
         const idx = updated.findIndex(
-          (p) => p.card.cardId === cardId && p.zone === "Deck"
+          (p) => p.card.cardId === cardId && p.zone === "Deck",
         );
         if (idx === -1) return prev;
         const card = updated[idx];
@@ -2476,7 +2480,7 @@ function AuthenticatedDeckEditor() {
         return next;
       });
     },
-    [collectionCount]
+    [collectionCount],
   );
 
   const moveOneFromSideboardToCollection = useCallback(
@@ -2491,7 +2495,7 @@ function AuthenticatedDeckEditor() {
       setPick3D((prev) => {
         const updated = [...prev];
         const idx = updated.findIndex(
-          (p) => p.card.cardId === cardId && p.zone === "Sideboard"
+          (p) => p.card.cardId === cardId && p.zone === "Sideboard",
         );
         if (idx === -1) return prev;
         const card = updated[idx];
@@ -2544,7 +2548,7 @@ function AuthenticatedDeckEditor() {
         return next;
       });
     },
-    [collectionCount]
+    [collectionCount],
   );
 
   const moveOneFromCollectionToSideboard = useCallback(
@@ -2553,7 +2557,7 @@ function AuthenticatedDeckEditor() {
       setPick3D((prev) => {
         const updated = [...prev];
         const idx = updated.findIndex(
-          (p) => p.card.cardId === cardId && p.zone === "Collection"
+          (p) => p.card.cardId === cardId && p.zone === "Collection",
         );
         if (idx === -1) return prev;
         const card = updated[idx];
@@ -2607,7 +2611,7 @@ function AuthenticatedDeckEditor() {
         return next;
       });
     },
-    [isSortingEnabled]
+    [isSortingEnabled],
   );
 
   const moveOneFromCollectionToDeck = useCallback(
@@ -2616,7 +2620,7 @@ function AuthenticatedDeckEditor() {
       setPick3D((prev) => {
         const updated = [...prev];
         const idx = updated.findIndex(
-          (p) => p.card.cardId === cardId && p.zone === "Collection"
+          (p) => p.card.cardId === cardId && p.zone === "Collection",
         );
         if (idx === -1) return prev;
         const card = updated[idx];
@@ -2668,7 +2672,7 @@ function AuthenticatedDeckEditor() {
         return next;
       });
     },
-    [isSortingEnabled]
+    [isSortingEnabled],
   );
 
   // Basic add-card helpers for the search UI
@@ -2696,7 +2700,7 @@ function AuthenticatedDeckEditor() {
         return { ...prev, [key]: next };
       });
     },
-    [setPicks]
+    [setPicks],
   );
 
   const addToSideboardFromSearch = useCallback(
@@ -2720,7 +2724,7 @@ function AuthenticatedDeckEditor() {
         return { ...prev, [key]: next };
       });
     },
-    [setPicks]
+    [setPicks],
   );
 
   // Minimal deck actions
@@ -2758,7 +2762,7 @@ function AuthenticatedDeckEditor() {
         avatar === 1 && atlas >= minAtlas && spellbookNonAvatar >= minSpellbook;
       if (!isValid && !isFreeMode) {
         throw new Error(
-          `Deck invalid. Require: 1 Avatar, Atlas >= ${minAtlas}, Spellbook >= ${minSpellbook} (excl. Avatar)`
+          `Deck invalid. Require: 1 Avatar, Atlas >= ${minAtlas}, Spellbook >= ${minSpellbook} (excl. Avatar)`,
         );
       }
 
@@ -2803,7 +2807,7 @@ function AuthenticatedDeckEditor() {
         throw new Error(
           "Collection invalid. Maximum 10 cards allowed (current: " +
             collectionCount +
-            ")"
+            ")",
         );
       }
 
@@ -2815,8 +2819,8 @@ function AuthenticatedDeckEditor() {
         isDraftMode || isSealed
           ? "Sealed"
           : isFreeMode
-          ? "sandbox"
-          : "Constructed";
+            ? "sandbox"
+            : "Constructed";
 
       // Debug: log cards being saved
       const cardsWithoutVariant = cards.filter((c) => !c.variantId);
@@ -2825,7 +2829,7 @@ function AuthenticatedDeckEditor() {
           `[saveDeck] ${cardsWithoutVariant.length} cards have no variantId:`,
           cardsWithoutVariant
             .slice(0, 3)
-            .map((c) => ({ cardId: c.cardId, zone: c.zone }))
+            .map((c) => ({ cardId: c.cardId, zone: c.zone })),
         );
       } else {
         console.log(`[saveDeck] All ${cards.length} cards have variantId`);
@@ -2860,12 +2864,12 @@ function AuthenticatedDeckEditor() {
             ? `${gameName} (Sealed)`
             : `Sealed Deck ${new Date().toLocaleDateString()}`
           : isDraftMode
-          ? gameName
-            ? `${gameName} (Draft)`
-            : `Draft Deck ${new Date().toLocaleDateString()}`
-          : gameName
-          ? `${gameName} (Constructed)`
-          : deckName || "New Deck";
+            ? gameName
+              ? `${gameName} (Draft)`
+              : `Draft Deck ${new Date().toLocaleDateString()}`
+            : gameName
+              ? `${gameName} (Constructed)`
+              : deckName || "New Deck";
 
         const res = await fetch("/api/decks", {
           method: "POST",
@@ -2886,7 +2890,7 @@ function AuthenticatedDeckEditor() {
         // Show warning if deck is incomplete in free mode
         if (isFreeMode && !isValid) {
           setSaveMsg(
-            `Saved draft: ${data.name} (incomplete deck - ${avatar} avatar, ${atlas}/${minAtlas} sites, ${spellbookNonAvatar}/${minSpellbook} spells)`
+            `Saved draft: ${data.name} (incomplete deck - ${avatar} avatar, ${atlas}/${minAtlas} sites, ${spellbookNonAvatar}/${minSpellbook} spells)`,
           );
         } else {
           setSaveMsg(`Saved deck ${data.name}`);
@@ -2945,7 +2949,7 @@ function AuthenticatedDeckEditor() {
         setSaving(false);
       }
     },
-    [deckId, status]
+    [deckId, status],
   );
 
   // Submit sealed deck to match server or tournament preparation when in tournament mode
@@ -2984,7 +2988,7 @@ function AuthenticatedDeckEditor() {
       // Sealed validation: 1 Avatar, 12+ sites, 24+ spells
       if (!(avatar === 1 && atlas >= 12 && spellbookNonAvatar >= 24)) {
         throw new Error(
-          `Deck invalid. Current: ${avatar} Avatar, ${atlas} Atlas, ${spellbookNonAvatar} Spellbook. Required: 1 Avatar, Atlas >= 12, Spellbook >= 24.`
+          `Deck invalid. Current: ${avatar} Avatar, ${atlas} Atlas, ${spellbookNonAvatar} Spellbook. Required: 1 Avatar, Atlas >= 12, Spellbook >= 24.`,
         );
       }
 
@@ -3000,8 +3004,8 @@ function AuthenticatedDeckEditor() {
           const apiZone = t.includes("site")
             ? "atlas"
             : t.includes("avatar")
-            ? "avatar"
-            : "spellbook";
+              ? "avatar"
+              : "spellbook";
           return {
             id: p.card.cardId.toString(),
             cardId: p.card.cardId,
@@ -3066,13 +3070,25 @@ function AuthenticatedDeckEditor() {
           counts.set(c.cardId, (counts.get(c.cardId) || 0) + 1);
         }
         const deckList = Array.from(counts.entries()).map(
-          ([cardId, quantity]) => ({ cardId: String(cardId), quantity })
+          ([cardId, quantity]) => ({ cardId: String(cardId), quantity }),
+        );
+
+        // Group sideboard cards by cardId for collection (per limited rules)
+        const sideboardCounts = new Map<number, number>();
+        for (const c of sideboardAsCollection) {
+          sideboardCounts.set(
+            c.cardId,
+            (sideboardCounts.get(c.cardId) || 0) + 1,
+          );
+        }
+        const sideboardList = Array.from(sideboardCounts.entries()).map(
+          ([cardId, quantity]) => ({ cardId: String(cardId), quantity }),
         );
 
         // Submit to tournament preparation API
         const res = await fetch(
           `/api/tournaments/${encodeURIComponent(
-            tournamentId
+            tournamentId,
           )}/preparation/submit`,
           {
             method: "POST",
@@ -3083,15 +3099,16 @@ function AuthenticatedDeckEditor() {
                   packsOpened: true,
                   deckBuilt: true,
                   deckList,
+                  sideboardList,
                 },
               },
             }),
-          }
+          },
         );
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
           throw new Error(
-            err?.error || "Failed to submit tournament sealed deck"
+            err?.error || "Failed to submit tournament sealed deck",
           );
         }
 
@@ -3099,7 +3116,7 @@ function AuthenticatedDeckEditor() {
         try {
           localStorage.setItem(
             `sealed_submitted_tournament_${tournamentId}`,
-            "true"
+            "true",
           );
         } catch {}
         setWaitingOverlayStage("waiting");
@@ -3119,19 +3136,19 @@ function AuthenticatedDeckEditor() {
               deck: fullDeckSubmission,
               matchId,
             },
-            window.location.origin
+            window.location.origin,
           );
         } else {
           // Fallback: save to localStorage for the match page to pick up
           localStorage.setItem(
             `sealedDeck_${matchId}`,
-            JSON.stringify(fullDeckSubmission)
+            JSON.stringify(fullDeckSubmission),
           );
         }
         setWaitingOverlayStage("waiting");
       } else {
         throw new Error(
-          "Missing match ID or tournament ID for sealed submission"
+          "Missing match ID or tournament ID for sealed submission",
         );
       }
 
@@ -3141,7 +3158,7 @@ function AuthenticatedDeckEditor() {
       setSaveMsg(
         tournamentId
           ? "Submitting deck to tournament…"
-          : "Sealed deck submitted successfully!"
+          : "Sealed deck submitted successfully!",
       );
 
       // Toast notification
@@ -3151,7 +3168,7 @@ function AuthenticatedDeckEditor() {
           window.dispatchEvent(
             new CustomEvent("app:toast", {
               detail: { message: "Sealed deck submitted!" },
-            })
+            }),
           );
         }
       } catch {}
@@ -3160,7 +3177,7 @@ function AuthenticatedDeckEditor() {
       if (tournamentId && !matchId) {
         setTimeout(() => {
           window.location.href = `/tournaments/${encodeURIComponent(
-            tournamentId
+            tournamentId,
           )}`;
         }, 1200);
       } else if (matchId) {
@@ -3214,8 +3231,8 @@ function AuthenticatedDeckEditor() {
           const apiZone = t.includes("site")
             ? "atlas"
             : t.includes("avatar")
-            ? "avatar"
-            : "spellbook";
+              ? "avatar"
+              : "spellbook";
           return {
             id: p.card.cardId.toString(),
             cardId: p.card.cardId,
@@ -3278,13 +3295,25 @@ function AuthenticatedDeckEditor() {
           counts.set(c.cardId, (counts.get(c.cardId) || 0) + 1);
         }
         const deckList = Array.from(counts.entries()).map(
-          ([cardId, quantity]) => ({ cardId: String(cardId), quantity })
+          ([cardId, quantity]) => ({ cardId: String(cardId), quantity }),
+        );
+
+        // Group sideboard cards by cardId for collection (per limited rules)
+        const sideboardCounts = new Map<number, number>();
+        for (const c of sideboardAsCollection) {
+          sideboardCounts.set(
+            c.cardId,
+            (sideboardCounts.get(c.cardId) || 0) + 1,
+          );
+        }
+        const sideboardList = Array.from(sideboardCounts.entries()).map(
+          ([cardId, quantity]) => ({ cardId: String(cardId), quantity }),
         );
 
         // Submit to tournament preparation API (draft)
         const res = await fetch(
           `/api/tournaments/${encodeURIComponent(
-            tournamentId
+            tournamentId,
           )}/preparation/submit`,
           {
             method: "POST",
@@ -3295,21 +3324,22 @@ function AuthenticatedDeckEditor() {
                   draftCompleted: true,
                   deckBuilt: true,
                   deckList,
+                  sideboardList,
                 },
               },
             }),
-          }
+          },
         );
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
           throw new Error(
-            err?.error || "Failed to submit tournament draft deck"
+            err?.error || "Failed to submit tournament draft deck",
           );
         }
         try {
           localStorage.setItem(
             `draft_submitted_tournament_${tournamentId}`,
-            "true"
+            "true",
           );
         } catch {}
         setWaitingOverlayStage("waiting");
@@ -3329,19 +3359,19 @@ function AuthenticatedDeckEditor() {
               deck: fullDeckSubmission,
               matchId,
             },
-            window.location.origin
+            window.location.origin,
           );
         } else {
           // Fallback: save to localStorage for the match page to pick up
           localStorage.setItem(
             `draftDeck_${matchId}`,
-            JSON.stringify(fullDeckSubmission)
+            JSON.stringify(fullDeckSubmission),
           );
         }
         setWaitingOverlayStage("waiting");
       } else {
         throw new Error(
-          "Missing match ID or tournament ID for draft submission"
+          "Missing match ID or tournament ID for draft submission",
         );
       }
 
@@ -3353,7 +3383,7 @@ function AuthenticatedDeckEditor() {
       setSaveMsg(
         tournamentId
           ? "Submitting draft deck to tournament…"
-          : "Draft deck submitted successfully!"
+          : "Draft deck submitted successfully!",
       );
 
       // Toast notification
@@ -3363,7 +3393,7 @@ function AuthenticatedDeckEditor() {
           window.dispatchEvent(
             new CustomEvent("app:toast", {
               detail: { message: "Draft deck submitted!" },
-            })
+            }),
           );
         }
       } catch {}
@@ -3372,7 +3402,7 @@ function AuthenticatedDeckEditor() {
       if (tournamentId && !matchId) {
         setTimeout(() => {
           window.location.href = `/tournaments/${encodeURIComponent(
-            tournamentId
+            tournamentId,
           )}`;
         }, 1200);
       } else if (matchId) {
@@ -3445,7 +3475,7 @@ function AuthenticatedDeckEditor() {
                 cardId: c.cardId,
                 name: c.name,
                 variantId: c.variantId,
-              }))
+              })),
             );
           }
           for (const c of arr) {
@@ -3475,13 +3505,13 @@ function AuthenticatedDeckEditor() {
           new Set(
             Object.values(next)
               .filter((p) => !p.slug)
-              .map((p) => p.cardId)
-          )
+              .map((p) => p.cardId),
+          ),
         );
         if (missingIds.length) {
           try {
             const resMeta = await fetch(
-              `/api/cards/by-id?ids=${encodeURIComponent(missingIds.join(","))}`
+              `/api/cards/by-id?ids=${encodeURIComponent(missingIds.join(","))}`,
             );
             if (resMeta.ok) {
               const metas = (await resMeta.json()) as Array<{
@@ -3575,7 +3605,7 @@ function AuthenticatedDeckEditor() {
         setError(e instanceof Error ? e.message : String(e));
       }
     },
-    [isSealed, setName, status]
+    [isSealed, setName, status],
   );
 
   // Create a private copy of a public deck
@@ -3674,7 +3704,7 @@ function AuthenticatedDeckEditor() {
       try {
         // Set-agnostic lookup: always query across all sets
         const res = await fetch(
-          `/api/cards/search?q=${encodeURIComponent(name)}&type=site`
+          `/api/cards/search?q=${encodeURIComponent(name)}&type=site`,
         );
         const data = (await res.json()) as SearchResult[];
         const r = res.ok ? pickStandardSiteResult(data, name) : null;
@@ -3684,7 +3714,7 @@ function AuthenticatedDeckEditor() {
         setError(e instanceof Error ? e.message : String(e));
       }
     },
-    [stdSites, addCardAuto]
+    [stdSites, addCardAuto],
   );
 
   // Sealed mode pack functions
@@ -3710,13 +3740,13 @@ function AuthenticatedDeckEditor() {
         console.log(
           `[Sealed] Persisted pack state to localStorage: ${
             updatedPacks.filter((p) => p.opened).length
-          }/${updatedPacks.length} opened`
+          }/${updatedPacks.length} opened`,
         );
       } catch (e) {
         console.error("[Sealed] Failed to persist pack state:", e);
       }
     },
-    [searchParams]
+    [searchParams],
   );
 
   const openPack = useCallback(
@@ -3738,7 +3768,7 @@ function AuthenticatedDeckEditor() {
         // Mark pack as opened; keep existing cards array
         setPacks((prev) => {
           const updated = prev.map((p) =>
-            p.id === packId ? { ...p, opened: true } : p
+            p.id === packId ? { ...p, opened: true } : p,
           );
           // Persist opened state to localStorage to prevent reload exploits
           persistPackOpenedState(updated);
@@ -3754,7 +3784,7 @@ function AuthenticatedDeckEditor() {
       resolveCardsForPack,
       addSearchResultsToSideboard,
       persistPackOpenedState,
-    ]
+    ],
   );
 
   const openAllPacks = useCallback(async () => {
@@ -3773,7 +3803,7 @@ function AuthenticatedDeckEditor() {
           addSearchResultsToSideboard(resolved);
           setPacks((prev) => {
             const updated = prev.map((p) =>
-              p.id === pack.id ? { ...p, opened: true } : p
+              p.id === pack.id ? { ...p, opened: true } : p,
             );
             // Persist opened state to localStorage to prevent reload exploits
             persistPackOpenedState(updated);
@@ -3786,7 +3816,7 @@ function AuthenticatedDeckEditor() {
       setError(
         err instanceof Error
           ? err.message
-          : "Failed to open all packs. Please try again."
+          : "Failed to open all packs. Please try again.",
       );
     } finally {
       setBulkOpenInProgress(false);
@@ -3837,7 +3867,7 @@ function AuthenticatedDeckEditor() {
             slug: card.slug || "",
             type: card.type || "",
             set: card.set || card.setName || freeBoosterSet,
-          })
+          }),
         );
         addSearchResultsToSideboard(searchResults);
         setFeedbackMessage(`Opened booster: ${packCards.length} cards added`);
@@ -3851,7 +3881,7 @@ function AuthenticatedDeckEditor() {
           // Fetch cube sideboard cards (excluding avatars which are drafted)
           try {
             const cubeRes = await fetch(
-              `/api/cubes/${encodeURIComponent(freeBoosterCubeId)}`
+              `/api/cubes/${encodeURIComponent(freeBoosterCubeId)}`,
             );
             if (cubeRes.ok) {
               const cubeData = await cubeRes.json();
@@ -3863,7 +3893,7 @@ function AuthenticatedDeckEditor() {
                   const cardType = (c.type ?? "").toLowerCase();
                   if (cardType.includes("avatar")) return false;
                   return true;
-                }
+                },
               );
               if (sideboardCards.length > 0) {
                 const converted: SearchResult[] = sideboardCards.map(
@@ -3885,7 +3915,7 @@ function AuthenticatedDeckEditor() {
                     finish: "Standard" as const,
                     product: "",
                     rarity: c.rarity ?? "Ordinary",
-                  })
+                  }),
                 );
                 setCubeStandardCards(converted);
               }
@@ -3932,7 +3962,7 @@ function AuthenticatedDeckEditor() {
               name: c.name,
               cardCount: c.cardCount,
               creatorName: c.creatorName,
-            })
+            }),
           );
           setAvailableCubes(cubes);
         }
@@ -3971,14 +4001,14 @@ function AuthenticatedDeckEditor() {
       setLiveSearchResults(searchResults);
       setLiveSearchLoading(false);
     },
-    [localCardSearch, localSearchReady]
+    [localCardSearch, localSearchReady],
   );
 
   // Free mode: Remove a card from the editor entirely
   const removeCardFromEditor = useCallback((cardId: number, zone: Zone) => {
     setPick3D((prev) => {
       const idx = prev.findIndex(
-        (p) => p.card.cardId === cardId && p.zone === zone
+        (p) => p.card.cardId === cardId && p.zone === zone,
       );
       if (idx === -1) return prev;
       const updated = [...prev];
@@ -4077,7 +4107,7 @@ function AuthenticatedDeckEditor() {
 
   // Track interaction order for unstacked mode - maps cardId to layer index
   const [cardLayerOrder, setCardLayerOrder] = useState<Map<number, number>>(
-    new Map()
+    new Map(),
   );
   const nextLayerIndex = useRef(0);
 
@@ -4097,7 +4127,7 @@ function AuthenticatedDeckEditor() {
         return newMap;
       });
     },
-    [isSortingEnabled]
+    [isSortingEnabled],
   );
 
   // Reset render orders when sorting is toggled to ensure proper stacking
@@ -4176,7 +4206,7 @@ function AuthenticatedDeckEditor() {
   const zoneCountsRef = useRef<Map<string, number>>(new Map());
   const lastPicksCount = useRef(0);
   const draftLayoutRef = useRef<Map<string, { x: number; z: number }> | null>(
-    null
+    null,
   );
   // Track when draft layout is loaded - use state to trigger pick3D rebuild
   const [draftLayoutLoaded, setDraftLayoutLoaded] = useState(false);
@@ -4276,7 +4306,7 @@ function AuthenticatedDeckEditor() {
           try {
             console.warn(
               "[Draft Init] Failed to parse draft stack prefs (3D):",
-              err
+              err,
             );
           } catch {}
         }
@@ -4298,7 +4328,7 @@ function AuthenticatedDeckEditor() {
         }>;
         console.log(
           `[Draft Init] Loaded ${parsed.length} layout entries from ${layoutKey}`,
-          parsed.slice(0, 3) // Log first 3 for debugging
+          parsed.slice(0, 3), // Log first 3 for debugging
         );
         const map = new Map<string, { x: number; z: number }>();
         let skippedNoId = 0;
@@ -4331,7 +4361,7 @@ function AuthenticatedDeckEditor() {
           }
         }
         console.log(
-          `[Draft Init] Layout map: ${map.size} entries (${addedById} by cardId, ${addedBySlug} by slug, ${skippedNoId} skipped)`
+          `[Draft Init] Layout map: ${map.size} entries (${addedById} by cardId, ${addedBySlug} by slug, ${skippedNoId} skipped)`,
         );
         if (map.size > 0) {
           draftLayoutRef.current = map;
@@ -4341,7 +4371,7 @@ function AuthenticatedDeckEditor() {
         try {
           console.warn(
             "[Draft Init] Failed to parse draft 3D layout for editor-3d:",
-            err
+            err,
           );
         } catch {}
       }
@@ -4349,7 +4379,7 @@ function AuthenticatedDeckEditor() {
       try {
         console.warn(
           "[Draft Init] Error reading draft 3D layout from localStorage:",
-          err
+          err,
         );
       } catch {}
     }
@@ -4359,7 +4389,7 @@ function AuthenticatedDeckEditor() {
     // Calculate total card count from picks
     const totalCards = Object.values(picks).reduce(
       (sum, item) => sum + item.count,
-      0
+      0,
     );
 
     // Skip rebuilding pick3D if card count hasn't changed AND layout hasn't just loaded
@@ -4410,7 +4440,7 @@ function AuthenticatedDeckEditor() {
       for (let i = 0; i < item.count; i++) {
         remainingDeckByCard.set(
           item.cardId,
-          (remainingDeckByCard.get(item.cardId) ?? 0) - 1
+          (remainingDeckByCard.get(item.cardId) ?? 0) - 1,
         );
 
         // Use logical zone from picks, but map non-deck zones (Sideboard/Collection)
@@ -4433,9 +4463,11 @@ function AuthenticatedDeckEditor() {
             draftLayoutRef.current.get(`${item.cardId}:Deck`) ??
             draftLayoutRef.current.get(`${item.cardId}:Sideboard`) ??
             (item.slug
-              ? draftLayoutRef.current.get(`slug:${item.slug}:${layoutZone}`) ??
+              ? (draftLayoutRef.current.get(
+                  `slug:${item.slug}:${layoutZone}`,
+                ) ??
                 draftLayoutRef.current.get(`slug:${item.slug}:Deck`) ??
-                draftLayoutRef.current.get(`slug:${item.slug}:Sideboard`)
+                draftLayoutRef.current.get(`slug:${item.slug}:Sideboard`))
               : undefined);
         }
         const useExisting = !!existingPos && (isSealed || isDraftMode);
@@ -4561,7 +4593,7 @@ function AuthenticatedDeckEditor() {
     sealedConfig && {
       timeLimit: sealedConfig.timeLimit,
       constructionStartTime: sealedConfig.constructionStartTime,
-    }
+    },
   );
 
   // Metadata via hook; keep state for any manual priming, then sync on change
@@ -4720,7 +4752,7 @@ function AuthenticatedDeckEditor() {
   // Helper to check if a card is a standard site (tournament legal)
   const isStandardSite = useCallback((cardName: string) => {
     return STANDARD_SITE_NAMES.some((siteName) =>
-      cardName.toLowerCase().includes(siteName.toLowerCase())
+      cardName.toLowerCase().includes(siteName.toLowerCase()),
     );
   }, []);
 
@@ -4730,7 +4762,7 @@ function AuthenticatedDeckEditor() {
       setPick3D((prev) => {
         const updated = [...prev];
         const idx = updated.findIndex(
-          (p) => p.card.cardId === cardId && p.zone === "Deck"
+          (p) => p.card.cardId === cardId && p.zone === "Deck",
         );
         if (idx === -1) return prev;
 
@@ -4806,7 +4838,7 @@ function AuthenticatedDeckEditor() {
         return updated;
       });
     },
-    [isStandardSite, isSortingEnabled]
+    [isStandardSite, isSortingEnabled],
   );
 
   const moveOneFromSideboardToDeck = useCallback(
@@ -4814,7 +4846,7 @@ function AuthenticatedDeckEditor() {
       setPick3D((prev) => {
         const updated = [...prev];
         const idx = updated.findIndex(
-          (p) => p.card.cardId === cardId && p.zone === "Sideboard"
+          (p) => p.card.cardId === cardId && p.zone === "Sideboard",
         );
         if (idx === -1) return prev;
         const card = updated[idx];
@@ -4871,7 +4903,7 @@ function AuthenticatedDeckEditor() {
         return updated;
       });
     },
-    [isSortingEnabled]
+    [isSortingEnabled],
   );
 
   // Helper function to move specific card by its unique ID
@@ -4953,7 +4985,7 @@ function AuthenticatedDeckEditor() {
         return updated;
       });
     },
-    [isStandardSite]
+    [isStandardSite],
   );
 
   const moveSpecificCardToDeck = useCallback((pickId: number) => {
@@ -5096,7 +5128,7 @@ function AuthenticatedDeckEditor() {
                 // Higher stack index = higher render order = rendered on top
                 // In unstacked mode, use interaction-based layering (most recently interacted cards on top)
                 const layerIndex = !stackPos
-                  ? cardLayerOrder.get(p.id) ?? cardIndex
+                  ? (cardLayerOrder.get(p.id) ?? cardIndex)
                   : 0;
                 const baseRenderOrder = stackPos
                   ? 1600 + stackPos.stackIndex * 10
@@ -5141,7 +5173,7 @@ function AuthenticatedDeckEditor() {
                         p.card.cardId,
                         p.card.cardName,
                         cx,
-                        cy
+                        cy,
                       )
                     }
                     onDrop={(wx, wz) => {
@@ -5153,7 +5185,7 @@ function AuthenticatedDeckEditor() {
                       setPick3D((prev) => {
                         const updated = [...prev];
                         const cardIndex = updated.findIndex(
-                          (it) => it.id === p.id
+                          (it) => it.id === p.id,
                         );
                         if (cardIndex === -1) return prev;
 
@@ -5208,7 +5240,7 @@ function AuthenticatedDeckEditor() {
                       // Show feedback message for zone changes
                       if (zoneChanged) {
                         setFeedbackMessage(
-                          `Moved "${p.card.cardName}" to ${newZone}`
+                          `Moved "${p.card.cardName}" to ${newZone}`,
                         );
                         setTimeout(() => setFeedbackMessage(null), 2000);
                       }
@@ -5242,13 +5274,13 @@ function AuthenticatedDeckEditor() {
                           // Move from deck to sideboard
                           moveSpecificCardToSideboard(p.id);
                           setFeedbackMessage(
-                            `Moved "${p.card.cardName}" to Sideboard`
+                            `Moved "${p.card.cardName}" to Sideboard`,
                           );
                         } else {
                           // Move from sideboard to deck
                           moveSpecificCardToDeck(p.id);
                           setFeedbackMessage(
-                            `Moved "${p.card.cardName}" to Deck`
+                            `Moved "${p.card.cardName}" to Deck`,
                           );
                         }
 
@@ -5323,7 +5355,7 @@ function AuthenticatedDeckEditor() {
             setAutoSaveEnabled(enabled);
             localStorage.setItem("sorcery:deckEditorAutoSave", String(enabled));
             setFeedbackMessage(
-              enabled ? "Auto-save enabled" : "Auto-save disabled"
+              enabled ? "Auto-save enabled" : "Auto-save disabled",
             );
             setTimeout(() => setFeedbackMessage(null), 2000);
           }}
@@ -5471,7 +5503,7 @@ function AuthenticatedDeckEditor() {
                         const count = manaCurve[cost] || 0;
                         const maxCount = Math.max(
                           ...Object.values(manaCurve),
-                          1
+                          1,
                         );
                         const height = (count / maxCount) * 100;
                         const label = cost === 7 ? "7+" : String(cost);
@@ -5485,7 +5517,7 @@ function AuthenticatedDeckEditor() {
                               style={{
                                 height: `${Math.max(
                                   height,
-                                  count > 0 ? 8 : 0
+                                  count > 0 ? 8 : 0,
                                 )}%`,
                               }}
                               title={`${label} mana: ${count} cards`}
@@ -5566,7 +5598,7 @@ function AuthenticatedDeckEditor() {
                       onClick={() => {
                         moveSpecificCardToSideboard(card.id);
                         setFeedbackMessage(
-                          `Moved "${contextMenu.cardName}" to Sideboard`
+                          `Moved "${contextMenu.cardName}" to Sideboard`,
                         );
                         setTimeout(() => setFeedbackMessage(null), 2000);
                         setContextMenu(null);
@@ -5604,7 +5636,7 @@ function AuthenticatedDeckEditor() {
                       onClick={() => {
                         moveSpecificCardToDeck(card.id);
                         setFeedbackMessage(
-                          `Moved "${contextMenu.cardName}" to Deck`
+                          `Moved "${contextMenu.cardName}" to Deck`,
                         );
                         setTimeout(() => setFeedbackMessage(null), 2000);
                         setContextMenu(null);
@@ -5641,7 +5673,7 @@ function AuthenticatedDeckEditor() {
                     onClick={() => {
                       moveOneFromCollectionToDeck(contextMenu.cardId);
                       setFeedbackMessage(
-                        `Moved "${contextMenu.cardName}" from Collection to Deck`
+                        `Moved "${contextMenu.cardName}" from Collection to Deck`,
                       );
                       setTimeout(() => setFeedbackMessage(null), 2000);
                       setContextMenu(null);
@@ -5654,7 +5686,7 @@ function AuthenticatedDeckEditor() {
                     onClick={() => {
                       moveOneFromCollectionToSideboard(contextMenu.cardId);
                       setFeedbackMessage(
-                        `Moved "${contextMenu.cardName}" from Collection to Sideboard`
+                        `Moved "${contextMenu.cardName}" from Collection to Sideboard`,
                       );
                       setTimeout(() => setFeedbackMessage(null), 2000);
                       setContextMenu(null);
@@ -5679,7 +5711,7 @@ function AuthenticatedDeckEditor() {
                             : "Sideboard";
                         removeCardFromEditor(contextMenu.cardId, zone as Zone);
                         setFeedbackMessage(
-                          `Removed "${contextMenu.cardName}" from ${zone}`
+                          `Removed "${contextMenu.cardName}" from ${zone}`,
                         );
                         setTimeout(() => setFeedbackMessage(null), 2000);
                         setContextMenu(null);
@@ -5701,7 +5733,7 @@ function AuthenticatedDeckEditor() {
                       setFeedbackMessage(
                         isHidden
                           ? `Showing "${contextMenu.cardName}" again`
-                          : `Hiding "${contextMenu.cardName}" from view`
+                          : `Hiding "${contextMenu.cardName}" from view`,
                       );
                       setTimeout(() => setFeedbackMessage(null), 2000);
                       setContextMenu(null);
@@ -5831,12 +5863,12 @@ function AuthenticatedDeckEditor() {
             cubeExtrasAvailable={cubeExtrasAvailable}
             onShowStandardCards={() =>
               setTournamentControlsMode((prev) =>
-                prev === "standard" ? null : "standard"
+                prev === "standard" ? null : "standard",
               )
             }
             onShowCubeExtras={() =>
               setTournamentControlsMode((prev) =>
-                prev === "cube" ? null : "cube"
+                prev === "cube" ? null : "cube",
               )
             }
             packs={packs}
@@ -5909,9 +5941,9 @@ function AuthenticatedDeckEditor() {
                   {waitingOverlayStage === "submitting"
                     ? "Validating your deck and syncing with the event server. Please keep this window open."
                     : searchParams?.get("tournament") &&
-                      !searchParams?.get("matchId")
-                    ? "Waiting for other players to submit their decks..."
-                    : "Returning you to the match momentarily."}
+                        !searchParams?.get("matchId")
+                      ? "Waiting for other players to submit their decks..."
+                      : "Returning you to the match momentarily."}
                 </p>
                 {waitingOverlayStage === "waiting" && (
                   <div className="text-sm text-gray-500">
@@ -5931,7 +5963,7 @@ function AuthenticatedDeckEditor() {
                         const matchId = searchParams?.get("matchId");
                         if (tournamentId && !matchId) {
                           window.location.href = `/tournaments/${encodeURIComponent(
-                            tournamentId
+                            tournamentId,
                           )}`;
                         } else {
                           goBackToMatch(matchId);

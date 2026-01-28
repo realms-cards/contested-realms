@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 // Returns specific tournament details
 export async function GET(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const startTime = performance.now();
   const { id } = await params;
@@ -55,7 +55,7 @@ export async function GET(
           throw new Error("Tournament not found");
         }
 
-        // Build viewer deck if available
+        // Build viewer deck and sideboard if available
         const viewerId: string | null = userId ?? null;
         const viewerReg = viewerId
           ? tournament.registrations.find((r) => r.playerId === viewerId) ||
@@ -63,6 +63,10 @@ export async function GET(
           : null;
         let viewerDeck: Array<{ cardId: string; quantity: number }> | null =
           null;
+        let viewerSideboard: Array<{
+          cardId: string;
+          quantity: number;
+        }> | null = null;
         if (viewerReg && viewerReg.preparationData) {
           try {
             const prep = viewerReg.preparationData as unknown as Record<
@@ -70,10 +74,16 @@ export async function GET(
               unknown
             >;
             const sealed = prep?.sealed as
-              | { deckList?: Array<{ cardId: string; quantity: number }> }
+              | {
+                  deckList?: Array<{ cardId: string; quantity: number }>;
+                  sideboardList?: Array<{ cardId: string; quantity: number }>;
+                }
               | undefined;
             const draft = prep?.draft as
-              | { deckList?: Array<{ cardId: string; quantity: number }> }
+              | {
+                  deckList?: Array<{ cardId: string; quantity: number }>;
+                  sideboardList?: Array<{ cardId: string; quantity: number }>;
+                }
               | undefined;
             const constructed = prep?.constructed as
               | {
@@ -95,6 +105,16 @@ export async function GET(
               }));
             }
 
+            // Get sideboard list for limited formats (becomes collection in-game)
+            const sideboardList =
+              sealed?.sideboardList || draft?.sideboardList || null;
+            if (Array.isArray(sideboardList)) {
+              viewerSideboard = sideboardList.map((it) => ({
+                cardId: String(it.cardId),
+                quantity: Number(it.quantity) || 0,
+              }));
+            }
+
             // Fallback for constructed: fetch the selected deck from database and aggregate
             if (!viewerDeck && constructed?.deckId) {
               const deck = await prisma.deck.findUnique({
@@ -109,7 +129,7 @@ export async function GET(
                   cardMap.set(id, (cardMap.get(id) || 0) + (card.count || 1));
                 }
                 viewerDeck = Array.from(cardMap.entries()).map(
-                  ([cardId, quantity]) => ({ cardId, quantity })
+                  ([cardId, quantity]) => ({ cardId, quantity }),
                 );
               }
             }
@@ -160,13 +180,14 @@ export async function GET(
           })),
           settings: tournament.settings,
           viewerDeck,
+          viewerSideboard,
           createdAt:
             typeof tournament.createdAt === "string"
               ? new Date(tournament.createdAt).getTime()
               : tournament.createdAt.getTime(),
         };
       },
-      { ttl: 5 } // 5 second cache - tournament state changes frequently during active play
+      { ttl: 5 }, // 5 second cache - tournament state changes frequently during active play
     );
 
     logPerformance(`GET /api/tournaments/${id}`, performance.now() - startTime);
@@ -184,8 +205,8 @@ export async function GET(
       e instanceof Error
         ? e.message
         : typeof e === "string"
-        ? e
-        : "Unknown error";
+          ? e
+          : "Unknown error";
     return new Response(JSON.stringify({ error: message }), { status: 500 });
   }
 }
@@ -194,7 +215,7 @@ export async function GET(
 // Delete tournament (only if registering and empty)
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const startTime = performance.now();
   const { id } = await params;
@@ -220,7 +241,7 @@ export async function DELETE(
     if (tournament.status !== "registering") {
       return new Response(
         JSON.stringify({ error: "Cannot delete tournament in progress" }),
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -229,7 +250,7 @@ export async function DELETE(
         JSON.stringify({
           error: "Cannot delete tournament with registered players",
         }),
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -239,7 +260,7 @@ export async function DELETE(
 
     logPerformance(
       `DELETE /api/tournaments/${id}`,
-      performance.now() - startTime
+      performance.now() - startTime,
     );
     return new Response(JSON.stringify({ success: true }), {
       status: 200,
@@ -248,14 +269,14 @@ export async function DELETE(
   } catch (e: unknown) {
     logPerformance(
       `DELETE /api/tournaments/${id}`,
-      performance.now() - startTime
+      performance.now() - startTime,
     );
     const message =
       e instanceof Error
         ? e.message
         : typeof e === "string"
-        ? e
-        : "Unknown error";
+          ? e
+          : "Unknown error";
     return new Response(JSON.stringify({ error: message }), { status: 500 });
   }
 }
