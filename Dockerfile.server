@@ -29,6 +29,8 @@ WORKDIR /app
 ENV NODE_ENV=production
 
 COPY package.json package-lock.json ./
+# Copy scripts before npm ci so postinstall can find fetch-ktx2-transcoder.js
+COPY --from=builder /app/scripts ./scripts
 RUN npm ci --omit=dev
 
 # Copy compiled artifacts and required assets
@@ -36,7 +38,6 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/data ./data
 COPY --from=builder /app/bots ./bots
-COPY --from=builder /app/scripts ./scripts
 COPY --from=builder /app/reference ./reference
 
 # Generate Prisma client with production deps
