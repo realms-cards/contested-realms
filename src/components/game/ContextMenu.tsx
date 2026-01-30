@@ -52,6 +52,7 @@ import {
   TOKEN_BY_NAME,
   newTokenInstanceId,
   tokenSlug,
+  isMinionToken,
 } from "@/lib/game/tokens";
 import type { ContextMenuAction } from "@/lib/game/types";
 
@@ -855,11 +856,15 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
           .map((it, i) => ({ it, i }))
           .filter(({ it, i }) => {
             const type = (it.card.type || "").toLowerCase();
-            const isUnit =
+            const name = it.card.name || "";
+            // Allow minions and minion tokens (Skeleton, Frog, Foot Soldier, Bruin, Tawny)
+            // Block artifacts, sites, and non-minion tokens (Lance, Ward, Disabled, etc.)
+            const isToken = type.includes("token");
+            const isValidTarget =
               !type.includes("artifact") &&
-              !type.includes("token") &&
-              !type.includes("site");
-            return isUnit && i !== t.index; // Exclude the artifact itself
+              !type.includes("site") &&
+              (!isToken || isMinionToken(name));
+            return isValidTarget && i !== t.index; // Exclude the artifact itself
           });
 
         // Check if there's an avatar on this tile

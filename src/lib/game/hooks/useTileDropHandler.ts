@@ -19,7 +19,7 @@ import type {
   BoardState,
   Permanents,
 } from "@/lib/game/store/types";
-import { TOKEN_BY_NAME } from "@/lib/game/tokens";
+import { TOKEN_BY_NAME, isMinionToken } from "@/lib/game/tokens";
 
 type LastCrossMove = {
   fromKey: string;
@@ -447,12 +447,16 @@ export function useTileDropHandler({
             }> = [];
 
             // Add minions as potential targets (any minion - friendly or enemy)
+            // Also allow minion tokens (Skeleton, Frog, Foot Soldier, Bruin, Tawny)
             toItems.forEach((perm, realIdx) => {
               const itemType = (perm.card.type || "").toLowerCase();
+              const itemName = perm.card.name || "";
+              const isToken = itemType.includes("token");
+              // Block artifacts, sites, and non-minion tokens (Lance, Ward, Disabled, etc.)
               if (
-                itemType.includes("token") ||
                 itemType.includes("artifact") ||
-                itemType.includes("site")
+                itemType.includes("site") ||
+                (isToken && !isMinionToken(itemName))
               ) {
                 return;
               }

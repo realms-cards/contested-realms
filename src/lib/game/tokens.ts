@@ -7,24 +7,50 @@ export type TokenDef = {
   size: TokenSize;
   siteReplacement?: boolean; // true for tokens meant to replace sites (rotate like sites)
   textureRotation?: number;
+  isMinion?: boolean; // true for minion tokens that can carry artifacts (Skeleton, Frog, etc.)
 };
 
 // Registry of known tokens. Extend this list as new tokens are added.
 export const TOKEN_DEFS: TokenDef[] = [
-  { key: "Bruin", name: "Bruin", fileBase: "Bruin", size: "normal" },
+  {
+    key: "Bruin",
+    name: "Bruin",
+    fileBase: "Bruin",
+    size: "normal",
+    isMinion: true,
+  },
   { key: "Disabled", name: "Disabled", fileBase: "Disabled", size: "small" },
   {
     key: "Foot_Soldier",
     name: "Foot Soldier",
     fileBase: "Foot_Soldier",
     size: "small",
+    isMinion: true,
   },
   { key: "Flooded", name: "Flooded", fileBase: "Flooded", size: "small" },
   { key: "Lance", name: "Lance", fileBase: "Lance", size: "small" },
-  { key: "Frog", name: "Frog", fileBase: "Frog", size: "small" },
-  { key: "Skeleton", name: "Skeleton", fileBase: "Skeleton", size: "small" },
+  {
+    key: "Frog",
+    name: "Frog",
+    fileBase: "Frog",
+    size: "small",
+    isMinion: true,
+  },
+  {
+    key: "Skeleton",
+    name: "Skeleton",
+    fileBase: "Skeleton",
+    size: "small",
+    isMinion: true,
+  },
   { key: "Stealth", name: "Stealth", fileBase: "Stealth", size: "small" },
-  { key: "Tawny", name: "Tawny", fileBase: "Tawny", size: "small" },
+  {
+    key: "Tawny",
+    name: "Tawny",
+    fileBase: "Tawny",
+    size: "small",
+    isMinion: true,
+  },
   { key: "Ward", name: "Ward", fileBase: "ward", size: "small" },
   {
     key: "Rubble",
@@ -39,11 +65,11 @@ export const TOKEN_DEFS: TokenDef[] = [
 ];
 
 export const TOKEN_BY_KEY = Object.fromEntries(
-  TOKEN_DEFS.map((t) => [t.key.toLowerCase(), t])
+  TOKEN_DEFS.map((t) => [t.key.toLowerCase(), t]),
 ) as Record<string, TokenDef>;
 
 export const TOKEN_BY_NAME = Object.fromEntries(
-  TOKEN_DEFS.map((t) => [t.name.toLowerCase(), t])
+  TOKEN_DEFS.map((t) => [t.name.toLowerCase(), t]),
 ) as Record<string, TokenDef>;
 
 export function tokenTextureUrl(def: TokenDef): string {
@@ -78,4 +104,19 @@ export function newTokenInstanceId(def: TokenDef): number {
   // Keep result negative to avoid clashing with real ids
   const out = base * 1000 - (salt & 0x7fffffff);
   return out | 0;
+}
+
+// Minion token names that can carry artifacts (like regular minions)
+const MINION_TOKEN_NAMES = new Set(
+  TOKEN_DEFS.filter((t) => t.isMinion).map((t) => t.name.toLowerCase()),
+);
+
+/**
+ * Check if a token name represents a minion token (can carry artifacts).
+ * Minion tokens: Skeleton, Frog, Foot Soldier, Bruin, Tawny
+ * Non-minion tokens: Lance, Ward, Disabled, Flooded, Rubble, Burned, Silenced, Stealth
+ */
+export function isMinionToken(tokenName: string | undefined | null): boolean {
+  if (!tokenName) return false;
+  return MINION_TOKEN_NAMES.has(tokenName.toLowerCase());
 }
