@@ -1,4 +1,5 @@
 import type { StateCreator } from "zustand";
+import { isMinionToken } from "@/lib/game/tokens";
 import { isMonumentByName, isAutomatonByName } from "../omphalosState";
 import type { GameState, Permanents, PlayerKey } from "../types";
 import {
@@ -30,7 +31,7 @@ export const createAttachmentActionsSlice: StateCreator<
       const nonTokenIndices = arr
         .map((it, i) => ({ it, i }))
         .filter(
-          ({ it }) => !(it.card.type || "").toLowerCase().includes("token")
+          ({ it }) => !(it.card.type || "").toLowerCase().includes("token"),
         );
       if (nonTokenIndices.length === 0) return state;
       const last = nonTokenIndices[nonTokenIndices.length - 1];
@@ -45,7 +46,7 @@ export const createAttachmentActionsSlice: StateCreator<
       per[at] = list;
       const ownerNum = token.owner === 1 ? "1" : "2";
       get().log(
-        `Attached token [p${ownerNum}card:${token.card.name}] to permanent at ${at}`
+        `Attached token [p${ownerNum}card:${token.card.name}] to permanent at ${at}`,
       );
       // Include full card/owner data so opponent can render the attachment
       const deltaPatch = createPermanentDeltaPatch([
@@ -95,12 +96,12 @@ export const createAttachmentActionsSlice: StateCreator<
         targetSubTypes.includes("automaton") || isAutomatonByName(targetName);
       const targetIsCarryableArtifact =
         targetIsArtifact && !targetIsMonument && !targetIsAutomaton;
-      // Allow attaching to minion tokens (Skeleton, Foot Soldier, etc.)
-      const targetIsMinionToken =
-        targetIsToken &&
-        (targetType.includes("minion") || targetSubTypes.includes("minion"));
+      // Allow attaching to minion tokens (Skeleton, Foot Soldier, Frog, Bruin, Tawny)
       // Block non-minion tokens (Lance, Ward, Disabled, etc.) and carryable artifacts
-      if ((targetIsToken && !targetIsMinionToken) || targetIsCarryableArtifact)
+      if (
+        (targetIsToken && !isMinionToken(targetName)) ||
+        targetIsCarryableArtifact
+      )
         return state;
 
       const per: Permanents = { ...state.permanents };
@@ -113,7 +114,7 @@ export const createAttachmentActionsSlice: StateCreator<
       per[at] = list;
       const itemLabel = isCarryableArtifact ? "artifact" : "token";
       get().log(
-        `Attached ${itemLabel} '${token.card.name}' to permanent '${target.card.name}' at ${at}`
+        `Attached ${itemLabel} '${token.card.name}' to permanent '${target.card.name}' at ${at}`,
       );
       // Include full card/owner data so opponent can render the attachment
       const deltaPatch = createPermanentDeltaPatch([
@@ -155,7 +156,7 @@ export const createAttachmentActionsSlice: StateCreator<
       list[permanentIndex] = updatedPermanent;
       per[at] = list;
       get().log(
-        `Attached '${permanent.card.name}' to ${avatarKey.toUpperCase()} Avatar`
+        `Attached '${permanent.card.name}' to ${avatarKey.toUpperCase()} Avatar`,
       );
       // Include full card/owner data so opponent can render the attachment
       const deltaPatch = createPermanentDeltaPatch([
