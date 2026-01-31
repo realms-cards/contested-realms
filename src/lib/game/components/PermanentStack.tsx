@@ -1,7 +1,4 @@
 import { Text } from "@react-three/drei";
-
-// Silenced token uses the Silence spell's card art
-const SILENCE_SPELL_TEXTURE_URL = "/api/images/alp_silence_b_s";
 import type { ThreeEvent } from "@react-three/fiber";
 import { CuboidCollider, RigidBody } from "@react-three/rapier";
 import {
@@ -37,6 +34,9 @@ import type {
 } from "@/lib/game/store/types";
 import { seatFromOwner } from "@/lib/game/store/utils/boardHelpers";
 import { TOKEN_BY_NAME, tokenTextureUrl } from "@/lib/game/tokens";
+
+// Silenced token uses the Silence spell's card art
+const SILENCE_SPELL_TEXTURE_URL = "/api/images/alp_silence_b_s";
 
 type ProjectileHit = {
   kind: "permanent" | "avatar";

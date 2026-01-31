@@ -466,7 +466,6 @@ export default function PlayersInvitePanel({
                   >
                     <div className="flex items-center gap-2 min-w-0">
                       {p.avatarUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={p.avatarUrl}
                           alt={p.displayName}

@@ -12,10 +12,10 @@ import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import DraggableCard3D from "@/app/decks/editor-3d/DraggableCard3D";
 import CardPreviewOverlay from "@/components/game/CardPreviewOverlay";
 import { ClientCanvas } from "@/components/game/ClientCanvas";
-import { CustomSelect } from "@/components/ui/CustomSelect";
 import { DynamicBoard as Board } from "@/components/game/dynamic-3d";
-import { NumberBadge } from "@/components/game/manacost";
 import type { Digit } from "@/components/game/manacost";
+import { NumberBadge } from "@/components/game/manacost";
+import { CustomSelect } from "@/components/ui/CustomSelect";
 import {
   BoosterCard,
   Pick3D,

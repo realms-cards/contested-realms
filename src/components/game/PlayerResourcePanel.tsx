@@ -44,7 +44,6 @@ function ThresholdSymbols({
 
   // For counts 1-4, use specific layouts. For 5+, use rows of 2.
   const Img = ({ src, alt: imgAlt }: { src: string; alt: string }) => (
-    // eslint-disable-next-line @next/next/no-img-element
     <img src={src} alt={imgAlt} width={ICON_SIZE} height={ICON_SIZE} />
   );
 

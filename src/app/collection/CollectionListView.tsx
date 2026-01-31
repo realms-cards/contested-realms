@@ -360,7 +360,6 @@ export default function CollectionListView({
                     isSite ? "w-96 aspect-[4/3]" : "w-72 aspect-[2.5/3.5]"
                   }`}
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={`/api/images/${previewCard.slug}`}
                     alt={previewCard.name}

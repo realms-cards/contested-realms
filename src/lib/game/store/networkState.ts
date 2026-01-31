@@ -1,4 +1,5 @@
 import type { StateCreator } from "zustand";
+import { soundManager } from "@/lib/audio/soundManager";
 import type {
   AvatarState,
   CardRef,
@@ -9,7 +10,6 @@ import type {
   Zones,
 } from "./types";
 import type { PlayerPositionReference } from "../types";
-import { soundManager } from "@/lib/audio/soundManager";
 import { createInitialPlayers } from "./coreState";
 import { filterEchoPatchIfAny } from "./transportState";
 import { normalizeAvatars } from "./utils/avatarHelpers";

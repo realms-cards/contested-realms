@@ -6,8 +6,8 @@
 import { RefreshCw, Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState, useRef } from "react";
-import { CustomSelect } from "@/components/ui/CustomSelect";
 import type { VoiceOutgoingRequest } from "@/app/online/online-context";
+import { CustomSelect } from "@/components/ui/CustomSelect";
 import type { SoatcStatus } from "@/lib/hooks/useSoatcStatus";
 import type { TournamentInfo, LobbyInfo } from "@/lib/net/protocol";
 import { generateLobbyName } from "@/lib/random-name-generator";
@@ -381,8 +381,8 @@ export default function LobbiesCentral({
   onLeaveLobby,
   onSetLobbyVisibility,
   onResync,
-  onAddCpuBot,
-  onRemoveCpuBot,
+  onAddCpuBot: _onAddCpuBot,
+  onRemoveCpuBot: _onRemoveCpuBot,
   onCreateTournament,
   onJoinTournament,
   onLeaveTournament,

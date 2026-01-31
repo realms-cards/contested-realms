@@ -3,10 +3,10 @@
 import { Grid3X3, List as ListIcon } from "lucide-react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
-import { CustomSelect } from "@/components/ui/CustomSelect";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import AuthButton from "@/components/auth/AuthButton";
 import OnlinePageShell from "@/components/online/OnlinePageShell";
+import { CustomSelect } from "@/components/ui/CustomSelect";
 import {
   normalizeCubeSummary,
   type CubeSummaryInput,

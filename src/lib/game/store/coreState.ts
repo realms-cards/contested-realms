@@ -1,4 +1,5 @@
 import type { StateCreator } from "zustand";
+import { soundManager } from "@/lib/audio/soundManager";
 import type {
   CellKey,
   GameState,
@@ -13,7 +14,6 @@ import {
 } from "./utils/patchHelpers";
 import { bumpPermanentVersion } from "./utils/permanentHelpers";
 import { phases } from "./utils/resourceHelpers";
-import { soundManager } from "@/lib/audio/soundManager";
 
 export const createInitialPlayers = (): GameState["players"] => ({
   p1: {
