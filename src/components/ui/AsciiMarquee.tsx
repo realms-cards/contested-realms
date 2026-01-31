@@ -90,6 +90,7 @@ export default function AsciiMarquee({
               : "text-[6px] sm:text-[8px] md:text-[10px] lg:text-xs"
           } text-red-500 drop-shadow-[0_0_10px_rgba(220,38,38,0.8)] drop-shadow-[0_0_20px_rgba(185,28,28,0.5)]`}
           style={{
+            fontFamily: "'Apple Symbols', 'Segoe UI Symbol', 'Noto Sans Symbols 2', 'DejaVu Sans', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
             textShadow: useSimple
               ? "0 0 10px #dc2626, 0 0 20px #dc2626, 0 0 30px #b91c1c, 0 0 40px #7f1d1d"
               : "0 0 5px #dc2626, 0 0 10px #dc2626, 0 0 15px #b91c1c",

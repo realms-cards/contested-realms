@@ -67,6 +67,8 @@ class BotClient {
     this._actedTurn = new Set(); // `${matchId}:${turnIndex}`
     this._startedAsFirst = false; // true if we were the first player when Start applied
     this._constructedInitDone = new Set(); // matchId
+    this._localZones = null; // { meKey, zones } - backup of locally-built deck zones
+    this._localZonesApplied = false; // true once server has acknowledged our zones
   }
 
   async start() {
@@ -76,6 +78,7 @@ class BotClient {
       transports: ["websocket"],
       autoConnect: true,
       reconnection: true,
+      auth: { clientVersion: 2 },
     });
     this.socket = socket;
 
@@ -198,6 +201,8 @@ class BotClient {
         this._onStatePatch(patch);
         // Merge patch into our local snapshot for AI decisions
         this._mergeGamePatch(patch, payload && payload.t);
+        // Re-apply constructed deck zones after merge (server patches may overwrite them)
+        this._ensureLocalZonesApplied();
         this._maybeAct();
       } catch (err) {
         console.warn("[Bot] statePatch handler error:", err);
@@ -214,6 +219,8 @@ class BotClient {
           if (this._game && typeof this._game.currentPlayer === 'number') {
             this._lastCurrentPlayer = this._game.currentPlayer;
           }
+          // Re-apply local deck zones if server snapshot has empty zones
+          this._ensureLocalZonesApplied();
           this._maybeAct();
         }
       } catch (e) {
@@ -364,10 +371,41 @@ class BotClient {
       };
       const patch = { zones: { [meKey]: myZones } };
       try {
+        // Store backup of locally-built zones - _ensureLocalZonesApplied() will
+        // re-apply these after every _mergeGamePatch() since server patches can
+        // overwrite our local zones before the server acknowledges them.
+        this._localZones = { meKey, zones: JSON.parse(JSON.stringify(myZones)) };
+        this._localZonesApplied = false;
         this.socket.emit('action', { action: patch });
         this._constructedInitDone.add(mid);
-        try { console.log('[Bot] Initialized constructed deck and opening hand'); } catch {}
+        // Also apply immediately for the current call
+        if (!this._game) this._game = {};
+        if (!this._game.zones) this._game.zones = {};
+        this._game.zones[meKey] = JSON.parse(JSON.stringify(myZones));
+        try {
+          console.log(`[Bot] Initialized constructed deck: hand=${myZones.hand.length}, spellbook=${myZones.spellbook.length}, atlas=${myZones.atlas.length}`);
+        } catch {}
       } catch {}
+    } catch {}
+  }
+
+  /**
+   * Re-apply locally-built deck zones after _mergeGamePatch() which may overwrite them.
+   * Once the server sends back zones with actual cards (hand.length > 0), we stop overriding.
+   */
+  _ensureLocalZonesApplied() {
+    try {
+      if (!this._localZones || this._localZonesApplied) return;
+      const { meKey, zones } = this._localZones;
+      if (!this._game || !this._game.zones) return;
+      const serverZones = this._game.zones[meKey];
+      // If server already has our cards (hand not empty), stop overriding
+      if (serverZones && Array.isArray(serverZones.hand) && serverZones.hand.length > 0) {
+        this._localZonesApplied = true;
+        return;
+      }
+      // Server zones are empty/missing - re-apply our local deck
+      this._game.zones[meKey] = JSON.parse(JSON.stringify(zones));
     } catch {}
   }
 

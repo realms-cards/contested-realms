@@ -965,22 +965,39 @@ export class SocketTransport implements GameTransport {
 
     console.log("[Transport] Socket connected, emitting joinMatch");
     return new Promise((resolve, reject) => {
+      let settled = false;
+      const cleanup = () => {
+        s.off("matchStarted", onMatch);
+        s.off("match:error", onError);
+      };
       const onMatch = (payload: unknown) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
         const fixed = normalizeMatchStartedPayload(payload);
         console.log("[Transport] Received matchStarted (normalized)", fixed);
         const parsed = Protocol.MatchStartedPayload.parse(fixed);
         this.dispatch("matchStarted", parsed);
-        s.off("matchStarted", onMatch);
-        s.off("match:error", onError);
+        cleanup();
         resolve();
       };
       const onError = (payload: unknown) => {
         const err = payload as { matchId?: string; message?: string };
         if (!err || err.matchId !== matchId) return;
-        s.off("matchStarted", onMatch);
-        s.off("match:error", onError);
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        cleanup();
         reject(new Error(err.message || "Unable to join match"));
       };
+      // Timeout after 8s to prevent hanging promise
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        console.warn("[Transport] joinMatch timed out for:", matchId);
+        reject(new Error("joinMatch timed out"));
+      }, 8000);
       s.on("matchStarted", onMatch);
       s.on("match:error", onError);
       const payload = Protocol.JoinMatchPayload.parse({ matchId });
@@ -1112,6 +1129,11 @@ export class SocketTransport implements GameTransport {
     // Host-only server handler will validate permissions.
     // Optional displayName allows picking a difficulty label.
     this.requireSocket().emit("addCpuBot", displayName ? { displayName } : {});
+  }
+
+  startCpuMatch(): void {
+    // Atomically create lobby + bot + start match for solo vs CPU.
+    this.requireSocket().emit("startCpuMatch", {});
   }
 
   removeCpuBot(playerId?: string): void {

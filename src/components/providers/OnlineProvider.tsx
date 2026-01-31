@@ -1772,6 +1772,11 @@ export default function OnlineProvider({
         if (transport.addCpuBot) transport.addCpuBot(displayName);
       } catch {}
     },
+    startCpuMatch: () => {
+      try {
+        if (transport.startCpuMatch) transport.startCpuMatch();
+      } catch {}
+    },
     removeCpuBot: (playerId?: string) => {
       try {
         if (transport.removeCpuBot) transport.removeCpuBot(playerId);

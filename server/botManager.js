@@ -22,6 +22,20 @@ class BotManager {
     return this.activeBots.get(botId) || null;
   }
 
+  /**
+   * Check if a bot is alive and connected (has an active socket).
+   * @param {string} botId
+   * @returns {boolean}
+   */
+  isBotAlive(botId) {
+    const bot = this.activeBots.get(botId);
+    if (!bot) return false;
+    const p = this.players.get(botId);
+    if (!p || !p.socketId) return false;
+    const s = this.io.sockets.sockets.get(p.socketId);
+    return !!s && s.connected;
+  }
+
   stopAndRemoveBot(botId, reason = 'cleanup') {
     try {
       const p = this.players.get(botId);

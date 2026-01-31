@@ -47,9 +47,14 @@ function createLobbyFeature(deps) {
   const LOBBY_STATE_CHANNEL = deps.lobbyStateChannel;
   const CPU_BOTS_ENABLED = !!deps.cpuBotsEnabled;
   const loadBotClientCtor = deps.loadBotClientCtor;
+  const loadBotCardIdMapFn = deps.loadBotCardIdMapFn || null;
+  const prisma = deps.prisma || null;
   const PORT = deps.port;
   const isCpuPlayerId = deps.isCpuPlayerId;
   const rtcMigration = deps.rtcMigration || null;
+
+  // Cache: card ID map loaded once for all bots
+  let _botCardIdMapLoaded = false;
 
   /** @type {Map<string, { id: string, name: string|null, hostId: string|null, playerIds: Set<string>, status: string, maxPlayers: number, ready: Set<string>, visibility: 'open'|'private', plannedMatchType?: string|null, lastActive: number }>} */
   const lobbies = new Map();
@@ -1650,23 +1655,206 @@ function createLobbyFeature(deps) {
       const serverUrl = `http://localhost:${PORT}`;
 
       try {
+        // Ensure card ID map is loaded (once) so bot zone writes include cardId
+        (async () => {
+          try {
+            if (!_botCardIdMapLoaded && prisma && loadBotCardIdMapFn) {
+              const fn = loadBotCardIdMapFn();
+              if (typeof fn === "function") {
+                await fn(prisma);
+                _botCardIdMapLoaded = true;
+              }
+            }
+          } catch (e) {
+            try { console.warn("[Bot] Failed to load card ID map:", e?.message || e); } catch {}
+          }
+
+          // Pick a random precon deck for the bot
+          let constructedDeck = null;
+          try {
+            if (prisma) {
+              const decks = await prisma.deck.findMany({
+                where: { isPublic: true, format: "Constructed", name: { startsWith: "Beta Precon" } },
+                include: { cards: { include: { card: true } } },
+              });
+              const configs = decks
+                .map((deck) => {
+                  try {
+                    const spellAgg = new Map();
+                    const atlasAgg = new Map();
+                    for (const dc of deck.cards || []) {
+                      const name = dc.card?.name || "";
+                      const count = Number(dc.count || 1);
+                      if (!name || count <= 0) continue;
+                      const map = dc.zone === "Atlas" ? atlasAgg : dc.zone === "Sideboard" ? null : spellAgg;
+                      if (!map) continue;
+                      map.set(name, (map.get(name) || 0) + count);
+                    }
+                    const toArr = (m) => Array.from(m.entries()).map(([name, count]) => ({ name, count }));
+                    const cfg = { spellbook: toArr(spellAgg), atlas: toArr(atlasAgg) };
+                    return cfg.spellbook.length && cfg.atlas.length ? cfg : null;
+                  } catch { return null; }
+                })
+                .filter(Boolean);
+              if (configs.length > 0) {
+                constructedDeck = configs[Math.floor(Math.random() * configs.length)];
+                console.log(`[Bot] Assigned precon deck to ${displayName}: ${constructedDeck.spellbook.length} spells, ${constructedDeck.atlas.length} sites`);
+              }
+            }
+          } catch (e) {
+            try { console.warn("[Bot] Failed to load precon for bot:", e?.message || e); } catch {}
+          }
+
+          const bot = new BotClient({
+            serverUrl,
+            displayName,
+            playerId: botId,
+            lobbyId: lobby.id,
+            constructedDeck: constructedDeck || undefined,
+          });
+          botManager.registerBot(botId, bot);
+          bot.start().catch((err) => {
+            console.error(`[Bot] Failed to start bot ${botId}:`, err);
+            botManager.stopAndRemoveBot(botId, "start_failed");
+          });
+          console.log(
+            `[Bot] Spawned CPU bot ${displayName} (${botId}) for lobby ${lobby.id}`
+          );
+        })();
+      } catch (err) {
+        console.error(`[Bot] Error creating bot:`, err);
+        socket.emit("error", { message: "Failed to spawn CPU bot" });
+      }
+    });
+
+    // ---------- Solo vs CPU: atomic lobby + bot + match creation ----------
+    socket.on("startCpuMatch", async () => {
+      if (!isAuthed()) return;
+      if (!CPU_BOTS_ENABLED) {
+        socket.emit("cpuMatchError", { message: "CPU bots are disabled", code: "feature_disabled" });
+        return;
+      }
+      const BotClient = loadBotClientCtor();
+      if (!BotClient) {
+        socket.emit("cpuMatchError", { message: "CPU bot component not available", code: "bot_unavailable" });
+        return;
+      }
+      if (!botManager) {
+        socket.emit("cpuMatchError", { message: "Bot manager unavailable", code: "bot_manager_unavailable" });
+        return;
+      }
+      const host = getPlayerBySocket(socket);
+      if (!host) return;
+
+      try {
+        // 1. Create a private lobby for the human player
+        const lobby = createLobby(host.id, { visibility: "private", maxPlayers: 2 });
+        lobby.plannedMatchType = "constructed";
+        host.lobbyId = lobby.id;
+        lobby.playerIds.add(host.id);
+        lobby.ready.add(host.id);
+        try { await io.in(socket.id).socketsJoin(`lobby:${lobby.id}`); } catch {}
+
+        // 2. Create invite for the bot
+        const botId = rid("cpu");
+        if (!lobbyInvites.has(lobby.id)) lobbyInvites.set(lobby.id, new Set());
+        lobbyInvites.get(lobby.id).add(botId);
+
+        const displayName = `CPU Bot ${botId.slice(-4)}`;
+        const serverUrl = `http://localhost:${PORT}`;
+
+        // 3. Load card ID map (once) so bot zone writes include cardId
+        try {
+          if (!_botCardIdMapLoaded && prisma && loadBotCardIdMapFn) {
+            const fn = loadBotCardIdMapFn();
+            if (typeof fn === "function") {
+              await fn(prisma);
+              _botCardIdMapLoaded = true;
+            }
+          }
+        } catch (e) {
+          try { console.warn("[CpuMatch] Failed to load card ID map:", e?.message || e); } catch {}
+        }
+
+        // 4. Pick a random precon deck for the bot
+        let constructedDeck = null;
+        try {
+          if (prisma) {
+            const decks = await prisma.deck.findMany({
+              where: { isPublic: true, format: "Constructed", name: { startsWith: "Beta Precon" } },
+              include: { cards: { include: { card: true } } },
+            });
+            const configs = decks
+              .map((deck) => {
+                try {
+                  const spellAgg = new Map();
+                  const atlasAgg = new Map();
+                  for (const dc of deck.cards || []) {
+                    const name = dc.card?.name || "";
+                    const count = Number(dc.count || 1);
+                    if (!name || count <= 0) continue;
+                    const map = dc.zone === "Atlas" ? atlasAgg : dc.zone === "Sideboard" ? null : spellAgg;
+                    if (!map) continue;
+                    map.set(name, (map.get(name) || 0) + count);
+                  }
+                  const toArr = (m) => Array.from(m.entries()).map(([name, count]) => ({ name, count }));
+                  const cfg = { spellbook: toArr(spellAgg), atlas: toArr(atlasAgg) };
+                  return cfg.spellbook.length && cfg.atlas.length ? cfg : null;
+                } catch { return null; }
+              })
+              .filter(Boolean);
+            if (configs.length > 0) {
+              constructedDeck = configs[Math.floor(Math.random() * configs.length)];
+            }
+          }
+        } catch (e) {
+          try { console.warn("[CpuMatch] Failed to load precon for bot:", e?.message || e); } catch {}
+        }
+
+        // 5. Spawn the bot
         const bot = new BotClient({
           serverUrl,
           displayName,
           playerId: botId,
           lobbyId: lobby.id,
+          constructedDeck: constructedDeck || undefined,
         });
         botManager.registerBot(botId, bot);
         bot.start().catch((err) => {
-          console.error(`[Bot] Failed to start bot ${botId}:`, err);
+          console.error(`[CpuMatch] Failed to start bot ${botId}:`, err);
           botManager.stopAndRemoveBot(botId, "start_failed");
         });
-        console.log(
-          `[Bot] Spawned CPU bot ${displayName} (${botId}) for lobby ${lobby.id}`
-        );
+        console.log(`[CpuMatch] Spawned CPU bot ${displayName} (${botId}) for lobby ${lobby.id}`);
+
+        // 6. Wait for bot to join the lobby (poll every 200ms, timeout 8s)
+        const maxWait = 8000;
+        const pollInterval = 200;
+        let waited = 0;
+        while (waited < maxWait) {
+          if (lobby.playerIds.has(botId)) break;
+          await new Promise((r) => setTimeout(r, pollInterval));
+          waited += pollInterval;
+        }
+        if (!lobby.playerIds.has(botId)) {
+          socket.emit("cpuMatchError", { message: "Bot failed to join lobby in time", code: "bot_timeout" });
+          try { botManager.stopAndRemoveBot(botId, "timeout"); } catch {}
+          return;
+        }
+
+        // 7. Mark bot as ready and start the match
+        lobby.ready.add(botId);
+        const res = await startMatchFromLobby(host, "constructed");
+        if (!res || !res.ok) {
+          socket.emit("cpuMatchError", { message: res?.error || "Failed to start match", code: "match_start_failed" });
+          return;
+        }
+
+        // 8. Emit match ready to the requesting socket
+        console.log(`[CpuMatch] Match ${res.matchId} started for lobby ${lobby.id}`);
+        socket.emit("cpuMatchReady", { matchId: res.matchId });
       } catch (err) {
-        console.error(`[Bot] Error creating bot:`, err);
-        socket.emit("error", { message: "Failed to spawn CPU bot" });
+        console.error("[CpuMatch] Error creating CPU match:", err);
+        socket.emit("cpuMatchError", { message: "Failed to create CPU match", code: "internal_error" });
       }
     });
 

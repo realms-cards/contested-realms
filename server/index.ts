@@ -807,18 +807,35 @@ const CPU_BOTS_ENABLED =
   process.env.NEXT_PUBLIC_CPU_BOTS_ENABLED === "true";
 
 // Lazy loader: only require the headless BotClient when feature is enabled
-function loadBotClientCtor() {
-  if (!CPU_BOTS_ENABLED) return null;
+let _botModule: { BotClient?: unknown; loadCardIdMap?: (p: unknown) => Promise<unknown> } | null = null;
+function _loadBotModule() {
+  if (_botModule) return _botModule;
   try {
+    const botPath = require("path").resolve(
+      process.cwd(),
+      "bots",
+      "headless-bot-client"
+    );
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const mod = require("../bots/headless-bot-client");
-    return mod && mod.BotClient ? mod.BotClient : null;
+    _botModule = require(botPath);
+    return _botModule;
   } catch (e) {
     try {
       console.warn("[Bot] BotClient module unavailable:", safeErrorMessage(e));
-    } catch {}
+    } catch { /* ignore */ }
     return null;
   }
+}
+
+function loadBotClientCtor() {
+  if (!CPU_BOTS_ENABLED) return null;
+  const mod = _loadBotModule();
+  return mod && mod.BotClient ? mod.BotClient : null;
+}
+
+function loadBotCardIdMapFn(): ((p: unknown) => Promise<unknown>) | null {
+  const mod = _loadBotModule();
+  return mod && typeof mod.loadCardIdMap === "function" ? mod.loadCardIdMap : null;
 }
 
 const container = createContainer();
@@ -855,6 +872,7 @@ const {
   lobbyStateChannel: LOBBY_STATE_CHANNEL,
   cpuBotsEnabled: CPU_BOTS_ENABLED,
   loadBotClientCtor,
+  loadBotCardIdMapFn,
   port: PORT,
   isCpuPlayerId,
   tournamentBroadcast,
@@ -2366,6 +2384,43 @@ io.on("connection", async (socket: SocketClient) => {
             );
           } catch {}
           socket.emit("draftUpdate", m.draftState);
+        }
+
+        // When a human rejoins a CPU match, ensure bot is still alive and nudge it
+        try {
+          const cpuIds = m.playerIds.filter((pid: string) =>
+            isCpuPlayerId(pid),
+          );
+          for (const cpuId of cpuIds) {
+            const bot = botManager.getBot(cpuId);
+            const cpuPlayer = players.get(cpuId);
+            if (bot && cpuPlayer?.socketId) {
+              // Bot is alive — send it a resync nudge so it resumes acting
+              const botSocket = io.sockets.sockets.get(cpuPlayer.socketId);
+              if (botSocket) {
+                try {
+                  console.log(
+                    `[CpuMatch] Nudging bot ${cpuId} to resync after human rejoin`,
+                  );
+                  botSocket.emit("resyncResponse", {
+                    snapshot: { game: m.game },
+                  });
+                } catch {}
+              }
+            } else {
+              // Bot is dead — log it (respawn would require lobby flow, not implemented yet)
+              console.warn(
+                `[CpuMatch] Bot ${cpuId} not found or disconnected for match ${m.id}`,
+              );
+            }
+          }
+        } catch (botCheckErr) {
+          try {
+            console.warn(
+              `[CpuMatch] Error checking bot health on rejoin:`,
+              botCheckErr,
+            );
+          } catch {}
         }
       }
     } else if (player.lobbyId && lobbies.has(player.lobbyId)) {
@@ -4829,19 +4884,21 @@ io.on("connection", async (socket: SocketClient) => {
         nextCursor?: string;
       };
 
-      // Filter out bot matches (those with CPU bots or host accounts)
-      // Only admins should see bot matches (via admin endpoints)
-      const recordings = result.recordings.filter((recording) => {
+      // Tag CPU/bot matches so the client can show them in a separate category
+      const recordings = result.recordings.map((recording) => {
         const playerIds = Array.isArray(recording.playerIds)
           ? (recording.playerIds as unknown[])
           : null;
-        if (!playerIds) return true;
-        // Exclude if any player is a bot (ID starts with 'cpu_' or 'host_')
-        return !playerIds.some((playerId) => {
-          const pid =
-            typeof playerId === "string" ? playerId : String(playerId ?? "");
-          return pid.startsWith("cpu_") || pid.startsWith("host_");
-        });
+        const isCpu =
+          !!playerIds &&
+          playerIds.some((playerId) => {
+            const pid =
+              typeof playerId === "string"
+                ? playerId
+                : String(playerId ?? "");
+            return pid.startsWith("cpu_") || pid.startsWith("host_");
+          });
+        return { ...recording, isCpuMatch: isCpu };
       });
 
       try {
@@ -4850,9 +4907,11 @@ io.on("connection", async (socket: SocketClient) => {
             player?.displayName || "unknown"
           } (limit: ${opts.limit}, cursor: ${opts.cursor}, playerId: ${
             opts.playerId
-          }), returning ${recordings.length} DB-backed summaries (filtered ${
-            result.recordings.length - recordings.length
-          } bot matches), hasMore: ${result.hasMore}`,
+          }), returning ${recordings.length} DB-backed summaries (${
+            recordings.filter(
+              (r: { isCpuMatch?: boolean }) => r.isCpuMatch,
+            ).length
+          } CPU matches), hasMore: ${result.hasMore}`,
         );
       } catch {}
       socket.emit("matchRecordingsResponse", {
@@ -4882,21 +4941,7 @@ io.on("connection", async (socket: SocketClient) => {
         return;
       }
 
-      // Block access to bot matches for regular users
-      // Check if any player is a bot (ID starts with 'cpu_' or 'host_')
-      const playerIds = recording.initialState?.playerIds || [];
-      const isBotMatch =
-        Array.isArray(playerIds) &&
-        playerIds.some((id) => {
-          const pid = String(id || "");
-          return pid.startsWith("cpu_") || pid.startsWith("host_");
-        });
-
-      if (isBotMatch) {
-        socket.emit("matchRecordingResponse", { error: "Recording not found" });
-        return;
-      }
-
+      // CPU/bot replays are allowed — they show in a separate category on the client
       socket.emit("matchRecordingResponse", { recording });
     } catch (e) {
       try {

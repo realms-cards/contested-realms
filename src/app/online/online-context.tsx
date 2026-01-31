@@ -104,6 +104,7 @@ export type OnlineContextValue = {
   // Server-managed CPU bot (host-only)
   addCpuBot?: (displayName?: string) => void;
   removeCpuBot?: (playerId?: string) => void;
+  startCpuMatch?: () => void;
   voice: {
     enabled: boolean;
     playbackEnabled: boolean;

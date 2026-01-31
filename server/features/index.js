@@ -44,6 +44,8 @@ function registerFeatures(container, deps) {
       lobbyStateChannel: deps.lobbyStateChannel,
       cpuBotsEnabled: deps.cpuBotsEnabled,
       loadBotClientCtor: deps.loadBotClientCtor,
+      loadBotCardIdMapFn: deps.loadBotCardIdMapFn,
+      prisma: container.resolve("prisma"),
       port: deps.port,
       isCpuPlayerId: deps.isCpuPlayerId,
       redisState: deps.redisState, // For horizontal scaling - cross-instance lobby visibility

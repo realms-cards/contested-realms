@@ -112,6 +112,7 @@ import { generateClientLeagueMatchResult } from "@/lib/soatc/clientResult";
 import type { LeagueMatchResult } from "@/lib/soatc/types";
 import {
   useBoardPingListener,
+  useBotActionToastListener,
   useChaosTwisterListener,
   useMatchPlayerNames,
   usePlayerIdentity,
@@ -256,6 +257,16 @@ export default function OnlineMatchPage() {
     myPlayerId,
     opponentPlayerId,
   ]);
+
+  // Auto-enable combat and magic guides for vs-CPU matches
+  useEffect(() => {
+    if (!opponentPlayerId) return;
+    const isCpu = opponentPlayerId.startsWith("cpu_");
+    if (!isCpu) return;
+    const store = useGameStore.getState();
+    if (!store.interactionGuides) store.setInteractionGuides(true);
+    if (!store.magicGuides) store.setMagicGuides(true);
+  }, [opponentPlayerId]);
 
   // Fetch cardback URLs for both players
   const setCardbackUrls = useGameStore((s) => s.setCardbackUrls);
@@ -437,6 +448,7 @@ export default function OnlineMatchPage() {
             }
           }
         } catch (err) {
+          if (err instanceof DOMException && err.name === "AbortError") return;
           console.error("[Playmat] Error fetching opponent playmat:", err);
         }
       } else {
@@ -484,6 +496,7 @@ export default function OnlineMatchPage() {
 
   useRemoteCursorTelemetry(transport);
   useBoardPingListener(transport);
+  useBotActionToastListener(transport);
   useChaosTwisterListener(transport);
 
   // Spectator presence
@@ -715,6 +728,26 @@ export default function OnlineMatchPage() {
     }
     lastConnectedRef.current = connected;
   }, [connected]);
+
+  // Retry join if stuck at "Joining Match" for too long
+  useEffect(() => {
+    if (!connected || !matchId) return;
+    if (match?.id === matchId) return; // Already joined
+
+    const retryTimer = setTimeout(() => {
+      if (match?.id === matchId) return; // Joined in the meantime
+      console.log("[joinMatch retry] Still not in match after 3s, retrying join + resync");
+      joinAttemptedForRef.current = null; // Allow re-attempt
+      try {
+        void joinMatch(matchId);
+      } catch {}
+      try {
+        resync();
+      } catch {}
+    }, 3000);
+
+    return () => clearTimeout(retryTimer);
+  }, [connected, matchId, match?.id, joinMatch, resync]);
 
   // Also reset one-shot guards if we are no longer in this match (e.g., user left)
   useEffect(() => {
@@ -1150,11 +1183,29 @@ export default function OnlineMatchPage() {
       );
     })();
     if (hasMeaningfulGameState) {
-      console.log(
-        "[match] Server game snapshot present; skipping local deck autoload",
-      );
-      setPrepared(true);
-      return;
+      // For constructed matches in "waiting" status where the server hasn't
+      // assigned the human player a deck (e.g. vs-CPU), skip auto-prepare so
+      // the human can use the deck selector.
+      const isConstructedWaiting =
+        match?.status === "waiting" &&
+        (match?.matchType === "constructed" || !match?.matchType);
+      const humanHasDeck =
+        me?.id &&
+        match?.playerDecks &&
+        !!(match.playerDecks as Record<string, unknown>)[me.id];
+
+      if (isConstructedWaiting && !humanHasDeck) {
+        console.log(
+          "[match] Constructed match waiting — skipping auto-prepare so human can select deck",
+        );
+        // Don't set prepared; let the deck selector render
+      } else {
+        console.log(
+          "[match] Server game snapshot present; skipping local deck autoload",
+        );
+        setPrepared(true);
+        return;
+      }
     }
 
     // Only auto-load local deck during waiting/deck_construction phases.
@@ -1168,7 +1219,11 @@ export default function OnlineMatchPage() {
     if (!myPlayerKey || storeActorKey !== myPlayerKey) return;
 
     const rawDeck = (match.playerDecks as Record<string, unknown>)[me.id];
-    if (!rawDeck) return;
+    if (!rawDeck) {
+      // No deck assigned by server — if constructed/waiting, let deck selector show
+      if (match?.status === "waiting") return;
+      return;
+    }
 
     console.log("[match] Auto-loading deck from match.playerDecks:", {
       deckLength: Array.isArray(rawDeck) ? rawDeck.length : "not an array",
@@ -2971,18 +3026,37 @@ export default function OnlineMatchPage() {
                 </div>
               )
             ) : (
-              <OnlineDeckSelector
-                myPlayerKey={myPlayerKey}
-                playerNames={playerNames}
-                onPrepareComplete={() => setPrepared(true)}
-                matchType={
-                  match?.matchType as
-                    | "constructed"
-                    | "sealed"
-                    | "draft"
-                    | "precon"
-                }
-              />
+              <div className="w-full max-w-2xl mx-auto space-y-4">
+                {opponentPlayerId?.startsWith("cpu_") && (
+                  <div className="bg-amber-950/60 border border-amber-700/40 rounded-xl px-5 py-4 space-y-2">
+                    <h3 className="text-sm font-semibold uppercase tracking-wide text-amber-300">
+                      Experimental Mode
+                    </h3>
+                    <ul className="text-xs text-amber-200/80 space-y-1 list-disc list-inside">
+                      <li>
+                        The bot can perform basic actions but will make many
+                        rules errors, especially regarding card-specific rules
+                      </li>
+                      <li>
+                        Best used for goldfishing &mdash; getting a feel for how
+                        your deck shapes the board without strong opposition
+                      </li>
+                    </ul>
+                  </div>
+                )}
+                <OnlineDeckSelector
+                  myPlayerKey={myPlayerKey}
+                  playerNames={playerNames}
+                  onPrepareComplete={() => setPrepared(true)}
+                  matchType={
+                    match?.matchType as
+                      | "constructed"
+                      | "sealed"
+                      | "draft"
+                      | "precon"
+                  }
+                />
+              </div>
             )
           ) : serverPhase === "Setup" ? (
             <OnlineD20Screen
@@ -3028,7 +3102,11 @@ export default function OnlineMatchPage() {
             setChatInput={setChatInput}
             onSendChat={sendChat}
             onLeaveMatch={leaveMatch}
-            onLeaveLobby={leaveLobby}
+            onLeaveLobby={() => {
+              const isCpuGame = opponentPlayerId?.startsWith("cpu_");
+              leaveLobby();
+              router.push(isCpuGame ? "/" : "/online/lobby");
+            }}
             connected={connected}
             myPlayerId={myPlayerId}
             playerNames={playerNames}
@@ -3114,7 +3192,11 @@ export default function OnlineMatchPage() {
               setChatInput={setChatInput}
               onSendChat={sendChat}
               onLeaveMatch={leaveMatch}
-              onLeaveLobby={leaveLobby}
+              onLeaveLobby={() => {
+                const isCpuGame = opponentPlayerId?.startsWith("cpu_");
+                leaveLobby();
+                router.push(isCpuGame ? "/" : "/online/lobby");
+              }}
               connected={connected}
               myPlayerId={myPlayerId}
               hideChat={isSpectatorView}
@@ -3256,8 +3338,12 @@ export default function OnlineMatchPage() {
               leaveMatch();
             }}
             onLeaveLobby={() => {
+              const isCpuGame = opponentPlayerId?.startsWith("cpu_");
               if (tournamentId) {
                 router.push(`/tournaments/${tournamentId}`);
+              } else if (isCpuGame) {
+                leaveLobby();
+                router.push("/");
               } else {
                 leaveLobby();
                 router.push("/online/lobby");

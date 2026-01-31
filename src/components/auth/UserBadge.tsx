@@ -491,6 +491,11 @@ export default function UserBadge({
         });
       }
 
+      // Update socket server's cached display name so chat/players tab reflects the change
+      if (data.user?.name && onlineCtx?.transport) {
+        onlineCtx.transport.updateDisplayName(data.user.name);
+      }
+
       let successMessage = "Profile updated.";
 
       if (data.emailChanged) {
