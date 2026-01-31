@@ -63,14 +63,13 @@ export const createImposterMaskSlice: StateCreator<
       return false;
     }
 
-    // Check mana cost
+    // Warn if not enough mana, but don't block
     const availableMana = state.getAvailableMana(who);
     const MASK_COST = IMPOSTER_MASK_COST;
     if (availableMana < MASK_COST) {
       state.log(
-        `Cannot mask: ${who.toUpperCase()} needs ${MASK_COST} mana (has ${availableMana})`
+        `Warning: ${who.toUpperCase()} needs ${MASK_COST} mana to mask (has ${availableMana})`
       );
-      return false;
     }
 
     // Verify the mask avatar is in collection

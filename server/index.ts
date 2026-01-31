@@ -4894,6 +4894,7 @@ io.on("connection", async (socket: SocketClient) => {
         limit: Math.min(Number(payload?.limit) || 50, 200),
         cursor: payload?.cursor || null,
         playerId: payload?.playerId || null,
+        ownOnly: payload?.ownOnly || false,
       };
 
       const result = (await replay.listRecordings(prisma, opts)) as {

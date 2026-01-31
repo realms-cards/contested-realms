@@ -147,7 +147,11 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
       );
     }
 
-    function computeEffectiveAttack(input: { at: CellKey; index: number }): {
+    function computeEffectiveAttack(input: {
+      at: CellKey;
+      index: number;
+      fightingUnit?: boolean;
+    }): {
       atk: number;
       firstStrike: boolean;
     } {
@@ -160,7 +164,10 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
         const name = (token.card?.name || "").toLowerCase();
         if (name === "lance") {
           firstStrike = true;
-          atk += 1;
+          // Lance only adds +1 damage when fighting a unit
+          if (input.fightingUnit !== false) {
+            atk += 1;
+          }
         }
         if (name === "disabled") {
           disabled = true;
@@ -171,9 +178,11 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
       return { atk, firstStrike };
     }
 
+    // setDamageAssignment is only used with multiple defenders, always fighting units
     const eff = computeEffectiveAttack({
       at: pending.attacker.at,
       index: pending.attacker.index,
+      fightingUnit: true,
     });
     if (!Array.isArray(assignment)) return false;
     const defenderKeys = new Set(
@@ -556,13 +565,19 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
       );
     }
 
-    function listAttachmentEffects(at: string, index: number): string[] {
+    function listAttachmentEffects(
+      at: string,
+      index: number,
+      fightingUnit?: boolean,
+    ): string[] {
       const effects: string[] = [];
       for (const token of getAttachments(at, index)) {
         const name = (token.card?.name || "").trim();
         const lowered = name.toLowerCase();
-        if (lowered === "lance") effects.push("Lance(+1, FS)");
-        else if (lowered === "disabled") effects.push("Disabled(Atk=0)");
+        if (lowered === "lance") {
+          // Lance only grants +1 and breaks when fighting a unit
+          effects.push(fightingUnit ? "Lance(+1, FS)" : "Lance(FS)");
+        } else if (lowered === "disabled") effects.push("Disabled(Atk=0)");
         else if (name) effects.push(name);
       }
       return effects;
@@ -584,7 +599,11 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
       }
     }
 
-    function computeEffectiveAttack(input: { at: CellKey; index: number }): {
+    function computeEffectiveAttack(input: {
+      at: CellKey;
+      index: number;
+      fightingUnit?: boolean;
+    }): {
       atk: number;
       firstStrike: boolean;
     } {
@@ -597,7 +616,10 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
         const name = (token.card?.name || "").toLowerCase();
         if (name === "lance") {
           firstStrike = true;
-          atk += 1;
+          // Lance only adds +1 damage when fighting a unit
+          if (input.fightingUnit !== false) {
+            atk += 1;
+          }
         }
         if (name === "disabled") {
           disabled = true;
@@ -607,6 +629,12 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
       if (!Number.isFinite(atk)) atk = 0;
       return { atk, firstStrike };
     }
+
+    // Determine if attacker is fighting a unit vs undefended site
+    const resolveFightingUnit =
+      (pending.defenders?.length ?? 0) > 0 ||
+      pending.target?.kind === "avatar" ||
+      pending.target?.kind === "permanent";
 
     // Compute effective attack - handle avatar attackers specially
     const eff = (() => {
@@ -619,6 +647,7 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
       return computeEffectiveAttack({
         at: pending.attacker.at,
         index: pending.attacker.index,
+        fightingUnit: resolveFightingUnit,
       });
     })();
     let summary = "Combat resolved";
@@ -630,7 +659,11 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
     })();
     const attachmentEffects = pending.attacker.isAvatar
       ? [] // Avatars don't have attachments
-      : listAttachmentEffects(pending.attacker.at, pending.attacker.index);
+      : listAttachmentEffects(
+          pending.attacker.at,
+          pending.attacker.index,
+          resolveFightingUnit,
+        );
     const effectText = attachmentEffects.length
       ? ` [${attachmentEffects.join(", ")}]`
       : "";
@@ -925,10 +958,15 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
       );
     }
 
-    function computeEffectiveAttack(input: { at: CellKey; index: number }): {
+    function computeEffectiveAttack(input: {
+      at: CellKey;
+      index: number;
+      fightingUnit?: boolean;
+    }): {
       atk: number;
       firstStrike: boolean;
       hasUntrackedArtifact: boolean;
+      hasLance: boolean;
     } {
       const base = getAtkDef(input.at, input.index).atk;
       const attachments = getAttachments(input.at, input.index);
@@ -936,13 +974,19 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
       let firstStrike = false;
       let disabled = false;
       let hasUntrackedArtifact = false;
+      let hasLance = false;
       for (const token of attachments) {
         const name = (token.card?.name || "").toLowerCase();
         const cardType = token.card?.type || "";
         const isArtifact = cardType.toLowerCase().includes("artifact");
         if (name === "lance") {
+          hasLance = true;
           firstStrike = true;
-          atk += 1;
+          // Lance only adds +1 damage when fighting a unit (minion/avatar),
+          // not when attacking an undefended site
+          if (input.fightingUnit !== false) {
+            atk += 1;
+          }
         } else if (name === "disabled") {
           disabled = true;
         } else if (isArtifact) {
@@ -952,8 +996,15 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
       }
       if (disabled) atk = 0;
       if (!Number.isFinite(atk)) atk = 0;
-      return { atk, firstStrike, hasUntrackedArtifact };
+      return { atk, firstStrike, hasUntrackedArtifact, hasLance };
     }
+
+    // Determine if the attacker is fighting a unit (minion/avatar) vs an undefended site.
+    // Lance only adds +1 damage and breaks when fighting units.
+    const attackerFightingUnit =
+      (pending.defenders?.length ?? 0) > 0 ||
+      pending.target?.kind === "avatar" ||
+      pending.target?.kind === "permanent";
 
     // For avatar attackers, don't use computeEffectiveAttack (avatars aren't permanents)
     // Just get avatar's base attack power directly from the enriched card data
@@ -973,11 +1024,17 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
             atk,
           );
           // Avatars don't have attachments, so no first strike or artifacts
-          return { atk, firstStrike: false, hasUntrackedArtifact: false };
+          return {
+            atk,
+            firstStrike: false,
+            hasUntrackedArtifact: false,
+            hasLance: false,
+          };
         })()
       : computeEffectiveAttack({
           at: pending.attacker.at,
           index: pending.attacker.index,
+          fightingUnit: attackerFightingUnit,
         });
 
     // Helper to get instanceId from a permanent at a given position
@@ -1000,15 +1057,18 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
       [];
     let defenders = (pending.defenders || []).map((defender) => {
       const stats = getAtkDef(defender.at, defender.index);
+      // Defenders are always fighting a unit (the attacker), so lance applies
       const effective = computeEffectiveAttack({
         at: defender.at,
         index: defender.index,
+        fightingUnit: true,
       });
       return {
         ...defender,
         def: stats.def,
         atk: effective.atk,
         fs: effective.firstStrike,
+        hasLance: effective.hasLance,
         hasUntrackedArtifact: effective.hasUntrackedArtifact,
       };
     });
@@ -1047,9 +1107,11 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
       })();
       if (owner === 1 || owner === 2) {
         const stats = getAtkDef(pending.target.at, pending.target.index);
+        // Target permanent is fighting the attacker, so lance applies
         const effective = computeEffectiveAttack({
           at: pending.target.at,
           index: pending.target.index,
+          fightingUnit: true,
         });
         // Note: target artifact warning already shown in UI if hasUntrackedArtifact
         // Resolution proceeds with base stats
@@ -1061,6 +1123,7 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
             def: stats.def,
             atk: effective.atk,
             fs: effective.firstStrike,
+            hasLance: effective.hasLance,
             hasUntrackedArtifact: false, // Already checked above
           },
         ];
@@ -1346,6 +1409,55 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
         get().movePermanentToZone(kill.at, currentIndex, "graveyard");
       } catch (error) {
         console.error("[autoResolveCombat] Error moving to graveyard:", error);
+      }
+    }
+
+    // --- Lance breaking ---
+    // Lance breaks (is banished) after combat when the bearer fought a unit.
+    // Only break lance on surviving permanents; killed ones already had their
+    // attachments removed by movePermanentToZone.
+    if (attackerFightingUnit) {
+      const breakLanceOn = (at: CellKey, index: number) => {
+        try {
+          const currentPerms = (get().permanents as Permanents)[at] || [];
+          // Find lance tokens attached to this permanent
+          for (let i = currentPerms.length - 1; i >= 0; i--) {
+            const perm = currentPerms[i];
+            if (
+              perm.attachedTo &&
+              perm.attachedTo.at === at &&
+              perm.attachedTo.index === index &&
+              (perm.card?.name || "").toLowerCase() === "lance"
+            ) {
+              console.log(
+                "[autoResolveCombat] Breaking lance token at",
+                at,
+                "index",
+                i,
+              );
+              get().movePermanentToZone(at, i, "banished");
+            }
+          }
+        } catch (error) {
+          console.error("[autoResolveCombat] Error breaking lance:", error);
+        }
+      };
+
+      // Break lance on surviving attacker
+      if (
+        attackerAlive &&
+        !pending.attacker.isAvatar &&
+        eff.hasLance
+      ) {
+        breakLanceOn(pending.attacker.at, pending.attacker.index);
+      }
+
+      // Break lance on surviving defenders
+      for (const defender of defenders) {
+        const key = `${defender.at}:${defender.index}`;
+        if (aliveDefenders.has(key) && defender.hasLance) {
+          breakLanceOn(defender.at, defender.index);
+        }
       }
     }
 

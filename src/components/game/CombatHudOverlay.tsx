@@ -203,6 +203,7 @@ export default function CombatHudOverlay() {
       index: number;
       isAvatar?: boolean;
       avatarSeat?: "p1" | "p2";
+      fightingUnit?: boolean;
     }): {
       atk: number;
       firstStrike: boolean;
@@ -223,7 +224,11 @@ export default function CombatHudOverlay() {
         const nm = (t.card?.name || "").toLowerCase();
         if (nm === "lance") {
           firstStrike = true;
-          atk += 1;
+          // Lance only adds +1 damage when fighting a unit (minion/avatar),
+          // not when attacking an undefended site
+          if (a.fightingUnit !== false) {
+            atk += 1;
+          }
         }
         if (nm === "disabled") {
           disabled = true;
@@ -234,6 +239,16 @@ export default function CombatHudOverlay() {
       return { atk, firstStrike };
     }
 
+    // Determine if attacker is fighting a unit vs undefended site
+    const hudFightingUnit = (() => {
+      if (!pc) return true;
+      return (
+        (pc.defenders?.length ?? 0) > 0 ||
+        pc.target?.kind === "avatar" ||
+        pc.target?.kind === "permanent"
+      );
+    })();
+
     const totalAtk = (() => {
       if (!pc) return 0;
       const eff = computeEffectiveAttack({
@@ -241,6 +256,7 @@ export default function CombatHudOverlay() {
         index: pc.attacker.index,
         isAvatar: pc.attacker.isAvatar,
         avatarSeat: pc.attacker.avatarSeat,
+        fightingUnit: hudFightingUnit,
       });
       return Math.max(0, Math.floor(eff.atk));
     })();
@@ -404,6 +420,7 @@ export default function CombatHudOverlay() {
     index: number;
     isAvatar?: boolean;
     avatarSeat?: "p1" | "p2";
+    fightingUnit?: boolean;
   }): {
     atk: number;
     firstStrike: boolean;
@@ -423,7 +440,10 @@ export default function CombatHudOverlay() {
       const nm = (t.card?.name || "").toLowerCase();
       if (nm === "lance") {
         firstStrike = true;
-        atk += 1;
+        // Lance only adds +1 damage when fighting a unit
+        if (a.fightingUnit !== false) {
+          atk += 1;
+        }
       }
       if (nm === "disabled") {
         disabled = true;
@@ -458,11 +478,16 @@ export default function CombatHudOverlay() {
 
   function SuggestionConfirm() {
     if (!attackConfirm) return null;
+    // Lance +1 only applies when fighting a unit, not an undefended site
+    const confirmFightingUnit =
+      attackConfirm.target.kind === "avatar" ||
+      attackConfirm.target.kind === "permanent";
     const eff = computeEffectiveAttack({
       at: attackConfirm.attacker.at,
       index: attackConfirm.attacker.index,
       isAvatar: attackConfirm.attacker.isAvatar,
       avatarSeat: attackConfirm.attacker.avatarSeat,
+      fightingUnit: confirmFightingUnit,
     });
     // Site damage suggestion follows DD rule
     if (attackConfirm.target.kind === "site") {
@@ -569,11 +594,17 @@ export default function CombatHudOverlay() {
 
   function SuggestionDefense() {
     if (!pendingCombat) return null;
+    // In defense context, attacker is always fighting units (defenders exist)
+    const defFightingUnit =
+      (pendingCombat.defenders?.length ?? 0) > 0 ||
+      pendingCombat.target?.kind === "avatar" ||
+      pendingCombat.target?.kind === "permanent";
     const a = computeEffectiveAttack({
       at: pendingCombat.attacker.at,
       index: pendingCombat.attacker.index,
       isAvatar: pendingCombat.attacker.isAvatar,
       avatarSeat: pendingCombat.attacker.avatarSeat,
+      fightingUnit: defFightingUnit,
     });
     let sumDef = 0;
     let sumAtk = 0;
@@ -746,7 +777,7 @@ export default function CombatHudOverlay() {
         const targetEffective = computeEffectiveAttack({
           at: pendingCombat.target.at as CellKey,
           index: pendingCombat.target.index ?? 0,
-          // Target is a permanent, not an avatar
+          fightingUnit: true, // Target permanent is fighting the attacker
         });
         const attackerDefence = (() => {
           try {
@@ -806,6 +837,7 @@ export default function CombatHudOverlay() {
       const dEff = computeEffectiveAttack({
         at: d0.at as CellKey,
         index: d0.index,
+        fightingUnit: true, // Defenders are always fighting the attacker
       });
       const defenderPower = dEff.atk;
       const defenderDef = sumDef; // single defender => its defence
@@ -1196,6 +1228,7 @@ export default function CombatHudOverlay() {
                     index: pendingCombat.attacker.index,
                     isAvatar: pendingCombat.attacker.isAvatar,
                     avatarSeat: pendingCombat.attacker.avatarSeat,
+                    fightingUnit: true, // Damage assignment means multiple defenders
                   });
                   const totalAtk = Math.max(0, Math.floor(eff.atk));
                   const sum = (pendingCombat.assignment || []).reduce(
