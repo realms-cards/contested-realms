@@ -7,7 +7,13 @@ import { CustomSelect } from "@/components/ui/CustomSelect";
 import CardPreview from "@/components/game/CardPreview";
 import { ClientCanvas } from "@/components/game/ClientCanvas";
 import OnlineConsole from "@/components/game/OnlineConsole";
-import { DynamicBoard as Board } from "@/components/game/dynamic-3d";
+import OnlineLifeCounters from "@/components/game/OnlineLifeCounters";
+import PlayerResourcePanels from "@/components/game/PlayerResourcePanel";
+import {
+  DynamicBoard as Board,
+  DynamicHand3D as Hand3D,
+  DynamicPiles3D as Piles3D,
+} from "@/components/game/dynamic-3d";
 import TextureCache from "@/lib/game/components/TextureCache";
 import { Physics } from "@/lib/game/physics";
 import { useGameStore } from "@/lib/game/store";
@@ -130,19 +136,40 @@ export default function AdminBotReplayViewerPage() {
     [recording]
   );
 
-  // Auto-playback
+  // Auto-playback with realistic timing based on action timestamps
   useEffect(() => {
     if (!isPlaying || !recording) return;
 
-    const interval = setInterval(() => {
-      if (currentActionIndex >= recording.actions.length - 1) {
-        setIsPlaying(false);
-        return;
-      }
-      stepForward();
-    }, 1000 / playbackSpeed);
+    if (currentActionIndex >= recording.actions.length - 1) {
+      setIsPlaying(false);
+      return;
+    }
 
-    return () => clearInterval(interval);
+    // Calculate delay based on actual timestamps between actions
+    const currentAction = recording.actions[currentActionIndex];
+    const nextAction = recording.actions[currentActionIndex + 1];
+
+    let delay: number;
+    if (currentAction && nextAction) {
+      // Use actual time difference between actions, scaled by playback speed
+      const timeDiff = nextAction.timestamp - currentAction.timestamp;
+      // Clamp to reasonable bounds: min 200ms, max 3000ms (before speed adjustment)
+      const clampedDiff = Math.max(200, Math.min(3000, timeDiff));
+      delay = clampedDiff / playbackSpeed;
+    } else {
+      // Fallback to fixed delay
+      delay = 800 / playbackSpeed;
+    }
+
+    // Minimum delay to ensure smooth visual transitions
+    const minDelay = 150 / playbackSpeed;
+    delay = Math.max(minDelay, delay);
+
+    const timer = setTimeout(() => {
+      stepForward();
+    }, delay);
+
+    return () => clearTimeout(timer);
   }, [isPlaying, recording, currentActionIndex, playbackSpeed, stepForward]);
 
   const formatTime = (timestamp: number) => {
@@ -206,7 +233,7 @@ export default function AdminBotReplayViewerPage() {
           <ambientLight intensity={0.8} />
           <directionalLight
             position={[10, 12, 8]}
-            intensity={1.5}
+            intensity={1.35}
             castShadow
             shadow-mapSize-width={2048}
             shadow-mapSize-height={2048}
@@ -220,6 +247,30 @@ export default function AdminBotReplayViewerPage() {
 
           <Physics gravity={[0, -9.81, 0]}>
             <Board interactionMode="spectator" enableBoardPings={false} />
+            {/* Commentator-style hands for replay: both players, face-up, flat, at edges */}
+            <Hand3D
+              owner="p1"
+              matW={1}
+              matH={1}
+              viewerPlayerNumber={1}
+              placement="edgeBottom"
+              showCardBacks={false}
+              flatCards
+            />
+            <Hand3D
+              owner="p2"
+              matW={1}
+              matH={1}
+              viewerPlayerNumber={1}
+              placement="edgeTop"
+              showCardBacks={false}
+              flatCards
+            />
+
+            {/* Player piles: spellbook, atlas, graveyard, collection (read-only in replay) */}
+            <Piles3D owner="p1" matW={1} matH={1} noRaycast />
+            <Piles3D owner="p2" matW={1} matH={1} noRaycast />
+
             <TextureCache />
           </Physics>
 
@@ -254,6 +305,28 @@ export default function AdminBotReplayViewerPage() {
         />
       )}
 
+      {/* Life Counters */}
+      <OnlineLifeCounters
+        dragFromHand={false}
+        myPlayerKey={null}
+        playerNames={{
+          p1: recording.playerNames[0] || "Player 1",
+          p2: recording.playerNames[1] || "Player 2",
+        }}
+        readOnly={true}
+      />
+
+      {/* Mana and Thresholds panel on the right */}
+      <PlayerResourcePanels
+        myPlayerKey={null}
+        playerNames={{
+          p1: recording.playerNames[0] || "Player 1",
+          p2: recording.playerNames[1] || "Player 2",
+        }}
+        readOnly={true}
+        dragFromHand={false}
+      />
+
       {/* Replay Controls Overlay */}
       <div className="absolute bottom-0 left-0 right-0 bg-black/80 backdrop-blur-sm p-4">
         <div className="max-w-6xl mx-auto">
@@ -268,12 +341,46 @@ export default function AdminBotReplayViewerPage() {
                 actions • Bot Match
               </div>
             </div>
-            <button
-              onClick={() => router.push("/admin/training")}
-              className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-white transition-colors"
-            >
-              Back to Training Dashboard
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  const blob = new Blob([JSON.stringify(recording, null, 2)], {
+                    type: "application/json",
+                  });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  const safeName = recording.playerNames
+                    .join("_vs_")
+                    .replace(/[^a-zA-Z0-9_-]/g, "");
+                  const date = new Date(recording.startTime)
+                    .toISOString()
+                    .split("T")[0];
+                  a.download = `bot_replay_${safeName}_${date}.json`;
+                  document.body.appendChild(a);
+                  a.click();
+                  document.body.removeChild(a);
+                  URL.revokeObjectURL(url);
+                }}
+                className="h-9 w-9 grid place-items-center bg-emerald-600 hover:bg-emerald-700 rounded-lg text-white transition-colors"
+                title="Download Replay"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  className="w-5 h-5"
+                >
+                  <path d="M12 16l-6-6h4V4h4v6h4l-6 6zm-8 2h16v2H4v-2z" />
+                </svg>
+              </button>
+              <button
+                onClick={() => router.push("/admin/training")}
+                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-white transition-colors"
+              >
+                Back to Training Dashboard
+              </button>
+            </div>
           </div>
 
           {/* Progress Bar */}

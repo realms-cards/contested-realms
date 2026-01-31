@@ -1,0 +1,7049 @@
+{
+  "generated": "2026-01-29T07:19:58.373Z",
+  "source": "https://realms.cards/api/meta/cards",
+  "cardCount": 329,
+  "cards": {
+    "442219512": {
+      "cardId": 442219512,
+      "type": null,
+      "slug": null,
+      "totalPlays": 1,
+      "totalWins": 0,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0,
+      "formats": {
+        "draft": {
+          "plays": 1,
+          "wins": 0,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Toolbox": {
+      "cardId": 1070,
+      "type": "Artifact",
+      "slug": "got-toolbox-b-s",
+      "totalPlays": 354,
+      "totalWins": 189,
+      "totalLosses": 163,
+      "totalDraws": 2,
+      "winRate": 0.537,
+      "formats": {
+        "constructed": {
+          "plays": 354,
+          "wins": 189,
+          "losses": 163,
+          "draws": 2,
+          "winRate": 0.5369318181818182
+        }
+      }
+    },
+    "Necromancer": {
+      "cardId": 946,
+      "type": "Avatar",
+      "slug": "got-necromancer-b-s",
+      "totalPlays": 313,
+      "totalWins": 162,
+      "totalLosses": 148,
+      "totalDraws": 3,
+      "winRate": 0.523,
+      "formats": {
+        "constructed": {
+          "plays": 306,
+          "wins": 158,
+          "losses": 145,
+          "draws": 3,
+          "winRate": 0.5214521452145214
+        },
+        "sealed": {
+          "plays": 6,
+          "wins": 4,
+          "losses": 2,
+          "draws": 0,
+          "winRate": 0.6666666666666666
+        },
+        "draft": {
+          "plays": 1,
+          "wins": 0,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Interrogator": {
+      "cardId": 889,
+      "type": "Avatar",
+      "slug": "got-interrogator-b-s",
+      "totalPlays": 303,
+      "totalWins": 146,
+      "totalLosses": 155,
+      "totalDraws": 2,
+      "winRate": 0.485,
+      "formats": {
+        "constructed": {
+          "plays": 303,
+          "wins": 146,
+          "losses": 155,
+          "draws": 2,
+          "winRate": 0.4850498338870432
+        }
+      }
+    },
+    "Mountain Peaks": {
+      "cardId": 938,
+      "type": "Site",
+      "slug": "got-mountain_peaks-b-s",
+      "totalPlays": 289,
+      "totalWins": 135,
+      "totalLosses": 152,
+      "totalDraws": 2,
+      "winRate": 0.47,
+      "formats": {
+        "constructed": {
+          "plays": 285,
+          "wins": 134,
+          "losses": 149,
+          "draws": 2,
+          "winRate": 0.4734982332155477
+        },
+        "sealed": {
+          "plays": 4,
+          "wins": 1,
+          "losses": 3,
+          "draws": 0,
+          "winRate": 0.25
+        }
+      }
+    },
+    "Gothic Tower": {
+      "cardId": 328,
+      "type": "Site",
+      "slug": "alp_gothic_tower_b_s",
+      "totalPlays": 270,
+      "totalWins": 120,
+      "totalLosses": 144,
+      "totalDraws": 5,
+      "winRate": 0.455,
+      "formats": {
+        "constructed": {
+          "plays": 270,
+          "wins": 120,
+          "losses": 144,
+          "draws": 5,
+          "winRate": 0.45454545454545453
+        }
+      }
+    },
+    "Lone Tower": {
+      "cardId": 329,
+      "type": "Site",
+      "slug": "alp_lone_tower_b_s",
+      "totalPlays": 251,
+      "totalWins": 107,
+      "totalLosses": 139,
+      "totalDraws": 5,
+      "winRate": 0.435,
+      "formats": {
+        "constructed": {
+          "plays": 249,
+          "wins": 106,
+          "losses": 138,
+          "draws": 5,
+          "winRate": 0.4344262295081967
+        },
+        "sealed": {
+          "plays": 2,
+          "wins": 1,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Active Volcano": {
+      "cardId": 676,
+      "type": "Site",
+      "slug": "got-active_volcano-b-s",
+      "totalPlays": 244,
+      "totalWins": 125,
+      "totalLosses": 117,
+      "totalDraws": 1,
+      "winRate": 0.517,
+      "formats": {
+        "constructed": {
+          "plays": 241,
+          "wins": 123,
+          "losses": 116,
+          "draws": 1,
+          "winRate": 0.5146443514644351
+        },
+        "sealed": {
+          "plays": 3,
+          "wins": 2,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.6666666666666666
+        }
+      }
+    },
+    "Ruins": {
+      "cardId": 368,
+      "type": "Site",
+      "slug": "alp_ruins_b_s",
+      "totalPlays": 237,
+      "totalWins": 125,
+      "totalLosses": 109,
+      "totalDraws": 3,
+      "winRate": 0.534,
+      "formats": {
+        "constructed": {
+          "plays": 237,
+          "wins": 125,
+          "losses": 109,
+          "draws": 3,
+          "winRate": 0.5341880341880342
+        }
+      }
+    },
+    "Dark Tower": {
+      "cardId": 327,
+      "type": "Site",
+      "slug": "alp_dark_tower_b_s",
+      "totalPlays": 238,
+      "totalWins": 110,
+      "totalLosses": 122,
+      "totalDraws": 4,
+      "winRate": 0.474,
+      "formats": {
+        "constructed": {
+          "plays": 236,
+          "wins": 109,
+          "losses": 121,
+          "draws": 4,
+          "winRate": 0.47391304347826085
+        },
+        "sealed": {
+          "plays": 2,
+          "wins": 1,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Blink": {
+      "cardId": 45,
+      "type": "Magic",
+      "slug": "alp_blink_b_s",
+      "totalPlays": 234,
+      "totalWins": 105,
+      "totalLosses": 124,
+      "totalDraws": 5,
+      "winRate": 0.459,
+      "formats": {
+        "constructed": {
+          "plays": 231,
+          "wins": 104,
+          "losses": 122,
+          "draws": 5,
+          "winRate": 0.46017699115044247
+        },
+        "sealed": {
+          "plays": 3,
+          "wins": 1,
+          "losses": 2,
+          "draws": 0,
+          "winRate": 0.3333333333333333
+        }
+      }
+    },
+    "Troll Bridge": {
+      "cardId": 613,
+      "type": "Site",
+      "slug": "art_troll_bridge_b_s",
+      "totalPlays": 210,
+      "totalWins": 113,
+      "totalLosses": 95,
+      "totalDraws": 2,
+      "winRate": 0.543,
+      "formats": {
+        "constructed": {
+          "plays": 210,
+          "wins": 113,
+          "losses": 95,
+          "draws": 2,
+          "winRate": 0.5432692307692307
+        }
+      }
+    },
+    "Vile Imp": {
+      "cardId": 175,
+      "type": "Minion",
+      "slug": "alp_vile_imp_b_s",
+      "totalPlays": 198,
+      "totalWins": 114,
+      "totalLosses": 79,
+      "totalDraws": 4,
+      "winRate": 0.591,
+      "formats": {
+        "constructed": {
+          "plays": 195,
+          "wins": 111,
+          "losses": 79,
+          "draws": 4,
+          "winRate": 0.5842105263157895
+        },
+        "sealed": {
+          "plays": 2,
+          "wins": 2,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        },
+        "draft": {
+          "plays": 1,
+          "wins": 1,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "Windmill": {
+      "cardId": 371,
+      "type": "Site",
+      "slug": "alp_windmill_b_s",
+      "totalPlays": 193,
+      "totalWins": 98,
+      "totalLosses": 91,
+      "totalDraws": 4,
+      "winRate": 0.519,
+      "formats": {
+        "constructed": {
+          "plays": 193,
+          "wins": 98,
+          "losses": 91,
+          "draws": 4,
+          "winRate": 0.5185185185185185
+        }
+      }
+    },
+    "Fertile Earth": {
+      "cardId": 818,
+      "type": "Site",
+      "slug": "got-fertile_earth-b-s",
+      "totalPlays": 190,
+      "totalWins": 88,
+      "totalLosses": 100,
+      "totalDraws": 2,
+      "winRate": 0.468,
+      "formats": {
+        "constructed": {
+          "plays": 190,
+          "wins": 88,
+          "losses": 100,
+          "draws": 2,
+          "winRate": 0.46808510638297873
+        }
+      }
+    },
+    "Steppe": {
+      "cardId": 369,
+      "type": "Site",
+      "slug": "alp_steppe_b_s",
+      "totalPlays": 190,
+      "totalWins": 106,
+      "totalLosses": 83,
+      "totalDraws": 1,
+      "winRate": 0.561,
+      "formats": {
+        "constructed": {
+          "plays": 190,
+          "wins": 106,
+          "losses": 83,
+          "draws": 1,
+          "winRate": 0.5608465608465608
+        }
+      }
+    },
+    "Deep Sea": {
+      "cardId": 770,
+      "type": "Site",
+      "slug": "got-deep_sea-b-s",
+      "totalPlays": 189,
+      "totalWins": 99,
+      "totalLosses": 90,
+      "totalDraws": 0,
+      "winRate": 0.524,
+      "formats": {
+        "constructed": {
+          "plays": 188,
+          "wins": 99,
+          "losses": 89,
+          "draws": 0,
+          "winRate": 0.526595744680851
+        },
+        "sealed": {
+          "plays": 1,
+          "wins": 0,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Lighthouse": {
+      "cardId": 365,
+      "type": "Site",
+      "slug": "alp_lighthouse_b_s",
+      "totalPlays": 187,
+      "totalWins": 91,
+      "totalLosses": 94,
+      "totalDraws": 2,
+      "winRate": 0.492,
+      "formats": {
+        "constructed": {
+          "plays": 187,
+          "wins": 91,
+          "losses": 94,
+          "draws": 2,
+          "winRate": 0.4918918918918919
+        }
+      }
+    },
+    "Harbinger": {
+      "cardId": 857,
+      "type": "Avatar",
+      "slug": "got-harbinger-b-s",
+      "totalPlays": 189,
+      "totalWins": 90,
+      "totalLosses": 98,
+      "totalDraws": 1,
+      "winRate": 0.479,
+      "formats": {
+        "constructed": {
+          "plays": 185,
+          "wins": 88,
+          "losses": 96,
+          "draws": 1,
+          "winRate": 0.4782608695652174
+        },
+        "sealed": {
+          "plays": 4,
+          "wins": 2,
+          "losses": 2,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Floodplain": {
+      "cardId": 356,
+      "type": "Site",
+      "slug": "alp_floodplain_d_s",
+      "totalPlays": 159,
+      "totalWins": 77,
+      "totalLosses": 80,
+      "totalDraws": 2,
+      "winRate": 0.49,
+      "formats": {
+        "constructed": {
+          "plays": 159,
+          "wins": 77,
+          "losses": 80,
+          "draws": 2,
+          "winRate": 0.49044585987261147
+        }
+      }
+    },
+    "Ring of Morrigan": {
+      "cardId": 550,
+      "type": "Artifact",
+      "slug": "art_ring_of_morrigan_b_s",
+      "totalPlays": 157,
+      "totalWins": 93,
+      "totalLosses": 62,
+      "totalDraws": 2,
+      "winRate": 0.6,
+      "formats": {
+        "constructed": {
+          "plays": 157,
+          "wins": 93,
+          "losses": 62,
+          "draws": 2,
+          "winRate": 0.6
+        }
+      }
+    },
+    "Lightning Bolt": {
+      "cardId": 54,
+      "type": "Magic",
+      "slug": "alp_lightning_bolt_b_s",
+      "totalPlays": 152,
+      "totalWins": 77,
+      "totalLosses": 72,
+      "totalDraws": 2,
+      "winRate": 0.517,
+      "formats": {
+        "constructed": {
+          "plays": 152,
+          "wins": 77,
+          "losses": 72,
+          "draws": 2,
+          "winRate": 0.5167785234899329
+        }
+      }
+    },
+    "Grapple Shot": {
+      "cardId": 53,
+      "type": "Magic",
+      "slug": "alp_grapple_shot_b_s",
+      "totalPlays": 146,
+      "totalWins": 69,
+      "totalLosses": 75,
+      "totalDraws": 2,
+      "winRate": 0.479,
+      "formats": {
+        "constructed": {
+          "plays": 146,
+          "wins": 69,
+          "losses": 75,
+          "draws": 2,
+          "winRate": 0.4791666666666667
+        }
+      }
+    },
+    "Den of Evil": {
+      "cardId": 775,
+      "type": "Site",
+      "slug": "got-den_of_evil-b-s",
+      "totalPlays": 141,
+      "totalWins": 75,
+      "totalLosses": 64,
+      "totalDraws": 2,
+      "winRate": 0.54,
+      "formats": {
+        "constructed": {
+          "plays": 138,
+          "wins": 73,
+          "losses": 63,
+          "draws": 2,
+          "winRate": 0.5367647058823529
+        },
+        "sealed": {
+          "plays": 3,
+          "wins": 2,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.6666666666666666
+        }
+      }
+    },
+    "Swap": {
+      "cardId": 659,
+      "type": "Magic",
+      "slug": "pro-swap-op-s",
+      "totalPlays": 136,
+      "totalWins": 69,
+      "totalLosses": 66,
+      "totalDraws": 1,
+      "winRate": 0.511,
+      "formats": {
+        "constructed": {
+          "plays": 134,
+          "wins": 67,
+          "losses": 66,
+          "draws": 1,
+          "winRate": 0.5037593984962406
+        },
+        "sealed": {
+          "plays": 2,
+          "wins": 2,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "Kettletop Leprechaun": {
+      "cardId": 501,
+      "type": "Minion",
+      "slug": "art_kettletop_leprechaun_b_s",
+      "totalPlays": 133,
+      "totalWins": 78,
+      "totalLosses": 54,
+      "totalDraws": 1,
+      "winRate": 0.591,
+      "formats": {
+        "constructed": {
+          "plays": 133,
+          "wins": 78,
+          "losses": 54,
+          "draws": 1,
+          "winRate": 0.5909090909090909
+        }
+      }
+    },
+    "Torshammar Trinket": {
+      "cardId": 321,
+      "type": "Artifact",
+      "slug": "alp_torshammar_trinket_b_s",
+      "totalPlays": 132,
+      "totalWins": 64,
+      "totalLosses": 66,
+      "totalDraws": 2,
+      "winRate": 0.492,
+      "formats": {
+        "constructed": {
+          "plays": 132,
+          "wins": 64,
+          "losses": 66,
+          "draws": 2,
+          "winRate": 0.49230769230769234
+        }
+      }
+    },
+    "Deathspeaker": {
+      "cardId": 398,
+      "type": "Avatar",
+      "slug": "alp_deathspeaker_b_s",
+      "totalPlays": 131,
+      "totalWins": 80,
+      "totalLosses": 49,
+      "totalDraws": 2,
+      "winRate": 0.62,
+      "formats": {
+        "constructed": {
+          "plays": 131,
+          "wins": 80,
+          "losses": 49,
+          "draws": 2,
+          "winRate": 0.6201550387596899
+        }
+      }
+    },
+    "Arid Desert": {
+      "cardId": 346,
+      "type": "Site",
+      "slug": "alp_arid_desert_b_s",
+      "totalPlays": 132,
+      "totalWins": 69,
+      "totalLosses": 62,
+      "totalDraws": 1,
+      "winRate": 0.527,
+      "formats": {
+        "constructed": {
+          "plays": 130,
+          "wins": 68,
+          "losses": 61,
+          "draws": 1,
+          "winRate": 0.5271317829457365
+        },
+        "sealed": {
+          "plays": 2,
+          "wins": 1,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Lugbog Cat": {
+      "cardId": 513,
+      "type": "Minion",
+      "slug": "art_lugbog_cat_b_s",
+      "totalPlays": 130,
+      "totalWins": 70,
+      "totalLosses": 58,
+      "totalDraws": 2,
+      "winRate": 0.547,
+      "formats": {
+        "constructed": {
+          "plays": 130,
+          "wins": 70,
+          "losses": 58,
+          "draws": 2,
+          "winRate": 0.546875
+        }
+      }
+    },
+    "Persecutor": {
+      "cardId": 974,
+      "type": "Avatar",
+      "slug": "got-persecutor-b-s",
+      "totalPlays": 132,
+      "totalWins": 52,
+      "totalLosses": 79,
+      "totalDraws": 1,
+      "winRate": 0.397,
+      "formats": {
+        "constructed": {
+          "plays": 130,
+          "wins": 51,
+          "losses": 78,
+          "draws": 1,
+          "winRate": 0.3953488372093023
+        },
+        "sealed": {
+          "plays": 2,
+          "wins": 1,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Open Mausoleum": {
+      "cardId": 960,
+      "type": "Site",
+      "slug": "got-open_mausoleum-b-s",
+      "totalPlays": 131,
+      "totalWins": 70,
+      "totalLosses": 58,
+      "totalDraws": 3,
+      "winRate": 0.547,
+      "formats": {
+        "constructed": {
+          "plays": 125,
+          "wins": 67,
+          "losses": 55,
+          "draws": 3,
+          "winRate": 0.5491803278688525
+        },
+        "sealed": {
+          "plays": 4,
+          "wins": 2,
+          "losses": 2,
+          "draws": 0,
+          "winRate": 0.5
+        },
+        "draft": {
+          "plays": 2,
+          "wins": 1,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Bury": {
+      "cardId": 119,
+      "type": "Magic",
+      "slug": "alp_bury_b_s",
+      "totalPlays": 126,
+      "totalWins": 54,
+      "totalLosses": 67,
+      "totalDraws": 5,
+      "winRate": 0.446,
+      "formats": {
+        "constructed": {
+          "plays": 124,
+          "wins": 53,
+          "losses": 66,
+          "draws": 5,
+          "winRate": 0.44537815126050423
+        },
+        "sealed": {
+          "plays": 2,
+          "wins": 1,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Savior": {
+      "cardId": 1007,
+      "type": "Avatar",
+      "slug": "got-savior-b-s",
+      "totalPlays": 126,
+      "totalWins": 72,
+      "totalLosses": 54,
+      "totalDraws": 0,
+      "winRate": 0.571,
+      "formats": {
+        "constructed": {
+          "plays": 122,
+          "wins": 72,
+          "losses": 50,
+          "draws": 0,
+          "winRate": 0.5901639344262295
+        },
+        "sealed": {
+          "plays": 2,
+          "wins": 0,
+          "losses": 2,
+          "draws": 0,
+          "winRate": 0
+        },
+        "draft": {
+          "plays": 2,
+          "wins": 0,
+          "losses": 2,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Thin Ice": {
+      "cardId": 1066,
+      "type": "Site",
+      "slug": "got-thin_ice-b-s",
+      "totalPlays": 124,
+      "totalWins": 69,
+      "totalLosses": 54,
+      "totalDraws": 1,
+      "winRate": 0.561,
+      "formats": {
+        "constructed": {
+          "plays": 122,
+          "wins": 67,
+          "losses": 54,
+          "draws": 1,
+          "winRate": 0.5537190082644629
+        },
+        "sealed": {
+          "plays": 2,
+          "wins": 2,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "Apprentice Wizard": {
+      "cardId": 1,
+      "type": "Minion",
+      "slug": "alp_apprentice_wizard_b_s",
+      "totalPlays": 121,
+      "totalWins": 71,
+      "totalLosses": 48,
+      "totalDraws": 2,
+      "winRate": 0.597,
+      "formats": {
+        "constructed": {
+          "plays": 121,
+          "wins": 71,
+          "losses": 48,
+          "draws": 2,
+          "winRate": 0.5966386554621849
+        }
+      }
+    },
+    "Sorcerer": {
+      "cardId": 403,
+      "type": "Avatar",
+      "slug": "alp_sorcerer_b_s",
+      "totalPlays": 121,
+      "totalWins": 49,
+      "totalLosses": 70,
+      "totalDraws": 1,
+      "winRate": 0.412,
+      "formats": {
+        "constructed": {
+          "plays": 120,
+          "wins": 48,
+          "losses": 70,
+          "draws": 1,
+          "winRate": 0.4067796610169492
+        },
+        "draft": {
+          "plays": 1,
+          "wins": 1,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "Waveshaper": {
+      "cardId": 409,
+      "type": "Avatar",
+      "slug": "bet_waveshaper_b_s",
+      "totalPlays": 122,
+      "totalWins": 68,
+      "totalLosses": 53,
+      "totalDraws": 1,
+      "winRate": 0.562,
+      "formats": {
+        "constructed": {
+          "plays": 120,
+          "wins": 68,
+          "losses": 51,
+          "draws": 1,
+          "winRate": 0.5714285714285714
+        },
+        "sealed": {
+          "plays": 2,
+          "wins": 0,
+          "losses": 2,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Daperyll Vampire": {
+      "cardId": 5,
+      "type": "Minion",
+      "slug": "alp_daperyll_vampire_b_s",
+      "totalPlays": 119,
+      "totalWins": 72,
+      "totalLosses": 45,
+      "totalDraws": 2,
+      "winRate": 0.615,
+      "formats": {
+        "constructed": {
+          "plays": 119,
+          "wins": 72,
+          "losses": 45,
+          "draws": 2,
+          "winRate": 0.6153846153846154
+        }
+      }
+    },
+    "Forsaken Crypt": {
+      "cardId": 827,
+      "type": "Site",
+      "slug": "got-forsaken_crypt-b-s",
+      "totalPlays": 120,
+      "totalWins": 54,
+      "totalLosses": 64,
+      "totalDraws": 2,
+      "winRate": 0.458,
+      "formats": {
+        "constructed": {
+          "plays": 119,
+          "wins": 54,
+          "losses": 63,
+          "draws": 2,
+          "winRate": 0.46153846153846156
+        },
+        "draft": {
+          "plays": 1,
+          "wins": 0,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Red Desert": {
+      "cardId": 349,
+      "type": "Site",
+      "slug": "alp_red_desert_b_s",
+      "totalPlays": 119,
+      "totalWins": 68,
+      "totalLosses": 50,
+      "totalDraws": 1,
+      "winRate": 0.576,
+      "formats": {
+        "constructed": {
+          "plays": 117,
+          "wins": 67,
+          "losses": 49,
+          "draws": 1,
+          "winRate": 0.5775862068965517
+        },
+        "sealed": {
+          "plays": 2,
+          "wins": 1,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "War Horse": {
+      "cardId": 624,
+      "type": "Minion",
+      "slug": "art_war_horse_b_s",
+      "totalPlays": 116,
+      "totalWins": 59,
+      "totalLosses": 56,
+      "totalDraws": 1,
+      "winRate": 0.513,
+      "formats": {
+        "constructed": {
+          "plays": 115,
+          "wins": 59,
+          "losses": 55,
+          "draws": 1,
+          "winRate": 0.5175438596491229
+        },
+        "draft": {
+          "plays": 1,
+          "wins": 0,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Valley of Delight": {
+      "cardId": 615,
+      "type": "Site",
+      "slug": "art_valley_of_delight_b_s",
+      "totalPlays": 115,
+      "totalWins": 65,
+      "totalLosses": 49,
+      "totalDraws": 1,
+      "winRate": 0.57,
+      "formats": {
+        "constructed": {
+          "plays": 113,
+          "wins": 64,
+          "losses": 48,
+          "draws": 1,
+          "winRate": 0.5714285714285714
+        },
+        "sealed": {
+          "plays": 2,
+          "wins": 1,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Quarrelsome Kobolds": {
+      "cardId": 165,
+      "type": "Minion",
+      "slug": "alp_quarrelsome_kobolds_b_s",
+      "totalPlays": 113,
+      "totalWins": 60,
+      "totalLosses": 52,
+      "totalDraws": 1,
+      "winRate": 0.536,
+      "formats": {
+        "constructed": {
+          "plays": 113,
+          "wins": 60,
+          "losses": 52,
+          "draws": 1,
+          "winRate": 0.5357142857142857
+        }
+      }
+    },
+    "River of Blood": {
+      "cardId": 660,
+      "type": "Site",
+      "slug": "pro-river_of_blood-d-s",
+      "totalPlays": 113,
+      "totalWins": 55,
+      "totalLosses": 56,
+      "totalDraws": 2,
+      "winRate": 0.495,
+      "formats": {
+        "constructed": {
+          "plays": 113,
+          "wins": 55,
+          "losses": 56,
+          "draws": 2,
+          "winRate": 0.4954954954954955
+        }
+      }
+    },
+    "Observatory": {
+      "cardId": 331,
+      "type": "Site",
+      "slug": "alp_observatory_b_s",
+      "totalPlays": 112,
+      "totalWins": 52,
+      "totalLosses": 59,
+      "totalDraws": 0,
+      "winRate": 0.468,
+      "formats": {
+        "constructed": {
+          "plays": 112,
+          "wins": 52,
+          "losses": 59,
+          "draws": 0,
+          "winRate": 0.46846846846846846
+        }
+      }
+    },
+    "Common Sense": {
+      "cardId": 122,
+      "type": "Magic",
+      "slug": "alp_common_sense_b_s",
+      "totalPlays": 111,
+      "totalWins": 50,
+      "totalLosses": 58,
+      "totalDraws": 3,
+      "winRate": 0.463,
+      "formats": {
+        "constructed": {
+          "plays": 111,
+          "wins": 50,
+          "losses": 58,
+          "draws": 3,
+          "winRate": 0.46296296296296297
+        }
+      }
+    },
+    "Animist": {
+      "cardId": 686,
+      "type": "Avatar",
+      "slug": "got-animist-b-s",
+      "totalPlays": 110,
+      "totalWins": 44,
+      "totalLosses": 64,
+      "totalDraws": 2,
+      "winRate": 0.407,
+      "formats": {
+        "constructed": {
+          "plays": 110,
+          "wins": 44,
+          "losses": 64,
+          "draws": 2,
+          "winRate": 0.4074074074074074
+        }
+      }
+    },
+    "Land Surveyor": {
+      "cardId": 89,
+      "type": "Minion",
+      "slug": "alp_land_surveyor_b_s",
+      "totalPlays": 112,
+      "totalWins": 65,
+      "totalLosses": 44,
+      "totalDraws": 3,
+      "winRate": 0.596,
+      "formats": {
+        "constructed": {
+          "plays": 110,
+          "wins": 63,
+          "losses": 44,
+          "draws": 3,
+          "winRate": 0.5887850467289719
+        },
+        "sealed": {
+          "plays": 2,
+          "wins": 2,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "Molten Maar": {
+      "cardId": 933,
+      "type": "Site",
+      "slug": "got-molten_maar-b-s",
+      "totalPlays": 111,
+      "totalWins": 47,
+      "totalLosses": 61,
+      "totalDraws": 3,
+      "winRate": 0.435,
+      "formats": {
+        "constructed": {
+          "plays": 109,
+          "wins": 46,
+          "losses": 60,
+          "draws": 3,
+          "winRate": 0.4339622641509434
+        },
+        "sealed": {
+          "plays": 2,
+          "wins": 1,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Wuthering Heights": {
+      "cardId": 1097,
+      "type": "Site",
+      "slug": "got-wuthering_heights-b-s",
+      "totalPlays": 108,
+      "totalWins": 53,
+      "totalLosses": 54,
+      "totalDraws": 1,
+      "winRate": 0.495,
+      "formats": {
+        "constructed": {
+          "plays": 108,
+          "wins": 53,
+          "losses": 54,
+          "draws": 1,
+          "winRate": 0.4953271028037383
+        }
+      }
+    },
+    "Autumn River": {
+      "cardId": 355,
+      "type": "Site",
+      "slug": "alp_autumn_river_b_s",
+      "totalPlays": 106,
+      "totalWins": 55,
+      "totalLosses": 50,
+      "totalDraws": 1,
+      "winRate": 0.524,
+      "formats": {
+        "constructed": {
+          "plays": 104,
+          "wins": 55,
+          "losses": 48,
+          "draws": 1,
+          "winRate": 0.5339805825242718
+        },
+        "sealed": {
+          "plays": 2,
+          "wins": 0,
+          "losses": 2,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Perilous Bridge": {
+      "cardId": 532,
+      "type": "Site",
+      "slug": "art_perilous_bridge_b_s",
+      "totalPlays": 102,
+      "totalWins": 52,
+      "totalLosses": 50,
+      "totalDraws": 0,
+      "winRate": 0.51,
+      "formats": {
+        "constructed": {
+          "plays": 102,
+          "wins": 52,
+          "losses": 50,
+          "draws": 0,
+          "winRate": 0.5098039215686274
+        }
+      }
+    },
+    "Ghoul": {
+      "cardId": 836,
+      "type": "Minion",
+      "slug": "got-ghoul-b-s",
+      "totalPlays": 105,
+      "totalWins": 50,
+      "totalLosses": 53,
+      "totalDraws": 2,
+      "winRate": 0.485,
+      "formats": {
+        "constructed": {
+          "plays": 102,
+          "wins": 49,
+          "losses": 51,
+          "draws": 2,
+          "winRate": 0.49
+        },
+        "sealed": {
+          "plays": 2,
+          "wins": 1,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.5
+        },
+        "draft": {
+          "plays": 1,
+          "wins": 0,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Saracen Raiders": {
+      "cardId": 552,
+      "type": "Minion",
+      "slug": "art_saracen_raiders_b_s",
+      "totalPlays": 101,
+      "totalWins": 61,
+      "totalLosses": 39,
+      "totalDraws": 1,
+      "winRate": 0.61,
+      "formats": {
+        "constructed": {
+          "plays": 101,
+          "wins": 61,
+          "losses": 39,
+          "draws": 1,
+          "winRate": 0.61
+        }
+      }
+    },
+    "Vast Desert": {
+      "cardId": 1084,
+      "type": "Site",
+      "slug": "got-vast_desert-b-s",
+      "totalPlays": 108,
+      "totalWins": 48,
+      "totalLosses": 59,
+      "totalDraws": 1,
+      "winRate": 0.449,
+      "formats": {
+        "constructed": {
+          "plays": 101,
+          "wins": 47,
+          "losses": 53,
+          "draws": 1,
+          "winRate": 0.47
+        },
+        "sealed": {
+          "plays": 6,
+          "wins": 1,
+          "losses": 5,
+          "draws": 0,
+          "winRate": 0.16666666666666666
+        },
+        "draft": {
+          "plays": 1,
+          "wins": 0,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Grandmaster Wizard": {
+      "cardId": 8,
+      "type": "Minion",
+      "slug": "alp_grandmaster_wizard_b_s",
+      "totalPlays": 101,
+      "totalWins": 64,
+      "totalLosses": 35,
+      "totalDraws": 2,
+      "winRate": 0.646,
+      "formats": {
+        "constructed": {
+          "plays": 101,
+          "wins": 64,
+          "losses": 35,
+          "draws": 2,
+          "winRate": 0.6464646464646465
+        }
+      }
+    },
+    "Spring River": {
+      "cardId": 360,
+      "type": "Site",
+      "slug": "alp_spring_river_b_s",
+      "totalPlays": 102,
+      "totalWins": 58,
+      "totalLosses": 42,
+      "totalDraws": 2,
+      "winRate": 0.58,
+      "formats": {
+        "constructed": {
+          "plays": 100,
+          "wins": 56,
+          "losses": 42,
+          "draws": 2,
+          "winRate": 0.5714285714285714
+        },
+        "sealed": {
+          "plays": 2,
+          "wins": 2,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "Riptide": {
+      "cardId": 260,
+      "type": "Magic",
+      "slug": "bet_riptide_b_s",
+      "totalPlays": 100,
+      "totalWins": 53,
+      "totalLosses": 46,
+      "totalDraws": 1,
+      "winRate": 0.535,
+      "formats": {
+        "constructed": {
+          "plays": 100,
+          "wins": 53,
+          "losses": 46,
+          "draws": 1,
+          "winRate": 0.5353535353535354
+        }
+      }
+    },
+    "Summoning Sphere": {
+      "cardId": 68,
+      "type": "Aura",
+      "slug": "alp_summoning_sphere_b_s",
+      "totalPlays": 99,
+      "totalWins": 46,
+      "totalLosses": 51,
+      "totalDraws": 2,
+      "winRate": 0.474,
+      "formats": {
+        "constructed": {
+          "plays": 99,
+          "wins": 46,
+          "losses": 51,
+          "draws": 2,
+          "winRate": 0.4742268041237113
+        }
+      }
+    },
+    "Croaking Swamp": {
+      "cardId": 761,
+      "type": "Site",
+      "slug": "got-croaking_swamp-b-s",
+      "totalPlays": 101,
+      "totalWins": 54,
+      "totalLosses": 47,
+      "totalDraws": 0,
+      "winRate": 0.535,
+      "formats": {
+        "constructed": {
+          "plays": 97,
+          "wins": 53,
+          "losses": 44,
+          "draws": 0,
+          "winRate": 0.5463917525773195
+        },
+        "sealed": {
+          "plays": 4,
+          "wins": 1,
+          "losses": 3,
+          "draws": 0,
+          "winRate": 0.25
+        }
+      }
+    },
+    "Drown": {
+      "cardId": 249,
+      "type": "Magic",
+      "slug": "alp_drown_b_s",
+      "totalPlays": 96,
+      "totalWins": 50,
+      "totalLosses": 44,
+      "totalDraws": 2,
+      "winRate": 0.532,
+      "formats": {
+        "constructed": {
+          "plays": 96,
+          "wins": 50,
+          "losses": 44,
+          "draws": 2,
+          "winRate": 0.5319148936170213
+        }
+      }
+    },
+    "Forlorn Keep": {
+      "cardId": 825,
+      "type": "Site",
+      "slug": "got-forlorn_keep-b-s",
+      "totalPlays": 94,
+      "totalWins": 48,
+      "totalLosses": 46,
+      "totalDraws": 0,
+      "winRate": 0.511,
+      "formats": {
+        "constructed": {
+          "plays": 94,
+          "wins": 48,
+          "losses": 46,
+          "draws": 0,
+          "winRate": 0.5106382978723404
+        }
+      }
+    },
+    "Landmass": {
+      "cardId": 904,
+      "type": "Magic",
+      "slug": "got-landmass-b-s",
+      "totalPlays": 94,
+      "totalWins": 47,
+      "totalLosses": 47,
+      "totalDraws": 0,
+      "winRate": 0.5,
+      "formats": {
+        "constructed": {
+          "plays": 94,
+          "wins": 47,
+          "losses": 47,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Phase Assassin": {
+      "cardId": 28,
+      "type": "Minion",
+      "slug": "bet_phase_assassin_b_f",
+      "totalPlays": 93,
+      "totalWins": 41,
+      "totalLosses": 48,
+      "totalDraws": 2,
+      "winRate": 0.461,
+      "formats": {
+        "constructed": {
+          "plays": 93,
+          "wins": 41,
+          "losses": 48,
+          "draws": 2,
+          "winRate": 0.4606741573033708
+        }
+      }
+    },
+    "Sinkhole": {
+      "cardId": 389,
+      "type": "Site",
+      "slug": "alp_sinkhole_b_s",
+      "totalPlays": 90,
+      "totalWins": 44,
+      "totalLosses": 44,
+      "totalDraws": 2,
+      "winRate": 0.5,
+      "formats": {
+        "constructed": {
+          "plays": 90,
+          "wins": 44,
+          "losses": 44,
+          "draws": 2,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Root Spider": {
+      "cardId": 100,
+      "type": "Minion",
+      "slug": "alp_root_spider_b_s",
+      "totalPlays": 90,
+      "totalWins": 44,
+      "totalLosses": 45,
+      "totalDraws": 1,
+      "winRate": 0.494,
+      "formats": {
+        "constructed": {
+          "plays": 90,
+          "wins": 44,
+          "losses": 45,
+          "draws": 1,
+          "winRate": 0.4943820224719101
+        }
+      }
+    },
+    "Redcap Powries": {
+      "cardId": 545,
+      "type": "Minion",
+      "slug": "art_redcap_powries_b_s",
+      "totalPlays": 89,
+      "totalWins": 55,
+      "totalLosses": 34,
+      "totalDraws": 0,
+      "winRate": 0.618,
+      "formats": {
+        "constructed": {
+          "plays": 89,
+          "wins": 55,
+          "losses": 34,
+          "draws": 0,
+          "winRate": 0.6179775280898876
+        }
+      }
+    },
+    "Coy Nixie": {
+      "cardId": 453,
+      "type": "Minion",
+      "slug": "art_coy_nixie_b_s",
+      "totalPlays": 89,
+      "totalWins": 52,
+      "totalLosses": 37,
+      "totalDraws": 0,
+      "winRate": 0.584,
+      "formats": {
+        "constructed": {
+          "plays": 89,
+          "wins": 52,
+          "losses": 37,
+          "draws": 0,
+          "winRate": 0.5842696629213483
+        }
+      }
+    },
+    "Remote Desert": {
+      "cardId": 350,
+      "type": "Site",
+      "slug": "alp_remote_desert_b_s",
+      "totalPlays": 91,
+      "totalWins": 49,
+      "totalLosses": 41,
+      "totalDraws": 1,
+      "winRate": 0.544,
+      "formats": {
+        "constructed": {
+          "plays": 89,
+          "wins": 47,
+          "losses": 41,
+          "draws": 1,
+          "winRate": 0.5340909090909091
+        },
+        "sealed": {
+          "plays": 2,
+          "wins": 2,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "Morgana le Fay": {
+      "cardId": 523,
+      "type": "Minion",
+      "slug": "art_morgana_le_fay_b_s",
+      "totalPlays": 88,
+      "totalWins": 45,
+      "totalLosses": 42,
+      "totalDraws": 1,
+      "winRate": 0.517,
+      "formats": {
+        "constructed": {
+          "plays": 88,
+          "wins": 45,
+          "losses": 42,
+          "draws": 1,
+          "winRate": 0.5172413793103449
+        }
+      }
+    },
+    "Lacuna Entity": {
+      "cardId": 903,
+      "type": "Minion",
+      "slug": "got-lacuna_entity-b-s",
+      "totalPlays": 88,
+      "totalWins": 51,
+      "totalLosses": 37,
+      "totalDraws": 0,
+      "winRate": 0.58,
+      "formats": {
+        "constructed": {
+          "plays": 88,
+          "wins": 51,
+          "losses": 37,
+          "draws": 0,
+          "winRate": 0.5795454545454546
+        }
+      }
+    },
+    "Kiss of Death": {
+      "cardId": 899,
+      "type": "Magic",
+      "slug": "got-kiss_of_death-b-s",
+      "totalPlays": 90,
+      "totalWins": 44,
+      "totalLosses": 43,
+      "totalDraws": 3,
+      "winRate": 0.506,
+      "formats": {
+        "constructed": {
+          "plays": 88,
+          "wins": 43,
+          "losses": 42,
+          "draws": 3,
+          "winRate": 0.5058823529411764
+        },
+        "sealed": {
+          "plays": 2,
+          "wins": 1,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Highland Princess": {
+      "cardId": 15,
+      "type": "Minion",
+      "slug": "alp_highland_princess_b_s",
+      "totalPlays": 88,
+      "totalWins": 49,
+      "totalLosses": 38,
+      "totalDraws": 1,
+      "winRate": 0.563,
+      "formats": {
+        "constructed": {
+          "plays": 88,
+          "wins": 49,
+          "losses": 38,
+          "draws": 1,
+          "winRate": 0.5632183908045977
+        }
+      }
+    },
+    "Peculiar Port": {
+      "cardId": 972,
+      "type": "Site",
+      "slug": "got-peculiar_port-b-s",
+      "totalPlays": 88,
+      "totalWins": 50,
+      "totalLosses": 38,
+      "totalDraws": 0,
+      "winRate": 0.568,
+      "formats": {
+        "constructed": {
+          "plays": 88,
+          "wins": 50,
+          "losses": 38,
+          "draws": 0,
+          "winRate": 0.5681818181818182
+        }
+      }
+    },
+    "Earthquake": {
+      "cardId": 126,
+      "type": "Magic",
+      "slug": "alp_earthquake_b_s",
+      "totalPlays": 87,
+      "totalWins": 53,
+      "totalLosses": 34,
+      "totalDraws": 0,
+      "winRate": 0.609,
+      "formats": {
+        "constructed": {
+          "plays": 87,
+          "wins": 53,
+          "losses": 34,
+          "draws": 0,
+          "winRate": 0.6091954022988506
+        }
+      }
+    },
+    "Infiltrate": {
+      "cardId": 190,
+      "type": "Magic",
+      "slug": "alp_infiltrate_b_s",
+      "totalPlays": 86,
+      "totalWins": 43,
+      "totalLosses": 41,
+      "totalDraws": 2,
+      "winRate": 0.512,
+      "formats": {
+        "constructed": {
+          "plays": 86,
+          "wins": 43,
+          "losses": 41,
+          "draws": 2,
+          "winRate": 0.5119047619047619
+        }
+      }
+    },
+    "Mirror Realm": {
+      "cardId": 384,
+      "type": "Site",
+      "slug": "alp_mirror_realm_b_s",
+      "totalPlays": 86,
+      "totalWins": 36,
+      "totalLosses": 50,
+      "totalDraws": 0,
+      "winRate": 0.419,
+      "formats": {
+        "constructed": {
+          "plays": 86,
+          "wins": 36,
+          "losses": 50,
+          "draws": 0,
+          "winRate": 0.4186046511627907
+        }
+      }
+    },
+    "Kelp Cavern": {
+      "cardId": 500,
+      "type": "Site",
+      "slug": "art_kelp_cavern_b_s",
+      "totalPlays": 86,
+      "totalWins": 52,
+      "totalLosses": 34,
+      "totalDraws": 0,
+      "winRate": 0.605,
+      "formats": {
+        "constructed": {
+          "plays": 86,
+          "wins": 52,
+          "losses": 34,
+          "draws": 0,
+          "winRate": 0.6046511627906976
+        }
+      }
+    },
+    "Browse": {
+      "cardId": 46,
+      "type": "Magic",
+      "slug": "alp_browse_b_s",
+      "totalPlays": 85,
+      "totalWins": 48,
+      "totalLosses": 34,
+      "totalDraws": 2,
+      "winRate": 0.585,
+      "formats": {
+        "constructed": {
+          "plays": 85,
+          "wins": 48,
+          "losses": 34,
+          "draws": 2,
+          "winRate": 0.5853658536585366
+        }
+      }
+    },
+    "Autumn Unicorn": {
+      "cardId": 75,
+      "type": "Minion",
+      "slug": "alp_autumn_unicorn_b_f",
+      "totalPlays": 85,
+      "totalWins": 50,
+      "totalLosses": 34,
+      "totalDraws": 1,
+      "winRate": 0.595,
+      "formats": {
+        "constructed": {
+          "plays": 85,
+          "wins": 50,
+          "losses": 34,
+          "draws": 1,
+          "winRate": 0.5952380952380952
+        }
+      }
+    },
+    "Blessed Village": {
+      "cardId": 721,
+      "type": "Site",
+      "slug": "got-blessed_village-b-s",
+      "totalPlays": 88,
+      "totalWins": 54,
+      "totalLosses": 33,
+      "totalDraws": 1,
+      "winRate": 0.621,
+      "formats": {
+        "constructed": {
+          "plays": 84,
+          "wins": 52,
+          "losses": 31,
+          "draws": 1,
+          "winRate": 0.6265060240963856
+        },
+        "sealed": {
+          "plays": 4,
+          "wins": 2,
+          "losses": 2,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Pudge Butcher": {
+      "cardId": 98,
+      "type": "Minion",
+      "slug": "alp_pudge_butcher_b_s",
+      "totalPlays": 84,
+      "totalWins": 42,
+      "totalLosses": 39,
+      "totalDraws": 3,
+      "winRate": 0.519,
+      "formats": {
+        "constructed": {
+          "plays": 83,
+          "wins": 42,
+          "losses": 38,
+          "draws": 3,
+          "winRate": 0.525
+        },
+        "draft": {
+          "plays": 1,
+          "wins": 0,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Gift of the Wolf": {
+      "cardId": 841,
+      "type": "Magic",
+      "slug": "got-gift_of_the_wolf-b-s",
+      "totalPlays": 86,
+      "totalWins": 46,
+      "totalLosses": 38,
+      "totalDraws": 2,
+      "winRate": 0.548,
+      "formats": {
+        "constructed": {
+          "plays": 83,
+          "wins": 43,
+          "losses": 38,
+          "draws": 2,
+          "winRate": 0.5308641975308642
+        },
+        "sealed": {
+          "plays": 3,
+          "wins": 3,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "Forsaken": {
+      "cardId": 826,
+      "type": "Minion",
+      "slug": "got-forsaken-b-s",
+      "totalPlays": 86,
+      "totalWins": 32,
+      "totalLosses": 52,
+      "totalDraws": 2,
+      "winRate": 0.381,
+      "formats": {
+        "constructed": {
+          "plays": 83,
+          "wins": 31,
+          "losses": 50,
+          "draws": 2,
+          "winRate": 0.38271604938271603
+        },
+        "sealed": {
+          "plays": 3,
+          "wins": 1,
+          "losses": 2,
+          "draws": 0,
+          "winRate": 0.3333333333333333
+        }
+      }
+    },
+    "The Colour Out of Space": {
+      "cardId": 370,
+      "type": "Site",
+      "slug": "alp_the_colour_out_of_space_b_s",
+      "totalPlays": 83,
+      "totalWins": 38,
+      "totalLosses": 45,
+      "totalDraws": 0,
+      "winRate": 0.458,
+      "formats": {
+        "constructed": {
+          "plays": 83,
+          "wins": 38,
+          "losses": 45,
+          "draws": 0,
+          "winRate": 0.4578313253012048
+        }
+      }
+    },
+    "Babbling Brook": {
+      "cardId": 424,
+      "type": "Site",
+      "slug": "art_babbling_brook_b_s",
+      "totalPlays": 82,
+      "totalWins": 46,
+      "totalLosses": 35,
+      "totalDraws": 1,
+      "winRate": 0.568,
+      "formats": {
+        "constructed": {
+          "plays": 82,
+          "wins": 46,
+          "losses": 35,
+          "draws": 1,
+          "winRate": 0.5679012345679012
+        }
+      }
+    },
+    "Sturmgeist": {
+      "cardId": 1046,
+      "type": "Minion",
+      "slug": "got-sturmgeist-b-s",
+      "totalPlays": 82,
+      "totalWins": 41,
+      "totalLosses": 41,
+      "totalDraws": 0,
+      "winRate": 0.5,
+      "formats": {
+        "constructed": {
+          "plays": 81,
+          "wins": 41,
+          "losses": 40,
+          "draws": 0,
+          "winRate": 0.5061728395061729
+        },
+        "sealed": {
+          "plays": 1,
+          "wins": 0,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Colicky Dragonettes": {
+      "cardId": 148,
+      "type": "Minion",
+      "slug": "alp_colicky_dragonettes_b_s",
+      "totalPlays": 81,
+      "totalWins": 43,
+      "totalLosses": 38,
+      "totalDraws": 0,
+      "winRate": 0.531,
+      "formats": {
+        "constructed": {
+          "plays": 81,
+          "wins": 43,
+          "losses": 38,
+          "draws": 0,
+          "winRate": 0.5308641975308642
+        }
+      }
+    },
+    "Flamecaller": {
+      "cardId": 408,
+      "type": "Avatar",
+      "slug": "bet_flamecaller_b_s",
+      "totalPlays": 81,
+      "totalWins": 41,
+      "totalLosses": 40,
+      "totalDraws": 0,
+      "winRate": 0.506,
+      "formats": {
+        "constructed": {
+          "plays": 81,
+          "wins": 41,
+          "losses": 40,
+          "draws": 0,
+          "winRate": 0.5061728395061729
+        }
+      }
+    },
+    "Aqueduct": {
+      "cardId": 364,
+      "type": "Site",
+      "slug": "alp_aqueduct_b_s",
+      "totalPlays": 81,
+      "totalWins": 43,
+      "totalLosses": 37,
+      "totalDraws": 1,
+      "winRate": 0.538,
+      "formats": {
+        "constructed": {
+          "plays": 81,
+          "wins": 43,
+          "losses": 37,
+          "draws": 1,
+          "winRate": 0.5375
+        }
+      }
+    },
+    "Overflow": {
+      "cardId": 967,
+      "type": "Magic",
+      "slug": "got-overflow-b-s",
+      "totalPlays": 82,
+      "totalWins": 41,
+      "totalLosses": 40,
+      "totalDraws": 1,
+      "winRate": 0.506,
+      "formats": {
+        "constructed": {
+          "plays": 80,
+          "wins": 40,
+          "losses": 39,
+          "draws": 1,
+          "winRate": 0.5063291139240507
+        },
+        "sealed": {
+          "plays": 2,
+          "wins": 1,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Searing Truth": {
+      "cardId": 1013,
+      "type": "Magic",
+      "slug": "got-searing_truth-b-s",
+      "totalPlays": 79,
+      "totalWins": 28,
+      "totalLosses": 50,
+      "totalDraws": 1,
+      "winRate": 0.359,
+      "formats": {
+        "constructed": {
+          "plays": 79,
+          "wins": 28,
+          "losses": 50,
+          "draws": 1,
+          "winRate": 0.358974358974359
+        }
+      }
+    },
+    "Glastonbury Tor": {
+      "cardId": 477,
+      "type": "Site",
+      "slug": "art_glastonbury_tor_b_s",
+      "totalPlays": 79,
+      "totalWins": 38,
+      "totalLosses": 39,
+      "totalDraws": 2,
+      "winRate": 0.494,
+      "formats": {
+        "constructed": {
+          "plays": 79,
+          "wins": 38,
+          "losses": 39,
+          "draws": 2,
+          "winRate": 0.4935064935064935
+        }
+      }
+    },
+    "Elder Ruins": {
+      "cardId": 799,
+      "type": "Site",
+      "slug": "got-elder_ruins-b-s",
+      "totalPlays": 79,
+      "totalWins": 43,
+      "totalLosses": 36,
+      "totalDraws": 0,
+      "winRate": 0.544,
+      "formats": {
+        "constructed": {
+          "plays": 79,
+          "wins": 43,
+          "losses": 36,
+          "draws": 0,
+          "winRate": 0.5443037974683544
+        }
+      }
+    },
+    "Horrible Hybrids": {
+      "cardId": 878,
+      "type": "Minion",
+      "slug": "got-horrible_hybrids-b-s",
+      "totalPlays": 80,
+      "totalWins": 44,
+      "totalLosses": 36,
+      "totalDraws": 0,
+      "winRate": 0.55,
+      "formats": {
+        "constructed": {
+          "plays": 78,
+          "wins": 44,
+          "losses": 34,
+          "draws": 0,
+          "winRate": 0.5641025641025641
+        },
+        "sealed": {
+          "plays": 2,
+          "wins": 0,
+          "losses": 2,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Pond": {
+      "cardId": 535,
+      "type": "Site",
+      "slug": "art_pond_b_s",
+      "totalPlays": 78,
+      "totalWins": 36,
+      "totalLosses": 40,
+      "totalDraws": 2,
+      "winRate": 0.474,
+      "formats": {
+        "constructed": {
+          "plays": 78,
+          "wins": 36,
+          "losses": 40,
+          "draws": 2,
+          "winRate": 0.47368421052631576
+        }
+      }
+    },
+    "Hotwheel": {
+      "cardId": 879,
+      "type": "Minion",
+      "slug": "got-hotwheel-b-s",
+      "totalPlays": 78,
+      "totalWins": 51,
+      "totalLosses": 26,
+      "totalDraws": 1,
+      "winRate": 0.662,
+      "formats": {
+        "constructed": {
+          "plays": 78,
+          "wins": 51,
+          "losses": 26,
+          "draws": 1,
+          "winRate": 0.6623376623376623
+        }
+      }
+    },
+    "Desert Bloom": {
+      "cardId": 779,
+      "type": "Site",
+      "slug": "got-desert_bloom-b-s",
+      "totalPlays": 86,
+      "totalWins": 36,
+      "totalLosses": 48,
+      "totalDraws": 2,
+      "winRate": 0.429,
+      "formats": {
+        "constructed": {
+          "plays": 78,
+          "wins": 33,
+          "losses": 43,
+          "draws": 2,
+          "winRate": 0.4342105263157895
+        },
+        "sealed": {
+          "plays": 8,
+          "wins": 3,
+          "losses": 5,
+          "draws": 0,
+          "winRate": 0.375
+        }
+      }
+    },
+    "Hellhounds": {
+      "cardId": 864,
+      "type": "Minion",
+      "slug": "got-hellhounds-b-s",
+      "totalPlays": 81,
+      "totalWins": 38,
+      "totalLosses": 42,
+      "totalDraws": 1,
+      "winRate": 0.475,
+      "formats": {
+        "constructed": {
+          "plays": 77,
+          "wins": 37,
+          "losses": 39,
+          "draws": 1,
+          "winRate": 0.4868421052631579
+        },
+        "sealed": {
+          "plays": 4,
+          "wins": 1,
+          "losses": 3,
+          "draws": 0,
+          "winRate": 0.25
+        }
+      }
+    },
+    "Undertow": {
+      "cardId": 363,
+      "type": "Site",
+      "slug": "alp_undertow_b_s",
+      "totalPlays": 77,
+      "totalWins": 43,
+      "totalLosses": 33,
+      "totalDraws": 1,
+      "winRate": 0.566,
+      "formats": {
+        "constructed": {
+          "plays": 77,
+          "wins": 43,
+          "losses": 33,
+          "draws": 1,
+          "winRate": 0.5657894736842105
+        }
+      }
+    },
+    "Amethyst Core": {
+      "cardId": 275,
+      "type": "Artifact",
+      "slug": "alp_amethyst_core_b_s",
+      "totalPlays": 76,
+      "totalWins": 31,
+      "totalLosses": 44,
+      "totalDraws": 1,
+      "winRate": 0.413,
+      "formats": {
+        "constructed": {
+          "plays": 76,
+          "wins": 31,
+          "losses": 44,
+          "draws": 1,
+          "winRate": 0.41333333333333333
+        }
+      }
+    },
+    "Philosopher's Stone": {
+      "cardId": 308,
+      "type": "Artifact",
+      "slug": "alp_philosophers_stone_b_s",
+      "totalPlays": 76,
+      "totalWins": 43,
+      "totalLosses": 33,
+      "totalDraws": 0,
+      "winRate": 0.566,
+      "formats": {
+        "constructed": {
+          "plays": 76,
+          "wins": 43,
+          "losses": 33,
+          "draws": 0,
+          "winRate": 0.5657894736842105
+        }
+      }
+    },
+    "Wasteland": {
+      "cardId": 414,
+      "type": "Site",
+      "slug": "bet_wasteland_dk_s",
+      "totalPlays": 89,
+      "totalWins": 39,
+      "totalLosses": 49,
+      "totalDraws": 1,
+      "winRate": 0.443,
+      "formats": {
+        "constructed": {
+          "plays": 76,
+          "wins": 35,
+          "losses": 40,
+          "draws": 1,
+          "winRate": 0.4666666666666667
+        },
+        "sealed": {
+          "plays": 11,
+          "wins": 3,
+          "losses": 8,
+          "draws": 0,
+          "winRate": 0.2727272727272727
+        },
+        "draft": {
+          "plays": 2,
+          "wins": 1,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Spire": {
+      "cardId": 411,
+      "type": "Site",
+      "slug": "bet_spire_dk_s",
+      "totalPlays": 89,
+      "totalWins": 48,
+      "totalLosses": 40,
+      "totalDraws": 1,
+      "winRate": 0.545,
+      "formats": {
+        "constructed": {
+          "plays": 76,
+          "wins": 41,
+          "losses": 34,
+          "draws": 1,
+          "winRate": 0.5466666666666666
+        },
+        "sealed": {
+          "plays": 11,
+          "wins": 6,
+          "losses": 5,
+          "draws": 0,
+          "winRate": 0.5454545454545454
+        },
+        "draft": {
+          "plays": 2,
+          "wins": 1,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Geomancer": {
+      "cardId": 407,
+      "type": "Avatar",
+      "slug": "bet_geomancer_b_s",
+      "totalPlays": 76,
+      "totalWins": 41,
+      "totalLosses": 34,
+      "totalDraws": 1,
+      "winRate": 0.547,
+      "formats": {
+        "constructed": {
+          "plays": 75,
+          "wins": 41,
+          "losses": 33,
+          "draws": 1,
+          "winRate": 0.5540540540540541
+        },
+        "draft": {
+          "plays": 1,
+          "wins": 0,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Funeral Pyre": {
+      "cardId": 475,
+      "type": "Site",
+      "slug": "art_funeral_pyre_b_s",
+      "totalPlays": 75,
+      "totalWins": 41,
+      "totalLosses": 33,
+      "totalDraws": 1,
+      "winRate": 0.554,
+      "formats": {
+        "constructed": {
+          "plays": 75,
+          "wins": 41,
+          "losses": 33,
+          "draws": 1,
+          "winRate": 0.5540540540540541
+        }
+      }
+    },
+    "Simple Village": {
+      "cardId": 344,
+      "type": "Site",
+      "slug": "alp_simple_village_b_s",
+      "totalPlays": 75,
+      "totalWins": 36,
+      "totalLosses": 37,
+      "totalDraws": 2,
+      "winRate": 0.493,
+      "formats": {
+        "constructed": {
+          "plays": 75,
+          "wins": 36,
+          "losses": 37,
+          "draws": 2,
+          "winRate": 0.4931506849315068
+        }
+      }
+    },
+    "Spore Spouts": {
+      "cardId": 1040,
+      "type": "Site",
+      "slug": "got-spore_spouts-b-s",
+      "totalPlays": 81,
+      "totalWins": 43,
+      "totalLosses": 36,
+      "totalDraws": 2,
+      "winRate": 0.544,
+      "formats": {
+        "constructed": {
+          "plays": 75,
+          "wins": 40,
+          "losses": 33,
+          "draws": 2,
+          "winRate": 0.547945205479452
+        },
+        "sealed": {
+          "plays": 4,
+          "wins": 2,
+          "losses": 2,
+          "draws": 0,
+          "winRate": 0.5
+        },
+        "draft": {
+          "plays": 2,
+          "wins": 1,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Fields of Phyxis": {
+      "cardId": 662,
+      "type": "Site",
+      "slug": "pro-fields_of_phyxis-d-s",
+      "totalPlays": 77,
+      "totalWins": 34,
+      "totalLosses": 42,
+      "totalDraws": 1,
+      "winRate": 0.447,
+      "formats": {
+        "constructed": {
+          "plays": 74,
+          "wins": 32,
+          "losses": 41,
+          "draws": 1,
+          "winRate": 0.4383561643835616
+        },
+        "sealed": {
+          "plays": 3,
+          "wins": 2,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.6666666666666666
+        }
+      }
+    },
+    "Headless Haunt": {
+      "cardId": 12,
+      "type": "Minion",
+      "slug": "alp_headless_haunt_b_s",
+      "totalPlays": 74,
+      "totalWins": 31,
+      "totalLosses": 42,
+      "totalDraws": 0,
+      "winRate": 0.425,
+      "formats": {
+        "constructed": {
+          "plays": 74,
+          "wins": 31,
+          "losses": 42,
+          "draws": 0,
+          "winRate": 0.4246575342465753
+        }
+      }
+    },
+    "Ironclad": {
+      "cardId": 893,
+      "type": "Avatar",
+      "slug": "got-ironclad-b-s",
+      "totalPlays": 74,
+      "totalWins": 26,
+      "totalLosses": 47,
+      "totalDraws": 1,
+      "winRate": 0.356,
+      "formats": {
+        "constructed": {
+          "plays": 74,
+          "wins": 26,
+          "losses": 47,
+          "draws": 1,
+          "winRate": 0.3561643835616438
+        }
+      }
+    },
+    "Bone Spear": {
+      "cardId": 727,
+      "type": "Magic",
+      "slug": "got-bone_spear-b-s",
+      "totalPlays": 79,
+      "totalWins": 41,
+      "totalLosses": 36,
+      "totalDraws": 2,
+      "winRate": 0.532,
+      "formats": {
+        "constructed": {
+          "plays": 73,
+          "wins": 38,
+          "losses": 33,
+          "draws": 2,
+          "winRate": 0.5352112676056338
+        },
+        "sealed": {
+          "plays": 6,
+          "wins": 3,
+          "losses": 3,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Summer River": {
+      "cardId": 361,
+      "type": "Site",
+      "slug": "alp_summer_river_b_s",
+      "totalPlays": 75,
+      "totalWins": 39,
+      "totalLosses": 34,
+      "totalDraws": 2,
+      "winRate": 0.534,
+      "formats": {
+        "constructed": {
+          "plays": 73,
+          "wins": 38,
+          "losses": 33,
+          "draws": 2,
+          "winRate": 0.5352112676056338
+        },
+        "sealed": {
+          "plays": 2,
+          "wins": 1,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Minor Explosion": {
+      "cardId": 195,
+      "type": "Magic",
+      "slug": "alp_minor_explosion_b_s",
+      "totalPlays": 72,
+      "totalWins": 37,
+      "totalLosses": 35,
+      "totalDraws": 0,
+      "winRate": 0.514,
+      "formats": {
+        "constructed": {
+          "plays": 72,
+          "wins": 37,
+          "losses": 35,
+          "draws": 0,
+          "winRate": 0.5138888888888888
+        }
+      }
+    },
+    "Oasis": {
+      "cardId": 366,
+      "type": "Site",
+      "slug": "alp_oasis_b_s",
+      "totalPlays": 72,
+      "totalWins": 37,
+      "totalLosses": 35,
+      "totalDraws": 0,
+      "winRate": 0.514,
+      "formats": {
+        "constructed": {
+          "plays": 72,
+          "wins": 37,
+          "losses": 35,
+          "draws": 0,
+          "winRate": 0.5138888888888888
+        }
+      }
+    },
+    "Algae Bloom": {
+      "cardId": 680,
+      "type": "Site",
+      "slug": "got-algae_bloom-b-s",
+      "totalPlays": 75,
+      "totalWins": 42,
+      "totalLosses": 32,
+      "totalDraws": 1,
+      "winRate": 0.568,
+      "formats": {
+        "constructed": {
+          "plays": 71,
+          "wins": 40,
+          "losses": 30,
+          "draws": 1,
+          "winRate": 0.5714285714285714
+        },
+        "sealed": {
+          "plays": 4,
+          "wins": 2,
+          "losses": 2,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Joyous Garde": {
+      "cardId": 497,
+      "type": "Site",
+      "slug": "art_joyous_garde_b_s",
+      "totalPlays": 72,
+      "totalWins": 37,
+      "totalLosses": 34,
+      "totalDraws": 1,
+      "winRate": 0.521,
+      "formats": {
+        "constructed": {
+          "plays": 71,
+          "wins": 36,
+          "losses": 34,
+          "draws": 1,
+          "winRate": 0.5142857142857142
+        },
+        "draft": {
+          "plays": 1,
+          "wins": 1,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "Pebbled Paths": {
+      "cardId": 529,
+      "type": "Site",
+      "slug": "art_pebbled_paths_b_s",
+      "totalPlays": 71,
+      "totalWins": 49,
+      "totalLosses": 22,
+      "totalDraws": 0,
+      "winRate": 0.69,
+      "formats": {
+        "constructed": {
+          "plays": 71,
+          "wins": 49,
+          "losses": 22,
+          "draws": 0,
+          "winRate": 0.6901408450704225
+        }
+      }
+    },
+    "Gibbous Nightgaunts": {
+      "cardId": 837,
+      "type": "Minion",
+      "slug": "got-gibbous_nightgaunts-b-s",
+      "totalPlays": 71,
+      "totalWins": 27,
+      "totalLosses": 43,
+      "totalDraws": 1,
+      "winRate": 0.386,
+      "formats": {
+        "constructed": {
+          "plays": 71,
+          "wins": 27,
+          "losses": 43,
+          "draws": 1,
+          "winRate": 0.38571428571428573
+        }
+      }
+    },
+    "Briar Patch": {
+      "cardId": 438,
+      "type": "Site",
+      "slug": "art_briar_patch_b_s",
+      "totalPlays": 70,
+      "totalWins": 34,
+      "totalLosses": 36,
+      "totalDraws": 0,
+      "winRate": 0.486,
+      "formats": {
+        "constructed": {
+          "plays": 70,
+          "wins": 34,
+          "losses": 36,
+          "draws": 0,
+          "winRate": 0.4857142857142857
+        }
+      }
+    },
+    "Twilight Bloom": {
+      "cardId": 1078,
+      "type": "Site",
+      "slug": "got-twilight_bloom-b-s",
+      "totalPlays": 75,
+      "totalWins": 31,
+      "totalLosses": 41,
+      "totalDraws": 3,
+      "winRate": 0.431,
+      "formats": {
+        "constructed": {
+          "plays": 70,
+          "wins": 30,
+          "losses": 37,
+          "draws": 3,
+          "winRate": 0.44776119402985076
+        },
+        "sealed": {
+          "plays": 5,
+          "wins": 1,
+          "losses": 4,
+          "draws": 0,
+          "winRate": 0.2
+        }
+      }
+    },
+    "Stinging Kelp": {
+      "cardId": 1044,
+      "type": "Site",
+      "slug": "got-stinging_kelp-b-s",
+      "totalPlays": 73,
+      "totalWins": 36,
+      "totalLosses": 37,
+      "totalDraws": 0,
+      "winRate": 0.493,
+      "formats": {
+        "constructed": {
+          "plays": 70,
+          "wins": 36,
+          "losses": 34,
+          "draws": 0,
+          "winRate": 0.5142857142857142
+        },
+        "sealed": {
+          "plays": 3,
+          "wins": 0,
+          "losses": 3,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Abaddon Succubus": {
+      "cardId": 670,
+      "type": "Minion",
+      "slug": "got-abaddon_succubus-b-s",
+      "totalPlays": 68,
+      "totalWins": 37,
+      "totalLosses": 31,
+      "totalDraws": 0,
+      "winRate": 0.544,
+      "formats": {
+        "constructed": {
+          "plays": 68,
+          "wins": 37,
+          "losses": 31,
+          "draws": 0,
+          "winRate": 0.5441176470588235
+        }
+      }
+    },
+    "Consecrated Ground": {
+      "cardId": 753,
+      "type": "Site",
+      "slug": "got-consecrated_ground-b-s",
+      "totalPlays": 69,
+      "totalWins": 37,
+      "totalLosses": 32,
+      "totalDraws": 0,
+      "winRate": 0.536,
+      "formats": {
+        "constructed": {
+          "plays": 68,
+          "wins": 37,
+          "losses": 31,
+          "draws": 0,
+          "winRate": 0.5441176470588235
+        },
+        "sealed": {
+          "plays": 1,
+          "wins": 0,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Wild Fanatic": {
+      "cardId": 1092,
+      "type": "Minion",
+      "slug": "got-wild_fanatic-b-s",
+      "totalPlays": 72,
+      "totalWins": 35,
+      "totalLosses": 37,
+      "totalDraws": 0,
+      "winRate": 0.486,
+      "formats": {
+        "constructed": {
+          "plays": 68,
+          "wins": 33,
+          "losses": 35,
+          "draws": 0,
+          "winRate": 0.4852941176470588
+        },
+        "sealed": {
+          "plays": 4,
+          "wins": 2,
+          "losses": 2,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Poison Nova": {
+      "cardId": 197,
+      "type": "Magic",
+      "slug": "alp_poison_nova_b_s",
+      "totalPlays": 68,
+      "totalWins": 32,
+      "totalLosses": 35,
+      "totalDraws": 1,
+      "winRate": 0.478,
+      "formats": {
+        "constructed": {
+          "plays": 68,
+          "wins": 32,
+          "losses": 35,
+          "draws": 1,
+          "winRate": 0.47761194029850745
+        }
+      }
+    },
+    "Novice Necromancer": {
+      "cardId": 954,
+      "type": "Minion",
+      "slug": "got-novice_necromancer-b-s",
+      "totalPlays": 76,
+      "totalWins": 44,
+      "totalLosses": 30,
+      "totalDraws": 2,
+      "winRate": 0.595,
+      "formats": {
+        "constructed": {
+          "plays": 68,
+          "wins": 40,
+          "losses": 26,
+          "draws": 2,
+          "winRate": 0.6060606060606061
+        },
+        "sealed": {
+          "plays": 7,
+          "wins": 4,
+          "losses": 3,
+          "draws": 0,
+          "winRate": 0.5714285714285714
+        },
+        "draft": {
+          "plays": 1,
+          "wins": 0,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Magician": {
+      "cardId": 918,
+      "type": "Avatar",
+      "slug": "got-magician-b-s",
+      "totalPlays": 67,
+      "totalWins": 28,
+      "totalLosses": 39,
+      "totalDraws": 0,
+      "winRate": 0.418,
+      "formats": {
+        "constructed": {
+          "plays": 67,
+          "wins": 28,
+          "losses": 39,
+          "draws": 0,
+          "winRate": 0.417910447761194
+        }
+      }
+    },
+    "Rustic Village": {
+      "cardId": 342,
+      "type": "Site",
+      "slug": "alp_rustic_village_b_s",
+      "totalPlays": 67,
+      "totalWins": 32,
+      "totalLosses": 31,
+      "totalDraws": 4,
+      "winRate": 0.508,
+      "formats": {
+        "constructed": {
+          "plays": 67,
+          "wins": 32,
+          "losses": 31,
+          "draws": 4,
+          "winRate": 0.5079365079365079
+        }
+      }
+    },
+    "Stygian Archers": {
+      "cardId": 1047,
+      "type": "Minion",
+      "slug": "got-stygian_archers-b-s",
+      "totalPlays": 69,
+      "totalWins": 28,
+      "totalLosses": 39,
+      "totalDraws": 2,
+      "winRate": 0.418,
+      "formats": {
+        "constructed": {
+          "plays": 67,
+          "wins": 28,
+          "losses": 37,
+          "draws": 2,
+          "winRate": 0.4307692307692308
+        },
+        "sealed": {
+          "plays": 2,
+          "wins": 0,
+          "losses": 2,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Haystack": {
+      "cardId": 661,
+      "type": "Site",
+      "slug": "pro-haystack-d-s",
+      "totalPlays": 69,
+      "totalWins": 39,
+      "totalLosses": 29,
+      "totalDraws": 1,
+      "winRate": 0.574,
+      "formats": {
+        "constructed": {
+          "plays": 67,
+          "wins": 37,
+          "losses": 29,
+          "draws": 1,
+          "winRate": 0.5606060606060606
+        },
+        "sealed": {
+          "plays": 2,
+          "wins": 2,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "Autumn Bloom": {
+      "cardId": 699,
+      "type": "Site",
+      "slug": "got-autumn_bloom-b-s",
+      "totalPlays": 70,
+      "totalWins": 30,
+      "totalLosses": 39,
+      "totalDraws": 1,
+      "winRate": 0.435,
+      "formats": {
+        "constructed": {
+          "plays": 66,
+          "wins": 28,
+          "losses": 37,
+          "draws": 1,
+          "winRate": 0.4307692307692308
+        },
+        "sealed": {
+          "plays": 4,
+          "wins": 2,
+          "losses": 2,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Firebolts": {
+      "cardId": 185,
+      "type": "Magic",
+      "slug": "alp_firebolts_b_s",
+      "totalPlays": 66,
+      "totalWins": 34,
+      "totalLosses": 31,
+      "totalDraws": 1,
+      "winRate": 0.523,
+      "formats": {
+        "constructed": {
+          "plays": 66,
+          "wins": 34,
+          "losses": 31,
+          "draws": 1,
+          "winRate": 0.5230769230769231
+        }
+      }
+    },
+    "Boulevard of Bones": {
+      "cardId": 731,
+      "type": "Site",
+      "slug": "got-boulevard_of_bones-b-s",
+      "totalPlays": 67,
+      "totalWins": 42,
+      "totalLosses": 24,
+      "totalDraws": 1,
+      "winRate": 0.636,
+      "formats": {
+        "constructed": {
+          "plays": 66,
+          "wins": 41,
+          "losses": 24,
+          "draws": 1,
+          "winRate": 0.6307692307692307
+        },
+        "sealed": {
+          "plays": 1,
+          "wins": 1,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "Dark Alley": {
+      "cardId": 766,
+      "type": "Site",
+      "slug": "got-dark_alley-b-s",
+      "totalPlays": 65,
+      "totalWins": 28,
+      "totalLosses": 36,
+      "totalDraws": 1,
+      "winRate": 0.438,
+      "formats": {
+        "constructed": {
+          "plays": 65,
+          "wins": 28,
+          "losses": 36,
+          "draws": 1,
+          "winRate": 0.4375
+        }
+      }
+    },
+    "Bedrock": {
+      "cardId": 334,
+      "type": "Site",
+      "slug": "alp_bedrock_b_s",
+      "totalPlays": 65,
+      "totalWins": 39,
+      "totalLosses": 25,
+      "totalDraws": 1,
+      "winRate": 0.609,
+      "formats": {
+        "constructed": {
+          "plays": 65,
+          "wins": 39,
+          "losses": 25,
+          "draws": 1,
+          "winRate": 0.609375
+        }
+      }
+    },
+    "Murder of Crows": {
+      "cardId": 943,
+      "type": "Magic",
+      "slug": "got-murder_of_crows-b-s",
+      "totalPlays": 66,
+      "totalWins": 26,
+      "totalLosses": 39,
+      "totalDraws": 1,
+      "winRate": 0.4,
+      "formats": {
+        "constructed": {
+          "plays": 64,
+          "wins": 25,
+          "losses": 38,
+          "draws": 1,
+          "winRate": 0.3968253968253968
+        },
+        "sealed": {
+          "plays": 2,
+          "wins": 1,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Witch": {
+      "cardId": 630,
+      "type": "Avatar",
+      "slug": "art_witch_b_s",
+      "totalPlays": 63,
+      "totalWins": 33,
+      "totalLosses": 29,
+      "totalDraws": 0,
+      "winRate": 0.532,
+      "formats": {
+        "constructed": {
+          "plays": 63,
+          "wins": 33,
+          "losses": 29,
+          "draws": 0,
+          "winRate": 0.532258064516129
+        }
+      }
+    },
+    "Atlantean Fate": {
+      "cardId": 268,
+      "type": "Aura",
+      "slug": "alp_atlantean_fate_b_s",
+      "totalPlays": 63,
+      "totalWins": 40,
+      "totalLosses": 23,
+      "totalDraws": 0,
+      "winRate": 0.635,
+      "formats": {
+        "constructed": {
+          "plays": 63,
+          "wins": 40,
+          "losses": 23,
+          "draws": 0,
+          "winRate": 0.6349206349206349
+        }
+      }
+    },
+    "Open Grave": {
+      "cardId": 959,
+      "type": "Site",
+      "slug": "got-open_grave-b-s",
+      "totalPlays": 69,
+      "totalWins": 40,
+      "totalLosses": 29,
+      "totalDraws": 0,
+      "winRate": 0.58,
+      "formats": {
+        "constructed": {
+          "plays": 63,
+          "wins": 36,
+          "losses": 27,
+          "draws": 0,
+          "winRate": 0.5714285714285714
+        },
+        "sealed": {
+          "plays": 6,
+          "wins": 4,
+          "losses": 2,
+          "draws": 0,
+          "winRate": 0.6666666666666666
+        }
+      }
+    },
+    "Aquamarine Core": {
+      "cardId": 277,
+      "type": "Artifact",
+      "slug": "alp_aquamarine_core_b_s",
+      "totalPlays": 62,
+      "totalWins": 37,
+      "totalLosses": 23,
+      "totalDraws": 2,
+      "winRate": 0.617,
+      "formats": {
+        "constructed": {
+          "plays": 62,
+          "wins": 37,
+          "losses": 23,
+          "draws": 2,
+          "winRate": 0.6166666666666667
+        }
+      }
+    },
+    "Stream": {
+      "cardId": 412,
+      "type": "Site",
+      "slug": "bet_stream_dk_s",
+      "totalPlays": 75,
+      "totalWins": 35,
+      "totalLosses": 40,
+      "totalDraws": 0,
+      "winRate": 0.467,
+      "formats": {
+        "constructed": {
+          "plays": 62,
+          "wins": 29,
+          "losses": 33,
+          "draws": 0,
+          "winRate": 0.46774193548387094
+        },
+        "sealed": {
+          "plays": 12,
+          "wins": 5,
+          "losses": 7,
+          "draws": 0,
+          "winRate": 0.4166666666666667
+        },
+        "draft": {
+          "plays": 1,
+          "wins": 1,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "Pollimorph": {
+      "cardId": 258,
+      "type": "Magic",
+      "slug": "bet_pollimorph_b_f",
+      "totalPlays": 61,
+      "totalWins": 37,
+      "totalLosses": 23,
+      "totalDraws": 1,
+      "winRate": 0.617,
+      "formats": {
+        "constructed": {
+          "plays": 61,
+          "wins": 37,
+          "losses": 23,
+          "draws": 1,
+          "winRate": 0.6166666666666667
+        }
+      }
+    },
+    "Penitent Knight": {
+      "cardId": 973,
+      "type": "Minion",
+      "slug": "got-penitent_knight-b-s",
+      "totalPlays": 67,
+      "totalWins": 33,
+      "totalLosses": 34,
+      "totalDraws": 0,
+      "winRate": 0.493,
+      "formats": {
+        "constructed": {
+          "plays": 61,
+          "wins": 30,
+          "losses": 31,
+          "draws": 0,
+          "winRate": 0.4918032786885246
+        },
+        "sealed": {
+          "plays": 6,
+          "wins": 3,
+          "losses": 3,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Magic Missiles": {
+      "cardId": 515,
+      "type": "Magic",
+      "slug": "art_magic_missiles_b_s",
+      "totalPlays": 61,
+      "totalWins": 33,
+      "totalLosses": 25,
+      "totalDraws": 3,
+      "winRate": 0.569,
+      "formats": {
+        "constructed": {
+          "plays": 61,
+          "wins": 33,
+          "losses": 25,
+          "draws": 3,
+          "winRate": 0.5689655172413793
+        }
+      }
+    },
+    "Gift of the Serpent": {
+      "cardId": 840,
+      "type": "Magic",
+      "slug": "got-gift_of_the_serpent-b-s",
+      "totalPlays": 63,
+      "totalWins": 24,
+      "totalLosses": 39,
+      "totalDraws": 0,
+      "winRate": 0.381,
+      "formats": {
+        "constructed": {
+          "plays": 61,
+          "wins": 22,
+          "losses": 39,
+          "draws": 0,
+          "winRate": 0.36065573770491804
+        },
+        "sealed": {
+          "plays": 2,
+          "wins": 2,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "Maelström": {
+      "cardId": 359,
+      "type": "Site",
+      "slug": "alp_maelstrom_b_s",
+      "totalPlays": 61,
+      "totalWins": 31,
+      "totalLosses": 29,
+      "totalDraws": 1,
+      "winRate": 0.517,
+      "formats": {
+        "constructed": {
+          "plays": 61,
+          "wins": 31,
+          "losses": 29,
+          "draws": 1,
+          "winRate": 0.5166666666666667
+        }
+      }
+    },
+    "Mount Ussar Sanctuary": {
+      "cardId": 939,
+      "type": "Site",
+      "slug": "got-mount_ussar_sanctuary-b-s",
+      "totalPlays": 60,
+      "totalWins": 39,
+      "totalLosses": 20,
+      "totalDraws": 1,
+      "winRate": 0.661,
+      "formats": {
+        "constructed": {
+          "plays": 60,
+          "wins": 39,
+          "losses": 20,
+          "draws": 1,
+          "winRate": 0.6610169491525424
+        }
+      }
+    },
+    "Cloud Spirit": {
+      "cardId": 4,
+      "type": "Minion",
+      "slug": "alp_cloud_spirit_b_s",
+      "totalPlays": 60,
+      "totalWins": 31,
+      "totalLosses": 27,
+      "totalDraws": 2,
+      "winRate": 0.534,
+      "formats": {
+        "constructed": {
+          "plays": 60,
+          "wins": 31,
+          "losses": 27,
+          "draws": 2,
+          "winRate": 0.5344827586206896
+        }
+      }
+    },
+    "Questing Beast": {
+      "cardId": 541,
+      "type": "Minion",
+      "slug": "art_questing_beast_b_s",
+      "totalPlays": 60,
+      "totalWins": 34,
+      "totalLosses": 24,
+      "totalDraws": 2,
+      "winRate": 0.586,
+      "formats": {
+        "constructed": {
+          "plays": 60,
+          "wins": 34,
+          "losses": 24,
+          "draws": 2,
+          "winRate": 0.5862068965517241
+        }
+      }
+    },
+    "Pillar of Zeiros": {
+      "cardId": 339,
+      "type": "Site",
+      "slug": "alp_pillar_of_zeiros_b_s",
+      "totalPlays": 59,
+      "totalWins": 22,
+      "totalLosses": 35,
+      "totalDraws": 2,
+      "winRate": 0.386,
+      "formats": {
+        "constructed": {
+          "plays": 59,
+          "wins": 22,
+          "losses": 35,
+          "draws": 2,
+          "winRate": 0.38596491228070173
+        }
+      }
+    },
+    "Dread Thicket": {
+      "cardId": 790,
+      "type": "Site",
+      "slug": "got-dread_thicket-b-s",
+      "totalPlays": 59,
+      "totalWins": 27,
+      "totalLosses": 31,
+      "totalDraws": 1,
+      "winRate": 0.466,
+      "formats": {
+        "constructed": {
+          "plays": 59,
+          "wins": 27,
+          "losses": 31,
+          "draws": 1,
+          "winRate": 0.46551724137931033
+        }
+      }
+    },
+    "Vesuvius": {
+      "cardId": 354,
+      "type": "Site",
+      "slug": "alp_vesuvius_b_s",
+      "totalPlays": 58,
+      "totalWins": 29,
+      "totalLosses": 29,
+      "totalDraws": 0,
+      "winRate": 0.5,
+      "formats": {
+        "constructed": {
+          "plays": 58,
+          "wins": 29,
+          "losses": 29,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Accursed Tower": {
+      "cardId": 673,
+      "type": "Site",
+      "slug": "got-accursed_tower-b-s",
+      "totalPlays": 59,
+      "totalWins": 24,
+      "totalLosses": 34,
+      "totalDraws": 1,
+      "winRate": 0.414,
+      "formats": {
+        "constructed": {
+          "plays": 58,
+          "wins": 23,
+          "losses": 34,
+          "draws": 1,
+          "winRate": 0.40350877192982454
+        },
+        "draft": {
+          "plays": 1,
+          "wins": 1,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "Gnarled Wendigo": {
+      "cardId": 844,
+      "type": "Minion",
+      "slug": "got-gnarled_wendigo-b-s",
+      "totalPlays": 61,
+      "totalWins": 35,
+      "totalLosses": 26,
+      "totalDraws": 0,
+      "winRate": 0.574,
+      "formats": {
+        "constructed": {
+          "plays": 58,
+          "wins": 34,
+          "losses": 24,
+          "draws": 0,
+          "winRate": 0.5862068965517241
+        },
+        "sealed": {
+          "plays": 3,
+          "wins": 1,
+          "losses": 2,
+          "draws": 0,
+          "winRate": 0.3333333333333333
+        }
+      }
+    },
+    "Lookout": {
+      "cardId": 511,
+      "type": "Site",
+      "slug": "art_lookout_b_s",
+      "totalPlays": 58,
+      "totalWins": 26,
+      "totalLosses": 31,
+      "totalDraws": 1,
+      "winRate": 0.456,
+      "formats": {
+        "constructed": {
+          "plays": 58,
+          "wins": 26,
+          "losses": 31,
+          "draws": 1,
+          "winRate": 0.45614035087719296
+        }
+      }
+    },
+    "Road to Perdition": {
+      "cardId": 1000,
+      "type": "Site",
+      "slug": "got-road_to_perdition-b-s",
+      "totalPlays": 57,
+      "totalWins": 21,
+      "totalLosses": 34,
+      "totalDraws": 2,
+      "winRate": 0.382,
+      "formats": {
+        "constructed": {
+          "plays": 57,
+          "wins": 21,
+          "losses": 34,
+          "draws": 2,
+          "winRate": 0.38181818181818183
+        }
+      }
+    },
+    "Rift Valley": {
+      "cardId": 341,
+      "type": "Site",
+      "slug": "alp_rift_valley_b_s",
+      "totalPlays": 57,
+      "totalWins": 24,
+      "totalLosses": 31,
+      "totalDraws": 2,
+      "winRate": 0.436,
+      "formats": {
+        "constructed": {
+          "plays": 57,
+          "wins": 24,
+          "losses": 31,
+          "draws": 2,
+          "winRate": 0.43636363636363634
+        }
+      }
+    },
+    "Lord of Lies": {
+      "cardId": 915,
+      "type": "Minion",
+      "slug": "got-lord_of_lies-b-s",
+      "totalPlays": 57,
+      "totalWins": 41,
+      "totalLosses": 15,
+      "totalDraws": 1,
+      "winRate": 0.732,
+      "formats": {
+        "constructed": {
+          "plays": 57,
+          "wins": 41,
+          "losses": 15,
+          "draws": 1,
+          "winRate": 0.7321428571428571
+        }
+      }
+    },
+    "Holy Ground": {
+      "cardId": 336,
+      "type": "Site",
+      "slug": "alp_holy_ground_b_s",
+      "totalPlays": 57,
+      "totalWins": 26,
+      "totalLosses": 30,
+      "totalDraws": 1,
+      "winRate": 0.464,
+      "formats": {
+        "constructed": {
+          "plays": 57,
+          "wins": 26,
+          "losses": 30,
+          "draws": 1,
+          "winRate": 0.4642857142857143
+        }
+      }
+    },
+    "Pith Imp": {
+      "cardId": 978,
+      "type": "Minion",
+      "slug": "got-pith_imp-b-s",
+      "totalPlays": 62,
+      "totalWins": 22,
+      "totalLosses": 40,
+      "totalDraws": 0,
+      "winRate": 0.355,
+      "formats": {
+        "constructed": {
+          "plays": 57,
+          "wins": 20,
+          "losses": 37,
+          "draws": 0,
+          "winRate": 0.3508771929824561
+        },
+        "sealed": {
+          "plays": 4,
+          "wins": 2,
+          "losses": 2,
+          "draws": 0,
+          "winRate": 0.5
+        },
+        "draft": {
+          "plays": 1,
+          "wins": 0,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Blaze": {
+      "cardId": 179,
+      "type": "Magic",
+      "slug": "alp_blaze_b_s",
+      "totalPlays": 58,
+      "totalWins": 29,
+      "totalLosses": 29,
+      "totalDraws": 0,
+      "winRate": 0.5,
+      "formats": {
+        "constructed": {
+          "plays": 56,
+          "wins": 28,
+          "losses": 28,
+          "draws": 0,
+          "winRate": 0.5
+        },
+        "sealed": {
+          "plays": 2,
+          "wins": 1,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Disintegrate": {
+      "cardId": 183,
+      "type": "Magic",
+      "slug": "alp_disintegrate_b_s",
+      "totalPlays": 56,
+      "totalWins": 30,
+      "totalLosses": 26,
+      "totalDraws": 0,
+      "winRate": 0.536,
+      "formats": {
+        "constructed": {
+          "plays": 56,
+          "wins": 30,
+          "losses": 26,
+          "draws": 0,
+          "winRate": 0.5357142857142857
+        }
+      }
+    },
+    "Teleport": {
+      "cardId": 62,
+      "type": "Magic",
+      "slug": "alp_teleport_b_s",
+      "totalPlays": 56,
+      "totalWins": 20,
+      "totalLosses": 35,
+      "totalDraws": 1,
+      "winRate": 0.364,
+      "formats": {
+        "constructed": {
+          "plays": 56,
+          "wins": 20,
+          "losses": 35,
+          "draws": 1,
+          "winRate": 0.36363636363636365
+        }
+      }
+    },
+    "Barging Barghest": {
+      "cardId": 705,
+      "type": "Minion",
+      "slug": "got-barging_barghest-b-s",
+      "totalPlays": 57,
+      "totalWins": 36,
+      "totalLosses": 20,
+      "totalDraws": 1,
+      "winRate": 0.643,
+      "formats": {
+        "constructed": {
+          "plays": 55,
+          "wins": 34,
+          "losses": 20,
+          "draws": 1,
+          "winRate": 0.6296296296296297
+        },
+        "sealed": {
+          "plays": 2,
+          "wins": 2,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "Failed Mutation": {
+      "cardId": 810,
+      "type": "Minion",
+      "slug": "got-failed_mutation-b-s",
+      "totalPlays": 55,
+      "totalWins": 21,
+      "totalLosses": 34,
+      "totalDraws": 0,
+      "winRate": 0.382,
+      "formats": {
+        "constructed": {
+          "plays": 55,
+          "wins": 21,
+          "losses": 34,
+          "draws": 0,
+          "winRate": 0.38181818181818183
+        }
+      }
+    },
+    "Humble Village": {
+      "cardId": 337,
+      "type": "Site",
+      "slug": "alp_humble_village_b_s",
+      "totalPlays": 58,
+      "totalWins": 24,
+      "totalLosses": 33,
+      "totalDraws": 1,
+      "winRate": 0.421,
+      "formats": {
+        "constructed": {
+          "plays": 55,
+          "wins": 21,
+          "losses": 33,
+          "draws": 1,
+          "winRate": 0.3888888888888889
+        },
+        "sealed": {
+          "plays": 3,
+          "wins": 3,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "Wormelow Tump": {
+      "cardId": 633,
+      "type": "Site",
+      "slug": "art_wormelow_tump_b_s",
+      "totalPlays": 55,
+      "totalWins": 37,
+      "totalLosses": 17,
+      "totalDraws": 1,
+      "winRate": 0.685,
+      "formats": {
+        "constructed": {
+          "plays": 55,
+          "wins": 37,
+          "losses": 17,
+          "draws": 1,
+          "winRate": 0.6851851851851852
+        }
+      }
+    },
+    "Valley": {
+      "cardId": 413,
+      "type": "Site",
+      "slug": "bet_valley_dk_s",
+      "totalPlays": 69,
+      "totalWins": 36,
+      "totalLosses": 33,
+      "totalDraws": 0,
+      "winRate": 0.522,
+      "formats": {
+        "constructed": {
+          "plays": 55,
+          "wins": 26,
+          "losses": 29,
+          "draws": 0,
+          "winRate": 0.4727272727272727
+        },
+        "sealed": {
+          "plays": 12,
+          "wins": 8,
+          "losses": 4,
+          "draws": 0,
+          "winRate": 0.6666666666666666
+        },
+        "draft": {
+          "plays": 2,
+          "wins": 2,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "Desecrated Ground": {
+      "cardId": 777,
+      "type": "Site",
+      "slug": "got-desecrated_ground-b-s",
+      "totalPlays": 56,
+      "totalWins": 27,
+      "totalLosses": 29,
+      "totalDraws": 0,
+      "winRate": 0.482,
+      "formats": {
+        "constructed": {
+          "plays": 54,
+          "wins": 26,
+          "losses": 28,
+          "draws": 0,
+          "winRate": 0.48148148148148145
+        },
+        "sealed": {
+          "plays": 2,
+          "wins": 1,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Gift of the Frog": {
+      "cardId": 838,
+      "type": "Magic",
+      "slug": "got-gift_of_the_frog-b-s",
+      "totalPlays": 56,
+      "totalWins": 30,
+      "totalLosses": 25,
+      "totalDraws": 1,
+      "winRate": 0.545,
+      "formats": {
+        "constructed": {
+          "plays": 54,
+          "wins": 29,
+          "losses": 24,
+          "draws": 1,
+          "winRate": 0.5471698113207547
+        },
+        "sealed": {
+          "plays": 2,
+          "wins": 1,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Wizard's Den": {
+      "cardId": 631,
+      "type": "Site",
+      "slug": "art_wizards_den_b_s",
+      "totalPlays": 54,
+      "totalWins": 26,
+      "totalLosses": 28,
+      "totalDraws": 0,
+      "winRate": 0.481,
+      "formats": {
+        "constructed": {
+          "plays": 54,
+          "wins": 26,
+          "losses": 28,
+          "draws": 0,
+          "winRate": 0.48148148148148145
+        }
+      }
+    },
+    "Gargantula": {
+      "cardId": 833,
+      "type": "Minion",
+      "slug": "got-gargantula-b-s",
+      "totalPlays": 54,
+      "totalWins": 34,
+      "totalLosses": 20,
+      "totalDraws": 0,
+      "winRate": 0.63,
+      "formats": {
+        "constructed": {
+          "plays": 54,
+          "wins": 34,
+          "losses": 20,
+          "draws": 0,
+          "winRate": 0.6296296296296297
+        }
+      }
+    },
+    "Gyre Hippogriffs": {
+      "cardId": 10,
+      "type": "Minion",
+      "slug": "alp_gyre_hippogriffs_b_s",
+      "totalPlays": 53,
+      "totalWins": 30,
+      "totalLosses": 23,
+      "totalDraws": 0,
+      "winRate": 0.566,
+      "formats": {
+        "constructed": {
+          "plays": 53,
+          "wins": 30,
+          "losses": 23,
+          "draws": 0,
+          "winRate": 0.5660377358490566
+        }
+      }
+    },
+    "Jihad": {
+      "cardId": 202,
+      "type": "Aura",
+      "slug": "alp_jihad_b_s",
+      "totalPlays": 52,
+      "totalWins": 30,
+      "totalLosses": 22,
+      "totalDraws": 0,
+      "winRate": 0.577,
+      "formats": {
+        "constructed": {
+          "plays": 52,
+          "wins": 30,
+          "losses": 22,
+          "draws": 0,
+          "winRate": 0.5769230769230769
+        }
+      }
+    },
+    "Silver Bullet": {
+      "cardId": 1026,
+      "type": "Artifact",
+      "slug": "got-silver_bullet-b-s",
+      "totalPlays": 52,
+      "totalWins": 30,
+      "totalLosses": 22,
+      "totalDraws": 0,
+      "winRate": 0.577,
+      "formats": {
+        "constructed": {
+          "plays": 52,
+          "wins": 30,
+          "losses": 22,
+          "draws": 0,
+          "winRate": 0.5769230769230769
+        }
+      }
+    },
+    "Into the Abyss": {
+      "cardId": 890,
+      "type": "Magic",
+      "slug": "got-into_the_abyss-b-s",
+      "totalPlays": 52,
+      "totalWins": 30,
+      "totalLosses": 22,
+      "totalDraws": 0,
+      "winRate": 0.577,
+      "formats": {
+        "constructed": {
+          "plays": 52,
+          "wins": 30,
+          "losses": 22,
+          "draws": 0,
+          "winRate": 0.5769230769230769
+        }
+      }
+    },
+    "Order of the Sacred Oak": {
+      "cardId": 963,
+      "type": "Minion",
+      "slug": "got-order_of_the_sacred_oak-b-s",
+      "totalPlays": 53,
+      "totalWins": 31,
+      "totalLosses": 21,
+      "totalDraws": 1,
+      "winRate": 0.596,
+      "formats": {
+        "constructed": {
+          "plays": 52,
+          "wins": 31,
+          "losses": 20,
+          "draws": 1,
+          "winRate": 0.6078431372549019
+        },
+        "sealed": {
+          "plays": 1,
+          "wins": 0,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "River Rapids": {
+      "cardId": 999,
+      "type": "Site",
+      "slug": "got-river_rapids-b-s",
+      "totalPlays": 52,
+      "totalWins": 29,
+      "totalLosses": 22,
+      "totalDraws": 1,
+      "winRate": 0.569,
+      "formats": {
+        "constructed": {
+          "plays": 52,
+          "wins": 29,
+          "losses": 22,
+          "draws": 1,
+          "winRate": 0.5686274509803921
+        }
+      }
+    },
+    "Redmane Hyena": {
+      "cardId": 991,
+      "type": "Minion",
+      "slug": "got-redmane_hyena-b-s",
+      "totalPlays": 52,
+      "totalWins": 22,
+      "totalLosses": 29,
+      "totalDraws": 1,
+      "winRate": 0.431,
+      "formats": {
+        "constructed": {
+          "plays": 52,
+          "wins": 22,
+          "losses": 29,
+          "draws": 1,
+          "winRate": 0.43137254901960786
+        }
+      }
+    },
+    "Whirling Blades": {
+      "cardId": 65,
+      "type": "Magic",
+      "slug": "alp_whirling_blades_b_s",
+      "totalPlays": 52,
+      "totalWins": 21,
+      "totalLosses": 29,
+      "totalDraws": 2,
+      "winRate": 0.42,
+      "formats": {
+        "constructed": {
+          "plays": 52,
+          "wins": 21,
+          "losses": 29,
+          "draws": 2,
+          "winRate": 0.42
+        }
+      }
+    },
+    "Smite": {
+      "cardId": 1034,
+      "type": "Magic",
+      "slug": "got-smite-b-s",
+      "totalPlays": 54,
+      "totalWins": 28,
+      "totalLosses": 26,
+      "totalDraws": 0,
+      "winRate": 0.519,
+      "formats": {
+        "constructed": {
+          "plays": 52,
+          "wins": 27,
+          "losses": 25,
+          "draws": 0,
+          "winRate": 0.5192307692307693
+        },
+        "sealed": {
+          "plays": 2,
+          "wins": 1,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Pit Vipers": {
+      "cardId": 164,
+      "type": "Minion",
+      "slug": "alp_pit_vipers_b_s",
+      "totalPlays": 52,
+      "totalWins": 30,
+      "totalLosses": 22,
+      "totalDraws": 0,
+      "winRate": 0.577,
+      "formats": {
+        "constructed": {
+          "plays": 52,
+          "wins": 30,
+          "losses": 22,
+          "draws": 0,
+          "winRate": 0.5769230769230769
+        }
+      }
+    },
+    "Snallygaster": {
+      "cardId": 1035,
+      "type": "Minion",
+      "slug": "got-snallygaster-b-s",
+      "totalPlays": 54,
+      "totalWins": 24,
+      "totalLosses": 28,
+      "totalDraws": 2,
+      "winRate": 0.462,
+      "formats": {
+        "constructed": {
+          "plays": 51,
+          "wins": 23,
+          "losses": 26,
+          "draws": 2,
+          "winRate": 0.46938775510204084
+        },
+        "sealed": {
+          "plays": 3,
+          "wins": 1,
+          "losses": 2,
+          "draws": 0,
+          "winRate": 0.3333333333333333
+        }
+      }
+    },
+    "River of Flame": {
+      "cardId": 351,
+      "type": "Site",
+      "slug": "alp_river_of_flame_b_s",
+      "totalPlays": 51,
+      "totalWins": 22,
+      "totalLosses": 28,
+      "totalDraws": 1,
+      "winRate": 0.44,
+      "formats": {
+        "constructed": {
+          "plays": 51,
+          "wins": 22,
+          "losses": 28,
+          "draws": 1,
+          "winRate": 0.44
+        }
+      }
+    },
+    "Ruby Core": {
+      "cardId": 313,
+      "type": "Artifact",
+      "slug": "alp_ruby_core_b_s",
+      "totalPlays": 52,
+      "totalWins": 27,
+      "totalLosses": 25,
+      "totalDraws": 0,
+      "winRate": 0.519,
+      "formats": {
+        "constructed": {
+          "plays": 51,
+          "wins": 27,
+          "losses": 24,
+          "draws": 0,
+          "winRate": 0.5294117647058824
+        },
+        "draft": {
+          "plays": 1,
+          "wins": 0,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Sacred Scarabs": {
+      "cardId": 168,
+      "type": "Minion",
+      "slug": "alp_sacred_scarabs_b_s",
+      "totalPlays": 54,
+      "totalWins": 23,
+      "totalLosses": 30,
+      "totalDraws": 1,
+      "winRate": 0.434,
+      "formats": {
+        "constructed": {
+          "plays": 51,
+          "wins": 22,
+          "losses": 28,
+          "draws": 1,
+          "winRate": 0.44
+        },
+        "sealed": {
+          "plays": 2,
+          "wins": 0,
+          "losses": 2,
+          "draws": 0,
+          "winRate": 0
+        },
+        "draft": {
+          "plays": 1,
+          "wins": 1,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "Tadpole Pool": {
+      "cardId": 362,
+      "type": "Site",
+      "slug": "alp_tadpole_pool_b_s",
+      "totalPlays": 50,
+      "totalWins": 31,
+      "totalLosses": 19,
+      "totalDraws": 0,
+      "winRate": 0.62,
+      "formats": {
+        "constructed": {
+          "plays": 50,
+          "wins": 31,
+          "losses": 19,
+          "draws": 0,
+          "winRate": 0.62
+        }
+      }
+    },
+    "Sphere of Animosity": {
+      "cardId": 1038,
+      "type": "Aura",
+      "slug": "got-sphere_of_animosity-b-s",
+      "totalPlays": 50,
+      "totalWins": 26,
+      "totalLosses": 24,
+      "totalDraws": 0,
+      "winRate": 0.52,
+      "formats": {
+        "constructed": {
+          "plays": 50,
+          "wins": 26,
+          "losses": 24,
+          "draws": 0,
+          "winRate": 0.52
+        }
+      }
+    },
+    "Witching Hour": {
+      "cardId": 1095,
+      "type": "Magic",
+      "slug": "got-witching_hour-b-s",
+      "totalPlays": 50,
+      "totalWins": 21,
+      "totalLosses": 28,
+      "totalDraws": 1,
+      "winRate": 0.429,
+      "formats": {
+        "constructed": {
+          "plays": 50,
+          "wins": 21,
+          "losses": 28,
+          "draws": 1,
+          "winRate": 0.42857142857142855
+        }
+      }
+    },
+    "Dispel": {
+      "cardId": 124,
+      "type": "Magic",
+      "slug": "alp_dispel_b_s",
+      "totalPlays": 50,
+      "totalWins": 22,
+      "totalLosses": 27,
+      "totalDraws": 1,
+      "winRate": 0.449,
+      "formats": {
+        "constructed": {
+          "plays": 50,
+          "wins": 22,
+          "losses": 27,
+          "draws": 1,
+          "winRate": 0.4489795918367347
+        }
+      }
+    },
+    "Sacred Stag": {
+      "cardId": 1002,
+      "type": "Minion",
+      "slug": "got-sacred_stag-b-s",
+      "totalPlays": 50,
+      "totalWins": 32,
+      "totalLosses": 18,
+      "totalDraws": 0,
+      "winRate": 0.64,
+      "formats": {
+        "constructed": {
+          "plays": 50,
+          "wins": 32,
+          "losses": 18,
+          "draws": 0,
+          "winRate": 0.64
+        }
+      }
+    },
+    "Plague of Frogs": {
+      "cardId": 257,
+      "type": "Magic",
+      "slug": "alp_plague_of_frogs_b_s",
+      "totalPlays": 50,
+      "totalWins": 27,
+      "totalLosses": 22,
+      "totalDraws": 1,
+      "winRate": 0.551,
+      "formats": {
+        "constructed": {
+          "plays": 50,
+          "wins": 27,
+          "losses": 22,
+          "draws": 1,
+          "winRate": 0.5510204081632653
+        }
+      }
+    },
+    "Forge": {
+      "cardId": 471,
+      "type": "Site",
+      "slug": "art_forge_b_s",
+      "totalPlays": 52,
+      "totalWins": 28,
+      "totalLosses": 23,
+      "totalDraws": 1,
+      "winRate": 0.549,
+      "formats": {
+        "constructed": {
+          "plays": 50,
+          "wins": 27,
+          "losses": 22,
+          "draws": 1,
+          "winRate": 0.5510204081632653
+        },
+        "sealed": {
+          "plays": 2,
+          "wins": 1,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "The Manor at Daperyll Hill": {
+      "cardId": 1061,
+      "type": "Site",
+      "slug": "got-the_manor_at_daperyll_hill-b-s",
+      "totalPlays": 49,
+      "totalWins": 29,
+      "totalLosses": 20,
+      "totalDraws": 0,
+      "winRate": 0.592,
+      "formats": {
+        "constructed": {
+          "plays": 49,
+          "wins": 29,
+          "losses": 20,
+          "draws": 0,
+          "winRate": 0.5918367346938775
+        }
+      }
+    },
+    "Skeleton Mage": {
+      "cardId": 1031,
+      "type": "Minion",
+      "slug": "got-skeleton_mage-b-s",
+      "totalPlays": 49,
+      "totalWins": 26,
+      "totalLosses": 22,
+      "totalDraws": 1,
+      "winRate": 0.542,
+      "formats": {
+        "constructed": {
+          "plays": 49,
+          "wins": 26,
+          "losses": 22,
+          "draws": 1,
+          "winRate": 0.5416666666666666
+        }
+      }
+    },
+    "Meat Hook": {
+      "cardId": 927,
+      "type": "Artifact",
+      "slug": "got-meat_hook-b-s",
+      "totalPlays": 49,
+      "totalWins": 18,
+      "totalLosses": 30,
+      "totalDraws": 1,
+      "winRate": 0.375,
+      "formats": {
+        "constructed": {
+          "plays": 49,
+          "wins": 18,
+          "losses": 30,
+          "draws": 1,
+          "winRate": 0.375
+        }
+      }
+    },
+    "Disenchant": {
+      "cardId": 49,
+      "type": "Magic",
+      "slug": "alp_disenchant_b_s",
+      "totalPlays": 49,
+      "totalWins": 21,
+      "totalLosses": 27,
+      "totalDraws": 1,
+      "winRate": 0.438,
+      "formats": {
+        "constructed": {
+          "plays": 49,
+          "wins": 21,
+          "losses": 27,
+          "draws": 1,
+          "winRate": 0.4375
+        }
+      }
+    },
+    "Sold-out Cemetery": {
+      "cardId": 1036,
+      "type": "Site",
+      "slug": "got-sold_out_cemetery-b-s",
+      "totalPlays": 49,
+      "totalWins": 24,
+      "totalLosses": 24,
+      "totalDraws": 1,
+      "winRate": 0.5,
+      "formats": {
+        "constructed": {
+          "plays": 49,
+          "wins": 24,
+          "losses": 24,
+          "draws": 1,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Spellslinger": {
+      "cardId": 410,
+      "type": "Avatar",
+      "slug": "bet_spellslinger_dk_s",
+      "totalPlays": 20,
+      "totalWins": 12,
+      "totalLosses": 8,
+      "totalDraws": 0,
+      "winRate": 0.6,
+      "formats": {
+        "sealed": {
+          "plays": 17,
+          "wins": 9,
+          "losses": 8,
+          "draws": 0,
+          "winRate": 0.5294117647058824
+        },
+        "draft": {
+          "plays": 3,
+          "wins": 3,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "Flaming Skull": {
+      "cardId": 822,
+      "type": "Minion",
+      "slug": "got-flaming_skull-b-s",
+      "totalPlays": 6,
+      "totalWins": 3,
+      "totalLosses": 3,
+      "totalDraws": 0,
+      "winRate": 0.5,
+      "formats": {
+        "sealed": {
+          "plays": 6,
+          "wins": 3,
+          "losses": 3,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Flame Strike": {
+      "cardId": 821,
+      "type": "Magic",
+      "slug": "got-flame_strike-b-s",
+      "totalPlays": 8,
+      "totalWins": 2,
+      "totalLosses": 6,
+      "totalDraws": 0,
+      "winRate": 0.25,
+      "formats": {
+        "sealed": {
+          "plays": 6,
+          "wins": 1,
+          "losses": 5,
+          "draws": 0,
+          "winRate": 0.16666666666666666
+        },
+        "draft": {
+          "plays": 2,
+          "wins": 1,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Vampire Bats": {
+      "cardId": 1081,
+      "type": "Minion",
+      "slug": "got-vampire_bats-b-s",
+      "totalPlays": 7,
+      "totalWins": 5,
+      "totalLosses": 2,
+      "totalDraws": 0,
+      "winRate": 0.714,
+      "formats": {
+        "sealed": {
+          "plays": 6,
+          "wins": 4,
+          "losses": 2,
+          "draws": 0,
+          "winRate": 0.6666666666666666
+        },
+        "draft": {
+          "plays": 1,
+          "wins": 1,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "Shoggoth": {
+      "cardId": 1023,
+      "type": "Minion",
+      "slug": "got-shoggoth-b-s",
+      "totalPlays": 6,
+      "totalWins": 5,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0.833,
+      "formats": {
+        "sealed": {
+          "plays": 6,
+          "wins": 5,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.8333333333333334
+        }
+      }
+    },
+    "Fowl Bones": {
+      "cardId": 829,
+      "type": "Minion",
+      "slug": "got-fowl_bones-b-s",
+      "totalPlays": 5,
+      "totalWins": 4,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0.8,
+      "formats": {
+        "sealed": {
+          "plays": 5,
+          "wins": 4,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.8
+        }
+      }
+    },
+    "Silent Hills": {
+      "cardId": 1025,
+      "type": "Site",
+      "slug": "got-silent_hills-b-s",
+      "totalPlays": 5,
+      "totalWins": 3,
+      "totalLosses": 2,
+      "totalDraws": 0,
+      "winRate": 0.6,
+      "formats": {
+        "sealed": {
+          "plays": 5,
+          "wins": 3,
+          "losses": 2,
+          "draws": 0,
+          "winRate": 0.6
+        }
+      }
+    },
+    "Buried Alive": {
+      "cardId": 736,
+      "type": "Magic",
+      "slug": "got-buried_alive-b-s",
+      "totalPlays": 6,
+      "totalWins": 4,
+      "totalLosses": 2,
+      "totalDraws": 0,
+      "winRate": 0.667,
+      "formats": {
+        "sealed": {
+          "plays": 5,
+          "wins": 3,
+          "losses": 2,
+          "draws": 0,
+          "winRate": 0.6
+        },
+        "draft": {
+          "plays": 1,
+          "wins": 1,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "Corruptor Freak": {
+      "cardId": 757,
+      "type": "Minion",
+      "slug": "got-corruptor_freak-b-s",
+      "totalPlays": 5,
+      "totalWins": 2,
+      "totalLosses": 3,
+      "totalDraws": 0,
+      "winRate": 0.4,
+      "formats": {
+        "sealed": {
+          "plays": 5,
+          "wins": 2,
+          "losses": 3,
+          "draws": 0,
+          "winRate": 0.4
+        }
+      }
+    },
+    "Entombed": {
+      "cardId": 804,
+      "type": "Minion",
+      "slug": "got-entombed-b-s",
+      "totalPlays": 5,
+      "totalWins": 3,
+      "totalLosses": 2,
+      "totalDraws": 0,
+      "winRate": 0.6,
+      "formats": {
+        "sealed": {
+          "plays": 5,
+          "wins": 3,
+          "losses": 2,
+          "draws": 0,
+          "winRate": 0.6
+        }
+      }
+    },
+    "Holy Warrior": {
+      "cardId": 874,
+      "type": "Minion",
+      "slug": "got-holy_warrior-b-s",
+      "totalPlays": 5,
+      "totalWins": 2,
+      "totalLosses": 3,
+      "totalDraws": 0,
+      "winRate": 0.4,
+      "formats": {
+        "sealed": {
+          "plays": 5,
+          "wins": 2,
+          "losses": 3,
+          "draws": 0,
+          "winRate": 0.4
+        }
+      }
+    },
+    "Torch and Pitchfork": {
+      "cardId": 1071,
+      "type": "Artifact",
+      "slug": "got-torch_and_pitchfork-b-s",
+      "totalPlays": 5,
+      "totalWins": 1,
+      "totalLosses": 4,
+      "totalDraws": 0,
+      "winRate": 0.2,
+      "formats": {
+        "sealed": {
+          "plays": 5,
+          "wins": 1,
+          "losses": 4,
+          "draws": 0,
+          "winRate": 0.2
+        }
+      }
+    },
+    "Holy Nova": {
+      "cardId": 873,
+      "type": "Magic",
+      "slug": "got-holy_nova-b-s",
+      "totalPlays": 4,
+      "totalWins": 1,
+      "totalLosses": 3,
+      "totalDraws": 0,
+      "winRate": 0.25,
+      "formats": {
+        "sealed": {
+          "plays": 4,
+          "wins": 1,
+          "losses": 3,
+          "draws": 0,
+          "winRate": 0.25
+        }
+      }
+    },
+    "Ghostfire": {
+      "cardId": 834,
+      "type": "Magic",
+      "slug": "got-ghostfire-b-s",
+      "totalPlays": 4,
+      "totalWins": 1,
+      "totalLosses": 3,
+      "totalDraws": 0,
+      "winRate": 0.25,
+      "formats": {
+        "sealed": {
+          "plays": 4,
+          "wins": 1,
+          "losses": 3,
+          "draws": 0,
+          "winRate": 0.25
+        }
+      }
+    },
+    "Serava Townsfolk": {
+      "cardId": 1019,
+      "type": "Minion",
+      "slug": "got-serava_townsfolk-b-s",
+      "totalPlays": 4,
+      "totalWins": 0,
+      "totalLosses": 4,
+      "totalDraws": 0,
+      "winRate": 0,
+      "formats": {
+        "sealed": {
+          "plays": 4,
+          "wins": 0,
+          "losses": 4,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Dead of Night Demon": {
+      "cardId": 6,
+      "type": "Minion",
+      "slug": "alp_dead_of_night_demon_b_s",
+      "totalPlays": 4,
+      "totalWins": 3,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0.75,
+      "formats": {
+        "sealed": {
+          "plays": 4,
+          "wins": 3,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.75
+        }
+      }
+    },
+    "Wiccan Tools": {
+      "cardId": 1091,
+      "type": "Artifact",
+      "slug": "got-wiccan_tools-b-s",
+      "totalPlays": 4,
+      "totalWins": 2,
+      "totalLosses": 2,
+      "totalDraws": 0,
+      "winRate": 0.5,
+      "formats": {
+        "sealed": {
+          "plays": 4,
+          "wins": 2,
+          "losses": 2,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Trial by Water": {
+      "cardId": 1076,
+      "type": "Magic",
+      "slug": "got-trial_by_water-b-s",
+      "totalPlays": 4,
+      "totalWins": 1,
+      "totalLosses": 3,
+      "totalDraws": 0,
+      "winRate": 0.25,
+      "formats": {
+        "sealed": {
+          "plays": 4,
+          "wins": 1,
+          "losses": 3,
+          "draws": 0,
+          "winRate": 0.25
+        }
+      }
+    },
+    "Search Party": {
+      "cardId": 1012,
+      "type": "Minion",
+      "slug": "got-search_party-b-s",
+      "totalPlays": 4,
+      "totalWins": 2,
+      "totalLosses": 2,
+      "totalDraws": 0,
+      "winRate": 0.5,
+      "formats": {
+        "sealed": {
+          "plays": 4,
+          "wins": 2,
+          "losses": 2,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Ten-tonne Slug": {
+      "cardId": 1052,
+      "type": "Minion",
+      "slug": "got-ten_tonne_slug-b-s",
+      "totalPlays": 4,
+      "totalWins": 3,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0.75,
+      "formats": {
+        "sealed": {
+          "plays": 4,
+          "wins": 3,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.75
+        }
+      }
+    },
+    "Ice Shards": {
+      "cardId": 883,
+      "type": "Magic",
+      "slug": "got-ice_shards-b-s",
+      "totalPlays": 4,
+      "totalWins": 3,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0.75,
+      "formats": {
+        "sealed": {
+          "plays": 4,
+          "wins": 3,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.75
+        }
+      }
+    },
+    "Belmotte Longbowmen": {
+      "cardId": 76,
+      "type": "Minion",
+      "slug": "alp_belmotte_longbowmen_b_s",
+      "totalPlays": 3,
+      "totalWins": 2,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0.667,
+      "formats": {
+        "sealed": {
+          "plays": 3,
+          "wins": 2,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.6666666666666666
+        }
+      }
+    },
+    "Nightwatchmen": {
+      "cardId": 949,
+      "type": "Minion",
+      "slug": "got-nightwatchmen-b-s",
+      "totalPlays": 4,
+      "totalWins": 3,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0.75,
+      "formats": {
+        "sealed": {
+          "plays": 3,
+          "wins": 2,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.6666666666666666
+        },
+        "draft": {
+          "plays": 1,
+          "wins": 1,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "Hillside Chapel": {
+      "cardId": 871,
+      "type": "Site",
+      "slug": "got-hillside_chapel-b-s",
+      "totalPlays": 4,
+      "totalWins": 2,
+      "totalLosses": 2,
+      "totalDraws": 0,
+      "winRate": 0.5,
+      "formats": {
+        "sealed": {
+          "plays": 3,
+          "wins": 2,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.6666666666666666
+        },
+        "draft": {
+          "plays": 1,
+          "wins": 0,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Instigator Imp": {
+      "cardId": 888,
+      "type": "Minion",
+      "slug": "got-instigator_imp-b-s",
+      "totalPlays": 3,
+      "totalWins": 1,
+      "totalLosses": 2,
+      "totalDraws": 0,
+      "winRate": 0.333,
+      "formats": {
+        "sealed": {
+          "plays": 3,
+          "wins": 1,
+          "losses": 2,
+          "draws": 0,
+          "winRate": 0.3333333333333333
+        }
+      }
+    },
+    "Accursed Desert": {
+      "cardId": 672,
+      "type": "Site",
+      "slug": "got-accursed_desert-b-s",
+      "totalPlays": 3,
+      "totalWins": 0,
+      "totalLosses": 3,
+      "totalDraws": 0,
+      "winRate": 0,
+      "formats": {
+        "sealed": {
+          "plays": 3,
+          "wins": 0,
+          "losses": 3,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Hand of Glory": {
+      "cardId": 856,
+      "type": "Artifact",
+      "slug": "got-hand_of_glory-b-s",
+      "totalPlays": 3,
+      "totalWins": 1,
+      "totalLosses": 2,
+      "totalDraws": 0,
+      "winRate": 0.333,
+      "formats": {
+        "sealed": {
+          "plays": 3,
+          "wins": 1,
+          "losses": 2,
+          "draws": 0,
+          "winRate": 0.3333333333333333
+        }
+      }
+    },
+    "Sawbones": {
+      "cardId": 1008,
+      "type": "Minion",
+      "slug": "got-sawbones-b-s",
+      "totalPlays": 3,
+      "totalWins": 1,
+      "totalLosses": 2,
+      "totalDraws": 0,
+      "winRate": 0.333,
+      "formats": {
+        "sealed": {
+          "plays": 3,
+          "wins": 1,
+          "losses": 2,
+          "draws": 0,
+          "winRate": 0.3333333333333333
+        }
+      }
+    },
+    "Crawler": {
+      "cardId": 759,
+      "type": "Minion",
+      "slug": "got-crawler-b-s",
+      "totalPlays": 3,
+      "totalWins": 3,
+      "totalLosses": 0,
+      "totalDraws": 0,
+      "winRate": 1,
+      "formats": {
+        "sealed": {
+          "plays": 3,
+          "wins": 3,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "Sea Witch": {
+      "cardId": 1014,
+      "type": "Minion",
+      "slug": "got-sea_witch-b-s",
+      "totalPlays": 3,
+      "totalWins": 1,
+      "totalLosses": 2,
+      "totalDraws": 0,
+      "winRate": 0.333,
+      "formats": {
+        "sealed": {
+          "plays": 3,
+          "wins": 1,
+          "losses": 2,
+          "draws": 0,
+          "winRate": 0.3333333333333333
+        }
+      }
+    },
+    "Broomstick Witch": {
+      "cardId": 733,
+      "type": "Minion",
+      "slug": "got-broomstick_witch-b-s",
+      "totalPlays": 3,
+      "totalWins": 1,
+      "totalLosses": 2,
+      "totalDraws": 0,
+      "winRate": 0.333,
+      "formats": {
+        "sealed": {
+          "plays": 3,
+          "wins": 1,
+          "losses": 2,
+          "draws": 0,
+          "winRate": 0.3333333333333333
+        }
+      }
+    },
+    "Muddy Pigs": {
+      "cardId": 941,
+      "type": "Minion",
+      "slug": "got-muddy_pigs-b-s",
+      "totalPlays": 3,
+      "totalWins": 2,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0.667,
+      "formats": {
+        "sealed": {
+          "plays": 3,
+          "wins": 2,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.6666666666666666
+        }
+      }
+    },
+    "Ravenous Werewolf": {
+      "cardId": 988,
+      "type": "Minion",
+      "slug": "got-ravenous_werewolf-b-s",
+      "totalPlays": 4,
+      "totalWins": 1,
+      "totalLosses": 3,
+      "totalDraws": 0,
+      "winRate": 0.25,
+      "formats": {
+        "sealed": {
+          "plays": 3,
+          "wins": 1,
+          "losses": 2,
+          "draws": 0,
+          "winRate": 0.3333333333333333
+        },
+        "draft": {
+          "plays": 1,
+          "wins": 0,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Lesser Blood Demon": {
+      "cardId": 908,
+      "type": "Minion",
+      "slug": "got-lesser_blood_demon-b-s",
+      "totalPlays": 3,
+      "totalWins": 3,
+      "totalLosses": 0,
+      "totalDraws": 0,
+      "winRate": 1,
+      "formats": {
+        "sealed": {
+          "plays": 3,
+          "wins": 3,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "Slimy Mutants": {
+      "cardId": 1032,
+      "type": "Minion",
+      "slug": "got-slimy_mutants-b-s",
+      "totalPlays": 3,
+      "totalWins": 2,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0.667,
+      "formats": {
+        "sealed": {
+          "plays": 3,
+          "wins": 2,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.6666666666666666
+        }
+      }
+    },
+    "Noxious Corpse": {
+      "cardId": 955,
+      "type": "Minion",
+      "slug": "got-noxious_corpse-b-s",
+      "totalPlays": 3,
+      "totalWins": 1,
+      "totalLosses": 2,
+      "totalDraws": 0,
+      "winRate": 0.333,
+      "formats": {
+        "sealed": {
+          "plays": 3,
+          "wins": 1,
+          "losses": 2,
+          "draws": 0,
+          "winRate": 0.3333333333333333
+        }
+      }
+    },
+    "Ignited": {
+      "cardId": 884,
+      "type": "Minion",
+      "slug": "got-ignited-b-s",
+      "totalPlays": 3,
+      "totalWins": 1,
+      "totalLosses": 2,
+      "totalDraws": 0,
+      "winRate": 0.333,
+      "formats": {
+        "sealed": {
+          "plays": 3,
+          "wins": 1,
+          "losses": 2,
+          "draws": 0,
+          "winRate": 0.3333333333333333
+        }
+      }
+    },
+    "Leadworks": {
+      "cardId": 906,
+      "type": "Site",
+      "slug": "got-leadworks-b-s",
+      "totalPlays": 5,
+      "totalWins": 1,
+      "totalLosses": 4,
+      "totalDraws": 0,
+      "winRate": 0.2,
+      "formats": {
+        "sealed": {
+          "plays": 3,
+          "wins": 0,
+          "losses": 3,
+          "draws": 0,
+          "winRate": 0
+        },
+        "draft": {
+          "plays": 2,
+          "wins": 1,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Detonate": {
+      "cardId": 780,
+      "type": "Magic",
+      "slug": "got-detonate-b-s",
+      "totalPlays": 3,
+      "totalWins": 2,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0.667,
+      "formats": {
+        "sealed": {
+          "plays": 3,
+          "wins": 2,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.6666666666666666
+        }
+      }
+    },
+    "Barrow Wight": {
+      "cardId": 706,
+      "type": "Minion",
+      "slug": "got-barrow_wight-b-s",
+      "totalPlays": 3,
+      "totalWins": 2,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0.667,
+      "formats": {
+        "sealed": {
+          "plays": 3,
+          "wins": 2,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.6666666666666666
+        }
+      }
+    },
+    "Renatus Trueblood": {
+      "cardId": 995,
+      "type": "Minion",
+      "slug": "got-renatus_trueblood-b-s",
+      "totalPlays": 3,
+      "totalWins": 0,
+      "totalLosses": 3,
+      "totalDraws": 0,
+      "winRate": 0,
+      "formats": {
+        "sealed": {
+          "plays": 3,
+          "wins": 0,
+          "losses": 3,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Noisome Twosome": {
+      "cardId": 950,
+      "type": "Minion",
+      "slug": "got-noisome_twosome-b-s",
+      "totalPlays": 3,
+      "totalWins": 3,
+      "totalLosses": 0,
+      "totalDraws": 0,
+      "winRate": 1,
+      "formats": {
+        "sealed": {
+          "plays": 3,
+          "wins": 3,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "Mesmer Demon": {
+      "cardId": 930,
+      "type": "Minion",
+      "slug": "got-mesmer_demon-b-s",
+      "totalPlays": 3,
+      "totalWins": 1,
+      "totalLosses": 2,
+      "totalDraws": 0,
+      "winRate": 0.333,
+      "formats": {
+        "sealed": {
+          "plays": 3,
+          "wins": 1,
+          "losses": 2,
+          "draws": 0,
+          "winRate": 0.3333333333333333
+        }
+      }
+    },
+    "Clay Golem": {
+      "cardId": 751,
+      "type": "Artifact",
+      "slug": "got-clay_golem-b-s",
+      "totalPlays": 2,
+      "totalWins": 2,
+      "totalLosses": 0,
+      "totalDraws": 0,
+      "winRate": 1,
+      "formats": {
+        "sealed": {
+          "plays": 2,
+          "wins": 2,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "Raise Militia": {
+      "cardId": 986,
+      "type": "Magic",
+      "slug": "got-raise_militia-b-s",
+      "totalPlays": 3,
+      "totalWins": 2,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0.667,
+      "formats": {
+        "sealed": {
+          "plays": 2,
+          "wins": 1,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.5
+        },
+        "draft": {
+          "plays": 1,
+          "wins": 1,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "Sewer Rats": {
+      "cardId": 1020,
+      "type": "Minion",
+      "slug": "got-sewer_rats-b-s",
+      "totalPlays": 2,
+      "totalWins": 1,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0.5,
+      "formats": {
+        "sealed": {
+          "plays": 2,
+          "wins": 1,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Shrike Orchard": {
+      "cardId": 1024,
+      "type": "Site",
+      "slug": "got-shrike_orchard-b-s",
+      "totalPlays": 3,
+      "totalWins": 2,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0.667,
+      "formats": {
+        "sealed": {
+          "plays": 2,
+          "wins": 2,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        },
+        "draft": {
+          "plays": 1,
+          "wins": 0,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Mandrake Jars": {
+      "cardId": 922,
+      "type": "Artifact",
+      "slug": "got-mandrake_jars-b-s",
+      "totalPlays": 2,
+      "totalWins": 1,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0.5,
+      "formats": {
+        "sealed": {
+          "plays": 2,
+          "wins": 1,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Bound Spirit": {
+      "cardId": 732,
+      "type": "Minion",
+      "slug": "got-bound_spirit-b-s",
+      "totalPlays": 2,
+      "totalWins": 2,
+      "totalLosses": 0,
+      "totalDraws": 0,
+      "winRate": 1,
+      "formats": {
+        "sealed": {
+          "plays": 2,
+          "wins": 2,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "Undead Ambush": {
+      "cardId": 1079,
+      "type": "Magic",
+      "slug": "got-undead_ambush-b-s",
+      "totalPlays": 3,
+      "totalWins": 2,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0.667,
+      "formats": {
+        "sealed": {
+          "plays": 2,
+          "wins": 2,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        },
+        "draft": {
+          "plays": 1,
+          "wins": 0,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Ogre Goons": {
+      "cardId": 160,
+      "type": "Minion",
+      "slug": "alp_ogre_goons_b_s",
+      "totalPlays": 2,
+      "totalWins": 0,
+      "totalLosses": 2,
+      "totalDraws": 0,
+      "winRate": 0,
+      "formats": {
+        "sealed": {
+          "plays": 2,
+          "wins": 0,
+          "losses": 2,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Common Cottagers": {
+      "cardId": 451,
+      "type": "Minion",
+      "slug": "art_common_cottagers_b_s",
+      "totalPlays": 2,
+      "totalWins": 1,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0.5,
+      "formats": {
+        "sealed": {
+          "plays": 2,
+          "wins": 1,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Aramos Mercenaries": {
+      "cardId": 138,
+      "type": "Minion",
+      "slug": "alp_aramos_mercenaries_b_s",
+      "totalPlays": 2,
+      "totalWins": 1,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0.5,
+      "formats": {
+        "sealed": {
+          "plays": 2,
+          "wins": 1,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Blessed Well": {
+      "cardId": 722,
+      "type": "Site",
+      "slug": "got-blessed_well-b-s",
+      "totalPlays": 2,
+      "totalWins": 1,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0.5,
+      "formats": {
+        "sealed": {
+          "plays": 2,
+          "wins": 1,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Return to Nature": {
+      "cardId": 997,
+      "type": "Magic",
+      "slug": "got-return_to_nature-b-s",
+      "totalPlays": 2,
+      "totalWins": 1,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0.5,
+      "formats": {
+        "sealed": {
+          "plays": 2,
+          "wins": 1,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Trial by Fire": {
+      "cardId": 1075,
+      "type": "Magic",
+      "slug": "got-trial_by_fire-b-s",
+      "totalPlays": 2,
+      "totalWins": 0,
+      "totalLosses": 2,
+      "totalDraws": 0,
+      "winRate": 0,
+      "formats": {
+        "sealed": {
+          "plays": 2,
+          "wins": 0,
+          "losses": 2,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Roaming Monster": {
+      "cardId": 33,
+      "type": "Minion",
+      "slug": "alp_roaming_monster_b_s",
+      "totalPlays": 2,
+      "totalWins": 1,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0.5,
+      "formats": {
+        "sealed": {
+          "plays": 2,
+          "wins": 1,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Order of the White Wing": {
+      "cardId": 964,
+      "type": "Minion",
+      "slug": "got-order_of_the_white_wing-b-s",
+      "totalPlays": 2,
+      "totalWins": 2,
+      "totalLosses": 0,
+      "totalDraws": 0,
+      "winRate": 1,
+      "formats": {
+        "sealed": {
+          "plays": 2,
+          "wins": 2,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "Sirian Templar": {
+      "cardId": 106,
+      "type": "Minion",
+      "slug": "alp_sirian_templar_b_s",
+      "totalPlays": 2,
+      "totalWins": 1,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0.5,
+      "formats": {
+        "sealed": {
+          "plays": 2,
+          "wins": 1,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Palliburrie Bats": {
+      "cardId": 24,
+      "type": "Minion",
+      "slug": "alp_palliburrie_bats_b_s",
+      "totalPlays": 3,
+      "totalWins": 2,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0.667,
+      "formats": {
+        "sealed": {
+          "plays": 2,
+          "wins": 1,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.5
+        },
+        "draft": {
+          "plays": 1,
+          "wins": 1,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "One-shot Wizard": {
+      "cardId": 957,
+      "type": "Minion",
+      "slug": "got-one_shot_wizard-b-s",
+      "totalPlays": 3,
+      "totalWins": 2,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0.667,
+      "formats": {
+        "sealed": {
+          "plays": 2,
+          "wins": 1,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.5
+        },
+        "draft": {
+          "plays": 1,
+          "wins": 1,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "Raal Dromedary": {
+      "cardId": 166,
+      "type": "Minion",
+      "slug": "alp_raal_dromedary_b_s",
+      "totalPlays": 2,
+      "totalWins": 0,
+      "totalLosses": 2,
+      "totalDraws": 0,
+      "winRate": 0,
+      "formats": {
+        "sealed": {
+          "plays": 2,
+          "wins": 0,
+          "losses": 2,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Fade": {
+      "cardId": 51,
+      "type": "Magic",
+      "slug": "alp_fade_b_s",
+      "totalPlays": 3,
+      "totalWins": 2,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0.667,
+      "formats": {
+        "sealed": {
+          "plays": 2,
+          "wins": 2,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        },
+        "draft": {
+          "plays": 1,
+          "wins": 0,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Dormant Monstrosity": {
+      "cardId": 788,
+      "type": "Minion",
+      "slug": "got-dormant_monstrosity-b-s",
+      "totalPlays": 2,
+      "totalWins": 1,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0.5,
+      "formats": {
+        "sealed": {
+          "plays": 2,
+          "wins": 1,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Nommo Monitor": {
+      "cardId": 952,
+      "type": "Minion",
+      "slug": "got-nommo_monitor-b-s",
+      "totalPlays": 2,
+      "totalWins": 0,
+      "totalLosses": 2,
+      "totalDraws": 0,
+      "winRate": 0,
+      "formats": {
+        "sealed": {
+          "plays": 2,
+          "wins": 0,
+          "losses": 2,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Sparkmage": {
+      "cardId": 406,
+      "type": "Avatar",
+      "slug": "bet_sparkmage_b_s",
+      "totalPlays": 2,
+      "totalWins": 1,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0.5,
+      "formats": {
+        "sealed": {
+          "plays": 2,
+          "wins": 1,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Outback Strider": {
+      "cardId": 161,
+      "type": "Minion",
+      "slug": "alp_outback_strider_b_s",
+      "totalPlays": 2,
+      "totalWins": 0,
+      "totalLosses": 2,
+      "totalDraws": 0,
+      "winRate": 0,
+      "formats": {
+        "sealed": {
+          "plays": 2,
+          "wins": 0,
+          "losses": 2,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Plague Rat": {
+      "cardId": 980,
+      "type": "Minion",
+      "slug": "got-plague_rat-b-s",
+      "totalPlays": 3,
+      "totalWins": 3,
+      "totalLosses": 0,
+      "totalDraws": 0,
+      "winRate": 1,
+      "formats": {
+        "sealed": {
+          "plays": 2,
+          "wins": 2,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        },
+        "draft": {
+          "plays": 1,
+          "wins": 1,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "Tufted Turtles": {
+      "cardId": 244,
+      "type": "Minion",
+      "slug": "alp_tufted_turtles_b_s",
+      "totalPlays": 2,
+      "totalWins": 1,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0.5,
+      "formats": {
+        "sealed": {
+          "plays": 2,
+          "wins": 1,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Bottomless Pit": {
+      "cardId": 375,
+      "type": "Site",
+      "slug": "alp_bottomless_pit_b_s",
+      "totalPlays": 2,
+      "totalWins": 0,
+      "totalLosses": 2,
+      "totalDraws": 0,
+      "winRate": 0,
+      "formats": {
+        "sealed": {
+          "plays": 2,
+          "wins": 0,
+          "losses": 2,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Faith Incarnate": {
+      "cardId": 811,
+      "type": "Minion",
+      "slug": "got-faith_incarnate-b-s",
+      "totalPlays": 2,
+      "totalWins": 0,
+      "totalLosses": 2,
+      "totalDraws": 0,
+      "winRate": 0,
+      "formats": {
+        "sealed": {
+          "plays": 2,
+          "wins": 0,
+          "losses": 2,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Khamaseen Mummy": {
+      "cardId": 897,
+      "type": "Minion",
+      "slug": "got-khamaseen_mummy-b-s",
+      "totalPlays": 3,
+      "totalWins": 3,
+      "totalLosses": 0,
+      "totalDraws": 0,
+      "winRate": 1,
+      "formats": {
+        "sealed": {
+          "plays": 2,
+          "wins": 2,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        },
+        "draft": {
+          "plays": 1,
+          "wins": 1,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "Cranky Overseer": {
+      "cardId": 758,
+      "type": "Minion",
+      "slug": "got-cranky_overseer-b-s",
+      "totalPlays": 2,
+      "totalWins": 1,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0.5,
+      "formats": {
+        "sealed": {
+          "plays": 2,
+          "wins": 1,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Moss Troll": {
+      "cardId": 937,
+      "type": "Minion",
+      "slug": "got-moss_troll-b-s",
+      "totalPlays": 2,
+      "totalWins": 2,
+      "totalLosses": 0,
+      "totalDraws": 0,
+      "winRate": 1,
+      "formats": {
+        "sealed": {
+          "plays": 2,
+          "wins": 2,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "Swamp Buffalo": {
+      "cardId": 240,
+      "type": "Minion",
+      "slug": "alp_swamp_buffalo_b_s",
+      "totalPlays": 2,
+      "totalWins": 1,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0.5,
+      "formats": {
+        "sealed": {
+          "plays": 2,
+          "wins": 1,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Carrionette": {
+      "cardId": 740,
+      "type": "Magic",
+      "slug": "got-carrionette-b-s",
+      "totalPlays": 2,
+      "totalWins": 1,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0.5,
+      "formats": {
+        "sealed": {
+          "plays": 2,
+          "wins": 1,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Bog": {
+      "cardId": 434,
+      "type": "Site",
+      "slug": "art_bog_b_s",
+      "totalPlays": 2,
+      "totalWins": 1,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0.5,
+      "formats": {
+        "sealed": {
+          "plays": 2,
+          "wins": 1,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Treetop Hideout": {
+      "cardId": 612,
+      "type": "Site",
+      "slug": "art_treetop_hideout_b_s",
+      "totalPlays": 2,
+      "totalWins": 0,
+      "totalLosses": 2,
+      "totalDraws": 0,
+      "winRate": 0,
+      "formats": {
+        "sealed": {
+          "plays": 2,
+          "wins": 0,
+          "losses": 2,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Firebreathing": {
+      "cardId": 469,
+      "type": "Magic",
+      "slug": "art_firebreathing_b_s",
+      "totalPlays": 2,
+      "totalWins": 1,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0.5,
+      "formats": {
+        "sealed": {
+          "plays": 2,
+          "wins": 1,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Rimland Nomads": {
+      "cardId": 167,
+      "type": "Minion",
+      "slug": "alp_rimland_nomads_b_s",
+      "totalPlays": 2,
+      "totalWins": 1,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0.5,
+      "formats": {
+        "sealed": {
+          "plays": 2,
+          "wins": 1,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Croll Morlocks": {
+      "cardId": 762,
+      "type": "Minion",
+      "slug": "got-croll_morlocks-b-s",
+      "totalPlays": 2,
+      "totalWins": 1,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0.5,
+      "formats": {
+        "sealed": {
+          "plays": 2,
+          "wins": 1,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Zombie Bruiser": {
+      "cardId": 1102,
+      "type": "Minion",
+      "slug": "got-zombie_bruiser-b-s",
+      "totalPlays": 2,
+      "totalWins": 2,
+      "totalLosses": 0,
+      "totalDraws": 0,
+      "winRate": 1,
+      "formats": {
+        "sealed": {
+          "plays": 2,
+          "wins": 2,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "Common Village": {
+      "cardId": 452,
+      "type": "Site",
+      "slug": "art_common_village_b_s",
+      "totalPlays": 2,
+      "totalWins": 0,
+      "totalLosses": 2,
+      "totalDraws": 0,
+      "winRate": 0,
+      "formats": {
+        "sealed": {
+          "plays": 2,
+          "wins": 0,
+          "losses": 2,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Lash": {
+      "cardId": 905,
+      "type": "Magic",
+      "slug": "got-lash-b-s",
+      "totalPlays": 4,
+      "totalWins": 1,
+      "totalLosses": 3,
+      "totalDraws": 0,
+      "winRate": 0.25,
+      "formats": {
+        "sealed": {
+          "plays": 2,
+          "wins": 0,
+          "losses": 2,
+          "draws": 0,
+          "winRate": 0
+        },
+        "draft": {
+          "plays": 2,
+          "wins": 1,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Drowned": {
+      "cardId": 794,
+      "type": "Minion",
+      "slug": "got-drowned-b-s",
+      "totalPlays": 2,
+      "totalWins": 2,
+      "totalLosses": 0,
+      "totalDraws": 0,
+      "winRate": 1,
+      "formats": {
+        "sealed": {
+          "plays": 2,
+          "wins": 2,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "Willing Tribute": {
+      "cardId": 1093,
+      "type": "Minion",
+      "slug": "got-willing_tribute-b-s",
+      "totalPlays": 3,
+      "totalWins": 3,
+      "totalLosses": 0,
+      "totalDraws": 0,
+      "winRate": 1,
+      "formats": {
+        "sealed": {
+          "plays": 2,
+          "wins": 2,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        },
+        "draft": {
+          "plays": 1,
+          "wins": 1,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "Weathered Trunks": {
+      "cardId": 1090,
+      "type": "Minion",
+      "slug": "got-weathered_trunks-b-s",
+      "totalPlays": 2,
+      "totalWins": 2,
+      "totalLosses": 0,
+      "totalDraws": 0,
+      "winRate": 1,
+      "formats": {
+        "sealed": {
+          "plays": 2,
+          "wins": 2,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "Death Knight": {
+      "cardId": 768,
+      "type": "Minion",
+      "slug": "got-death_knight-b-s",
+      "totalPlays": 1,
+      "totalWins": 1,
+      "totalLosses": 0,
+      "totalDraws": 0,
+      "winRate": 1,
+      "formats": {
+        "sealed": {
+          "plays": 1,
+          "wins": 1,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "No Man's Land": {
+      "cardId": 951,
+      "type": "Site",
+      "slug": "got-no_mans_land-b-s",
+      "totalPlays": 1,
+      "totalWins": 0,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0,
+      "formats": {
+        "sealed": {
+          "plays": 1,
+          "wins": 0,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Order of the Pale Worm": {
+      "cardId": 962,
+      "type": "Minion",
+      "slug": "got-order_of_the_pale_worm-b-s",
+      "totalPlays": 1,
+      "totalWins": 0,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0,
+      "formats": {
+        "sealed": {
+          "plays": 1,
+          "wins": 0,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Clairvoyant": {
+      "cardId": 750,
+      "type": "Minion",
+      "slug": "got-clairvoyant-b-s",
+      "totalPlays": 2,
+      "totalWins": 1,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0.5,
+      "formats": {
+        "sealed": {
+          "plays": 1,
+          "wins": 1,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        },
+        "draft": {
+          "plays": 1,
+          "wins": 0,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Bane of Aventis": {
+      "cardId": 703,
+      "type": "Minion",
+      "slug": "got-bane_of_aventis-b-s",
+      "totalPlays": 1,
+      "totalWins": 0,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0,
+      "formats": {
+        "sealed": {
+          "plays": 1,
+          "wins": 0,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Forgotten Tomb": {
+      "cardId": 824,
+      "type": "Site",
+      "slug": "got-forgotten_tomb-b-s",
+      "totalPlays": 1,
+      "totalWins": 0,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0,
+      "formats": {
+        "sealed": {
+          "plays": 1,
+          "wins": 0,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Hellstar": {
+      "cardId": 866,
+      "type": "Minion",
+      "slug": "got-hellstar-b-s",
+      "totalPlays": 1,
+      "totalWins": 0,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0,
+      "formats": {
+        "sealed": {
+          "plays": 1,
+          "wins": 0,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Eltham Townsfolk": {
+      "cardId": 800,
+      "type": "Minion",
+      "slug": "got-eltham_townsfolk-b-s",
+      "totalPlays": 3,
+      "totalWins": 2,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0.667,
+      "formats": {
+        "sealed": {
+          "plays": 1,
+          "wins": 0,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0
+        },
+        "draft": {
+          "plays": 2,
+          "wins": 2,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "Troubled Town": {
+      "cardId": 1077,
+      "type": "Site",
+      "slug": "got-troubled_town-b-s",
+      "totalPlays": 1,
+      "totalWins": 0,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0,
+      "formats": {
+        "sealed": {
+          "plays": 1,
+          "wins": 0,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Tombstone Wardens": {
+      "cardId": 1069,
+      "type": "Artifact",
+      "slug": "got-tombstone_wardens-b-s",
+      "totalPlays": 1,
+      "totalWins": 0,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0,
+      "formats": {
+        "sealed": {
+          "plays": 1,
+          "wins": 0,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Profane Revenant": {
+      "cardId": 983,
+      "type": "Minion",
+      "slug": "got-profane_revenant-b-s",
+      "totalPlays": 1,
+      "totalWins": 1,
+      "totalLosses": 0,
+      "totalDraws": 0,
+      "winRate": 1,
+      "formats": {
+        "sealed": {
+          "plays": 1,
+          "wins": 1,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "Consecrate": {
+      "cardId": 752,
+      "type": "Magic",
+      "slug": "got-consecrate-b-s",
+      "totalPlays": 1,
+      "totalWins": 0,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0,
+      "formats": {
+        "sealed": {
+          "plays": 1,
+          "wins": 0,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Baptize": {
+      "cardId": 704,
+      "type": "Magic",
+      "slug": "got-baptize-b-s",
+      "totalPlays": 1,
+      "totalWins": 0,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0,
+      "formats": {
+        "sealed": {
+          "plays": 1,
+          "wins": 0,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Mayor of Milborne": {
+      "cardId": 925,
+      "type": "Minion",
+      "slug": "got-mayor_of_milborne-b-s",
+      "totalPlays": 1,
+      "totalWins": 0,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0,
+      "formats": {
+        "sealed": {
+          "plays": 1,
+          "wins": 0,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Exhume": {
+      "cardId": 809,
+      "type": "Magic",
+      "slug": "got-exhume-b-s",
+      "totalPlays": 1,
+      "totalWins": 1,
+      "totalLosses": 0,
+      "totalDraws": 0,
+      "winRate": 1,
+      "formats": {
+        "sealed": {
+          "plays": 1,
+          "wins": 1,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "Bureau of Occult Control": {
+      "cardId": 735,
+      "type": "Site",
+      "slug": "got-bureau_of_occult_control-b-s",
+      "totalPlays": 1,
+      "totalWins": 0,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0,
+      "formats": {
+        "sealed": {
+          "plays": 1,
+          "wins": 0,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Endless Fence": {
+      "cardId": 801,
+      "type": "Site",
+      "slug": "got-endless_fence-b-s",
+      "totalPlays": 1,
+      "totalWins": 1,
+      "totalLosses": 0,
+      "totalDraws": 0,
+      "winRate": 1,
+      "formats": {
+        "sealed": {
+          "plays": 1,
+          "wins": 1,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "Gift of the Raven": {
+      "cardId": 839,
+      "type": "Magic",
+      "slug": "got-gift_of_the_raven-b-s",
+      "totalPlays": 1,
+      "totalWins": 1,
+      "totalLosses": 0,
+      "totalDraws": 0,
+      "winRate": 1,
+      "formats": {
+        "sealed": {
+          "plays": 1,
+          "wins": 1,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "Bleeding Skull": {
+      "cardId": 719,
+      "type": "Artifact",
+      "slug": "got-bleeding_skull-b-s",
+      "totalPlays": 1,
+      "totalWins": 1,
+      "totalLosses": 0,
+      "totalDraws": 0,
+      "winRate": 1,
+      "formats": {
+        "sealed": {
+          "plays": 1,
+          "wins": 1,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "Virgin in Prayer": {
+      "cardId": 1087,
+      "type": "Minion",
+      "slug": "got-virgin_in_prayer-b-s",
+      "totalPlays": 2,
+      "totalWins": 1,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0.5,
+      "formats": {
+        "draft": {
+          "plays": 2,
+          "wins": 1,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0.5
+        }
+      }
+    },
+    "Beast of Burden": {
+      "cardId": 143,
+      "type": "Minion",
+      "slug": "alp_beast_of_burden_b_s",
+      "totalPlays": 1,
+      "totalWins": 1,
+      "totalLosses": 0,
+      "totalDraws": 0,
+      "winRate": 1,
+      "formats": {
+        "draft": {
+          "plays": 1,
+          "wins": 1,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "Bless": {
+      "cardId": 720,
+      "type": "Magic",
+      "slug": "got-bless-b-s",
+      "totalPlays": 1,
+      "totalWins": 1,
+      "totalLosses": 0,
+      "totalDraws": 0,
+      "winRate": 1,
+      "formats": {
+        "draft": {
+          "plays": 1,
+          "wins": 1,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "Wall of Brambles": {
+      "cardId": 623,
+      "type": "Aura",
+      "slug": "art_wall_of_brambles_b_s",
+      "totalPlays": 1,
+      "totalWins": 1,
+      "totalLosses": 0,
+      "totalDraws": 0,
+      "winRate": 1,
+      "formats": {
+        "draft": {
+          "plays": 1,
+          "wins": 1,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "Hamlet's Ablaze!": {
+      "cardId": 486,
+      "type": "Aura",
+      "slug": "art_hamlets_ablaze_b_s",
+      "totalPlays": 1,
+      "totalWins": 1,
+      "totalLosses": 0,
+      "totalDraws": 0,
+      "winRate": 1,
+      "formats": {
+        "draft": {
+          "plays": 1,
+          "wins": 1,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "Älvalinne Dryads": {
+      "cardId": 72,
+      "type": "Minion",
+      "slug": "alp_alvalinne_dryads_b_s",
+      "totalPlays": 1,
+      "totalWins": 1,
+      "totalLosses": 0,
+      "totalDraws": 0,
+      "winRate": 1,
+      "formats": {
+        "draft": {
+          "plays": 1,
+          "wins": 1,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "Sensu of the Fang": {
+      "cardId": 1016,
+      "type": "Artifact",
+      "slug": "got-sensu_of_the_fang-b-s",
+      "totalPlays": 1,
+      "totalWins": 0,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0,
+      "formats": {
+        "draft": {
+          "plays": 1,
+          "wins": 0,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Highland Clansmen": {
+      "cardId": 13,
+      "type": "Minion",
+      "slug": "alp_highland_clansmen_b_s",
+      "totalPlays": 1,
+      "totalWins": 0,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0,
+      "formats": {
+        "draft": {
+          "plays": 1,
+          "wins": 0,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Snow Leopard": {
+      "cardId": 37,
+      "type": "Minion",
+      "slug": "alp_snow_leopard_b_s",
+      "totalPlays": 1,
+      "totalWins": 0,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0,
+      "formats": {
+        "draft": {
+          "plays": 1,
+          "wins": 0,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Keening Banshee": {
+      "cardId": 499,
+      "type": "Minion",
+      "slug": "art_keening_banshee_b_s",
+      "totalPlays": 1,
+      "totalWins": 0,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0,
+      "formats": {
+        "draft": {
+          "plays": 1,
+          "wins": 0,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Petrosian Cavalry": {
+      "cardId": 163,
+      "type": "Minion",
+      "slug": "bet_petrosian_cavalry_b_s",
+      "totalPlays": 1,
+      "totalWins": 1,
+      "totalLosses": 0,
+      "totalDraws": 0,
+      "winRate": 1,
+      "formats": {
+        "draft": {
+          "plays": 1,
+          "wins": 1,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "Saracen Scout": {
+      "cardId": 553,
+      "type": "Minion",
+      "slug": "art_saracen_scout_b_s",
+      "totalPlays": 1,
+      "totalWins": 1,
+      "totalLosses": 0,
+      "totalDraws": 0,
+      "winRate": 1,
+      "formats": {
+        "draft": {
+          "plays": 1,
+          "wins": 1,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "Redbreast Robin": {
+      "cardId": 544,
+      "type": "Minion",
+      "slug": "art_redbreast_robin_b_s",
+      "totalPlays": 1,
+      "totalWins": 1,
+      "totalLosses": 0,
+      "totalDraws": 0,
+      "winRate": 1,
+      "formats": {
+        "draft": {
+          "plays": 1,
+          "wins": 1,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "Pendragon Banner": {
+      "cardId": 530,
+      "type": "Artifact",
+      "slug": "art_pendragon_banner_b_s",
+      "totalPlays": 1,
+      "totalWins": 0,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0,
+      "formats": {
+        "draft": {
+          "plays": 1,
+          "wins": 0,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Plumed Pegasus": {
+      "cardId": 29,
+      "type": "Minion",
+      "slug": "alp_plumed_pegasus_b_s",
+      "totalPlays": 1,
+      "totalWins": 0,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0,
+      "formats": {
+        "draft": {
+          "plays": 1,
+          "wins": 0,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Merlin": {
+      "cardId": 517,
+      "type": "Minion",
+      "slug": "art_merlin_b_s",
+      "totalPlays": 1,
+      "totalWins": 1,
+      "totalLosses": 0,
+      "totalDraws": 0,
+      "winRate": 1,
+      "formats": {
+        "draft": {
+          "plays": 1,
+          "wins": 1,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "Shield Maidens": {
+      "cardId": 104,
+      "type": "Minion",
+      "slug": "alp_shield_maidens_b_s",
+      "totalPlays": 1,
+      "totalWins": 0,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0,
+      "formats": {
+        "draft": {
+          "plays": 1,
+          "wins": 0,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Cave Trolls": {
+      "cardId": 79,
+      "type": "Minion",
+      "slug": "alp_cave_trolls_b_s",
+      "totalPlays": 1,
+      "totalWins": 0,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0,
+      "formats": {
+        "draft": {
+          "plays": 1,
+          "wins": 0,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Onyx Core": {
+      "cardId": 304,
+      "type": "Artifact",
+      "slug": "alp_onyx_core_b_s",
+      "totalPlays": 1,
+      "totalWins": 0,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0,
+      "formats": {
+        "draft": {
+          "plays": 1,
+          "wins": 0,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Zephyranne Airship": {
+      "cardId": 44,
+      "type": "Minion",
+      "slug": "alp_zephyranne_airship_b_s",
+      "totalPlays": 1,
+      "totalWins": 1,
+      "totalLosses": 0,
+      "totalDraws": 0,
+      "winRate": 1,
+      "formats": {
+        "draft": {
+          "plays": 1,
+          "wins": 1,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "The Lady of the Lake": {
+      "cardId": 601,
+      "type": "Minion",
+      "slug": "art_the_lady_of_the_lake_b_s",
+      "totalPlays": 1,
+      "totalWins": 1,
+      "totalLosses": 0,
+      "totalDraws": 0,
+      "winRate": 1,
+      "formats": {
+        "draft": {
+          "plays": 1,
+          "wins": 1,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    },
+    "Grief Larvae": {
+      "cardId": 853,
+      "type": "Minion",
+      "slug": "got-grief_larvae-b-s",
+      "totalPlays": 1,
+      "totalWins": 0,
+      "totalLosses": 1,
+      "totalDraws": 0,
+      "winRate": 0,
+      "formats": {
+        "draft": {
+          "plays": 1,
+          "wins": 0,
+          "losses": 1,
+          "draws": 0,
+          "winRate": 0
+        }
+      }
+    },
+    "Revered Revenant": {
+      "cardId": 998,
+      "type": "Minion",
+      "slug": "got-revered_revenant-b-s",
+      "totalPlays": 1,
+      "totalWins": 1,
+      "totalLosses": 0,
+      "totalDraws": 0,
+      "winRate": 1,
+      "formats": {
+        "draft": {
+          "plays": 1,
+          "wins": 1,
+          "losses": 0,
+          "draws": 0,
+          "winRate": 1
+        }
+      }
+    }
+  }
+}

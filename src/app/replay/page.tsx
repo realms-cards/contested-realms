@@ -17,6 +17,7 @@ interface MatchRecordingSummary {
   actionCount: number;
   matchType: string;
   playerIds?: string[];
+  isCpuMatch?: boolean;
 }
 
 export default function ReplayListPage() {
@@ -169,11 +170,63 @@ export default function ReplayListPage() {
     );
   };
 
-  // Separate recordings into own matches and others' matches
-  const ownRecordings = recordings.filter((recording) =>
+  const renderReplayCard = (recording: MatchRecordingSummary) => (
+    <div
+      key={recording.matchId}
+      className="bg-slate-900/60 border border-slate-800/70 rounded-xl px-4 py-4 hover:bg-slate-900/80 transition-colors cursor-pointer"
+      onClick={() => router.push(`/replay/${recording.matchId}`)}
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-3">
+            <h3 className="text-sm font-semibold text-slate-100">
+              {recording.playerNames.join(" vs ")}
+            </h3>
+            <span
+              className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide ${
+                recording.isCpuMatch
+                  ? "bg-amber-500/60 text-amber-50"
+                  : recording.matchType === "sealed"
+                    ? "bg-blue-500/60 text-blue-50"
+                    : "bg-emerald-500/60 text-emerald-50"
+              }`}
+            >
+              {recording.isCpuMatch ? "vs CPU" : recording.matchType}
+            </span>
+          </div>
+          <div className="text-xs text-slate-400">
+            {formatDate(recording.startTime)}
+          </div>
+        </div>
+        <div className="text-right text-xs text-slate-400 space-y-1">
+          <div>
+            <span className="uppercase tracking-wide text-slate-500">
+              Duration:
+            </span>{" "}
+            {recording.duration
+              ? formatDuration(recording.duration)
+              : "In Progress"}
+          </div>
+          <div>
+            <span className="uppercase tracking-wide text-slate-500">
+              Actions:
+            </span>{" "}
+            {recording.actionCount}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Separate recordings into own matches, CPU matches, and others' matches
+  const onlineRecordings = recordings.filter((r) => !r.isCpuMatch);
+  const cpuRecordings = recordings.filter(
+    (r) => r.isCpuMatch && r.playerIds?.includes(currentPlayerId || "")
+  );
+  const ownRecordings = onlineRecordings.filter((recording) =>
     recording.playerIds?.includes(currentPlayerId || "")
   );
-  const otherRecordings = recordings.filter(
+  const otherRecordings = onlineRecordings.filter(
     (recording) => !recording.playerIds?.includes(currentPlayerId || "")
   );
 
@@ -282,51 +335,7 @@ export default function ReplayListPage() {
               </span>
             </div>
             <div className="grid gap-3">
-              {recordings.map((recording) => (
-                <div
-                  key={recording.matchId}
-                  className="bg-slate-900/60 border border-slate-800/70 rounded-xl px-4 py-4 hover:bg-slate-900/80 transition-colors cursor-pointer"
-                  onClick={() => router.push(`/replay/${recording.matchId}`)}
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="space-y-2">
-                      <div className="flex flex-wrap items-center gap-3">
-                        <h3 className="text-sm font-semibold text-slate-100">
-                          {recording.playerNames.join(" vs ")}
-                        </h3>
-                        <span
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide ${
-                            recording.matchType === "sealed"
-                              ? "bg-blue-500/60 text-blue-50"
-                              : "bg-emerald-500/60 text-emerald-50"
-                          }`}
-                        >
-                          {recording.matchType}
-                        </span>
-                      </div>
-                      <div className="text-xs text-slate-400">
-                        {formatDate(recording.startTime)}
-                      </div>
-                    </div>
-                    <div className="text-right text-xs text-slate-400 space-y-1">
-                      <div>
-                        <span className="uppercase tracking-wide text-slate-500">
-                          Duration:
-                        </span>{" "}
-                        {recording.duration
-                          ? formatDuration(recording.duration)
-                          : "In Progress"}
-                      </div>
-                      <div>
-                        <span className="uppercase tracking-wide text-slate-500">
-                          Actions:
-                        </span>{" "}
-                        {recording.actionCount}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
+              {recordings.map(renderReplayCard)}
             </div>
             {hasMore && (
               <button
@@ -334,7 +343,7 @@ export default function ReplayListPage() {
                 disabled={loadingMore}
                 className="w-full py-3 px-4 bg-slate-800/60 hover:bg-slate-800 disabled:bg-slate-800/40 border border-slate-700 rounded-lg text-sm text-slate-200 disabled:text-slate-500 transition-colors"
               >
-                {loadingMore ? "Loading…" : "Load More"}
+                {loadingMore ? "Loading..." : "Load More"}
               </button>
             )}
           </div>
@@ -351,53 +360,7 @@ export default function ReplayListPage() {
                   </span>
                 </div>
                 <div className="grid gap-3">
-                  {ownRecordings.map((recording) => (
-                    <div
-                      key={recording.matchId}
-                      className="bg-slate-900/60 border border-slate-800/70 rounded-xl px-4 py-4 hover:bg-slate-900/80 transition-colors cursor-pointer"
-                      onClick={() =>
-                        router.push(`/replay/${recording.matchId}`)
-                      }
-                    >
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="space-y-2">
-                          <div className="flex flex-wrap items-center gap-3">
-                            <h3 className="text-sm font-semibold text-slate-100">
-                              {recording.playerNames.join(" vs ")}
-                            </h3>
-                            <span
-                              className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide ${
-                                recording.matchType === "sealed"
-                                  ? "bg-blue-500/60 text-blue-50"
-                                  : "bg-emerald-500/60 text-emerald-50"
-                              }`}
-                            >
-                              {recording.matchType}
-                            </span>
-                          </div>
-                          <div className="text-xs text-slate-400">
-                            {formatDate(recording.startTime)}
-                          </div>
-                        </div>
-                        <div className="text-right text-xs text-slate-400 space-y-1">
-                          <div>
-                            <span className="uppercase tracking-wide text-slate-500">
-                              Duration:
-                            </span>{" "}
-                            {recording.duration
-                              ? formatDuration(recording.duration)
-                              : "In Progress"}
-                          </div>
-                          <div>
-                            <span className="uppercase tracking-wide text-slate-500">
-                              Actions:
-                            </span>{" "}
-                            {recording.actionCount}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                  {ownRecordings.map(renderReplayCard)}
                 </div>
               </div>
             )}
@@ -413,53 +376,23 @@ export default function ReplayListPage() {
                   </span>
                 </div>
                 <div className="grid gap-3">
-                  {otherRecordings.map((recording) => (
-                    <div
-                      key={recording.matchId}
-                      className="bg-slate-900/60 border border-slate-800/70 rounded-xl px-4 py-4 hover:bg-slate-900/80 transition-colors cursor-pointer"
-                      onClick={() =>
-                        router.push(`/replay/${recording.matchId}`)
-                      }
-                    >
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="space-y-2">
-                          <div className="flex flex-wrap items-center gap-3">
-                            <h3 className="text-sm font-semibold text-slate-100">
-                              {recording.playerNames.join(" vs ")}
-                            </h3>
-                            <span
-                              className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide ${
-                                recording.matchType === "sealed"
-                                  ? "bg-blue-500/60 text-blue-50"
-                                  : "bg-emerald-500/60 text-emerald-50"
-                              }`}
-                            >
-                              {recording.matchType}
-                            </span>
-                          </div>
-                          <div className="text-xs text-slate-400">
-                            {formatDate(recording.startTime)}
-                          </div>
-                        </div>
-                        <div className="text-right text-xs text-slate-400 space-y-1">
-                          <div>
-                            <span className="uppercase tracking-wide text-slate-500">
-                              Duration:
-                            </span>{" "}
-                            {recording.duration
-                              ? formatDuration(recording.duration)
-                              : "In Progress"}
-                          </div>
-                          <div>
-                            <span className="uppercase tracking-wide text-slate-500">
-                              Actions:
-                            </span>{" "}
-                            {recording.actionCount}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                  {otherRecordings.map(renderReplayCard)}
+                </div>
+              </div>
+            )}
+
+            {cpuRecordings.length > 0 && (
+              <div className="rounded-xl bg-slate-950/60 ring-1 ring-amber-900/40 p-5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-semibold uppercase tracking-wide text-amber-200">
+                    vs CPU
+                  </h2>
+                  <span className="text-xs text-slate-400">
+                    {cpuRecordings.length} replays
+                  </span>
+                </div>
+                <div className="grid gap-3">
+                  {cpuRecordings.map(renderReplayCard)}
                 </div>
               </div>
             )}
@@ -471,7 +404,7 @@ export default function ReplayListPage() {
                   disabled={loadingMore}
                   className="w-full py-3 px-4 bg-slate-800/60 hover:bg-slate-800 disabled:bg-slate-800/40 border border-slate-700 rounded-lg text-sm text-slate-200 disabled:text-slate-500 transition-colors"
                 >
-                  {loadingMore ? "Loading…" : "Load More"}
+                  {loadingMore ? "Loading..." : "Load More"}
                 </button>
               </div>
             )}

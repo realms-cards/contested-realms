@@ -861,20 +861,21 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
     ) => {
       const dmg = Math.max(0, Math.floor(Number(amount) || 0));
       if (dmg <= 0) return;
-      if (!tr || isLocalTransport) {
-        try {
-          get().addLife(seat, -dmg, isAvatarDamage);
-        } catch {}
-        return;
-      }
+      // Always apply locally so the resolving client sees the change immediately.
+      // For online play, also broadcast so the remote client can apply its own copy.
       try {
-        tr.sendMessage?.({
-          type: "combatLifeDamage",
-          id: pending.id,
-          damage: [{ seat, amount: dmg, isAvatarDamage }],
-          ts: Date.now(),
-        } as unknown as CustomMessage);
+        get().addLife(seat, -dmg, isAvatarDamage);
       } catch {}
+      if (tr && !isLocalTransport) {
+        try {
+          tr.sendMessage?.({
+            type: "combatLifeDamage",
+            id: pending.id,
+            damage: [{ seat, amount: dmg, isAvatarDamage }],
+            ts: Date.now(),
+          } as unknown as CustomMessage);
+        } catch {}
+      }
     };
 
     function getAtkDef(

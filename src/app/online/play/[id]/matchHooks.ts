@@ -276,6 +276,35 @@ export function useChaosTwisterListener(transport: MessageTransport | null) {
   }, [transport, receiveCustomMessage]);
 }
 
+/**
+ * Listen for bot action toast messages and dispatch them as app:toast events.
+ * The headless bot client emits "botActionToast" messages for each action it takes.
+ */
+export function useBotActionToastListener(
+  transport: MessageTransport | null
+) {
+  useEffect(() => {
+    if (!transport?.on) return;
+    if (typeof window === "undefined") return;
+    const off = transport.on("message", (m) => {
+      const msg = m as Record<string, unknown> | null;
+      if (!msg || msg.type !== "botActionToast") return;
+      const message = typeof msg.message === "string" ? msg.message : null;
+      if (!message) return;
+      window.dispatchEvent(
+        new CustomEvent("app:toast", {
+          detail: { message: `🤖 ${message}` },
+        })
+      );
+    });
+    return () => {
+      try {
+        off?.();
+      } catch {}
+    };
+  }, [transport]);
+}
+
 export function useBoardPingListener(transport: MessageTransport | null) {
   useEffect(() => {
     if (!transport?.on) return;

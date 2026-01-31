@@ -26,6 +26,9 @@ export interface FeatureFlags {
   cardSleeves: {
     enabled: boolean;
   };
+  cpuBots: {
+    enabled: boolean;
+  };
 }
 
 /**
@@ -87,6 +90,11 @@ export const FEATURE_FLAGS: FeatureFlags = {
       true
     ),
   },
+  cpuBots: {
+    enabled:
+      process.env.NEXT_PUBLIC_CPU_BOTS_ENABLED === "1" ||
+      parseBooleanFlag(process.env.NEXT_PUBLIC_CPU_BOTS_ENABLED, false),
+  },
 };
 
 /**
@@ -126,3 +134,4 @@ export const FEATURE_SEAT_VIDEO: boolean = FEATURE_FLAGS.seatVideo.enabled;
 export const FEATURE_AUDIO_ONLY: boolean = FEATURE_FLAGS.audioOnlyRtc.enabled;
 export const FEATURE_UNDO: boolean = FEATURE_FLAGS.undo.enabled;
 export const FEATURE_CARD_SLEEVES: boolean = FEATURE_FLAGS.cardSleeves.enabled;
+export const FEATURE_CPU_BOTS: boolean = FEATURE_FLAGS.cpuBots.enabled;

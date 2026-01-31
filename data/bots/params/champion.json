@@ -1,9 +1,9 @@
 {
   "meta": {
-    "id": "refined/v9-learned-patterns",
-    "description": "Self-correcting strategy with learned patterns from 100 production replays",
-    "version": "9.0.0",
-    "created": "2026-01-25",
+    "id": "refined/v10-type-aware",
+    "description": "Type-specific card evaluation with per-card winrate data and card-type-aware strategic modifiers",
+    "version": "10.0.0",
+    "created": "2026-01-29",
     "changes": [
       "T002: Added cost and threshold validation",
       "T004-T008: Added board development, mana efficiency, threat deployment, life pressure features",
@@ -11,13 +11,16 @@
       "T011: Integrated strategic modifiers into search scoring",
       "T012-T014: Refined candidate generation and prioritization",
       "T048: Increased early mana development priority (w_sites 2.0→3.5, extended establish_mana_base to turn 6)",
-      "T061: AGGRESSIVE TUNING - penalize drawing (w_hand: -0.1), boost sites (5.0), board development (1.5), life pressure (2.0), add 'draw' modifier to discourage spam",
-      "T073: ULTRA-AGGRESSIVE - massive draw penalty (0.01-0.05), extreme site priority (5.0→8.0 modifier), punish card hoarding (-0.5)",
-      "T078: BALANCED - moderate hand penalty (-0.2), tactical draw modifiers (0.1-0.2), conditional draw generation (hand<6)",
-      "T100: DETERMINISTIC RULES - Turn 1 ALWAYS plays site, Turn 2-3 strongly prefer sites, bypasses scoring for obvious plays",
-      "T101: ATTACK PRIORITY - Sites first for mana denial, lethal always taken, avatar chip damage lowest priority",
-      "T102: THRESHOLD-AWARE DRAWING - Analyzes hand for missing thresholds, prefers atlas when fixing thresholds needed",
-      "T103: LEARNED PATTERNS - Analyzed 100 production replays. Key findings: losers play 192% more units on turn 1 (overextending), losers rush 37% more units on turn 3. Updated modifiers to penalize early unit spam."
+      "T061: AGGRESSIVE TUNING - penalize drawing, boost sites, board development, life pressure",
+      "T078: BALANCED - moderate hand penalty, tactical draw modifiers, conditional draw generation",
+      "T100: DETERMINISTIC RULES - Turn 1 ALWAYS plays site, bypasses scoring for obvious plays",
+      "T101: ATTACK PRIORITY - Sites first for mana denial, lethal always taken",
+      "T102: THRESHOLD-AWARE DRAWING - Analyzes hand for missing thresholds",
+      "T103: LEARNED PATTERNS - 100 replay analysis, penalize early unit overextension",
+      "T200: TYPE-SPECIFIC EVALUATION - Per-card-type evaluators (Site, Minion, Magic, Aura, Artifact) with keyword bonuses, stats efficiency, board context",
+      "T201: WINRATE INTEGRATION - Production winrate data as power tier signal (tier 1-5)",
+      "T202: AVATAR TAP ALTERNATIVES - Bot evaluates drawing a site vs placing one",
+      "T203: TYPE-AWARE MODIFIERS - Strategic modifiers for play_magic, play_aura, play_artifact, avatar_tap"
     ]
   },
   "search": {
@@ -87,16 +90,20 @@
     "legal_move_fallback": "pass_or_minimal"
   },
   "strategic_modifiers": {
-    "_comment": "Phase-based strategy (T103: LEARNED PATTERNS - winners play fewer units on T1, avoid overextending)",
+    "_comment": "Phase-based type-specific strategy (T200: card-type-aware modifiers for Site, Minion, Magic, Aura, Artifact)",
     "turn_1_mandatory_site": {
       "condition": "turnNumber === 1 && ownedSites === 0",
       "modifiers": {
         "play_site": 10.0,
         "play_unit": 0.1,
         "play_minion": 0.1,
+        "play_magic": 0.1,
+        "play_aura": 0.05,
+        "play_artifact": 0.05,
+        "avatar_tap": 0.3,
         "draw": 0.3
       },
-      "_comment": "T103: Losers play 192% more units on turn 1. Site is mandatory, penalize unit plays heavily."
+      "_comment": "T103: Site is mandatory on turn 1. All non-site plays heavily penalized."
     },
     "establish_mana_base": {
       "condition": "turnNumber <= 3 && ownedSites < 3 && ownedSites >= 1",
@@ -104,9 +111,13 @@
         "play_site": 5.0,
         "play_unit": 0.2,
         "play_minion": 0.2,
+        "play_magic": 0.3,
+        "play_aura": 0.1,
+        "play_artifact": 0.15,
+        "avatar_tap": 0.8,
         "draw": 0.25
       },
-      "_comment": "T103: Reduced unit modifier from 0.3 to 0.2 based on loser patterns showing early unit overextension"
+      "_comment": "T200: Added type-specific modifiers. Auras/artifacts too early. Avatar tap okay for drawing sites."
     },
     "expand_toward_opponent": {
       "condition": "ownedSites >= 3 && ownedSites < 8",
@@ -114,6 +125,10 @@
         "play_site": 3.0,
         "play_unit": 1.8,
         "play_minion": 1.8,
+        "play_magic": 1.5,
+        "play_aura": 1.2,
+        "play_artifact": 1.3,
+        "avatar_tap": 0.6,
         "draw": 0.15
       }
     },
@@ -122,7 +137,11 @@
       "modifiers": {
         "play_minion": 2.5,
         "play_unit": 2.5,
+        "play_magic": 1.5,
+        "play_aura": 1.8,
+        "play_artifact": 1.5,
         "play_site": 1.8,
+        "avatar_tap": 0.5,
         "draw": 0.1
       }
     },
@@ -131,18 +150,28 @@
       "modifiers": {
         "attack": 2.5,
         "play_minion": 1.8,
+        "play_magic": 2.0,
+        "play_aura": 1.2,
+        "play_artifact": 1.2,
         "play_site": 2.0,
+        "avatar_tap": 0.4,
         "draw": 0.1
-      }
+      },
+      "_comment": "T200: Magic spells (removal/tricks) highly valued during combat phase"
     },
     "defend_lethal": {
       "condition": "oppThreatDeploy >= myLife && myLife > 0",
       "modifiers": {
         "play_unit": 4.0,
         "play_minion": 4.0,
+        "play_magic": 3.0,
+        "play_aura": 0.5,
+        "play_artifact": 0.5,
+        "avatar_tap": 0.2,
         "attack": 0.3,
         "draw": 0.05
-      }
+      },
+      "_comment": "T200: Removal spells critical when defending. No time for enchantments."
     }
   },
   "quality_metrics": {

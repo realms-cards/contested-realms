@@ -12,11 +12,6 @@ import type { SoatcStatus } from "@/lib/hooks/useSoatcStatus";
 import type { TournamentInfo, LobbyInfo } from "@/lib/net/protocol";
 import { generateLobbyName } from "@/lib/random-name-generator";
 
-// Check if CPU bots are enabled via environment variable
-function isCpuBotsEnabled(): boolean {
-  const enabled = process.env.NEXT_PUBLIC_CPU_BOTS_ENABLED;
-  return enabled === "1" || enabled === "true";
-}
 
 // Format duration from timestamp to human-readable string
 function formatDuration(startedAt: number | null | undefined): string {
@@ -1042,42 +1037,7 @@ export default function LobbiesCentral({
                           )}
                         </button>
                       )}
-                      {onAddCpuBot &&
-                        myId &&
-                        l.hostId === myId &&
-                        isCpuBotsEnabled() && (
-                          <button
-                            className="ml-1 rounded bg-indigo-600/80 hover:bg-indigo-600 px-3 py-1 text-xs disabled:opacity-40"
-                            onClick={() => onAddCpuBot("CPU Easy")}
-                            disabled={
-                              !(l.status === "open") ||
-                              l.players.length >= l.maxPlayers
-                            }
-                            title={
-                              l.players.length >= l.maxPlayers
-                                ? "Lobby is full"
-                                : "Add a CPU bot to this lobby"
-                            }
-                          >
-                            Add CPU Bot
-                          </button>
-                        )}
-
-                      {onRemoveCpuBot &&
-                        myId &&
-                        l.hostId === myId &&
-                        isCpuBotsEnabled() && (
-                          <button
-                            className="ml-1 rounded bg-rose-600/80 hover:bg-rose-600 px-3 py-1 text-xs disabled:opacity-40"
-                            onClick={() => onRemoveCpuBot()}
-                            disabled={
-                              !l.players.some((p) => p.id.startsWith("cpu_"))
-                            }
-                            title="Remove a CPU bot from this lobby"
-                          >
-                            Remove CPU Bot
-                          </button>
-                        )}
+                      {/* CPU bot lobby buttons hidden — use Solo vs CPU route instead */}
 
                       <button
                         className="rounded bg-slate-700 hover:bg-slate-600 px-2 py-1 text-xs"

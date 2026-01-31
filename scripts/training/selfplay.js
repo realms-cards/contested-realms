@@ -13,7 +13,7 @@ const fs = require('fs');
 const path = require('path');
 const { io } = require('socket.io-client');
 const { PrismaClient } = require('@prisma/client');
-const { BotClient } = require('../../bots/headless-bot-client');
+const { BotClient, loadCardIdMap } = require('../../bots/headless-bot-client');
 const { analyzeLogFiles } = require('./analyze-logs');
 const { runSmokeTest, reportSmokeTest } = require('./smoke-test');
 
@@ -84,7 +84,7 @@ function loadThetaMaybe(p) {
 (async () => {
   const opts = parseArgs(process.argv);
   const hostId = `host_${Math.random().toString(36).slice(2, 10)}`;
-  const socket = io(opts.server, { transports: ['websocket'], autoConnect: true });
+  const socket = io(opts.server, { transports: ['websocket'], autoConnect: true, auth: { clientVersion: 2 } });
 
   console.log(`[SelfPlay] Config -> server=${opts.server}, rounds=${opts.rounds}, match=${opts.match}, durationSec=${opts.durationSec}`);
 
@@ -99,11 +99,16 @@ function loadThetaMaybe(p) {
   let thetaMetaA = null;
   let thetaMetaB = null;
   let prisma = null;
+  let stuckCheckTimer = null;
+  let lastStateChangeAt = Date.now();
+  let lastCurrentPlayer = null;
+  let turnsSeen = 0;
 
   function cleanupAndExit(code = 0) {
     try { if (joinPollTimer) clearInterval(joinPollTimer); } catch {}
     try { if (globalTimer) clearTimeout(globalTimer); } catch {}
     try { if (matchTimer) clearTimeout(matchTimer); } catch {}
+    try { if (stuckCheckTimer) clearInterval(stuckCheckTimer); } catch {}
     try { botA && botA.stop && botA.stop(); } catch {}
     try { botB && botB.stop && botB.stop(); } catch {}
     try { prisma && prisma.$disconnect && prisma.$disconnect().catch(()=>{}); } catch {}
@@ -193,6 +198,15 @@ function loadThetaMaybe(p) {
     let deckConfA = null;
     let deckConfB = null;
     (async () => {
+      // Ensure Prisma client is available for card ID map loading
+      if (!prisma) prisma = new PrismaClient();
+      // Load card name → DB id mapping so server accepts bot zone writes
+      try {
+        await loadCardIdMap(prisma);
+      } catch (e) {
+        console.warn('[SelfPlay] Failed to load card ID map:', e?.message || e);
+      }
+
       if (!opts.deckA || !opts.deckB) {
         const confs = await pickRandomPrecons();
         console.log(`[SelfPlay] Loaded ${confs.length} precon deck(s) from database`);
@@ -384,4 +398,63 @@ function loadThetaMaybe(p) {
       setTimeout(() => cleanupAndExit(0), 1000);
     }
   });
+
+  // --- Stuck-match detection ---
+  // Poll bot internal state to detect when no turn progress happens
+  // (Host socket isn't in the match room, so we can't rely on statePatch events)
+  const STUCK_TIMEOUT_SEC = 30; // If no turn progress for 30s, match is stuck
+  const MAX_TURNS = 60; // If game exceeds 60 turns, declare stalemate
+
+  // Periodic check for stuck matches AND game-over detection (every 5 seconds)
+  stuckCheckTimer = setInterval(() => {
+    try {
+      if (!observedMatchId) return; // Match hasn't started yet
+
+      // Check if either bot reports game ended
+      const endedA = botA?._gameEnded === true;
+      const endedB = botB?._gameEnded === true;
+      if (endedA || endedB) {
+        const winner = botA?._gameWinner || botB?._gameWinner || null;
+        console.log(`[SelfPlay] Game ended detected via bot state. Winner: ${winner || 'unknown'}`);
+        // Synthesize matchEnded data for the handler
+        const syntheticData = { matchId: observedMatchId, winnerId: winner };
+        socket.emit('matchEnded', syntheticData); // Won't reach server but triggers local handler
+        // Directly invoke cleanup since observer socket won't receive matchEnded from server
+        setTimeout(() => cleanupAndExit(0), 2000);
+        return;
+      }
+
+      // Read turn index from bots' internal state
+      const turnA = botA?._turnIndex ?? 0;
+      const turnB = botB?._turnIndex ?? 0;
+      const maxTurn = Math.max(turnA, turnB);
+
+      if (maxTurn !== turnsSeen) {
+        // Turn progressed
+        turnsSeen = maxTurn;
+        lastStateChangeAt = Date.now();
+        if (turnsSeen % 5 === 0) {
+          const cpA = botA?._game?.currentPlayer ?? '?';
+          console.log(`[SelfPlay] Turn ${turnsSeen} (currentPlayer=${cpA})`);
+        }
+      }
+
+      const elapsed = (Date.now() - lastStateChangeAt) / 1000;
+
+      if (elapsed >= STUCK_TIMEOUT_SEC) {
+        const cpA = botA?._game?.currentPlayer ?? '?';
+        const cpB = botB?._game?.currentPlayer ?? '?';
+        console.error(`[SelfPlay] STUCK MATCH DETECTED: No turn change for ${Math.round(elapsed)}s (turn ${turnsSeen}, cpA=${cpA}, cpB=${cpB})`);
+        console.error('[SelfPlay] Force-closing match as stalemate.');
+        cleanupAndExit(1);
+        return;
+      }
+
+      if (turnsSeen >= MAX_TURNS) {
+        console.warn(`[SelfPlay] STALEMATE: Match exceeded ${MAX_TURNS} turns. Force-closing.`);
+        cleanupAndExit(1);
+        return;
+      }
+    } catch {}
+  }, 5000);
 })();

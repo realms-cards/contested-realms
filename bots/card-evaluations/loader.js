@@ -475,6 +475,250 @@ function parsePosition(cellKey) {
   return { r, c };
 }
 
+// =============================================================================
+// Card Lookup Table - unified metadata with winrates, power tiers, keywords
+// =============================================================================
+
+let cardLookup = null;
+
+/**
+ * Load the unified card lookup table
+ * @param {string} [filePath] - Optional path to card-lookup.json
+ * @returns {object|null} The lookup table or null
+ */
+function loadCardLookup(filePath) {
+  if (cardLookup) return cardLookup;
+
+  const absPath = filePath
+    ? (path.isAbsolute(filePath) ? filePath : path.join(process.cwd(), filePath))
+    : path.join(process.cwd(), 'data', 'bots', 'card-lookup.json');
+
+  try {
+    if (!fs.existsSync(absPath)) {
+      console.warn(`[CardEval] Card lookup not found: ${absPath}`);
+      return null;
+    }
+    const raw = JSON.parse(fs.readFileSync(absPath, 'utf8'));
+    cardLookup = raw.cards || {};
+    console.log(`[CardEval] Loaded card lookup: ${Object.keys(cardLookup).length} cards`);
+    return cardLookup;
+  } catch (e) {
+    console.warn(`[CardEval] Failed to load card lookup:`, e.message);
+    return null;
+  }
+}
+
+/**
+ * Get card lookup entry
+ * @param {string} cardName
+ * @returns {object|null}
+ */
+function getCardLookup(cardName) {
+  if (!cardLookup) loadCardLookup();
+  return (cardLookup && cardLookup[cardName]) || null;
+}
+
+/**
+ * Get power tier (1=premium, 5=weak, 3=default)
+ * @param {string} cardName
+ * @returns {number}
+ */
+function getCardPowerTier(cardName) {
+  const entry = getCardLookup(cardName);
+  return entry ? (entry.powerTier || 3) : 3;
+}
+
+/**
+ * Get production winrate
+ * @param {string} cardName
+ * @returns {number|null}
+ */
+function getWinRate(cardName) {
+  const entry = getCardLookup(cardName);
+  return entry ? (entry.winRate || null) : null;
+}
+
+// Lazy-loaded name→type map from cards_raw.json for fallback type detection
+let _cardTypeMap = null;
+function _getCardTypeMap() {
+  if (_cardTypeMap) return _cardTypeMap;
+  _cardTypeMap = {};
+  try {
+    const rawPath = path.join(__dirname, '..', '..', 'data', 'cards_raw.json');
+    if (fs.existsSync(rawPath)) {
+      const cards = JSON.parse(fs.readFileSync(rawPath, 'utf8'));
+      for (const c of cards) {
+        const name = c && c.name;
+        const type = c?.guardian?.type || (c?.sets?.[0]?.metadata?.type) || null;
+        if (name && type) _cardTypeMap[name.toLowerCase()] = type;
+      }
+      console.log(`[CardEval] Loaded card type map: ${Object.keys(_cardTypeMap).length} cards from cards_raw.json`);
+    }
+  } catch (e) {
+    console.warn('[CardEval] Failed to load card type map:', e.message);
+  }
+  return _cardTypeMap;
+}
+
+/**
+ * Look up card type by name from cards_raw.json
+ * @param {string} cardName
+ * @returns {string|null} Raw type string or null
+ */
+function lookupCardTypeByName(cardName) {
+  if (!cardName) return null;
+  const map = _getCardTypeMap();
+  return map[cardName.toLowerCase()] || null;
+}
+
+/**
+ * Normalize card type to canonical form.
+ * Falls back to cards_raw.json lookup if card.type is missing.
+ * @param {object} card - Card object with type field
+ * @returns {string} One of: site, minion, magic, aura, artifact, avatar, unknown
+ */
+function getCardType(card) {
+  if (!card) return 'unknown';
+  let rawType = card.type ? String(card.type) : null;
+  // Fallback: look up from cards_raw.json by name
+  if (!rawType && card.name) {
+    rawType = lookupCardTypeByName(card.name);
+  }
+  if (!rawType) return 'unknown';
+  const t = rawType.toLowerCase();
+  if (t.includes('site')) return 'site';
+  if (t.includes('avatar')) return 'avatar';
+  if (t.includes('minion') || t.includes('unit')) return 'minion';
+  if (t.includes('aura') || t.includes('enchantment')) return 'aura';
+  if (t.includes('artifact') || t.includes('relic') || t.includes('equipment')) return 'artifact';
+  if (t.includes('magic') || t.includes('sorcery')) return 'magic';
+  return 'unknown';
+}
+
+/**
+ * Get keyword-based score adjustments for a card
+ * @param {object} card - Card object
+ * @returns {number} Keyword bonus score
+ */
+function getKeywordBonuses(card) {
+  const lookup = getCardLookup(card && card.name);
+  const keywords = (lookup && lookup.keywords) || [];
+  const rulesText = (card && card.text) || (lookup && lookup.rulesText) || '';
+  const text = rulesText.toLowerCase();
+
+  let bonus = 0;
+
+  // Evasion keywords
+  if (keywords.includes('airborne') || text.includes('airborne')) bonus += 1.5;
+  if (keywords.includes('stealth') || text.includes('stealth')) bonus += 1.0;
+  if (keywords.includes('burrow') || text.includes('burrow')) bonus += 0.8;
+  if (keywords.includes('voidwalk') || text.includes('voidwalk')) bonus += 1.0;
+
+  // Combat keywords
+  if (keywords.includes('lethal') || text.includes('lethal')) bonus += 2.0;
+  if (keywords.includes('ranged') || text.includes('ranged')) bonus += 1.2;
+  if (keywords.includes('initiative') || text.includes('initiative')) bonus += 1.0;
+
+  // Defensive keywords
+  if (keywords.includes('defender') || text.includes('defender')) bonus += 0.5;
+  if (keywords.includes('reach') || text.includes('reach')) bonus += 0.8;
+  if (keywords.includes('ward') || text.includes('ward')) bonus += 1.5;
+  if (keywords.includes('guardian') || text.includes('guardian')) bonus += 0.8;
+
+  // Value keywords
+  if (keywords.includes('genesis') || text.includes('genesis')) bonus += 1.5;
+  if (keywords.includes('lifesteal') || text.includes('lifesteal')) bonus += 1.0;
+  if (keywords.includes('dredge') || text.includes('dredge')) bonus += 0.5;
+
+  // Movement bonus
+  if (text.includes('movement +')) bonus += 0.5;
+
+  return bonus;
+}
+
+/**
+ * Get winrate-based bonus for scoring
+ * Maps power tiers to score bonuses used in the engine
+ * @param {string} cardName
+ * @returns {number} Score bonus (-2.0 to +3.0)
+ */
+function getWinrateBonus(cardName) {
+  const tier = getCardPowerTier(cardName);
+  const tierBonuses = {
+    1: 3.0,   // Premium cards
+    2: 1.5,   // Above average
+    3: 0.0,   // Average (no bonus)
+    4: -1.0,  // Below average
+    5: -2.0,  // Weak cards
+  };
+  return tierBonuses[tier] || 0;
+}
+
+/**
+ * Resolver-aware bonus scoring for cards with custom resolvers.
+ * Cards with interactive effects (tutors, card advantage, disruption)
+ * get additional score reflecting their actual gameplay impact.
+ * @param {string} cardName
+ * @returns {number} Resolver bonus (0 to +2.5)
+ */
+const RESOLVER_BONUSES = {
+  // Spell resolvers — scored by effect type
+  "browse":             { bonus: 2.5, tag: "card_advantage" },
+  "common sense":       { bonus: 2.0, tag: "tutor" },
+  "call to war":        { bonus: 2.0, tag: "tutor" },
+  "searing truth":      { bonus: 1.5, tag: "disruption" },
+  "accusation":         { bonus: 1.0, tag: "disruption" },
+  "earthquake":         { bonus: 2.0, tag: "board_wipe" },
+  "black mass":         { bonus: 1.5, tag: "sacrifice" },
+  "demonic contract":   { bonus: 1.5, tag: "card_advantage" },
+  "dhol chants":        { bonus: 1.0, tag: "card_advantage" },
+  "atlantean fate":     { bonus: 1.0, tag: "board_control" },
+  "doomsday cult":      { bonus: 1.0, tag: "sacrifice" },
+  "chaos twister":      { bonus: 0.5, tag: "minigame" },
+  "raise dead":         { bonus: 1.5, tag: "recursion" },
+  // Minion resolvers — scored by ETB value
+  "pith imp":           { bonus: 1.5, tag: "disruption" },
+  "highland princess":  { bonus: 1.5, tag: "token_gen" },
+  "assorted animals":   { bonus: 1.0, tag: "token_gen" },
+  "frontier settlers":  { bonus: 1.0, tag: "token_gen" },
+  "pigs of the sounder":{ bonus: 0.8, tag: "token_gen" },
+  "headless haunt":     { bonus: 0.5, tag: "movement" },
+  "lilith":             { bonus: 2.0, tag: "demon_summon" },
+  "mephistopheles":     { bonus: 2.5, tag: "avatar_upgrade" },
+  "legion of gall":     { bonus: 1.5, tag: "disruption" },
+  "pathfinder":         { bonus: 1.0, tag: "movement" },
+};
+
+function getResolverBonus(cardName) {
+  if (!cardName) return 0;
+  const key = cardName.toLowerCase();
+  const entry = RESOLVER_BONUSES[key];
+  return entry ? entry.bonus : 0;
+}
+
+/**
+ * Get the resolver tag for a card (e.g., "card_advantage", "tutor", "disruption").
+ * Returns null if the card has no resolver.
+ * @param {string} cardName
+ * @returns {string|null}
+ */
+function getResolverTag(cardName) {
+  if (!cardName) return null;
+  const key = cardName.toLowerCase();
+  const entry = RESOLVER_BONUSES[key];
+  return entry ? entry.tag : null;
+}
+
+/**
+ * Check if a card has a custom resolver
+ * @param {string} cardName
+ * @returns {boolean}
+ */
+function hasResolver(cardName) {
+  if (!cardName) return false;
+  return cardName.toLowerCase() in RESOLVER_BONUSES;
+}
+
 // Singleton instance
 let globalCache = null;
 
@@ -549,4 +793,17 @@ module.exports = {
   initCacheFromDatabase,
   buildEvaluationContext,
   evaluateCard,
+  // Card lookup table functions
+  loadCardLookup,
+  getCardLookup,
+  getCardPowerTier,
+  getWinRate,
+  getCardType,
+  lookupCardTypeByName,
+  getKeywordBonuses,
+  getWinrateBonus,
+  // Resolver awareness
+  getResolverBonus,
+  getResolverTag,
+  hasResolver,
 };
