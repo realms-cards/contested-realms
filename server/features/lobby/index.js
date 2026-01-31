@@ -52,6 +52,7 @@ function createLobbyFeature(deps) {
   const PORT = deps.port;
   const isCpuPlayerId = deps.isCpuPlayerId;
   const rtcMigration = deps.rtcMigration || null;
+  const botInternalSecret = deps.botInternalSecret || null;
 
   // Cache: card ID map loaded once for all bots
   let _botCardIdMapLoaded = false;
@@ -1711,6 +1712,7 @@ function createLobbyFeature(deps) {
             playerId: botId,
             lobbyId: lobby.id,
             constructedDeck: constructedDeck || undefined,
+            botSecret: botInternalSecret,
           });
           botManager.registerBot(botId, bot);
           bot.start().catch((err) => {
@@ -1818,6 +1820,7 @@ function createLobbyFeature(deps) {
           playerId: botId,
           lobbyId: lobby.id,
           constructedDeck: constructedDeck || undefined,
+          botSecret: botInternalSecret,
         });
         botManager.registerBot(botId, bot);
         bot.start().catch((err) => {

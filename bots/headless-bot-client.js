@@ -69,6 +69,7 @@ class BotClient {
     this.playerId =
       opts.playerId || `cpu_${Math.random().toString(36).slice(2, 10)}`;
     this.lobbyId = opts.lobbyId || null;
+    this._botSecret = opts.botSecret || null;
 
     this.socket = null;
     this.you = null; // { id, displayName }
@@ -159,11 +160,15 @@ class BotClient {
   async start() {
     if (this.socket) return;
 
+    const authPayload = { clientVersion: 2, playerId: this.playerId };
+    if (this._botSecret) {
+      authPayload.botSecret = this._botSecret;
+    }
     const socket = io(this.serverUrl, {
       transports: ["websocket"],
       autoConnect: true,
       reconnection: true,
-      auth: { clientVersion: 2 },
+      auth: authPayload,
     });
     this.socket = socket;
 
