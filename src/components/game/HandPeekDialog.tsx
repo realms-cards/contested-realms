@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import CardPreview from "@/components/game/CardPreview";
+import { cardRefToPreview } from "@/lib/game/card-preview.types";
 import type { CardRef, PlayerKey } from "@/lib/game/store";
 import { useGameStore } from "@/lib/game/store";
 
@@ -37,8 +39,12 @@ export default function HandPeekDialog({
 }: HandPeekDialogProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const cardsToRender = useMemo(() => cards ?? [], [cards]);
-  const setPreviewCard = useGameStore((s) => s.setPreviewCard);
   const handlePeekedCard = useGameStore((s) => s.handlePeekedCard);
+  const cardPreviewsEnabled = useGameStore((s) => s.cardPreviewsEnabled);
+  const toggleCardPreviews = useGameStore((s) => s.toggleCardPreviews);
+
+  // Local preview state (separate from global to show inside dialog)
+  const [previewCard, setPreviewCard] = useState<CardRef | null>(null);
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{
@@ -49,8 +55,13 @@ export default function HandPeekDialog({
   } | null>(null);
 
   useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
+    const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
+      // "p" toggles card previews (same as main game)
+      if (e.key === "p" || e.key === "P") {
+        e.preventDefault();
+        toggleCardPreviews();
+      }
     };
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
@@ -61,13 +72,13 @@ export default function HandPeekDialog({
         onClose();
       }
     };
-    document.addEventListener("keydown", handleEscape);
+    document.addEventListener("keydown", handleKeyDown);
     document.addEventListener("mousedown", handleClickOutside);
     return () => {
-      document.removeEventListener("keydown", handleEscape);
+      document.removeEventListener("keydown", handleKeyDown);
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [onClose]);
+  }, [onClose, toggleCardPreviews]);
 
   // Track cards that have been acted upon (removed from peek view)
   const [removedIndices, setRemovedIndices] = useState<Set<number>>(new Set());
@@ -86,11 +97,10 @@ export default function HandPeekDialog({
     return () => document.removeEventListener("mousedown", handleClick);
   }, [contextMenu]);
 
+  // Clear preview when cards change
   useEffect(() => {
-    // Clear global preview when dialog mounts/unmounts or card set changes
     setPreviewCard(null);
-    return () => setPreviewCard(null);
-  }, [setPreviewCard]);
+  }, [cards]);
 
   // Handle context menu action
   const handleAction = useCallback(
@@ -323,6 +333,15 @@ export default function HandPeekDialog({
             ⛔ Banish
           </button>
         </div>
+      )}
+
+      {/* Card preview overlay - uses same component as main game */}
+      {cardPreviewsEnabled && (
+        <CardPreview
+          card={cardRefToPreview(previewCard)}
+          anchor="top-right"
+          zIndexClass="z-[70]"
+        />
       )}
     </div>
   );
