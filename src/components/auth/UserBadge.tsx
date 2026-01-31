@@ -1186,7 +1186,6 @@ export default function UserBadge({
               <div className="flex items-center gap-3">
                 <div className="w-14 h-14 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center overflow-hidden">
                   {previewAvatar ? (
-                    // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={previewAvatar}
                       alt="Avatar preview"

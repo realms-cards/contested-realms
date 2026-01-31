@@ -3,7 +3,6 @@
 import { OrbitControls } from "@react-three/drei";
 import { useParams, useRouter } from "next/navigation";
 import { useState, useEffect, useCallback } from "react";
-import { CustomSelect } from "@/components/ui/CustomSelect";
 import CardPreview from "@/components/game/CardPreview";
 import { ClientCanvas } from "@/components/game/ClientCanvas";
 import OnlineConsole from "@/components/game/OnlineConsole";
@@ -14,6 +13,7 @@ import {
   DynamicHand3D as Hand3D,
   DynamicPiles3D as Piles3D,
 } from "@/components/game/dynamic-3d";
+import { CustomSelect } from "@/components/ui/CustomSelect";
 import TextureCache from "@/lib/game/components/TextureCache";
 import { Physics } from "@/lib/game/physics";
 import { useGameStore } from "@/lib/game/store";

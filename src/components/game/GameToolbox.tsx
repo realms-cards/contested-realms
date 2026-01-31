@@ -5,10 +5,12 @@ import { Wrench, Eye, Search, AlertTriangle, Circle } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useRef, useState, useMemo } from "react";
 import BugReportModal from "@/components/game/BugReportModal";
+import CardPreview from "@/components/game/CardPreview";
 import CardSearchDialog from "@/components/game/CardSearchDialog";
 import HandPeekDialog from "@/components/game/HandPeekDialog";
 import { CustomSelect } from "@/components/ui/CustomSelect";
 import { useGraphicsSettings } from "@/hooks/useGraphicsSettings";
+import { cardRefToPreview } from "@/lib/game/card-preview.types";
 import D20Dice from "@/lib/game/components/D20Dice";
 import D6Dice from "@/lib/game/components/D6Dice";
 import {
@@ -51,6 +53,7 @@ export default function GameToolbox({
   const currentPlayer = useGameStore((s) => s.currentPlayer);
   const localPlayerId = useGameStore((s) => s.localPlayerId);
   const transport = useGameStore((s) => s.transport);
+  const cardPreviewsEnabled = useGameStore((s) => s.cardPreviewsEnabled);
 
   const isOnline =
     !!myPlayerId && !!matchId && !!opponentPlayerId && !!opponentSeat;
@@ -96,6 +99,7 @@ export default function GameToolbox({
   const [scryOpen, setScryOpen] = useState<boolean>(false);
   const [scryCards, setScryCards] = useState<CardRef[]>([]);
   const [scryBottom, setScryBottom] = useState<Record<number, boolean>>({});
+  const [scryPreviewCard, setScryPreviewCard] = useState<CardRef | null>(null);
 
   const [actionType, setActionType] = useState<
     "draw" | "peek" | "reveal" | "scry"
@@ -1333,6 +1337,8 @@ export default function GameToolbox({
                               : "ring-1 ring-white/20"
                           } rounded overflow-hidden`}
                           onClick={() => toggleScryIndex(i)}
+                          onMouseEnter={() => setScryPreviewCard(c)}
+                          onMouseLeave={() => setScryPreviewCard(null)}
                         >
                           <div
                             className={`${
@@ -1401,7 +1407,6 @@ export default function GameToolbox({
                 aria-label="Roll D20"
                 title="Roll D20"
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src="/d20.svg"
                   alt="D20"
@@ -1416,7 +1421,6 @@ export default function GameToolbox({
                 aria-label="Roll D6"
                 title="Roll D6"
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src="/d6.svg"
                   alt="D6"
@@ -1905,6 +1909,15 @@ export default function GameToolbox({
         matchId={matchId}
         userId={myPlayerId}
       />
+      {/* Card preview for scry - rendered at top level with fixed positioning */}
+      {cardPreviewsEnabled && scryOpen && (
+        <div className="fixed bottom-6 left-6 z-[70] pointer-events-none">
+          <CardPreview
+            card={cardRefToPreview(scryPreviewCard)}
+            anchor="bottom-left"
+          />
+        </div>
+      )}
     </div>
   );
 }

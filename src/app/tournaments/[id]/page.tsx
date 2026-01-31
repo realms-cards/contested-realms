@@ -77,7 +77,7 @@ export default function TournamentDetailsPage() {
   // Round/match flow helpers
   const [startingRound, setStartingRound] = useState(false);
   const [endingRound, setEndingRound] = useState(false);
-  const [invalidatingMatchId, setInvalidatingMatchId] = useState<string | null>(
+  const [_invalidatingMatchId, setInvalidatingMatchId] = useState<string | null>(
     null,
   );
   const [lockingRegistration, setLockingRegistration] = useState(false);

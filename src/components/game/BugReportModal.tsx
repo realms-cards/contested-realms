@@ -314,7 +314,6 @@ export default function BugReportModal({
                       Capturing...
                     </div>
                   ) : screenshotPreview ? (
-                    // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={screenshotPreview}
                       alt="Screenshot preview"

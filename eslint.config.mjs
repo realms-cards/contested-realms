@@ -77,6 +77,7 @@ const eslintConfig = [
       ],
 
       // React/Next.js specific improvements
+      "@next/next/no-img-element": "off", // Game overlays use <img> for dynamic card art; next/image is irrelevant here
       "react/jsx-no-useless-fragment": "warn",
       "react/self-closing-comp": "warn",
 

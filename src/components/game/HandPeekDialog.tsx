@@ -235,7 +235,6 @@ export default function HandPeekDialog({
                         height: isSite ? GRID_CARD_WIDTH : GRID_CARD_HEIGHT,
                       }}
                     >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={`/api/images/${slug}`}
                         alt={card.name || slug}

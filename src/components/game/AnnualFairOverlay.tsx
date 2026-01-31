@@ -51,7 +51,6 @@ export default function AnnualFairOverlay() {
                   onClick={() => completeAnnualFair(el.key)}
                   className={`flex flex-col items-center gap-2 p-4 rounded-lg bg-gradient-to-br ${el.color} hover:scale-105 transition-transform ring-1 ring-white/10 hover:ring-white/30`}
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={el.icon} alt={el.label} className="w-12 h-12" />
                   <span className="text-white font-medium">{el.label}</span>
                 </button>

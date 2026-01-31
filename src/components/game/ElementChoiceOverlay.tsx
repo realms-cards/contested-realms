@@ -62,7 +62,6 @@ export function ElementChoiceOverlay() {
           <div className="flex gap-3">
             {ELEMENTS.map((el) => (
               <div key={el.key} className="w-12 h-12 opacity-30 animate-pulse">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={el.icon} alt={el.key} className="w-full h-full" />
               </div>
             ))}
@@ -87,7 +86,6 @@ export function ElementChoiceOverlay() {
               className="w-16 h-16 hover:scale-125 transition-transform focus:outline-none focus:ring-2 focus:ring-white/50 rounded"
               title={el.key.charAt(0).toUpperCase() + el.key.slice(1)}
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={el.icon} alt={el.key} className="w-full h-full" />
             </button>
           ))}

@@ -43,7 +43,6 @@ function StatusEffectIcon({ effect, expanded }: StatusEffectIconProps) {
           effect.isSilenced ? "opacity-60" : ""
         }`}
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={effect.imageUrl}
           alt={effect.title}
@@ -98,7 +97,6 @@ function ClusteredIcon({ effects, isExpanded }: ClusteredIconProps) {
                 className={`w-6 h-6 rounded-full overflow-hidden ring-2 ${ringColor} bg-slate-900 shadow-md`}
                 style={{ zIndex: 10 - idx }}
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={effect.imageUrl}
                   alt={effect.title}
