@@ -54,6 +54,8 @@ function createLobbyFeature(deps) {
   const rtcMigration = deps.rtcMigration || null;
   const botInternalSecret = deps.botInternalSecret || null;
 
+  console.log(`[Lobby] CPU bots feature: enabled=${CPU_BOTS_ENABLED}, hasBotSecret=${!!botInternalSecret}, port=${PORT}`);
+
   // Cache: card ID map loaded once for all bots
   let _botCardIdMapLoaded = false;
 
@@ -1731,22 +1733,26 @@ function createLobbyFeature(deps) {
 
     // ---------- Solo vs CPU: atomic lobby + bot + match creation ----------
     socket.on("startCpuMatch", async () => {
-      if (!isAuthed()) return;
+      console.log("[CpuMatch] startCpuMatch received", { authed: isAuthed(), cpuEnabled: CPU_BOTS_ENABLED, hasBotManager: !!botManager, hasBotSecret: !!botInternalSecret });
+      if (!isAuthed()) { console.log("[CpuMatch] rejected: not authed"); return; }
       if (!CPU_BOTS_ENABLED) {
+        console.log("[CpuMatch] rejected: CPU_BOTS_ENABLED is false");
         socket.emit("cpuMatchError", { message: "CPU bots are disabled", code: "feature_disabled" });
         return;
       }
       const BotClient = loadBotClientCtor();
       if (!BotClient) {
+        console.log("[CpuMatch] rejected: BotClient constructor not available");
         socket.emit("cpuMatchError", { message: "CPU bot component not available", code: "bot_unavailable" });
         return;
       }
       if (!botManager) {
+        console.log("[CpuMatch] rejected: botManager unavailable");
         socket.emit("cpuMatchError", { message: "Bot manager unavailable", code: "bot_manager_unavailable" });
         return;
       }
       const host = getPlayerBySocket(socket);
-      if (!host) return;
+      if (!host) { console.log("[CpuMatch] rejected: no host player found"); return; }
 
       try {
         // 1. Create a private lobby for the human player

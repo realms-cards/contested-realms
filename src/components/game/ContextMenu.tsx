@@ -1153,13 +1153,13 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
 
     if (isMine && isNecromancer(effectiveAvatarName)) {
       const canSummon =
-        isMyTurn && hasEnoughMana && !hasAlreadyUsed && hasPosition;
+        isMyTurn && !hasAlreadyUsed && hasPosition;
       let description = `Summon a Skeleton token at your avatar's location (costs ${NECROMANCER_SKELETON_COST} mana, once per turn)`;
       if (!isMyTurn) description = "Can only summon skeleton on your turn";
       else if (hasAlreadyUsed)
         description = "Already summoned a skeleton this turn";
       else if (!hasEnoughMana)
-        description = `Not enough mana (need ${NECROMANCER_SKELETON_COST}, have ${availableMana})`;
+        description = `Warning: not enough mana (need ${NECROMANCER_SKELETON_COST}, have ${availableMana})`;
       else if (!hasPosition) description = "Avatar must be on the board";
 
       extraActions.push({

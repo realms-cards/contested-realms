@@ -66,13 +66,12 @@ export const createNecromancerSlice: StateCreator<
       return false;
     }
 
-    // Check if player has enough mana
+    // Warn if player doesn't have enough mana, but don't block
     const availableMana = get().getAvailableMana(who);
     if (availableMana < NECROMANCER_SKELETON_COST) {
       get().log(
-        `Cannot summon skeleton: not enough mana (need ${NECROMANCER_SKELETON_COST}, have ${availableMana})`,
+        `Warning: not enough mana to summon skeleton (need ${NECROMANCER_SKELETON_COST}, have ${availableMana})`,
       );
-      return false;
     }
 
     // Check if avatar has a position

@@ -114,10 +114,15 @@ export default function ReplayListPage() {
 
     transport.onGeneric("matchRecordingsResponse", handleRecordings);
 
-    // Request recordings with optional playerId filter
-    const payload: { limit?: number; playerId?: string } = { limit: 50 };
-    if (showOwnOnly && currentPlayerId) {
+    // Always send playerId so the server can ensure the player's own matches
+    // are included in results (even when showing global matches).
+    // ownOnly restricts to only the player's matches.
+    const payload: { limit?: number; playerId?: string; ownOnly?: boolean } = { limit: 50 };
+    if (currentPlayerId) {
       payload.playerId = currentPlayerId;
+    }
+    if (showOwnOnly) {
+      payload.ownOnly = true;
     }
     transport.emit("getMatchRecordings", payload);
 
@@ -146,12 +151,15 @@ export default function ReplayListPage() {
 
     transport.onGeneric("matchRecordingsResponse", handleMoreRecordings);
 
-    const payload: { limit?: number; cursor?: string; playerId?: string } = {
+    const payload: { limit?: number; cursor?: string; playerId?: string; ownOnly?: boolean } = {
       limit: 50,
       cursor: nextCursor,
     };
-    if (showOwnOnly && currentPlayerId) {
+    if (currentPlayerId) {
       payload.playerId = currentPlayerId;
+    }
+    if (showOwnOnly) {
+      payload.ownOnly = true;
     }
     transport.emit("getMatchRecordings", payload);
   };

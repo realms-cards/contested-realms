@@ -7,25 +7,58 @@
  * Options:
  *  - limit: Number of results per page (default: 50, max: 200)
  *  - cursor: Pagination cursor (ISO timestamp)
- *  - playerId: Filter to matches with this player ID
- *  - includeOwn: When true and playerId set, show only matches with this player
+ *  - playerId: When set, ensures this player's matches are included in results
+ *  - ownOnly: When true and playerId set, show ONLY this player's matches
  */
 async function listRecordings(prisma, opts = {}) {
   const limit = Math.min(Number(opts.limit) || 50, 200);
   const cursor = opts.cursor ? new Date(opts.cursor) : null;
   const playerId = opts.playerId || null;
+  const ownOnly = opts.ownOnly || false;
 
-  // Finished matches first (prefer authoritative summary)
-  const whereClause = {};
+  // --- Fetch finished matches from MatchResult ---
+  const globalWhere = {};
   if (cursor) {
-    whereClause.completedAt = { lt: cursor };
+    globalWhere.completedAt = { lt: cursor };
   }
 
-  const results = await prisma.matchResult.findMany({
-    where: whereClause,
+  // ownOnly mode: filter at DB level to the player's matches only
+  if (playerId && ownOnly) {
+    globalWhere.OR = [{ winnerId: playerId }, { loserId: playerId }];
+  }
+
+  const globalResults = await prisma.matchResult.findMany({
+    where: globalWhere,
     orderBy: { completedAt: "desc" },
     take: limit + 1,
   });
+
+  // When not ownOnly but playerId is set, also fetch the player's own matches
+  // separately so they're guaranteed to appear even if buried in older records.
+  let playerResults = [];
+  if (playerId && !ownOnly) {
+    const playerWhere = {
+      OR: [{ winnerId: playerId }, { loserId: playerId }],
+    };
+    if (cursor) {
+      playerWhere.completedAt = { lt: cursor };
+    }
+    playerResults = await prisma.matchResult.findMany({
+      where: playerWhere,
+      orderBy: { completedAt: "desc" },
+      take: limit + 1,
+    });
+  }
+
+  // Merge and deduplicate by matchId
+  const seenMatchIds = new Set();
+  const results = [];
+  for (const r of [...globalResults, ...playerResults]) {
+    if (!seenMatchIds.has(r.matchId)) {
+      seenMatchIds.add(r.matchId);
+      results.push(r);
+    }
+  }
   const finishedIds = results.map((r) => r.matchId);
 
   // Fetch sessions for these matchIds (for createdAt/matchType fallback)
@@ -88,19 +121,50 @@ async function listRecordings(prisma, opts = {}) {
   });
 
   // Fallback: sessions that are in progress or ended, without a MatchResult row
-  const fallbackWhere = {
+  const fallbackGlobalWhere = {
     status: { in: ["in_progress", "ended"] },
     id: { notIn: finishedIds },
   };
   if (cursor) {
-    fallbackWhere.updatedAt = { lt: cursor };
+    fallbackGlobalWhere.updatedAt = { lt: cursor };
+  }
+  if (playerId && ownOnly) {
+    fallbackGlobalWhere.playerIds = { has: playerId };
   }
 
-  const fallbackSessions = await prisma.onlineMatchSession.findMany({
-    where: fallbackWhere,
+  const fallbackGlobalSessions = await prisma.onlineMatchSession.findMany({
+    where: fallbackGlobalWhere,
     orderBy: { updatedAt: "desc" },
     take: limit + 1,
   });
+
+  // When not ownOnly, also fetch the player's own sessions separately
+  let fallbackPlayerSessions = [];
+  if (playerId && !ownOnly) {
+    const fallbackPlayerWhere = {
+      status: { in: ["in_progress", "ended"] },
+      id: { notIn: finishedIds },
+      playerIds: { has: playerId },
+    };
+    if (cursor) {
+      fallbackPlayerWhere.updatedAt = { lt: cursor };
+    }
+    fallbackPlayerSessions = await prisma.onlineMatchSession.findMany({
+      where: fallbackPlayerWhere,
+      orderBy: { updatedAt: "desc" },
+      take: limit + 1,
+    });
+  }
+
+  // Merge and deduplicate fallback sessions
+  const seenSessionIds = new Set(finishedIds);
+  const fallbackSessions = [];
+  for (const s of [...fallbackGlobalSessions, ...fallbackPlayerSessions]) {
+    if (!seenSessionIds.has(s.id)) {
+      seenSessionIds.add(s.id);
+      fallbackSessions.push(s);
+    }
+  }
 
   // Resolve display names for fallback sessions in a single query
   const allIds = Array.from(
@@ -172,13 +236,10 @@ async function listRecordings(prisma, opts = {}) {
     return bt - at;
   });
 
-  // Filter by playerId if requested
-  let filtered = multiplayerOnly;
-  if (playerId) {
-    filtered = multiplayerOnly.filter((r) =>
-      (r.playerIds || []).includes(playerId)
-    );
-  }
+  // playerId filtering is now done at the DB query level (winnerId/loserId
+  // for MatchResult, playerIds array for OnlineMatchSession) so that
+  // pagination limits apply to the player's own matches, not global matches.
+  const filtered = multiplayerOnly;
 
   // Check if there are more results
   const hasMore = filtered.length > limit;
