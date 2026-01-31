@@ -806,6 +806,10 @@ const CPU_BOTS_ENABLED =
   process.env.NEXT_PUBLIC_CPU_BOTS_ENABLED === "1" ||
   process.env.NEXT_PUBLIC_CPU_BOTS_ENABLED === "true";
 
+// Internal secret for in-process bot connections to bypass JWT auth.
+// Generated at startup — never exposed outside this process.
+const BOT_INTERNAL_SECRET = `bot_${Date.now()}_${Math.random().toString(36).slice(2, 14)}`;
+
 // Lazy loader: only require the headless BotClient when feature is enabled
 let _botModule: { BotClient?: unknown; loadCardIdMap?: (p: unknown) => Promise<unknown> } | null = null;
 function _loadBotModule() {
@@ -875,6 +879,7 @@ const {
   loadBotCardIdMapFn,
   port: PORT,
   isCpuPlayerId,
+  botInternalSecret: BOT_INTERNAL_SECRET,
   tournamentBroadcast,
   redisState, // For horizontal scaling - cross-instance lobby visibility
   rtcParticipants, // For lobby-to-match voice connection persistence
@@ -2113,6 +2118,19 @@ io.use((socket: SocketClient, next: (err?: Error) => void) => {
 
   try {
     const token = handshakeAuth?.token ?? null;
+
+    // Allow in-process bot connections that carry the internal secret
+    const internalSecret = (handshakeAuth as Record<string, unknown> | undefined)?.botSecret;
+    if (typeof internalSecret === "string" && internalSecret === BOT_INTERNAL_SECRET) {
+      const botId = (handshakeAuth as Record<string, unknown>)?.playerId;
+      socket.data = socket.data || {};
+      socket.data.authUser = {
+        id: typeof botId === "string" ? botId : null,
+        name: "CPU Bot",
+      };
+      return next();
+    }
+
     if (token && process.env.NEXTAUTH_SECRET) {
       const payload = jwt.verify(
         token,
