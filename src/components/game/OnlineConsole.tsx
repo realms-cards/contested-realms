@@ -331,8 +331,9 @@ export default function OnlineConsole({
       onLeaveMatch();
       if (onLeaveLobby) {
         onLeaveLobby();
+      } else {
+        router.push("/online/lobby");
       }
-      router.push("/online/lobby");
     }
   };
 
