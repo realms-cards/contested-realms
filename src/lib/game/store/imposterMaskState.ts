@@ -185,8 +185,8 @@ export const createImposterMaskSlice: StateCreator<
           maskAvatar,
           newAvatars,
           newImposterMasks,
-          newZones: newZones,
-          newPlayers: newPlayers,
+          newZones,
+          newPlayers,
           ts: Date.now(),
         } as never);
         // Send toast notification
