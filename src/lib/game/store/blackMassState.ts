@@ -210,13 +210,13 @@ export const createBlackMassSlice: StateCreator<
 
     const { spell, casterSeat, topSevenCards, selectedIndices } = pending;
 
-    // Check Gard of Eden draw limit
+    // Check Garden of Eden draw limit
     const cardsToDraw = selectedIndices.length;
     if (cardsToDraw > 0) {
       const canDraw = get().canDrawCard(casterSeat, cardsToDraw);
       if (!canDraw.allowed) {
         get().log(
-          `[${casterSeat.toUpperCase()}] Gard of Eden prevents drawing ${cardsToDraw} cards (only ${canDraw.remaining} remaining)`,
+          `[${casterSeat.toUpperCase()}] Garden of Eden prevents drawing ${cardsToDraw} cards (only ${canDraw.remaining} remaining)`,
         );
         // Cancel instead of resolving
         get().cancelBlackMass();
@@ -286,7 +286,7 @@ export const createBlackMassSlice: StateCreator<
           selectedCards.length
         } Evil minion(s): ${selectedCards.map((c) => c.name).join(", ")}`,
       );
-      // Increment cards drawn counter for Gard of Eden tracking
+      // Increment cards drawn counter for Garden of Eden tracking
       get().incrementCardsDrawn(casterSeat, selectedCards.length);
     } else {
       get().log(`[${casterSeat.toUpperCase()}] chooses not to draw any cards`);

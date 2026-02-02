@@ -193,11 +193,11 @@ export const createAutoResolveSlice: StateCreator<
 
   // Internal execution functions - called after user confirms auto-resolve
   _executeOmphalosDrawEffect: (omphalosId: string, ownerSeat: PlayerKey) => {
-    // Check Gard of Eden draw limit
+    // Check Garden of Eden draw limit
     const canDraw = get().canDrawCard(ownerSeat, 1);
     if (!canDraw.allowed) {
       get().log(
-        `[${ownerSeat.toUpperCase()}] Gard of Eden prevents Omphalos from drawing (limit: 1 card per turn)`,
+        `[${ownerSeat.toUpperCase()}] Garden of Eden prevents Omphalos from drawing (limit: 1 card per turn)`,
       );
       return;
     }
@@ -235,7 +235,7 @@ export const createAutoResolveSlice: StateCreator<
       o.id === omphalosId ? { ...o, hand: [...o.hand, drawnCard] } : o,
     );
 
-    // Increment cards drawn counter for Gard of Eden tracking
+    // Increment cards drawn counter for Garden of Eden tracking
     get().incrementCardsDrawn(ownerSeat, 1);
 
     set({

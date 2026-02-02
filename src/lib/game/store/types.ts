@@ -1153,18 +1153,18 @@ export type PendingHeadlessHauntMove = {
   createdAt: number;
 };
 
-// --- Gard of Eden State --------------------------------------------------
+// --- Garden of Eden State --------------------------------------------------
 // Site that limits card drawing to 1 per turn when in play and not silenced
-export type GardOfEdenEntry = {
+export type GardenOfEdenEntry = {
   cellKey: CellKey;
   instanceId: string | null;
   cardName: string;
   silenced: boolean;
 };
 
-export type GardOfEdenLocations = {
-  p1?: GardOfEdenEntry | undefined;
-  p2?: GardOfEdenEntry | undefined;
+export type GardenOfEdenLocations = {
+  p1?: GardenOfEdenEntry | undefined;
+  p2?: GardenOfEdenEntry | undefined;
 };
 
 // --- Gem Token State (generic draggable tokens on board) --------------------------------
@@ -2376,10 +2376,10 @@ export type GameState = {
   selectHeadlessHauntTile: (tileKey: CellKey) => void;
   skipHeadlessHauntMove: () => void;
   resolveHeadlessHauntMove: () => void;
-  // Gard of Eden State (site that limits card drawing to 1 per turn)
-  gardOfEdenLocations: GardOfEdenLocations;
+  // Garden of Eden State (site that limits card drawing to 1 per turn)
+  gardenOfEdenLocations: GardenOfEdenLocations;
   cardsDrawnThisTurn: Record<PlayerKey, number>;
-  registerGardOfEden: (input: {
+  registerGardenOfEden: (input: {
     site: {
       at: CellKey;
       card: CardRef;
@@ -2388,8 +2388,8 @@ export type GameState = {
     };
     ownerSeat: PlayerKey;
   }) => void;
-  unregisterGardOfEden: (ownerSeat: PlayerKey, cellKey: CellKey) => void;
-  isGardOfEdenActive: (seat: PlayerKey) => boolean;
+  unregisterGardenOfEden: (ownerSeat: PlayerKey, cellKey: CellKey) => void;
+  isGardenOfEdenActive: (seat: PlayerKey) => boolean;
   incrementCardsDrawn: (seat: PlayerKey, count?: number) => void;
   resetCardsDrawn: () => void;
   canDrawCard: (
@@ -2715,7 +2715,7 @@ export type ServerPatchT = Partial<{
   pendingBabelPlacement: GameState["pendingBabelPlacement"];
   resolversDisabled: GameState["resolversDisabled"];
   gemTokens: GameState["gemTokens"];
-  gardOfEdenLocations: GameState["gardOfEdenLocations"];
+  gardenOfEdenLocations: GameState["gardenOfEdenLocations"];
   cardsDrawnThisTurn: GameState["cardsDrawnThisTurn"];
   __replaceKeys: string[];
   // Snapshot timestamp for replay truncation on undo

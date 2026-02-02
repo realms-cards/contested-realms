@@ -176,11 +176,11 @@ export const createCommonSenseSlice: StateCreator<
 
     const casterSeat = pending.casterSeat;
 
-    // Check Gard of Eden draw limit
+    // Check Garden of Eden draw limit
     const canDraw = get().canDrawCard(casterSeat, 1);
     if (!canDraw.allowed) {
       get().log(
-        `[${casterSeat.toUpperCase()}] Gard of Eden prevents drawing more cards this turn (limit: 1)`,
+        `[${casterSeat.toUpperCase()}] Garden of Eden prevents drawing more cards this turn (limit: 1)`,
       );
       // Cancel instead of resolving
       get().cancelCommonSense();
@@ -221,7 +221,7 @@ export const createCommonSenseSlice: StateCreator<
       },
     };
 
-    // Increment cards drawn counter for Gard of Eden tracking
+    // Increment cards drawn counter for Garden of Eden tracking
     get().incrementCardsDrawn(casterSeat, 1);
 
     set({

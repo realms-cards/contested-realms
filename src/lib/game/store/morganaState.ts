@@ -76,11 +76,11 @@ export const createMorganaSlice: StateCreator<
       return;
     }
 
-    // Check Gard of Eden draw limit
+    // Check Garden of Eden draw limit
     const canDraw = get().canDrawCard(ownerSeat, drawCount);
     if (!canDraw.allowed) {
       get().log(
-        `[${ownerSeat.toUpperCase()}] Gard of Eden prevents Morgana from drawing ${drawCount} spells (only ${canDraw.remaining} remaining)`,
+        `[${ownerSeat.toUpperCase()}] Garden of Eden prevents Morgana from drawing ${drawCount} spells (only ${canDraw.remaining} remaining)`,
       );
       return;
     }
@@ -137,7 +137,7 @@ export const createMorganaSlice: StateCreator<
       morganaHands: [...currentMorganaHands, newMorganaHand],
     });
 
-    // Increment cards drawn counter for Gard of Eden tracking
+    // Increment cards drawn counter for Garden of Eden tracking
     get().incrementCardsDrawn(ownerSeat, drawCount);
 
     // Send zone patch
