@@ -160,18 +160,43 @@ export const createImposterMaskSlice: StateCreator<
     };
 
     // Build and send patch
-    // IMPORTANT: In online play, the server will reject/ignore patches that attempt
-    // to mutate opponent-private zones. If we send full `zones` for both seats,
-    // we risk the server dropping the patch entirely, which would prevent the
-    // opponent from seeing the new masked avatar.
+    // IMPORTANT: In online play, the server will reject patches that include
+    // opponent data. Only send OUR seat's data for zones, players, and avatars.
+    // For avatars specifically, including opponent's tapped state would trigger
+    // "Cannot tap or untap opponent avatar" validation error.
     const patch: ServerPatchT = {
-      avatars: newAvatars,
+      avatars: { [who]: { card: maskAvatar } } as GameState["avatars"],
       imposterMasks: newImposterMasks,
       zones: { [who]: newZones[who] } as GameState["zones"],
       players: { [who]: newPlayers[who] } as GameState["players"],
     };
 
     get().trySendPatch(patch);
+
+    // CRITICAL: Also send a custom message so opponent's client receives the mask update
+    // The patch system can filter/drop updates, but custom messages always go through
+    // Include zones and players so opponent sees collection/banished and mana changes
+    const transport = get().transport;
+    if (transport?.sendMessage) {
+      try {
+        transport.sendMessage({
+          type: "imposterMask",
+          who,
+          maskAvatar,
+          newAvatars,
+          newImposterMasks,
+          newZones: newZones,
+          newPlayers: newPlayers,
+          ts: Date.now(),
+        } as never);
+        // Send toast notification
+        transport.sendMessage({
+          type: "toast",
+          message: `${who.toUpperCase()}'s Imposter masks as ${maskAvatar.name}`,
+        } as never);
+      } catch {}
+    }
+
     get().log(
       `${who.toUpperCase()}'s Imposter masks as ${
         maskAvatar.name
@@ -220,13 +245,36 @@ export const createImposterMaskSlice: StateCreator<
       [who]: null,
     };
 
-    // Build and send patch
+    // Build and send patch - only include player's own avatar to avoid validation errors
     const patch: ServerPatchT = {
-      avatars: newAvatars,
+      avatars: {
+        [who]: { card: maskState.originalAvatar },
+      } as GameState["avatars"],
       imposterMasks: newImposterMasks,
     };
 
     get().trySendPatch(patch);
+
+    // CRITICAL: Also send a custom message so opponent's client receives the unmask update
+    const transport = get().transport;
+    if (transport?.sendMessage) {
+      try {
+        transport.sendMessage({
+          type: "imposterUnmask",
+          who,
+          originalAvatar: maskState.originalAvatar,
+          newAvatars,
+          newImposterMasks,
+          ts: Date.now(),
+        } as never);
+        // Send toast notification
+        transport.sendMessage({
+          type: "toast",
+          message: `${who.toUpperCase()}'s Imposter revealed`,
+        } as never);
+      } catch {}
+    }
+
     get().log(
       `${who.toUpperCase()}'s Imposter revealed (was masked as ${
         maskState.maskAvatar.name
@@ -273,13 +321,36 @@ export const createImposterMaskSlice: StateCreator<
       [who]: null,
     };
 
-    // Build and send patch
+    // Build and send patch - only include player's own avatar to avoid validation errors
     const patch: ServerPatchT = {
-      avatars: newAvatars,
+      avatars: {
+        [who]: { card: maskState.originalAvatar },
+      } as GameState["avatars"],
       imposterMasks: newImposterMasks,
     };
 
     get().trySendPatch(patch);
+
+    // CRITICAL: Also send a custom message so opponent's client receives the mask break
+    const transport = get().transport;
+    if (transport?.sendMessage) {
+      try {
+        transport.sendMessage({
+          type: "imposterMaskBreak",
+          who,
+          originalAvatar: maskState.originalAvatar,
+          brokenMaskName: maskState.maskAvatar.name,
+          newAvatars,
+          newImposterMasks,
+          ts: Date.now(),
+        } as never);
+        // Send toast notification
+        transport.sendMessage({
+          type: "toast",
+          message: `${who.toUpperCase()}'s mask breaks! ${maskState.maskAvatar.name} is banished.`,
+        } as never);
+      } catch {}
+    }
 
     set({
       avatars: newAvatars,

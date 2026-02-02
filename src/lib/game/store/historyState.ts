@@ -477,6 +477,10 @@ export const createHistorySlice: StateCreator<
           events: prev.events,
           eventSeq: prev.eventSeq,
           portalState: prev.portalState,
+          // CRITICAL: Clear pending resolver states to prevent card duplication bugs
+          pendingSearingTruth: null,
+          pendingBrowse: null,
+          pendingAccusation: null,
         } as Partial<GameState> as GameState;
       }
 
@@ -507,6 +511,10 @@ export const createHistorySlice: StateCreator<
         events: prev.events,
         eventSeq: prev.eventSeq,
         portalState: prev.portalState,
+        // CRITICAL: Clear pending resolver states to prevent card duplication bugs
+        pendingSearingTruth: null,
+        pendingBrowse: null,
+        pendingAccusation: null,
       } as Partial<GameState> as GameState;
     }),
 });

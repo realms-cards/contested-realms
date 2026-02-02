@@ -1300,6 +1300,11 @@ export default function OnlineProvider({
               "avatars",
               "mulligans",
               "mulliganDrawn",
+              // Avatar-related state that must persist across reloads
+              "imposterMasks",
+              "pathfinderUsed",
+              "druidFlipped",
+              "necromancerSkeletonUsed",
             ];
 
             // Only include keys that exist in the snapshot AND are safe to replace

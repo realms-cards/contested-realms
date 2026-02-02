@@ -1,7 +1,7 @@
 "use client";
 
 import { Gem } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import PileSearchDialog from "@/components/game/PileSearchDialog";
 import { isImposter } from "@/lib/game/avatarAbilities";
 import { useGameStore, type PlayerKey, type CardRef } from "@/lib/game/store";
@@ -21,10 +21,31 @@ export default function CollectionButton({ mySeat }: CollectionButtonProps) {
   const actorKey = useGameStore((s) => s.actorKey);
 
   const [searchOpen, setSearchOpen] = useState(false);
-  const [isHovered, setIsHovered] = useState(false);
 
   // Use actorKey if available (online), otherwise mySeat (offline)
   const myKey = actorKey || mySeat || "p1";
+
+  // Listen for custom event from context menu to open mask dialog
+  useEffect(() => {
+    const handleOpenMaskDialog = (e: CustomEvent<{ seat: PlayerKey }>) => {
+      if (e.detail.seat === myKey) {
+        setSearchOpen(true);
+      }
+    };
+
+    window.addEventListener(
+      "imposter:openMaskDialog",
+      handleOpenMaskDialog as EventListener,
+    );
+    return () => {
+      window.removeEventListener(
+        "imposter:openMaskDialog",
+        handleOpenMaskDialog as EventListener,
+      );
+    };
+  }, [myKey]);
+
+  const [isHovered, setIsHovered] = useState(false);
   const collection = zones[myKey]?.collection || [];
   const count = collection.length;
 

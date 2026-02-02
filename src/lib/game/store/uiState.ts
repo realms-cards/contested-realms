@@ -29,6 +29,26 @@ export function getStoredCameraMode(): GameState["cameraMode"] {
 }
 
 /**
+ * Load camera mode from API (for authenticated users).
+ * Returns null if not authenticated or on error.
+ */
+export async function loadCameraModeFromApi(): Promise<
+  GameState["cameraMode"] | null
+> {
+  try {
+    const res = await fetch("/api/users/me/playmats/preferences", {
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { cameraMode?: string };
+    if (data.cameraMode === "orbit" || data.cameraMode === "topdown") {
+      return data.cameraMode;
+    }
+  } catch {}
+  return null;
+}
+
+/**
  * Load card previews preference from localStorage.
  * Defaults to true (previews enabled).
  */
@@ -70,11 +90,19 @@ function saveUiHidden(hidden: boolean): void {
   } catch {}
 }
 
-/** Persist camera mode preference to localStorage */
+/** Persist camera mode preference to localStorage and API */
 function saveCameraMode(mode: GameState["cameraMode"]): void {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(CAMERA_MODE_KEY, mode);
+  } catch {}
+  // Also save to API for authenticated users (fire and forget)
+  try {
+    void fetch("/api/users/me/playmats/preferences", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cameraMode: mode }),
+    });
   } catch {}
 }
 

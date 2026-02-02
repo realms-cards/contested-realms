@@ -2,9 +2,14 @@
 
 import React from "react";
 import { useGameStore } from "@/lib/game/store";
+import type { PlayerKey } from "@/lib/game/store/types";
 import CardWithPreview from "./CardWithPreview";
 
-export default function LilithOverlay() {
+interface LilithOverlayProps {
+  playerNames?: { p1: string; p2: string };
+}
+
+export default function LilithOverlay({ playerNames }: LilithOverlayProps) {
   const pending = useGameStore((s) => s.pendingLilithReveal);
   const actorKey = useGameStore((s) => s.actorKey);
   const resolve = useGameStore((s) => s.resolveLilithReveal);
@@ -13,6 +18,16 @@ export default function LilithOverlay() {
   if (!pending) return null;
 
   const { phase, revealedCard, isMinion, lilithOwner } = pending;
+
+  // Helper to get display name for a player
+  const getPlayerName = (seat: PlayerKey): string => {
+    if (playerNames) {
+      return playerNames[seat];
+    }
+    return seat.toUpperCase();
+  };
+
+  const opponentSeat: PlayerKey = lilithOwner === "p1" ? "p2" : "p1";
 
   // Both players see the reveal, but only Lilith owner can dismiss
   const isOwner = actorKey === null || lilithOwner === actorKey;
@@ -42,7 +57,7 @@ export default function LilithOverlay() {
               {revealedCard
                 ? isOwner
                   ? "You reveal"
-                  : `${lilithOwner.toUpperCase()} reveals`
+                  : `${getPlayerName(lilithOwner)} reveals`
                 : "Waiting for opponent's card..."}
             </h2>
 
@@ -111,7 +126,7 @@ export default function LilithOverlay() {
                   {!isOwner && (
                     <div className="flex flex-col items-center gap-2">
                       <p className="text-gray-400 text-sm">
-                        Waiting for {lilithOwner.toUpperCase()} to continue...
+                        Waiting for {getPlayerName(lilithOwner)} to continue...
                       </p>
                       <button
                         onClick={cancel}
@@ -152,9 +167,7 @@ export default function LilithOverlay() {
           >
             {isMinion
               ? `Lilith summons ${revealedCard.name}!`
-              : `${revealedCard.name} goes to bottom of ${
-                  lilithOwner === "p1" ? "P2" : "P1"
-                }'s spellbook`}
+              : `${revealedCard.name} goes to bottom of ${getPlayerName(opponentSeat)}'s spellbook`}
           </div>
         </div>
       )}

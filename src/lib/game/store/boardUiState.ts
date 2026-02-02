@@ -2,6 +2,53 @@ import type { StateCreator } from "zustand";
 import type { BoardPingEvent, CellKey, GameState, SiteTile } from "./types";
 import { BOARD_PING_LIFETIME_MS, BOARD_PING_MAX_HISTORY } from "./types";
 
+const PLAYMAT_KEY = "sorcery:showPlaymat";
+const GRID_KEY = "sorcery:showGrid";
+
+function loadShowPlaymat(): boolean {
+  if (typeof window === "undefined") return true;
+  try {
+    const stored = localStorage.getItem(PLAYMAT_KEY);
+    if (stored === "false") return false;
+  } catch {}
+  return true;
+}
+
+function loadShowGrid(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const stored = localStorage.getItem(GRID_KEY);
+    if (stored === "true") return true;
+  } catch {}
+  return false;
+}
+
+/**
+ * Load playmat/grid settings from API (for authenticated users).
+ * Returns null if not authenticated or on error.
+ */
+export async function loadPlaymatSettingsFromApi(): Promise<{
+  showPlaymat: boolean;
+  showGrid: boolean;
+} | null> {
+  try {
+    const res = await fetch("/api/users/me/playmats/preferences", {
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as {
+      showPlaymat?: boolean;
+      showGrid?: boolean;
+    };
+    return {
+      showPlaymat:
+        typeof data.showPlaymat === "boolean" ? data.showPlaymat : true,
+      showGrid: typeof data.showGrid === "boolean" ? data.showGrid : false,
+    };
+  } catch {}
+  return null;
+}
+
 export type DraggingSite = {
   sourceKey: CellKey;
   site: SiteTile;
@@ -33,8 +80,8 @@ type BoardUiDefaults = Pick<
 
 export const createInitialBoardUiState = (): BoardUiDefaults => ({
   showGridOverlay: false,
-  showPlaymat: true,
-  showPlaymatOverlay: false, // Default: show playmat, hide grid overlay
+  showPlaymat: loadShowPlaymat(),
+  showPlaymatOverlay: loadShowGrid(), // Grid overlay state is persisted
   playmatUrl: null, // null until user's preference is loaded
   playmatUrls: { p1: null, p2: null }, // Per-player custom playmat URLs
   activePlaymatOwner: null, // null = use own playmat, "p1"/"p2" = show that player's playmat
@@ -109,9 +156,44 @@ export const createBoardUiSlice: StateCreator<
 
   toggleGridOverlay: () =>
     set((state) => ({ showGridOverlay: !state.showGridOverlay })),
-  togglePlaymat: () => set((state) => ({ showPlaymat: !state.showPlaymat })),
+  togglePlaymat: () =>
+    set((state) => {
+      const newValue = !state.showPlaymat;
+      // Persist to localStorage
+      try {
+        if (typeof window !== "undefined") {
+          localStorage.setItem("sorcery:showPlaymat", String(newValue));
+        }
+      } catch {}
+      // Persist to API for authenticated users (fire and forget)
+      try {
+        void fetch("/api/users/me/playmats/preferences", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ showPlaymat: newValue }),
+        });
+      } catch {}
+      return { showPlaymat: newValue };
+    }),
   togglePlaymatOverlay: () =>
-    set((state) => ({ showPlaymatOverlay: !state.showPlaymatOverlay })),
+    set((state) => {
+      const newValue = !state.showPlaymatOverlay;
+      // Persist to localStorage
+      try {
+        if (typeof window !== "undefined") {
+          localStorage.setItem("sorcery:showGrid", String(newValue));
+        }
+      } catch {}
+      // Persist to API for authenticated users (fire and forget)
+      try {
+        void fetch("/api/users/me/playmats/preferences", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ showGrid: newValue }),
+        });
+      } catch {}
+      return { showPlaymatOverlay: newValue };
+    }),
   toggleAllowSiteDrag: () =>
     set((state) => ({ allowSiteDrag: !state.allowSiteDrag })),
   toggleAutoTapOnMove: () =>

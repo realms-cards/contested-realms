@@ -238,6 +238,9 @@ model User {
   selectedAtlasRef        String?
   selectedSpellbookRef    String?
   showOpponentPlaymat     Boolean                  @default(true)
+  cameraMode              String                   @default("topdown")
+  showPlaymat             Boolean                  @default(true)
+  showGrid                Boolean                  @default(false)
   soatcAutoDetect         Boolean                  @default(false)
   soatcUuid               String?
   discordId               String?                  @unique
