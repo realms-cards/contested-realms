@@ -98,11 +98,11 @@ export const createSearingTruthSlice: StateCreator<
     const pending = get().pendingSearingTruth;
     if (!pending || pending.phase !== "selectingTarget") return;
 
-    // Check Gard of Eden draw limit for target player
+    // Check Garden of Eden draw limit for target player
     const canDraw = get().canDrawCard(targetSeat, 2);
     if (!canDraw.allowed) {
       get().log(
-        `[${targetSeat.toUpperCase()}] Gard of Eden prevents drawing more cards this turn (limit: 1)`,
+        `[${targetSeat.toUpperCase()}] Garden of Eden prevents drawing more cards this turn (limit: 1)`,
       );
       // Cancel instead of resolving
       get().cancelSearingTruth();
@@ -193,7 +193,7 @@ export const createSearingTruthSlice: StateCreator<
       `[${targetSeat.toUpperCase()}] draws and reveals ${cardNames} - will take ${maxCost} damage`,
     );
 
-    // Increment cards drawn counter for Gard of Eden tracking
+    // Increment cards drawn counter for Garden of Eden tracking
     get().incrementCardsDrawn(targetSeat, drawnCards.length);
   },
 

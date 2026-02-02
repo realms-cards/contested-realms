@@ -1,6 +1,6 @@
 import type { StateCreator } from "zustand";
 import { isAnimist } from "@/lib/game/avatarAbilities";
-import { isGardOfEden } from "../gardOfEdenState";
+import { isGardenOfEden } from "../gardenOfEdenState";
 import {
   BEACON_GENESIS_SITES,
   ELEMENT_CHOICE_SITES,
@@ -107,10 +107,10 @@ const triggerSiteGenesis = (
     return;
   }
 
-  // Gard of Eden - register to track for draw limit
-  if (isGardOfEden(siteName)) {
+  // Garden of Eden - register to track for draw limit
+  if (isGardenOfEden(siteName)) {
     const ownerSeat = owner === 1 ? "p1" : "p2";
-    state.registerGardOfEden({
+    state.registerGardenOfEden({
       site: {
         at: cellKey,
         card: { name: siteName, cardId: 0, type: "site" },

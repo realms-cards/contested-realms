@@ -655,7 +655,7 @@ export const createCoreSlice: StateCreator<
       phase: "Start",
       currentPlayer: nextPlayer,
       hasDrawnThisTurn: false, // Reset draw tracking for new turn
-      cardsDrawnThisTurn: { p1: 0, p2: 0 }, // Reset Gard of Eden draw counters
+      cardsDrawnThisTurn: { p1: 0, p2: 0 }, // Reset Garden of Eden draw counters
       players: { [nextKey]: playersNext[nextKey] } as GameState["players"],
       necromancerSkeletonUsed: necromancerSkeletonUsedNext,
       mephistophelesSummonUsed: mephistophelesSummonUsedNext,
@@ -670,7 +670,7 @@ export const createCoreSlice: StateCreator<
       phase: "Start",
       currentPlayer: nextPlayer,
       hasDrawnThisTurn: false, // Reset draw tracking for new turn
-      cardsDrawnThisTurn: { p1: 0, p2: 0 }, // Reset Gard of Eden draw counters
+      cardsDrawnThisTurn: { p1: 0, p2: 0 }, // Reset Garden of Eden draw counters
       permanents,
       avatars: avatarsNext,
       players: playersNext,

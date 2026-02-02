@@ -42,7 +42,7 @@ import {
 import { createEarthquakeSlice } from "./store/earthquakeState";
 import { createEventSlice } from "./store/eventState";
 import { createFrontierSettlersSlice } from "./store/frontierSettlersState";
-import { createGardOfEdenSlice } from "./store/gardOfEdenState";
+import { createGardenOfEdenSlice } from "./store/gardenOfEdenState";
 import { createGameActionsSlice } from "./store/gameActions";
 import { createGemTokenSlice } from "./store/gemTokenState";
 import { createHeadlessHauntSlice } from "./store/headlessHauntState";
@@ -218,7 +218,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   ...createPathfinderSlice(set, get, storeApi),
   ...createBabelTowerSlice(set, get, storeApi),
   ...createGemTokenSlice(set, get, storeApi),
-  ...createGardOfEdenSlice(set, get, storeApi),
+  ...createGardenOfEdenSlice(set, get, storeApi),
   ...createRevealOverlaySlice(set, get, storeApi),
   cardScale: 1,
 
@@ -327,7 +327,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         headlessHaunts: [],
         pendingHeadlessHauntMove: null,
         gemTokens: [],
-        gardOfEdenLocations: {},
+        gardenOfEdenLocations: {},
         cardsDrawnThisTurn: { p1: 0, p2: 0 },
       };
       return reset as GameState;
