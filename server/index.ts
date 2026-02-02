@@ -811,14 +811,17 @@ const CPU_BOTS_ENABLED =
 const BOT_INTERNAL_SECRET = `bot_${Date.now()}_${Math.random().toString(36).slice(2, 14)}`;
 
 // Lazy loader: only require the headless BotClient when feature is enabled
-let _botModule: { BotClient?: unknown; loadCardIdMap?: (p: unknown) => Promise<unknown> } | null = null;
+let _botModule: {
+  BotClient?: unknown;
+  loadCardIdMap?: (p: unknown) => Promise<unknown>;
+} | null = null;
 function _loadBotModule() {
   if (_botModule) return _botModule;
   try {
     const botPath = require("path").resolve(
       process.cwd(),
       "bots",
-      "headless-bot-client"
+      "headless-bot-client",
     );
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     _botModule = require(botPath);
@@ -826,7 +829,9 @@ function _loadBotModule() {
   } catch (e) {
     try {
       console.warn("[Bot] BotClient module unavailable:", safeErrorMessage(e));
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     return null;
   }
 }
@@ -839,7 +844,9 @@ function loadBotClientCtor() {
 
 function loadBotCardIdMapFn(): ((p: unknown) => Promise<unknown>) | null {
   const mod = _loadBotModule();
-  return mod && typeof mod.loadCardIdMap === "function" ? mod.loadCardIdMap : null;
+  return mod && typeof mod.loadCardIdMap === "function"
+    ? mod.loadCardIdMap
+    : null;
 }
 
 const container = createContainer();
@@ -2120,8 +2127,13 @@ io.use((socket: SocketClient, next: (err?: Error) => void) => {
     const token = handshakeAuth?.token ?? null;
 
     // Allow in-process bot connections that carry the internal secret
-    const internalSecret = (handshakeAuth as Record<string, unknown> | undefined)?.botSecret;
-    if (typeof internalSecret === "string" && internalSecret === BOT_INTERNAL_SECRET) {
+    const internalSecret = (
+      handshakeAuth as Record<string, unknown> | undefined
+    )?.botSecret;
+    if (
+      typeof internalSecret === "string" &&
+      internalSecret === BOT_INTERNAL_SECRET
+    ) {
       const botId = (handshakeAuth as Record<string, unknown>)?.playerId;
       socket.data = socket.data || {};
       socket.data.authUser = {
@@ -4513,6 +4525,48 @@ io.on("connection", async (socket: SocketClient) => {
           io.to(`spectate:${matchId}`).emit("message", out);
         } catch {}
       } catch {}
+    } else if (
+      type === "imposterMask" ||
+      type === "imposterUnmask" ||
+      type === "imposterMaskBreak"
+    ) {
+      // Imposter avatar mask messages - relay to match room
+      try {
+        const match = await getOrLoadMatch(matchId);
+        const room = `match:${matchId}`;
+        const playerKey = getSeatForPlayer(match, player.id) || "p1";
+        const out = {
+          ...payload,
+          type,
+          playerKey,
+          ts: Date.now(),
+        };
+        io.to(room).emit("message", out);
+        try {
+          io.to(`spectate:${matchId}`).emit("message", out);
+        } catch {}
+      } catch {}
+    } else if (
+      type === "pathfinderBegin" ||
+      type === "pathfinderResolve" ||
+      type === "pathfinderCancel"
+    ) {
+      // Pathfinder avatar ability messages - relay to match room
+      try {
+        const match = await getOrLoadMatch(matchId);
+        const room = `match:${matchId}`;
+        const playerKey = getSeatForPlayer(match, player.id) || "p1";
+        const out = {
+          ...payload,
+          type,
+          playerKey,
+          ts: Date.now(),
+        };
+        io.to(room).emit("message", out);
+        try {
+          io.to(`spectate:${matchId}`).emit("message", out);
+        } catch {}
+      } catch {}
     }
   });
 
@@ -4912,9 +4966,7 @@ io.on("connection", async (socket: SocketClient) => {
           !!playerIds &&
           playerIds.some((playerId) => {
             const pid =
-              typeof playerId === "string"
-                ? playerId
-                : String(playerId ?? "");
+              typeof playerId === "string" ? playerId : String(playerId ?? "");
             return pid.startsWith("cpu_") || pid.startsWith("host_");
           });
         return { ...recording, isCpuMatch: isCpu };
@@ -4927,9 +4979,8 @@ io.on("connection", async (socket: SocketClient) => {
           } (limit: ${opts.limit}, cursor: ${opts.cursor}, playerId: ${
             opts.playerId
           }), returning ${recordings.length} DB-backed summaries (${
-            recordings.filter(
-              (r: { isCpuMatch?: boolean }) => r.isCpuMatch,
-            ).length
+            recordings.filter((r: { isCpuMatch?: boolean }) => r.isCpuMatch)
+              .length
           } CPU matches), hasMore: ${result.hasMore}`,
         );
       } catch {}

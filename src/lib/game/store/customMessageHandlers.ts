@@ -4768,6 +4768,9 @@ export function handleCustomMessage(
     const topSite = (msg as { topSite?: unknown }).topSite as
       | CardRef
       | undefined;
+    const atlasCount = (msg as { atlasCount?: unknown }).atlasCount as
+      | number
+      | undefined;
 
     if (!targetCell || !topSite) return;
 
@@ -4820,11 +4823,28 @@ export function handleCustomMessage(
     // Mark ability as used
     const updatedUsed = { ...state.pathfinderUsed, [who]: true };
 
+    // Update opponent's view of the atlas - remove the played site from the top
+    // We use atlasCount from the message if available, otherwise just slice
+    const currentAtlas = state.zones[who]?.atlas || [];
+    const newAtlas =
+      typeof atlasCount === "number"
+        ? currentAtlas.slice(0, atlasCount)
+        : currentAtlas.slice(1);
+
+    const updatedZones = {
+      ...state.zones,
+      [who]: {
+        ...state.zones[who],
+        atlas: newAtlas,
+      },
+    };
+
     set({
       pendingPathfinderPlay: null,
       board: { ...state.board, sites: newSites },
       avatars: newAvatars,
       pathfinderUsed: updatedUsed,
+      zones: updatedZones,
     } as Partial<GameState> as GameState);
 
     try {
@@ -4850,6 +4870,118 @@ export function handleCustomMessage(
     try {
       get().log(
         `[${pending.ownerSeat.toUpperCase()}] Pathfinder play cancelled`,
+      );
+    } catch {}
+    return;
+  }
+
+  // --- Imposter Mask message handlers ---
+  if (t === "imposterMask") {
+    const who = (msg as { who?: unknown }).who as PlayerKey | undefined;
+    const maskAvatar = (msg as { maskAvatar?: unknown }).maskAvatar as
+      | CardRef
+      | undefined;
+    const newAvatars = (msg as { newAvatars?: unknown }).newAvatars as
+      | GameState["avatars"]
+      | undefined;
+    const newImposterMasks = (msg as { newImposterMasks?: unknown })
+      .newImposterMasks as GameState["imposterMasks"] | undefined;
+    const newZones = (msg as { newZones?: unknown }).newZones as
+      | GameState["zones"]
+      | undefined;
+    const newPlayers = (msg as { newPlayers?: unknown }).newPlayers as
+      | GameState["players"]
+      | undefined;
+
+    if (!who || !maskAvatar || !newAvatars || !newImposterMasks) return;
+
+    // Skip if we're the owner - we already have the state
+    const actorKey = get().actorKey;
+    if (actorKey === who) return;
+
+    // Build the update object - always include avatars and imposterMasks
+    const update: Partial<GameState> = {
+      avatars: newAvatars,
+      imposterMasks: newImposterMasks,
+    };
+
+    // Merge zones if provided (opponent's zones - collection/banished changes)
+    if (newZones && newZones[who]) {
+      const currentZones = get().zones;
+      update.zones = {
+        ...currentZones,
+        [who]: newZones[who],
+      };
+    }
+
+    // Merge players if provided (opponent's mana change)
+    if (newPlayers && newPlayers[who]) {
+      const currentPlayers = get().players;
+      update.players = {
+        ...currentPlayers,
+        [who]: newPlayers[who],
+      };
+    }
+
+    set(update as GameState);
+
+    try {
+      get().log(`${who.toUpperCase()}'s Imposter masks as ${maskAvatar.name}`);
+    } catch {}
+    return;
+  }
+
+  if (t === "imposterUnmask") {
+    const who = (msg as { who?: unknown }).who as PlayerKey | undefined;
+    const _originalAvatar = (msg as { originalAvatar?: unknown })
+      .originalAvatar as CardRef | undefined;
+    const newAvatars = (msg as { newAvatars?: unknown }).newAvatars as
+      | GameState["avatars"]
+      | undefined;
+    const newImposterMasks = (msg as { newImposterMasks?: unknown })
+      .newImposterMasks as GameState["imposterMasks"] | undefined;
+
+    if (!who || !newAvatars || !newImposterMasks) return;
+
+    // Skip if we're the owner - we already have the state
+    const actorKey = get().actorKey;
+    if (actorKey === who) return;
+
+    set({
+      avatars: newAvatars,
+      imposterMasks: newImposterMasks,
+    } as Partial<GameState> as GameState);
+
+    try {
+      get().log(`${who.toUpperCase()}'s Imposter revealed`);
+    } catch {}
+    return;
+  }
+
+  if (t === "imposterMaskBreak") {
+    const who = (msg as { who?: unknown }).who as PlayerKey | undefined;
+    const brokenMaskName = (msg as { brokenMaskName?: unknown })
+      .brokenMaskName as string | undefined;
+    const newAvatars = (msg as { newAvatars?: unknown }).newAvatars as
+      | GameState["avatars"]
+      | undefined;
+    const newImposterMasks = (msg as { newImposterMasks?: unknown })
+      .newImposterMasks as GameState["imposterMasks"] | undefined;
+
+    if (!who || !newAvatars || !newImposterMasks) return;
+
+    // Skip if we're the owner - we already have the state
+    const actorKey = get().actorKey;
+    if (actorKey === who) return;
+
+    set({
+      avatars: newAvatars,
+      imposterMasks: newImposterMasks,
+    } as Partial<GameState> as GameState);
+
+    try {
+      get().log(
+        `${who.toUpperCase()}'s mask breaks! ${brokenMaskName || "Mask"} is banished.`,
       );
     } catch {}
     return;

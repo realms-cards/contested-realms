@@ -8,6 +8,7 @@ export interface AttachmentTarget {
   index: number; // -1 for avatar
   card: CardRef;
   displayName: string;
+  avatarKey?: "p1" | "p2"; // Which avatar (for avatar targets)
 }
 
 interface AttachmentTargetSelectionDialogProps {

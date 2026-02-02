@@ -9,6 +9,7 @@ import {
   isMephistopheles,
   isPathfinder,
   isSavior,
+  isImposter,
 } from "@/lib/game/avatarAbilities";
 import {
   detectBurrowSubmergeAbilities,
@@ -36,6 +37,7 @@ import {
 import {
   NECROMANCER_SKELETON_COST,
   SAVIOR_WARD_COST,
+  IMPOSTER_MASK_COST,
 } from "@/lib/game/store/types";
 import {
   getCellNumber,
@@ -881,21 +883,14 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
             return isValidTarget && i !== t.index; // Exclude the artifact itself
           });
 
-        // Check if there's an avatar on this tile
-        const ownerKey = seatFromOwner(item.owner);
-        const avatar = avatars[ownerKey];
-        const avatarPos =
-          Array.isArray(avatar?.pos) && avatar.pos.length === 2
-            ? avatar.pos
-            : null;
+        // Check if there's any avatar on this tile (either player's)
+        // Allow both players to pick up dropped artifacts
         const [artifactX, artifactY] = t.at.split(",").map(Number);
-        const isOnAvatarTile =
-          avatarPos && avatarPos[0] === artifactX && avatarPos[1] === artifactY;
 
         // Build list of all possible attachment targets
         const possibleTargets: AttachmentTarget[] = [];
 
-        // Add all minions as potential targets
+        // Add all minions as potential targets (from either player)
         for (const { it, i } of nonArtifactPermanents) {
           possibleTargets.push({
             type: "permanent",
@@ -905,14 +900,27 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
           });
         }
 
-        // Add avatar if on same tile
-        if (isOnAvatarTile && avatar?.card) {
-          possibleTargets.push({
-            type: "avatar",
-            index: -1,
-            card: avatar.card,
-            displayName: `${ownerKey.toUpperCase()} Avatar`,
-          });
+        // Check both players' avatars on this tile
+        for (const avatarKey of ["p1", "p2"] as const) {
+          const avatar = avatars[avatarKey];
+          const avatarPos =
+            Array.isArray(avatar?.pos) && avatar.pos.length === 2
+              ? avatar.pos
+              : null;
+          const isOnTile =
+            avatarPos &&
+            avatarPos[0] === artifactX &&
+            avatarPos[1] === artifactY;
+
+          if (isOnTile && avatar?.card) {
+            possibleTargets.push({
+              type: "avatar",
+              index: -1,
+              card: avatar.card,
+              displayName: `${avatarKey.toUpperCase()} Avatar`,
+              avatarKey, // Store which avatar for attachment
+            });
+          }
         }
 
         // Can attach to minion or avatar
@@ -928,8 +936,8 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
             // If only one target, attach directly (old behavior)
             if (possibleTargets.length === 1) {
               const target = possibleTargets[0];
-              if (target.type === "avatar") {
-                attachPermanentToAvatar(t.at, t.index, ownerKey);
+              if (target.type === "avatar" && target.avatarKey) {
+                attachPermanentToAvatar(t.at, t.index, target.avatarKey);
               } else {
                 attachTokenToPermanent(t.at, t.index, target.index);
                 log(
@@ -1150,6 +1158,35 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         targetPermanentId: "",
         description:
           "Remove mask and reveal original Imposter avatar. The mask is banished.",
+      });
+    }
+
+    // Imposter mask action (if player has Imposter avatar and avatars in collection)
+    // Check if avatar is Imposter (either currently or originally if masked)
+    const currentAvatarName = a?.card?.name;
+    const originalImposterAvatar = imposterMasks[t.who]?.originalAvatar;
+    const isImposterAvatar = isImposter(
+      originalImposterAvatar?.name ?? currentAvatarName,
+    );
+    const collectionAvatars = (zones[t.who]?.collection || []).filter((card) =>
+      card.type?.toLowerCase().includes("avatar"),
+    );
+    const hasAvatarsInCollection = collectionAvatars.length > 0;
+
+    if (isMine && isImposterAvatar && hasAvatarsInCollection) {
+      const currentMana = getAvailableMana(t.who);
+      const hasEnoughManaForMask = currentMana >= IMPOSTER_MASK_COST;
+      let maskDescription = `Open collection to choose an avatar to mask as (costs ${IMPOSTER_MASK_COST} mana)`;
+      if (!hasEnoughManaForMask) {
+        maskDescription = `Warning: not enough mana (need ${IMPOSTER_MASK_COST}, have ${currentMana})`;
+      }
+
+      extraActions.push({
+        actionId: "__imposter_mask__",
+        displayText: `Mask (${IMPOSTER_MASK_COST} mana)`,
+        isEnabled: true, // Always enabled - mana check is a warning
+        targetPermanentId: "",
+        description: maskDescription,
       });
     }
 
@@ -1511,10 +1548,9 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     const artifact = arr[artifactIndex];
     if (!artifact) return;
 
-    if (target.type === "avatar") {
-      // Attach to avatar
-      const ownerKey = seatFromOwner(artifact.owner);
-      attachPermanentToAvatar(artifactAt, artifactIndex, ownerKey);
+    if (target.type === "avatar" && target.avatarKey) {
+      // Attach to avatar - use target's avatarKey (the avatar being attached to)
+      attachPermanentToAvatar(artifactAt, artifactIndex, target.avatarKey);
     } else {
       // Attach to permanent
       attachTokenToPermanent(artifactAt, artifactIndex, target.index);
@@ -2840,6 +2876,30 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                           onClick={() => {
                             if (t.kind === "avatar") {
                               unmask(t.who);
+                            }
+                            onClose();
+                          }}
+                        >
+                          {action.displayText}
+                        </button>
+                      );
+                    }
+                    // Imposter mask action - opens collection search for avatar selection
+                    if (action.actionId === "__imposter_mask__") {
+                      return (
+                        <button
+                          key={action.actionId}
+                          className="w-full text-left rounded bg-purple-600/20 hover:bg-purple-600/30 px-3 py-1"
+                          title={action.description}
+                          onClick={() => {
+                            if (t.kind === "avatar") {
+                              // Open the collection search dialog - the CollectionButton handles masking
+                              // We trigger a custom event that CollectionButton listens for
+                              window.dispatchEvent(
+                                new CustomEvent("imposter:openMaskDialog", {
+                                  detail: { seat: t.who },
+                                }),
+                              );
                             }
                             onClose();
                           }}

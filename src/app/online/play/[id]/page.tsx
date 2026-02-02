@@ -737,7 +737,9 @@ export default function OnlineMatchPage() {
 
     const retryTimer = setTimeout(() => {
       if (match?.id === matchId) return; // Joined in the meantime
-      console.log("[joinMatch retry] Still not in match after 3s, retrying join + resync");
+      console.log(
+        "[joinMatch retry] Still not in match after 3s, retrying join + resync",
+      );
       joinAttemptedForRef.current = null; // Allow re-attempt
       try {
         void joinMatch(matchId);
@@ -2313,21 +2315,74 @@ export default function OnlineMatchPage() {
   const cameraMode = useGameStore((s) => s.cameraMode);
   const setCameraMode = useGameStore((s) => s.setCameraMode);
 
-  // Restore camera mode from localStorage after hydration to avoid mismatch
-  const cameraModeRestoredRef = useRef(false);
+  // Restore camera mode and playmat settings from API (authenticated users) or localStorage after hydration
+  const settingsRestoredRef = useRef(false);
+  const togglePlaymat = useGameStore((s) => s.togglePlaymat);
+  const togglePlaymatOverlay = useGameStore((s) => s.togglePlaymatOverlay);
+
   useEffect(() => {
-    if (cameraModeRestoredRef.current) return;
-    cameraModeRestoredRef.current = true;
+    if (settingsRestoredRef.current) return;
+    settingsRestoredRef.current = true;
+
     // Defer to next tick to ensure hydration is complete
     requestAnimationFrame(() => {
-      try {
-        const stored = localStorage.getItem("sorcery:cameraMode");
-        if (stored === "orbit" && cameraMode !== "orbit") {
-          setCameraMode("orbit");
+      const loadSettings = async () => {
+        try {
+          // Try to load from API first (authenticated users)
+          const res = await fetch("/api/users/me/playmats/preferences", {
+            cache: "no-store",
+          });
+          if (res.ok) {
+            const data = (await res.json()) as {
+              cameraMode?: string;
+              showPlaymat?: boolean;
+              showGrid?: boolean;
+            };
+            // Apply camera mode from API
+            if (data.cameraMode === "orbit" || data.cameraMode === "topdown") {
+              if (data.cameraMode !== cameraMode) {
+                setCameraMode(data.cameraMode);
+              }
+              // Sync to localStorage for offline fallback
+              localStorage.setItem("sorcery:cameraMode", data.cameraMode);
+            }
+            // Apply playmat setting from API
+            if (typeof data.showPlaymat === "boolean") {
+              const storeShowPlaymat = useGameStore.getState().showPlaymat;
+              if (data.showPlaymat !== storeShowPlaymat) {
+                togglePlaymat();
+              }
+              localStorage.setItem(
+                "sorcery:showPlaymat",
+                String(data.showPlaymat),
+              );
+            }
+            // Apply grid setting from API
+            if (typeof data.showGrid === "boolean") {
+              const storeShowGrid = useGameStore.getState().showPlaymatOverlay;
+              if (data.showGrid !== storeShowGrid) {
+                togglePlaymatOverlay();
+              }
+              localStorage.setItem("sorcery:showGrid", String(data.showGrid));
+            }
+            return; // API loaded successfully
+          }
+        } catch {
+          // API failed, fall back to localStorage
         }
-      } catch {}
+
+        // Fallback: load from localStorage
+        try {
+          const storedCamera = localStorage.getItem("sorcery:cameraMode");
+          if (storedCamera === "orbit" && cameraMode !== "orbit") {
+            setCameraMode("orbit");
+          }
+        } catch {}
+      };
+
+      void loadSettings();
     });
-  }, [cameraMode, setCameraMode]);
+  }, [cameraMode, setCameraMode, togglePlaymat, togglePlaymatOverlay]);
 
   // Compute natural tilt angle for 2D mode and reuse across handlers
   // Use a tiny epsilon (not exactly 0) to avoid gimbal lock in Chrome's OrbitControls
@@ -3383,7 +3438,7 @@ export default function OnlineMatchPage() {
               {/* Accusation Overlay (reveal opponent hand, banish) */}
               <AccusationOverlay />
               {/* Lilith Overlay (end of turn reveal) */}
-              <LilithOverlay />
+              <LilithOverlay playerNames={playerNames} />
               {/* Mother Nature Overlay (start of turn reveal) */}
               <MotherNatureOverlay />
               {/* Headless Haunt Overlay (start of turn movement - Kythera Mechanism) */}

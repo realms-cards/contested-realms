@@ -341,11 +341,12 @@ export const createPathfinderSlice: StateCreator<
           seat: who,
           cellKey: targetCell,
         } as never);
-        // Broadcast resolution
+        // Broadcast resolution - include atlas count so opponent knows cards were removed
         transport.sendMessage({
           type: "pathfinderResolve",
           targetCell,
           topSite,
+          atlasCount: newAtlas.length,
         } as never);
       } catch {}
     }

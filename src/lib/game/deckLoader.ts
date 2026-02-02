@@ -186,7 +186,23 @@ export async function loadDeckFor(
     if (!magicianDeck) {
       shuffleAtlas(who);
     }
-    setAvatarCard(who, avatar);
+    // IMPORTANT: Check if player has an active Imposter mask - don't overwrite masked avatar
+    const { imposterMasks, avatars: currentAvatars } = useGameStore.getState();
+    const existingMask = imposterMasks[who];
+    if (existingMask) {
+      // Player is masked - preserve the mask avatar, don't overwrite with original
+      console.log(
+        `[loadDeckFor] Preserving Imposter mask for ${who}:`,
+        existingMask.maskAvatar.name,
+      );
+      // Only place avatar if position isn't already set
+      if (!currentAvatars[who]?.pos) {
+        placeAvatarAtStart(who);
+      }
+    } else {
+      setAvatarCard(who, avatar);
+      placeAvatarAtStart(who);
+    }
 
     // Set Dragonlord champion if present
     if (data.champion) {
@@ -196,8 +212,6 @@ export async function loadDeckFor(
         slug: data.champion.slug || null,
       });
     }
-
-    placeAvatarAtStart(who);
     drawOpening(who);
 
     return true;
@@ -462,9 +476,24 @@ export async function loadSealedDeckFor(
     shuffleAtlas(who);
 
     // Only set avatar if we have one (draft/sealed might not have avatar yet)
+    // IMPORTANT: Check if player has an active Imposter mask - don't overwrite masked avatar
     if (avatar) {
-      setAvatarCard(who, avatar);
-      placeAvatarAtStart(who);
+      const { imposterMasks, avatars } = useGameStore.getState();
+      const existingMask = imposterMasks[who];
+      if (existingMask) {
+        // Player is masked - preserve the mask avatar, don't overwrite with original
+        console.log(
+          `[loadSealedDeckFor] Preserving Imposter mask for ${who}:`,
+          existingMask.maskAvatar.name,
+        );
+        // Only place avatar if position isn't already set
+        if (!avatars[who]?.pos) {
+          placeAvatarAtStart(who);
+        }
+      } else {
+        setAvatarCard(who, avatar);
+        placeAvatarAtStart(who);
+      }
     }
 
     drawOpening(who);
@@ -573,7 +602,24 @@ export async function loadTournamentConstructedDeck(
     initLibraries(who, spellbook, rawAtlas);
     shuffleSpellbook(who);
     shuffleAtlas(who);
-    setAvatarCard(who, avatar);
+
+    // IMPORTANT: Check if player has an active Imposter mask - don't overwrite masked avatar
+    const { imposterMasks, avatars: currentAvatars } = useGameStore.getState();
+    const existingMask = imposterMasks[who];
+    if (existingMask) {
+      // Player is masked - preserve the mask avatar, don't overwrite with original
+      console.log(
+        `[loadTournamentConstructedDeck] Preserving Imposter mask for ${who}:`,
+        existingMask.maskAvatar.name,
+      );
+      // Only place avatar if position isn't already set
+      if (!currentAvatars[who]?.pos) {
+        placeAvatarAtStart(who);
+      }
+    } else {
+      setAvatarCard(who, avatar);
+      placeAvatarAtStart(who);
+    }
 
     // Set Dragonlord champion if present
     const deckWithChampion = deckData as {
@@ -586,8 +632,6 @@ export async function loadTournamentConstructedDeck(
         slug: deckWithChampion.champion.slug || null,
       });
     }
-
-    placeAvatarAtStart(who);
     drawOpening(who);
 
     return true;

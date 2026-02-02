@@ -129,8 +129,67 @@ export default function PlayPage() {
   const boardSize = useGameStore((s) => s.board.size);
   const cameraMode = useGameStore((s) => s.cameraMode);
   const setCameraMode = useGameStore((s) => s.setCameraMode);
+  const togglePlaymat = useGameStore((s) => s.togglePlaymat);
+  const togglePlaymatOverlay = useGameStore((s) => s.togglePlaymatOverlay);
   const toggleHandVisibility = useGameStore((s) => s.toggleHandVisibility);
   const currentPlayerKey = currentPlayer === 1 ? "p1" : "p2";
+
+  // Restore camera mode and playmat settings from API (authenticated users) or localStorage after hydration
+  const settingsRestoredRef = useRef(false);
+  useEffect(() => {
+    if (settingsRestoredRef.current) return;
+    settingsRestoredRef.current = true;
+
+    requestAnimationFrame(() => {
+      const loadSettings = async () => {
+        try {
+          // Try to load from API first (authenticated users)
+          const res = await fetch("/api/users/me/playmats/preferences", {
+            cache: "no-store",
+          });
+          if (res.ok) {
+            const data = (await res.json()) as {
+              cameraMode?: string;
+              showPlaymat?: boolean;
+              showGrid?: boolean;
+            };
+            // Apply camera mode from API
+            if (data.cameraMode === "orbit" || data.cameraMode === "topdown") {
+              const storeMode = useGameStore.getState().cameraMode;
+              if (data.cameraMode !== storeMode) {
+                setCameraMode(data.cameraMode);
+              }
+              localStorage.setItem("sorcery:cameraMode", data.cameraMode);
+            }
+            // Apply playmat setting from API
+            if (typeof data.showPlaymat === "boolean") {
+              const storeShowPlaymat = useGameStore.getState().showPlaymat;
+              if (data.showPlaymat !== storeShowPlaymat) {
+                togglePlaymat();
+              }
+              localStorage.setItem(
+                "sorcery:showPlaymat",
+                String(data.showPlaymat),
+              );
+            }
+            // Apply grid setting from API
+            if (typeof data.showGrid === "boolean") {
+              const storeShowGrid = useGameStore.getState().showPlaymatOverlay;
+              if (data.showGrid !== storeShowGrid) {
+                togglePlaymatOverlay();
+              }
+              localStorage.setItem("sorcery:showGrid", String(data.showGrid));
+            }
+            return;
+          }
+        } catch {
+          // API failed, settings already loaded from localStorage via store initialization
+        }
+      };
+
+      void loadSettings();
+    });
+  }, [setCameraMode, togglePlaymat, togglePlaymatOverlay]);
   const offlinePlayerNames = useMemo(
     () => ({ p1: "Player 1", p2: "Player 2" }),
     [],
