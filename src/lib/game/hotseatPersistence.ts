@@ -88,6 +88,8 @@ type CompactPermanent = {
   counters?: number;
   offset?: [number, number];
   attachedTo?: { at: string; index: number };
+  faceDown?: boolean;
+  positionState?: "surface" | "burrowed" | "submerged";
 };
 
 type CompactSite = {
@@ -215,18 +217,26 @@ function serializeCompact(
   const permanents: Record<string, CompactPermanent[]> = {};
   for (const [key, items] of Object.entries(state.permanents)) {
     if (Array.isArray(items) && items.length > 0) {
-      permanents[key] = items.map((p) => ({
-        slug: p.card?.slug || "",
-        name: p.card?.name,
-        cardId: p.card?.cardId,
-        instanceId: p.instanceId ?? undefined,
-        type: p.card?.type ?? undefined,
-        owner: p.owner, // Preserve owner for correct assignment on restore
-        tapped: p.tapped,
-        counters: p.counters ?? undefined,
-        offset: p.offset ?? undefined,
-        attachedTo: p.attachedTo ?? undefined,
-      }));
+      permanents[key] = items.map((p) => {
+        // Check if this permanent has a burrowed/submerged position
+        const posState = p.instanceId
+          ? state.permanentPositions?.[p.instanceId]?.state
+          : undefined;
+        return {
+          slug: p.card?.slug || "",
+          name: p.card?.name,
+          cardId: p.card?.cardId,
+          instanceId: p.instanceId ?? undefined,
+          type: p.card?.type ?? undefined,
+          owner: p.owner, // Preserve owner for correct assignment on restore
+          tapped: p.tapped,
+          counters: p.counters ?? undefined,
+          offset: p.offset ?? undefined,
+          attachedTo: p.attachedTo ?? undefined,
+          faceDown: p.faceDown || undefined,
+          positionState: posState && posState !== "surface" ? posState : undefined,
+        };
+      });
     }
   }
 
@@ -504,22 +514,43 @@ export function applyLoadedGame(
 
   // Rebuild permanents (use type assertion for complex nested types)
   const permanents: Record<string, unknown[]> = {};
+  const restoredPositions: Record<string, { permanentId: string; state: "burrowed" | "submerged"; position: { x: number; y: number; z: number } }> = {};
+  const restoredAbilities: Record<string, { permanentId: string; canBurrow: boolean; canSubmerge: boolean; requiresWaterSite: boolean; abilitySource: string }> = {};
   for (const [key, items] of Object.entries(loaded.permanents)) {
-    permanents[key] = items.map((p) => ({
-      card: {
-        slug: p.slug,
-        name: p.name || "",
-        cardId: p.cardId || 0,
+    permanents[key] = items.map((p) => {
+      // Restore burrowed/submerged position state
+      if (p.instanceId && p.positionState && p.positionState !== "surface") {
+        const yPos = p.positionState === "burrowed" ? -0.25 : -0.5;
+        restoredPositions[p.instanceId] = {
+          permanentId: p.instanceId,
+          state: p.positionState,
+          position: { x: 0, y: yPos, z: 0 },
+        };
+        restoredAbilities[p.instanceId] = {
+          permanentId: p.instanceId,
+          canBurrow: p.positionState === "burrowed",
+          canSubmerge: p.positionState === "submerged",
+          requiresWaterSite: false,
+          abilitySource: "Restored from save",
+        };
+      }
+      return {
+        card: {
+          slug: p.slug,
+          name: p.name || "",
+          cardId: p.cardId || 0,
+          instanceId: p.instanceId,
+          type: p.type || null, // Preserve original type for proper rendering
+        },
+        owner: p.owner, // Preserve owner for correct assignment
         instanceId: p.instanceId,
-        type: p.type || null, // Preserve original type for proper rendering
-      },
-      owner: p.owner, // Preserve owner for correct assignment
-      instanceId: p.instanceId,
-      tapped: p.tapped || false,
-      counters: p.counters,
-      offset: p.offset || null,
-      attachedTo: p.attachedTo || null,
-    }));
+        tapped: p.tapped || false,
+        counters: p.counters,
+        offset: p.offset || null,
+        attachedTo: p.attachedTo || null,
+        faceDown: p.faceDown || undefined,
+      };
+    });
   }
 
   // Rebuild board sites
@@ -564,5 +595,9 @@ export function applyLoadedGame(
       sites,
     },
     portalState,
+    // Restore burrowed/submerged position state
+    ...(Object.keys(restoredPositions).length > 0
+      ? { permanentPositions: restoredPositions, permanentAbilities: restoredAbilities }
+      : {}),
   } as Partial<GameState>;
 }

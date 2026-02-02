@@ -68,7 +68,7 @@ export const createImposterMaskSlice: StateCreator<
     const MASK_COST = IMPOSTER_MASK_COST;
     if (availableMana < MASK_COST) {
       state.log(
-        `Warning: ${who.toUpperCase()} needs ${MASK_COST} mana to mask (has ${availableMana})`
+        `Warning: ${who.toUpperCase()} needs ${MASK_COST} mana to mask (has ${availableMana})`,
       );
     }
 
@@ -76,13 +76,14 @@ export const createImposterMaskSlice: StateCreator<
     const collection = state.zones[who].collection;
     const maskCardIndex = collection.findIndex(
       (c) =>
-        c.cardId === maskAvatar.cardId && c.instanceId === maskAvatar.instanceId
+        c.cardId === maskAvatar.cardId &&
+        c.instanceId === maskAvatar.instanceId,
     );
     if (maskCardIndex === -1) {
       state.log(
         `Cannot mask: ${
           maskAvatar.name
-        } not found in ${who.toUpperCase()}'s collection`
+        } not found in ${who.toUpperCase()}'s collection`,
       );
       return false;
     }
@@ -93,7 +94,7 @@ export const createImposterMaskSlice: StateCreator<
       state.log(
         `${who.toUpperCase()} removes ${
           existingMask.maskAvatar.name
-        } mask (banished)`
+        } mask (banished)`,
       );
       // Update zones with banished mask
       set((s) => ({
@@ -159,18 +160,22 @@ export const createImposterMaskSlice: StateCreator<
     };
 
     // Build and send patch
+    // IMPORTANT: In online play, the server will reject/ignore patches that attempt
+    // to mutate opponent-private zones. If we send full `zones` for both seats,
+    // we risk the server dropping the patch entirely, which would prevent the
+    // opponent from seeing the new masked avatar.
     const patch: ServerPatchT = {
       avatars: newAvatars,
       imposterMasks: newImposterMasks,
-      zones: newZones,
-      players: newPlayers,
+      zones: { [who]: newZones[who] } as GameState["zones"],
+      players: { [who]: newPlayers[who] } as GameState["players"],
     };
 
     get().trySendPatch(patch);
     get().log(
       `${who.toUpperCase()}'s Imposter masks as ${
         maskAvatar.name
-      } (${MASK_COST} mana)`
+      } (${MASK_COST} mana)`,
     );
 
     set({
@@ -197,7 +202,7 @@ export const createImposterMaskSlice: StateCreator<
 
     // Banish the current mask avatar (already banished when masking, but log)
     state.log(
-      `${who.toUpperCase()} unmasks, banishing ${maskState.maskAvatar.name}`
+      `${who.toUpperCase()} unmasks, banishing ${maskState.maskAvatar.name}`,
     );
 
     // Restore original Imposter avatar
@@ -225,7 +230,7 @@ export const createImposterMaskSlice: StateCreator<
     get().log(
       `${who.toUpperCase()}'s Imposter revealed (was masked as ${
         maskState.maskAvatar.name
-      })`
+      })`,
     );
 
     set({
@@ -250,7 +255,7 @@ export const createImposterMaskSlice: StateCreator<
     state.log(
       `${who.toUpperCase()}'s mask breaks! ${
         maskState.maskAvatar.name
-      } is banished.`
+      } is banished.`,
     );
 
     // Restore original Imposter avatar
@@ -288,7 +293,7 @@ export const createImposterMaskSlice: StateCreator<
  */
 export function isMasked(
   imposterMasks: Record<PlayerKey, ImposterMaskState | null>,
-  who: PlayerKey
+  who: PlayerKey,
 ): boolean {
   return imposterMasks[who] !== null;
 }
@@ -298,7 +303,7 @@ export function isMasked(
  */
 export function getOriginalImposter(
   imposterMasks: Record<PlayerKey, ImposterMaskState | null>,
-  who: PlayerKey
+  who: PlayerKey,
 ): CardRef | null {
   return imposterMasks[who]?.originalAvatar ?? null;
 }

@@ -46,6 +46,8 @@ export type TileInteractionPlaneProps = {
   // Pathfinder target selection support
   pendingPathfinderPlay?: GameState["pendingPathfinderPlay"];
   selectPathfinderTarget?: GameState["selectPathfinderTarget"];
+  // Cast placement from context menu
+  castPlacementMode?: GameState["castPlacementMode"];
 };
 
 export function TileInteractionPlane({
@@ -79,6 +81,7 @@ export function TileInteractionPlane({
   selectMephistophelesSummonTarget,
   pendingPathfinderPlay,
   selectPathfinderTarget,
+  castPlacementMode,
 }: TileInteractionPlaneProps) {
   const { dragAvatar, dragging, setGhost, draggedBody, moveDraggedBody } =
     dragContext;
@@ -226,6 +229,16 @@ export function TileInteractionPlane({
       onClick={(e) => {
         e.stopPropagation();
         if (Date.now() - lastDropAt.current < 200) return;
+        // Cast placement from context menu - handle click-to-place
+        if (castPlacementMode && selectedCard && !dragFromHand) {
+          handleTilePointerUp({
+            event: e as unknown as ThreeEvent<PointerEvent>,
+            tileX,
+            tileY,
+            tileWorldPosition: position,
+          });
+          return;
+        }
         // Switch site is now handled in onPointerUp
         clearBoardSelection();
       }}

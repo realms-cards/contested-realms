@@ -213,6 +213,7 @@ export default function Board({
   );
   const contextMenu = useScopedStore((s) => s.contextMenu);
   const openContextMenu = useScopedStore((s) => s.openContextMenu);
+  const openPlacementDialog = useScopedStore((s) => s.openPlacementDialog);
   const selected = useScopedStore((s) => s.selectedCard);
   const selectedPermanent = useScopedStore((s) => s.selectedPermanent);
   const toggleFaceDown = useScopedStore((s) => s.toggleFaceDown);
@@ -224,6 +225,7 @@ export default function Board({
   const dropDraggingSite = useScopedStore((s) => s.dropDraggingSite);
   const { playCardPlay, playTurnGong, playCardFlip } = useSound();
   const dragFromHand = useScopedStore((s) => s.dragFromHand);
+  const castPlacementMode = useScopedStore((s) => s.castPlacementMode);
   const previewCard = useScopedStore((s) => s.previewCard);
   // Hand visibility state to disable glows when hand is shown
   const mouseInHandZone = useScopedStore((s) => s.mouseInHandZone);
@@ -1147,6 +1149,7 @@ export default function Board({
     dropDraggingSite,
     pendingPrivateHandCast,
     completePendingPrivateHandCast,
+    castPlacementMode,
   });
 
   const {
@@ -1214,6 +1217,7 @@ export default function Board({
     lastPointerRef,
     draggingSite,
     setDraggingSite,
+    openPlacementDialog,
   });
 
   // removed global pointerup fallback; drops are handled by tiles/cards precisely
@@ -1368,6 +1372,7 @@ export default function Board({
               stolenCards={stolenCards}
               metaByCardId={metaByCardId}
               babelTowers={babelTowers}
+              castPlacementMode={castPlacementMode}
             />
           );
         })}

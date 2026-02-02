@@ -252,7 +252,7 @@ export const createPlayActionsSlice: StateCreator<
             );
           }
         } catch {}
-        return state;
+        return { ...state, castPlacementMode: null, selectedCard: null };
       }
       // Block non-site/non-token cards outside of Main phase (and Start phase after drawing)
       const canPlayInCurrentPhase =
@@ -266,7 +266,7 @@ export const createPlayActionsSlice: StateCreator<
         !allowInstant
       ) {
         get().log(`Cannot play '${card.name}' during ${state.phase} phase`);
-        return state;
+        return { ...state, castPlacementMode: null, selectedCard: null };
       }
 
       // Check for Animist playing a magic card - trigger choice dialog
@@ -571,6 +571,7 @@ export const createPlayActionsSlice: StateCreator<
           permanents: permanentsNext,
           selectedCard: null,
           selectedPermanent: null,
+          castPlacementMode: null,
           ...(nextInteractionLog ? { interactionLog: nextInteractionLog } : {}),
         } as Partial<GameState> as GameState;
       }
@@ -578,6 +579,8 @@ export const createPlayActionsSlice: StateCreator<
       const arr = [...(per[key] || [])];
       const cardWithId = prepareCardForSeat(card, who);
       const isFaceDown = state.dragFaceDown;
+      const isSubsurface = state.castSubsurface;
+      const permanentInstanceId = cardWithId.instanceId ?? newPermanentInstanceId();
       arr.push({
         owner: ownerFromSeat(who),
         card: cardWithId,
@@ -586,13 +589,33 @@ export const createPlayActionsSlice: StateCreator<
         tapVersion: 0,
         tapped: false,
         version: 0,
-        instanceId: cardWithId.instanceId ?? newPermanentInstanceId(),
+        instanceId: permanentInstanceId,
         faceDown: isFaceDown || undefined,
         enteredOnTurn: state.turn, // Track when this permanent entered (for Savior ward ability)
       });
       // Reset dragFaceDown after use
       if (isFaceDown) {
         setTimeout(() => get().setDragFaceDown(false), 0);
+      }
+      // Build subsurface position/ability data synchronously (included in patch + state)
+      const subsurfacePosition = isSubsurface
+        ? {
+            permanentId: permanentInstanceId,
+            state: "burrowed" as const,
+            position: { x: 0, y: -0.25, z: 0 },
+          }
+        : null;
+      const subsurfaceAbility = isSubsurface
+        ? {
+            permanentId: permanentInstanceId,
+            canBurrow: true,
+            canSubmerge: false,
+            requiresWaterSite: false,
+            abilitySource: "Cast subsurface",
+          }
+        : null;
+      if (isSubsurface) {
+        setTimeout(() => get().setCastSubsurface(false), 0);
       }
       per[key] = arr;
       const logPlayerNum = who === "p1" ? "1" : "2";
@@ -675,6 +698,17 @@ export const createPlayActionsSlice: StateCreator<
       // Only send affected player's data to avoid overwriting opponent's state
       if (playersNext)
         combined.players = { [who]: playersNext[who] } as GameState["players"];
+      // Include subsurface position/ability in patch for opponent sync
+      if (subsurfacePosition && subsurfaceAbility) {
+        combined.permanentPositions = {
+          ...state.permanentPositions,
+          [permanentInstanceId]: subsurfacePosition,
+        };
+        combined.permanentAbilities = {
+          ...state.permanentAbilities,
+          [permanentInstanceId]: subsurfaceAbility,
+        };
+      }
       if (Object.keys(combined).length > 0) get().trySendPatch(combined);
       // Check for special card abilities that need custom flows
       const cardNameLower = (card.name || "").toLowerCase();
@@ -753,7 +787,24 @@ export const createPlayActionsSlice: StateCreator<
           permanents: per,
           selectedCard: null,
           selectedPermanent: null,
+          castPlacementMode: null,
           ...(playersNext ? { players: playersNext } : {}),
+          ...(subsurfacePosition
+            ? {
+                permanentPositions: {
+                  ...state.permanentPositions,
+                  [permanentInstanceId]: subsurfacePosition,
+                },
+              }
+            : {}),
+          ...(subsurfaceAbility
+            ? {
+                permanentAbilities: {
+                  ...state.permanentAbilities,
+                  [permanentInstanceId]: subsurfaceAbility,
+                },
+              }
+            : {}),
         } as GameState;
       }
 
@@ -1143,8 +1194,26 @@ export const createPlayActionsSlice: StateCreator<
         permanents: per,
         selectedCard: null,
         selectedPermanent: null,
+        castPlacementMode: null,
         ...(playersNext ? { players: playersNext } : {}),
         ...(nextInteractionLog ? { interactionLog: nextInteractionLog } : {}),
+        // Subsurface cast: set position + ability synchronously in state
+        ...(subsurfacePosition
+          ? {
+              permanentPositions: {
+                ...state.permanentPositions,
+                [permanentInstanceId]: subsurfacePosition,
+              },
+            }
+          : {}),
+        ...(subsurfaceAbility
+          ? {
+              permanentAbilities: {
+                ...state.permanentAbilities,
+                [permanentInstanceId]: subsurfaceAbility,
+              },
+            }
+          : {}),
       } as Partial<GameState> as GameState;
     }),
   playFromPileTo: (x, y) =>
@@ -1367,6 +1436,8 @@ export const createPlayActionsSlice: StateCreator<
       const arr = [...(per[key] || [])];
       const cardWithId = prepareCardForSeat(card, who);
       const isFaceDown = state.dragFaceDown;
+      const isSubsurfacePile = state.castSubsurface;
+      const pilePermInstanceId = cardWithId.instanceId ?? newPermanentInstanceId();
       arr.push({
         owner: ownerFromSeat(who),
         card: cardWithId,
@@ -1375,13 +1446,33 @@ export const createPlayActionsSlice: StateCreator<
         tapVersion: 0,
         tapped: false,
         version: 0,
-        instanceId: cardWithId.instanceId ?? newPermanentInstanceId(),
+        instanceId: pilePermInstanceId,
         faceDown: isFaceDown || undefined,
         enteredOnTurn: state.turn, // Track when this permanent entered (for Savior ward ability)
       });
       // Reset dragFaceDown after use
       if (isFaceDown) {
         setTimeout(() => get().setDragFaceDown(false), 0);
+      }
+      // Build subsurface position/ability data synchronously (included in patch + state)
+      const pileSubsurfacePosition = isSubsurfacePile
+        ? {
+            permanentId: pilePermInstanceId,
+            state: "burrowed" as const,
+            position: { x: 0, y: -0.25, z: 0 },
+          }
+        : null;
+      const pileSubsurfaceAbility = isSubsurfacePile
+        ? {
+            permanentId: pilePermInstanceId,
+            canBurrow: true,
+            canSubmerge: false,
+            requiresWaterSite: false,
+            abilitySource: "Cast subsurface",
+          }
+        : null;
+      if (isSubsurfacePile) {
+        setTimeout(() => get().setCastSubsurface(false), 0);
       }
       per[key] = arr;
       const logPlayerNum2 = who === "p1" ? "1" : "2";
@@ -1445,6 +1536,17 @@ export const createPlayActionsSlice: StateCreator<
       else if (fallbackPatch?.permanents)
         combined.permanents = fallbackPatch.permanents;
       if (zonePatch?.zones) combined.zones = zonePatch.zones;
+      // Include subsurface position/ability in patch for opponent sync
+      if (pileSubsurfacePosition && pileSubsurfaceAbility) {
+        combined.permanentPositions = {
+          ...state.permanentPositions,
+          [pilePermInstanceId]: pileSubsurfacePosition,
+        };
+        combined.permanentAbilities = {
+          ...state.permanentAbilities,
+          [pilePermInstanceId]: pileSubsurfaceAbility,
+        };
+      }
       if (Object.keys(combined).length > 0) get().trySendPatch(combined);
       // If this is a Magic card, begin the magic casting flow after placing it
       try {
@@ -1470,7 +1572,25 @@ export const createPlayActionsSlice: StateCreator<
         permanents: per,
         dragFromPile: null,
         dragFromHand: false,
+        castPlacementMode: null,
         ...(nextInteractionLog ? { interactionLog: nextInteractionLog } : {}),
+        // Subsurface cast: set position + ability synchronously in state
+        ...(pileSubsurfacePosition
+          ? {
+              permanentPositions: {
+                ...state.permanentPositions,
+                [pilePermInstanceId]: pileSubsurfacePosition,
+              },
+            }
+          : {}),
+        ...(pileSubsurfaceAbility
+          ? {
+              permanentAbilities: {
+                ...state.permanentAbilities,
+                [pilePermInstanceId]: pileSubsurfaceAbility,
+              },
+            }
+          : {}),
       } as Partial<GameState> as GameState;
     }),
   drawFromPileToHand: () =>

@@ -74,6 +74,7 @@ export default function Hand3D({
   const dragFromHand = useGameStore((s) => s.dragFromHand);
   const setDragFromHand = useGameStore((s) => s.setDragFromHand);
   const setDragFaceDown = useGameStore((s) => s.setDragFaceDown);
+  const openContextMenu = useGameStore((s) => s.openContextMenu);
   const dragFromPile = useGameStore((s) => s.dragFromPile);
   const boardDragActive = useGameStore((s) => s.boardDragActive);
   const draggingSite = useGameStore((s) => s.draggingSite);
@@ -86,6 +87,7 @@ export default function Hand3D({
   const cardbackUrls = useGameStore((s) => s.cardbackUrls);
   const handVisibilityMode = useGameStore((s) => s.handVisibilityMode);
   const setHandVisibilityMode = useGameStore((s) => s.setHandVisibilityMode);
+  const castPlacementMode = useGameStore((s) => s.castPlacementMode);
   const { playCardSelect } = useSound();
 
   const hand = useMemo(() => zones?.[owner]?.hand ?? [], [zones, owner]);
@@ -507,7 +509,10 @@ export default function Hand3D({
     // Reveal logic: edge hands always visible; overlay hands show on interaction
     // handVisibilityMode: null = default, "hidden" = force hide, "visible" = force show
     let targetShown: number;
-    if (!showCardBacks && handVisibilityMode === "hidden") {
+    if (!showCardBacks && castPlacementMode) {
+      // Hide hand during cast placement (user is clicking a tile)
+      targetShown = 0;
+    } else if (!showCardBacks && handVisibilityMode === "hidden") {
       targetShown = 0;
     } else if (!showCardBacks && handVisibilityMode === "visible") {
       targetShown = 1;
@@ -1359,21 +1364,25 @@ export default function Hand3D({
                     handAreaLeaveTimeoutRef.current = null;
                   }, 30); // Short debounce - onPointerOver cancels this when moving between cards
                 }}
+                onContextMenu={(e) => {
+                  if (isDragging) return;
+                  e.stopPropagation();
+                  e.nativeEvent.preventDefault();
+                  openContextMenu(
+                    { kind: "handCard", who: owner, index: originalIndex, card: c },
+                    { x: e.nativeEvent.clientX, y: e.nativeEvent.clientY },
+                  );
+                }}
                 onPointerDown={(e) => {
                   if (isDragging) return; // don't start another drag
-                  // Accept left-click (0) or right-click (2) for face-down play
-                  const isRightClick = e.button === 2;
-                  if (e.button !== 0 && e.button !== 2) return;
+                  // Only handle left-click for drag; right-click handled by onContextMenu
+                  if (e.button !== 0) return;
                   e.stopPropagation();
-                  // Prevent browser context menu for right-click
-                  if (isRightClick && e.nativeEvent) {
-                    e.nativeEvent.preventDefault();
-                  }
 
                   // Check for two-finger touch (face-down gesture)
                   const isTwoFingerTouch =
                     isCoarsePointer && activeTouchCountRef.current >= 2;
-                  const shouldPlayFaceDown = isRightClick || isTwoFingerTouch;
+                  const shouldPlayFaceDown = isTwoFingerTouch;
 
                   // On touch devices, track for tap detection (only for single touch)
                   if (isCoarsePointer && !isTwoFingerTouch) {

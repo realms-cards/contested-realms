@@ -148,6 +148,12 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   const duplicateGemToken = useGameStore((s) => s.duplicateGemToken);
   const destroyGemToken = useGameStore((s) => s.destroyGemToken);
 
+  // Hand card actions
+  const selectHandCard = useGameStore((s) => s.selectHandCard);
+  const moveCardFromHandToPile = useGameStore((s) => s.moveCardFromHandToPile);
+  const setCastSubsurface = useGameStore((s) => s.setCastSubsurface);
+  const closeContextMenu = useGameStore((s) => s.closeContextMenu);
+
   // Permanent position management (burrow/submerge)
   const getAvailableActions = useGameStore((s) => s.getAvailableActions);
   const updatePermanentState = useGameStore((s) => s.updatePermanentState);
@@ -674,6 +680,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     header = item?.card?.name || "Permanent";
     tapped = !!item?.tapped;
     const ownerKey = item ? seatFromOwner(item.owner) : null;
+    const canActOnline = !!actorKey;
     const canToggle = !actorKey || (ownerKey && actorKey === ownerKey);
     hasToggle = !!canToggle;
     if (canToggle) {
@@ -847,9 +854,16 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         } catch {}
         onClose();
       };
-    } else if (isMine) {
+    } else {
       // Handle carryable artifacts (attach only - detach is on the unit's menu)
-      if (isCarryableArtifactType && !item?.attachedTo) {
+      // Allow either seated player to pick up an unattached carryable artifact,
+      // and transfer control to the holder on attach.
+      const canPickUpCarryableArtifact =
+        isCarryableArtifactType &&
+        !item?.attachedTo &&
+        (isMine || canActOnline);
+
+      if (canPickUpCarryableArtifact) {
         // Artifact is not attached - provide attach option
         // Check for minions (non-artifact permanents) on the same tile
         const nonArtifactPermanents = arr
@@ -1152,8 +1166,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     const hasPosition = Array.isArray(a?.pos) && a.pos.length === 2;
 
     if (isMine && isNecromancer(effectiveAvatarName)) {
-      const canSummon =
-        isMyTurn && !hasAlreadyUsed && hasPosition;
+      const canSummon = isMyTurn && !hasAlreadyUsed && hasPosition;
       let description = `Summon a Skeleton token at your avatar's location (costs ${NECROMANCER_SKELETON_COST} mana, once per turn)`;
       if (!isMyTurn) description = "Can only summon skeleton on your turn";
       else if (hasAlreadyUsed)
@@ -1483,6 +1496,8 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     header = gemToken
       ? `${colorInfo?.label || gemToken.color} Gem`
       : "Gem Token";
+  } else if (t.kind === "handCard") {
+    header = t.card.name || "Hand Card";
   }
 
   const label = tapped ? "Untap" : "Tap";
@@ -1655,6 +1670,73 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                   </button>
                 </>
               )}
+
+              {/* Hand card actions - site cards: Play Site + Discard */}
+              {t.kind === "handCard" &&
+                (t.card.type || "").toLowerCase().includes("site") && (
+                  <>
+                    <button
+                      className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
+                      onClick={() => {
+                        selectHandCard(t.who, t.index);
+                        useGameStore.setState({ castPlacementMode: "surface" });
+                        closeContextMenu();
+                      }}
+                    >
+                      Play Site
+                    </button>
+                    <button
+                      className="w-full text-left rounded bg-red-900/30 hover:bg-red-900/50 px-3 py-1"
+                      onClick={() => {
+                        selectHandCard(t.who, t.index);
+                        moveCardFromHandToPile(t.who, "graveyard", "top");
+                        closeContextMenu();
+                      }}
+                    >
+                      Discard
+                    </button>
+                  </>
+                )}
+
+              {/* Hand card actions - non-site cards: Cast + Cast Subsurface + Discard */}
+              {t.kind === "handCard" &&
+                !(t.card.type || "").toLowerCase().includes("site") && (
+                  <>
+                    <button
+                      className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
+                      onClick={() => {
+                        selectHandCard(t.who, t.index);
+                        useGameStore.setState({ castPlacementMode: "surface" });
+                        closeContextMenu();
+                      }}
+                    >
+                      Cast
+                    </button>
+                    <button
+                      className="w-full text-left rounded bg-amber-900/30 hover:bg-amber-900/50 px-3 py-1"
+                      onClick={() => {
+                        selectHandCard(t.who, t.index);
+                        setCastSubsurface(true);
+                        useGameStore.setState({
+                          castPlacementMode: "subsurface",
+                        });
+                        closeContextMenu();
+                      }}
+                    >
+                      Cast Subsurface
+                    </button>
+                    <button
+                      className="w-full text-left rounded bg-red-900/30 hover:bg-red-900/50 px-3 py-1"
+                      onClick={() => {
+                        selectHandCard(t.who, t.index);
+                        moveCardFromHandToPile(t.who, "graveyard", "top");
+                        closeContextMenu();
+                      }}
+                    >
+                      Discard
+                    </button>
+                  </>
+                )}
 
               {/* Ward - for sites with ward keyword */}
               {t.kind === "site" && siteHasWardAbility && (

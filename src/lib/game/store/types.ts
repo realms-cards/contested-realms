@@ -1185,7 +1185,8 @@ export type ContextMenuTarget =
       from: "spellbook" | "atlas" | "graveyard" | "collection";
     }
   | { kind: "tokenpile"; who: PlayerKey }
-  | { kind: "gemToken"; tokenId: string };
+  | { kind: "gemToken"; tokenId: string }
+  | { kind: "handCard"; who: PlayerKey; index: number; card: CardRef };
 
 export type GameEvent = {
   id: number;
@@ -2112,7 +2113,7 @@ export type GameState = {
   drawFromPileToHand: () => void;
   moveCardFromHandToPile: (
     who: PlayerKey,
-    pile: "spellbook" | "atlas",
+    pile: "spellbook" | "atlas" | "graveyard",
     position: "top" | "bottom",
   ) => void;
   selectPermanent: (at: CellKey, index: number) => void;
@@ -2138,7 +2139,7 @@ export type GameState = {
   movePermanentToZone: (
     at: CellKey,
     index: number,
-    target: "hand" | "graveyard" | "banished" | "spellbook",
+    target: "hand" | "graveyard" | "banished" | "spellbook" | "atlas",
     position?: "top" | "bottom",
   ) => void;
   moveSiteToZone: (
@@ -2435,6 +2436,8 @@ export type GameState = {
   // UI cross-surface drag state
   dragFromHand: boolean;
   dragFaceDown: boolean; // When true, card will be placed face-down on the board
+  castSubsurface: boolean; // When true, card enters play burrowed (subsurface)
+  castPlacementMode: "surface" | "subsurface" | null; // Active cast placement prompt
   boardDragActive: boolean; // True when dragging permanents/avatars on board
   dragFromPile: {
     who: PlayerKey;
@@ -2443,6 +2446,7 @@ export type GameState = {
   } | null;
   setDragFromHand: (on: boolean) => void;
   setDragFaceDown: (on: boolean) => void;
+  setCastSubsurface: (on: boolean) => void;
   setBoardDragActive: (on: boolean) => void;
   setDragFromPile: (
     info: {

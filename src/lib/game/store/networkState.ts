@@ -751,6 +751,31 @@ export const createNetworkSlice: StateCreator<
           source as Permanents,
         ) as GameState["permanents"];
 
+        // PERMANENTS HARDENING: Prevent accidental board wipes
+        // If we had permanents before and the patch would wipe them all (non-snapshot),
+        // preserve the original permanents instead
+        if (!replaceKeys.has("permanents")) {
+          const prevPermCount = Object.values(state.permanents || {}).reduce(
+            (a, v) => a + (Array.isArray(v) ? v.length : 0),
+            0,
+          );
+          const nextPermCount = Object.values(next.permanents || {}).reduce(
+            (a, v) => a + (Array.isArray(v) ? v.length : 0),
+            0,
+          );
+          if (prevPermCount > 0 && nextPermCount === 0) {
+            console.warn(
+              `[PERMANENTS_HARDENING] Prevented board wipe: patch would clear all ${prevPermCount} permanents`,
+              {
+                patchPermanentsKeys: Object.keys(p.permanents || {}),
+                statePermanentsKeys: Object.keys(state.permanents || {}),
+              },
+            );
+            // Restore original permanents
+            next.permanents = state.permanents;
+          }
+        }
+
         // Detect Lilith/Mother Nature minions in permanents
         // On snapshot replace, register ALL existing Lilith/Mother Nature
         // On incremental patch, only register NEW ones
@@ -1247,6 +1272,22 @@ export const createNetworkSlice: StateCreator<
           next.permanents = normalizePermanentsRecord(
             merged as Permanents,
           ) as GameState["permanents"];
+
+          // PERMANENTS HARDENING: Prevent accidental board wipes in applyPatch
+          const prevPermCount = Object.values(state.permanents || {}).reduce(
+            (a, v) => a + (Array.isArray(v) ? v.length : 0),
+            0,
+          );
+          const nextPermCount = Object.values(next.permanents || {}).reduce(
+            (a, v) => a + (Array.isArray(v) ? v.length : 0),
+            0,
+          );
+          if (prevPermCount > 0 && nextPermCount === 0) {
+            console.warn(
+              `[PERMANENTS_HARDENING] applyPatch: Prevented board wipe: patch would clear all ${prevPermCount} permanents`,
+            );
+            next.permanents = state.permanents;
+          }
         }
       }
       if (p.mulligans !== undefined) {

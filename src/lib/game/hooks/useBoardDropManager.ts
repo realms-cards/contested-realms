@@ -41,6 +41,12 @@ type UseBoardDropManagerOptions = {
   // Site dragging
   draggingSite: GameState["draggingSite"];
   setDraggingSite: GameState["setDraggingSite"];
+  // Placement dialog for pile drops
+  openPlacementDialog: (
+    cardName: string,
+    pileName: string,
+    onConfirm: (position: "top" | "bottom") => void,
+  ) => void;
 };
 
 export function useBoardDropManager({
@@ -51,6 +57,7 @@ export function useBoardDropManager({
   dragFromPile,
   isSpectator,
   permanents,
+  openPlacementDialog,
   avatars,
   interactionGuides,
   metaByCardId,
@@ -148,7 +155,59 @@ export function useBoardDropManager({
           wx <= p2X + halfW &&
           wz >= p2SpellZ - halfH &&
           wz <= p2SpellZ + halfH;
+        // Handle drops to atlas/spellbook piles from board permanents
         if (overP1Atlas || overP2Atlas || overP1Spell || overP2Spell) {
+          const draggedCard = permanents[d.from]?.[d.index]?.card;
+          const cardType = (draggedCard?.type || "").toLowerCase();
+          const isSite = cardType.includes("site");
+          const isToken = cardType.includes("token");
+          const isAvatar = cardType.includes("avatar");
+
+          // Determine which pile was dropped on and if the card type matches
+          const droppedOnAtlas = overP1Atlas || overP2Atlas;
+          const droppedOnSpellbook = overP1Spell || overP2Spell;
+
+          // Sites can go to atlas, non-sites (spellbook cards) can go to spellbook
+          // Tokens and avatars cannot be returned to piles
+          if (!isToken && !isAvatar) {
+            if (droppedOnAtlas && isSite) {
+              try {
+                movePermanentToZone(d.from, d.index, "atlas", "top");
+                try {
+                  playCardFlip();
+                } catch {}
+              } finally {
+                setDragging(null);
+                setDragFromHand(false);
+                setGhost(null);
+                dragTarget.current = null;
+                lastDropAt.current = Date.now();
+                draggedBody.current = null;
+              }
+              return;
+            } else if (droppedOnSpellbook && !isSite) {
+              // Show placement dialog for spellbook drops
+              const cardName = draggedCard?.name || "Card";
+              openPlacementDialog(cardName, "Spellbook", (position) => {
+                try {
+                  movePermanentToZone(d.from, d.index, "spellbook", position);
+                  try {
+                    playCardFlip();
+                  } catch {}
+                } finally {
+                  setDragging(null);
+                  setDragFromHand(false);
+                  setGhost(null);
+                  dragTarget.current = null;
+                  lastDropAt.current = Date.now();
+                  draggedBody.current = null;
+                }
+              });
+              return;
+            }
+          }
+
+          // Invalid drop (wrong card type for pile, or token/avatar) - just cancel
           setDragging(null);
           setDragFromHand(false);
           setGhost(null);
@@ -217,7 +276,7 @@ export function useBoardDropManager({
       const fromTileX = offsetX + fromX * TILE_SIZE;
       const fromTileZ = offsetY + fromY * TILE_SIZE;
       const distFromSource = Math.sqrt(
-        Math.pow(wx - fromTileX, 2) + Math.pow(wz - fromTileZ, 2)
+        Math.pow(wx - fromTileX, 2) + Math.pow(wz - fromTileZ, 2),
       );
 
       let tx: number;
@@ -290,7 +349,7 @@ export function useBoardDropManager({
               tileX: tx,
               tileY: ty,
               newIndex,
-            }
+            },
           );
         }
       }
@@ -325,6 +384,7 @@ export function useBoardDropManager({
     metaByCardId,
     movePermanentToZone,
     moveSelectedPermanentToWithOffset,
+    openPlacementDialog,
     permanents,
     playCardFlip,
     snapBodyTo,
