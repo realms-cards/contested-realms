@@ -73,6 +73,8 @@ type TileDropHandlerOptions = {
   // Private hand cast targeting (Morgana/Omphalos)
   pendingPrivateHandCast: GameState["pendingPrivateHandCast"];
   completePendingPrivateHandCast: GameState["completePendingPrivateHandCast"];
+  // Cast placement from context menu
+  castPlacementMode: GameState["castPlacementMode"];
 };
 
 type HandleTilePointerUpArgs = {
@@ -118,6 +120,7 @@ export function useTileDropHandler({
   dropDraggingSite,
   pendingPrivateHandCast,
   completePendingPrivateHandCast,
+  castPlacementMode,
 }: TileDropHandlerOptions) {
   const {
     dragAvatar,
@@ -397,6 +400,38 @@ export function useTileDropHandler({
           handleCrossTileMove();
         }
         finishDrag();
+        return;
+      }
+
+      // Handle cast placement from context menu (no active drag, just selectedCard + castPlacementMode)
+      if (castPlacementMode && selectedCard && !dragFromHand) {
+        playSelectedTo(tileX, tileY);
+        try {
+          playCardPlay();
+        } catch {}
+        const type = (selectedCard.card?.type || "").toLowerCase();
+        const isToken = type.includes("token");
+        const tokenDef = isToken
+          ? TOKEN_BY_NAME[(selectedCard.card?.name || "").toLowerCase()]
+          : undefined;
+        const tokenSiteReplace = !!tokenDef?.siteReplacement;
+        if (!type.includes("site") && !tokenSiteReplace) {
+          // Calculate offset so card centers on click position
+          const wx = e.point.x;
+          const wz = e.point.z;
+          const pos = tileWorldPosition;
+          const dropOwner: 1 | 2 =
+            selectedCard.who === "p1" ? 1 : selectedCard.who === "p2" ? 2 : currentPlayer;
+          const dropZBase =
+            dropOwner === 1
+              ? -TILE_SIZE * 0.5 + STACK_MARGIN_Z
+              : TILE_SIZE * 0.5 - STACK_MARGIN_Z;
+          const offX = clampOffset(wx - pos[0], TILE_OFFSET_LIMIT_X);
+          const offZ = clampOffset(wz - pos[2] - dropZBase, TILE_OFFSET_LIMIT_Z);
+          const newIndex = (permanents[dropKey] || []).length;
+          setPermanentOffset(dropKey, newIndex, [offX, offZ]);
+        }
+        lastDropAt.current = Date.now();
         return;
       }
 
@@ -692,6 +727,7 @@ export function useTileDropHandler({
       dropDraggingSite,
       pendingPrivateHandCast,
       completePendingPrivateHandCast,
+      castPlacementMode,
     ],
   );
 }

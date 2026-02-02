@@ -112,6 +112,8 @@ type BoardTileProps = {
   metaByCardId: GameState["metaByCardId"];
   // Babel Tower tracking for stacked card rendering
   babelTowers: BabelTowerMerge[];
+  // Cast placement from context menu
+  castPlacementMode?: GameState["castPlacementMode"];
 };
 
 export function BoardTile({
@@ -179,6 +181,7 @@ export function BoardTile({
   stolenCards,
   metaByCardId,
   babelTowers,
+  castPlacementMode,
 }: BoardTileProps) {
   const items = permanents[tileKey] || [];
   const cellNumber = (boardSize.h - 1 - tileY) * boardSize.w + tileX + 1;
@@ -222,6 +225,7 @@ export function BoardTile({
         }
         pendingPathfinderPlay={pathfinderContext.pendingPathfinderPlay}
         selectPathfinderTarget={pathfinderContext.selectPathfinderTarget}
+        castPlacementMode={castPlacementMode}
       />
 
       {/* Portal overlay (Harbinger ability) - rendered under cards */}

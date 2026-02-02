@@ -8,6 +8,7 @@ import {
   createPermanentsPatch,
 } from "../utils/patchHelpers";
 import { bumpPermanentVersion } from "../utils/permanentHelpers";
+import { prepareCardForSeat } from "../utils/cardHelpers";
 
 export type AttachmentActionsSlice = Pick<
   GameState,
@@ -106,8 +107,16 @@ export const createAttachmentActionsSlice: StateCreator<
 
       const per: Permanents = { ...state.permanents };
       const list = [...(per[at] || [])];
+
+      // Carryable artifacts transfer control to whoever holds it.
+      const nextOwner: 1 | 2 = isCarryableArtifact ? target.owner : token.owner;
+      const nextOwnerSeat: PlayerKey = nextOwner === 1 ? "p1" : "p2";
       const updatedToken = bumpPermanentVersion({
         ...token,
+        owner: nextOwner,
+        card: isCarryableArtifact
+          ? prepareCardForSeat(token.card, nextOwnerSeat)
+          : token.card,
         attachedTo: { at, index: targetIndex },
       });
       list[tokenIndex] = updatedToken;
@@ -147,10 +156,26 @@ export const createAttachmentActionsSlice: StateCreator<
         get().log("Cannot attach to avatar: not on same tile");
         return state;
       }
+
+      // Carryable artifacts transfer control to whoever holds it.
+      const type = (permanent.card.type || "").toLowerCase();
+      const subTypes = (permanent.card.subTypes || "").toLowerCase();
+      const name = permanent.card.name || "";
+      const isArtifact = type.includes("artifact");
+      const isMonument =
+        subTypes.includes("monument") || isMonumentByName(name);
+      const isAutomaton =
+        subTypes.includes("automaton") || isAutomatonByName(name);
+      const isCarryableArtifact = isArtifact && !isMonument && !isAutomaton;
+      const nextOwner: 1 | 2 = avatarKey === "p1" ? 1 : 2;
       const per: Permanents = { ...state.permanents };
       const list = [...(per[at] || [])];
       const updatedPermanent = bumpPermanentVersion({
         ...permanent,
+        owner: isCarryableArtifact ? nextOwner : permanent.owner,
+        card: isCarryableArtifact
+          ? prepareCardForSeat(permanent.card, avatarKey as PlayerKey)
+          : permanent.card,
         attachedTo: { at, index: -1 },
       });
       list[permanentIndex] = updatedPermanent;

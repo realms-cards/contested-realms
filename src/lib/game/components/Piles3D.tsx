@@ -461,6 +461,18 @@ export default function Piles3D({
                               store.closePlacementDialog();
                             },
                           );
+                        } else if (key === "graveyard") {
+                          // Any card can be discarded to graveyard
+                          store.moveCardFromHandToPile(
+                            owner,
+                            "graveyard",
+                            "top",
+                          );
+                          try {
+                            playCardFlip();
+                          } catch {}
+                          setDragFromHand(false);
+                          store.clearSelection();
                         } else {
                           // Invalid drop - just cancel
                           setDragFromHand(false);
@@ -510,15 +522,16 @@ export default function Piles3D({
                   })()}
                 </group>
               </group>
-            ) : // Empty pile placeholder - skip for cemetery (no visual indicator)
-            isCemetery ? null : (
+            ) : (
+              // Empty pile placeholder - cemetery gets invisible drop target, others get visual indicator
               <mesh
                 rotation-x={-Math.PI / 2}
                 rotation-z={pileRotZ}
                 position={[0, 0, 0]}
                 raycast={noRaycast ? () => [] : undefined}
                 onContextMenu={(e: ThreeEvent<PointerEvent>) => {
-                  // Right click: open context menu for empty pile
+                  // Right click: open context menu for empty pile (skip cemetery)
+                  if (isCemetery) return;
                   const isDragging = !!dragFromHand || !!dragFromPile;
                   if (isDragging) return;
                   e.nativeEvent.preventDefault();
@@ -548,9 +561,15 @@ export default function Piles3D({
                   if (dragFromHand && store.selectedCard) {
                     const card = store.selectedCard;
                     const typeLc = String(card.card?.type || "").toLowerCase();
+                    // Check if owner is Magician (sites go to spellbook)
+                    const ownerAvatar = avatars[owner];
+                    const ownerIsMagician = isMagician(ownerAvatar?.card?.name);
 
-                    // Non-site cards go to Spellbook
-                    if (key === "spellbook" && !typeLc.includes("site")) {
+                    // Non-site cards go to Spellbook; Magician can also put sites in Spellbook
+                    if (
+                      key === "spellbook" &&
+                      (!typeLc.includes("site") || ownerIsMagician)
+                    ) {
                       const pileName = "Spellbook";
                       openPlacementDialog(
                         card.card?.name || "Card",
@@ -589,6 +608,14 @@ export default function Piles3D({
                           store.closePlacementDialog();
                         },
                       );
+                    } else if (key === "graveyard") {
+                      // Any card can be discarded to graveyard
+                      store.moveCardFromHandToPile(owner, "graveyard", "top");
+                      try {
+                        playCardFlip();
+                      } catch {}
+                      setDragFromHand(false);
+                      store.clearSelection();
                     } else {
                       // Invalid drop - cancel
                       setDragFromHand(false);
@@ -603,12 +630,16 @@ export default function Piles3D({
                 }}
               >
                 <planeGeometry args={[w, h]} />
-                <meshStandardMaterial
-                  color="#374151"
-                  transparent
-                  opacity={0.3}
-                  depthWrite={true}
-                />
+                {isCemetery ? (
+                  <meshBasicMaterial transparent opacity={0} />
+                ) : (
+                  <meshStandardMaterial
+                    color="#374151"
+                    transparent
+                    opacity={0.3}
+                    depthWrite={true}
+                  />
+                )}
               </mesh>
             )}
           </group>

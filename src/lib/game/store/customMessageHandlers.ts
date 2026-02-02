@@ -1734,6 +1734,52 @@ export function handleCustomMessage(
       ? (revealedCardsAny as CardRef[])
       : [];
 
+    // If we are the caster, do NOT apply zone-moving logic here.
+    // The caster already performed the draw locally in searingTruthState.ts.
+    // Applying it again (especially when targeting self) duplicates cards in hand.
+    const currentPendingAtStart = get().pendingSearingTruth;
+    if (
+      currentPendingAtStart?.id === id &&
+      currentPendingAtStart.casterSeat === get().actorKey
+    ) {
+      set((s) => {
+        const cur = s.pendingSearingTruth;
+        if (cur && cur.id !== id) return s as GameState;
+        return {
+          pendingSearingTruth: {
+            ...(cur || {
+              id,
+              spell: {
+                at: "0,0" as CellKey,
+                index: 0,
+                instanceId: null,
+                owner: 1,
+                card: {} as CardRef,
+              },
+              casterSeat: (get().actorKey ?? "p1") as PlayerKey,
+              createdAt: Date.now(),
+            }),
+            phase: "revealing",
+            targetSeat,
+            revealedCards,
+            damageAmount: damageAmount ?? 0,
+          },
+        } as Partial<GameState> as GameState;
+      });
+
+      const cardNames = revealedCards
+        .map((c) => c.name || "Unknown")
+        .join(", ");
+      try {
+        get().log(
+          `[${targetSeat.toUpperCase()}] reveals ${cardNames} - ${
+            damageAmount ?? 0
+          } damage incoming`,
+        );
+      } catch {}
+      return;
+    }
+
     // IMPORTANT: The caster's trySendPatch only sends their own seat's zones,
     // so when targeting the opponent, we need to update the target's zones here.
     // Draw the revealed cards from spellbook to hand for the target player.

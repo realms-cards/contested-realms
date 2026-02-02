@@ -20,6 +20,7 @@ import BlackMassOverlay from "@/components/game/BlackMassOverlay";
 import BrowseOverlay from "@/components/game/BrowseOverlay";
 import CallToWarOverlay from "@/components/game/CallToWarOverlay";
 import CardPreview from "@/components/game/CardPreview";
+import CastPlacementBanner from "@/components/game/CastPlacementBanner";
 import ChaosTwisterOverlay from "@/components/game/ChaosTwisterOverlay";
 import { ClientCanvas } from "@/components/game/ClientCanvas";
 import CollectionButton from "@/components/game/CollectionButton";
@@ -3230,6 +3231,9 @@ export default function OnlineMatchPage() {
                 zIndexClass="z-30"
               />
             )}
+
+          {/* Cast placement banner */}
+          <CastPlacementBanner />
 
           {/* Context Menu - always visible for interactions */}
           {contextMenu && (
