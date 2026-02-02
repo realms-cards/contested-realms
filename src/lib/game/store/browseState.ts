@@ -21,7 +21,7 @@ export type BrowseSlice = Pick<
 
 export const createBrowseSlice: StateCreator<GameState, [], [], BrowseSlice> = (
   set,
-  get
+  get,
 ) => ({
   pendingBrowse: null,
 
@@ -40,14 +40,14 @@ export const createBrowseSlice: StateCreator<GameState, [], [], BrowseSlice> = (
 
     if (revealedCards.length === 0) {
       get().log(
-        `[${casterSeat.toUpperCase()}] Browse: No spells in spellbook to reveal`
+        `[${casterSeat.toUpperCase()}] Browse: No spells in spellbook to reveal`,
       );
       // Move spell to graveyard since it resolves with no effect
       try {
         get().movePermanentToZone(
           input.spell.at,
           input.spell.index,
-          "graveyard"
+          "graveyard",
         );
       } catch {}
       return;
@@ -84,7 +84,7 @@ export const createBrowseSlice: StateCreator<GameState, [], [], BrowseSlice> = (
     get().log(
       `[${casterSeat.toUpperCase()}] casts Browse - looking at ${
         revealedCards.length
-      } spell${revealedCards.length !== 1 ? "s" : ""}`
+      } spell${revealedCards.length !== 1 ? "s" : ""}`,
     );
   },
 
@@ -167,6 +167,18 @@ export const createBrowseSlice: StateCreator<GameState, [], [], BrowseSlice> = (
       return;
 
     const casterSeat = pending.casterSeat;
+
+    // Check Gard of Eden draw limit
+    const canDraw = get().canDrawCard(casterSeat, 1);
+    if (!canDraw.allowed) {
+      get().log(
+        `[${casterSeat.toUpperCase()}] Gard of Eden prevents drawing more cards this turn (limit: 1)`,
+      );
+      // Cancel the Browse instead of resolving
+      get().cancelBrowse();
+      return;
+    }
+
     const zones = get().zones;
     const spellbook = [...(zones[casterSeat]?.spellbook || [])];
     const hand = [...(zones[casterSeat]?.hand || [])];
@@ -184,7 +196,7 @@ export const createBrowseSlice: StateCreator<GameState, [], [], BrowseSlice> = (
     // Put the rest on the bottom of spellbook in the specified order
     // Last in the UI order = very bottom of spellbook (drawn last among bottom cards)
     const bottomCards = pending.bottomOrder.map(
-      (i) => pending.revealedCards[i]
+      (i) => pending.revealedCards[i],
     );
     spellbook.push(...bottomCards);
 
@@ -197,6 +209,9 @@ export const createBrowseSlice: StateCreator<GameState, [], [], BrowseSlice> = (
         hand,
       },
     };
+
+    // Increment cards drawn counter for Gard of Eden tracking
+    get().incrementCardsDrawn(casterSeat, 1);
 
     set({
       zones: zonesNext,
@@ -217,7 +232,7 @@ export const createBrowseSlice: StateCreator<GameState, [], [], BrowseSlice> = (
       get().movePermanentToZone(
         pending.spell.at,
         pending.spell.index,
-        "graveyard"
+        "graveyard",
       );
     } catch {}
 
@@ -238,7 +253,7 @@ export const createBrowseSlice: StateCreator<GameState, [], [], BrowseSlice> = (
     get().log(
       `Browse resolved: ${selectedCard?.name || "card"} added to hand, ${
         bottomCards.length
-      } card${bottomCards.length !== 1 ? "s" : ""} to bottom of spellbook`
+      } card${bottomCards.length !== 1 ? "s" : ""} to bottom of spellbook`,
     );
   },
 

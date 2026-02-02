@@ -54,7 +54,9 @@ function createLobbyFeature(deps) {
   const rtcMigration = deps.rtcMigration || null;
   const botInternalSecret = deps.botInternalSecret || null;
 
-  console.log(`[Lobby] CPU bots feature: enabled=${CPU_BOTS_ENABLED}, hasBotSecret=${!!botInternalSecret}, port=${PORT}`);
+  console.log(
+    `[Lobby] CPU bots feature: enabled=${CPU_BOTS_ENABLED}, hasBotSecret=${!!botInternalSecret}, port=${PORT}`,
+  );
 
   // Cache: card ID map loaded once for all bots
   let _botCardIdMapLoaded = false;
@@ -99,7 +101,7 @@ function createLobbyFeature(deps) {
     } catch (err) {
       console.error(
         `[lobby] Failed to persist lobby ${lobby.id} to Redis:`,
-        err
+        err,
       );
     }
   }
@@ -115,7 +117,7 @@ function createLobbyFeature(deps) {
     } catch (err) {
       console.error(
         `[lobby] Failed to delete lobby ${lobbyId} from Redis:`,
-        err
+        err,
       );
     }
   }
@@ -195,7 +197,7 @@ function createLobbyFeature(deps) {
       if (storeRedis)
         await storeRedis.publish(
           LOBBY_STATE_CHANNEL,
-          JSON.stringify({ type: "upsert", lobby: serializeLobby(lobby) })
+          JSON.stringify({ type: "upsert", lobby: serializeLobby(lobby) }),
         );
     } catch {}
   }
@@ -208,7 +210,7 @@ function createLobbyFeature(deps) {
       if (storeRedis)
         await storeRedis.publish(
           LOBBY_STATE_CHANNEL,
-          JSON.stringify({ type: "delete", id: lobbyId })
+          JSON.stringify({ type: "delete", id: lobbyId }),
         );
     } catch {}
   }
@@ -316,15 +318,15 @@ function createLobbyFeature(deps) {
 
     const packCountSum = Object.values(packCounts).reduce(
       (sum, value) => sum + (Number.isFinite(value) ? Number(value) : 0),
-      0
+      0,
     );
     const packCount =
       packCountSum > 0
         ? packCountSum
         : Number.isFinite(Number(asObj.packCount)) &&
-          Number(asObj.packCount) > 0
-        ? Math.floor(Number(asObj.packCount))
-        : setMix.length;
+            Number(asObj.packCount) > 0
+          ? Math.floor(Number(asObj.packCount))
+          : setMix.length;
 
     const packSize =
       Number.isFinite(Number(asObj.packSize)) && Number(asObj.packSize) > 0
@@ -430,6 +432,34 @@ function createLobbyFeature(deps) {
     return lobby;
   }
 
+  /**
+   * Create a lobby with a specific ID (used for Discord bot challenges).
+   * The first player to join becomes the host, lobby is open for the second player.
+   */
+  function createLobbyWithId(lobbyId, hostId) {
+    const now = Date.now();
+    const lobby = {
+      id: lobbyId,
+      name: "Discord Match",
+      hostId,
+      playerIds: new Set(),
+      status: "open",
+      maxPlayers: 2,
+      ready: new Set(),
+      visibility: "open", // Open so second player can join with the link
+      plannedMatchType: "constructed",
+      createdAt: now,
+      lastActive: now,
+      allowSpectators: false,
+      hostReady: true, // Discord matches are ready to start immediately
+      isDiscordMatch: true,
+    };
+    lobbies.set(lobby.id, lobby);
+    // Persist to Redis for cross-instance visibility (fire and forget)
+    persistLobbyToRedis(lobby).catch(() => {});
+    return lobby;
+  }
+
   function markLobbyActive(lobby) {
     lobby.lastActive = Date.now();
     // Update Redis activity timestamp (fire and forget)
@@ -444,6 +474,12 @@ function createLobbyFeature(deps) {
     let lobby = null;
     if (suppliedLobbyId && lobbies.has(suppliedLobbyId)) {
       lobby = lobbies.get(suppliedLobbyId);
+    } else if (suppliedLobbyId && suppliedLobbyId.startsWith("discord-")) {
+      // Discord bot challenge - create lobby on-demand with the exact ID
+      console.log(
+        `[lobby] Creating Discord match lobby on-demand: ${suppliedLobbyId}`,
+      );
+      lobby = createLobbyWithId(suppliedLobbyId, player.id);
     } else {
       lobby = findOpenLobby() || createLobby(player.id);
     }
@@ -510,8 +546,8 @@ function createLobbyFeature(deps) {
         try {
           console.info(
             `[invite] denied (not_invited) inviter=${String(lobby.hostId).slice(
-              -6
-            )} target=${String(player.id).slice(-6)} lobby=${lobby.id}`
+              -6,
+            )} target=${String(player.id).slice(-6)} lobby=${lobby.id}`,
           );
         } catch {}
         return;
@@ -602,10 +638,10 @@ function createLobbyFeature(deps) {
     matchType = "constructed",
     sealedConfig = null,
     draftConfig = null,
-    soatcLeagueMatch = null
+    soatcLeagueMatch = null,
   ) {
     console.log(
-      `[Match] Starting match requested by ${requestingPlayer?.displayName}, type: ${matchType}`
+      `[Match] Starting match requested by ${requestingPlayer?.displayName}, type: ${matchType}`,
     );
     const lobbyId = requestingPlayer.lobbyId;
     if (!lobbyId) return { ok: false, error: "Not in a lobby" };
@@ -629,8 +665,8 @@ function createLobbyFeature(deps) {
         matchType === "sealed"
           ? "deck_construction"
           : matchType === "draft"
-          ? "waiting"
-          : "waiting",
+            ? "waiting"
+            : "waiting",
       seed: `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
       turn: Array.from(lobby.playerIds)[0],
       winnerId: null,
@@ -679,7 +715,7 @@ function createLobbyFeature(deps) {
           INSTANCE_ID,
           "NX",
           "EX",
-          60
+          60,
         );
     } catch {}
 
@@ -755,7 +791,7 @@ function createLobbyFeature(deps) {
             }
           } else {
             console.error(
-              `[Sealed] packCounts not provided for player ${pid} in match ${match.id}`
+              `[Sealed] packCounts not provided for player ${pid} in match ${match.id}`,
             );
             continue;
           }
@@ -767,7 +803,7 @@ function createLobbyFeature(deps) {
               setName,
               rng,
               replaceAvatars,
-              freeAvatars
+              freeAvatars,
             );
             const cards = picks.map((p, idx) => ({
               id: `${String(p.variantId)}_${i}_${idx}_${pid.slice(-4)}`,
@@ -796,7 +832,7 @@ function createLobbyFeature(deps) {
       } catch (err) {
         console.error(
           `[Sealed] Error generating sealed packs for match ${match.id}:`,
-          err
+          err,
         );
       }
     }
@@ -849,7 +885,7 @@ function createLobbyFeature(deps) {
     if (redisState && redisState.isEnabled()) {
       try {
         const redisLobbies = await redisState.getActiveLobbies(
-          STALE_MATCH_DISPLAY_MS
+          STALE_MATCH_DISPLAY_MS,
         );
         for (const redisLobby of redisLobbies) {
           const lobby = redisLobbyToInternal(redisLobby);
@@ -860,7 +896,7 @@ function createLobbyFeature(deps) {
       } catch (err) {
         console.error(
           "[lobby] Failed to fetch lobbies from Redis, using local:",
-          err
+          err,
         );
         // Fall back to local
         allLobbies = Array.from(lobbies.values());
@@ -880,7 +916,12 @@ function createLobbyFeature(deps) {
         if (lobby.matchId) {
           const match = matches.get(lobby.matchId);
           // Hide lobbies whose match has ended
-          if (match && (match.status === "ended" || match.status === "completed" || match._finalized)) {
+          if (
+            match &&
+            (match.status === "ended" ||
+              match.status === "completed" ||
+              match._finalized)
+          ) {
             continue;
           }
           if (match && typeof match.lastTs === "number") {
@@ -918,7 +959,12 @@ function createLobbyFeature(deps) {
         if (lobby.matchId) {
           const match = matches.get(lobby.matchId);
           // Hide lobbies whose match has ended
-          if (match && (match.status === "ended" || match.status === "completed" || match._finalized)) {
+          if (
+            match &&
+            (match.status === "ended" ||
+              match.status === "completed" ||
+              match._finalized)
+          ) {
             continue;
           }
           if (match && typeof match.lastTs === "number") {
@@ -1262,7 +1308,7 @@ function createLobbyFeature(deps) {
         matchType || "constructed",
         sealedConfig || null,
         draftConfig || null,
-        soatcLeagueMatch || null
+        soatcLeagueMatch || null,
       );
       if (lobby && lobbies.has(lobby.id)) {
         await publishLobbyState(lobbies.get(lobby.id));
@@ -1296,7 +1342,7 @@ function createLobbyFeature(deps) {
           if (storeRedis)
             await storeRedis.publish(
               LOBBY_CONTROL_CHANNEL,
-              JSON.stringify(msg)
+              JSON.stringify(msg),
             );
           return;
         }
@@ -1321,7 +1367,7 @@ function createLobbyFeature(deps) {
           if (storeRedis)
             await storeRedis.publish(
               LOBBY_CONTROL_CHANNEL,
-              JSON.stringify(msg)
+              JSON.stringify(msg),
             );
           return;
         }
@@ -1340,7 +1386,7 @@ function createLobbyFeature(deps) {
           if (storeRedis)
             await storeRedis.publish(
               LOBBY_CONTROL_CHANNEL,
-              JSON.stringify(msg)
+              JSON.stringify(msg),
             );
           return;
         }
@@ -1364,7 +1410,7 @@ function createLobbyFeature(deps) {
           if (storeRedis)
             await storeRedis.publish(
               LOBBY_CONTROL_CHANNEL,
-              JSON.stringify(msg)
+              JSON.stringify(msg),
             );
           return;
         }
@@ -1388,7 +1434,7 @@ function createLobbyFeature(deps) {
           if (storeRedis)
             await storeRedis.publish(
               LOBBY_CONTROL_CHANNEL,
-              JSON.stringify(msg)
+              JSON.stringify(msg),
             );
           return;
         }
@@ -1467,8 +1513,8 @@ function createLobbyFeature(deps) {
       try {
         console.info(
           `[presence] ${player.displayName} (${player.id.slice(
-            -6
-          )}) → ${location}`
+            -6,
+          )}) → ${location}`,
         );
       } catch {}
       // Broadcast updated player list
@@ -1495,8 +1541,8 @@ function createLobbyFeature(deps) {
         try {
           console.info(
             `[invite] denied (not_host) inviter=${String(inviter.id).slice(
-              -6
-            )} target=${String(targetId).slice(-6)} lobby=${lobbyId}`
+              -6,
+            )} target=${String(targetId).slice(-6)} lobby=${lobbyId}`,
           );
         } catch {}
         return;
@@ -1516,10 +1562,10 @@ function createLobbyFeature(deps) {
           try {
             console.info(
               `[invite] sent inviter=${String(inviter.id).slice(
-                -6
+                -6,
               )} target=${String(targetId).slice(
-                -6
-              )} lobby=${lobbyId} visibility=${lobby.visibility}`
+                -6,
+              )} lobby=${lobbyId} visibility=${lobby.visibility}`,
             );
           } catch {}
         }
@@ -1557,8 +1603,8 @@ function createLobbyFeature(deps) {
           try {
             console.info(
               `[invite] response=${response} from=${player.id.slice(
-                -6
-              )} lobby=${lobbyId}`
+                -6,
+              )} lobby=${lobbyId}`,
             );
           } catch {}
         }
@@ -1592,10 +1638,10 @@ function createLobbyFeature(deps) {
           try {
             console.info(
               `[tournament-invite] sent from=${String(inviter.id).slice(
-                -6
+                -6,
               )} to=${String(targetPlayerId).slice(
-                -6
-              )} tournament=${tournamentId}`
+                -6,
+              )} tournament=${tournamentId}`,
             );
           } catch {}
         }
@@ -1669,7 +1715,12 @@ function createLobbyFeature(deps) {
               }
             }
           } catch (e) {
-            try { console.warn("[Bot] Failed to load card ID map:", e?.message || e); } catch {}
+            try {
+              console.warn(
+                "[Bot] Failed to load card ID map:",
+                e?.message || e,
+              );
+            } catch {}
           }
 
           // Pick a random precon deck for the bot
@@ -1677,7 +1728,11 @@ function createLobbyFeature(deps) {
           try {
             if (prisma) {
               const decks = await prisma.deck.findMany({
-                where: { isPublic: true, format: "Constructed", name: { startsWith: "Beta Precon" } },
+                where: {
+                  isPublic: true,
+                  format: "Constructed",
+                  name: { startsWith: "Beta Precon" },
+                },
                 include: { cards: { include: { card: true } } },
               });
               const configs = decks
@@ -1689,23 +1744,47 @@ function createLobbyFeature(deps) {
                       const name = dc.card?.name || "";
                       const count = Number(dc.count || 1);
                       if (!name || count <= 0) continue;
-                      const map = dc.zone === "Atlas" ? atlasAgg : dc.zone === "Sideboard" ? null : spellAgg;
+                      const map =
+                        dc.zone === "Atlas"
+                          ? atlasAgg
+                          : dc.zone === "Sideboard"
+                            ? null
+                            : spellAgg;
                       if (!map) continue;
                       map.set(name, (map.get(name) || 0) + count);
                     }
-                    const toArr = (m) => Array.from(m.entries()).map(([name, count]) => ({ name, count }));
-                    const cfg = { spellbook: toArr(spellAgg), atlas: toArr(atlasAgg) };
-                    return cfg.spellbook.length && cfg.atlas.length ? cfg : null;
-                  } catch { return null; }
+                    const toArr = (m) =>
+                      Array.from(m.entries()).map(([name, count]) => ({
+                        name,
+                        count,
+                      }));
+                    const cfg = {
+                      spellbook: toArr(spellAgg),
+                      atlas: toArr(atlasAgg),
+                    };
+                    return cfg.spellbook.length && cfg.atlas.length
+                      ? cfg
+                      : null;
+                  } catch {
+                    return null;
+                  }
                 })
                 .filter(Boolean);
               if (configs.length > 0) {
-                constructedDeck = configs[Math.floor(Math.random() * configs.length)];
-                console.log(`[Bot] Assigned precon deck to ${displayName}: ${constructedDeck.spellbook.length} spells, ${constructedDeck.atlas.length} sites`);
+                constructedDeck =
+                  configs[Math.floor(Math.random() * configs.length)];
+                console.log(
+                  `[Bot] Assigned precon deck to ${displayName}: ${constructedDeck.spellbook.length} spells, ${constructedDeck.atlas.length} sites`,
+                );
               }
             }
           } catch (e) {
-            try { console.warn("[Bot] Failed to load precon for bot:", e?.message || e); } catch {}
+            try {
+              console.warn(
+                "[Bot] Failed to load precon for bot:",
+                e?.message || e,
+              );
+            } catch {}
           }
 
           const bot = new BotClient({
@@ -1722,7 +1801,7 @@ function createLobbyFeature(deps) {
             botManager.stopAndRemoveBot(botId, "start_failed");
           });
           console.log(
-            `[Bot] Spawned CPU bot ${displayName} (${botId}) for lobby ${lobby.id}`
+            `[Bot] Spawned CPU bot ${displayName} (${botId}) for lobby ${lobby.id}`,
           );
         })();
       } catch (err) {
@@ -1733,35 +1812,60 @@ function createLobbyFeature(deps) {
 
     // ---------- Solo vs CPU: atomic lobby + bot + match creation ----------
     socket.on("startCpuMatch", async () => {
-      console.log("[CpuMatch] startCpuMatch received", { authed: isAuthed(), cpuEnabled: CPU_BOTS_ENABLED, hasBotManager: !!botManager, hasBotSecret: !!botInternalSecret });
-      if (!isAuthed()) { console.log("[CpuMatch] rejected: not authed"); return; }
+      console.log("[CpuMatch] startCpuMatch received", {
+        authed: isAuthed(),
+        cpuEnabled: CPU_BOTS_ENABLED,
+        hasBotManager: !!botManager,
+        hasBotSecret: !!botInternalSecret,
+      });
+      if (!isAuthed()) {
+        console.log("[CpuMatch] rejected: not authed");
+        return;
+      }
       if (!CPU_BOTS_ENABLED) {
         console.log("[CpuMatch] rejected: CPU_BOTS_ENABLED is false");
-        socket.emit("cpuMatchError", { message: "CPU bots are disabled", code: "feature_disabled" });
+        socket.emit("cpuMatchError", {
+          message: "CPU bots are disabled",
+          code: "feature_disabled",
+        });
         return;
       }
       const BotClient = loadBotClientCtor();
       if (!BotClient) {
         console.log("[CpuMatch] rejected: BotClient constructor not available");
-        socket.emit("cpuMatchError", { message: "CPU bot component not available", code: "bot_unavailable" });
+        socket.emit("cpuMatchError", {
+          message: "CPU bot component not available",
+          code: "bot_unavailable",
+        });
         return;
       }
       if (!botManager) {
         console.log("[CpuMatch] rejected: botManager unavailable");
-        socket.emit("cpuMatchError", { message: "Bot manager unavailable", code: "bot_manager_unavailable" });
+        socket.emit("cpuMatchError", {
+          message: "Bot manager unavailable",
+          code: "bot_manager_unavailable",
+        });
         return;
       }
       const host = getPlayerBySocket(socket);
-      if (!host) { console.log("[CpuMatch] rejected: no host player found"); return; }
+      if (!host) {
+        console.log("[CpuMatch] rejected: no host player found");
+        return;
+      }
 
       try {
         // 1. Create a private lobby for the human player
-        const lobby = createLobby(host.id, { visibility: "private", maxPlayers: 2 });
+        const lobby = createLobby(host.id, {
+          visibility: "private",
+          maxPlayers: 2,
+        });
         lobby.plannedMatchType = "constructed";
         host.lobbyId = lobby.id;
         lobby.playerIds.add(host.id);
         lobby.ready.add(host.id);
-        try { await io.in(socket.id).socketsJoin(`lobby:${lobby.id}`); } catch {}
+        try {
+          await io.in(socket.id).socketsJoin(`lobby:${lobby.id}`);
+        } catch {}
 
         // 2. Create invite for the bot
         const botId = rid("cpu");
@@ -1781,7 +1885,12 @@ function createLobbyFeature(deps) {
             }
           }
         } catch (e) {
-          try { console.warn("[CpuMatch] Failed to load card ID map:", e?.message || e); } catch {}
+          try {
+            console.warn(
+              "[CpuMatch] Failed to load card ID map:",
+              e?.message || e,
+            );
+          } catch {}
         }
 
         // 4. Pick a random precon deck for the bot
@@ -1789,7 +1898,11 @@ function createLobbyFeature(deps) {
         try {
           if (prisma) {
             const decks = await prisma.deck.findMany({
-              where: { isPublic: true, format: "Constructed", name: { startsWith: "Beta Precon" } },
+              where: {
+                isPublic: true,
+                format: "Constructed",
+                name: { startsWith: "Beta Precon" },
+              },
               include: { cards: { include: { card: true } } },
             });
             const configs = decks
@@ -1801,22 +1914,42 @@ function createLobbyFeature(deps) {
                     const name = dc.card?.name || "";
                     const count = Number(dc.count || 1);
                     if (!name || count <= 0) continue;
-                    const map = dc.zone === "Atlas" ? atlasAgg : dc.zone === "Sideboard" ? null : spellAgg;
+                    const map =
+                      dc.zone === "Atlas"
+                        ? atlasAgg
+                        : dc.zone === "Sideboard"
+                          ? null
+                          : spellAgg;
                     if (!map) continue;
                     map.set(name, (map.get(name) || 0) + count);
                   }
-                  const toArr = (m) => Array.from(m.entries()).map(([name, count]) => ({ name, count }));
-                  const cfg = { spellbook: toArr(spellAgg), atlas: toArr(atlasAgg) };
+                  const toArr = (m) =>
+                    Array.from(m.entries()).map(([name, count]) => ({
+                      name,
+                      count,
+                    }));
+                  const cfg = {
+                    spellbook: toArr(spellAgg),
+                    atlas: toArr(atlasAgg),
+                  };
                   return cfg.spellbook.length && cfg.atlas.length ? cfg : null;
-                } catch { return null; }
+                } catch {
+                  return null;
+                }
               })
               .filter(Boolean);
             if (configs.length > 0) {
-              constructedDeck = configs[Math.floor(Math.random() * configs.length)];
+              constructedDeck =
+                configs[Math.floor(Math.random() * configs.length)];
             }
           }
         } catch (e) {
-          try { console.warn("[CpuMatch] Failed to load precon for bot:", e?.message || e); } catch {}
+          try {
+            console.warn(
+              "[CpuMatch] Failed to load precon for bot:",
+              e?.message || e,
+            );
+          } catch {}
         }
 
         // 5. Spawn the bot
@@ -1833,7 +1966,9 @@ function createLobbyFeature(deps) {
           console.error(`[CpuMatch] Failed to start bot ${botId}:`, err);
           botManager.stopAndRemoveBot(botId, "start_failed");
         });
-        console.log(`[CpuMatch] Spawned CPU bot ${displayName} (${botId}) for lobby ${lobby.id}`);
+        console.log(
+          `[CpuMatch] Spawned CPU bot ${displayName} (${botId}) for lobby ${lobby.id}`,
+        );
 
         // 6. Wait for bot to join the lobby (poll every 200ms, timeout 8s)
         const maxWait = 8000;
@@ -1845,8 +1980,13 @@ function createLobbyFeature(deps) {
           waited += pollInterval;
         }
         if (!lobby.playerIds.has(botId)) {
-          socket.emit("cpuMatchError", { message: "Bot failed to join lobby in time", code: "bot_timeout" });
-          try { botManager.stopAndRemoveBot(botId, "timeout"); } catch {}
+          socket.emit("cpuMatchError", {
+            message: "Bot failed to join lobby in time",
+            code: "bot_timeout",
+          });
+          try {
+            botManager.stopAndRemoveBot(botId, "timeout");
+          } catch {}
           return;
         }
 
@@ -1854,16 +1994,24 @@ function createLobbyFeature(deps) {
         lobby.ready.add(botId);
         const res = await startMatchFromLobby(host, "constructed");
         if (!res || !res.ok) {
-          socket.emit("cpuMatchError", { message: res?.error || "Failed to start match", code: "match_start_failed" });
+          socket.emit("cpuMatchError", {
+            message: res?.error || "Failed to start match",
+            code: "match_start_failed",
+          });
           return;
         }
 
         // 8. Emit match ready to the requesting socket
-        console.log(`[CpuMatch] Match ${res.matchId} started for lobby ${lobby.id}`);
+        console.log(
+          `[CpuMatch] Match ${res.matchId} started for lobby ${lobby.id}`,
+        );
         socket.emit("cpuMatchReady", { matchId: res.matchId });
       } catch (err) {
         console.error("[CpuMatch] Error creating CPU match:", err);
-        socket.emit("cpuMatchError", { message: "Failed to create CPU match", code: "internal_error" });
+        socket.emit("cpuMatchError", {
+          message: "Failed to create CPU match",
+          code: "internal_error",
+        });
       }
     });
 
@@ -1953,7 +2101,7 @@ function createLobbyFeature(deps) {
           if (storeRedis)
             await storeRedis.publish(
               LOBBY_CONTROL_CHANNEL,
-              JSON.stringify(msg)
+              JSON.stringify(msg),
             );
           return;
         }
@@ -1979,7 +2127,7 @@ function createLobbyFeature(deps) {
           if (storeRedis)
             await storeRedis.publish(
               LOBBY_CONTROL_CHANNEL,
-              JSON.stringify(msg)
+              JSON.stringify(msg),
             );
           return;
         }
@@ -2036,7 +2184,7 @@ function createLobbyFeature(deps) {
     }
     try {
       console.log(
-        `[lobby] reconstructed ${count} lobby(ies) from recovered matches (skipped ${skippedStale} stale)`
+        `[lobby] reconstructed ${count} lobby(ies) from recovered matches (skipped ${skippedStale} stale)`,
       );
     } catch {}
     if (count > 0) {

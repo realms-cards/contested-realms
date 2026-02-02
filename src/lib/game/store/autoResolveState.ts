@@ -65,7 +65,7 @@ export const createAutoResolveSlice: StateCreator<
     get().log(
       `[${pending.ownerSeat.toUpperCase()}] ${pending.sourceName}: ${
         pending.effectDescription
-      } - awaiting confirmation`
+      } - awaiting confirmation`,
     );
 
     // Broadcast to opponent
@@ -137,7 +137,7 @@ export const createAutoResolveSlice: StateCreator<
         get()._executeLilithRevealEffect(
           lilithInstanceId,
           lilithLocation,
-          ownerSeat
+          ownerSeat,
         );
         break;
       }
@@ -169,7 +169,7 @@ export const createAutoResolveSlice: StateCreator<
     const { kind, ownerSeat, sourceName, id } = pending;
 
     get().log(
-      `[${ownerSeat.toUpperCase()}] ${sourceName}: Effect declined (manual resolution)`
+      `[${ownerSeat.toUpperCase()}] ${sourceName}: Effect declined (manual resolution)`,
     );
 
     // Clear pending
@@ -193,6 +193,15 @@ export const createAutoResolveSlice: StateCreator<
 
   // Internal execution functions - called after user confirms auto-resolve
   _executeOmphalosDrawEffect: (omphalosId: string, ownerSeat: PlayerKey) => {
+    // Check Gard of Eden draw limit
+    const canDraw = get().canDrawCard(ownerSeat, 1);
+    if (!canDraw.allowed) {
+      get().log(
+        `[${ownerSeat.toUpperCase()}] Gard of Eden prevents Omphalos from drawing (limit: 1 card per turn)`,
+      );
+      return;
+    }
+
     const omphalosHands = get().omphalosHands;
     const omphalos = omphalosHands.find((o) => o.id === omphalosId);
     if (!omphalos) return;
@@ -204,7 +213,7 @@ export const createAutoResolveSlice: StateCreator<
       get().log(
         `[${ownerSeat.toUpperCase()}] ${
           omphalos.artifact.card.name
-        }: No spells in spellbook`
+        }: No spells in spellbook`,
       );
       return;
     }
@@ -223,8 +232,11 @@ export const createAutoResolveSlice: StateCreator<
 
     // Add card to Omphalos hand
     const updatedOmphalosHands = omphalosHands.map((o) =>
-      o.id === omphalosId ? { ...o, hand: [...o.hand, drawnCard] } : o
+      o.id === omphalosId ? { ...o, hand: [...o.hand, drawnCard] } : o,
     );
+
+    // Increment cards drawn counter for Gard of Eden tracking
+    get().incrementCardsDrawn(ownerSeat, 1);
 
     set({
       zones: zonesNext,
@@ -245,7 +257,7 @@ export const createAutoResolveSlice: StateCreator<
     get().log(
       `[${ownerSeat.toUpperCase()}] ${
         omphalos.artifact.card.name
-      } draws a spell (now has ${newHandSize})`
+      } draws a spell (now has ${newHandSize})`,
     );
   },
 
@@ -258,7 +270,7 @@ export const createAutoResolveSlice: StateCreator<
       card: unknown;
       skipConfirmation?: boolean;
     },
-    ownerSeat: PlayerKey
+    ownerSeat: PlayerKey,
   ) => {
     // Delegate to triggerMorganaGenesis with skipConfirmation
     get().triggerMorganaGenesis({
@@ -289,7 +301,7 @@ export const createAutoResolveSlice: StateCreator<
       card: unknown;
       skipConfirmation?: boolean;
     },
-    ownerSeat: PlayerKey
+    ownerSeat: PlayerKey,
   ) => {
     // Delegate to the actual steal logic with skipConfirmation
     get().triggerPithImpGenesis({
@@ -308,7 +320,7 @@ export const createAutoResolveSlice: StateCreator<
   _executeLilithRevealEffect: (
     _lilithInstanceId: string,
     _lilithLocation: string,
-    ownerSeat: PlayerKey
+    ownerSeat: PlayerKey,
   ) => {
     // Call triggerLilithEndOfTurn with skipConfirmation to proceed with the reveal
     get().triggerLilithEndOfTurn(ownerSeat, true);

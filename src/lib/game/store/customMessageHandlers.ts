@@ -56,13 +56,21 @@ export function handleCustomMessage(
     return;
   }
   if (t === "revealCards") {
-    // Opponent revealed cards from a pile - show them in peek dialog
+    // Opponent revealed cards from a pile - show them in prominent reveal overlay
     const payload = msg as {
       title?: string;
       cards?: CardRef[];
       source?: { seat?: PlayerKey; pile?: string; from?: string };
+      revealedBy?: PlayerKey;
     };
     if (Array.isArray(payload.cards)) {
+      // Use the prominent reveal overlay for better visibility
+      get().openRevealOverlay(
+        typeof payload.title === "string" ? payload.title : "Card Revealed",
+        payload.cards,
+        payload.revealedBy || payload.source?.seat,
+      );
+      // Also open the peek dialog for backward compatibility and card actions
       get().openPeekDialog(
         typeof payload.title === "string" ? payload.title : "Revealed",
         payload.cards,
