@@ -196,7 +196,7 @@ export default function BrowseOverlay({}: BrowseOverlayProps) {
                   Arrange Bottom Order
                 </h2>
                 <p className="text-white/70 text-xs sm:text-sm mb-3 sm:mb-4 text-center">
-                  Drag to reorder. Last card will be at the very bottom.
+                  Drag to reorder. First card will be at the very bottom.
                 </p>
 
                 {/* Selected card display */}
