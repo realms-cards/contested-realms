@@ -89,14 +89,14 @@ export const createCommonSenseSlice: StateCreator<
 
     if (eligibleCards.length === 0) {
       get().log(
-        `[${casterSeat.toUpperCase()}] Common Sense: No Ordinary cards in spellbook`
+        `[${casterSeat.toUpperCase()}] Common Sense: No Ordinary cards in spellbook`,
       );
       // Move spell to graveyard since it resolves with no effect
       try {
         get().movePermanentToZone(
           input.spell.at,
           input.spell.index,
-          "graveyard"
+          "graveyard",
         );
       } catch {}
       return;
@@ -132,7 +132,7 @@ export const createCommonSenseSlice: StateCreator<
     get().log(
       `[${casterSeat.toUpperCase()}] casts Common Sense - searching for Ordinary cards (${
         eligibleCards.length
-      } found)`
+      } found)`,
     );
   },
 
@@ -175,6 +175,18 @@ export const createCommonSenseSlice: StateCreator<
       return;
 
     const casterSeat = pending.casterSeat;
+
+    // Check Gard of Eden draw limit
+    const canDraw = get().canDrawCard(casterSeat, 1);
+    if (!canDraw.allowed) {
+      get().log(
+        `[${casterSeat.toUpperCase()}] Gard of Eden prevents drawing more cards this turn (limit: 1)`,
+      );
+      // Cancel instead of resolving
+      get().cancelCommonSense();
+      return;
+    }
+
     const zones = get().zones;
     const spellbook = [...(zones[casterSeat]?.spellbook || [])];
     const hand = [...(zones[casterSeat]?.hand || [])];
@@ -185,7 +197,7 @@ export const createCommonSenseSlice: StateCreator<
       (c) =>
         c.cardId === selectedCard.cardId &&
         c.slug === selectedCard.slug &&
-        c.name === selectedCard.name
+        c.name === selectedCard.name,
     );
 
     if (spellbookIndex !== -1) {
@@ -209,6 +221,9 @@ export const createCommonSenseSlice: StateCreator<
       },
     };
 
+    // Increment cards drawn counter for Gard of Eden tracking
+    get().incrementCardsDrawn(casterSeat, 1);
+
     set({
       zones: zonesNext,
       pendingCommonSense: null,
@@ -228,7 +243,7 @@ export const createCommonSenseSlice: StateCreator<
       get().movePermanentToZone(
         pending.spell.at,
         pending.spell.index,
-        "graveyard"
+        "graveyard",
       );
     } catch {}
 
@@ -249,7 +264,7 @@ export const createCommonSenseSlice: StateCreator<
     get().log(
       `Common Sense resolved: ${
         selectedCard?.name || "card"
-      } added to hand, spellbook shuffled`
+      } added to hand, spellbook shuffled`,
     );
   },
 

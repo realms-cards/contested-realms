@@ -42,6 +42,7 @@ import {
 import { createEarthquakeSlice } from "./store/earthquakeState";
 import { createEventSlice } from "./store/eventState";
 import { createFrontierSettlersSlice } from "./store/frontierSettlersState";
+import { createGardOfEdenSlice } from "./store/gardOfEdenState";
 import { createGameActionsSlice } from "./store/gameActions";
 import { createGemTokenSlice } from "./store/gemTokenState";
 import { createHeadlessHauntSlice } from "./store/headlessHauntState";
@@ -82,6 +83,7 @@ import { createPortalSlice } from "./store/portalState";
 import { createPositionSlice } from "./store/positionState";
 import { createPreferenceSlice } from "./store/preferenceState";
 import { createRaiseDeadSlice } from "./store/raiseDeadState";
+import { createRevealOverlaySlice } from "./store/revealOverlayState";
 import { createRemoteCursorSlice } from "./store/remoteCursorState";
 import { createResourceSlice } from "./store/resourceState";
 import { createSearingTruthSlice } from "./store/searingTruthState";
@@ -216,6 +218,8 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   ...createPathfinderSlice(set, get, storeApi),
   ...createBabelTowerSlice(set, get, storeApi),
   ...createGemTokenSlice(set, get, storeApi),
+  ...createGardOfEdenSlice(set, get, storeApi),
+  ...createRevealOverlaySlice(set, get, storeApi),
   cardScale: 1,
 
   // Multiplayer transport (injected by online play UI)
@@ -323,6 +327,8 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         headlessHaunts: [],
         pendingHeadlessHauntMove: null,
         gemTokens: [],
+        gardOfEdenLocations: {},
+        cardsDrawnThisTurn: { p1: 0, p2: 0 },
       };
       return reset as GameState;
     }),

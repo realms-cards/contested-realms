@@ -83,9 +83,9 @@ export async function POST(
     });
 
     // Build join URLs with lobby ID and player tokens
-    // The lobby will be created when the first player joins
-    const joinUrlP1 = `${baseUrl}/online/lobby?join=${lobbyId}&format=${challenge.format}&discord=1`;
-    const joinUrlP2 = `${baseUrl}/online/lobby?join=${lobbyId}&format=${challenge.format}&discord=1`;
+    // The lobby will be created on-demand when the first player joins with a discord-prefixed ID
+    const joinUrlP1 = `${baseUrl}/online/lobby?invite=${lobbyId}&format=${challenge.format}&discord=1`;
+    const joinUrlP2 = `${baseUrl}/online/lobby?invite=${lobbyId}&format=${challenge.format}&discord=1`;
 
     // Generate join tokens for each player
     const joinTokenP1 = randomBytes(16).toString("hex");

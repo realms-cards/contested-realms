@@ -1153,6 +1153,20 @@ export type PendingHeadlessHauntMove = {
   createdAt: number;
 };
 
+// --- Gard of Eden State --------------------------------------------------
+// Site that limits card drawing to 1 per turn when in play and not silenced
+export type GardOfEdenEntry = {
+  cellKey: CellKey;
+  instanceId: string | null;
+  cardName: string;
+  silenced: boolean;
+};
+
+export type GardOfEdenLocations = {
+  p1?: GardOfEdenEntry | undefined;
+  p2?: GardOfEdenEntry | undefined;
+};
+
 // --- Gem Token State (generic draggable tokens on board) --------------------------------
 export type GemColorId =
   | "red"
@@ -2362,6 +2376,39 @@ export type GameState = {
   selectHeadlessHauntTile: (tileKey: CellKey) => void;
   skipHeadlessHauntMove: () => void;
   resolveHeadlessHauntMove: () => void;
+  // Gard of Eden State (site that limits card drawing to 1 per turn)
+  gardOfEdenLocations: GardOfEdenLocations;
+  cardsDrawnThisTurn: Record<PlayerKey, number>;
+  registerGardOfEden: (input: {
+    site: {
+      at: CellKey;
+      card: CardRef;
+      instanceId?: string | null;
+      owner: 1 | 2;
+    };
+    ownerSeat: PlayerKey;
+  }) => void;
+  unregisterGardOfEden: (ownerSeat: PlayerKey, cellKey: CellKey) => void;
+  isGardOfEdenActive: (seat: PlayerKey) => boolean;
+  incrementCardsDrawn: (seat: PlayerKey, count?: number) => void;
+  resetCardsDrawn: () => void;
+  canDrawCard: (
+    seat: PlayerKey,
+    count?: number,
+  ) => { allowed: boolean; remaining: number };
+  // Reveal Overlay State (prominent display for revealed cards)
+  revealOverlay: {
+    isOpen: boolean;
+    title: string;
+    cards: CardRef[];
+    revealedBy?: PlayerKey;
+  };
+  openRevealOverlay: (
+    title: string,
+    cards: CardRef[],
+    revealedBy?: PlayerKey,
+  ) => void;
+  closeRevealOverlay: () => void;
   // Gem Token State (generic draggable tokens on board)
   gemTokens: GemToken[];
   spawnGemToken: (color: GemColorId, owner: PlayerKey) => void;
@@ -2668,6 +2715,8 @@ export type ServerPatchT = Partial<{
   pendingBabelPlacement: GameState["pendingBabelPlacement"];
   resolversDisabled: GameState["resolversDisabled"];
   gemTokens: GameState["gemTokens"];
+  gardOfEdenLocations: GameState["gardOfEdenLocations"];
+  cardsDrawnThisTurn: GameState["cardsDrawnThisTurn"];
   __replaceKeys: string[];
   // Snapshot timestamp for replay truncation on undo
   __snapshotTs: number;

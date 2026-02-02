@@ -54,6 +54,7 @@ import PlacementDialog from "@/components/game/PlacementDialog";
 import PlayerResourcePanels from "@/components/game/PlayerResourcePanel";
 import PrivateHandTargetingOverlay from "@/components/game/PrivateHandTargetingOverlay";
 import RaiseDeadOverlay from "@/components/game/RaiseDeadOverlay";
+import RevealOverlay from "@/components/game/RevealOverlay";
 import RestoreUiButton from "@/components/game/RestoreUiButton";
 import SearingTruthOverlay from "@/components/game/SearingTruthOverlay";
 import SeerScreen from "@/components/game/SeerScreen";
@@ -1044,6 +1045,9 @@ export default function PlayPage() {
       {/* Dhol Chants Overlay */}
       <DholChantsOverlay />
 
+      {/* Reveal Overlay (prominent display for revealed cards) */}
+      <RevealOverlayWrapper />
+
       {/* Annual Fair Overlay (activated ability element choice) */}
       <AnnualFairOverlay />
 
@@ -1346,6 +1350,24 @@ export default function PlayPage() {
         context="game"
       />
     </div>
+  );
+}
+
+// Wrapper component for RevealOverlay that connects to game store
+function RevealOverlayWrapper() {
+  const revealOverlay = useGameStore((s) => s.revealOverlay);
+  const closeRevealOverlay = useGameStore((s) => s.closeRevealOverlay);
+
+  if (!revealOverlay.isOpen) return null;
+
+  return (
+    <RevealOverlay
+      title={revealOverlay.title}
+      cards={revealOverlay.cards}
+      revealedBy={revealOverlay.revealedBy}
+      onClose={closeRevealOverlay}
+      autoCloseDelay={8000} // Auto close after 8 seconds
+    />
   );
 }
 

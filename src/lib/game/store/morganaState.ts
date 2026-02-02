@@ -71,7 +71,16 @@ export const createMorganaSlice: StateCreator<
     const drawCount = Math.min(3, spellbook.length);
     if (drawCount === 0) {
       get().log(
-        `[${ownerSeat.toUpperCase()}] Morgana le Fay: No spells in spellbook to draw`
+        `[${ownerSeat.toUpperCase()}] Morgana le Fay: No spells in spellbook to draw`,
+      );
+      return;
+    }
+
+    // Check Gard of Eden draw limit
+    const canDraw = get().canDrawCard(ownerSeat, drawCount);
+    if (!canDraw.allowed) {
+      get().log(
+        `[${ownerSeat.toUpperCase()}] Gard of Eden prevents Morgana from drawing ${drawCount} spells (only ${canDraw.remaining} remaining)`,
       );
       return;
     }
@@ -128,6 +137,9 @@ export const createMorganaSlice: StateCreator<
       morganaHands: [...currentMorganaHands, newMorganaHand],
     });
 
+    // Increment cards drawn counter for Gard of Eden tracking
+    get().incrementCardsDrawn(ownerSeat, drawCount);
+
     // Send zone patch
     const zonePatch: ServerPatchT = {
       zones: { [ownerSeat]: zonesNext[ownerSeat] } as Record<PlayerKey, Zones>,
@@ -155,14 +167,14 @@ export const createMorganaSlice: StateCreator<
     get().log(
       `[${ownerSeat.toUpperCase()}] Morgana le Fay draws her own hand of ${drawCount} spell${
         drawCount !== 1 ? "s" : ""
-      }`
+      }`,
     );
   },
 
   castFromMorganaHand: (
     morganaId: string,
     cardIndex: number,
-    targetTile: { x: number; y: number }
+    targetTile: { x: number; y: number },
   ) => {
     const morganaHands = get().morganaHands;
     const morganaEntry = morganaHands.find((m) => m.id === morganaId);
@@ -177,7 +189,7 @@ export const createMorganaSlice: StateCreator<
     newHand.splice(cardIndex, 1);
 
     const updatedMorganaHands = morganaHands.map((m) =>
-      m.id === morganaId ? { ...m, hand: newHand } : m
+      m.id === morganaId ? { ...m, hand: newHand } : m,
     );
 
     set({
@@ -230,7 +242,7 @@ export const createMorganaSlice: StateCreator<
     }
 
     get().log(
-      `Morgana le Fay casts ${card.name} at tile ${targetTile.x},${targetTile.y}`
+      `Morgana le Fay casts ${card.name} at tile ${targetTile.x},${targetTile.y}`,
     );
 
     // Trigger magic cast flow if it's a magic spell
@@ -266,7 +278,7 @@ export const createMorganaSlice: StateCreator<
     const morganaEntry = morganaHands.find(
       (m) =>
         m.minion.at === minionAt ||
-        (minionInstanceId && m.minion.instanceId === minionInstanceId)
+        (minionInstanceId && m.minion.instanceId === minionInstanceId),
     );
 
     if (!morganaEntry) return;
@@ -301,7 +313,7 @@ export const createMorganaSlice: StateCreator<
       get().log(
         `Morgana le Fay's remaining ${remainingCards.length} spell${
           remainingCards.length !== 1 ? "s" : ""
-        } go to graveyard`
+        } go to graveyard`,
       );
     }
 
@@ -309,7 +321,7 @@ export const createMorganaSlice: StateCreator<
     const remainingMorganaHands = morganaHands.filter(
       (m) =>
         m.minion.at !== minionAt &&
-        (!minionInstanceId || m.minion.instanceId !== minionInstanceId)
+        (!minionInstanceId || m.minion.instanceId !== minionInstanceId),
     );
 
     set({
@@ -339,13 +351,13 @@ export const createMorganaSlice: StateCreator<
 
   getMorganaHandForMinion: (
     minionInstanceId: string | null,
-    minionAt: CellKey
+    minionAt: CellKey,
   ): CardRef[] => {
     const morganaHands = get().morganaHands;
     const entry = morganaHands.find(
       (m) =>
         m.minion.at === minionAt ||
-        (minionInstanceId && m.minion.instanceId === minionInstanceId)
+        (minionInstanceId && m.minion.instanceId === minionInstanceId),
     );
     return entry?.hand || [];
   },

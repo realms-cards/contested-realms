@@ -1,5 +1,6 @@
 import type { StateCreator } from "zustand";
 import { isAnimist } from "@/lib/game/avatarAbilities";
+import { isGardOfEden } from "../gardOfEdenState";
 import {
   BEACON_GENESIS_SITES,
   ELEMENT_CHOICE_SITES,
@@ -103,6 +104,20 @@ const triggerSiteGenesis = (
         `${siteName} Genesis: You control ${towerCount} copies - no bonus`,
       );
     }
+    return;
+  }
+
+  // Gard of Eden - register to track for draw limit
+  if (isGardOfEden(siteName)) {
+    const ownerSeat = owner === 1 ? "p1" : "p2";
+    state.registerGardOfEden({
+      site: {
+        at: cellKey,
+        card: { name: siteName, cardId: 0, type: "site" },
+        owner,
+      },
+      ownerSeat,
+    });
     return;
   }
 
@@ -580,7 +595,8 @@ export const createPlayActionsSlice: StateCreator<
       const cardWithId = prepareCardForSeat(card, who);
       const isFaceDown = state.dragFaceDown;
       const isSubsurface = state.castSubsurface;
-      const permanentInstanceId = cardWithId.instanceId ?? newPermanentInstanceId();
+      const permanentInstanceId =
+        cardWithId.instanceId ?? newPermanentInstanceId();
       arr.push({
         owner: ownerFromSeat(who),
         card: cardWithId,
@@ -1437,7 +1453,8 @@ export const createPlayActionsSlice: StateCreator<
       const cardWithId = prepareCardForSeat(card, who);
       const isFaceDown = state.dragFaceDown;
       const isSubsurfacePile = state.castSubsurface;
-      const pilePermInstanceId = cardWithId.instanceId ?? newPermanentInstanceId();
+      const pilePermInstanceId =
+        cardWithId.instanceId ?? newPermanentInstanceId();
       arr.push({
         owner: ownerFromSeat(who),
         card: cardWithId,
