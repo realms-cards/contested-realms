@@ -215,6 +215,16 @@ export const createSpecialSiteSlice: StateCreator<
       state.specialSiteState.mismanagedMortuaries,
     );
 
+    // Check and unregister Garden of Eden if this site was one
+    const gardenP1 = state.gardenOfEdenLocations?.p1;
+    const gardenP2 = state.gardenOfEdenLocations?.p2;
+    if (gardenP1?.cellKey === cellKey) {
+      state.unregisterGardenOfEden("p1", cellKey);
+    }
+    if (gardenP2?.cellKey === cellKey) {
+      state.unregisterGardenOfEden("p2", cellKey);
+    }
+
     // Remove valley choice for this cell
     const newValleyChoices = state.specialSiteState.valleyChoices.filter(
       (c) => c.cellKey !== cellKey,

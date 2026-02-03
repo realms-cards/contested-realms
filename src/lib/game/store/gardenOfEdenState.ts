@@ -7,6 +7,7 @@ import type {
   PlayerKey,
   ServerPatchT,
 } from "./types";
+import { siteHasSilencedToken } from "./utils/resourceHelpers";
 
 // Helper to detect Garden of Eden by name
 export function isGardenOfEden(cardName: string): boolean {
@@ -20,6 +21,7 @@ export type GardenOfEdenSlice = Pick<
   | "registerGardenOfEden"
   | "unregisterGardenOfEden"
   | "isGardenOfEdenActive"
+  | "isAnyGardenOfEdenActive"
   | "cardsDrawnThisTurn"
   | "incrementCardsDrawn"
   | "resetCardsDrawn"
@@ -131,13 +133,34 @@ export const createGardenOfEdenSlice: StateCreator<
     const entry = get().gardenOfEdenLocations[seat];
     if (!entry) return false;
 
-    // Check if the site is silenced by looking at the board
+    // Check if the site still exists on the board
     const site = get().board.sites[entry.cellKey];
     if (!site) return false; // Site no longer exists
 
-    // Check for silence effect on the site
-    const silenced = get().board.silencedSites?.[entry.cellKey] ?? false;
+    // Check for Silenced token on the site (silenced sites lose their ability)
+    const silenced = siteHasSilencedToken(entry.cellKey, get().permanents);
     return !silenced;
+  },
+
+  // Check if ANY Garden of Eden is active on the board (affects both players)
+  isAnyGardenOfEdenActive: (): boolean => {
+    const locations = get().gardenOfEdenLocations;
+    const boardSites = get().board.sites;
+    const permanents = get().permanents;
+
+    for (const seat of ["p1", "p2"] as PlayerKey[]) {
+      const entry = locations[seat];
+      if (!entry) continue;
+
+      // Check if site still exists
+      const site = boardSites[entry.cellKey];
+      if (!site) continue;
+
+      // Check if silenced
+      const silenced = siteHasSilencedToken(entry.cellKey, permanents);
+      if (!silenced) return true; // Found an active Garden of Eden
+    }
+    return false;
   },
 
   incrementCardsDrawn: (seat: PlayerKey, count: number = 1) => {
@@ -172,7 +195,8 @@ export const createGardenOfEdenSlice: StateCreator<
     seat: PlayerKey,
     count: number = 1,
   ): { allowed: boolean; remaining: number } => {
-    const isActive = get().isGardenOfEdenActive(seat);
+    // Garden of Eden affects BOTH players - check if ANY is active
+    const isActive = get().isAnyGardenOfEdenActive();
     if (!isActive) {
       return { allowed: true, remaining: Infinity };
     }

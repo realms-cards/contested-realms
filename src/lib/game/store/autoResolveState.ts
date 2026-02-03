@@ -199,6 +199,33 @@ export const createAutoResolveSlice: StateCreator<
       get().log(
         `[${ownerSeat.toUpperCase()}] Garden of Eden prevents Omphalos from drawing (limit: 1 card per turn)`,
       );
+      // Show toast notification to the player trying to draw
+      const toastMessage =
+        "[card:Garden of Eden] blocks cards drawn after the first";
+      try {
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("app:toast", {
+              detail: {
+                message: toastMessage,
+                seat: ownerSeat,
+                showToSelf: true,
+              },
+            }),
+          );
+        }
+      } catch {}
+      // Also send to opponent via transport
+      const toastTr = get().transport;
+      if (toastTr?.sendMessage) {
+        try {
+          toastTr.sendMessage({
+            type: "toast",
+            text: toastMessage,
+            seat: ownerSeat,
+          } as never);
+        } catch {}
+      }
       return;
     }
 

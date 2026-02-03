@@ -2252,6 +2252,14 @@ export type GameState = {
   necromancerSkeletonUsed: Record<PlayerKey, boolean>;
   // Summon a skeleton token at the avatar's current position (costs 1 mana, once per turn)
   summonSkeletonHere: (who: PlayerKey) => boolean;
+  // Harbinger Portal Discount State (Gothic expansion)
+  // Tracks whether each player has used their once-per-turn portal mana discount
+  // When Harbinger casts a minion to a portal tile, mana cost is reduced by 1
+  harbingerPortalDiscountUsed: Record<PlayerKey, boolean>;
+  // Ether Core Turn Start State
+  // Tracks which Ether Core instanceIds were in the void at the start of the turn
+  // Ether Core only provides 3 mana if cast this turn OR started the turn in the void
+  etherCoresInVoidAtTurnStart: string[];
   // Druid Flip State (Arthurian Legends)
   // Tracks whether each player's Druid has been flipped (one-way transformation)
   druidFlipped: Record<PlayerKey, boolean>;
@@ -2390,6 +2398,7 @@ export type GameState = {
   }) => void;
   unregisterGardenOfEden: (ownerSeat: PlayerKey, cellKey: CellKey) => void;
   isGardenOfEdenActive: (seat: PlayerKey) => boolean;
+  isAnyGardenOfEdenActive: () => boolean;
   incrementCardsDrawn: (seat: PlayerKey, count?: number) => void;
   resetCardsDrawn: () => void;
   canDrawCard: (
@@ -2695,6 +2704,8 @@ export type ServerPatchT = Partial<{
   seerState: GameState["seerState"];
   imposterMasks: GameState["imposterMasks"];
   necromancerSkeletonUsed: GameState["necromancerSkeletonUsed"];
+  harbingerPortalDiscountUsed: GameState["harbingerPortalDiscountUsed"];
+  etherCoresInVoidAtTurnStart: GameState["etherCoresInVoidAtTurnStart"];
   druidFlipped: GameState["druidFlipped"];
   stolenCards: GameState["stolenCards"];
   pithImpHands: GameState["pithImpHands"];

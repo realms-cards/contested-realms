@@ -4318,7 +4318,9 @@ io.on("connection", async (socket: SocketClient) => {
       type === "searingTruthResolve" ||
       type === "searingTruthCancel" ||
       type === "interrogatorTrigger" ||
-      type === "interrogatorResolve"
+      type === "interrogatorResolve" ||
+      type === "gardenOfEdenRegister" ||
+      type === "gardenOfEdenUnregister"
     ) {
       // Resolver messages - broadcast to match room
       try {

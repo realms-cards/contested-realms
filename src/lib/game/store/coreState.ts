@@ -649,6 +649,26 @@ export const createCoreSlice: StateCreator<
       [nextKey]: false, // Reset for the player whose turn is starting
     };
 
+    // Reset harbinger portal discount usage for the next player's turn
+    const harbingerPortalDiscountUsedNext = {
+      ...state.harbingerPortalDiscountUsed,
+      [nextKey]: false, // Reset for the player whose turn is starting
+    };
+
+    // Track which Ether Cores are currently in the void at turn start
+    // Ether Core only provides 3 mana if it was cast this turn OR started the turn in the void
+    const etherCoresInVoidAtTurnStartNext: string[] = [];
+    for (const [cellKey, cellPerms] of Object.entries(permanents)) {
+      const isVoidCell = !state.board?.sites?.[cellKey];
+      if (!isVoidCell) continue;
+      for (const perm of cellPerms || []) {
+        const cardName = String(perm.card?.name || "").toLowerCase();
+        if (cardName === "ether core" && perm.instanceId) {
+          etherCoresInVoidAtTurnStartNext.push(perm.instanceId);
+        }
+      }
+    }
+
     // Don't send turn in patch - server increments turn when currentPlayer changes
     // Only send affected player's data to avoid overwriting opponent's state
     const base: ServerPatchT = {
@@ -659,6 +679,8 @@ export const createCoreSlice: StateCreator<
       players: { [nextKey]: playersNext[nextKey] } as GameState["players"],
       necromancerSkeletonUsed: necromancerSkeletonUsedNext,
       mephistophelesSummonUsed: mephistophelesSummonUsedNext,
+      harbingerPortalDiscountUsed: harbingerPortalDiscountUsedNext,
+      etherCoresInVoidAtTurnStart: etherCoresInVoidAtTurnStartNext,
     };
     const deltaPatch =
       updates.length > 0 ? createPermanentDeltaPatch(updates) : undefined;
@@ -676,6 +698,8 @@ export const createCoreSlice: StateCreator<
       players: playersNext,
       necromancerSkeletonUsed: necromancerSkeletonUsedNext,
       mephistophelesSummonUsed: mephistophelesSummonUsedNext,
+      harbingerPortalDiscountUsed: harbingerPortalDiscountUsedNext,
+      etherCoresInVoidAtTurnStart: etherCoresInVoidAtTurnStartNext,
       selectedCard: null,
       selectedPermanent: null,
     });

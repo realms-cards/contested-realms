@@ -5145,4 +5145,75 @@ export function handleCustomMessage(
     }
     return;
   }
+
+  // --- Garden of Eden (draw limit site) ---
+  if (t === "gardenOfEdenRegister") {
+    const cellKey = (msg as { cellKey?: unknown }).cellKey as
+      | CellKey
+      | undefined;
+    const ownerSeat = (msg as { ownerSeat?: unknown }).ownerSeat as
+      | PlayerKey
+      | undefined;
+
+    if (!cellKey || !ownerSeat) return;
+
+    // Skip if we're the owner - we already registered it locally
+    const actorKey = get().actorKey;
+    if (actorKey === ownerSeat) return;
+
+    // Update local state for opponent's Garden of Eden
+    const current = get().gardenOfEdenLocations;
+    set({
+      gardenOfEdenLocations: {
+        ...current,
+        [ownerSeat]: {
+          cellKey,
+          instanceId: null,
+          cardName: "Garden of Eden",
+          silenced: false,
+        },
+      },
+    } as Partial<GameState> as GameState);
+
+    try {
+      get().log(
+        `[${ownerSeat.toUpperCase()}] Garden of Eden enters the realm - card draws are now limited`,
+      );
+    } catch {}
+    return;
+  }
+
+  if (t === "gardenOfEdenUnregister") {
+    const cellKey = (msg as { cellKey?: unknown }).cellKey as
+      | CellKey
+      | undefined;
+    const ownerSeat = (msg as { ownerSeat?: unknown }).ownerSeat as
+      | PlayerKey
+      | undefined;
+
+    if (!cellKey || !ownerSeat) return;
+
+    // Skip if we're the owner - we already unregistered it locally
+    const actorKey = get().actorKey;
+    if (actorKey === ownerSeat) return;
+
+    // Check if there's a matching Garden of Eden to unregister
+    const current = get().gardenOfEdenLocations[ownerSeat];
+    if (!current || current.cellKey !== cellKey) return;
+
+    // Remove from local state
+    set({
+      gardenOfEdenLocations: {
+        ...get().gardenOfEdenLocations,
+        [ownerSeat]: undefined,
+      },
+    } as Partial<GameState> as GameState);
+
+    try {
+      get().log(
+        `[${ownerSeat.toUpperCase()}] Garden of Eden leaves - card draw limits removed`,
+      );
+    } catch {}
+    return;
+  }
 }

@@ -435,6 +435,8 @@ export const computeAvailableMana = (
   zones?: Record<PlayerKey, Zones> | null,
   specialSiteState?: SpecialSiteState | null,
   thresholds?: Thresholds | null,
+  currentTurn?: number,
+  etherCoresInVoidAtTurnStart?: string[],
 ): number => {
   const owner = playerKeyToOwner(who);
   const opponent: PlayerKey = who === "p1" ? "p2" : "p1";
@@ -557,9 +559,26 @@ export const computeAvailableMana = (
         const cardType = String(p.card?.type || "").toLowerCase();
         const isArtifact = cardType.includes("artifact");
         // Check for void mana providers (e.g., Ether Core)
-        // Ether Core provides mana in void regardless of attachment
+        // Ether Core only provides 3 mana if:
+        // 1. Cast this turn AND currently in void, OR
+        // 2. Started the turn in the void (tracked by etherCoresInVoidAtTurnStart)
+        // If it started on a site and was moved to void, it provides no mana this turn.
         if (isVoidCell && VOID_MANA_PROVIDERS[nm]) {
-          mana += VOID_MANA_PROVIDERS[nm];
+          const voidManaAmount = VOID_MANA_PROVIDERS[nm];
+          const instanceId = p.instanceId ?? null;
+          const enteredThisTurn =
+            currentTurn !== undefined &&
+            p.enteredOnTurn !== undefined &&
+            p.enteredOnTurn === currentTurn;
+          const startedInVoid =
+            instanceId !== null &&
+            etherCoresInVoidAtTurnStart?.includes(instanceId);
+
+          // Only provide mana if cast this turn (while in void) or started turn in void
+          if (enteredThisTurn || startedInVoid) {
+            mana += voidManaAmount;
+          }
+          // If neither condition is met, Ether Core provides 0 mana this turn
           continue;
         }
         // Regular mana providers
