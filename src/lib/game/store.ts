@@ -2,6 +2,7 @@ import { create, type StateCreator } from "zustand";
 import { createAccusationSlice } from "./store/accusationState";
 import { createAnimistSlice } from "./store/animistState";
 import { createAnnualFairSlice } from "./store/annualFairState";
+import { createArtifactCastSlice } from "./store/artifactCastState";
 import { createAssortedAnimalsSlice } from "./store/assortedAnimalsState";
 import { createAtlanteanFateSlice } from "./store/atlanteanFateState";
 import { createAutoResolveSlice } from "./store/autoResolveState";
@@ -211,6 +212,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   ...createDruidSlice(set, get, storeApi),
   ...createSpecialSiteSlice(set, get, storeApi),
   ...createAnimistSlice(set, get, storeApi),
+  ...createArtifactCastSlice(set, get, storeApi),
   ...createHeadlessHauntSlice(set, get, storeApi),
   ...createInterrogatorSlice(set, get, storeApi),
   ...createAtlanteanFateSlice(set, get, storeApi),
@@ -316,6 +318,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         pendingRaiseDead: null,
         pendingLegionOfGall: null,
         pendingAutoResolve: null,
+        pendingArtifactCast: null,
         mephistophelesSummonUsed: createInitialMephistophelesSummonUsed(),
         pendingMephistophelesSummon: null,
         pathfinderUsed: createInitialPathfinderUsed(),

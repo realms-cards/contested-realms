@@ -2348,6 +2348,11 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                         isArtifact && !isMonument && !isAutomaton;
 
                       if (isCarryableArt) {
+                        // Check for special artifacts with activated abilities
+                        const isToolbox = tokenName === "toolbox";
+                        const isSilverBullet = tokenName === "silver bullet";
+                        const hasActivatedAbility = isToolbox || isSilverBullet;
+
                         // Carryable artifacts: offer Drop option (like Lance) - only if we own the parent
                         if (!isMine) {
                           return (
@@ -2359,6 +2364,103 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                             </div>
                           );
                         }
+
+                        // Toolbox and Silver Bullet have activated abilities
+                        if (hasActivatedAbility) {
+                          const artifactType = isToolbox
+                            ? "toolbox"
+                            : "silver_bullet";
+                          const rarityLabel = isToolbox
+                            ? "Ordinary"
+                            : "Exceptional";
+                          const bearerKind: "permanent" | "avatar" =
+                            t.kind === "avatar" ? "avatar" : "permanent";
+                          const bearerName =
+                            t.kind === "avatar"
+                              ? avatars[t.who]?.card?.name || "Avatar"
+                              : permanents[t.at]?.[t.index]?.card?.name ||
+                                "Bearer";
+                          const bearerInstanceId =
+                            t.kind === "avatar"
+                              ? null
+                              : permanents[t.at]?.[t.index]?.instanceId || null;
+
+                          // For Silver Bullet, check if bearer is already tapped
+                          const bearerTapped =
+                            t.kind === "avatar"
+                              ? avatars[t.who]?.tapped
+                              : permanents[t.at]?.[t.index]?.tapped;
+                          const silverBulletDisabled =
+                            isSilverBullet && bearerTapped;
+
+                          return (
+                            <div key={token.index} className="space-y-1">
+                              <button
+                                className={`w-full text-left rounded px-3 py-1 text-sm ${
+                                  silverBulletDisabled
+                                    ? "bg-gray-700/50 text-gray-500 cursor-not-allowed"
+                                    : "bg-amber-900/30 hover:bg-amber-900/50"
+                                }`}
+                                disabled={silverBulletDisabled}
+                                title={
+                                  silverBulletDisabled
+                                    ? "Bearer must be untapped to use Silver Bullet"
+                                    : `Sacrifice ${token.name} to cast ${rarityLabel} spell from collection`
+                                }
+                                onClick={() => {
+                                  if (silverBulletDisabled) return;
+                                  const state = useGameStore.getState();
+                                  const ownerSeat =
+                                    t.kind === "avatar"
+                                      ? t.who
+                                      : seatFromOwner(
+                                          permanents[t.at]?.[t.index]?.owner ||
+                                            1,
+                                        );
+                                  state.beginArtifactCast({
+                                    artifactType: artifactType as
+                                      | "toolbox"
+                                      | "silver_bullet",
+                                    casterSeat: ownerSeat,
+                                    artifact: {
+                                      at: token.tileKey,
+                                      index: token.index,
+                                      instanceId:
+                                        token.card?.instanceId || null,
+                                      name: token.name,
+                                    },
+                                    bearer: {
+                                      kind: bearerKind,
+                                      at:
+                                        t.kind === "avatar"
+                                          ? toCellKey(
+                                              avatars[t.who]?.pos?.[0] ?? 0,
+                                              avatars[t.who]?.pos?.[1] ?? 0,
+                                            )
+                                          : t.at,
+                                      index: t.kind === "avatar" ? -1 : t.index,
+                                      instanceId: bearerInstanceId,
+                                      name: bearerName,
+                                    },
+                                  });
+                                  onClose();
+                                }}
+                              >
+                                Use {token.name} ({rarityLabel})
+                              </button>
+                              <button
+                                className="w-full text-left rounded bg-purple-900/20 hover:bg-purple-900/40 px-3 py-1 text-sm"
+                                onClick={() => {
+                                  detachToken(token.tileKey, token.index);
+                                  onClose();
+                                }}
+                              >
+                                Drop {token.name}
+                              </button>
+                            </div>
+                          );
+                        }
+
                         return (
                           <button
                             key={token.index}

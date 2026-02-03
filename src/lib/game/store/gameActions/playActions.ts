@@ -1762,6 +1762,23 @@ export const createPlayActionsSlice: StateCreator<
           patch.phase = "Main"; // Transition to Main phase after free draw
         }
         if (Object.keys(patch).length > 0) {
+          // Debug: log graveyard/hand counts in the outgoing patch
+          if (process.env.NODE_ENV !== "production" && from === "graveyard") {
+            const pz = patch.zones as Record<
+              string,
+              { hand?: unknown[]; graveyard?: unknown[] }
+            >;
+            const seatZones = pz?.[who];
+            console.log("[drawFromPileToHand] Sending zone patch:", {
+              seat: who,
+              from,
+              cardName: card.name,
+              patchHandCount: seatZones?.hand?.length,
+              patchGraveyardCount: seatZones?.graveyard?.length,
+              prevHandCount: state.zones[who]?.hand?.length,
+              prevGraveyardCount: state.zones[who]?.graveyard?.length,
+            });
+          }
           get().trySendPatch(patch);
         }
       }

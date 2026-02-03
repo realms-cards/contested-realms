@@ -5216,4 +5216,161 @@ export function handleCustomMessage(
     } catch {}
     return;
   }
+
+  // --- Artifact Cast message handlers (Toolbox, Silver Bullet) ---
+  if (t === "artifactCastBegin") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const artifactType = (msg as { artifactType?: unknown }).artifactType as
+      | "toolbox"
+      | "silver_bullet"
+      | undefined;
+    const casterSeat = (msg as { casterSeat?: unknown }).casterSeat as
+      | PlayerKey
+      | undefined;
+    const artifact = (msg as { artifact?: unknown }).artifact as
+      | { at: CellKey; index: number; instanceId: string | null; name: string }
+      | undefined;
+    const bearer = (msg as { bearer?: unknown }).bearer as
+      | {
+          kind: "permanent" | "avatar";
+          at: CellKey;
+          index: number;
+          instanceId: string | null;
+          name: string;
+        }
+      | undefined;
+
+    if (!id || !artifactType || !casterSeat || !artifact || !bearer) return;
+
+    // Skip if we're the caster - we already have the state
+    const actorKey = get().actorKey;
+    if (actorKey === casterSeat) return;
+
+    // Set pending state for opponent visibility
+    set({
+      pendingArtifactCast: {
+        id,
+        artifactType,
+        casterSeat,
+        artifact,
+        bearer,
+        phase: "selecting",
+        eligibleSpells: [], // Opponent doesn't see eligible spells
+        selectedSpell: null,
+        createdAt: Date.now(),
+      },
+    } as Partial<GameState> as GameState);
+
+    try {
+      const displayName =
+        artifactType === "toolbox" ? "Toolbox" : "Silver Bullet";
+      get().log(
+        `[${casterSeat.toUpperCase()}] activates ${displayName} on ${bearer.name}`,
+      );
+    } catch {}
+    return;
+  }
+
+  if (t === "artifactCastSelect") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const spellName = (msg as { spellName?: unknown }).spellName as
+      | string
+      | undefined;
+
+    if (!id || !spellName) return;
+
+    const pending = get().pendingArtifactCast;
+    if (!pending || pending.id !== id) return;
+
+    // Skip if we're the caster - we already have the state
+    const actorKey = get().actorKey;
+    if (actorKey === pending.casterSeat) return;
+
+    set({
+      pendingArtifactCast: {
+        ...pending,
+        phase: "casting",
+      },
+    } as Partial<GameState> as GameState);
+
+    try {
+      get().log(`[${pending.casterSeat.toUpperCase()}] selected ${spellName}`);
+    } catch {}
+    return;
+  }
+
+  if (t === "artifactCastResolve") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const spellName = (msg as { spellName?: unknown }).spellName as
+      | string
+      | undefined;
+    const casterSeat = (msg as { casterSeat?: unknown }).casterSeat as
+      | PlayerKey
+      | undefined;
+    const newZones = (msg as { newZones?: unknown }).newZones as
+      | Record<string, Zones>
+      | undefined;
+    const newPermanents = (msg as { newPermanents?: unknown }).newPermanents as
+      | GameState["permanents"]
+      | undefined;
+
+    if (!id) return;
+
+    const pending = get().pendingArtifactCast;
+    if (!pending || pending.id !== id) return;
+
+    // Skip if we're the caster - we already have the state
+    const actorKey = get().actorKey;
+    if (actorKey === pending.casterSeat) return;
+
+    // Build update object
+    const update: Partial<GameState> = { pendingArtifactCast: null };
+
+    // Apply zone changes from caster
+    if (newZones && casterSeat && newZones[casterSeat]) {
+      const currentZones = get().zones;
+      update.zones = {
+        ...currentZones,
+        [casterSeat]: newZones[casterSeat],
+      };
+    }
+
+    // Apply permanents changes (spell placed on board)
+    if (newPermanents) {
+      update.permanents = newPermanents;
+    }
+
+    set(update as GameState);
+
+    try {
+      const displayName =
+        pending.artifactType === "toolbox" ? "Toolbox" : "Silver Bullet";
+      get().log(
+        `[${pending.casterSeat.toUpperCase()}] ${pending.bearer.name} casts ${spellName || "spell"} via ${displayName}`,
+      );
+    } catch {}
+    return;
+  }
+
+  if (t === "artifactCastCancel") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+
+    if (!id) return;
+
+    const pending = get().pendingArtifactCast;
+    if (!pending || pending.id !== id) return;
+
+    // Skip if we're the caster - we already have the state
+    const actorKey = get().actorKey;
+    if (actorKey === pending.casterSeat) return;
+
+    set({ pendingArtifactCast: null } as Partial<GameState> as GameState);
+
+    try {
+      const displayName =
+        pending.artifactType === "toolbox" ? "Toolbox" : "Silver Bullet";
+      get().log(`[${pending.casterSeat.toUpperCase()}] cancels ${displayName}`);
+    } catch {}
+    return;
+  }
 }

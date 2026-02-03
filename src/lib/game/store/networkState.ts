@@ -348,11 +348,33 @@ export const createNetworkSlice: StateCreator<
             stateP2Graveyard: state.zones?.p2?.graveyard?.length,
           });
         } catch {}
-        let zonesCandidate = replaceKeys.has("zones")
-          ? (p.zones as GameState["zones"])
-          : (deepMergeReplaceArrays(state.zones, p.zones) as Partial<
-              Record<PlayerKey, GameState["zones"][PlayerKey]>
-            >);
+        // When a zones patch includes data for a seat, replace that seat's
+        // zones wholesale instead of deep-merging individual zone arrays.
+        // createZonesPatchFor always sends ALL zone arrays for a seat, so
+        // seat-level replacement is safe and prevents stale data from surviving
+        // (e.g., a card remaining in the graveyard after being drawn to hand).
+        let zonesCandidate: Partial<
+          Record<PlayerKey, GameState["zones"][PlayerKey]>
+        >;
+        if (replaceKeys.has("zones")) {
+          zonesCandidate = p.zones as GameState["zones"];
+        } else {
+          const patchZones = p.zones as Partial<
+            Record<PlayerKey, GameState["zones"][PlayerKey]>
+          >;
+          const merged = { ...state.zones } as Record<
+            PlayerKey,
+            GameState["zones"][PlayerKey]
+          >;
+          // For each seat in the patch, replace the entire seat zones object
+          // rather than deep-merging (which could leave stale zone arrays)
+          for (const seat of ["p1", "p2"] as PlayerKey[]) {
+            if (patchZones[seat] && typeof patchZones[seat] === "object") {
+              merged[seat] = patchZones[seat] as GameState["zones"][PlayerKey];
+            }
+          }
+          zonesCandidate = merged;
+        }
 
         // CRITICAL: Filter out stolen cards from incoming zones patches
         // Server doesn't know about pithImpHands, so it may re-add stolen cards during turn transitions
