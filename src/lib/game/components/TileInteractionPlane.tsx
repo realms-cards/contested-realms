@@ -124,7 +124,9 @@ export function TileInteractionPlane({
       }}
       onPointerUp={(e: ThreeEvent<PointerEvent>) => {
         // Complete switch site if a source is selected - check this first before other handlers
-        if (switchSiteSource && onCompleteSwitchSite) {
+        // (Skip during earthquake rearranging - earthquake has its own swap handler below)
+        if (switchSiteSource && onCompleteSwitchSite &&
+            !(pendingEarthquake?.phase === "rearranging")) {
           e.stopPropagation();
           onCompleteSwitchSite(tileX, tileY);
           return;

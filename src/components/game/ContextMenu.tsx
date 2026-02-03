@@ -1420,7 +1420,8 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
       };
     }
     // Only Spellbook/Atlas can be shuffled; Collection and Cemetery are not shuffled
-    if (isMine && isCurrent && (t.from === "spellbook" || t.from === "atlas")) {
+    // Shuffling own piles is allowed even when it's not your turn
+    if (isMine && (t.from === "spellbook" || t.from === "atlas")) {
       doShufflePile = () => {
         if (t.from === "spellbook") shuffleSpellbook(t.who);
         else shuffleAtlas(t.who);

@@ -15,12 +15,14 @@ import {
   THRESHOLD_GRANT_BY_NAME,
   VOID_MANA_PROVIDERS,
 } from "@/lib/game/mana-providers";
-import { isTowerOfBabel } from "../babelTowerState";
+import { isBaseOfBabel, isTowerOfBabel } from "../babelTowerState";
 import { getAdjacentCells, parseCellKey } from "./boardHelpers";
 import type {
   AvatarState,
+  BabelTowerMerge,
   BoardState,
   CardRef,
+  CellKey,
   GameState,
   Permanents,
   Phase,
@@ -224,6 +226,7 @@ export const computeThresholdTotals = (
   who: PlayerKey,
   avatar?: AvatarState | null,
   specialSiteState?: SpecialSiteState | null,
+  babelTowers?: BabelTowerMerge[],
 ): Thresholds => {
   const owner = playerKeyToOwner(who);
   const boardHeight = board?.size?.h ?? 4;
@@ -314,6 +317,26 @@ export const computeThresholdTotals = (
       continue;
     }
 
+    // Tower of Babel: Base provides earth, Apex provides air
+    // When merged, both thresholds apply. Hardcoded because card.thresholds
+    // may be null depending on the data pipeline.
+    if (isBaseOfBabel(siteName)) {
+      totals.earth += 1;
+      // If merged with Apex, also grant air threshold
+      if (babelTowers) {
+        const merge = babelTowers.find((t) => t.cellKey === (cellKey as CellKey));
+        if (merge) {
+          totals.air += 1;
+        }
+      }
+      continue;
+    }
+    if (siteName.includes("apex of babel")) {
+      // Apex played as a standalone site (not merged)
+      totals.air += 1;
+      continue;
+    }
+
     // Standard threshold from site card data (fallback)
     accumulateThresholds(totals, tile?.card?.thresholds ?? null);
   }
@@ -371,6 +394,7 @@ export const getCachedThresholdTotals = (
     who,
     avatarRef,
     state.specialSiteState,
+    state.babelTowers,
   );
 };
 
@@ -437,6 +461,7 @@ export const computeAvailableMana = (
   thresholds?: Thresholds | null,
   currentTurn?: number,
   etherCoresInVoidAtTurnStart?: string[],
+  babelTowers?: BabelTowerMerge[],
 ): number => {
   const owner = playerKeyToOwner(who);
   const opponent: PlayerKey = who === "p1" ? "p2" : "p1";
@@ -530,7 +555,11 @@ export const computeAvailableMana = (
     }
 
     // Tower of Babel provides 2 mana (merged from Base + Apex)
-    if (isTowerOfBabel(siteName)) {
+    if (
+      isTowerOfBabel(siteName) ||
+      (babelTowers && isBaseOfBabel(siteName) &&
+        babelTowers.some((t) => t.cellKey === (cellKey as CellKey)))
+    ) {
       mana += 2;
       continue;
     }

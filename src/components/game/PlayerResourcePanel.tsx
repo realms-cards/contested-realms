@@ -244,6 +244,8 @@ export function PlayerResourceColumn({
   const avatar = useGameStore((s) => s.avatars[player]);
   const specialSiteState = useGameStore((s) => s.specialSiteState);
 
+  const babelTowers = useGameStore((s) => s.babelTowers);
+
   // Compute thresholds from subscribed state
   const thresholds = useMemo(() => {
     const result = computeThresholdTotals(
@@ -252,9 +254,10 @@ export function PlayerResourceColumn({
       player,
       avatar,
       specialSiteState,
+      babelTowers,
     );
     return result;
-  }, [boardSize, boardSites, permanents, player, avatar, specialSiteState]);
+  }, [boardSize, boardSites, permanents, player, avatar, specialSiteState, babelTowers]);
 
   // Compute mana from sites + permanents (including cores)
   const owner = player === "p1" ? 1 : 2;
@@ -288,6 +291,9 @@ export function PlayerResourceColumn({
       zones,
       specialSiteState,
       thresholds,
+      undefined,
+      undefined,
+      babelTowers,
     );
     return { baseMana: total, mana: Math.max(0, available + manaOffset) };
   }, [

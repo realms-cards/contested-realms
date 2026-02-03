@@ -33,6 +33,7 @@ export default function Threshold3D({
   const permanents = useGameStore((s) => s.permanents);
   const avatar = useGameStore((s) => s.avatars[owner]);
   const specialSiteState = useGameStore((s) => s.specialSiteState);
+  const babelTowers = useGameStore((s) => s.babelTowers);
 
   // Compute thresholds from the subscribed state
   const thresholds = useMemo(
@@ -42,9 +43,10 @@ export default function Threshold3D({
         permanents,
         owner,
         avatar,
-        specialSiteState
+        specialSiteState,
+        babelTowers
       ),
-    [boardSize, boardSites, permanents, owner, avatar, specialSiteState]
+    [boardSize, boardSites, permanents, owner, avatar, specialSiteState, babelTowers]
   );
 
   // Layout
