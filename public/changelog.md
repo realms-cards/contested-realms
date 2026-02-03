@@ -5,12 +5,14 @@
 ### Feb 18 - Garden of Eden and Reveal Overlay
 
 - **Solo VS CPU mode added** not very smart, mostly for goldfishing purposes
-- **add show revealed cards to opponent**
 - **add Garden of Eden custom resolver** - when active, players can only draw one card per turn
+- **add toolbox and silver bullet resolvers**
 - **add Silenced token** - when placed on a site, it prevents the sites ability
 - **fix imposter masks not transporting to opponent**
 - **fix Ether Core providing mana only when in void at beginning of turn!**
-- **add Harbinger 1 mana discount** to first portal minion cast of turn
+- **add Harbinger 1 mana discount** to first minion cast to a portal this turn
+- **fix take card from cemetery**
+- **add show revealed cards to opponent**
 
 ## January 2026
 
