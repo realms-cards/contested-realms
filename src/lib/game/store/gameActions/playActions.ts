@@ -233,7 +233,7 @@ export const createPlayActionsSlice: StateCreator<
         const req = (card.thresholds || {}) as Partial<
           Record<keyof Thresholds, number>
         >;
-        const have = computeThresholdTotals(state.board, state.permanents, who);
+        const have = computeThresholdTotals(state.board, state.permanents, who, undefined, undefined, state.babelTowers);
         const miss: string[] = [];
         for (const kk of Object.keys(req) as (keyof Thresholds)[]) {
           const need = Number(req[kk] ?? 0);

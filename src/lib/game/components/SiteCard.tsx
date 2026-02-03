@@ -304,7 +304,8 @@ export function SiteCard({
 
   const handlePointerUp = (e: ThreeEvent<PointerEvent>) => {
     // If switching sites, complete the switch when clicking on this site
-    if (switchSiteSource && onCompleteSwitchSite) {
+    // (Skip during earthquake rearranging - earthquake has its own swap handler)
+    if (switchSiteSource && onCompleteSwitchSite && !isInEarthquakeArea) {
       e.stopPropagation();
       onCompleteSwitchSite(tileX, tileY);
     }

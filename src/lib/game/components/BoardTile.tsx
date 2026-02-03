@@ -364,6 +364,7 @@ export function BoardTile({
         cardScale={cardScale}
         stolenCards={stolenCards}
         hasSite={Boolean(site)}
+        isBabelTower={babelTowers.some((t) => t.cellKey === tileKey)}
       />
 
       {showGrid && (

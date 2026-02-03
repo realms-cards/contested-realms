@@ -1098,7 +1098,7 @@ export default function GameToolbox({
       cost: card.cost,
       thresholds: null, // Toolbox cards don't enforce thresholds
     });
-    setCardSearchOpen(false);
+    // Keep dialog open so user can draw multiple cards; closed via Cancel button
   };
 
   const collapsed = !open;

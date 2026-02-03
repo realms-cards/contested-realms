@@ -184,6 +184,7 @@ export type PermanentStackProps = {
   cardScale: number;
   stolenCards: GameState["stolenCards"];
   hasSite?: boolean;
+  isBabelTower?: boolean;
 };
 
 /** Counter badge with +/- buttons that appear on hover */
@@ -322,6 +323,7 @@ export function PermanentStack({
   cardScale,
   stolenCards: _stolenCards,
   hasSite = false,
+  isBabelTower = false,
 }: PermanentStackProps) {
   if (items.length === 0) {
     return null;
@@ -513,8 +515,9 @@ export function PermanentStack({
         // Burrowed cards at ground level, non-burrowed cards elevated above them
         // When avatar is on this tile, lift permanents above the avatar
         // When site is on this tile, lift permanents above the site (site rendered by SiteCard)
+        // Tower of Babel has two stacked cards, so lift an extra layer
         const avatarLift = avatarOnThisTile ? layerLift : 0;
-        const siteLift = hasSite && !tokenSiteReplace ? layerLift : 0;
+        const siteLift = hasSite && !tokenSiteReplace ? layerLift * (isBabelTower ? 2 : 1) : 0;
         const baseY = isBurrowed
           ? burrowedElevation
           : tokenSiteReplace
