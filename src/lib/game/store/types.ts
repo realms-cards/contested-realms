@@ -1053,6 +1053,38 @@ export type PendingRaiseDead = {
   createdAt: number;
 };
 
+// --- Artifact Cast State (Toolbox, Silver Bullet) ---------------------
+// Allows bearer to cast a spell from collection with rarity restriction
+export type ArtifactCastType = "toolbox" | "silver_bullet";
+
+export type ArtifactCastPhase =
+  | "selecting" // Player selecting spell from collection
+  | "casting" // Spell selected, playing to board
+  | "complete";
+
+export type PendingArtifactCast = {
+  id: string;
+  artifactType: ArtifactCastType;
+  casterSeat: PlayerKey;
+  artifact: {
+    at: CellKey;
+    index: number;
+    instanceId: string | null;
+    name: string;
+  };
+  bearer: {
+    kind: "permanent" | "avatar";
+    at: CellKey;
+    index: number; // -1 for avatar
+    instanceId: string | null;
+    name: string;
+  };
+  phase: ArtifactCastPhase;
+  eligibleSpells: CardRef[];
+  selectedSpell: CardRef | null;
+  createdAt: number;
+};
+
 // --- Generic Auto-Resolve Confirmation State --------------------------
 // Used by resolvers that need user confirmation before auto-resolving
 // (for silence effects or manual resolution preference)
@@ -1863,6 +1895,28 @@ export type GameState = {
   selectLegionOfGallCard: (index: number) => void;
   resolveLegionOfGall: () => void;
   cancelLegionOfGall: () => void;
+  // Artifact Cast (Toolbox = Ordinary, Silver Bullet = Exceptional spells from collection)
+  pendingArtifactCast: PendingArtifactCast | null;
+  beginArtifactCast: (input: {
+    artifactType: ArtifactCastType;
+    casterSeat: PlayerKey;
+    artifact: {
+      at: CellKey;
+      index: number;
+      instanceId: string | null;
+      name: string;
+    };
+    bearer: {
+      kind: "permanent" | "avatar";
+      at: CellKey;
+      index: number;
+      instanceId: string | null;
+      name: string;
+    };
+  }) => void;
+  selectArtifactCastSpell: (spell: CardRef) => void;
+  resolveArtifactCast: () => void;
+  cancelArtifactCast: () => void;
   // Raise Dead (summon random dead minion from any graveyard)
   pendingRaiseDead: PendingRaiseDead | null;
   beginRaiseDead: (input: {

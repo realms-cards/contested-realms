@@ -1668,7 +1668,10 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
 
         // DEBUG: Log what patch is being broadcast
         if (enrichedPatchToApply.zones) {
-          type ZoneLike = Record<string, { hand?: unknown[] }>;
+          type ZoneLike = Record<
+            string,
+            { hand?: unknown[]; graveyard?: unknown[] }
+          >;
           const patchZones = enrichedPatchToApply.zones as ZoneLike;
           const patchRecord = enrichedPatchToApply as Record<string, unknown>;
           console.log("[match-leader] Broadcasting zones patch:", {
@@ -1677,6 +1680,8 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
             hasP2: !!patchZones?.p2,
             p1HandCount: patchZones?.p1?.hand?.length,
             p2HandCount: patchZones?.p2?.hand?.length,
+            p1GraveyardCount: patchZones?.p1?.graveyard?.length,
+            p2GraveyardCount: patchZones?.p2?.graveyard?.length,
             hasAvatars: !!enrichedPatchToApply.avatars,
             hasPermanents: !!enrichedPatchToApply.permanents,
             hasReplaceKeys: !!patchRecord.__replaceKeys,

@@ -8,6 +8,7 @@ import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import AccusationOverlay from "@/components/game/AccusationOverlay";
 import { AnimistCastChoiceOverlay } from "@/components/game/AnimistCastChoiceOverlay";
 import AnnualFairOverlay from "@/components/game/AnnualFairOverlay";
+import ArtifactCastOverlay from "@/components/game/ArtifactCastOverlay";
 import AssortedAnimalsOverlay from "@/components/game/AssortedAnimalsOverlay";
 import AtlanteanFateOverlay from "@/components/game/AtlanteanFateOverlay";
 import AudioControls from "@/components/game/AudioControls";
@@ -1040,6 +1041,8 @@ export default function PlayPage() {
       <RaiseDeadOverlay />
       {/* Legion of Gall Overlay (inspect and banish from opponent collection) */}
       <LegionOfGallOverlay />
+      {/* Artifact Cast Overlay (Toolbox, Silver Bullet) */}
+      <ArtifactCastOverlay />
       {/* Auto-Resolve Confirmation Overlay (for silence effects) */}
       <AutoResolveConfirmOverlay />
       {/* Dhol Chants Overlay */}
