@@ -15,6 +15,7 @@
 - **add show revealed cards to opponent**
 - **fix Discord bot lobby creation from queue**
 - **save camera and playmat settings**
+- **fix import list to collection**
 
 ## January 2026
 
