@@ -871,6 +871,7 @@ export default function OnlineProvider({
             cellKey?: string;
             seat?: string;
             isActionToast?: boolean;
+            showToSelf?: boolean;
           }
         | undefined;
       if (detail?.message) {
@@ -889,10 +890,11 @@ export default function OnlineProvider({
         }
 
         // Skip toast for the active player (only show to opponent)
+        // Unless showToSelf is true (for warnings like Garden of Eden draw limit)
         const matchPlayers = matchRef.current?.players;
         const myId = meRef.current?.id;
 
-        if (detail.seat && myId && matchPlayers) {
+        if (detail.seat && myId && matchPlayers && !detail.showToSelf) {
           const mySeatIndex = matchPlayers.findIndex((p) => p.id === myId);
           const myPlayerKey =
             mySeatIndex === 0 ? "p1" : mySeatIndex === 1 ? "p2" : null;

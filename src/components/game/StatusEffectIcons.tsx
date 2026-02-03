@@ -8,6 +8,7 @@ import { siteHasSilencedToken } from "@/lib/game/store/utils/resourceHelpers";
 /** Card image URLs */
 const MORTUARY_IMAGE_URL = "/api/images/bet_mismanaged_mortuary_b_s";
 const ATLANTEAN_FATE_IMAGE_URL = "/api/images/alp_atlantean_fate_b_s";
+const GARDEN_OF_EDEN_IMAGE_URL = "/api/images/alp_garden_of_eden_b_s";
 
 /** Status effect type for unified display */
 interface StatusEffect {
@@ -16,7 +17,12 @@ interface StatusEffect {
   title: string;
   description: string;
   controllerSeat: PlayerKey;
-  effectType: "mortuary" | "atlanteanFate" | "counter" | "aura";
+  effectType:
+    | "mortuary"
+    | "atlanteanFate"
+    | "gardenOfEden"
+    | "counter"
+    | "aura";
   isSilenced?: boolean; // Whether this effect is silenced (show strikethrough)
 }
 
@@ -140,6 +146,7 @@ export default function PlayerStatusEffects() {
   const atlanteanFateAuras = useGameStore(
     (s) => s.specialSiteState.atlanteanFateAuras,
   );
+  const gardenOfEdenLocations = useGameStore((s) => s.gardenOfEdenLocations);
   const permanents = useGameStore((s) => s.permanents);
   const boardSites = useGameStore((s) => s.board.sites);
 
@@ -171,6 +178,32 @@ export default function PlayerStatusEffects() {
         description: "Mismanaged Mortuary active",
         controllerSeat,
         effectType: "mortuary",
+      });
+    }
+
+    // --- Garden of Eden (draw limit) ---
+    // Check for any active Garden of Eden (affects both players)
+    for (const seat of ["p1", "p2"] as PlayerKey[]) {
+      const entry = gardenOfEdenLocations[seat];
+      if (!entry) continue;
+
+      // Check if site still exists on board
+      const siteStillExists = !!boardSites[entry.cellKey];
+      if (!siteStillExists) continue;
+
+      // Check if silenced
+      const isSilenced = siteHasSilencedToken(entry.cellKey, permanents);
+
+      effects.push({
+        id: `garden-of-eden-${seat}`,
+        imageUrl: GARDEN_OF_EDEN_IMAGE_URL,
+        title: "Garden of Eden",
+        description: isSilenced
+          ? "Effect suppressed"
+          : "Draw limit: 1 card/turn",
+        controllerSeat: seat,
+        effectType: "gardenOfEden",
+        isSilenced,
       });
     }
 
@@ -237,7 +270,13 @@ export default function PlayerStatusEffects() {
     }
 
     return effects;
-  }, [mismanagedMortuaries, atlanteanFateAuras, permanents, boardSites]);
+  }, [
+    mismanagedMortuaries,
+    atlanteanFateAuras,
+    gardenOfEdenLocations,
+    permanents,
+    boardSites,
+  ]);
 
   if (activeEffects.length === 0) return null;
 

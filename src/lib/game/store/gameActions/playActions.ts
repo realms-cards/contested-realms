@@ -1,6 +1,7 @@
 import type { StateCreator } from "zustand";
-import { isAnimist } from "@/lib/game/avatarAbilities";
+import { isAnimist, isHarbinger } from "@/lib/game/avatarAbilities";
 import { isGardenOfEden } from "../gardenOfEdenState";
+import { isPortalTile } from "../portalState";
 import {
   BEACON_GENESIS_SITES,
   ELEMENT_CHOICE_SITES,
@@ -669,12 +670,51 @@ export const createPlayActionsSlice: StateCreator<
         } catch {}
       }
       // Subtract mana cost from available mana when playing non-site cards from hand
-      const manaCost = getManaCost(card, state.metaByCardId);
+      let manaCost = getManaCost(card, state.metaByCardId);
+
+      // Harbinger Portal Discount: Once per turn, if Harbinger casts a minion to a portal tile,
+      // reduce the mana cost by 1
+      let harbingerPortalDiscountApplied = false;
+      if (type.includes("minion") && !type.includes("token") && manaCost > 0) {
+        // Check if player is Harbinger (or masked as Harbinger)
+        const avatar = state.avatars[who];
+        const avatarName = avatar?.card?.name;
+        const maskedState = state.imposterMasks[who];
+        const effectiveAvatarName = maskedState?.maskAvatar?.name ?? avatarName;
+
+        if (isHarbinger(effectiveAvatarName)) {
+          // Check if discount not yet used this turn
+          if (!state.harbingerPortalDiscountUsed[who]) {
+            // Check if target cell is a portal tile owned by this Harbinger
+            const { isPortal, owner: portalOwner } = isPortalTile(
+              x,
+              y,
+              state.portalState,
+            );
+            const playerOwner = who === "p1" ? "p1" : "p2";
+            if (isPortal && portalOwner === playerOwner) {
+              // Apply discount
+              manaCost = Math.max(0, manaCost - 1);
+              harbingerPortalDiscountApplied = true;
+              get().log(
+                `[Harbinger Portal] ${card.name} cost reduced by 1 (portal discount)`,
+              );
+            }
+          }
+        }
+      }
+
       const currentMana = Number(state.players[who]?.mana || 0);
       const nextMana =
         manaCost > 0 && !type.includes("token")
           ? currentMana - manaCost
           : currentMana;
+
+      // Update Harbinger portal discount usage if applied
+      const harbingerPortalDiscountUsedNext = harbingerPortalDiscountApplied
+        ? { ...state.harbingerPortalDiscountUsed, [who]: true }
+        : null;
+
       const playersNext =
         nextMana !== currentMana
           ? {
@@ -714,6 +754,9 @@ export const createPlayActionsSlice: StateCreator<
       // Only send affected player's data to avoid overwriting opponent's state
       if (playersNext)
         combined.players = { [who]: playersNext[who] } as GameState["players"];
+      // Include Harbinger portal discount usage in patch
+      if (harbingerPortalDiscountUsedNext)
+        combined.harbingerPortalDiscountUsed = harbingerPortalDiscountUsedNext;
       // Include subsurface position/ability in patch for opponent sync
       if (subsurfacePosition && subsurfaceAbility) {
         combined.permanentPositions = {
@@ -805,6 +848,9 @@ export const createPlayActionsSlice: StateCreator<
           selectedPermanent: null,
           castPlacementMode: null,
           ...(playersNext ? { players: playersNext } : {}),
+          ...(harbingerPortalDiscountUsedNext
+            ? { harbingerPortalDiscountUsed: harbingerPortalDiscountUsedNext }
+            : {}),
           ...(subsurfacePosition
             ? {
                 permanentPositions: {
@@ -1212,6 +1258,9 @@ export const createPlayActionsSlice: StateCreator<
         selectedPermanent: null,
         castPlacementMode: null,
         ...(playersNext ? { players: playersNext } : {}),
+        ...(harbingerPortalDiscountUsedNext
+          ? { harbingerPortalDiscountUsed: harbingerPortalDiscountUsedNext }
+          : {}),
         ...(nextInteractionLog ? { interactionLog: nextInteractionLog } : {}),
         // Subsurface cast: set position + ability synchronously in state
         ...(subsurfacePosition

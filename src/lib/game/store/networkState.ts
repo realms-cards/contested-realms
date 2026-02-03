@@ -984,6 +984,18 @@ export const createNetworkSlice: StateCreator<
       } else if (replaceKeys.has("necromancerSkeletonUsed")) {
         next.necromancerSkeletonUsed = { p1: false, p2: false };
       }
+      // Harbinger portal discount used state (Gothic expansion)
+      if (p.harbingerPortalDiscountUsed !== undefined) {
+        next.harbingerPortalDiscountUsed = p.harbingerPortalDiscountUsed;
+      } else if (replaceKeys.has("harbingerPortalDiscountUsed")) {
+        next.harbingerPortalDiscountUsed = { p1: false, p2: false };
+      }
+      // Ether Core turn-start tracking (for void mana calculation)
+      if (p.etherCoresInVoidAtTurnStart !== undefined) {
+        next.etherCoresInVoidAtTurnStart = p.etherCoresInVoidAtTurnStart;
+      } else if (replaceKeys.has("etherCoresInVoidAtTurnStart")) {
+        next.etherCoresInVoidAtTurnStart = [];
+      }
       // Mephistopheles summon used state (Gothic expansion)
       if (p.mephistophelesSummonUsed !== undefined) {
         next.mephistophelesSummonUsed = p.mephistophelesSummonUsed;
@@ -1012,6 +1024,15 @@ export const createNetworkSlice: StateCreator<
       // Always replace, don't merge (arrays inside)
       if (p.specialSiteState !== undefined) {
         next.specialSiteState = p.specialSiteState;
+      }
+      // Garden of Eden locations (draw limit tracking)
+      // Replace completely - both players need this data
+      if (p.gardenOfEdenLocations !== undefined) {
+        next.gardenOfEdenLocations = p.gardenOfEdenLocations;
+      }
+      // Cards drawn this turn (for Garden of Eden tracking)
+      if (p.cardsDrawnThisTurn !== undefined) {
+        next.cardsDrawnThisTurn = p.cardsDrawnThisTurn;
       }
       // Pith Imp private hands (stolen cards)
       // CRITICAL: Do NOT clear based on replaceKeys - owner tracks locally, server snapshots would wipe it
@@ -1386,6 +1407,14 @@ export const createNetworkSlice: StateCreator<
       if (p.necromancerSkeletonUsed !== undefined) {
         next.necromancerSkeletonUsed = p.necromancerSkeletonUsed;
       }
+      // Harbinger portal discount used state - applyPatch version
+      if (p.harbingerPortalDiscountUsed !== undefined) {
+        next.harbingerPortalDiscountUsed = p.harbingerPortalDiscountUsed;
+      }
+      // Ether Core turn-start tracking - applyPatch version
+      if (p.etherCoresInVoidAtTurnStart !== undefined) {
+        next.etherCoresInVoidAtTurnStart = p.etherCoresInVoidAtTurnStart;
+      }
       // Mephistopheles summon used state - applyPatch version
       if (p.mephistophelesSummonUsed !== undefined) {
         next.mephistophelesSummonUsed = p.mephistophelesSummonUsed;
@@ -1408,6 +1437,14 @@ export const createNetworkSlice: StateCreator<
         next.specialSiteState = replaceKeys.has("specialSiteState")
           ? (p.specialSiteState as GameState["specialSiteState"])
           : (p.specialSiteState as GameState["specialSiteState"]);
+      }
+      // Garden of Eden locations - applyPatch version
+      if (p.gardenOfEdenLocations !== undefined) {
+        next.gardenOfEdenLocations = p.gardenOfEdenLocations;
+      }
+      // Cards drawn this turn - applyPatch version
+      if (p.cardsDrawnThisTurn !== undefined) {
+        next.cardsDrawnThisTurn = p.cardsDrawnThisTurn;
       }
       // Babel Tower merge tracking - applyPatch version
       if (p.babelTowers !== undefined) {

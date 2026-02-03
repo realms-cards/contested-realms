@@ -932,6 +932,88 @@ Use these as reference implementations.
 
 ---
 
+## Special Sites (Passive Effects)
+
+Special sites are **NOT** custom resolvers - they don't have overlays or user interactions. Instead, they register persistent effects when played and clean up when removed.
+
+### Implementation Pattern (e.g., Mismanaged Mortuary, Garden of Eden)
+
+**Key differences from resolvers:**
+
+1. **No overlay component** - Effects are passive/automatic
+2. **Register on play** - Call registration function in `playActions.ts` site trigger
+3. **Cleanup on removal** - Hook into `removeSiteChoice()` in `specialSiteState.ts`
+4. **State via patches** - Sync state via `trySendPatch()`, not custom messages (optional messages for logs)
+
+### Required Integration Points
+
+1. **State Slice** (`src/lib/game/store/<siteName>State.ts`)
+   - Detection function: `is<SiteName>(cardName: string): boolean`
+   - Registration function: `register<SiteName>(input): void`
+   - Unregistration function: `unregister<SiteName>(ownerSeat, cellKey): void`
+   - Effect check function: `is<SiteName>Active(seat): boolean`
+
+2. **Play Action Trigger** (`src/lib/game/store/gameActions/playActions.ts`)
+
+   ```typescript
+   if (is<SiteName>(siteName)) {
+     const ownerSeat = owner === 1 ? "p1" : "p2";
+     state.register<SiteName>({ site: {...}, ownerSeat });
+     return;
+   }
+   ```
+
+3. **Cleanup on Removal** (`src/lib/game/store/specialSiteState.ts` in `removeSiteChoice`)
+
+   ```typescript
+   // Check and unregister <SiteName> if this site was one
+   const p1Entry = state.<siteName>Locations?.p1;
+   const p2Entry = state.<siteName>Locations?.p2;
+   if (p1Entry?.cellKey === cellKey) {
+     state.unregister<SiteName>("p1", cellKey);
+   }
+   if (p2Entry?.cellKey === cellKey) {
+     state.unregister<SiteName>("p2", cellKey);
+   }
+   ```
+
+4. **Effect Enforcement** (where the effect applies)
+   - For draw limits: Check in `zoneState.ts` `drawFrom()`/`drawFromBottom()`
+   - For graveyard swap: Check in zone movement functions
+   - For threshold bonuses: Check in `resourceHelpers.ts`
+
+5. **Server Message Registration** (`server/index.ts`)
+   - Add message types to the resolver broadcast block if using custom messages
+
+6. **Message Handlers** (`customMessageHandlers.ts`)
+   - Only needed if using custom messages for online sync (patches often suffice)
+
+### Example: Garden of Eden (Draw Limit Site)
+
+**Card Effect:** "Players may only draw one card per turn."
+
+**Files:**
+
+- State: `src/lib/game/store/gardenOfEdenState.ts`
+- Types: `GardenOfEdenEntry`, `GardenOfEdenLocations` in `types.ts`
+- Trigger: `playActions.ts` calls `registerGardenOfEden()`
+- Cleanup: `specialSiteState.ts` `removeSiteChoice()` calls `unregisterGardenOfEden()`
+- Enforcement: `zoneState.ts` `drawFrom()`/`drawFromBottom()` check `canDrawCard()`
+- Counter reset: `coreState.ts` `endTurn()` resets `cardsDrawnThisTurn`
+
+### Example: Mismanaged Mortuary (Cemetery Swap)
+
+**Card Effect:** "Treat your opponent's cemetery as yours, and vice versa."
+
+**Files:**
+
+- State: Part of `specialSiteState.ts` (uses `specialSiteState.mismanagedMortuaries` array)
+- Trigger: `playActions.ts` calls `registerMismanagedMortuary()`
+- Cleanup: `specialSiteState.ts` `removeSiteChoice()` filters mortuaries array
+- Enforcement: `getEffectiveGraveyardSeat()` and `getEffectiveGraveyardSeatStatic()`
+
+---
+
 ## Recent Example: Legion of Gall
 
 **Card Effect:** "Genesis → Look at a collection and banish three cards from it."
