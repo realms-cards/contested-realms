@@ -67,8 +67,8 @@ import PlacementDialog from "@/components/game/PlacementDialog";
 import PlayerResourcePanels from "@/components/game/PlayerResourcePanel";
 import PrivateHandTargetingOverlay from "@/components/game/PrivateHandTargetingOverlay";
 import RaiseDeadOverlay from "@/components/game/RaiseDeadOverlay";
-import RevealOverlay from "@/components/game/RevealOverlay";
 import RestoreUiButton from "@/components/game/RestoreUiButton";
+import RevealOverlay from "@/components/game/RevealOverlay";
 import SearingTruthOverlay from "@/components/game/SearingTruthOverlay";
 import PlayerStatusEffects from "@/components/game/StatusEffectIcons";
 // SeerScreen is now integrated into OnlineMulliganScreen

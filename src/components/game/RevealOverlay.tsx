@@ -1,11 +1,11 @@
 "use client";
 
+import { X } from "lucide-react";
 import { useEffect, useMemo, useRef } from "react";
 import CardPreview from "@/components/game/CardPreview";
 import { cardRefToPreview } from "@/lib/game/card-preview.types";
 import type { CardRef, PlayerKey } from "@/lib/game/store";
 import { useGameStore } from "@/lib/game/store";
-import { X } from "lucide-react";
 
 export interface RevealOverlayProps {
   title?: string;
@@ -73,12 +73,16 @@ export default function RevealOverlay({
           <h2 className="text-2xl font-bold text-white mb-2">{title}</h2>
           {isOpponentReveal && revealedBy && (
             <p className="text-amber-300 text-lg">
-              Your opponent revealed {cardsToRender.length === 1 ? "a card" : `${cardsToRender.length} cards`}
+              Your opponent revealed{" "}
+              {cardsToRender.length === 1
+                ? "a card"
+                : `${cardsToRender.length} cards`}
             </p>
           )}
           <p className="text-white/60 text-sm mt-2">
             Press Escape, Space, Enter, or click outside to close
-            {autoCloseDelay > 0 && ` • Auto-closes in ${autoCloseDelay / 1000}s`}
+            {autoCloseDelay > 0 &&
+              ` • Auto-closes in ${autoCloseDelay / 1000}s`}
           </p>
         </div>
 
@@ -98,12 +102,7 @@ export default function RevealOverlay({
                 animation: `revealCardIn 0.3s ease-out ${index * 0.1}s both`,
               }}
             >
-              <CardPreview
-                card={cardRefToPreview(card)}
-                width={REVEAL_CARD_WIDTH}
-                height={REVEAL_CARD_HEIGHT}
-                showCardActions={false}
-              />
+              <CardPreview card={cardRefToPreview(card)} />
             </div>
           ))}
         </div>

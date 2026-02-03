@@ -2,13 +2,13 @@ import type { StateCreator } from "zustand";
 import { isMinionToken } from "@/lib/game/tokens";
 import { isMonumentByName, isAutomatonByName } from "../omphalosState";
 import type { GameState, Permanents, PlayerKey } from "../types";
+import { prepareCardForSeat } from "../utils/cardHelpers";
 import {
   cloneCardForPatch,
   createPermanentDeltaPatch,
   createPermanentsPatch,
 } from "../utils/patchHelpers";
 import { bumpPermanentVersion } from "../utils/permanentHelpers";
-import { prepareCardForSeat } from "../utils/cardHelpers";
 
 export type AttachmentActionsSlice = Pick<
   GameState,
