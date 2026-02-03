@@ -859,7 +859,7 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
       } as Partial<GameState> as GameState;
     }),
 
-  switchSitePosition: (sourceX, sourceY, targetX, targetY) =>
+  switchSitePosition: (sourceX, sourceY, targetX, targetY, opts) =>
     set((state) => {
       get().pushHistory();
       const sourceKey = toCellKey(sourceX, sourceY);
@@ -872,8 +872,8 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
         return state;
       }
 
-      // Check actor permissions in online mode
-      if (state.transport && state.actorKey) {
+      // Check actor permissions in online mode (bypassed for Earthquake swaps)
+      if (state.transport && state.actorKey && !opts?.bypassOwnerCheck) {
         const ownerSeat = seatFromOwner(sourceSite.owner);
         if (state.actorKey !== ownerSeat) {
           get().log("Cannot move opponent's site without consent");

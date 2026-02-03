@@ -546,6 +546,8 @@ export default function Board({
   const onCompleteSwitchSite = useCallback(
     (targetX: number, targetY: number) => {
       if (!switchSiteSource) return;
+      // During earthquake rearranging, swaps are handled by EarthquakeOverlay
+      if (resolvedStoreApi.getState().pendingEarthquake?.phase === "rearranging") return;
       // Block if already waiting for approval
       if (switchSitePending) return;
 

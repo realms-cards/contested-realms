@@ -2259,6 +2259,7 @@ export type GameState = {
     sourceY: number,
     targetX: number,
     targetY: number,
+    opts?: { bypassOwnerCheck?: boolean },
   ) => void;
   avatars: Record<PlayerKey, AvatarState>;
   permanents: Permanents;
