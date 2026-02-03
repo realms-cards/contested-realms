@@ -1,5 +1,6 @@
 import type { Finish } from "@prisma/client";
 import { NextRequest } from "next/server";
+import { getPriceForCard } from "@/lib/collection/price-cache";
 import {
   getAffiliateLink,
   buildPriceCacheKey,
@@ -54,6 +55,9 @@ export async function POST(req: NextRequest) {
       string,
       {
         marketPrice: number | null;
+        lowPrice: number | null;
+        midPrice: number | null;
+        highPrice: number | null;
         currency: string;
         affiliateUrl: string;
       }
@@ -87,11 +91,21 @@ export async function POST(req: NextRequest) {
         if (byFinish) variant = byFinish;
       }
 
+      const setName = variant?.set.name;
+      const priceData = setName
+        ? await getPriceForCard(card.name, setName, finish)
+        : null;
+
       const key = buildPriceCacheKey(cardId, variantId ?? null, finish);
       prices[key] = {
-        marketPrice: null, // Real pricing not available without API
+        marketPrice: priceData?.marketPrice ?? null,
+        lowPrice: priceData?.lowPrice ?? null,
+        midPrice: priceData?.midPrice ?? null,
+        highPrice: priceData?.highPrice ?? null,
         currency: "USD",
-        affiliateUrl: getAffiliateLink(card.name, variant?.set.name, finish),
+        affiliateUrl:
+          priceData?.affiliateUrl ??
+          getAffiliateLink(card.name, setName, finish),
       };
     }
 
@@ -99,7 +113,6 @@ export async function POST(req: NextRequest) {
       JSON.stringify({
         prices,
         notFound,
-        cacheHit: false, // No real caching without pricing data
       }),
       { status: 200, headers: { "content-type": "application/json" } }
     );

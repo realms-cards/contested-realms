@@ -1,5 +1,6 @@
 import type { Finish } from "@prisma/client";
 import { NextRequest } from "next/server";
+import { getPriceForCard } from "@/lib/collection/price-cache";
 import { getAffiliateLink } from "@/lib/collection/pricing-provider";
 import { prisma } from "@/lib/prisma";
 
@@ -55,21 +56,32 @@ export async function GET(
       variants = variants.filter((v) => v.finish === finish);
     }
 
-    // Build price data for each variant
-    // Note: Real pricing not available without TCGPlayer API
-    const prices = variants.map((v) => ({
-      variantId: v.id,
-      setName: v.set.name,
-      finish: v.finish,
-      marketPrice: null, // Not available without API
-      lowPrice: null,
-      midPrice: null,
-      highPrice: null,
-      currency: "USD" as const,
-      source: "tcgplayer" as const,
-      lastUpdated: new Date().toISOString(),
-      affiliateUrl: getAffiliateLink(card.name, v.set.name, v.finish),
-    }));
+    // Build price data for each variant using tcgcsv price cache
+    const prices = await Promise.all(
+      variants.map(async (v) => {
+        const priceData = await getPriceForCard(
+          card.name,
+          v.set.name,
+          v.finish,
+        );
+
+        return {
+          variantId: v.id,
+          setName: v.set.name,
+          finish: v.finish,
+          marketPrice: priceData?.marketPrice ?? null,
+          lowPrice: priceData?.lowPrice ?? null,
+          midPrice: priceData?.midPrice ?? null,
+          highPrice: priceData?.highPrice ?? null,
+          currency: "USD" as const,
+          source: "tcgplayer" as const,
+          lastUpdated: priceData?.lastUpdated ?? new Date().toISOString(),
+          affiliateUrl:
+            priceData?.affiliateUrl ??
+            getAffiliateLink(card.name, v.set.name, v.finish),
+        };
+      }),
+    );
 
     // If no variants match filters, still provide a generic affiliate link
     if (prices.length === 0) {
