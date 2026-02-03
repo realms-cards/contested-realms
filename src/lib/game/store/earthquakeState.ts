@@ -166,7 +166,7 @@ export const createEarthquakeSlice: StateCreator<
     if (from.x === to.x && from.y === to.y) return;
 
     // Use the existing switchSitePosition function
-    get().switchSitePosition(from.x, from.y, to.x, to.y);
+    get().switchSitePosition(from.x, from.y, to.x, to.y, { bypassOwnerCheck: true });
 
     // Record the swap
     const newSwaps = [...pending.swaps, { from, to }];

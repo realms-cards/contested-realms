@@ -14,6 +14,10 @@ export default function SwitchSiteHudOverlay() {
   const setSwitchSitePending = useGameStore((s) => s.setSwitchSitePending);
   const board = useGameStore((s) => s.board);
   const log = useGameStore((s) => s.log);
+  const pendingEarthquake = useGameStore((s) => s.pendingEarthquake);
+
+  // During earthquake rearranging, the EarthquakeOverlay handles its own UI
+  if (pendingEarthquake?.phase === "rearranging") return null;
 
   // Show overlay for either source selection or pending approval
   if (!switchSiteSource && !switchSitePending) return null;

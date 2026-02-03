@@ -326,6 +326,7 @@ export function BoardTile({
         switchSiteSource={switchSiteSource}
         onCompleteSwitchSite={onCompleteSwitchSite}
         babelTowers={babelTowers}
+        pendingEarthquake={earthquakeContext.pendingEarthquake}
       />
 
       <PermanentStack

@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
   if (!session?.user) {
     return new Response(
       JSON.stringify({ error: "Unauthorized", code: "UNAUTHORIZED" }),
-      { status: 401, headers: { "content-type": "application/json" } }
+      { status: 401, headers: { "content-type": "application/json" } },
     );
   }
 
@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
           error: "Your account could not be found in the database.",
           code: "USER_NOT_FOUND",
         }),
-        { status: 401, headers: { "content-type": "application/json" } }
+        { status: 401, headers: { "content-type": "application/json" } },
       );
     }
 
@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
     if (!text || typeof text !== "string") {
       return new Response(
         JSON.stringify({ error: "No text provided", code: "INVALID_INPUT" }),
-        { status: 400, headers: { "content-type": "application/json" } }
+        { status: 400, headers: { "content-type": "application/json" } },
       );
     }
 
@@ -65,17 +65,35 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // Look up cards by name
+      // Look up cards by name with their variants
       const cardNames = [...new Set(cardList.map((c) => c.name))];
       const cards = await prisma.card.findMany({
         where: {
           name: { in: cardNames, mode: "insensitive" },
         },
-        select: { id: true, name: true },
+        select: {
+          id: true,
+          name: true,
+          variants: {
+            select: {
+              id: true,
+              setId: true,
+              slug: true,
+            },
+            take: 1, // Just grab the first available variant
+          },
+        },
       });
 
       // Build name -> card mapping (case-insensitive)
-      const cardByName = new Map<string, { id: number; name: string }>();
+      const cardByName = new Map<
+        string,
+        {
+          id: number;
+          name: string;
+          variants: Array<{ id: number; setId: number | null; slug: string }>;
+        }
+      >();
       for (const card of cards) {
         cardByName.set(card.name.toLowerCase(), card);
       }
@@ -89,6 +107,11 @@ export async function POST(req: NextRequest) {
           added.push({ name: item.name, quantity: item.count, matched: false });
           continue;
         }
+
+        // Get variant info (first available variant for this card)
+        const variant = card.variants?.[0];
+        const variantId = variant?.id ?? null;
+        const setId = variant?.setId ?? null;
 
         // Upsert into collection
         const existing = await prisma.collectionCard.findFirst({
@@ -107,13 +130,20 @@ export async function POST(req: NextRequest) {
           const newQuantity = Math.min(99, existing.quantity + item.count);
           await prisma.collectionCard.update({
             where: { id: existing.id },
-            data: { quantity: newQuantity },
+            data: {
+              quantity: newQuantity,
+              // Also update variant/set if missing
+              variantId: existing.variantId ?? variantId,
+              setId: existing.setId ?? setId,
+            },
           });
         } else {
           await prisma.collectionCard.create({
             data: {
               userId,
               cardId: card.id,
+              variantId,
+              setId,
               finish: "Standard",
               quantity: Math.min(99, item.count),
             },
@@ -221,13 +251,13 @@ export async function POST(req: NextRequest) {
           let variant = card.variants.find(
             (v) =>
               v.set?.name?.toLowerCase() === line.set.toLowerCase() &&
-              v.finish === normalizedFinish
+              v.finish === normalizedFinish,
           );
 
           // Fall back to just set name match
           if (!variant && line.set) {
             variant = card.variants.find(
-              (v) => v.set?.name?.toLowerCase() === line.set.toLowerCase()
+              (v) => v.set?.name?.toLowerCase() === line.set.toLowerCase(),
             );
           }
 
@@ -285,7 +315,7 @@ export async function POST(req: NextRequest) {
         existingCards.map((e) => [
           `${e.cardId}-${e.variantId || "null"}-${e.finish}`,
           e,
-        ])
+        ]),
       );
 
       // Aggregate matched cards by unique key to handle duplicates in CSV
@@ -346,7 +376,7 @@ export async function POST(req: NextRequest) {
             prisma.collectionCard.update({
               where: { id: existing.id },
               data: { quantity: newQuantity, notes: newNotes },
-            })
+            }),
           );
         } else {
           createOps.push(
@@ -360,7 +390,7 @@ export async function POST(req: NextRequest) {
                 quantity: Math.min(99, match.count),
                 notes: match.notes || null,
               },
-            })
+            }),
           );
         }
       }
@@ -395,7 +425,7 @@ export async function POST(req: NextRequest) {
         parsedLines.push(parsed);
       }
 
-      // Batch lookup all card names at once (1 query instead of N)
+      // Batch lookup all card names at once with variants (1 query instead of N)
       const cardNames = parsedLines.map((p) => p.name);
       const cards = await prisma.card.findMany({
         where: {
@@ -404,7 +434,18 @@ export async function POST(req: NextRequest) {
             mode: "insensitive",
           },
         },
-        select: { id: true, name: true },
+        select: {
+          id: true,
+          name: true,
+          variants: {
+            select: {
+              id: true,
+              setId: true,
+              slug: true,
+            },
+            take: 1, // Just grab the first available variant
+          },
+        },
       });
 
       // Create lookup map (case-insensitive)
@@ -413,6 +454,8 @@ export async function POST(req: NextRequest) {
       // Match parsed lines to cards
       const matchedCards: Array<{
         cardId: number;
+        variantId: number | null;
+        setId: number | null;
         name: string;
         count: number;
       }> = [];
@@ -423,8 +466,11 @@ export async function POST(req: NextRequest) {
           added.push({ name: line.name, quantity: line.count, matched: false });
           continue;
         }
+        const variant = card.variants?.[0];
         matchedCards.push({
           cardId: card.id,
+          variantId: variant?.id ?? null,
+          setId: variant?.setId ?? null,
           name: card.name,
           count: line.count,
         });
@@ -438,7 +484,13 @@ export async function POST(req: NextRequest) {
           cardId: { in: cardIds },
           finish: "Standard",
         },
-        select: { id: true, cardId: true, quantity: true },
+        select: {
+          id: true,
+          cardId: true,
+          quantity: true,
+          variantId: true,
+          setId: true,
+        },
       });
 
       const existingByCardId = new Map(existingCards.map((e) => [e.cardId, e]));
@@ -458,8 +510,13 @@ export async function POST(req: NextRequest) {
           updateOps.push(
             prisma.collectionCard.update({
               where: { id: existing.id },
-              data: { quantity: newQuantity },
-            })
+              data: {
+                quantity: newQuantity,
+                // Also update variant/set if missing
+                variantId: existing.variantId ?? match.variantId,
+                setId: existing.setId ?? match.setId,
+              },
+            }),
           );
         } else {
           createOps.push(
@@ -467,10 +524,12 @@ export async function POST(req: NextRequest) {
               data: {
                 userId,
                 cardId: match.cardId,
+                variantId: match.variantId,
+                setId: match.setId,
                 finish: "Standard",
                 quantity: Math.min(99, match.count),
               },
-            })
+            }),
           );
         }
         added.push({
@@ -488,7 +547,7 @@ export async function POST(req: NextRequest) {
     } else {
       return new Response(
         JSON.stringify({ error: "Invalid format", code: "INVALID_FORMAT" }),
-        { status: 400, headers: { "content-type": "application/json" } }
+        { status: 400, headers: { "content-type": "application/json" } },
       );
     }
 
@@ -507,7 +566,7 @@ export async function POST(req: NextRequest) {
       {
         status: 400,
         headers: { "content-type": "application/json" },
-      }
+      },
     );
   }
 }
@@ -556,7 +615,7 @@ function normalizeFinish(finish: string): string {
  * - CardNexus format: "1 Valley (BETA)"
  */
 function parseCountAndNameCSV(
-  line: string
+  line: string,
 ): { name: string; count: number } | null {
   // Strategy:
   // 1. First try to match "count separator name" where separator is space or comma

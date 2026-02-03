@@ -72,6 +72,8 @@ export type SiteCardProps = {
   onCompleteSwitchSite?: (targetX: number, targetY: number) => void;
   // Babel Tower tracking for stacked card rendering
   babelTowers: BabelTowerMerge[];
+  // Earthquake rearrangement highlighting
+  pendingEarthquake?: GameState["pendingEarthquake"];
 };
 
 export function SiteCard({
@@ -113,6 +115,7 @@ export function SiteCard({
   switchSiteSource,
   onCompleteSwitchSite,
   babelTowers,
+  pendingEarthquake,
 }: SiteCardProps) {
   // These props are kept for future re-enablement of magic targeting hints
   void magicGuidesActive;
@@ -171,10 +174,37 @@ export function SiteCard({
     );
   }
 
+  // Check if this tile is within the earthquake 2x2 area
+  const isInEarthquakeArea = !!(
+    pendingEarthquake?.phase === "rearranging" &&
+    pendingEarthquake.areaCorner &&
+    tileX >= pendingEarthquake.areaCorner.x &&
+    tileX <= pendingEarthquake.areaCorner.x + 1 &&
+    tileY >= pendingEarthquake.areaCorner.y &&
+    tileY <= pendingEarthquake.areaCorner.y + 1
+  );
+
   function highlightColor(): string | null {
     let hl: string | null = null;
-    // Switch site source highlight (amber pulse)
+
+    // Earthquake rearranging highlights
+    if (isInEarthquakeArea && pendingEarthquake) {
+      const isSource =
+        switchSiteSource &&
+        switchSiteSource.x === tileX &&
+        switchSiteSource.y === tileY;
+      if (isSource) {
+        // Selected source site: pulsing highlight in caster's player color
+        hl = PLAYER_COLORS[pendingEarthquake.casterSeat];
+      } else if (switchSiteSource) {
+        // Other sites in area when a source is selected: subtle guide highlight
+        hl = HIGHLIGHT_SWITCH_SOURCE; // amber guide
+      }
+    }
+
+    // Switch site source highlight (non-earthquake)
     if (
+      !isInEarthquakeArea &&
       switchSiteSource &&
       switchSiteSource.x === tileX &&
       switchSiteSource.y === tileY
@@ -281,6 +311,13 @@ export function SiteCard({
   };
 
   const highlight = highlightColor();
+  // Pulse for source selection; static for earthquake guide targets
+  const isEarthquakeSource =
+    isInEarthquakeArea &&
+    !!switchSiteSource &&
+    switchSiteSource.x === tileX &&
+    switchSiteSource.y === tileY;
+  const shouldPulse = !isInEarthquakeArea || isEarthquakeSource;
 
   // Check if this is a merged Tower of Babel (Base + Apex stacked)
   // Match by cellKey - Tower of Babel is a concept, not a separate card
@@ -310,7 +347,7 @@ export function SiteCard({
             elevation={0.0002}
             color={highlight}
             renderOrder={1202}
-            pulse
+            pulse={shouldPulse}
           />
         </group>
       )}

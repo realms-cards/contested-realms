@@ -13,6 +13,8 @@
 - **add Harbinger 1 mana discount** to first minion cast to a portal this turn
 - **fix take card from cemetery**
 - **add show revealed cards to opponent**
+- **fix Discord bot lobby creation from queue**
+- **save camera and playmat settings**
 
 ## January 2026
 
