@@ -2,6 +2,10 @@ import type { Finish, Prisma } from "@prisma/client";
 import { NextRequest } from "next/server";
 import { getServerAuthSession } from "@/lib/auth";
 import { CacheKeys, invalidateCache } from "@/lib/cache/redis-cache";
+import {
+  getBulkPrices,
+  buildLookupKey,
+} from "@/lib/collection/price-cache";
 import type {
   CollectionListResponse,
   CollectionAddResponse,
@@ -197,47 +201,72 @@ export async function GET(req: NextRequest) {
       ? filteredCards.slice((page - 1) * limit, page * limit)
       : filteredCards;
 
+    // Fetch prices for the page of cards
+    const priceInputs = paginatedCards
+      .map((c) => {
+        const setName = c.set?.name ?? c.variant?.set?.name;
+        if (!setName) return null;
+        return { cardName: c.card.name, setName, finish: c.finish };
+      })
+      .filter(
+        (x): x is { cardName: string; setName: string; finish: Finish } =>
+          x !== null,
+      );
+
+    const priceMap = await getBulkPrices(priceInputs);
+
+    let totalValue: number | null = null;
     const response: CollectionListResponse = {
-      cards: paginatedCards.map((c) => ({
-        id: c.id,
-        cardId: c.cardId,
-        variantId: c.variantId,
-        setId: c.setId,
-        finish: c.finish,
-        quantity: c.quantity,
-        notes: c.notes,
-        card: {
-          name: c.card.name,
-          elements: c.card.elements,
-          subTypes: c.card.subTypes,
-        },
-        variant: c.variant
-          ? {
-              slug: c.variant.slug,
-              finish: c.variant.finish,
-              product: c.variant.product,
-            }
-          : null,
-        // Prefer collection.set, fall back to variant.set for legacy entries
-        set: c.set
-          ? { name: c.set.name }
-          : c.variant?.set
-            ? { name: c.variant.set.name }
+      cards: paginatedCards.map((c) => {
+        const setName = c.set?.name ?? c.variant?.set?.name ?? null;
+        let price = null;
+        if (setName) {
+          const key = buildLookupKey(c.card.name, setName, c.finish);
+          price = priceMap.get(key) ?? null;
+          if (price?.marketPrice != null) {
+            totalValue = (totalValue ?? 0) + price.marketPrice * c.quantity;
+          }
+        }
+        return {
+          id: c.id,
+          cardId: c.cardId,
+          variantId: c.variantId,
+          setId: c.setId,
+          finish: c.finish,
+          quantity: c.quantity,
+          notes: c.notes,
+          card: {
+            name: c.card.name,
+            elements: c.card.elements,
+            subTypes: c.card.subTypes,
+          },
+          variant: c.variant
+            ? {
+                slug: c.variant.slug,
+                finish: c.variant.finish,
+                product: c.variant.product,
+              }
             : null,
-        meta: (() => {
-          const meta = getMetaForCard(c);
-          if (!meta) return null;
-          return {
-            type: meta.type,
-            rarity: meta.rarity ?? "Unknown",
-            cost: meta.cost,
-            attack: meta.attack,
-            defence: meta.defence,
-            thresholds: meta.thresholds,
-          };
-        })(),
-        price: null, // Pricing to be added in later task
-      })),
+          set: c.set
+            ? { name: c.set.name }
+            : c.variant?.set
+              ? { name: c.variant.set.name }
+              : null,
+          meta: (() => {
+            const meta = getMetaForCard(c);
+            if (!meta) return null;
+            return {
+              type: meta.type,
+              rarity: meta.rarity ?? "Unknown",
+              cost: meta.cost,
+              attack: meta.attack,
+              defence: meta.defence,
+              thresholds: meta.thresholds,
+            };
+          })(),
+          price,
+        };
+      }),
       pagination: {
         page,
         limit,
@@ -247,7 +276,7 @@ export async function GET(req: NextRequest) {
       stats: {
         totalCards: statsAgg._sum.quantity || 0,
         uniqueCards: uniqueCount.length,
-        totalValue: null, // Pricing to be computed later
+        totalValue: totalValue != null ? Math.round(totalValue * 100) / 100 : null,
         currency: "USD",
       },
     };

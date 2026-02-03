@@ -1,11 +1,16 @@
 /**
  * Pricing Provider for Collection Tracker
  *
- * Currently implements TCGPlayer affiliate link generation.
- * Real-time pricing to be added when API access becomes available.
+ * Provides card pricing via tcgcsv.com price cache and
+ * TCGPlayer affiliate link generation.
  */
 
 import type { Finish } from "@prisma/client";
+import {
+  getBulkPrices as getBulkPricesFromCache,
+  getPriceForCard,
+  buildLookupKey,
+} from "./price-cache";
 import type { PriceData, PriceProvider } from "./types";
 
 // TCGPlayer affiliate configuration
@@ -47,25 +52,22 @@ function generateTCGPlayerSearchUrl(
 }
 
 /**
- * TCGPlayer Affiliate Provider
+ * TCGPlayer Price Provider
  *
- * Generates affiliate links for TCGPlayer searches.
- * Does not provide real-time pricing (API access required).
+ * Uses tcgcsv.com cached pricing data + affiliate link generation.
  */
 export class TCGPlayerAffiliateProvider implements PriceProvider {
   name = "tcgplayer";
 
   async getPrice(
-    cardId: number,
-    variantId: number | null,
-    finish: Finish
+    _cardId: number,
+    _variantId: number | null,
+    _finish: Finish,
+    cardName?: string,
+    setName?: string,
   ): Promise<PriceData | null> {
-    void cardId;
-    void variantId;
-    void finish;
-    // Real-time pricing not available without API access
-    // Return null to indicate no pricing data
-    return null;
+    if (!cardName || !setName) return null;
+    return getPriceForCard(cardName, setName, _finish);
   }
 
   async getBulkPrices(
@@ -73,11 +75,37 @@ export class TCGPlayerAffiliateProvider implements PriceProvider {
       cardId: number;
       variantId?: number | null;
       finish?: Finish;
+      cardName?: string;
+      setName?: string;
     }>
   ): Promise<Map<string, PriceData>> {
-    void cards;
-    // Real-time pricing not available without API access
-    return new Map();
+    const inputs = cards
+      .filter(
+        (c): c is typeof c & { cardName: string; setName: string } =>
+          Boolean(c.cardName) && Boolean(c.setName),
+      )
+      .map((c) => ({
+        cardName: c.cardName,
+        setName: c.setName,
+        finish: c.finish ?? ("Standard" as Finish),
+      }));
+
+    if (inputs.length === 0) return new Map();
+
+    const pricesByLookupKey = await getBulkPricesFromCache(inputs);
+
+    // Re-key to the buildPriceCacheKey format consumers expect
+    const result = new Map<string, PriceData>();
+    for (const card of inputs) {
+      const lookupKey = buildLookupKey(card.cardName, card.setName, card.finish);
+      const price = pricesByLookupKey.get(lookupKey);
+      if (price) {
+        const cacheKey = `price:${card.cardName}:${card.setName}:${card.finish}`;
+        result.set(cacheKey, price);
+      }
+    }
+
+    return result;
   }
 
   getAffiliateLink(
@@ -89,8 +117,7 @@ export class TCGPlayerAffiliateProvider implements PriceProvider {
   }
 
   async refreshPrices(_cardIds: number[]): Promise<void> {
-    void _cardIds;
-    // No-op without API access
+    // Price refresh is handled by the /api/pricing/refresh cron endpoint
   }
 }
 
