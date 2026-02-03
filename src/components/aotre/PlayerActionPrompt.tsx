@@ -216,7 +216,6 @@ export function PlayerActionPrompt({ onCardHover }: PlayerActionPromptProps) {
   const passedPlayers = useAotreStore((s) => s.passedPlayers);
   const pass = useAotreStore((s) => s.pass);
   const turn = useAotreStore((s) => s.turn);
-  const sharedMana = useAotreStore((s) => s.sharedMana);
   const canAffordCost = useAotreStore((s) => s.canAffordCost);
   const drawCard = useAotreStore((s) => s.drawCard);
   const completeMulligan = useAotreStore((s) => s.completeMulligan);

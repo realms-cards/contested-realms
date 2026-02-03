@@ -1,7 +1,5 @@
 import type { StateCreator } from "zustand";
 import { isAnimist, isHarbinger } from "@/lib/game/avatarAbilities";
-import { isGardenOfEden } from "../gardenOfEdenState";
-import { isPortalTile } from "../portalState";
 import {
   BEACON_GENESIS_SITES,
   ELEMENT_CHOICE_SITES,
@@ -11,6 +9,8 @@ import {
 } from "@/lib/game/mana-providers";
 import { TOKEN_BY_NAME } from "@/lib/game/tokens";
 import { isApexOfBabel, isBaseOfBabel } from "../babelTowerState";
+import { isGardenOfEden } from "../gardenOfEdenState";
+import { isPortalTile } from "../portalState";
 import { isMismanagedMortuary } from "../specialSiteState";
 import type {
   CardRef,
