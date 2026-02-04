@@ -1,10 +1,7 @@
 import type { Finish } from "@prisma/client";
 import { NextRequest } from "next/server";
 import { getPriceForCard } from "@/lib/collection/price-cache";
-import {
-  getAffiliateLink,
-  buildPriceCacheKey,
-} from "@/lib/collection/pricing-provider";
+import { buildPriceCacheKey } from "@/lib/collection/pricing-provider";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -59,7 +56,6 @@ export async function POST(req: NextRequest) {
         midPrice: number | null;
         highPrice: number | null;
         currency: string;
-        affiliateUrl: string;
       }
     > = {};
     const notFound: number[] = [];
@@ -103,9 +99,6 @@ export async function POST(req: NextRequest) {
         midPrice: priceData?.midPrice ?? null,
         highPrice: priceData?.highPrice ?? null,
         currency: "USD",
-        affiliateUrl:
-          priceData?.affiliateUrl ??
-          getAffiliateLink(card.name, setName, finish),
       };
     }
 

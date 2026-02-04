@@ -64,6 +64,16 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
       const site = state.board.sites[key];
       if (!site || !site.card) return state;
 
+      // Check and unregister Garden of Eden if this site is leaving the board
+      const gardenP1 = state.gardenOfEdenLocations?.p1;
+      const gardenP2 = state.gardenOfEdenLocations?.p2;
+      if (gardenP1?.cellKey === key) {
+        state.unregisterGardenOfEden("p1", key);
+      }
+      if (gardenP2?.cellKey === key) {
+        state.unregisterGardenOfEden("p2", key);
+      }
+
       // Check if this is a merged Tower of Babel (Base + Apex stacked)
       const towerMerge = isMergedTower(key, state.babelTowers);
       if (towerMerge) {
@@ -207,6 +217,16 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
       const key = toCellKey(x, y);
       const site = state.board.sites[key];
       if (!site || !site.card) return state;
+
+      // Check and unregister Garden of Eden if this site is leaving the board
+      const gardenP1 = state.gardenOfEdenLocations?.p1;
+      const gardenP2 = state.gardenOfEdenLocations?.p2;
+      if (gardenP1?.cellKey === key) {
+        state.unregisterGardenOfEden("p1", key);
+      }
+      if (gardenP2?.cellKey === key) {
+        state.unregisterGardenOfEden("p2", key);
+      }
 
       // Check if this is a merged Tower of Babel (Base + Apex stacked)
       // If so, use destroyBabelTower which handles both cards going to graveyard
@@ -872,6 +892,49 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
         return state;
       }
 
+      // Update Garden of Eden locations if sites are being swapped/moved
+      const gardenP1 = state.gardenOfEdenLocations?.p1;
+      const gardenP2 = state.gardenOfEdenLocations?.p2;
+      const targetSite = state.board.sites[targetKey];
+
+      // If source site is Garden of Eden, update its location
+      if (gardenP1?.cellKey === sourceKey) {
+        set({
+          gardenOfEdenLocations: {
+            ...state.gardenOfEdenLocations,
+            p1: { ...gardenP1, cellKey: targetKey },
+          },
+        } as Partial<GameState> as GameState);
+      }
+      if (gardenP2?.cellKey === sourceKey) {
+        set({
+          gardenOfEdenLocations: {
+            ...state.gardenOfEdenLocations,
+            p2: { ...gardenP2, cellKey: targetKey },
+          },
+        } as Partial<GameState> as GameState);
+      }
+
+      // If target site is Garden of Eden (swap case), update its location
+      if (targetSite) {
+        if (gardenP1?.cellKey === targetKey) {
+          set({
+            gardenOfEdenLocations: {
+              ...state.gardenOfEdenLocations,
+              p1: { ...gardenP1, cellKey: sourceKey },
+            },
+          } as Partial<GameState> as GameState);
+        }
+        if (gardenP2?.cellKey === targetKey) {
+          set({
+            gardenOfEdenLocations: {
+              ...state.gardenOfEdenLocations,
+              p2: { ...gardenP2, cellKey: sourceKey },
+            },
+          } as Partial<GameState> as GameState);
+        }
+      }
+
       // Check actor permissions in online mode (bypassed for Earthquake swaps)
       if (state.transport && state.actorKey && !opts?.bypassOwnerCheck) {
         const ownerSeat = seatFromOwner(sourceSite.owner);
@@ -881,7 +944,6 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
         }
       }
 
-      const targetSite = state.board.sites[targetKey];
       const isSwap = !!targetSite;
 
       // Build new sites map

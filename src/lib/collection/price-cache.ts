@@ -113,34 +113,6 @@ function cleanProductName(name: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Affiliate links (inline to avoid circular dependency with pricing-provider)
-// ---------------------------------------------------------------------------
-
-const TCGPLAYER_BASE_URL = "https://www.tcgplayer.com";
-const TCGPLAYER_CATEGORY = "sorcery-contested-realm";
-const TCGPLAYER_AFFILIATE_ID = process.env.TCGPLAYER_AFFILIATE_ID || "";
-
-function generateAffiliateUrl(
-  cardName: string,
-  setName?: string,
-  finish?: Finish | string,
-): string {
-  const params = new URLSearchParams();
-  let query = cardName;
-  if (setName) query += ` ${setName}`;
-  if (finish === "Foil") query += " Foil";
-  params.set("q", query);
-  params.set("view", "grid");
-  params.set("ProductTypeName", "Cards");
-  if (TCGPLAYER_AFFILIATE_ID) {
-    params.set("utm_source", TCGPLAYER_AFFILIATE_ID);
-    params.set("utm_medium", "affiliate");
-    params.set("utm_campaign", "realms_cards");
-  }
-  return `${TCGPLAYER_BASE_URL}/search/${TCGPLAYER_CATEGORY}/product?${params.toString()}`;
-}
-
-// ---------------------------------------------------------------------------
 // Fetch from tcgcsv
 // ---------------------------------------------------------------------------
 
@@ -296,23 +268,16 @@ export async function getPriceForCard(
   const entry = priceMap.get(key);
   if (!entry) return null;
 
-  const affiliateUrl = generateAffiliateUrl(
-    cardName,
-    setName,
-    finish as Finish,
-  );
-
   return {
     marketPrice: entry.marketPrice,
     lowPrice: entry.lowPrice,
     midPrice: entry.midPrice,
     highPrice: entry.highPrice,
-    currency: "USD",
-    source: "tcgplayer",
+    currency: "USD" as const,
+    source: "tcgplayer" as const,
     lastUpdated: lastFetchedAt
       ? new Date(lastFetchedAt).toISOString()
       : new Date().toISOString(),
-    affiliateUrl,
   };
 }
 
@@ -338,23 +303,16 @@ export async function getBulkPrices(
     const entry = priceMap.get(key);
     if (!entry) continue;
 
-    const affiliateUrl = generateAffiliateUrl(
-      card.cardName,
-      card.setName,
-      card.finish as Finish,
-    );
-
     result.set(key, {
       marketPrice: entry.marketPrice,
       lowPrice: entry.lowPrice,
       midPrice: entry.midPrice,
       highPrice: entry.highPrice,
-      currency: "USD",
-      source: "tcgplayer",
+      currency: "USD" as const,
+      source: "tcgplayer" as const,
       lastUpdated: lastFetchedAt
         ? new Date(lastFetchedAt).toISOString()
         : new Date().toISOString(),
-      affiliateUrl,
     });
   }
 

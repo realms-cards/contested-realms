@@ -221,6 +221,20 @@ export const RESOLVER_REGISTRY: ResolverEntry[] = [
 
   // ─── SITE RESOLVERS ────────────────────────────────────────────────
   {
+    id: "riverGenesis",
+    cardName: "Spring River / Summer River / Autumn River / Winter River",
+    category: "site",
+    stateFile: "riverGenesisState.ts",
+    description: "Genesis: Look at next spell, may put on bottom of spellbook",
+  },
+  {
+    id: "shapeshift",
+    cardName: "Shapeshift",
+    category: "spell",
+    stateFile: "shapeshiftState.ts",
+    description: "Transform allied minion into a minion from top 5 spells",
+  },
+  {
     id: "morgana",
     cardName: "Morgana's Sanctum",
     category: "site",

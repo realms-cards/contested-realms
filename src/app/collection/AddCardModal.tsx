@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { getImageSlug } from "@/lib/utils/cardSlug";
+import CardPriceTag from "./CardPriceTag";
 
 interface CardData {
   id: number;
@@ -116,6 +117,26 @@ export default function AddCardModal({
               <div className="font-bold text-lg">{card.name}</div>
               <div className="text-gray-400 text-sm">
                 {card.variant?.setName || "Unknown Set"}
+              </div>
+              <div className="flex gap-3 mt-1">
+                <div className="flex items-center gap-1 text-xs text-gray-500">
+                  <span>Std:</span>
+                  <CardPriceTag
+                    cardId={card.id}
+                    cardName={card.name}
+                    variantId={card.variant?.id ?? null}
+                    finish="Standard"
+                  />
+                </div>
+                <div className="flex items-center gap-1 text-xs text-gray-500">
+                  <span>Foil:</span>
+                  <CardPriceTag
+                    cardId={card.id}
+                    cardName={card.name}
+                    variantId={card.variant?.id ?? null}
+                    finish="Foil"
+                  />
+                </div>
               </div>
             </div>
           </div>

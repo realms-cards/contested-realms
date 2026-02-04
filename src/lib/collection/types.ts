@@ -40,6 +40,9 @@ export interface CollectionCardMeta {
   cost: number | null;
   attack: number | null;
   defence: number | null;
+  life: number | null;
+  rulesText: string | null;
+  thresholds: Record<string, number> | null;
 }
 
 /** Price data for a card */
@@ -51,7 +54,6 @@ export interface PriceData {
   currency: "USD" | "EUR";
   source: "tcgplayer" | "manual" | "community";
   lastUpdated: Date | string;
-  affiliateUrl: string;
 }
 
 /** Single collection card response */
@@ -206,9 +208,6 @@ export interface PriceProvider {
       finish?: Finish;
     }>,
   ): Promise<Map<string, PriceData>>;
-
-  /** Generate affiliate link for purchasing */
-  getAffiliateLink(cardName: string, setName?: string, finish?: Finish): string;
 
   /** Refresh cached prices */
   refreshPrices(cardIds: number[]): Promise<void>;

@@ -1,8 +1,7 @@
 /**
  * Pricing Provider for Collection Tracker
  *
- * Provides card pricing via tcgcsv.com price cache and
- * TCGPlayer affiliate link generation.
+ * Provides card pricing via tcgcsv.com price cache.
  */
 
 import type { Finish } from "@prisma/client";
@@ -13,50 +12,12 @@ import {
 } from "./price-cache";
 import type { PriceData, PriceProvider } from "./types";
 
-// TCGPlayer affiliate configuration
-const TCGPLAYER_BASE_URL = "https://www.tcgplayer.com";
-const TCGPLAYER_CATEGORY = "sorcery-contested-realm";
-const TCGPLAYER_AFFILIATE_ID = process.env.TCGPLAYER_AFFILIATE_ID || "";
-
-/**
- * Generate a TCGPlayer search URL for a card
- */
-function generateTCGPlayerSearchUrl(
-  cardName: string,
-  setName?: string,
-  finish?: Finish
-): string {
-  const params = new URLSearchParams();
-
-  // Build search query
-  let query = cardName;
-  if (setName) {
-    query += ` ${setName}`;
-  }
-  if (finish === "Foil") {
-    query += " Foil";
-  }
-
-  params.set("q", query);
-  params.set("view", "grid");
-  params.set("ProductTypeName", "Cards");
-
-  // Add affiliate ID if configured
-  if (TCGPLAYER_AFFILIATE_ID) {
-    params.set("utm_source", TCGPLAYER_AFFILIATE_ID);
-    params.set("utm_medium", "affiliate");
-    params.set("utm_campaign", "realms_cards");
-  }
-
-  return `${TCGPLAYER_BASE_URL}/search/${TCGPLAYER_CATEGORY}/product?${params.toString()}`;
-}
-
 /**
  * TCGPlayer Price Provider
  *
- * Uses tcgcsv.com cached pricing data + affiliate link generation.
+ * Uses tcgcsv.com cached pricing data.
  */
-export class TCGPlayerAffiliateProvider implements PriceProvider {
+export class TCGPlayerPriceProvider implements PriceProvider {
   name = "tcgplayer";
 
   async getPrice(
@@ -94,7 +55,6 @@ export class TCGPlayerAffiliateProvider implements PriceProvider {
 
     const pricesByLookupKey = await getBulkPricesFromCache(inputs);
 
-    // Re-key to the buildPriceCacheKey format consumers expect
     const result = new Map<string, PriceData>();
     for (const card of inputs) {
       const lookupKey = buildLookupKey(card.cardName, card.setName, card.finish);
@@ -108,14 +68,6 @@ export class TCGPlayerAffiliateProvider implements PriceProvider {
     return result;
   }
 
-  getAffiliateLink(
-    cardName: string,
-    setName?: string,
-    finish?: Finish
-  ): string {
-    return generateTCGPlayerSearchUrl(cardName, setName, finish);
-  }
-
   async refreshPrices(_cardIds: number[]): Promise<void> {
     // Price refresh is handled by the /api/pricing/refresh cron endpoint
   }
@@ -125,18 +77,7 @@ export class TCGPlayerAffiliateProvider implements PriceProvider {
  * Get the default price provider
  */
 export function getDefaultPriceProvider(): PriceProvider {
-  return new TCGPlayerAffiliateProvider();
-}
-
-/**
- * Generate affiliate link for a card (convenience function)
- */
-export function getAffiliateLink(
-  cardName: string,
-  setName?: string,
-  finish?: Finish
-): string {
-  return generateTCGPlayerSearchUrl(cardName, setName, finish);
+  return new TCGPlayerPriceProvider();
 }
 
 /**

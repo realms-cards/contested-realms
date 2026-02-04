@@ -1,9 +1,43 @@
 "use client";
 
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { useRef, useState, useEffect } from "react";
+import { useMemo, useRef, useState, useEffect } from "react";
 import type { CollectionCardResponse } from "@/lib/collection/types";
 import CollectionCard from "./CollectionCard";
+
+function isSiteCard(card: CollectionCardResponse): boolean {
+  return (card.meta?.type || "").toLowerCase().includes("site");
+}
+
+/** Build rows accounting for site cards taking 2 column slots */
+function buildRows(
+  cards: CollectionCardResponse[],
+  columns: number,
+): CollectionCardResponse[][] {
+  const rows: CollectionCardResponse[][] = [];
+  let currentRow: CollectionCardResponse[] = [];
+  let slotsUsed = 0;
+
+  for (const card of cards) {
+    const slots = isSiteCard(card) ? 2 : 1;
+
+    // If this card won't fit, start a new row
+    if (slotsUsed + slots > columns && currentRow.length > 0) {
+      rows.push(currentRow);
+      currentRow = [];
+      slotsUsed = 0;
+    }
+
+    currentRow.push(card);
+    slotsUsed += slots;
+  }
+
+  if (currentRow.length > 0) {
+    rows.push(currentRow);
+  }
+
+  return rows;
+}
 
 interface VirtualizedCollectionGridProps {
   cards: CollectionCardResponse[];
@@ -261,18 +295,21 @@ export default function VirtualizedCollectionGrid({
       return updated;
     });
 
-  // Calculate rows (each row contains `columns` cards)
-  const rowCount = Math.ceil(visibleCards.length / columns);
+  // Pre-compute rows accounting for site cards taking 2 column slots
+  const rows = useMemo(
+    () => buildRows(visibleCards, columns),
+    [visibleCards, columns],
+  );
 
   // Calculate row height based on zoom
   const estimatedRowHeight = Math.round(400 * (zoom / 100));
 
   // Virtualizer for rows (must be called before any early returns)
   const rowVirtualizer = useVirtualizer({
-    count: rowCount,
+    count: rows.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => estimatedRowHeight, // Approximate row height (card aspect 2.5/3.5 + info section + gap)
-    overscan: 2, // Render 2 extra rows above/below viewport for smooth scrolling
+    estimateSize: () => estimatedRowHeight,
+    overscan: 2,
   });
 
   if (loading) {
@@ -310,9 +347,7 @@ export default function VirtualizedCollectionGrid({
         }}
       >
         {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-          const startIndex = virtualRow.index * columns;
-          const endIndex = Math.min(startIndex + columns, visibleCards.length);
-          const rowCards = visibleCards.slice(startIndex, endIndex);
+          const rowCards = rows[virtualRow.index];
 
           return (
             <div

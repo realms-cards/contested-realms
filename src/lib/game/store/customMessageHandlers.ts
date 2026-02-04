@@ -5373,4 +5373,299 @@ export function handleCustomMessage(
     } catch {}
     return;
   }
+
+  // --- River Genesis message handlers (Spring/Summer/Autumn/Winter River) ---
+  if (t === "riverGenesisBegin") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const siteName = (msg as { siteName?: unknown }).siteName as
+      | string
+      | undefined;
+    const cellKey = (msg as { cellKey?: unknown }).cellKey as
+      | CellKey
+      | undefined;
+    const ownerSeat = (msg as { ownerSeat?: unknown }).ownerSeat as
+      | PlayerKey
+      | undefined;
+
+    if (!id || !siteName || !cellKey || !ownerSeat) return;
+
+    // Skip if we're the owner - we already have the state
+    const actorKey = get().actorKey;
+    if (actorKey === ownerSeat) return;
+
+    // Set pending state for opponent visibility (they don't see the actual card)
+    set({
+      pendingRiverGenesis: {
+        id,
+        siteName,
+        cellKey,
+        ownerSeat,
+        phase: "viewing",
+        topSpell: null, // Opponent doesn't see the spell
+        choice: null,
+        createdAt: Date.now(),
+      },
+    } as Partial<GameState> as GameState);
+
+    try {
+      const playerNum = ownerSeat === "p1" ? "1" : "2";
+      get().log(
+        `[p${playerNum}:PLAYER] ${siteName} Genesis: Looking at next spell...`,
+      );
+    } catch {}
+    return;
+  }
+
+  if (t === "riverGenesisComplete") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const choice = (msg as { choice?: unknown }).choice as
+      | "keep"
+      | "bottom"
+      | undefined;
+
+    if (!id || !choice) return;
+
+    const pending = get().pendingRiverGenesis;
+    if (!pending || pending.id !== id) return;
+
+    // Skip if we're the owner - we already have the state
+    const actorKey = get().actorKey;
+    if (actorKey === pending.ownerSeat) return;
+
+    // Clear pending state
+    set({ pendingRiverGenesis: null } as Partial<GameState> as GameState);
+
+    try {
+      const playerNum = pending.ownerSeat === "p1" ? "1" : "2";
+      const choiceText =
+        choice === "bottom"
+          ? "put spell on bottom of spellbook"
+          : "kept spell on top of spellbook";
+      get().log(
+        `[p${playerNum}:PLAYER] ${pending.siteName} Genesis: ${choiceText}`,
+      );
+    } catch {}
+    return;
+  }
+
+  if (t === "riverGenesisCancel") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+
+    if (!id) return;
+
+    const pending = get().pendingRiverGenesis;
+    if (!pending || pending.id !== id) return;
+
+    // Skip if we're the owner - we already have the state
+    const actorKey = get().actorKey;
+    if (actorKey === pending.ownerSeat) return;
+
+    set({ pendingRiverGenesis: null } as Partial<GameState> as GameState);
+
+    try {
+      get().log(`${pending.siteName} Genesis cancelled`);
+    } catch {}
+    return;
+  }
+
+  // --- Shapeshift message handlers ---
+  if (t === "shapeshiftBegin") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const spell = (msg as { spell?: unknown }).spell as
+      | {
+          at: CellKey;
+          index: number;
+          instanceId: string | null;
+          owner: number;
+          card: CardRef;
+        }
+      | undefined;
+    const casterSeat = (msg as { casterSeat?: unknown }).casterSeat as
+      | PlayerKey
+      | undefined;
+
+    if (!id || !spell || !casterSeat) return;
+
+    // Skip if we're the caster - we already have the state
+    const actorKey = get().actorKey;
+    if (actorKey === casterSeat) return;
+
+    set({
+      pendingShapeshift: {
+        id,
+        spell,
+        casterSeat,
+        phase: "selectingTarget",
+        targetMinion: null,
+        revealedCards: [],
+        selectedMinionIndex: null,
+        createdAt: Date.now(),
+      },
+    } as Partial<GameState> as GameState);
+
+    try {
+      get().log(
+        `[${casterSeat.toUpperCase()}] casts Shapeshift - select an allied minion to transform`,
+      );
+    } catch {}
+    return;
+  }
+
+  if (t === "shapeshiftSelectTarget") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const target = (msg as { target?: unknown }).target as
+      | {
+          cellKey: CellKey;
+          index: number;
+          instanceId: string | null;
+          card: CardRef;
+        }
+      | undefined;
+    const revealedCount = (msg as { revealedCount?: unknown }).revealedCount as
+      | number
+      | undefined;
+
+    if (!id || !target) return;
+
+    const pending = get().pendingShapeshift;
+    if (!pending || pending.id !== id) return;
+
+    // Skip if we're the caster - we already have the state
+    const actorKey = get().actorKey;
+    if (actorKey === pending.casterSeat) return;
+
+    set({
+      pendingShapeshift: {
+        ...pending,
+        targetMinion: target,
+        phase: "viewing",
+        // Opponent doesn't see the actual revealed cards
+        revealedCards: [],
+      },
+    } as Partial<GameState> as GameState);
+
+    try {
+      get().log(
+        `[${pending.casterSeat.toUpperCase()}] Shapeshift: ${target.card.name} will try to transform - looking at ${revealedCount || "?"} spells`,
+      );
+    } catch {}
+    return;
+  }
+
+  if (t === "shapeshiftSelectMinion") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const cardIndex = (msg as { cardIndex?: unknown }).cardIndex as
+      | number
+      | undefined;
+
+    if (!id || cardIndex === undefined) return;
+
+    const pending = get().pendingShapeshift;
+    if (!pending || pending.id !== id) return;
+
+    // Skip if we're the caster - we already have the state
+    const actorKey = get().actorKey;
+    if (actorKey === pending.casterSeat) return;
+
+    set({
+      pendingShapeshift: {
+        ...pending,
+        selectedMinionIndex: cardIndex,
+      },
+    } as Partial<GameState> as GameState);
+    return;
+  }
+
+  if (t === "shapeshiftSkipSelection") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+
+    if (!id) return;
+
+    const pending = get().pendingShapeshift;
+    if (!pending || pending.id !== id) return;
+
+    // Skip if we're the caster - we already have the state
+    const actorKey = get().actorKey;
+    if (actorKey === pending.casterSeat) return;
+
+    set({
+      pendingShapeshift: {
+        ...pending,
+        selectedMinionIndex: null,
+      },
+    } as Partial<GameState> as GameState);
+    return;
+  }
+
+  if (t === "shapeshiftResolve") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const selectedMinionIndex = (msg as { selectedMinionIndex?: unknown })
+      .selectedMinionIndex as number | null | undefined;
+
+    if (!id) return;
+
+    const pending = get().pendingShapeshift;
+    if (!pending || pending.id !== id) return;
+
+    // Skip if we're the caster - we already have the state
+    const actorKey = get().actorKey;
+    if (actorKey === pending.casterSeat) return;
+
+    // Clear pending state
+    set({ pendingShapeshift: null } as Partial<GameState> as GameState);
+
+    try {
+      const targetName = pending.targetMinion?.card.name || "minion";
+      if (selectedMinionIndex !== null && selectedMinionIndex !== undefined) {
+        get().log(
+          `[${pending.casterSeat.toUpperCase()}] Shapeshift resolved: ${targetName} transformed!`,
+        );
+      } else {
+        get().log(
+          `[${pending.casterSeat.toUpperCase()}] Shapeshift resolved: ${targetName} failed to find a new form`,
+        );
+      }
+    } catch {}
+    return;
+  }
+
+  if (t === "shapeshiftCancel") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+
+    if (!id) return;
+
+    const pending = get().pendingShapeshift;
+    if (!pending || pending.id !== id) return;
+
+    // Skip if we're the caster - we already have the state
+    const actorKey = get().actorKey;
+    if (actorKey === pending.casterSeat) return;
+
+    set({ pendingShapeshift: null } as Partial<GameState> as GameState);
+
+    try {
+      get().log("Shapeshift cancelled");
+    } catch {}
+    return;
+  }
+
+  if (t === "shapeshiftSkipAutoResolve") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+
+    if (!id) return;
+
+    const pending = get().pendingShapeshift;
+    if (!pending || pending.id !== id) return;
+
+    // Skip if we're the caster - we already have the state
+    const actorKey = get().actorKey;
+    if (actorKey === pending.casterSeat) return;
+
+    set({ pendingShapeshift: null } as Partial<GameState> as GameState);
+
+    try {
+      get().log("Shapeshift: skipping auto-resolve, resolve manually");
+    } catch {}
+    return;
+  }
 }

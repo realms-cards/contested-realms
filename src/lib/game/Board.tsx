@@ -547,7 +547,10 @@ export default function Board({
     (targetX: number, targetY: number) => {
       if (!switchSiteSource) return;
       // During earthquake rearranging, swaps are handled by EarthquakeOverlay
-      if (resolvedStoreApi.getState().pendingEarthquake?.phase === "rearranging") return;
+      if (
+        resolvedStoreApi.getState().pendingEarthquake?.phase === "rearranging"
+      )
+        return;
       // Block if already waiting for approval
       if (switchSitePending) return;
 
@@ -756,6 +759,12 @@ export default function Board({
   );
   const selectChaosTwisterSite = useScopedStore(
     (s) => s.selectChaosTwisterSite,
+  );
+
+  // Shapeshift spell flow (transform allied minion)
+  const pendingShapeshift = useScopedStore((s) => s.pendingShapeshift);
+  const selectShapeshiftTarget = useScopedStore(
+    (s) => s.selectShapeshiftTarget,
   );
 
   // Earthquake spell flow
@@ -1060,6 +1069,13 @@ export default function Board({
       metaByCardId,
     ],
   );
+  const shapeshiftContext = useMemo(
+    () => ({
+      pendingShapeshift,
+      selectShapeshiftTarget,
+    }),
+    [pendingShapeshift, selectShapeshiftTarget],
+  );
   const earthquakeContext = useMemo(
     () => ({
       pendingEarthquake,
@@ -1333,6 +1349,7 @@ export default function Board({
               combatContext={combatContext}
               magicContext={magicContext}
               chaosTwisterContext={chaosTwisterContext}
+              shapeshiftContext={shapeshiftContext}
               earthquakeContext={earthquakeContext}
               atlanteanFateContext={atlanteanFateContext}
               mephistophelesSummonContext={mephistophelesSummonContext}

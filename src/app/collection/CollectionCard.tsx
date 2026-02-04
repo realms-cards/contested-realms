@@ -5,6 +5,7 @@ import { memo, useState, useEffect } from "react";
 import { CodexTooltip } from "@/components/collection/CodexTooltip";
 import { useCodex } from "@/contexts/CodexContext";
 import type { CollectionCardResponse } from "@/lib/collection/types";
+import CardDetailOverlay from "./CardDetailOverlay";
 import CardPriceTag from "./CardPriceTag";
 
 interface CollectionCardProps {
@@ -98,6 +99,7 @@ function CollectionCardInner({
   const [editingNotes, setEditingNotes] = useState(false);
   const [notesValue, setNotesValue] = useState(card.notes || "");
   const [showMobileModal, setShowMobileModal] = useState(false);
+  const [showDetail, setShowDetail] = useState(false);
   const [isTouchDevice, setIsTouchDevice] = useState(false);
 
   // Detect touch device
@@ -122,20 +124,19 @@ function CollectionCardInner({
     : primaryUrl;
 
   const isFoil = card.finish === "Foil";
+  const isSite = (card.meta?.type || "").toLowerCase().includes("site");
 
-  // Handle card tap on mobile
+  // Handle card click - open details on both desktop and mobile
   const handleCardClick = () => {
-    if (isTouchDevice) {
-      setShowMobileModal(true);
-    }
+    setShowDetail(true);
   };
 
   return (
     <>
       <div
         className={`relative group rounded-lg overflow-hidden bg-gray-800 hover:z-50 ${
-          isFoil ? "foil-card" : ""
-        } ${updating ? "opacity-50 pointer-events-none" : ""}`}
+          isSite ? "col-span-2" : ""
+        } ${isFoil ? "foil-card" : ""} ${updating ? "opacity-50 pointer-events-none" : ""}`}
         style={
           isFoil
             ? {
@@ -152,12 +153,12 @@ function CollectionCardInner({
         onClick={handleCardClick}
       >
         {/* Card Image */}
-        <div className="aspect-[2.5/3.5] relative">
+        <div className={`${isSite ? "aspect-[3.5/2.5] overflow-hidden" : "aspect-[2.5/3.5]"} relative`}>
           <Image
             src={imageUrl}
             alt={card.card.name}
             fill
-            className="object-cover"
+            className={isSite ? "object-contain rotate-90 scale-[1.4]" : "object-cover"}
             sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, 16vw"
             onError={() => {
               // Use state to switch to placeholder (prevents flicker from direct src manipulation)
@@ -333,13 +334,19 @@ function CollectionCardInner({
           )}
 
           <button
+            onClick={() => setShowDetail(true)}
+            className="text-white bg-gray-600 hover:bg-gray-500 text-xs px-3 py-1 rounded"
+          >
+            Details
+          </button>
+
+          <button
             onClick={onDelete}
             className="text-red-400 hover:text-red-300 text-xs underline"
           >
             Remove
           </button>
 
-          {/* Price/Buy Link */}
           <CardPriceTag
             cardId={card.cardId}
             cardName={card.card.name}
@@ -364,12 +371,12 @@ function CollectionCardInner({
           </button>
 
           {/* Card Image - large */}
-          <div className="relative w-full max-w-sm aspect-[2.5/3.5] mb-4">
+          <div className={`relative w-full max-w-sm ${isSite ? "aspect-[3.5/2.5] overflow-hidden" : "aspect-[2.5/3.5]"} mb-4`}>
             <Image
               src={imageUrl}
               alt={card.card.name}
               fill
-              className="object-contain rounded-lg"
+              className={isSite ? "object-contain rotate-90 scale-[1.4]" : "object-contain"}
               sizes="100vw"
               unoptimized
             />
@@ -478,6 +485,17 @@ function CollectionCardInner({
               </button>
             )}
 
+            {/* Details */}
+            <button
+              onClick={() => {
+                setShowMobileModal(false);
+                setShowDetail(true);
+              }}
+              className="w-full bg-gray-700 hover:bg-gray-600 text-white text-sm py-2 rounded"
+            >
+              View Details
+            </button>
+
             {/* Delete */}
             <button
               onClick={() => {
@@ -489,7 +507,6 @@ function CollectionCardInner({
               Remove from Collection
             </button>
 
-            {/* Price */}
             <CardPriceTag
               cardId={card.cardId}
               cardName={card.card.name}
@@ -498,6 +515,14 @@ function CollectionCardInner({
             />
           </div>
         </div>
+      )}
+
+      {/* Card Detail Overlay */}
+      {showDetail && (
+        <CardDetailOverlay
+          card={card}
+          onClose={() => setShowDetail(false)}
+        />
       )}
     </>
   );

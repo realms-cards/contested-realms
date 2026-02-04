@@ -1,5 +1,6 @@
 "use client";
 
+import { ChevronDown } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState, useRef } from "react";
 import type {
@@ -35,6 +36,7 @@ export default function CollectionPage() {
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [zoom, setZoom] = useState(100);
   const [, setViewHydrated] = useState(false);
+  const [showFilters, setShowFilters] = useState(true);
 
   // Hydrate view preferences from localStorage after mount (avoids SSR mismatch)
   useEffect(() => {
@@ -275,42 +277,41 @@ export default function CollectionPage() {
 
   return (
     <div className="space-y-6">
-      {/* Stats Summary */}
+      {/* Stats Bar */}
       {data?.stats && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-gray-800 rounded-lg p-4">
-            <div className="text-2xl font-bold">{data.stats.totalCards}</div>
-            <div className="text-gray-400 text-sm">Total Cards</div>
-          </div>
-          <div className="bg-gray-800 rounded-lg p-4">
-            <div className="text-2xl font-bold">{data.stats.uniqueCards}</div>
-            <div className="text-gray-400 text-sm">Unique Cards</div>
-          </div>
-          <div className="bg-gray-800 rounded-lg p-4">
-            <div className="text-2xl font-bold">
-              {data.stats.totalValue != null
-                ? `$${data.stats.totalValue.toFixed(2)}`
-                : "N/A"}
-            </div>
-            <div className="text-gray-400 text-sm">Est. Value</div>
-          </div>
-          <div className="bg-gray-800 rounded-lg p-4 flex items-center justify-center gap-2">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 bg-gray-800/50 rounded-lg px-4 py-2 text-sm">
+          <span className="text-gray-400">
+            <span className="font-bold text-white">{data.stats.totalCards}</span> cards
+          </span>
+          <span className="text-gray-600">|</span>
+          <span className="text-gray-400">
+            <span className="font-bold text-white">{data.stats.uniqueCards}</span> unique
+          </span>
+          {data.stats.totalValue != null && (
+            <>
+              <span className="text-gray-600">|</span>
+              <span className="text-gray-400">
+                <span className="font-bold text-green-400">${data.stats.totalValue.toFixed(2)}</span> est.
+              </span>
+            </>
+          )}
+          <div className="flex items-center gap-2 ml-auto">
             <button
               onClick={() => setShowQuickAdd(true)}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-medium transition-colors"
+              className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-xs font-medium transition-colors"
             >
-              + Quick Add
+              + Add
             </button>
             <Link
               href="/collection/scan"
-              className="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 rounded-lg text-sm font-medium transition-colors"
+              className="px-3 py-1 bg-cyan-600 hover:bg-cyan-700 rounded text-xs font-medium transition-colors"
             >
-              📷 Scan
+              Scan
             </Link>
             <div className="relative">
               <button
                 onClick={() => setShowDangerZone(!showDangerZone)}
-                className="p-2 text-yellow-500 hover:text-yellow-400 hover:bg-gray-700 rounded-lg transition-colors"
+                className="p-1 text-yellow-500 hover:text-yellow-400 hover:bg-gray-700 rounded transition-colors text-xs"
                 title="Danger Zone"
               >
                 ⚠️
@@ -318,7 +319,7 @@ export default function CollectionPage() {
               {showDangerZone && (
                 <div className="absolute right-0 top-full mt-2 w-80 bg-gray-900 border border-red-900/50 rounded-lg p-4 shadow-xl z-50">
                   <h3 className="text-red-400 font-bold mb-2">
-                    ⚠️ Danger Zone
+                    Danger Zone
                   </h3>
                   <p className="text-sm text-gray-400 mb-4">
                     Permanently delete your entire collection. This cannot be
@@ -375,15 +376,15 @@ export default function CollectionPage() {
         </div>
       )}
 
-      {/* Filters and View Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <CollectionFilters
-          filters={filters}
-          sort={sort}
-          order={order}
-          onFiltersChange={handleFiltersChange}
-          onSortChange={handleSortChange}
-        />
+      {/* Filters Toggle + View Controls */}
+      <div className="flex items-center justify-between">
+        <button
+          onClick={() => setShowFilters((v) => !v)}
+          className="flex items-center gap-1 text-sm text-gray-400 hover:text-white transition-colors"
+        >
+          <ChevronDown className={`w-4 h-4 transition-transform ${showFilters ? "" : "-rotate-90"}`} />
+          Filters
+        </button>
         <CollectionViewControls
           viewMode={viewMode}
           onViewModeChange={handleViewModeChange}
@@ -391,6 +392,17 @@ export default function CollectionPage() {
           onZoomChange={handleZoomChange}
         />
       </div>
+
+      {/* Collapsible Filters */}
+      {showFilters && (
+        <CollectionFilters
+          filters={filters}
+          sort={sort}
+          order={order}
+          onFiltersChange={handleFiltersChange}
+          onSortChange={handleSortChange}
+        />
+      )}
 
       {/* Error State */}
       {error && (
