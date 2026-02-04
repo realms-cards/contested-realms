@@ -897,6 +897,50 @@ export type PendingHighlandPrincess = {
   createdAt: number;
 };
 
+// --- River Genesis State ------------------------------------------------
+// "Genesis → Look at your next spell. You may put it on the bottom of your spellbook."
+// Applies to: Spring River, Summer River, Autumn River, Winter River
+export type RiverGenesisPhase = "viewing" | "resolved";
+
+export type PendingRiverGenesis = {
+  id: string;
+  siteName: string;
+  cellKey: CellKey;
+  ownerSeat: PlayerKey;
+  phase: RiverGenesisPhase;
+  topSpell: CardRef | null;
+  choice: "keep" | "bottom" | null;
+  createdAt: number;
+};
+
+// --- Shapeshift State ------------------------------------------------
+// "An allied minion tries to transform. Look at your next five spells:
+// you may choose a minion among them to be the new form.
+// Put the rest on the bottom in a random order."
+export type ShapeshiftPhase = "selectingTarget" | "viewing" | "resolved";
+
+export type PendingShapeshift = {
+  id: string;
+  spell: {
+    at: CellKey;
+    index: number;
+    instanceId: string | null;
+    owner: number;
+    card: CardRef;
+  };
+  casterSeat: PlayerKey;
+  phase: ShapeshiftPhase;
+  targetMinion: {
+    cellKey: CellKey;
+    index: number;
+    instanceId: string | null;
+    card: CardRef;
+  } | null;
+  revealedCards: CardRef[];
+  selectedMinionIndex: number | null;
+  createdAt: number;
+};
+
 // --- Assorted Animals State ------------------------------------------------
 // Search your spellbook for different Beasts with a combined mana cost of X or less, reveal them, and put them in your hand. Shuffle.
 export type AssortedAnimalsPhase =
@@ -1818,6 +1862,39 @@ export type GameState = {
   selectHighlandPrincessCard: (card: CardRef) => void;
   resolveHighlandPrincess: () => void;
   cancelHighlandPrincess: () => void;
+  // River Genesis (look at next spell, may put on bottom)
+  // Applies to: Spring River, Summer River, Autumn River, Winter River
+  pendingRiverGenesis: PendingRiverGenesis | null;
+  beginRiverGenesis: (input: {
+    siteName: string;
+    cellKey: CellKey;
+    ownerSeat: PlayerKey;
+  }) => void;
+  completeRiverGenesis: (choice: "keep" | "bottom") => void;
+  cancelRiverGenesis: () => void;
+  // Shapeshift (transform allied minion into a minion from top 5 spells)
+  pendingShapeshift: PendingShapeshift | null;
+  beginShapeshift: (input: {
+    spell: {
+      at: CellKey;
+      index: number;
+      instanceId: string | null;
+      owner: number;
+      card: CardRef;
+    };
+    casterSeat: PlayerKey;
+  }) => void;
+  selectShapeshiftTarget: (target: {
+    cellKey: CellKey;
+    index: number;
+    instanceId: string | null;
+    card: CardRef;
+  }) => void;
+  selectShapeshiftMinion: (cardIndex: number) => void;
+  skipShapeshiftSelection: () => void;
+  resolveShapeshift: () => void;
+  cancelShapeshift: () => void;
+  skipShapeshiftAutoResolve: () => void;
   // Assorted Animals (search Beasts with combined cost ≤ X)
   pendingAssortedAnimals: PendingAssortedAnimals | null;
   beginAssortedAnimals: (input: {

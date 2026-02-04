@@ -87,6 +87,8 @@ import { createRaiseDeadSlice } from "./store/raiseDeadState";
 import { createRemoteCursorSlice } from "./store/remoteCursorState";
 import { createResourceSlice } from "./store/resourceState";
 import { createRevealOverlaySlice } from "./store/revealOverlayState";
+import { createRiverGenesisSlice } from "./store/riverGenesisState";
+import { createShapeshiftSlice } from "./store/shapeshiftState";
 import { createSearingTruthSlice } from "./store/searingTruthState";
 import { createSeerSlice } from "./store/seerState";
 import { createSessionSlice } from "./store/sessionState";
@@ -222,6 +224,8 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   ...createGemTokenSlice(set, get, storeApi),
   ...createGardenOfEdenSlice(set, get, storeApi),
   ...createRevealOverlaySlice(set, get, storeApi),
+  ...createRiverGenesisSlice(set, get, storeApi),
+  ...createShapeshiftSlice(set, get, storeApi),
   cardScale: 1,
   // Harbinger portal discount (Gothic expansion) - once per turn mana reduction
   harbingerPortalDiscountUsed: { p1: false, p2: false },
@@ -338,6 +342,8 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         gemTokens: [],
         gardenOfEdenLocations: {},
         cardsDrawnThisTurn: { p1: 0, p2: 0 },
+        pendingRiverGenesis: null,
+        pendingShapeshift: null,
       };
       return reset as GameState;
     }),

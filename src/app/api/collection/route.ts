@@ -261,7 +261,9 @@ export async function GET(req: NextRequest) {
               cost: meta.cost,
               attack: meta.attack,
               defence: meta.defence,
-              thresholds: meta.thresholds,
+              life: meta.life ?? null,
+              rulesText: meta.rulesText ?? null,
+              thresholds: (meta.thresholds as Record<string, number>) ?? null,
             };
           })(),
           price,

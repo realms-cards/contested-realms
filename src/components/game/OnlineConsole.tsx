@@ -13,6 +13,7 @@ import { useGraphicsSettings } from "@/hooks/useGraphicsSettings";
 import { type MatchEvent, formatMatchEvent } from "@/hooks/useMatchEvents";
 import { PLAYER_COLORS } from "@/lib/game/constants";
 import { useGameStore } from "@/lib/game/store";
+import type { GameEvent } from "@/lib/game/store/types";
 import { useMobileDevice } from "@/lib/hooks/useTouchDevice";
 import type { ServerChatPayloadT, ChatScope } from "@/lib/net/protocol";
 
@@ -35,7 +36,10 @@ interface OnlineConsoleProps {
   toastOnly?: boolean; // Only show toast notifications, hide console UI
 }
 
-type TabType = "events" | "chat";
+type StreamItem =
+  | { kind: "game"; id: string; ts: number; data: GameEvent }
+  | { kind: "match"; id: string; ts: number; data: MatchEvent }
+  | { kind: "chat"; id: string; ts: number; data: ServerChatPayloadT };
 
 export default function OnlineConsole({
   dragFromHand,
@@ -69,7 +73,8 @@ export default function OnlineConsole({
   const fontStyle = { fontSize: `${scaledFontSize}px` };
 
   const [consoleOpen, setConsoleOpen] = useState<boolean>(defaultOpen);
-  const [activeTab, setActiveTab] = useState<TabType>("events");
+  const [showEvents, setShowEvents] = useState<boolean>(true);
+  const [showChat, setShowChat] = useState<boolean>(true);
   const [showToast, setShowToast] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string>("");
   // Only show match chat in match console (or hide entirely in replay)
@@ -81,8 +86,7 @@ export default function OnlineConsole({
   // Game events
   const events = useGameStore((s) => s.events);
   const actorKey = useGameStore((s) => s.actorKey);
-  const eventsRef = useRef<HTMLDivElement | null>(null);
-  const chatRef = useRef<HTMLDivElement | null>(null);
+  const streamRef = useRef<HTMLDivElement | null>(null);
 
   // Auto-expand on incoming chat (not from self) and auto-collapse after 10s
   const prevMatchChatLenRef = useRef<number>(matchChat.length);
@@ -141,11 +145,6 @@ export default function OnlineConsole({
     }
     prevMatchChatLenRef.current = matchChat.length;
   }, [myPlayerId, consoleOpen, startAutoCloseTimer, matchChat]);
-
-  // Ensure chat tab cannot be active when chat is hidden
-  useEffect(() => {
-    if (hideChat && activeTab === "chat") setActiveTab("events");
-  }, [hideChat, activeTab]);
 
   // Format event text (same logic as offline console)
   // IMPORTANT: Hide opponent's drawn card names from the event log
@@ -282,40 +281,49 @@ export default function OnlineConsole({
     return parts.length > 0 ? parts : processedText;
   }
 
-  // Combine game events and match events with timestamps for unified display
-  const combinedEvents = useMemo(() => {
-    const gameEvs = events.map((ev) => ({
-      id: ev.id,
-      timestamp: Date.now(), // Game events don't have timestamps, show them first
-      type: "game" as const,
+  // Build unified stream: game events + match events + chat messages, sorted chronologically
+  const streamItems = useMemo(() => {
+    const gameItems: StreamItem[] = events.map((ev) => ({
+      kind: "game" as const,
+      id: `game-${ev.id}`,
+      ts: ev.ts || 0,
       data: ev,
     }));
 
-    const matchEvs = matchEvents.map((ev) => ({
-      id: ev.id,
-      timestamp: ev.timestamp,
-      type: "match" as const,
+    const matchItems: StreamItem[] = matchEvents.map((ev) => ({
+      kind: "match" as const,
+      id: `match-${ev.id}`,
+      ts: ev.timestamp,
       data: ev,
     }));
 
-    // Combine and sort by timestamp
-    return [...gameEvs, ...matchEvs].sort((a, b) => {
-      // If timestamps are equal, prioritize match events
-      if (a.timestamp === b.timestamp) {
-        return a.type === "match" ? -1 : 1;
-      }
-      return a.timestamp - b.timestamp;
+    const chatItems: StreamItem[] = matchChat.map((m, idx) => ({
+      kind: "chat" as const,
+      id: `chat-${idx}-${m.ts ?? idx}`,
+      ts: m.ts ?? Date.now(),
+      data: m,
+    }));
+
+    return [...gameItems, ...matchItems, ...chatItems].sort(
+      (a, b) => a.ts - b.ts,
+    );
+  }, [events, matchEvents, matchChat]);
+
+  // Apply filter toggles
+  const filteredStream = useMemo(() => {
+    return streamItems.filter((item) => {
+      if (item.kind === "chat") return showChat && !hideChat;
+      return showEvents; // "game" and "match" are both event types
     });
-  }, [events, matchEvents]);
+  }, [streamItems, showChat, showEvents, hideChat]);
 
-  // Auto-scroll to latest content when tab changes or new content arrives
+  // Auto-scroll to latest content when new content arrives
   useEffect(() => {
     if (!consoleOpen) return;
-    const targetRef = activeTab === "events" ? eventsRef : chatRef;
-    const el = targetRef.current;
+    const el = streamRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
-  }, [combinedEvents.length, matchChat.length, activeTab, consoleOpen]);
+  }, [filteredStream.length, consoleOpen]);
 
   const handleSendChat = () => {
     const msg = chatInput.trim();
@@ -352,7 +360,7 @@ export default function OnlineConsole({
   // Collapsed state is always compact icon-only
   const containerWidth = collapsed ? "w-auto" : isMobile ? "w-72" : "w-80";
   const headerPadding = collapsed ? "px-1.5 py-1" : "px-3 py-2";
-  const tabBtnPadding = "px-2 py-1";
+  const filterBtnPadding = "px-2 py-1";
 
   return (
     <div
@@ -363,7 +371,7 @@ export default function OnlineConsole({
       {/* Main console UI - hidden when toastOnly */}
       {!toastOnly && (
         <div className="bg-black/60 backdrop-blur rounded-xl ring-1 ring-white/10 shadow transition-all">
-          {/* Header with tabs - compact icon-only when collapsed */}
+          {/* Header - compact icon-only when collapsed, filter toggles when expanded */}
           <div
             className={`flex items-center justify-between ${headerPadding} text-sm ${!collapsed ? "border-b border-white/10" : ""} select-none`}
             onContextMenu={(e) => e.preventDefault()}
@@ -374,7 +382,6 @@ export default function OnlineConsole({
                 <button
                   className="rounded bg-white/10 hover:bg-white/20 p-1.5 transition-colors relative"
                   onClick={() => {
-                    setActiveTab("events");
                     setConsoleOpen(true);
                     lastOpenReasonRef.current = "manual";
                     clearAutoCloseTimer();
@@ -389,12 +396,12 @@ export default function OnlineConsole({
                     </span>
                   )}
                 </button>
-                {!hideChat && (
+                {!hideChat && matchChat.length > 0 && (
                   <button
                     className="rounded bg-white/10 hover:bg-white/20 p-1.5 transition-colors relative"
                     onClick={() => {
-                      setActiveTab("chat");
                       setConsoleOpen(true);
+                      setShowChat(true);
                       lastOpenReasonRef.current = "manual";
                       clearAutoCloseTimer();
                     }}
@@ -402,11 +409,9 @@ export default function OnlineConsole({
                     title="Chat"
                   >
                     <MessageCircle className="w-4 h-4" />
-                    {matchChat.length > 0 && (
-                      <span className="absolute -top-1 -right-1 bg-green-500 text-white text-[9px] min-w-[14px] h-[14px] flex items-center justify-center rounded-full">
-                        {matchChat.length > 99 ? "99+" : matchChat.length}
-                      </span>
-                    )}
+                    <span className="absolute -top-1 -right-1 bg-green-500 text-white text-[9px] min-w-[14px] h-[14px] flex items-center justify-center rounded-full">
+                      {matchChat.length > 99 ? "99+" : matchChat.length}
+                    </span>
                   </button>
                 )}
                 <button
@@ -423,19 +428,18 @@ export default function OnlineConsole({
                 </button>
               </div>
             ) : (
-              /* Expanded: full tab buttons */
+              /* Expanded: filter toggle buttons */
               <>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1">
                   <button
-                    className={`flex items-center gap-1 ${tabBtnPadding} rounded text-xs transition-colors ${
-                      activeTab === "events"
+                    className={`flex items-center gap-1 ${filterBtnPadding} rounded text-xs transition-colors ${
+                      showEvents
                         ? "bg-white/20 text-white"
-                        : "hover:bg-white/10 opacity-70"
+                        : "bg-white/5 opacity-40"
                     }`}
-                    onClick={() => {
-                      setActiveTab("events");
-                    }}
+                    onClick={() => setShowEvents((v) => !v)}
                     onContextMenu={(e) => e.preventDefault()}
+                    title={showEvents ? "Hide events" : "Show events"}
                   >
                     <ScrollText className="w-3 h-3" />
                     Events
@@ -447,15 +451,14 @@ export default function OnlineConsole({
                   </button>
                   {!hideChat && (
                     <button
-                      className={`flex items-center gap-1 ${tabBtnPadding} rounded text-xs transition-colors ${
-                        activeTab === "chat"
+                      className={`flex items-center gap-1 ${filterBtnPadding} rounded text-xs transition-colors ${
+                        showChat
                           ? "bg-white/20 text-white"
-                          : "hover:bg-white/10 opacity-70"
+                          : "bg-white/5 opacity-40"
                       }`}
-                      onClick={() => {
-                        setActiveTab("chat");
-                      }}
+                      onClick={() => setShowChat((v) => !v)}
                       onContextMenu={(e) => e.preventDefault()}
+                      title={showChat ? "Hide chat" : "Show chat"}
                     >
                       <MessageCircle className="w-3 h-3" />
                       Chat
@@ -497,140 +500,129 @@ export default function OnlineConsole({
             )}
           </div>
 
-          {/* Content */}
+          {/* Content: interleaved stream + chat input */}
           {consoleOpen && (
             <div className="h-64 flex flex-col">
-              {/* Events Tab */}
-              {activeTab === "events" && (
-                <div
-                  ref={eventsRef}
-                  data-allow-wheel="true"
-                  className="flex-1 overflow-y-scroll thin-scrollbar px-3 py-3 space-y-1 min-h-0"
-                  style={fontStyle}
-                >
-                  {combinedEvents.length === 0 && (
-                    <div className="opacity-60">No events yet</div>
-                  )}
-                  {combinedEvents.slice(-100).map((item, index) => {
-                    if (item.type === "match") {
-                      // Render match/tournament event
-                      const matchEv = item.data;
-                      const formatted = formatMatchEvent(matchEv);
-                      return (
-                        <div
-                          key={`${item.id}-${index}`}
-                          className={`opacity-90 ${formatted.color || ""}`}
-                        >
-                          {formatted.icon} {formatted.text}
-                        </div>
-                      );
-                    } else {
-                      // Render game event
-                      const ev = item.data;
-                      const t = ev.text || "";
-                      const low = t.toLowerCase();
-                      // Detect warnings: messages starting with [warning], warning, cannot, or other error patterns
-                      const isWarn =
-                        low.startsWith("[warning]") ||
-                        low.startsWith("warning") ||
-                        low.startsWith("cannot") ||
-                        low.includes("cannot") ||
-                        low.startsWith("insufficient") ||
-                        low.startsWith("first site must") ||
-                        low.startsWith("new sites must") ||
-                        low.startsWith("sites cannot") ||
-                        low.startsWith("permanents can only") ||
-                        low.startsWith("avatar must");
-                      const isSearch = low.startsWith("search:");
-                      const turnPrefix = ev.turn ? `[T${ev.turn}] ` : "";
-                      // Color turn prefix by which player's turn it was
-                      const turnColor =
-                        ev.player === 1
-                          ? PLAYER_COLORS.p1
-                          : ev.player === 2
-                            ? PLAYER_COLORS.p2
-                            : undefined;
-                      return (
-                        <div
-                          key={`${item.id}-${index}`}
-                          className={`opacity-85 ${
-                            isWarn
-                              ? "text-yellow-400"
-                              : isSearch
-                                ? "text-blue-400"
-                                : ""
-                          }`}
-                        >
-                          {turnPrefix && (
-                            <span
-                              className="opacity-70"
-                              style={
-                                turnColor ? { color: turnColor } : undefined
-                              }
-                            >
-                              {turnPrefix}
-                            </span>
-                          )}
-                          • {renderColoredText(formatEventText(ev.text))}
-                        </div>
-                      );
-                    }
-                  })}
-                </div>
-              )}
-
-              {/* Chat Tab */}
-              {activeTab === "chat" && !hideChat && (
-                <>
-                  <div
-                    ref={chatRef}
-                    data-allow-wheel="true"
-                    className="flex-1 overflow-y-scroll thin-scrollbar px-3 py-3 space-y-1 min-h-0"
-                    style={fontStyle}
-                  >
-                    {matchChat.length === 0 && (
-                      <div className="opacity-60">No messages</div>
-                    )}
-                    {matchChat.map((m, i) => (
-                      <div key={i} className="opacity-90">
-                        <span className="font-medium">
+              {/* Interleaved stream */}
+              <div
+                ref={streamRef}
+                data-allow-wheel="true"
+                className="flex-1 overflow-y-scroll thin-scrollbar px-3 py-3 space-y-1 min-h-0"
+                style={fontStyle}
+              >
+                {filteredStream.length === 0 && (
+                  <div className="opacity-60">No events yet</div>
+                )}
+                {filteredStream.slice(-100).map((item) => {
+                  if (item.kind === "match") {
+                    // Render match/tournament event
+                    const formatted = formatMatchEvent(item.data);
+                    return (
+                      <div
+                        key={item.id}
+                        className={`opacity-90 ${formatted.color || ""}`}
+                      >
+                        {formatted.icon} {formatted.text}
+                      </div>
+                    );
+                  } else if (item.kind === "chat") {
+                    // Render chat message with green left border
+                    const m = item.data;
+                    return (
+                      <div
+                        key={item.id}
+                        className="opacity-90 border-l-2 border-green-500/50 pl-2 py-0.5"
+                      >
+                        <span className="font-bold text-green-300/90">
                           {m.from?.displayName ?? "System"}
                         </span>
-                        : {m.content}
+                        <span className="opacity-80">: {m.content}</span>
                       </div>
-                    ))}
-                  </div>
+                    );
+                  } else {
+                    // Render game event
+                    const ev = item.data;
+                    const t = ev.text || "";
+                    const low = t.toLowerCase();
+                    // Detect warnings: messages starting with [warning], warning, cannot, or other error patterns
+                    const isWarn =
+                      low.startsWith("[warning]") ||
+                      low.startsWith("warning") ||
+                      low.startsWith("cannot") ||
+                      low.includes("cannot") ||
+                      low.startsWith("insufficient") ||
+                      low.startsWith("first site must") ||
+                      low.startsWith("new sites must") ||
+                      low.startsWith("sites cannot") ||
+                      low.startsWith("permanents can only") ||
+                      low.startsWith("avatar must");
+                    const isSearch = low.startsWith("search:");
+                    const turnPrefix = ev.turn ? `[T${ev.turn}] ` : "";
+                    // Color turn prefix by which player's turn it was
+                    const turnColor =
+                      ev.player === 1
+                        ? PLAYER_COLORS.p1
+                        : ev.player === 2
+                          ? PLAYER_COLORS.p2
+                          : undefined;
+                    return (
+                      <div
+                        key={item.id}
+                        className={`opacity-70 ${
+                          isWarn
+                            ? "text-yellow-400"
+                            : isSearch
+                              ? "text-blue-400"
+                              : ""
+                        }`}
+                      >
+                        {turnPrefix && (
+                          <span
+                            className="opacity-70"
+                            style={
+                              turnColor ? { color: turnColor } : undefined
+                            }
+                          >
+                            {turnPrefix}
+                          </span>
+                        )}
+                        • {renderColoredText(formatEventText(ev.text))}
+                      </div>
+                    );
+                  }
+                })}
+              </div>
 
-                  {/* Chat input */}
-                  <div
-                    className="px-3 pb-3 pt-2 border-t border-white/10 flex gap-2 select-none"
+              {/* Chat input - always visible when expanded and chat not hidden */}
+              {!hideChat && (
+                <div
+                  className="px-3 pb-3 pt-2 border-t border-white/10 flex gap-2 select-none"
+                  onContextMenu={(e) => e.preventDefault()}
+                >
+                  <input
+                    className="flex-1 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1"
+                    style={fontStyle}
+                    placeholder="Type a message..."
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        handleSendChat();
+                      }
+                    }}
+                    disabled={!connected}
+                    onContextMenu={(e) => e.preventDefault()}
+                  />
+                  <button
+                    className="rounded bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed px-3 py-1 transition-colors"
+                    style={fontStyle}
+                    onClick={handleSendChat}
+                    disabled={!connected || !chatInput.trim()}
                     onContextMenu={(e) => e.preventDefault()}
                   >
-                    <input
-                      className="flex-1 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1"
-                      style={fontStyle}
-                      placeholder="Type a message..."
-                      value={chatInput}
-                      onChange={(e) => setChatInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          handleSendChat();
-                        }
-                      }}
-                      disabled={!connected}
-                      onContextMenu={(e) => e.preventDefault()}
-                    />
-                    <button
-                      className="rounded bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed px-3 py-1 transition-colors"
-                      style={fontStyle}
-                      onClick={handleSendChat}
-                      disabled={!connected || !chatInput.trim()}
-                      onContextMenu={(e) => e.preventDefault()}
-                    >
-                      Send
-                    </button>
-                  </div>
-                </>
+                    Send
+                  </button>
+                </div>
               )}
             </div>
           )}
@@ -638,7 +630,7 @@ export default function OnlineConsole({
       )}
 
       {/* Toast notification for chat messages - always shown (even in toastOnly mode) */}
-      {showToast && (toastOnly || !consoleOpen || activeTab !== "chat") && (
+      {showToast && (toastOnly || !consoleOpen) && (
         <div
           className={`absolute ${toastOnly ? "top-0" : "top-[-70px]"} left-0 right-0 bg-black/70 rounded-lg px-4 py-3 text-sm text-white shadow-xl cursor-pointer transform transition-all duration-300 ease-out z-20`}
           style={{
@@ -647,7 +639,7 @@ export default function OnlineConsole({
           onClick={() => {
             if (!toastOnly) {
               setConsoleOpen(true);
-              setActiveTab("chat");
+              setShowChat(true);
             }
             setShowToast(false);
             lastOpenReasonRef.current = "manual";

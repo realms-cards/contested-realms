@@ -1,13 +1,12 @@
 import type { Finish } from "@prisma/client";
 import { NextRequest } from "next/server";
 import { getPriceForCard } from "@/lib/collection/price-cache";
-import { getAffiliateLink } from "@/lib/collection/pricing-provider";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
 // GET /api/pricing/card/[cardId]
-// Get pricing and affiliate links for a card
+// Get pricing for a card
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ cardId: string }> }
@@ -76,14 +75,10 @@ export async function GET(
           currency: "USD" as const,
           source: "tcgplayer" as const,
           lastUpdated: priceData?.lastUpdated ?? new Date().toISOString(),
-          affiliateUrl:
-            priceData?.affiliateUrl ??
-            getAffiliateLink(card.name, v.set.name, v.finish),
         };
       }),
     );
 
-    // If no variants match filters, still provide a generic affiliate link
     if (prices.length === 0) {
       return new Response(
         JSON.stringify({
@@ -91,7 +86,6 @@ export async function GET(
           cardName: card.name,
           prices: [],
           message: "No pricing data available",
-          affiliateUrl: getAffiliateLink(card.name),
         }),
         { status: 200, headers: { "content-type": "application/json" } }
       );

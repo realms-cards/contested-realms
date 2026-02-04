@@ -11,6 +11,7 @@ import { TOKEN_BY_NAME } from "@/lib/game/tokens";
 import { isApexOfBabel, isBaseOfBabel } from "../babelTowerState";
 import { isGardenOfEden } from "../gardenOfEdenState";
 import { isPortalTile } from "../portalState";
+import { isRiverGenesisSite } from "../riverGenesisState";
 import { isMismanagedMortuary } from "../specialSiteState";
 import type {
   CardRef,
@@ -119,6 +120,21 @@ const triggerSiteGenesis = (
       },
       ownerSeat,
     });
+    return;
+  }
+
+  // River sites (Spring/Summer/Autumn/Winter River) - look at next spell, may put on bottom
+  // "Genesis → Look at your next spell. You may put it on the bottom of your spellbook."
+  if (isRiverGenesisSite(siteName)) {
+    const ownerSeat = owner === 1 ? "p1" : "p2";
+    // Check if resolvers are disabled
+    if (!state.resolversDisabled) {
+      state.beginRiverGenesis({
+        siteName,
+        cellKey,
+        ownerSeat,
+      });
+    }
     return;
   }
 
@@ -233,7 +249,14 @@ export const createPlayActionsSlice: StateCreator<
         const req = (card.thresholds || {}) as Partial<
           Record<keyof Thresholds, number>
         >;
-        const have = computeThresholdTotals(state.board, state.permanents, who, undefined, undefined, state.babelTowers);
+        const have = computeThresholdTotals(
+          state.board,
+          state.permanents,
+          who,
+          undefined,
+          undefined,
+          state.babelTowers,
+        );
         const miss: string[] = [];
         for (const kk of Object.keys(req) as (keyof Thresholds)[]) {
           const need = Number(req[kk] ?? 0);
@@ -791,6 +814,7 @@ export const createPlayActionsSlice: StateCreator<
       const isMephistopheles = cardNameLower.includes("mephistopheles");
       const isRaiseDead = cardNameLower === "raise dead";
       const isLegionOfGall = cardNameLower === "legion of gall";
+      const isShapeshift = cardNameLower === "shapeshift";
       console.log("[playActions] Card played:", {
         cardName: card.name,
         cardNameLower,
@@ -889,6 +913,21 @@ export const createPlayActionsSlice: StateCreator<
       else if (isBrowse && newest) {
         try {
           get().beginBrowse({
+            spell: {
+              at: key,
+              index: arr.length - 1,
+              instanceId: newest.instanceId ?? null,
+              owner: newest.owner,
+              card: newest.card as CardRef,
+            },
+            casterSeat: who,
+          });
+        } catch {}
+      }
+      // If this is Shapeshift, begin the transformation spell flow
+      else if (isShapeshift && newest) {
+        try {
+          get().beginShapeshift({
             spell: {
               at: key,
               index: arr.length - 1,

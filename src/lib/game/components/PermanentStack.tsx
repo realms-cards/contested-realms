@@ -122,6 +122,11 @@ type ChaosTwisterContext = {
   metaByCardId: GameState["metaByCardId"];
 };
 
+type ShapeshiftContext = {
+  pendingShapeshift: GameState["pendingShapeshift"];
+  selectShapeshiftTarget: GameState["selectShapeshiftTarget"];
+};
+
 type CounterHandlers = {
   increment: GameState["incrementPermanentCounter"];
   decrement: GameState["decrementPermanentCounter"];
@@ -172,6 +177,7 @@ export type PermanentStackProps = {
   combatContext: CombatContext;
   magicContext: MagicContext;
   chaosTwisterContext: ChaosTwisterContext;
+  shapeshiftContext: ShapeshiftContext;
   counterHandlers: CounterHandlers;
   movementHandlers: MovementHandlers;
   emitBoardPing: (pos: { x: number; z: number }) => void;
@@ -311,6 +317,7 @@ export function PermanentStack({
   combatContext,
   magicContext,
   chaosTwisterContext,
+  shapeshiftContext,
   counterHandlers,
   movementHandlers,
   emitBoardPing,
@@ -380,6 +387,7 @@ export function PermanentStack({
   void computeProjectileFirstHits;
   const { pendingChaosTwister, selectChaosTwisterMinion, metaByCardId } =
     chaosTwisterContext;
+  const { pendingShapeshift, selectShapeshiftTarget } = shapeshiftContext;
   const { increment, decrement } = counterHandlers;
   const { setOffset, moveToWithOffset, moveToZone } = movementHandlers;
 
@@ -517,7 +525,8 @@ export function PermanentStack({
         // When site is on this tile, lift permanents above the site (site rendered by SiteCard)
         // Tower of Babel has two stacked cards, so lift an extra layer
         const avatarLift = avatarOnThisTile ? layerLift : 0;
-        const siteLift = hasSite && !tokenSiteReplace ? layerLift * (isBabelTower ? 2 : 1) : 0;
+        const siteLift =
+          hasSite && !tokenSiteReplace ? layerLift * (isBabelTower ? 2 : 1) : 0;
         const baseY = isBurrowed
           ? burrowedElevation
           : tokenSiteReplace
@@ -756,6 +765,30 @@ export function PermanentStack({
                       index: idx,
                       card: p.card,
                       power,
+                    });
+                    return;
+                  }
+                }
+                // Shapeshift target selection - click on an allied minion
+                if (
+                  pendingShapeshift &&
+                  pendingShapeshift.phase === "selectingTarget" &&
+                  pendingShapeshift.casterSeat === actorKey
+                ) {
+                  const type = (p.card?.type || "").toLowerCase();
+                  const isMinion =
+                    type.includes("minion") || type.includes("creature");
+                  // Only allied minions can be targeted, and attachments cannot be selected
+                  const isAttachment = Boolean(p.attachedTo);
+                  const casterOwner =
+                    pendingShapeshift.casterSeat === "p1" ? 1 : 2;
+                  if (isMinion && !isAttachment && owner === casterOwner) {
+                    e.stopPropagation();
+                    selectShapeshiftTarget({
+                      cellKey: key as CellKey,
+                      index: idx,
+                      instanceId: p.card?.instanceId ?? null,
+                      card: p.card as CardRef,
                     });
                     return;
                   }
@@ -1277,9 +1310,7 @@ export function PermanentStack({
                     polygonOffsetFactor={-1}
                     polygonOffsetUnits={-1}
                     renderOrder={
-                      isDraggingPermanent || isSel || isLastTouched
-                        ? 1000
-                        : 100
+                      isDraggingPermanent || isSel || isLastTouched ? 1000 : 100
                     }
                   />
                 ) : isToken ? (

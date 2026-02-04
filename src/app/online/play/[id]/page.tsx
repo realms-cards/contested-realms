@@ -70,7 +70,9 @@ import PrivateHandTargetingOverlay from "@/components/game/PrivateHandTargetingO
 import RaiseDeadOverlay from "@/components/game/RaiseDeadOverlay";
 import RestoreUiButton from "@/components/game/RestoreUiButton";
 import RevealOverlay from "@/components/game/RevealOverlay";
+import { RiverGenesisOverlay } from "@/components/game/RiverGenesisOverlay";
 import SearingTruthOverlay from "@/components/game/SearingTruthOverlay";
+import ShapeshiftOverlay from "@/components/game/ShapeshiftOverlay";
 import PlayerStatusEffects from "@/components/game/StatusEffectIcons";
 // SeerScreen is now integrated into OnlineMulliganScreen
 import SwitchSiteHudOverlay from "@/components/game/SwitchSiteHudOverlay";
@@ -3427,6 +3429,10 @@ export default function OnlineMatchPage() {
               <EarthquakeOverlay transport={transport} />
               {/* Element Choice Overlay (Valley of Delight, etc.) */}
               <ElementChoiceOverlay />
+              {/* River Genesis Overlay (Spring/Summer/Autumn/Winter River) */}
+              <RiverGenesisOverlay />
+              {/* Shapeshift Overlay (transform minion) */}
+              <ShapeshiftOverlay />
               {/* Animist Cast Choice Overlay (magic or spirit) */}
               <AnimistCastChoiceOverlay />
               {/* Browse Overlay (spell selection) */}
