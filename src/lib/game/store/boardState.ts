@@ -935,6 +935,29 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
         }
       }
 
+      // Update Tower of Babel tracking if source or target has a merged tower
+      let babelTowersNext = state.babelTowers;
+      const sourceTower = state.babelTowers.find(
+        (t) => t.cellKey === sourceKey,
+      );
+      const targetTower = targetSite
+        ? state.babelTowers.find((t) => t.cellKey === targetKey)
+        : null;
+
+      if (sourceTower || targetTower) {
+        babelTowersNext = state.babelTowers.map((t) => {
+          if (t.cellKey === sourceKey) {
+            // Source tower moves to target position
+            return { ...t, cellKey: targetKey };
+          }
+          if (targetSite && t.cellKey === targetKey) {
+            // Target tower (in swap) moves to source position
+            return { ...t, cellKey: sourceKey };
+          }
+          return t;
+        });
+      }
+
       // Check actor permissions in online mode (bypassed for Earthquake swaps)
       if (state.transport && state.actorKey && !opts?.bypassOwnerCheck) {
         const ownerSeat = seatFromOwner(sourceSite.owner);
@@ -1040,6 +1063,7 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
           board: { ...boardNext, sites: sitesPatch as typeof boardNext.sites },
           permanents: permanents as ServerPatchT["permanents"],
           avatars,
+          babelTowers: babelTowersNext,
         };
         get().trySendPatch(patch);
       }
@@ -1048,6 +1072,7 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
         board: boardNext,
         permanents,
         avatars,
+        babelTowers: babelTowersNext,
       } as Partial<GameState> as GameState;
     }),
 });

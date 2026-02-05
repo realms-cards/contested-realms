@@ -913,6 +913,51 @@ export type PendingRiverGenesis = {
   createdAt: number;
 };
 
+// --- Observatory State ------------------------------------------------
+// "Genesis → Look at your next three spells. Put them back in any order."
+export type ObservatoryPhase = "ordering" | "resolving" | "complete";
+
+export type PendingObservatory = {
+  id: string;
+  siteName: string;
+  cellKey: CellKey;
+  ownerSeat: PlayerKey;
+  phase: ObservatoryPhase;
+  revealedCards: CardRef[];
+  newOrder: number[];
+  createdAt: number;
+};
+
+// --- Kelp Cavern State ------------------------------------------------
+// "Genesis → Look at your bottom three spells. Put one on top of your spellbook."
+export type KelpCavernPhase = "selecting" | "resolving" | "complete";
+
+export type PendingKelpCavern = {
+  id: string;
+  siteName: string;
+  cellKey: CellKey;
+  ownerSeat: PlayerKey;
+  phase: KelpCavernPhase;
+  revealedCards: CardRef[];
+  originalIndices: number[];
+  selectedCardIndex: number | null;
+  createdAt: number;
+};
+
+// --- Mirror Realm State ------------------------------------------------
+// "When played, choose a nearby site to copy. Transform into that site."
+export type MirrorRealmPhase = "selecting" | "resolving" | "complete";
+
+export type PendingMirrorRealm = {
+  id: string;
+  casterSeat: PlayerKey;
+  mirrorRealmCell: CellKey;
+  phase: MirrorRealmPhase;
+  nearbySites: CellKey[]; // Nearby cells with sites (not void)
+  selectedTarget: CellKey | null;
+  createdAt: number;
+};
+
 // --- Shapeshift State ------------------------------------------------
 // "An allied minion tries to transform. Look at your next five spells:
 // you may choose a minion among them to be the new form.
@@ -1750,6 +1795,12 @@ export type GameState = {
     cardIndex: number,
     targetTile: { x: number; y: number },
   ) => void;
+  // Transfer Pith Imp ownership (called when Pith Imp's control is transferred)
+  transferPithImpOwnership: (
+    minionInstanceId: string | null,
+    minionAt: CellKey,
+    newOwnerSeat: PlayerKey,
+  ) => void;
   // Morgana le Fay private hands
   morganaHands: MorganaHandEntry[];
   triggerMorganaGenesis: (input: {
@@ -1872,6 +1923,28 @@ export type GameState = {
   }) => void;
   completeRiverGenesis: (choice: "keep" | "bottom") => void;
   cancelRiverGenesis: () => void;
+  // Observatory (look at top 3 spells, reorder them)
+  pendingObservatory: PendingObservatory | null;
+  beginObservatory: (input: {
+    siteName: string;
+    cellKey: CellKey;
+    ownerSeat: PlayerKey;
+  }) => void;
+  setObservatoryOrder: (order: number[]) => void;
+  resolveObservatory: () => void;
+  cancelObservatory: () => void;
+  // Kelp Cavern (look at bottom 3 spells, put one on top)
+  pendingKelpCavern: PendingKelpCavern | null;
+  beginKelpCavern: (input: {
+    siteName: string;
+    cellKey: CellKey;
+    ownerSeat: PlayerKey;
+  }) => void;
+  selectKelpCavernCard: (cardIndex: number) => void;
+  resolveKelpCavern: () => void;
+  cancelKelpCavern: () => void;
+  // Torshammar Trinket (return to hand at end of turn)
+  triggerTorshammarEndOfTurn: (endingPlayerSeat: PlayerKey) => void;
   // Shapeshift (transform allied minion into a minion from top 5 spells)
   pendingShapeshift: PendingShapeshift | null;
   beginShapeshift: (input: {
@@ -2537,6 +2610,16 @@ export type GameState = {
     seat: PlayerKey,
     count?: number,
   ) => { allowed: boolean; remaining: number };
+  // Mirror Realm State (Gothic expansion)
+  // When played, choose a nearby site to copy and transform into it
+  pendingMirrorRealm: PendingMirrorRealm | null;
+  beginMirrorRealm: (input: {
+    mirrorRealmCell: CellKey;
+    casterSeat: PlayerKey;
+  }) => void;
+  selectMirrorRealmTarget: (targetCell: CellKey) => void;
+  resolveMirrorRealm: () => void;
+  cancelMirrorRealm: () => void;
   // Reveal Overlay State (prominent display for revealed cards)
   revealOverlay: {
     isOpen: boolean;
@@ -2860,6 +2943,7 @@ export type ServerPatchT = Partial<{
   gemTokens: GameState["gemTokens"];
   gardenOfEdenLocations: GameState["gardenOfEdenLocations"];
   cardsDrawnThisTurn: GameState["cardsDrawnThisTurn"];
+  pendingMirrorRealm: GameState["pendingMirrorRealm"];
   __replaceKeys: string[];
   // Snapshot timestamp for replay truncation on undo
   __snapshotTs: number;

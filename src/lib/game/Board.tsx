@@ -253,6 +253,9 @@ export default function Board({
     (s) => s.getRemoteHighlightColor,
   );
   const currentPlayer = useScopedStore((s) => s.currentPlayer);
+  const phase = useScopedStore((s) => s.phase);
+  const hasDrawnThisTurn = useScopedStore((s) => s.hasDrawnThisTurn);
+  const turn = useScopedStore((s) => s.turn);
   const actorKey = useScopedStore((s) => s.actorKey);
   const remoteCursors = useScopedStore((s) => s.remoteCursors);
   const localPlayerId = useScopedStore((s) => s.localPlayerId);
@@ -1364,6 +1367,9 @@ export default function Board({
               isSpectator={isSpectator}
               actorKey={actorKey}
               currentPlayer={currentPlayer}
+              phase={phase}
+              hasDrawnThisTurn={hasDrawnThisTurn}
+              turn={turn}
               lastDropAt={lastDropAt}
               pendingMagic={pendingMagic}
               avatars={avatars}

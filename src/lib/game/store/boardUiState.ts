@@ -100,7 +100,7 @@ export const createInitialBoardUiState = (): BoardUiDefaults => ({
   gridColor: "white",
   gridBlend: "normal",
   allowSiteDrag: false, // Default: sites cannot be freely dragged on board
-  autoTapOnMove: true, // Default: auto-tap avatars/minions when moved across tiles
+  autoTapOnMove: false, // Default: do not auto-tap avatars/minions when moved across tiles
   showOwnershipOverlay: false, // Default: no ownership highlight on cards
   cardScale: 1, // Default: full size cards (range 0.25 to 1)
   boardPings: [],

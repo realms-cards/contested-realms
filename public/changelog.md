@@ -2,7 +2,17 @@
 
 ## February 2026
 
-### Feb 18 - Garden of Eden and Reveal Overlay
+### Feb 05 - More resolvers
+
+- **introduce Turn change Overlay** and change sound at turn start
+- **introduce insufficient Mana/Treshold toast message**
+- **interleave chat and event log in matches**
+- **disable auto-tap** for moving cards on the board. you can tap by hitting "t" or richt-click->Tap
+- **custom resolvers for** Seasonal River series, Shapeshift, Observatory, Kelp Cavern, Torshammars Trinket, Mirror Realm
+- **fix resolver for** Valley of Delight, Pith Imp, Omphalos, Searing Truth
+- **sites can spawn their keyword** frog, foot soldier, skeleton, lance
+
+### Feb 03 - Garden of Eden and Reveal Overlay
 
 - **Solo VS CPU mode added** not very smart, mostly for goldfishing purposes
 - **add Garden of Eden custom resolver** - when active, players can only draw one card per turn

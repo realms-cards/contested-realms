@@ -221,6 +221,14 @@ export const RESOLVER_REGISTRY: ResolverEntry[] = [
 
   // ─── SITE RESOLVERS ────────────────────────────────────────────────
   {
+    id: "valleyOfDelight",
+    cardName: "Valley of Delight",
+    category: "site",
+    stateFile: "specialSiteState.ts",
+    description:
+      "Genesis: Choose an element (Air/Water/Earth/Fire) - site provides that threshold permanently. Spawns a colored gem on tile.",
+  },
+  {
     id: "riverGenesis",
     cardName: "Spring River / Summer River / Autumn River / Winter River",
     category: "site",
@@ -261,6 +269,28 @@ export const RESOLVER_REGISTRY: ResolverEntry[] = [
     category: "site",
     stateFile: "specialSiteState.ts",
     description: "Troubled Town, Gilman House, etc.",
+  },
+  {
+    id: "observatory",
+    cardName: "Observatory",
+    category: "site",
+    stateFile: "observatoryState.ts",
+    description: "Genesis: Look at top 3 spells, put them back in any order",
+  },
+  {
+    id: "kelpCavern",
+    cardName: "Kelp Cavern",
+    category: "site",
+    stateFile: "kelpCavernState.ts",
+    description:
+      "Genesis: Look at bottom 3 spells, put one on top of spellbook",
+  },
+  {
+    id: "torshammarTrinket",
+    cardName: "Torshammar Trinket",
+    category: "artifact",
+    stateFile: "torshammarState.ts",
+    description: "Bearer has +1 power. After each turn, return to owner's hand",
   },
 ];
 

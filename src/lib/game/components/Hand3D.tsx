@@ -189,7 +189,7 @@ export default function Hand3D({
   // Hand zone: portion of the screen height from the bottom that counts as "in hand zone"
   // Higher value = smaller zone (cursor must be closer to bottom)
   // On touch devices, use a larger trigger zone for easier access
-  const HAND_ZONE_TOP_FRAC = isCoarsePointer ? 0.82 : 0.84; // Mobile: bottom 18%, Desktop: bottom 12%
+  const HAND_ZONE_TOP_FRAC = isCoarsePointer ? 0.82 : 0.87; // Mobile: bottom 18%, Desktop: bottom 12%
   const HAND_ZONE_BOTTOM_FRAC = 1.0; // Allow touching very edge on mobile
   // Horizontal zone: center portion of screen width that triggers hand reveal
   // On touch devices, use wider zone for easier access
@@ -1369,7 +1369,12 @@ export default function Hand3D({
                   e.stopPropagation();
                   e.nativeEvent.preventDefault();
                   openContextMenu(
-                    { kind: "handCard", who: owner, index: originalIndex, card: c },
+                    {
+                      kind: "handCard",
+                      who: owner,
+                      index: originalIndex,
+                      card: c,
+                    },
                     { x: e.nativeEvent.clientX, y: e.nativeEvent.clientY },
                   );
                 }}

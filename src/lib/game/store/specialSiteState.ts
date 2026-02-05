@@ -1,9 +1,11 @@
 import type { StateCreator } from "zustand";
+import { TILE_SIZE } from "@/lib/game/constants";
 import type {
   BloomSiteBonus,
   CellKey,
   ElementChoice,
   GameState,
+  GemColorId,
   GenesisManaBonus,
   MismanagedMortuaryAura,
   Permanents,
@@ -11,7 +13,16 @@ import type {
   SpecialSiteState,
   ValleyOfDelightChoice,
 } from "./types";
+import { parseCellKey } from "./utils/boardHelpers";
 import { siteHasSilencedToken } from "./utils/resourceHelpers";
+
+// Map element choices to gem colors for visual feedback on Valley of Delight
+const ELEMENT_TO_GEM_COLOR: Record<ElementChoice, GemColorId> = {
+  air: "cyan",
+  water: "blue",
+  earth: "green",
+  fire: "red",
+};
 
 const emptySpecialSiteState = (): SpecialSiteState => ({
   valleyChoices: [],
@@ -98,6 +109,26 @@ export const createSpecialSiteSlice: StateCreator<
     };
 
     set({ specialSiteState: newState });
+
+    // Spawn a gem token on the tile to visualize the element choice
+    const gemColor = ELEMENT_TO_GEM_COLOR[element];
+    const ownerSeat = pending.chooserSeat;
+    const { x, y } = parseCellKey(pending.cellKey);
+    const boardSize = state.board.size;
+
+    // Calculate world position from tile coordinates
+    // (same formula as Board.tsx uses for tile positioning)
+    const offsetX = -((boardSize.w - 1) * TILE_SIZE) / 2;
+    const offsetY = -((boardSize.h - 1) * TILE_SIZE) / 2;
+    const worldX = x * TILE_SIZE + offsetX;
+    const worldZ = y * TILE_SIZE + offsetY;
+
+    // Spawn gem slightly above the card surface
+    state.spawnGemTokenAt(gemColor, ownerSeat, {
+      x: worldX,
+      y: 0.05, // Slightly above board surface
+      z: worldZ,
+    });
 
     // Sync to server
     state.trySendPatch({ specialSiteState: newState });

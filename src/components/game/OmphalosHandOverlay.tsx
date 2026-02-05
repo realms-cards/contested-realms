@@ -16,12 +16,13 @@ export default function OmphalosHandOverlay({
   const omphalosHands = useGameStore((s) => s.omphalosHands);
   const actorKey = useGameStore((s) => s.actorKey);
   const setPendingPrivateHandCast = useGameStore(
-    (s) => s.setPendingPrivateHandCast
+    (s) => s.setPendingPrivateHandCast,
   );
+  const castFromOmphalosHand = useGameStore((s) => s.castFromOmphalosHand);
 
   const [expanded, setExpanded] = useState<string | null>(null);
   const [selectedCardIndex, setSelectedCardIndex] = useState<number | null>(
-    null
+    null,
   );
 
   // Filter hands based on player
@@ -43,8 +44,9 @@ export default function OmphalosHandOverlay({
     setSelectedCardIndex((prev) => (prev === index ? null : index));
   }, []);
 
-  // Begin casting the selected card - puts player in targeting mode
-  // For Omphalos, minions MUST be summoned at the Omphalos location
+  // Begin casting the selected card
+  // For Omphalos, minions are summoned directly at the Omphalos location
+  // Spells require targeting (player must click a tile)
   const handleCast = useCallback(
     (omphalos: OmphalosHandEntry, cardIndex: number) => {
       const card = omphalos.hand[cardIndex];
@@ -53,19 +55,25 @@ export default function OmphalosHandOverlay({
       const cardType = (card.type || "").toLowerCase();
       const isMinion = cardType.includes("minion");
 
-      // Set pending cast - player must now click a tile to complete
-      // For minions, they must be cast at the Omphalos location
-      setPendingPrivateHandCast({
-        kind: "omphalos",
-        handId: omphalos.id,
-        cardIndex,
-        card,
-        mustCastAtLocation: isMinion ? omphalos.artifact.at : undefined,
-      });
-      setSelectedCardIndex(null);
-      setExpanded(null);
+      if (isMinion) {
+        // Minions: cast directly at the Omphalos location (no targeting needed)
+        const [x, y] = omphalos.artifact.at.split(",").map(Number);
+        castFromOmphalosHand(omphalos.id, cardIndex, { x, y });
+        setSelectedCardIndex(null);
+        setExpanded(null);
+      } else {
+        // Spells: require targeting - player must click a tile
+        setPendingPrivateHandCast({
+          kind: "omphalos",
+          handId: omphalos.id,
+          cardIndex,
+          card,
+        });
+        setSelectedCardIndex(null);
+        setExpanded(null);
+      }
     },
-    [setPendingPrivateHandCast]
+    [setPendingPrivateHandCast, castFromOmphalosHand],
   );
 
   if (visibleHands.length === 0) return null;

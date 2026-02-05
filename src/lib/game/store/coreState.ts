@@ -590,6 +590,11 @@ export const createCoreSlice: StateCreator<
       get().triggerLilithEndOfTurn(endingPlayerSeat);
     } catch {}
 
+    // Trigger Torshammar Trinket return to hand for the ending player
+    try {
+      get().triggerTorshammarEndOfTurn(endingPlayerSeat);
+    } catch {}
+
     // Clear turn-based bonuses (bloom sites, genesis mana, etc.)
     try {
       get().clearTurnBonuses();
@@ -597,7 +602,9 @@ export const createCoreSlice: StateCreator<
 
     get().log(`Turn passes to [p${nextPlayerNum}:PLAYER]`);
 
-    const permanents: Permanents = { ...state.permanents };
+    // IMPORTANT: Re-read permanents AFTER end-of-turn triggers have run
+    // Torshammar, Lilith, Omphalos may have modified the permanents state
+    const permanents: Permanents = { ...get().permanents };
     const updates: PermanentDeltaUpdate[] = [];
     for (const cellKey of Object.keys(permanents)) {
       const cellPermanents = permanents[cellKey] || [];
@@ -669,8 +676,14 @@ export const createCoreSlice: StateCreator<
       }
     }
 
+    // Build combined patch with all end-of-turn changes
+    // NOTE: We do NOT include zones here - zone changes (like Torshammar's hand update)
+    // are already applied locally, and sending partial zones can wipe the other player's
+    // zone data on the server (server does full replacement, not merge, for zones).
+    // Zone state is private to each player anyway (opponent can't see hand contents).
+
     // Don't send turn in patch - server increments turn when currentPlayer changes
-    // Only send affected player's data to avoid overwriting opponent's state
+    // Include full permanents with __replaceKeys to ensure all trigger changes are synced
     const base: ServerPatchT = {
       phase: "Start",
       currentPlayer: nextPlayer,
@@ -681,10 +694,15 @@ export const createCoreSlice: StateCreator<
       mephistophelesSummonUsed: mephistophelesSummonUsedNext,
       harbingerPortalDiscountUsed: harbingerPortalDiscountUsedNext,
       etherCoresInVoidAtTurnStart: etherCoresInVoidAtTurnStartNext,
+      // Include full permanents after all end-of-turn triggers
+      permanents,
+      __replaceKeys: ["permanents"],
     };
     const deltaPatch =
       updates.length > 0 ? createPermanentDeltaPatch(updates) : undefined;
-    const patch: ServerPatchT = deltaPatch ? { ...deltaPatch, ...base } : base;
+    // Note: deltaPatch updates are for untapping, which is already reflected in `permanents`
+    // We include deltaPatch for backward compatibility but permanents is the source of truth
+    const patch: ServerPatchT = deltaPatch ? { ...base, ...deltaPatch } : base;
     get().trySendPatch(patch);
 
     // Don't set turn locally - server will send the authoritative turn value
