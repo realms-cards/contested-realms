@@ -251,7 +251,7 @@ export const createShapeshiftSlice: StateCreator<
         : null;
 
     let transformedMessage = "";
-    const board = get().board;
+    const _board = get().board;
     const permanents = { ...get().permanents };
 
     if (selectedCard && pending.targetMinion) {

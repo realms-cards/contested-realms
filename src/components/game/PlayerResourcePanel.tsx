@@ -257,7 +257,15 @@ export function PlayerResourceColumn({
       babelTowers,
     );
     return result;
-  }, [boardSize, boardSites, permanents, player, avatar, specialSiteState, babelTowers]);
+  }, [
+    boardSize,
+    boardSites,
+    permanents,
+    player,
+    avatar,
+    specialSiteState,
+    babelTowers,
+  ]);
 
   // Compute mana from sites + permanents (including cores)
   const owner = player === "p1" ? 1 : 2;
@@ -306,6 +314,7 @@ export function PlayerResourceColumn({
     specialSiteState,
     thresholds,
     manaOffset,
+    babelTowers,
   ]);
 
   // Can adjust if we're the actor (or offline) and not dragging

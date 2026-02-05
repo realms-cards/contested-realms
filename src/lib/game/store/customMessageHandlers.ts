@@ -1,7 +1,7 @@
 import type { StateCreator } from "zustand";
-import type { CustomMessage } from "@/lib/net/transport";
 import { extractMagicTargetingHintsSync } from "@/lib/game/cardAbilities";
 import { hasCustomResolver } from "@/lib/game/resolverRegistry";
+import type { CustomMessage } from "@/lib/net/transport";
 import type {
   GameState,
   PlayerKey,

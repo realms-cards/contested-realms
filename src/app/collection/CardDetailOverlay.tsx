@@ -3,8 +3,8 @@
 import Image from "next/image";
 import { useEffect, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
-import type { CollectionCardResponse } from "@/lib/collection/types";
 import { NumberBadge, type Digit } from "@/components/game/manacost";
+import type { CollectionCardResponse } from "@/lib/collection/types";
 
 interface CodexEntry {
   id: number;
@@ -195,7 +195,9 @@ export default function CardDetailOverlay({
               alt={cardName}
               fill
               className={`rounded-lg ${
-                isSite ? "object-contain rotate-90 scale-[1.4]" : "object-contain"
+                isSite
+                  ? "object-contain rotate-90 scale-[1.4]"
+                  : "object-contain"
               }`}
               sizes="320px"
               unoptimized
