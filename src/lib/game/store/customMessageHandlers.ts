@@ -1,5 +1,7 @@
 import type { StateCreator } from "zustand";
+import type { CustomMessage } from "@/lib/net/transport";
 import { extractMagicTargetingHintsSync } from "@/lib/game/cardAbilities";
+import { hasCustomResolver } from "@/lib/game/resolverRegistry";
 import type {
   GameState,
   PlayerKey,
@@ -10,6 +12,7 @@ import type {
   MagicTarget,
   ServerPatchT,
   Zones,
+  PithImpHandEntry,
 } from "./types";
 import {
   getCellNumber,
@@ -198,7 +201,7 @@ export function handleCustomMessage(
         status: "choosingCaster",
         hints,
         createdAt: Date.now(),
-        guidesSuppressed: !magicGuidesActive,
+        guidesSuppressed: !magicGuidesActive || hasCustomResolver(cardName),
       },
     } as Partial<GameState> as GameState);
     return;
@@ -1723,7 +1726,8 @@ export function handleCustomMessage(
       },
     } as Partial<GameState> as GameState);
     try {
-      get().log(`[${casterSeat.toUpperCase()}] casts Searing Truth...`);
+      const casterNum = casterSeat === "p1" ? "1" : "2";
+      get().log(`[p${casterNum}:PLAYER] casts Searing Truth...`);
     } catch {}
     return;
   }
@@ -1738,7 +1742,7 @@ export function handleCustomMessage(
       | number
       | undefined;
     if (!id || !targetSeat) return;
-    const revealedCards = Array.isArray(revealedCardsAny)
+    let revealedCards = Array.isArray(revealedCardsAny)
       ? (revealedCardsAny as CardRef[])
       : [];
 
@@ -1815,44 +1819,46 @@ export function handleCustomMessage(
       );
 
       let zonesUpdate = {};
-      if (isTarget && revealedCards.length > 0) {
+      let actualDamageAmount = damageAmount ?? 0;
+      // Determine how many cards to draw - use message count or default to 2
+      const cardsToDraw = revealedCards.length > 0 ? revealedCards.length : 2;
+      if (isTarget && cardsToDraw > 0) {
         const zones = s.zones;
         const spellbook = [...(zones[targetSeat]?.spellbook || [])];
         const hand = [...(zones[targetSeat]?.hand || [])];
 
-        // Find and move the actual cards from spellbook to hand
-        // Use cardIds from message to identify which cards to move
-        // Track counts instead of using Set to handle duplicate cardIds
-        const drawnCardCounts = new Map<number, number>();
-        for (const c of revealedCards) {
-          drawnCardCounts.set(
-            c.cardId,
-            (drawnCardCounts.get(c.cardId) || 0) + 1,
-          );
-        }
+        // Draw cards from the TOP of our own spellbook
+        // The caster doesn't have access to our spellbook data in online play,
+        // so we must draw from our local spellbook rather than matching cardIds
+        const actualCardsToDraw = Math.min(cardsToDraw, spellbook.length);
         const movedCards: CardRef[] = [];
-        const updatedSpellbook = spellbook.filter((card) => {
-          const remaining = drawnCardCounts.get(card.cardId) || 0;
-          if (remaining > 0 && movedCards.length < revealedCards.length) {
-            movedCards.push(card); // Keep full card data from local spellbook
-            drawnCardCounts.set(card.cardId, remaining - 1); // Decrement count
-            return false;
+        for (let i = 0; i < actualCardsToDraw; i++) {
+          const card = spellbook.shift();
+          if (card) {
+            movedCards.push(card);
+            hand.push(card);
           }
-          return true;
-        });
-
-        // Add the actual cards (with full data) to hand
-        for (const card of movedCards) {
-          hand.push(card);
         }
+
+        // Recalculate damage from actual drawn cards (higher mana cost)
+        let maxCost = 0;
+        for (const card of movedCards) {
+          const cost = card.cost ?? 0;
+          if (cost > maxCost) {
+            maxCost = cost;
+          }
+        }
+        actualDamageAmount = maxCost;
 
         console.log(
           "[SearingTruth] Updating zones - movedCards:",
           movedCards.length,
           "updatedSpellbook:",
-          updatedSpellbook.length,
+          spellbook.length,
           "hand:",
           hand.length,
+          "damage:",
+          actualDamageAmount,
         );
 
         zonesUpdate = {
@@ -1860,11 +1866,14 @@ export function handleCustomMessage(
             ...zones,
             [targetSeat]: {
               ...zones[targetSeat],
-              spellbook: updatedSpellbook,
+              spellbook,
               hand,
             },
           },
         };
+
+        // Update revealedCards to use actual drawn cards for UI display
+        revealedCards = movedCards;
       }
 
       // Use movedCards for revealedCards if we're the target (full card data)
@@ -1887,7 +1896,7 @@ export function handleCustomMessage(
           phase: "revealing",
           targetSeat,
           revealedCards,
-          damageAmount: damageAmount ?? 0,
+          damageAmount: actualDamageAmount,
         },
       } as Partial<GameState> as GameState;
     });
@@ -1895,6 +1904,8 @@ export function handleCustomMessage(
     // CRITICAL: If we're the target, we must send a zone patch to persist our zone changes.
     // Without this, on reload the server sends the old zones (cards still in spellbook).
     const actorKey = get().actorKey;
+    const pendingAfterSet = get().pendingSearingTruth;
+    const finalDamageAmount = pendingAfterSet?.damageAmount ?? 0;
     if (actorKey === targetSeat && revealedCards.length > 0) {
       const zonesNow = get().zones;
       const zonePatch: ServerPatchT = {
@@ -1907,14 +1918,33 @@ export function handleCustomMessage(
         "[SearingTruth] Target sending zone patch to persist changes",
       );
       get().trySendPatch(zonePatch);
+
+      // Send the correct damage and revealed cards back to the caster
+      // The caster doesn't have access to our spellbook, so they need this info
+      const transport = get().transport;
+      if (transport?.sendMessage) {
+        try {
+          transport.sendMessage({
+            type: "searingTruthConfirm",
+            id,
+            revealedCards: revealedCards.map((c) => ({
+              cardId: c.cardId,
+              name: c.name,
+              slug: c.slug,
+              cost: c.cost,
+            })),
+            damageAmount: finalDamageAmount,
+            ts: Date.now(),
+          } as unknown as CustomMessage);
+        } catch {}
+      }
     }
 
     const cardNames = revealedCards.map((c) => c.name || "Unknown").join(", ");
     try {
+      const targetNum = targetSeat === "p1" ? "1" : "2";
       get().log(
-        `[${targetSeat.toUpperCase()}] reveals ${cardNames} - ${
-          damageAmount ?? 0
-        } damage incoming`,
+        `[p${targetNum}:PLAYER] reveals ${cardNames} - ${finalDamageAmount} damage incoming`,
       );
     } catch {}
     return;
@@ -1940,12 +1970,52 @@ export function handleCustomMessage(
       }
     }, 3000); // Keep protection for 3 seconds
     try {
+      const targetNumResolve = pending.targetSeat === "p1" ? "1" : "2";
       get().log(
-        `Searing Truth resolved: ${pending.targetSeat?.toUpperCase()} takes ${
+        `Searing Truth resolved: [p${targetNumResolve}:PLAYER] takes ${
           damageAmount ?? 0
         } damage`,
       );
     } catch {}
+    return;
+  }
+  if (t === "searingTruthConfirm") {
+    // Target player sends this back to caster with correct damage and card info
+    // This allows the caster to update their pending state before resolving
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const revealedCardsAny = (msg as { revealedCards?: unknown })
+      .revealedCards as unknown;
+    const damageAmount = (msg as { damageAmount?: unknown }).damageAmount as
+      | number
+      | undefined;
+    const pending = get().pendingSearingTruth;
+    if (!pending || (id && pending.id !== id)) return;
+
+    // Only the caster should process this (the target sent it)
+    if (pending.casterSeat !== get().actorKey) return;
+
+    const confirmedCards = Array.isArray(revealedCardsAny)
+      ? (revealedCardsAny as CardRef[])
+      : [];
+
+    set((s) => {
+      const cur = s.pendingSearingTruth;
+      if (!cur || (id && cur.id !== id)) return s as GameState;
+      return {
+        pendingSearingTruth: {
+          ...cur,
+          revealedCards: confirmedCards,
+          damageAmount: damageAmount ?? 0,
+        },
+      } as Partial<GameState> as GameState;
+    });
+
+    console.log(
+      "[SearingTruth] Caster received confirm from target - damage:",
+      damageAmount,
+      "cards:",
+      confirmedCards.map((c) => c.name).join(", "),
+    );
     return;
   }
   if (t === "searingTruthCancel") {
@@ -2249,17 +2319,23 @@ export function handleCustomMessage(
       (p) => p.instanceId === minionRec.instanceId,
     );
 
-    // IMPORTANT: Use victim's owner number so the card returns to the correct hand
-    // when detached/moved. The victim is the opposite of the Pith Imp owner.
-    const victimOwnerNum: 1 | 2 = victimSeat === "p1" ? 1 : 2;
+    // IMPORTANT: Use Pith Imp controller's owner number for the stolen card
+    // This transfers ownership to the controller while the card is stolen
+    // The victimSeat is stored separately to return the card when Pith Imp leaves
+    const controllerOwnerNum: 1 | 2 = ownerSeat === "p1" ? 1 : 2;
 
     let permanentsNext = permanents;
     if (minionIndex !== -1 && stolenCard) {
       // Add stolen card as visual attachment (for display only)
-      // Use victimOwnerNum so "move to hand" sends it to the victim's hand
+      // Use controllerOwnerNum - ownership transfers to Pith Imp controller
+      // victimSeat is tracked in pithImpHands for returning the card later
       const stolenVisual = {
-        card: { ...stolenCard, pithImpStolen: true } as CardRef,
-        owner: victimOwnerNum,
+        card: {
+          ...stolenCard,
+          pithImpStolen: true,
+          originalOwnerSeat: victimSeat,
+        } as CardRef,
+        owner: controllerOwnerNum,
         instanceId: `pithimp_visual_${id}`,
         tapped: false,
         attachedTo: { at: minionAt, index: minionIndex },
@@ -2392,6 +2468,100 @@ export function handleCustomMessage(
         );
       } catch {}
     }
+
+    return;
+  }
+
+  // Pith Imp ownership transfer (when Pith Imp's control is transferred to another player)
+  if (t === "pithImpOwnershipTransfer") {
+    const minionAt = (msg as { minionAt?: unknown }).minionAt as
+      | CellKey
+      | undefined;
+    const minionInstanceId = (msg as { minionInstanceId?: unknown })
+      .minionInstanceId as string | null | undefined;
+    const oldOwnerSeat = (msg as { oldOwnerSeat?: unknown }).oldOwnerSeat as
+      | PlayerKey
+      | undefined;
+    const newOwnerSeat = (msg as { newOwnerSeat?: unknown }).newOwnerSeat as
+      | PlayerKey
+      | undefined;
+
+    if (!minionAt || !newOwnerSeat) return;
+
+    // Skip if we initiated the transfer (we already handled it locally)
+    const actorKey = get().actorKey;
+    if (actorKey === oldOwnerSeat) {
+      console.log(
+        "[PithImp] pithImpOwnershipTransfer: Skipping - we initiated the transfer",
+      );
+      return;
+    }
+
+    console.log("[PithImp] Receiving ownership transfer from opponent:", {
+      minionAt,
+      minionInstanceId,
+      oldOwnerSeat,
+      newOwnerSeat,
+    });
+
+    const pithImpHands = get().pithImpHands;
+    const entryIndex = pithImpHands.findIndex(
+      (p) =>
+        (minionInstanceId && p.minion.instanceId === minionInstanceId) ||
+        (!minionInstanceId && p.minion.at === minionAt),
+    );
+
+    if (entryIndex === -1) {
+      console.log("[PithImp] No entry found for ownership transfer");
+      return;
+    }
+
+    const entry = pithImpHands[entryIndex];
+    const newOwnerNum: 1 | 2 = newOwnerSeat === "p1" ? 1 : 2;
+
+    // Update the entry with new owner
+    const updatedEntry: PithImpHandEntry = {
+      ...entry,
+      ownerSeat: newOwnerSeat,
+      minion: {
+        ...entry.minion,
+        owner: newOwnerNum,
+      },
+    };
+
+    const updatedHands = [...pithImpHands];
+    updatedHands[entryIndex] = updatedEntry;
+
+    // Update visual attachments (stolen cards) to have new owner
+    const permanents = get().permanents;
+    const cell = permanents[minionAt] || [];
+    const updatedCell = cell.map((p) => {
+      const isPithImpStolen = (p.card as { pithImpStolen?: boolean })
+        ?.pithImpStolen;
+      if (isPithImpStolen && p.attachedTo?.at === minionAt) {
+        return {
+          ...p,
+          owner: newOwnerNum,
+        };
+      }
+      return p;
+    });
+
+    const permanentsNext =
+      updatedCell !== cell
+        ? { ...permanents, [minionAt]: updatedCell }
+        : permanents;
+
+    set({
+      pithImpHands: updatedHands,
+      permanents: permanentsNext,
+    } as Partial<GameState> as GameState);
+
+    try {
+      get().log(
+        `Pith Imp stolen cards transferred to ${newOwnerSeat.toUpperCase()}'s control`,
+      );
+    } catch {}
 
     return;
   }
@@ -5468,6 +5638,271 @@ export function handleCustomMessage(
     return;
   }
 
+  // --- Observatory message handlers ---
+  if (t === "observatoryBegin") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const siteName = (msg as { siteName?: unknown }).siteName as
+      | string
+      | undefined;
+    const cellKey = (msg as { cellKey?: unknown }).cellKey as
+      | CellKey
+      | undefined;
+    const ownerSeat = (msg as { ownerSeat?: unknown }).ownerSeat as
+      | PlayerKey
+      | undefined;
+    const revealedCount = (msg as { revealedCount?: unknown }).revealedCount as
+      | number
+      | undefined;
+
+    if (!id || !siteName || !cellKey || !ownerSeat) return;
+
+    // Skip if we're the owner - we already have the state
+    const actorKey = get().actorKey;
+    if (actorKey === ownerSeat) return;
+
+    set({
+      pendingObservatory: {
+        id,
+        siteName,
+        cellKey,
+        ownerSeat,
+        phase: "ordering",
+        revealedCards: [], // Opponent doesn't see the cards
+        newOrder: [],
+        createdAt: Date.now(),
+      },
+    } as Partial<GameState> as GameState);
+
+    try {
+      const playerNum = ownerSeat === "p1" ? "1" : "2";
+      get().log(
+        `[p${playerNum}:PLAYER] ${siteName} Genesis: Reordering top ${revealedCount ?? 3} spells...`,
+      );
+    } catch {}
+    return;
+  }
+
+  if (t === "observatorySetOrder") {
+    // Opponent doesn't need to track order changes
+    return;
+  }
+
+  if (t === "observatoryResolve") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const pending = get().pendingObservatory;
+    if (!pending || (id && pending.id !== id)) return;
+
+    // Skip if we're the owner - we already have the state
+    const actorKey = get().actorKey;
+    if (actorKey === pending.ownerSeat) return;
+
+    set({ pendingObservatory: null } as Partial<GameState> as GameState);
+
+    try {
+      const playerNum = pending.ownerSeat === "p1" ? "1" : "2";
+      get().log(
+        `[p${playerNum}:PLAYER] ${pending.siteName} Genesis: Finished reordering spells`,
+      );
+    } catch {}
+    return;
+  }
+
+  if (t === "observatoryCancel") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const pending = get().pendingObservatory;
+    if (!pending || (id && pending.id !== id)) return;
+
+    // Skip if we're the owner
+    const actorKey = get().actorKey;
+    if (actorKey === pending.ownerSeat) return;
+
+    set({ pendingObservatory: null } as Partial<GameState> as GameState);
+
+    try {
+      get().log(`${pending.siteName} Genesis cancelled`);
+    } catch {}
+    return;
+  }
+
+  // --- Kelp Cavern message handlers ---
+  if (t === "kelpCavernBegin") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const siteName = (msg as { siteName?: unknown }).siteName as
+      | string
+      | undefined;
+    const cellKey = (msg as { cellKey?: unknown }).cellKey as
+      | CellKey
+      | undefined;
+    const ownerSeat = (msg as { ownerSeat?: unknown }).ownerSeat as
+      | PlayerKey
+      | undefined;
+    const revealedCount = (msg as { revealedCount?: unknown }).revealedCount as
+      | number
+      | undefined;
+
+    if (!id || !siteName || !cellKey || !ownerSeat) return;
+
+    // Skip if we're the owner - we already have the state
+    const actorKey = get().actorKey;
+    if (actorKey === ownerSeat) return;
+
+    set({
+      pendingKelpCavern: {
+        id,
+        siteName,
+        cellKey,
+        ownerSeat,
+        phase: "selecting",
+        revealedCards: [], // Opponent doesn't see the cards
+        originalIndices: [],
+        selectedCardIndex: null,
+        createdAt: Date.now(),
+      },
+    } as Partial<GameState> as GameState);
+
+    try {
+      const playerNum = ownerSeat === "p1" ? "1" : "2";
+      get().log(
+        `[p${playerNum}:PLAYER] ${siteName} Genesis: Looking at bottom ${revealedCount ?? 3} spells...`,
+      );
+    } catch {}
+    return;
+  }
+
+  if (t === "kelpCavernSelect") {
+    // Opponent doesn't need to track selection
+    return;
+  }
+
+  if (t === "kelpCavernResolve") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const pending = get().pendingKelpCavern;
+    if (!pending || (id && pending.id !== id)) return;
+
+    // Skip if we're the owner - we already have the state
+    const actorKey = get().actorKey;
+    if (actorKey === pending.ownerSeat) return;
+
+    set({ pendingKelpCavern: null } as Partial<GameState> as GameState);
+
+    try {
+      const playerNum = pending.ownerSeat === "p1" ? "1" : "2";
+      get().log(
+        `[p${playerNum}:PLAYER] ${pending.siteName} Genesis: Put a spell on top of spellbook`,
+      );
+    } catch {}
+    return;
+  }
+
+  if (t === "kelpCavernCancel") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const pending = get().pendingKelpCavern;
+    if (!pending || (id && pending.id !== id)) return;
+
+    // Skip if we're the owner
+    const actorKey = get().actorKey;
+    if (actorKey === pending.ownerSeat) return;
+
+    set({ pendingKelpCavern: null } as Partial<GameState> as GameState);
+
+    try {
+      get().log(`${pending.siteName} Genesis cancelled`);
+    } catch {}
+    return;
+  }
+
+  // --- Torshammar Trinket message handlers ---
+  if (t === "torshammarReturn") {
+    const endingPlayerSeat = (msg as { endingPlayerSeat?: unknown })
+      .endingPlayerSeat as PlayerKey | undefined;
+    const count = (msg as { count?: unknown }).count as number | undefined;
+
+    if (!endingPlayerSeat) return;
+
+    // Skip if we're the ending player - we already updated state
+    const actorKey = get().actorKey;
+    if (actorKey === endingPlayerSeat) return;
+
+    // Opponent needs to actually perform the state update
+    // Find and remove all Torshammar Trinkets owned by ending player
+    const endingPlayerNum = endingPlayerSeat === "p1" ? 1 : 2;
+
+    set((currentState) => {
+      const per = { ...currentState.permanents };
+      const zonesNext = { ...currentState.zones } as Record<PlayerKey, Zones>;
+      let foundCount = 0;
+
+      // Find all Torshammar Trinkets owned by ending player
+      for (const [cellKey, cellPerms] of Object.entries(per)) {
+        if (!cellPerms) continue;
+        const arr = [...cellPerms];
+        const indicesToRemove: number[] = [];
+
+        for (let i = 0; i < arr.length; i++) {
+          const perm = arr[i];
+          if (!perm) continue;
+          const cardName = (perm.card?.name || "").toLowerCase();
+          if (
+            perm.owner === endingPlayerNum &&
+            cardName === "torshammar trinket"
+          ) {
+            indicesToRemove.push(i);
+          }
+        }
+
+        // Remove trinkets in reverse order to preserve indices
+        for (const idx of indicesToRemove.reverse()) {
+          const item = arr[idx];
+          if (!item) continue;
+
+          // Remove from permanents
+          arr.splice(idx, 1);
+
+          // Add to owner's hand
+          const ownerSeat = endingPlayerSeat;
+          if (zonesNext[ownerSeat] === currentState.zones[ownerSeat]) {
+            zonesNext[ownerSeat] = {
+              spellbook: [...currentState.zones[ownerSeat].spellbook],
+              atlas: [...currentState.zones[ownerSeat].atlas],
+              hand: [...currentState.zones[ownerSeat].hand],
+              graveyard: [...currentState.zones[ownerSeat].graveyard],
+              battlefield: [...currentState.zones[ownerSeat].battlefield],
+              collection: [...currentState.zones[ownerSeat].collection],
+              banished: [...(currentState.zones[ownerSeat].banished || [])],
+            };
+          }
+          zonesNext[ownerSeat].hand = [
+            ...zonesNext[ownerSeat].hand,
+            { ...item.card },
+          ];
+          foundCount++;
+        }
+
+        // Update or delete cell
+        if (arr.length === 0) {
+          delete per[cellKey];
+        } else {
+          per[cellKey as CellKey] = arr;
+        }
+      }
+
+      if (foundCount === 0) return currentState;
+
+      return {
+        permanents: per,
+        zones: zonesNext,
+      } as Partial<GameState> as GameState;
+    });
+
+    try {
+      const playerNum = endingPlayerSeat === "p1" ? "1" : "2";
+      get().log(
+        `[p${playerNum}:PLAYER] ${count ?? 1} Torshammar Trinket${(count ?? 1) !== 1 ? "s" : ""} return${(count ?? 1) === 1 ? "s" : ""} to hand (end of turn)`,
+      );
+    } catch {}
+    return;
+  }
+
   // --- Shapeshift message handlers ---
   if (t === "shapeshiftBegin") {
     const id = (msg as { id?: unknown }).id as string | undefined;
@@ -5666,6 +6101,105 @@ export function handleCustomMessage(
     try {
       get().log("Shapeshift: skipping auto-resolve, resolve manually");
     } catch {}
+    return;
+  }
+
+  // --- Mirror Realm handlers ---
+  if (t === "mirrorRealmBegin") {
+    const payload = msg as {
+      id?: string;
+      casterSeat?: PlayerKey;
+      mirrorRealmCell?: CellKey;
+      nearbySites?: CellKey[];
+    };
+
+    const { id, casterSeat, mirrorRealmCell, nearbySites } = payload;
+    if (!id || !casterSeat || !mirrorRealmCell || !Array.isArray(nearbySites))
+      return;
+
+    // Skip if we're the caster - we already have the state
+    const actorKey = get().actorKey;
+    if (actorKey === casterSeat) return;
+
+    set({
+      pendingMirrorRealm: {
+        id,
+        casterSeat,
+        mirrorRealmCell,
+        phase: "selecting",
+        nearbySites,
+        selectedTarget: null,
+        createdAt: Date.now(),
+      },
+    } as Partial<GameState> as GameState);
+    return;
+  }
+
+  if (t === "mirrorRealmSelect") {
+    const payload = msg as {
+      id?: string;
+      targetCell?: CellKey;
+    };
+
+    const { id, targetCell } = payload;
+    if (!id || !targetCell) return;
+
+    const pending = get().pendingMirrorRealm;
+    if (!pending || pending.id !== id) return;
+
+    // Skip if we're the caster - we already have the state
+    const actorKey = get().actorKey;
+    if (actorKey === pending.casterSeat) return;
+
+    set({
+      pendingMirrorRealm: {
+        ...pending,
+        selectedTarget: targetCell,
+      },
+    } as Partial<GameState> as GameState);
+    return;
+  }
+
+  if (t === "mirrorRealmResolve") {
+    const payload = msg as {
+      id?: string;
+      casterSeat?: PlayerKey;
+      mirrorRealmCell?: CellKey;
+      targetCell?: CellKey;
+      copiedCard?: CardRef;
+    };
+
+    const { id, casterSeat, mirrorRealmCell, targetCell, copiedCard } = payload;
+    if (!id || !casterSeat || !mirrorRealmCell || !targetCell || !copiedCard)
+      return;
+
+    const pending = get().pendingMirrorRealm;
+    if (!pending || pending.id !== id) return;
+
+    // Skip if we're the caster - we already have the state
+    const actorKey = get().actorKey;
+    if (actorKey === casterSeat) return;
+
+    set({ pendingMirrorRealm: null } as Partial<GameState> as GameState);
+    return;
+  }
+
+  if (t === "mirrorRealmCancel") {
+    const payload = msg as {
+      id?: string;
+    };
+
+    const { id } = payload;
+    if (!id) return;
+
+    const pending = get().pendingMirrorRealm;
+    if (!pending || pending.id !== id) return;
+
+    // Skip if we're the caster - we already have the state
+    const actorKey = get().actorKey;
+    if (actorKey === pending.casterSeat) return;
+
+    set({ pendingMirrorRealm: null } as Partial<GameState> as GameState);
     return;
   }
 }

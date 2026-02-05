@@ -58,12 +58,16 @@ import RaiseDeadOverlay from "@/components/game/RaiseDeadOverlay";
 import RestoreUiButton from "@/components/game/RestoreUiButton";
 import RevealOverlay from "@/components/game/RevealOverlay";
 import { RiverGenesisOverlay } from "@/components/game/RiverGenesisOverlay";
+import ObservatoryOverlay from "@/components/game/ObservatoryOverlay";
+import KelpCavernOverlay from "@/components/game/KelpCavernOverlay";
+import MirrorRealmOverlay from "@/components/game/MirrorRealmOverlay";
 import SearingTruthOverlay from "@/components/game/SearingTruthOverlay";
 import SeerScreen from "@/components/game/SeerScreen";
 import ShapeshiftOverlay from "@/components/game/ShapeshiftOverlay";
 import StatusBar from "@/components/game/StatusBar";
 import PlayerStatusEffects from "@/components/game/StatusEffectIcons";
 import SwitchSiteHudOverlay from "@/components/game/SwitchSiteHudOverlay";
+import TurnStartOverlay from "@/components/game/TurnStartOverlay";
 import UnitHandsOverlay from "@/components/game/UnitHandsOverlay";
 import {
   DynamicBoard as Board,
@@ -234,6 +238,51 @@ export default function PlayPage() {
 
   // Keyboard shortcuts help overlay
   const [helpOpen, setHelpOpen] = useHelpShortcut();
+
+  // Toast state for warnings (mana/threshold)
+  const [appToast, setAppToast] = useState<
+    | { kind: "text"; message: string }
+    | {
+        kind: "resource-warning";
+        cardName: string;
+        manaCost: number | null;
+        availableMana: number | null;
+        missingThresholds: Record<string, number>;
+      }
+    | null
+  >(null);
+
+  // Listen for toast events
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail as
+        | Record<string, unknown>
+        | undefined;
+      if (!detail) return;
+
+      // Handle resource-warning toast
+      if (detail.type === "resource-warning") {
+        setAppToast({
+          kind: "resource-warning",
+          cardName: String(detail.cardName || ""),
+          manaCost: detail.manaCost as number | null,
+          availableMana: detail.availableMana as number | null,
+          missingThresholds:
+            (detail.missingThresholds as Record<string, number>) || {},
+        });
+        setTimeout(() => setAppToast(null), 3500);
+        return;
+      }
+
+      // Handle regular text toasts
+      if (detail.message) {
+        setAppToast({ kind: "text", message: String(detail.message) });
+        setTimeout(() => setAppToast(null), 3500);
+      }
+    };
+    window.addEventListener("app:toast", handler);
+    return () => window.removeEventListener("app:toast", handler);
+  }, []);
 
   // LocalTransport wiring for offline play
   const transportRef = useRef<LocalTransport | null>(null);
@@ -979,6 +1028,15 @@ export default function PlayPage() {
       {/* River Genesis Overlay (Spring/Summer/Autumn/Winter River) */}
       <RiverGenesisOverlay />
 
+      {/* Observatory Overlay (reorder top 3 spells) */}
+      <ObservatoryOverlay />
+
+      {/* Kelp Cavern Overlay (pick one from bottom 3 for top) */}
+      <KelpCavernOverlay />
+
+      {/* Mirror Realm Overlay (copy nearby site) */}
+      <MirrorRealmOverlay />
+
       {/* Shapeshift Overlay (transform minion) */}
       <ShapeshiftOverlay />
 
@@ -1096,6 +1154,8 @@ export default function PlayPage() {
       )}
       {/* End Turn Confirmation Dialog - always visible (for untapped avatar warning) */}
       <EndTurnConfirmDialog />
+      {/* Turn Start Overlay - announces turn number and draw reminder */}
+      <TurnStartOverlay />
       {/* Audio Controls - hidden visually when uiHidden but stays mounted to keep music playing */}
       {uiHidden && (
         <div className="sr-only">
@@ -1353,6 +1413,43 @@ export default function PlayPage() {
 
       {/* Mobile hand interaction hint */}
       <MobileHandHint />
+
+      {/* Toast notification for warnings */}
+      {appToast && appToast.kind === "text" && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[3000] text-xl px-6 py-3 rounded-lg shadow-lg font-medium animate-fade-in bg-black/90 text-white ring-2 ring-white/30">
+          {appToast.message}
+        </div>
+      )}
+      {appToast && appToast.kind === "resource-warning" && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[3000] px-5 py-3 rounded-lg shadow-lg animate-fade-in bg-black/90 text-white ring-2 ring-white/30 flex items-center gap-3">
+          <span className="font-fantaisie text-lg text-amber-300">
+            {appToast.cardName}
+          </span>
+          <span className="flex items-center gap-2 text-sm">
+            <span className="text-red-400">missing</span>
+            {appToast.manaCost !== null && appToast.availableMana !== null && (
+              <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-gray-700 border border-gray-500 font-fantaisie text-white font-bold">
+                {appToast.manaCost - appToast.availableMana}
+              </span>
+            )}
+            {Object.keys(appToast.missingThresholds).length > 0 &&
+              Object.entries(appToast.missingThresholds).map(
+                ([element, count]) => (
+                  <span key={element} className="flex items-center">
+                    {Array.from({ length: count }).map((_, i) => (
+                      <img
+                        key={i}
+                        src={`/${element}.png`}
+                        alt={element}
+                        className="w-5 h-5 -ml-1 first:ml-0"
+                      />
+                    ))}
+                  </span>
+                ),
+              )}
+          </span>
+        </div>
+      )}
 
       {/* Keyboard shortcuts help overlay */}
       <KeyboardShortcutsHelp

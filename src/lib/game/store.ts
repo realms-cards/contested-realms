@@ -58,6 +58,7 @@ import {
 } from "./store/imposterMaskState";
 import { createInteractionSlice } from "./store/interactionState";
 import { createInterrogatorSlice } from "./store/interrogatorState";
+import { createKelpCavernSlice } from "./store/kelpCavernState";
 import { createLegionOfGallSlice } from "./store/legionOfGallState";
 import { createLilithSlice } from "./store/lilithState";
 import { createMagicSlice } from "./store/magicState";
@@ -65,6 +66,7 @@ import {
   createMephistophelesSlice,
   createInitialMephistophelesSummonUsed,
 } from "./store/mephistophelesState";
+import { createMirrorRealmSlice } from "./store/mirrorRealmState";
 import { createMorganaSlice } from "./store/morganaState";
 import { createMotherNatureSlice } from "./store/motherNatureState";
 import {
@@ -72,6 +74,7 @@ import {
   createInitialNecromancerSkeletonUsed,
 } from "./store/necromancerState";
 import { createNetworkSlice } from "./store/networkState";
+import { createObservatorySlice } from "./store/observatoryState";
 import { createOmphalosSlice } from "./store/omphalosState";
 import {
   createPathfinderSlice,
@@ -88,10 +91,10 @@ import { createRemoteCursorSlice } from "./store/remoteCursorState";
 import { createResourceSlice } from "./store/resourceState";
 import { createRevealOverlaySlice } from "./store/revealOverlayState";
 import { createRiverGenesisSlice } from "./store/riverGenesisState";
-import { createShapeshiftSlice } from "./store/shapeshiftState";
 import { createSearingTruthSlice } from "./store/searingTruthState";
 import { createSeerSlice } from "./store/seerState";
 import { createSessionSlice } from "./store/sessionState";
+import { createShapeshiftSlice } from "./store/shapeshiftState";
 import {
   createSnapshotSlice,
   createEmptySnapshots,
@@ -100,6 +103,7 @@ import {
   createSpecialSiteSlice,
   getEmptySpecialSiteState,
 } from "./store/specialSiteState";
+import { createTorshammarSlice } from "./store/torshammarState";
 import {
   createTransportSlice,
   setTransportStateAccessor,
@@ -225,6 +229,10 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   ...createGardenOfEdenSlice(set, get, storeApi),
   ...createRevealOverlaySlice(set, get, storeApi),
   ...createRiverGenesisSlice(set, get, storeApi),
+  ...createObservatorySlice(set, get, storeApi),
+  ...createKelpCavernSlice(set, get, storeApi),
+  ...createMirrorRealmSlice(set, get, storeApi),
+  ...createTorshammarSlice(set, get, storeApi),
   ...createShapeshiftSlice(set, get, storeApi),
   cardScale: 1,
   // Harbinger portal discount (Gothic expansion) - once per turn mana reduction
@@ -312,6 +320,8 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         pendingCommonSense: null,
         pendingEarthquake: null,
         stolenCards: [],
+        pithImpHands: [],
+        processedPithImpReturns: new Set<string>(),
         morganaHands: [],
         omphalosHands: [],
         pendingPrivateHandCast: null,
@@ -343,6 +353,8 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         gardenOfEdenLocations: {},
         cardsDrawnThisTurn: { p1: 0, p2: 0 },
         pendingRiverGenesis: null,
+        pendingObservatory: null,
+        pendingKelpCavern: null,
         pendingShapeshift: null,
       };
       return reset as GameState;

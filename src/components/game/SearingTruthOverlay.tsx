@@ -5,7 +5,13 @@ import { useGameStore } from "@/lib/game/store";
 import type { PlayerKey } from "@/lib/game/store/types";
 import CardWithPreview from "./CardWithPreview";
 
-export default function SearingTruthOverlay() {
+interface SearingTruthOverlayProps {
+  playerNames?: { p1: string; p2: string };
+}
+
+export default function SearingTruthOverlay({
+  playerNames = { p1: "Player 1", p2: "Player 2" },
+}: SearingTruthOverlayProps) {
   const pending = useGameStore((s) => s.pendingSearingTruth);
   const actorKey = useGameStore((s) => s.actorKey);
   const selectSearingTruthTarget = useGameStore(
@@ -67,9 +73,9 @@ export default function SearingTruthOverlay() {
             {phase === "selectingTarget" &&
               (isCaster
                 ? "Select a player to draw and reveal two spells"
-                : `${pending.casterSeat.toUpperCase()} is selecting a target...`)}
+                : `${playerNames[pending.casterSeat]} is selecting a target...`)}
             {phase === "revealing" &&
-              `${targetSeat?.toUpperCase()} reveals - ${damageAmount} damage incoming!`}
+              `${targetSeat ? playerNames[targetSeat] : "Target"} reveals - ${damageAmount} damage incoming!`}
             {phase === "resolving" && "Resolving..."}
           </span>
           {isCaster && phase === "selectingTarget" && (
@@ -100,13 +106,13 @@ export default function SearingTruthOverlay() {
                 className="px-8 py-4 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold transition-colors text-lg"
                 onClick={() => handleSelectTarget("p1")}
               >
-                Player 1
+                {playerNames.p1}
               </button>
               <button
                 className="px-8 py-4 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold transition-colors text-lg"
                 onClick={() => handleSelectTarget("p2")}
               >
-                Player 2
+                {playerNames.p2}
               </button>
             </div>
 
@@ -127,7 +133,7 @@ export default function SearingTruthOverlay() {
         <div className="fixed inset-0 flex items-center justify-center pointer-events-auto bg-black/70">
           <div className="bg-black/95 rounded-xl p-6 max-w-2xl w-full mx-4 ring-1 ring-orange-500/30">
             <h2 className="text-2xl font-fantaisie text-orange-400 mb-2 text-center">
-              {targetSeat?.toUpperCase()} Reveals
+              {targetSeat ? playerNames[targetSeat] : "Target"} Reveals
             </h2>
             <p className="text-white/70 text-sm mb-6 text-center">
               Drawn cards revealed - Highest cost:{" "}
@@ -153,7 +159,7 @@ export default function SearingTruthOverlay() {
             {/* Damage indicator */}
             <div className="flex justify-center mb-6">
               <div className="px-6 py-3 rounded-lg bg-orange-600/30 border border-orange-500/50 text-orange-300 font-bold text-xl">
-                💥 {damageAmount} Damage to {targetSeat?.toUpperCase()}
+                💥 {damageAmount} Damage to {targetSeat ? playerNames[targetSeat] : "Target"}
               </div>
             </div>
 
@@ -177,7 +183,7 @@ export default function SearingTruthOverlay() {
         <div className="fixed bottom-24 inset-x-0 z-[201] pointer-events-none flex justify-center">
           <div className="pointer-events-auto px-4 py-2 rounded-lg bg-black/90 text-white/80 text-sm ring-1 ring-orange-500/30">
             <span className="text-orange-300">
-              {pending.casterSeat.toUpperCase()}
+              {playerNames[pending.casterSeat]}
             </span>{" "}
             is casting Searing Truth...
           </div>

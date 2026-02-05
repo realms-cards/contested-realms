@@ -89,8 +89,9 @@ export const createSearingTruthSlice: StateCreator<
       } catch {}
     }
 
+    const casterNum = casterSeat === "p1" ? "1" : "2";
     get().log(
-      `[${casterSeat.toUpperCase()}] casts Searing Truth - choose a target player`,
+      `[p${casterNum}:PLAYER] casts Searing Truth - choose a target player`,
     );
   },
 
@@ -101,8 +102,9 @@ export const createSearingTruthSlice: StateCreator<
     // Check Garden of Eden draw limit for target player
     const canDraw = get().canDrawCard(targetSeat, 2);
     if (!canDraw.allowed) {
+      const targetNum = targetSeat === "p1" ? "1" : "2";
       get().log(
-        `[${targetSeat.toUpperCase()}] Garden of Eden prevents drawing more cards this turn (limit: 1)`,
+        `[p${targetNum}:PLAYER] Garden of Eden prevents drawing more cards this turn (limit: 1)`,
       );
       // Cancel instead of resolving
       get().cancelSearingTruth();
@@ -189,8 +191,9 @@ export const createSearingTruthSlice: StateCreator<
     }
 
     const cardNames = drawnCards.map((c) => c.name || "Unknown").join(" and ");
+    const targetNumForLog = targetSeat === "p1" ? "1" : "2";
     get().log(
-      `[${targetSeat.toUpperCase()}] draws and reveals ${cardNames} - will take ${maxCost} damage`,
+      `[p${targetNumForLog}:PLAYER] draws and reveals ${cardNames} - will take ${maxCost} damage`,
     );
 
     // Increment cards drawn counter for Garden of Eden tracking
@@ -270,8 +273,9 @@ export const createSearingTruthSlice: StateCreator<
       } catch {}
     }
 
+    const targetNumResolve = targetSeat === "p1" ? "1" : "2";
     get().log(
-      `Searing Truth resolved: ${targetSeat.toUpperCase()} takes ${damageAmount} damage`,
+      `Searing Truth resolved: [p${targetNumResolve}:PLAYER] takes ${damageAmount} damage`,
     );
   },
 

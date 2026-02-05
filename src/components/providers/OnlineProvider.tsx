@@ -144,7 +144,17 @@ export default function OnlineProvider({
     message: string;
     tone: "info" | "error";
   } | null>(null);
-  const [appToast, setAppToast] = useState<string | null>(null);
+  const [appToast, setAppToast] = useState<
+    | { kind: "text"; message: string; type?: "info" | "warning" }
+    | {
+        kind: "resource-warning";
+        cardName: string;
+        manaCost: number | null;
+        availableMana: number | null;
+        missingThresholds: Record<string, number>;
+      }
+    | null
+  >(null);
   const [resyncing, setResyncing] = useState<boolean>(false);
   // Matchmaking state
   const [matchmakingStatus, setMatchmakingStatus] =
@@ -866,15 +876,26 @@ export default function OnlineProvider({
   useEffect(() => {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail as
-        | {
-            message?: string;
-            cellKey?: string;
-            seat?: string;
-            isActionToast?: boolean;
-            showToSelf?: boolean;
-          }
+        | Record<string, unknown>
         | undefined;
-      if (detail?.message) {
+      if (!detail) return;
+
+      // Handle resource-warning toast (mana/threshold warnings)
+      if (detail.type === "resource-warning") {
+        setAppToast({
+          kind: "resource-warning",
+          cardName: String(detail.cardName || ""),
+          manaCost: detail.manaCost as number | null,
+          availableMana: detail.availableMana as number | null,
+          missingThresholds:
+            (detail.missingThresholds as Record<string, number>) || {},
+        });
+        window.setTimeout(() => setAppToast(null), 3500);
+        return;
+      }
+
+      // Handle regular text toasts
+      if (detail.message) {
         // Check if action notifications are disabled for action toasts
         // Action toasts are those with seat or cellKey (play/draw/move actions)
         const isActionToast =
@@ -905,20 +926,25 @@ export default function OnlineProvider({
         }
 
         // Resolve PLAYER placeholder to actual player name if seat is provided
-        let resolvedMessage = detail.message;
+        let resolvedMessage = String(detail.message);
         if (detail.seat && matchPlayers) {
           const playerIndex = detail.seat === "p1" ? 0 : 1;
           const playerName =
-            matchPlayers[playerIndex]?.displayName || detail.seat.toUpperCase();
+            matchPlayers[playerIndex]?.displayName ||
+            String(detail.seat).toUpperCase();
           resolvedMessage = resolvedMessage.replace(/PLAYER/g, playerName);
         } else {
           // Fallback to P1/P2 if no match context
           resolvedMessage = resolvedMessage.replace(
             /PLAYER/g,
-            detail.seat?.toUpperCase() || "Player",
+            detail.seat ? String(detail.seat).toUpperCase() : "Player",
           );
         }
-        setAppToast(resolvedMessage);
+        setAppToast({
+          kind: "text",
+          message: resolvedMessage,
+          type: detail.type as "info" | "warning" | undefined,
+        });
         // Dispatch highlight event if cellKey is provided
         if (detail.cellKey) {
           window.dispatchEvent(
@@ -1868,9 +1894,39 @@ export default function OnlineProvider({
           {connToast.message}
         </div>
       )}
-      {appToast && (
-        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[3000] bg-black/90 text-white text-xl px-6 py-3 rounded-lg shadow-lg ring-2 ring-white/30 font-medium animate-fade-in">
-          {renderColoredText(appToast)}
+      {appToast && appToast.kind === "text" && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[3000] text-xl px-6 py-3 rounded-lg shadow-lg font-medium animate-fade-in bg-black/90 text-white ring-2 ring-white/30">
+          {renderColoredText(appToast.message)}
+        </div>
+      )}
+      {appToast && appToast.kind === "resource-warning" && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[3000] px-5 py-3 rounded-lg shadow-lg animate-fade-in bg-black/90 text-white ring-2 ring-white/30 flex items-center gap-3">
+          <span className="font-fantaisie text-lg text-amber-300">
+            {appToast.cardName}
+          </span>
+          <span className="flex items-center gap-2 text-sm">
+            <span className="text-red-400">missing</span>
+            {appToast.manaCost !== null && appToast.availableMana !== null && (
+              <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-gray-700 border border-gray-500 font-fantaisie text-white font-bold">
+                {appToast.manaCost - appToast.availableMana}
+              </span>
+            )}
+            {Object.keys(appToast.missingThresholds).length > 0 &&
+              Object.entries(appToast.missingThresholds).map(
+                ([element, count]) => (
+                  <span key={element} className="flex items-center">
+                    {Array.from({ length: count }).map((_, i) => (
+                      <img
+                        key={i}
+                        src={`/${element}.png`}
+                        alt={element}
+                        className="w-5 h-5 -ml-1 first:ml-0"
+                      />
+                    ))}
+                  </span>
+                ),
+              )}
+          </span>
         </div>
       )}
     </OnlineContext.Provider>

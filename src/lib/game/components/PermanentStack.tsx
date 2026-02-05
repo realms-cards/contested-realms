@@ -170,6 +170,9 @@ export type PermanentStackProps = {
   isSpectator: boolean;
   actorKey: PlayerKey | null;
   currentPlayer: 1 | 2;
+  phase: GameState["phase"];
+  hasDrawnThisTurn: boolean;
+  turn: number;
   dragContext: DragContext;
   hoverContext: HoverContext;
   touchContext: TouchContext;
@@ -310,6 +313,9 @@ export function PermanentStack({
   isSpectator,
   actorKey,
   currentPlayer,
+  phase,
+  hasDrawnThisTurn,
+  turn,
   dragContext,
   hoverContext,
   touchContext,
@@ -769,20 +775,26 @@ export function PermanentStack({
                     return;
                   }
                 }
-                // Shapeshift target selection - click on an allied minion
+                // Shapeshift target selection - click on any allied permanent (except avatars/sites)
                 if (
                   pendingShapeshift &&
                   pendingShapeshift.phase === "selectingTarget" &&
                   pendingShapeshift.casterSeat === actorKey
                 ) {
                   const type = (p.card?.type || "").toLowerCase();
-                  const isMinion =
-                    type.includes("minion") || type.includes("creature");
-                  // Only allied minions can be targeted, and attachments cannot be selected
+                  // Exclude avatars and sites - everything else can be targeted
+                  // (includes minions, tokens, animated spells, etc.)
+                  const isAvatar = type.includes("avatar");
+                  const isSite = type.includes("site");
                   const isAttachment = Boolean(p.attachedTo);
                   const casterOwner =
                     pendingShapeshift.casterSeat === "p1" ? 1 : 2;
-                  if (isMinion && !isAttachment && owner === casterOwner) {
+                  if (
+                    !isAvatar &&
+                    !isSite &&
+                    !isAttachment &&
+                    owner === casterOwner
+                  ) {
                     e.stopPropagation();
                     selectShapeshiftTarget({
                       cellKey: key as CellKey,
@@ -897,23 +909,24 @@ export function PermanentStack({
                     const actorIsActive =
                       (actorKey === "p1" && currentPlayer === 1) ||
                       (actorKey === "p2" && currentPlayer === 2);
-                    const canDefendNow = !!(
-                      pendingCombat && pendingCombat.defenderSeat === actorKey
-                    );
+                    // Acting player can drag any card (own or opponent's)
+                    // Non-acting player can only drag their own cards
                     if (!actorIsActive && !mine) {
                       clearHoverPreview(hoverKey);
                       return;
                     }
-                    if (canDefendNow && !actorIsActive && !mine) {
+                    // Block board movement until the acting player has drawn
+                    // (Sorcery rules: must draw before any actions, except turn 1)
+                    const isFirstTurn = turn === 1;
+                    if (
+                      actorIsActive &&
+                      (phase === "Start" || phase === "Draw") &&
+                      !hasDrawnThisTurn &&
+                      !isFirstTurn
+                    ) {
                       clearHoverPreview(hoverKey);
                       return;
                     }
-                  }
-                  // Monuments cannot be dragged (they're immovable artifacts)
-                  const cardType = (p.card?.type || "").toLowerCase();
-                  if (cardType.includes("monument")) {
-                    clearHoverPreview(hoverKey);
-                    return;
                   }
                   dragStartRef.current = {
                     at: key,

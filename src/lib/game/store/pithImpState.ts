@@ -31,6 +31,7 @@ export type PithImpSlice = Pick<
   | "removePithImpHand"
   | "getPithImpHandForMinion"
   | "dropStolenCard"
+  | "transferPithImpOwnership"
 >;
 
 export const createPithImpSlice: StateCreator<
@@ -173,17 +174,23 @@ export const createPithImpSlice: StateCreator<
       (p) => p.instanceId === input.minion.instanceId,
     );
 
-    // IMPORTANT: Use victim's owner number so the card returns to the correct hand
-    // when detached/moved. The victim is the opposite of the Pith Imp owner.
-    const victimOwnerNum: 1 | 2 = victimSeat === "p1" ? 1 : 2;
+    // IMPORTANT: Use Pith Imp controller's owner number for the stolen card
+    // This transfers ownership to the controller while the card is stolen
+    // The victimSeat is stored separately to return the card when Pith Imp leaves
+    const controllerOwnerNum: 1 | 2 = ownerSeat === "p1" ? 1 : 2;
 
     let permanentsNext = permanents;
     if (minionIndex !== -1) {
       // Add stolen card as visual attachment (for display only, not for state)
-      // Use victimOwnerNum so "move to hand" sends it to the victim's hand
+      // Use controllerOwnerNum - ownership transfers to Pith Imp controller
+      // victimSeat is tracked in pithImpHands for returning the card later
       const stolenVisual = {
-        card: { ...stolenCard, pithImpStolen: true } as CardRef,
-        owner: victimOwnerNum,
+        card: {
+          ...stolenCard,
+          pithImpStolen: true,
+          originalOwnerSeat: victimSeat,
+        } as CardRef,
+        owner: controllerOwnerNum,
         instanceId: `pithimp_visual_${id}`,
         tapped: false,
         attachedTo: { at: input.minion.at, index: minionIndex },
@@ -372,13 +379,18 @@ export const createPithImpSlice: StateCreator<
     });
 
     // Add the card as a permanent on the board
-    // IMPORTANT: Use the victim's owner number (original card owner), not the Pith Imp's owner
-    const victimOwnerNum: 1 | 2 = pithImpEntry.victimSeat === "p1" ? 1 : 2;
+    // IMPORTANT: Use the Pith Imp controller's owner number - card ownership transfers
+    // Mark as pithImpStolen to prevent custom resolvers from triggering
+    const controllerOwnerNum: 1 | 2 = pithImpEntry.ownerSeat === "p1" ? 1 : 2;
     const permanents = get().permanents;
     const cellPerms = [...(permanents[key] || [])];
     const newPermanent = {
-      card,
-      owner: victimOwnerNum, // Keep original ownership (victim's)
+      card: {
+        ...card,
+        originalOwnerSeat: pithImpEntry.victimSeat,
+        pithImpStolen: true, // Prevents custom resolvers from triggering
+      } as CardRef,
+      owner: controllerOwnerNum, // Ownership transferred to Pith Imp controller
       instanceId: `dropped_${Date.now().toString(36)}`,
       tapped: false,
     };
@@ -421,6 +433,110 @@ export const createPithImpSlice: StateCreator<
           cardIndex,
           cardName: card.name,
           targetTile,
+          ts: Date.now(),
+        } as unknown as CustomMessage);
+      } catch {}
+    }
+  },
+
+  // Transfer Pith Imp ownership when control is transferred to another player
+  // Stolen cards transfer with the Pith Imp
+  transferPithImpOwnership: (
+    minionInstanceId: string | null,
+    minionAt: CellKey,
+    newOwnerSeat: PlayerKey,
+  ) => {
+    const pithImpHands = get().pithImpHands;
+
+    // Find the Pith Imp entry - prioritize instanceId (unique per card)
+    const entryIndex = pithImpHands.findIndex(
+      (p) =>
+        (minionInstanceId && p.minion.instanceId === minionInstanceId) ||
+        (!minionInstanceId && p.minion.at === minionAt),
+    );
+
+    if (entryIndex === -1) {
+      console.log("[PithImp] No entry found for ownership transfer");
+      return;
+    }
+
+    const entry = pithImpHands[entryIndex];
+    const oldOwnerSeat = entry.ownerSeat;
+
+    if (oldOwnerSeat === newOwnerSeat) {
+      console.log("[PithImp] Ownership already correct, skipping transfer");
+      return;
+    }
+
+    console.log("[PithImp] Transferring ownership:", {
+      minionInstanceId,
+      minionAt,
+      oldOwnerSeat,
+      newOwnerSeat,
+      stolenCards: entry.hand.map((c) => c.name),
+    });
+
+    // Update the entry with new owner
+    const newOwnerNum: 1 | 2 = newOwnerSeat === "p1" ? 1 : 2;
+    const updatedEntry: PithImpHandEntry = {
+      ...entry,
+      ownerSeat: newOwnerSeat,
+      minion: {
+        ...entry.minion,
+        owner: newOwnerNum,
+      },
+    };
+
+    const updatedHands = [...pithImpHands];
+    updatedHands[entryIndex] = updatedEntry;
+
+    // Update visual attachments (stolen cards) to have new owner
+    const permanents = get().permanents;
+    const cell = permanents[minionAt] || [];
+    const updatedCell = cell.map((p) => {
+      const isPithImpStolen = (p.card as { pithImpStolen?: boolean })
+        ?.pithImpStolen;
+      if (isPithImpStolen && p.attachedTo?.at === minionAt) {
+        // Update the stolen card's owner to new controller
+        return {
+          ...p,
+          owner: newOwnerNum,
+        };
+      }
+      return p;
+    });
+
+    const permanentsNext =
+      updatedCell !== cell
+        ? { ...permanents, [minionAt]: updatedCell }
+        : permanents;
+
+    set({
+      pithImpHands: updatedHands,
+      permanents: permanentsNext,
+    } as Partial<GameState> as GameState);
+
+    // Send patch for permanents update
+    const patch: ServerPatchT = {
+      permanents: permanentsNext,
+      pithImpHands: updatedHands,
+    };
+    get().trySendPatch(patch);
+
+    get().log(
+      `Pith Imp stolen cards transferred to ${newOwnerSeat.toUpperCase()}'s control`,
+    );
+
+    // Broadcast
+    const transport = get().transport;
+    if (transport?.sendMessage) {
+      try {
+        transport.sendMessage({
+          type: "pithImpOwnershipTransfer",
+          minionInstanceId,
+          minionAt,
+          oldOwnerSeat,
+          newOwnerSeat,
           ts: Date.now(),
         } as unknown as CustomMessage);
       } catch {}

@@ -71,11 +71,15 @@ import RaiseDeadOverlay from "@/components/game/RaiseDeadOverlay";
 import RestoreUiButton from "@/components/game/RestoreUiButton";
 import RevealOverlay from "@/components/game/RevealOverlay";
 import { RiverGenesisOverlay } from "@/components/game/RiverGenesisOverlay";
+import ObservatoryOverlay from "@/components/game/ObservatoryOverlay";
+import KelpCavernOverlay from "@/components/game/KelpCavernOverlay";
+import MirrorRealmOverlay from "@/components/game/MirrorRealmOverlay";
 import SearingTruthOverlay from "@/components/game/SearingTruthOverlay";
 import ShapeshiftOverlay from "@/components/game/ShapeshiftOverlay";
 import PlayerStatusEffects from "@/components/game/StatusEffectIcons";
 // SeerScreen is now integrated into OnlineMulliganScreen
 import SwitchSiteHudOverlay from "@/components/game/SwitchSiteHudOverlay";
+import TurnStartOverlay from "@/components/game/TurnStartOverlay";
 import UnitHandsOverlay from "@/components/game/UnitHandsOverlay";
 import {
   DynamicBoard as Board,
@@ -3210,6 +3214,10 @@ export default function OnlineMatchPage() {
           )}
           {/* End Turn Confirmation Dialog - always visible (for untapped avatar warning) */}
           <EndTurnConfirmDialog />
+          {/* Turn Start Overlay - announces turn number and draw reminder */}
+          <TurnStartOverlay
+            gameStarted={bothPlayersReady && portalSetupComplete}
+          />
           {/* Audio Controls - hidden visually when uiHidden but stays mounted to keep music playing */}
           {uiHidden && !shouldShowDraft && (
             <div className="sr-only">
@@ -3431,6 +3439,12 @@ export default function OnlineMatchPage() {
               <ElementChoiceOverlay />
               {/* River Genesis Overlay (Spring/Summer/Autumn/Winter River) */}
               <RiverGenesisOverlay />
+              {/* Observatory Overlay (reorder top 3 spells) */}
+              <ObservatoryOverlay />
+              {/* Kelp Cavern Overlay (pick one from bottom 3 for top) */}
+              <KelpCavernOverlay />
+              {/* Mirror Realm Overlay (copy nearby site) */}
+              <MirrorRealmOverlay />
               {/* Shapeshift Overlay (transform minion) */}
               <ShapeshiftOverlay />
               {/* Animist Cast Choice Overlay (magic or spirit) */}
@@ -3442,7 +3456,7 @@ export default function OnlineMatchPage() {
               {/* Call to War Overlay (search for Exceptional Mortal) */}
               <CallToWarOverlay />
               {/* Searing Truth Overlay (reveal and damage) */}
-              <SearingTruthOverlay />
+              <SearingTruthOverlay playerNames={playerNames} />
               {/* Accusation Overlay (reveal opponent hand, banish) */}
               <AccusationOverlay />
               {/* Lilith Overlay (end of turn reveal) */}

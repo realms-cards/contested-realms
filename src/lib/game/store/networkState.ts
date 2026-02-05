@@ -684,10 +684,9 @@ export const createNetworkSlice: StateCreator<
           console.error("[FILTER_SANITY_CHECK] Error:", e);
         }
 
-        // HARDENING: Always pass state.zones as fallback to preserve data
-        // The hardening in normalizeZones/ensurePlayerZones will prevent accidental wipes
-        // when patch has empty arrays but state has cards
-        // Pre-check for potential data loss
+        // HARDENING: Prevent accidental pile wipes
+        // If a patch would replace spellbook/atlas with empty array when state has cards,
+        // preserve the state data instead of wiping it
         try {
           const patchZones = zonesCandidate as Record<
             string,
@@ -699,24 +698,38 @@ export const createNetworkSlice: StateCreator<
               string,
               unknown[]
             > | null;
-            for (const zoneName of [
-              "spellbook",
-              "atlas",
-              "hand",
-            ] as (keyof Zones)[]) {
-              const stateCount =
-                (stateZones?.[zoneName] as unknown[] | undefined)?.length ?? 0;
+            // Critical piles that should never be accidentally wiped
+            for (const zoneName of ["spellbook", "atlas"] as (keyof Zones)[]) {
+              const stateArr = stateZones?.[zoneName] as unknown[] | undefined;
+              const stateCount = stateArr?.length ?? 0;
               const patchVal = patchSeatZones?.[zoneName];
-              // Warn if patch would wipe a zone that has cards
+              // GUARD: If patch would wipe a pile that has cards, preserve state data
               if (
                 stateCount > 0 &&
                 Array.isArray(patchVal) &&
                 patchVal.length === 0
               ) {
-                console.warn(
-                  `[ZONE_WIPE_DETECT] ${seat}.${zoneName}: patch has [] but state has ${stateCount} cards`,
+                console.error(
+                  `[PILE_WIPE_BLOCKED] ${seat}.${zoneName}: patch has [] but state has ${stateCount} cards - preserving state`,
                 );
+                // Restore from state to prevent wipe
+                if (patchSeatZones && stateArr) {
+                  patchSeatZones[zoneName] = stateArr;
+                }
               }
+            }
+            // Warn for hand wipes (but allow them - hand can legitimately become empty)
+            const handStateCount =
+              (stateZones?.hand as unknown[] | undefined)?.length ?? 0;
+            const handPatchVal = patchSeatZones?.hand;
+            if (
+              handStateCount > 0 &&
+              Array.isArray(handPatchVal) &&
+              handPatchVal.length === 0
+            ) {
+              console.warn(
+                `[ZONE_WIPE_DETECT] ${seat}.hand: patch has [] but state has ${handStateCount} cards`,
+              );
             }
           }
         } catch {}

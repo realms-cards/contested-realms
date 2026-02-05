@@ -173,6 +173,8 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   const [hasWardAbility, setHasWardAbility] = useState(false);
   const [hasLanceAbility, setHasLanceAbility] = useState(false);
   const [siteHasWardAbility, setSiteHasWardAbility] = useState(false);
+  // Token names this site can spawn based on its rulesText keywords
+  const [siteSpawnableTokens, setSiteSpawnableTokens] = useState<string[]>([]);
   // Extra combat actions computed per-open menu (do not store in state to avoid duplication)
   const extraActions: ContextMenuAction[] = [];
 
@@ -227,10 +229,11 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
       setHasWardAbility(false);
       setHasLanceAbility(false);
       setSiteHasWardAbility(false);
+      setSiteSpawnableTokens([]);
       return;
     }
 
-    // Detect ward ability for sites
+    // Detect ward ability and token-spawning keywords for sites
     const t = contextMenu.target;
     if (t.kind === "site") {
       const key = toCellKey(t.x, t.y);
@@ -240,12 +243,36 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         (async () => {
           const hasWard = await detectWardAbility(cardName);
           setSiteHasWardAbility(hasWard);
+
+          // Check rulesText for token-spawning keywords (frog, foot soldier, skeleton, lance)
+          try {
+            const resp = await fetch(
+              `/api/cards/rules?name=${encodeURIComponent(cardName)}`,
+            );
+            if (resp.ok) {
+              const data = await resp.json();
+              const rules = ((data.rulesText as string) || "").toLowerCase();
+              const spawnable: string[] = [];
+              if (rules.includes("frog")) spawnable.push("frog");
+              if (rules.includes("foot soldier"))
+                spawnable.push("foot soldier");
+              if (rules.includes("skeleton")) spawnable.push("skeleton");
+              if (rules.includes("lance")) spawnable.push("lance");
+              setSiteSpawnableTokens(spawnable);
+            } else {
+              setSiteSpawnableTokens([]);
+            }
+          } catch {
+            setSiteSpawnableTokens([]);
+          }
         })();
       } else {
         setSiteHasWardAbility(false);
+        setSiteSpawnableTokens([]);
       }
     } else {
       setSiteHasWardAbility(false);
+      setSiteSpawnableTokens([]);
     }
 
     if (t.kind === "permanent") {
@@ -518,7 +545,8 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
       (actorKey === "p2" && currentPlayer === 2) ||
       !actorKey;
 
-    if (site && isMine) {
+    // Acting player can transfer control of any site (steal effects)
+    if (site && (isMine || isActingPlayer)) {
       transferTo = opponentOwner(site.owner);
       doTransfer = () => {
         transferSiteControl(t.x, t.y);
@@ -526,7 +554,8 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
       };
     }
 
-    if (isMine) {
+    // Acting player can bounce any site to hand (unsummon, bounce effects)
+    if (isMine || isActingPlayer) {
       doToHand = () => {
         moveSiteToZone(t.x, t.y, "hand");
         try {
@@ -564,7 +593,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     }
 
     if (
-      isMine &&
+      (isMine || isActingPlayer) &&
       site?.card?.name &&
       (site.card?.type || "").toLowerCase().includes("site")
     ) {
@@ -683,7 +712,11 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     tapped = !!item?.tapped;
     const ownerKey = item ? seatFromOwner(item.owner) : null;
     const canActOnline = !!actorKey;
-    const canToggle = !actorKey || (ownerKey && actorKey === ownerKey);
+    const isActingPlayer =
+      (actorKey === "p1" && currentPlayer === 1) ||
+      (actorKey === "p2" && currentPlayer === 2) ||
+      !actorKey;
+    const canToggle = !actorKey || (ownerKey && actorKey === ownerKey) || isActingPlayer;
     hasToggle = !!canToggle;
     if (canToggle) {
       doToggle = () => {
@@ -695,7 +728,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
       };
     }
 
-    // Flip (face-down/face-up) for permanents owned by the player
+    // Flip (face-down/face-up) for permanents
     isFaceDown = !!item?.faceDown;
     if (canToggle) {
       doFlip = () => {
@@ -708,7 +741,8 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     }
 
     isMine = !actorKey || !!(ownerKey && actorKey === ownerKey);
-    if (item && isMine) {
+    // Acting player can transfer control of any permanent (steal effects)
+    if (item && (isMine || isActingPlayer)) {
       transferTo = opponentOwner(item.owner);
       doTransfer = () => {
         transferPermanentControl(t.at, t.index);
@@ -766,7 +800,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         }));
     }
 
-    if (isToken && isMine) {
+    if (isToken && (isMine || isActingPlayer)) {
       const nonTokenIndices = arr
         .map((it, i) => ({ it, i }))
         .filter(
@@ -988,10 +1022,6 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     }
 
     // Acting player can send any permanent to graveyard/banished (destroy effects)
-    const isActingPlayer =
-      (actorKey === "p1" && currentPlayer === 1) ||
-      (actorKey === "p2" && currentPlayer === 2) ||
-      !actorKey;
     if (isMine || isActingPlayer) {
       doToGY = () => {
         movePermanentToZone(t.at, t.index, "graveyard");
@@ -1027,6 +1057,18 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
             "Place a Silenced token on this permanent (removes abilities).",
         });
       }
+    }
+
+    // Monument move action (monuments can be relocated via context menu)
+    if (isMonument && (isMine || isActingPlayer)) {
+      extraActions.push({
+        actionId: "__move_monument__",
+        displayText: "Move Monument",
+        isEnabled: true,
+        targetPermanentId: "",
+        description:
+          "Move this monument to another tile on the board.",
+      });
     }
 
     // Combat actions (same-tile and ranged-adjacent)
@@ -1855,6 +1897,84 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                   Ward
                 </button>
               )}
+
+              {/* Spawn minion tokens for sites with keywords (frog, foot soldier, skeleton, lance) */}
+              {t.kind === "site" &&
+                siteSpawnableTokens.length > 0 &&
+                siteSpawnableTokens.map((tokenName) => {
+                  const tokenDef = TOKEN_BY_NAME[tokenName];
+                  if (!tokenDef) return null;
+                  const label =
+                    tokenDef.name.charAt(0).toUpperCase() +
+                    tokenDef.name.slice(1);
+                  return (
+                    <button
+                      key={`spawn-${tokenName}`}
+                      className="w-full text-left rounded bg-emerald-900/30 hover:bg-emerald-900/50 px-3 py-1"
+                      onClick={() => {
+                        const key = toCellKey(t.x, t.y);
+                        const site = board.sites[key];
+                        if (!site) {
+                          onClose();
+                          return;
+                        }
+
+                        const ownerNum = site.owner;
+                        const ownerKey = seatFromOwner(ownerNum);
+                        const instanceId = `${tokenDef.key.toLowerCase()}-${Date.now()}-${Math.random()
+                          .toString(36)
+                          .slice(2, 8)}`;
+
+                        const tokenCard = {
+                          cardId: newTokenInstanceId(tokenDef),
+                          variantId: null,
+                          name: tokenDef.name,
+                          type: "Token",
+                          slug: tokenSlug(tokenDef),
+                          thresholds: null,
+                          instanceId,
+                        };
+
+                        const tokenPermanent = {
+                          owner: ownerNum,
+                          card: tokenCard,
+                          offset: null,
+                          tilt: 0,
+                          tapVersion: 0,
+                          tapped: false,
+                          version: 0,
+                          instanceId,
+                        };
+
+                        const permanentsNext = { ...permanents };
+                        const tileArr = [...(permanentsNext[key] || [])];
+                        tileArr.push(tokenPermanent);
+                        permanentsNext[key] = tileArr;
+
+                        useGameStore.setState({ permanents: permanentsNext });
+
+                        const state = useGameStore.getState();
+                        if (state.transport) {
+                          state.trySendPatch({ permanents: permanentsNext });
+                        }
+
+                        const playerNum = ownerKey === "p1" ? "1" : "2";
+                        log(
+                          `[p${playerNum}card:${
+                            site.card?.name || "Site"
+                          }] spawns ${tokenDef.name}`,
+                        );
+
+                        try {
+                          playCardFlip();
+                        } catch {}
+                        onClose();
+                      }}
+                    >
+                      Spawn {label}
+                    </button>
+                  );
+                })}
 
               {/* Stealth - for permanents with stealth keyword */}
               {t.kind === "permanent" &&

@@ -38,7 +38,10 @@ import {
   createPermanentsPatch,
 } from "../utils/patchHelpers";
 import { randomTilt } from "../utils/permanentHelpers";
-import { computeThresholdTotals } from "../utils/resourceHelpers";
+import {
+  computeAvailableMana,
+  computeThresholdTotals,
+} from "../utils/resourceHelpers";
 import { createZonesPatchFor } from "../utils/zoneHelpers";
 
 // Count how many copies of a site the player controls
@@ -130,6 +133,34 @@ const triggerSiteGenesis = (
     // Check if resolvers are disabled
     if (!state.resolversDisabled) {
       state.beginRiverGenesis({
+        siteName,
+        cellKey,
+        ownerSeat,
+      });
+    }
+    return;
+  }
+
+  // Observatory - Genesis → Look at your next three spells. Put them back in any order.
+  if (lc === "observatory") {
+    const ownerSeat = owner === 1 ? "p1" : "p2";
+    // Check if resolvers are disabled
+    if (!state.resolversDisabled) {
+      state.beginObservatory({
+        siteName,
+        cellKey,
+        ownerSeat,
+      });
+    }
+    return;
+  }
+
+  // Kelp Cavern - Genesis → Look at your bottom three spells. Put one on top of your spellbook.
+  if (lc === "kelp cavern") {
+    const ownerSeat = owner === 1 ? "p1" : "p2";
+    // Check if resolvers are disabled
+    if (!state.resolversDisabled) {
+      state.beginKelpCavern({
         siteName,
         cellKey,
         ownerSeat,
@@ -245,7 +276,8 @@ export const createPlayActionsSlice: StateCreator<
         );
       }
       const type = typeEarly;
-      if (!type.includes("site")) {
+      if (!type.includes("site") && !type.includes("token")) {
+        // Check threshold requirements
         const req = (card.thresholds || {}) as Partial<
           Record<keyof Thresholds, number>
         >;
@@ -253,22 +285,63 @@ export const createPlayActionsSlice: StateCreator<
           state.board,
           state.permanents,
           who,
-          undefined,
-          undefined,
+          state.avatars[who],
+          state.specialSiteState,
           state.babelTowers,
         );
-        const miss: string[] = [];
+        const missingThresholds: string[] = [];
         for (const kk of Object.keys(req) as (keyof Thresholds)[]) {
           const need = Number(req[kk] ?? 0);
           const haveVal = Number(have[kk] ?? 0);
           if (need > haveVal) {
-            miss.push(`${kk} ${need - haveVal}`);
+            missingThresholds.push(`${kk} ${need - haveVal}`);
           }
         }
-        if (miss.length) {
+
+        // Check mana cost using computeAvailableMana
+        const cardManaCost = getManaCost(card, state.metaByCardId);
+        const currentMana = computeAvailableMana(
+          state.board,
+          state.permanents,
+          who,
+          state.zones,
+          state.specialSiteState,
+          have,
+          state.turn,
+          state.etherCoresInVoidAtTurnStart,
+          state.babelTowers,
+        );
+        const manaInsufficient = cardManaCost > currentMana;
+
+        // Build structured missing thresholds data
+        const missingThresholdData: Record<string, number> = {};
+        for (const kk of Object.keys(req) as (keyof Thresholds)[]) {
+          const need = Number(req[kk] ?? 0);
+          const haveVal = Number(have[kk] ?? 0);
+          if (need > haveVal) {
+            missingThresholdData[kk] = need - haveVal;
+          }
+        }
+
+        if (manaInsufficient || missingThresholds.length) {
           get().log(
-            `[Warning] '${card.name}' missing thresholds (${miss.join(", ")})`,
+            `[Warning] '${card.name}' ${manaInsufficient ? `costs ${cardManaCost} (you have ${currentMana})` : ""} ${missingThresholds.length ? `missing: ${missingThresholds.join(", ")}` : ""}`,
           );
+          try {
+            if (typeof window !== "undefined") {
+              window.dispatchEvent(
+                new CustomEvent("app:toast", {
+                  detail: {
+                    type: "resource-warning",
+                    cardName: card.name,
+                    manaCost: manaInsufficient ? cardManaCost : null,
+                    availableMana: manaInsufficient ? currentMana : null,
+                    missingThresholds: missingThresholdData,
+                  },
+                }),
+              );
+            }
+          } catch {}
         }
       }
       // Guard: Must draw a card before playing during Start/Draw phase
@@ -294,6 +367,7 @@ export const createPlayActionsSlice: StateCreator<
         return { ...state, castPlacementMode: null, selectedCard: null };
       }
       // Block non-site/non-token cards outside of Main phase (and Start phase after drawing)
+      // Sorcery phases: Start, Draw, Main, End (no combat phase)
       const canPlayInCurrentPhase =
         state.phase === "Main" ||
         ((state.phase === "Start" || state.phase === "Draw") &&
@@ -304,7 +378,9 @@ export const createPlayActionsSlice: StateCreator<
         !canPlayInCurrentPhase &&
         !allowInstant
       ) {
-        get().log(`Cannot play '${card.name}' during ${state.phase} phase`);
+        get().log(
+          `Cannot play '${card.name}' during ${state.phase} phase – play cards during Main phase`,
+        );
         return { ...state, castPlacementMode: null, selectedCard: null };
       }
 
@@ -576,6 +652,17 @@ export const createPlayActionsSlice: StateCreator<
           triggerSiteGenesis(card.name, key, ownerFromSeat(who), get);
         }, 0);
 
+        // Trigger Mirror Realm transformation (Gothic expansion)
+        // "When played, choose a nearby site to copy. Transform into that site."
+        if (card.name?.toLowerCase().includes("mirror realm")) {
+          setTimeout(() => {
+            get().beginMirrorRealm({
+              mirrorRealmCell: key,
+              casterSeat: who,
+            });
+          }, 0);
+        }
+
         const nextInteractionLog = expireInteractionGrant(
           state,
           consumeInstantId,
@@ -815,6 +902,33 @@ export const createPlayActionsSlice: StateCreator<
       const isRaiseDead = cardNameLower === "raise dead";
       const isLegionOfGall = cardNameLower === "legion of gall";
       const isShapeshift = cardNameLower === "shapeshift";
+      const isTorshammarTrinket = cardNameLower === "torshammar trinket";
+
+      // If this is Torshammar Trinket, show a toast that it will return to hand automatically
+      if (isTorshammarTrinket && newest && type.includes("artifact")) {
+        const playerNum = who === "p1" ? "1" : "2";
+        const trinketToast = `[p${playerNum}card:Torshammar Trinket] will return to hand at end of turn`;
+        const tr = get().transport;
+        if (tr?.sendMessage) {
+          try {
+            tr.sendMessage({
+              type: "toast",
+              text: trinketToast,
+              cellKey: key,
+              seat: who,
+            } as never);
+          } catch {}
+        }
+        // Also dispatch local toast
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("app:toast", {
+              detail: { message: trinketToast, cellKey: key },
+            }),
+          );
+        }
+      }
+
       console.log("[playActions] Card played:", {
         cardName: card.name,
         cardNameLower,
@@ -837,9 +951,12 @@ export const createPlayActionsSlice: StateCreator<
 
       // Check if resolvers are disabled - if so, skip all custom card logic
       const resolversDisabled = get().resolversDisabled;
-      if (resolversDisabled) {
+      // Also skip resolvers for Pith Imp stolen cards - they're not "played", just placed
+      const isPithImpStolen =
+        (card as { pithImpStolen?: boolean })?.pithImpStolen === true;
+      if (resolversDisabled || isPithImpStolen) {
         console.log(
-          "[playActions] Resolvers disabled - skipping custom card logic",
+          `[playActions] Resolvers skipped - ${resolversDisabled ? "disabled" : "pithImpStolen card"}`,
         );
         // Still trigger generic magic cast for Magic cards so they can be resolved manually
         if (type.includes("magic") && newest) {
@@ -1389,6 +1506,7 @@ export const createPlayActionsSlice: StateCreator<
         } as Partial<GameState> as GameState;
       }
       // Block non-site/non-token cards outside of Main phase (and Start phase after drawing)
+      // Sorcery phases: Start, Draw, Main, End (no combat phase)
       const canPlayInCurrentPhase =
         state.phase === "Main" ||
         ((state.phase === "Start" || state.phase === "Draw") &&
@@ -1400,7 +1518,7 @@ export const createPlayActionsSlice: StateCreator<
         !allowInstant
       ) {
         get().log(
-          `Cannot play '${card.name}' from ${from} during ${state.phase} phase`,
+          `Cannot play '${card.name}' from ${from} during ${state.phase} phase – play cards during Main phase`,
         );
         return {
           dragFromPile: null,

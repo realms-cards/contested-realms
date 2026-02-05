@@ -80,6 +80,9 @@ type BoardTileProps = {
   isSpectator: boolean;
   actorKey: PlayerKey | null;
   currentPlayer: 1 | 2;
+  phase: GameState["phase"];
+  hasDrawnThisTurn: boolean;
+  turn: number;
   lastDropAt: MutableRefObject<number>;
   pendingMagic: GameState["pendingMagic"];
   avatars: GameState["avatars"];
@@ -156,6 +159,9 @@ export function BoardTile({
   isSpectator,
   actorKey,
   currentPlayer,
+  phase,
+  hasDrawnThisTurn,
+  turn,
   lastDropAt,
   pendingMagic,
   avatars,
@@ -347,6 +353,9 @@ export function BoardTile({
         isSpectator={isSpectator}
         actorKey={actorKey}
         currentPlayer={currentPlayer}
+        phase={phase}
+        hasDrawnThisTurn={hasDrawnThisTurn}
+        turn={turn}
         dragContext={permanentDragContext}
         hoverContext={hoverContext}
         touchContext={touchContext}
