@@ -718,7 +718,11 @@ export const createNetworkSlice: StateCreator<
                 }
               }
             }
-            // Warn for hand wipes (but allow them - hand can legitimately become empty)
+            // HARDENING: Block suspicious hand wipes
+            // Hand CAN legitimately become empty (played all cards), but if the patch
+            // would wipe a hand with many cards AND the patch also has permanents with
+            // __replaceKeys (typical endTurn patch), it's likely a stale server sync issue.
+            // Block these suspicious wipes to protect against server sending stale zone data.
             const handStateCount =
               (stateZones?.hand as unknown[] | undefined)?.length ?? 0;
             const handPatchVal = patchSeatZones?.hand;
@@ -727,9 +731,23 @@ export const createNetworkSlice: StateCreator<
               Array.isArray(handPatchVal) &&
               handPatchVal.length === 0
             ) {
-              console.warn(
-                `[ZONE_WIPE_DETECT] ${seat}.hand: patch has [] but state has ${handStateCount} cards`,
-              );
+              // Suspicious if: wiping 3+ cards AND patch has permanents replacement
+              // This pattern matches the stale-server-zone-data bug
+              const isSuspiciousWipe =
+                handStateCount >= 3 && replaceKeys.has("permanents");
+              if (isSuspiciousWipe) {
+                console.error(
+                  `[HAND_WIPE_BLOCKED] ${seat}.hand: patch has [] but state has ${handStateCount} cards (suspicious: permanents replacement) - preserving state`,
+                );
+                // Restore from state to prevent wipe
+                if (patchSeatZones && stateZones?.hand) {
+                  patchSeatZones.hand = stateZones.hand as unknown[];
+                }
+              } else {
+                console.warn(
+                  `[ZONE_WIPE_DETECT] ${seat}.hand: patch has [] but state has ${handStateCount} cards`,
+                );
+              }
             }
           }
         } catch {}
@@ -1054,6 +1072,16 @@ export const createNetworkSlice: StateCreator<
         next.druidFlipped = p.druidFlipped;
       } else if (replaceKeys.has("druidFlipped")) {
         next.druidFlipped = { p1: false, p2: false };
+      }
+      // Pathfinder used state (tracks if ability was used this turn)
+      if (p.pathfinderUsed !== undefined) {
+        next.pathfinderUsed = p.pathfinderUsed;
+        console.log("[PATHFINDER] applyServerPatch received pathfinderUsed:", {
+          incoming: p.pathfinderUsed,
+          prev: state.pathfinderUsed,
+        });
+      } else if (replaceKeys.has("pathfinderUsed")) {
+        next.pathfinderUsed = { p1: false, p2: false };
       }
       // Special site state (Valley of Delight, Mismanaged Mortuary, etc.)
       // Always replace, don't merge (arrays inside)
@@ -1465,6 +1493,10 @@ export const createNetworkSlice: StateCreator<
       // Druid flipped state - applyPatch version
       if (p.druidFlipped !== undefined) {
         next.druidFlipped = p.druidFlipped;
+      }
+      // Pathfinder used state - applyPatch version
+      if (p.pathfinderUsed !== undefined) {
+        next.pathfinderUsed = p.pathfinderUsed;
       }
       // Special site state (Valley of Delight, Mismanaged Mortuary, etc.) - applyPatch version
       // Use replaceKeys to fully replace the state (arrays don't merge well)

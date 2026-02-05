@@ -163,6 +163,7 @@ export function isSavior(avatarName: string | null | undefined): boolean {
  * Check if an avatar has the "Tap → Play or draw a site" ability.
  * Most avatars have this standard ability, but some special avatars do not:
  * - Magician: No atlas (all cards in spellbook, including sites)
+ * - Pathfinder: Has a unique "Tap → Play site and move there" ability instead
  */
 export function hasTapToDrawSite(
   avatarName: string | null | undefined,
@@ -170,6 +171,8 @@ export function hasTapToDrawSite(
   if (!avatarName) return false;
   // Magician doesn't have atlas - sites are in spellbook
   if (isMagician(avatarName)) return false;
+  // Pathfinder has a unique ability: Tap → Play topmost site to adjacent void/Rubble and move there
+  if (isPathfinder(avatarName)) return false;
   // All other avatars have the standard tap-to-draw-site ability
   return true;
 }

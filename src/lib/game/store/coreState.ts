@@ -524,11 +524,26 @@ export const createCoreSlice: StateCreator<
         [nextKey]: { ...state.avatars[nextKey], tapped: false },
       } as GameState["avatars"];
 
+      // Reset pathfinder usage for the next player's turn
+      const pathfinderUsedNext = {
+        ...state.pathfinderUsed,
+        [nextKey]: false,
+      };
+
+      console.log("[PATHFINDER] nextPhase reset:", {
+        nextKey,
+        pathfinderUsedBefore: state.pathfinderUsed,
+        pathfinderUsedAfter: pathfinderUsedNext,
+      });
+
       // Don't send turn in patch - server increments turn when currentPlayer changes
+      // Include avatars to ensure correct position is broadcast (e.g., after Pathfinder move)
       const base: ServerPatchT = {
         phase: nextPhase,
         currentPlayer: nextPlayer,
         hasDrawnThisTurn: false, // Reset draw tracking for new turn
+        pathfinderUsed: pathfinderUsedNext,
+        avatars: avatarsNext,
       };
       const deltaPatch =
         updates.length > 0 ? createPermanentDeltaPatch(updates) : undefined;
@@ -544,6 +559,7 @@ export const createCoreSlice: StateCreator<
         hasDrawnThisTurn: false, // Reset draw tracking for new turn
         permanents,
         avatars: avatarsNext,
+        pathfinderUsed: pathfinderUsedNext,
         selectedCard: null,
       });
       try {
@@ -662,6 +678,20 @@ export const createCoreSlice: StateCreator<
       [nextKey]: false, // Reset for the player whose turn is starting
     };
 
+    // Reset pathfinder usage for the next player's turn
+    const pathfinderUsedNext = {
+      ...state.pathfinderUsed,
+      [nextKey]: false, // Reset for the player whose turn is starting
+    };
+
+    console.log("[PATHFINDER] endTurn reset:", {
+      nextKey,
+      pathfinderUsedBefore: state.pathfinderUsed,
+      pathfinderUsedAfter: pathfinderUsedNext,
+      avatarsP1Pos: state.avatars?.p1?.pos,
+      avatarsP2Pos: state.avatars?.p2?.pos,
+    });
+
     // Track which Ether Cores are currently in the void at turn start
     // Ether Core only provides 3 mana if it was cast this turn OR started the turn in the void
     const etherCoresInVoidAtTurnStartNext: string[] = [];
@@ -684,6 +714,7 @@ export const createCoreSlice: StateCreator<
 
     // Don't send turn in patch - server increments turn when currentPlayer changes
     // Include full permanents with __replaceKeys to ensure all trigger changes are synced
+    // Include avatars to ensure correct position is broadcast (e.g., after Pathfinder move)
     const base: ServerPatchT = {
       phase: "Start",
       currentPlayer: nextPlayer,
@@ -693,9 +724,12 @@ export const createCoreSlice: StateCreator<
       necromancerSkeletonUsed: necromancerSkeletonUsedNext,
       mephistophelesSummonUsed: mephistophelesSummonUsedNext,
       harbingerPortalDiscountUsed: harbingerPortalDiscountUsedNext,
+      pathfinderUsed: pathfinderUsedNext,
       etherCoresInVoidAtTurnStart: etherCoresInVoidAtTurnStartNext,
       // Include full permanents after all end-of-turn triggers
       permanents,
+      // Include avatars to ensure correct positions are synced
+      avatars: avatarsNext,
       __replaceKeys: ["permanents"],
     };
     const deltaPatch =
@@ -717,6 +751,7 @@ export const createCoreSlice: StateCreator<
       necromancerSkeletonUsed: necromancerSkeletonUsedNext,
       mephistophelesSummonUsed: mephistophelesSummonUsedNext,
       harbingerPortalDiscountUsed: harbingerPortalDiscountUsedNext,
+      pathfinderUsed: pathfinderUsedNext,
       etherCoresInVoidAtTurnStart: etherCoresInVoidAtTurnStartNext,
       selectedCard: null,
       selectedPermanent: null,
