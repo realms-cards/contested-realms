@@ -1348,9 +1348,28 @@ export const createNetworkSlice: StateCreator<
       }
       if (p.permanents !== undefined) {
         if (replaceKeys.has("permanents")) {
-          next.permanents = normalizePermanentsRecord(
+          const candidatePermanents = normalizePermanentsRecord(
             (p.permanents as Permanents) || ({} as Permanents),
           ) as GameState["permanents"];
+
+          // PERMANENTS HARDENING: Prevent accidental board wipes even with __replaceKeys
+          const prevPermCount = Object.values(state.permanents || {}).reduce(
+            (a, v) => a + (Array.isArray(v) ? v.length : 0),
+            0,
+          );
+          const nextPermCount = Object.values(candidatePermanents || {}).reduce(
+            (a, v) => a + (Array.isArray(v) ? v.length : 0),
+            0,
+          );
+          // Block if wiping more than half the board (suspicious)
+          if (prevPermCount > 4 && nextPermCount < prevPermCount / 2) {
+            console.error(
+              `[PERMANENTS_HARDENING] applyPatch (replace): Blocked suspicious wipe: ${prevPermCount} -> ${nextPermCount} permanents`,
+            );
+            next.permanents = state.permanents;
+          } else {
+            next.permanents = candidatePermanents;
+          }
         } else {
           const merged = mergePermanentsMap(state.permanents, p.permanents);
           next.permanents = normalizePermanentsRecord(
