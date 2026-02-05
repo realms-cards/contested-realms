@@ -5001,6 +5001,15 @@ export function handleCustomMessage(
     // Mark ability as used
     const updatedUsed = { ...state.pathfinderUsed, [who]: true };
 
+    console.log("[PATHFINDER] pathfinderResolve received (opponent):", {
+      who,
+      targetCell,
+      newAvatarPos: [targetX, targetY],
+      pathfinderUsedBefore: state.pathfinderUsed,
+      pathfinderUsedAfter: updatedUsed,
+      actorKey: get().actorKey,
+    });
+
     // Update opponent's view of the atlas - remove the played site from the top
     // We use atlasCount from the message if available, otherwise just slice
     const currentAtlas = state.zones[who]?.atlas || [];

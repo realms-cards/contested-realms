@@ -309,6 +309,14 @@ export const createPathfinderSlice: StateCreator<
     // Mark ability as used
     const updatedUsed = { ...state.pathfinderUsed, [who]: true };
 
+    console.log("[PATHFINDER] selectPathfinderTarget:", {
+      who,
+      targetCell,
+      newAvatarPos: [targetX, targetY],
+      pathfinderUsedBefore: state.pathfinderUsed,
+      pathfinderUsedAfter: updatedUsed,
+    });
+
     set({
       zones: updatedZones,
       board: { ...board, sites: newSites },

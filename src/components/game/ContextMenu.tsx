@@ -1288,6 +1288,15 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     // Pathfinder play site action (tap → play top site to adjacent void/Rubble and move)
     const pathfinderHasAlreadyUsed = pathfinderUsed[t.who];
     if (isMine && isPathfinder(effectiveAvatarName)) {
+      console.log("[PATHFINDER] ContextMenu check:", {
+        who: t.who,
+        pathfinderUsed,
+        pathfinderHasAlreadyUsed,
+        isMyTurn,
+        isTapped: a?.tapped,
+        hasPosition,
+        atlasCount: zones[t.who]?.atlas?.length,
+      });
       const isNotTapped = !a?.tapped;
       const atlasCount = zones[t.who]?.atlas?.length ?? 0;
       const canPlay =

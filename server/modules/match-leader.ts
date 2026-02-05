@@ -449,20 +449,48 @@ function syncBattlefieldZones(
       dirtySeats.push(seat);
     }
   }
-  if (dirtySeats.length === 0 && !patch.permanents) {
+
+  // CRITICAL FIX: Only update battlefield zone, never add full zones to patches
+  // that didn't originally include zones. The server has stale zone data (zones
+  // are private to each client), so adding them to patches causes hand/deck wipes.
+  // If no battlefield actually changed, don't modify the patch at all.
+  if (dirtySeats.length === 0) {
+    // No battlefield changes - return patch unchanged
     return patch;
   }
-  if (dirtySeats.length === 0) {
-    dirtySeats.push("p1", "p2");
-  }
+
+  // Update match.game.zones for the server's internal state (battlefield only)
   match.game = {
     ...(match.game as Record<string, unknown>),
     zones: nextZones,
   } as MatchGameState;
 
+  // CRITICAL: Only add zones to patch if the original patch already had zones.
+  // Otherwise, adding stale server-side zone data will wipe the opponent's
+  // private zone data (hand, spellbook, atlas).
+  if (!patch.zones) {
+    // Original patch had no zones - don't add zones to it
+    // The battlefield sync is for server state only
+    return patch;
+  }
+
+  // Original patch had zones - safely merge battlefield updates
   const existingPatchZones = isRecord(patch.zones) ? { ...patch.zones } : {};
   for (const seat of dirtySeats) {
-    existingPatchZones[seat] = nextZones[seat];
+    // Only update battlefield, preserve other zones from the original patch
+    const existingSeat = existingPatchZones[seat] as PlayerZones | undefined;
+    if (existingSeat) {
+      existingPatchZones[seat] = {
+        ...existingSeat,
+        battlefield: battlefield[seat],
+      };
+    } else {
+      // Patch didn't include this seat - only add battlefield, not full zones
+      existingPatchZones[seat] = {
+        ...ensurePlayerZones(undefined, seat),
+        battlefield: battlefield[seat],
+      } as PlayerZones;
+    }
   }
   return {
     ...patch,

@@ -27,48 +27,60 @@ export default function TurnStartOverlay({ gameStarted }: TurnStartOverlayProps 
   const [fading, setFading] = useState<"in" | "out" | null>(null);
   const [displayTurn, setDisplayTurn] = useState(1);
   const [showDrawReminder, setShowDrawReminder] = useState(false);
+  const mountedRef = useRef(false);
   const prevPhaseRef = useRef<string | null>(null);
   const prevPlayerRef = useRef<number | null>(null);
   const prevGameStartedRef = useRef<boolean | undefined>(undefined);
-  const shownForTurn1Ref = useRef(false);
+  const shownForTurnRef = useRef<number>(0); // Track which turn we've shown for
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    // Skip initial mount to prevent triggering on page load/reload
+    if (!mountedRef.current) {
+      mountedRef.current = true;
+      prevPhaseRef.current = phase;
+      prevPlayerRef.current = currentPlayer;
+      prevGameStartedRef.current = gameStarted;
+      return;
+    }
+
     // Only show when it's my turn
     const isMyTurn =
       !actorKey ||
       (actorKey === "p1" && currentPlayer === 1) ||
       (actorKey === "p2" && currentPlayer === 2);
 
-    // For turn 1: trigger when gameStarted prop changes to true (mulligan closes)
-    // This "cheats" the timing to show after mulligan instead of at phase transition
+    // Don't show if we've already shown for this turn
+    const alreadyShownForThisTurn = shownForTurnRef.current >= turn;
+
+    // For turn 1 in ONLINE play: trigger when gameStarted prop changes to true (mulligan closes)
+    // gameStarted prop is only passed in online play
     const turn1JustStarted =
       turn === 1 &&
       gameStarted === true &&
       prevGameStartedRef.current !== true &&
-      !shownForTurn1Ref.current;
+      !alreadyShownForThisTurn;
 
     // For subsequent turns: trigger when currentPlayer changes AND we're in Start phase
     const turnChanged =
       turn > 1 &&
       prevPlayerRef.current !== null &&
       prevPlayerRef.current !== currentPlayer &&
-      phase === "Start";
+      phase === "Start" &&
+      !alreadyShownForThisTurn;
 
-    // Fallback for offline play (no gameStarted prop): use phase transition
+    // Fallback for OFFLINE play only (gameStarted prop is undefined): use phase transition
     const offlineGameStart =
-      !gameStarted &&
+      gameStarted === undefined &&
       prevPhaseRef.current === "Setup" &&
       phase === "Start" &&
-      !shownForTurn1Ref.current;
+      !alreadyShownForThisTurn;
 
     const shouldShow =
       isMyTurn && (turn1JustStarted || turnChanged || offlineGameStart);
 
     if (shouldShow) {
-      if (turn === 1) {
-        shownForTurn1Ref.current = true;
-      }
+      shownForTurnRef.current = turn;
       setDisplayTurn(turn);
       // First turn: first player does NOT draw, so no reminder
       // Subsequent turns: show draw reminder
