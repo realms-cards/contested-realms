@@ -1,15 +1,13 @@
 import type { StateCreator } from "zustand";
+import type { CustomMessage } from "@/lib/net/transport";
 import type {
   CardRef,
   CellKey,
   GameState,
-  MirrorRealmPhase,
   PendingMirrorRealm,
-  PlayerKey,
   ServerPatchT,
   SiteTile,
 } from "./types";
-import type { CustomMessage } from "@/lib/net/transport";
 import { getCellNumber } from "./utils/boardHelpers";
 import { getNearbyCells } from "./utils/boardHelpers";
 
@@ -200,7 +198,7 @@ export const createMirrorRealmSlice: StateCreator<
 
       // Broadcast resolution
       try {
-        transport.sendMessage({
+        transport.sendMessage?.({
           type: "mirrorRealmResolve",
           id: pending.id,
           casterSeat,
@@ -213,7 +211,7 @@ export const createMirrorRealmSlice: StateCreator<
 
       // Send toast
       try {
-        transport.sendMessage({
+        transport.sendMessage?.({
           type: "toast",
           text: logMessage,
           cellKey: mirrorRealmCell,
