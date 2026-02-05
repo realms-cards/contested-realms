@@ -592,6 +592,17 @@ export const createCoreSlice: StateCreator<
     const nextPlayer = cur === 1 ? 2 : 1;
     const curPlayerNum = cur === 1 ? "1" : "2";
     const nextPlayerNum = nextPlayer === 1 ? "1" : "2";
+
+    // DEBUG: Track permanents at start of endTurn
+    const permCountAtStart = Object.values(state.permanents || {}).reduce(
+      (sum, arr) => sum + (Array.isArray(arr) ? arr.length : 0),
+      0,
+    );
+    console.log("[endTurn] START - Permanents before triggers:", {
+      cellCount: Object.keys(state.permanents || {}).length,
+      totalPermanents: permCountAtStart,
+    });
+
     // Log both messages before updating state so they use the current turn number
     get().log(`[p${curPlayerNum}:PLAYER] ends the turn`);
 
@@ -622,6 +633,22 @@ export const createCoreSlice: StateCreator<
     // Torshammar, Lilith, Omphalos may have modified the permanents state
     const permanents: Permanents = { ...get().permanents };
     const updates: PermanentDeltaUpdate[] = [];
+
+    // DEBUG: Track permanent counts through endTurn
+    const permCountBefore = Object.values(permanents).reduce(
+      (sum, arr) => sum + (Array.isArray(arr) ? arr.length : 0),
+      0,
+    );
+    console.log("[endTurn] Permanents after triggers:", {
+      cellCount: Object.keys(permanents).length,
+      totalPermanents: permCountBefore,
+      cells: Object.fromEntries(
+        Object.entries(permanents).map(([k, v]) => [
+          k,
+          Array.isArray(v) ? v.length : 0,
+        ]),
+      ),
+    });
     for (const cellKey of Object.keys(permanents)) {
       const cellPermanents = permanents[cellKey] || [];
       const arr = [...cellPermanents];
@@ -732,14 +759,24 @@ export const createCoreSlice: StateCreator<
       avatars: avatarsNext,
       __replaceKeys: ["permanents"],
     };
-    const deltaPatch =
-      updates.length > 0 ? createPermanentDeltaPatch(updates) : undefined;
-    // Note: deltaPatch updates are for untapping, which is already reflected in `permanents`
-    // We include deltaPatch for backward compatibility but permanents is the source of truth
-    const patch: ServerPatchT = deltaPatch ? { ...base, ...deltaPatch } : base;
-    get().trySendPatch(patch);
+    // NOTE: We do NOT include deltaPatch when using __replaceKeys: ["permanents"]
+    // The full permanents object already contains untapping changes.
+    // Spreading deltaPatch would OVERWRITE permanents with incomplete delta data,
+    // causing all permanents except the updated one to be lost!
+    // The deltaPatch is only useful when NOT doing a full replacement.
+    get().trySendPatch(base);
 
     // Don't set turn locally - server will send the authoritative turn value
+    // DEBUG: Track permanents before set()
+    const permCountBeforeSet = Object.values(permanents).reduce(
+      (sum, arr) => sum + (Array.isArray(arr) ? arr.length : 0),
+      0,
+    );
+    console.log("[endTurn] Before set() - Permanents to be set:", {
+      cellCount: Object.keys(permanents).length,
+      totalPermanents: permCountBeforeSet,
+    });
+
     set({
       phase: "Start",
       currentPlayer: nextPlayer,
@@ -756,6 +793,23 @@ export const createCoreSlice: StateCreator<
       selectedCard: null,
       selectedPermanent: null,
     });
+
+    // DEBUG: Verify permanents after set()
+    const permCountAfterSet = Object.values(get().permanents || {}).reduce(
+      (sum, arr) => sum + (Array.isArray(arr) ? arr.length : 0),
+      0,
+    );
+    console.log("[endTurn] After set() - Permanents now:", {
+      cellCount: Object.keys(get().permanents || {}).length,
+      totalPermanents: permCountAfterSet,
+      lostPermanents: permCountBeforeSet - permCountAfterSet,
+    });
+    if (permCountAfterSet < permCountBeforeSet) {
+      console.error(
+        `[endTurn] WARNING: Lost ${permCountBeforeSet - permCountAfterSet} permanents during set()!`,
+      );
+    }
+
     try {
       get().clearAllDamageForSeat(nextKey);
     } catch {}

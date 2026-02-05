@@ -96,7 +96,8 @@ export const createTorshammarSlice: StateCreator<
     // This is an automated game effect, not a player action
     console.log("[Torshammar] Applying state update...");
     set((currentState) => {
-      const per: Permanents = {};
+      // IMPORTANT: Start with spread of existing permanents to avoid losing any
+      const per: Permanents = { ...currentState.permanents };
       const zonesNext = { ...currentState.zones } as Record<PlayerKey, Zones>;
 
       // Deep copy zones for owner
@@ -153,8 +154,10 @@ export const createTorshammarSlice: StateCreator<
         totalAfter += filtered.length;
         if (filtered.length > 0) {
           per[cellKey as CellKey] = filtered;
+        } else {
+          // Cell is now empty after removing trinkets - delete it
+          delete per[cellKey as CellKey];
         }
-        // If filtered is empty, don't add the cell (effectively deleting it)
       }
 
       console.log("[Torshammar] Permanents before/after:", {

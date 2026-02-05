@@ -1155,7 +1155,7 @@ export default function PlayPage() {
       {/* End Turn Confirmation Dialog - always visible (for untapped avatar warning) */}
       <EndTurnConfirmDialog />
       {/* Turn Start Overlay - announces turn number and draw reminder */}
-      <TurnStartOverlay />
+      <TurnStartOverlay gameStarted={mulliganComplete && portalSetupComplete} />
       {/* Audio Controls - hidden visually when uiHidden but stays mounted to keep music playing */}
       {uiHidden && (
         <div className="sr-only">

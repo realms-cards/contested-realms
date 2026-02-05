@@ -53,8 +53,7 @@ export default function TurnStartOverlay({ gameStarted }: TurnStartOverlayProps 
     // Don't show if we've already shown for this turn
     const alreadyShownForThisTurn = shownForTurnRef.current >= turn;
 
-    // For turn 1 in ONLINE play: trigger when gameStarted prop changes to true (mulligan closes)
-    // gameStarted prop is only passed in online play
+    // For turn 1: trigger when gameStarted prop changes to true (mulligan/seer/portal complete)
     const turn1JustStarted =
       turn === 1 &&
       gameStarted === true &&
@@ -69,15 +68,8 @@ export default function TurnStartOverlay({ gameStarted }: TurnStartOverlayProps 
       phase === "Start" &&
       !alreadyShownForThisTurn;
 
-    // Fallback for OFFLINE play only (gameStarted prop is undefined): use phase transition
-    const offlineGameStart =
-      gameStarted === undefined &&
-      prevPhaseRef.current === "Setup" &&
-      phase === "Start" &&
-      !alreadyShownForThisTurn;
-
     const shouldShow =
-      isMyTurn && (turn1JustStarted || turnChanged || offlineGameStart);
+      isMyTurn && (turn1JustStarted || turnChanged);
 
     if (shouldShow) {
       shownForTurnRef.current = turn;
