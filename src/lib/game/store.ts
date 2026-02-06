@@ -28,6 +28,7 @@ import {
   createInitialD20Rolls,
   createInitialPlayers,
 } from "./store/coreState";
+import { createCrossroadsSlice } from "./store/crossroadsState";
 import { handleCustomMessage } from "./store/customMessageHandlers";
 import { createDemonicContractSlice } from "./store/demonicContractState";
 import { createDholChantsSlice } from "./store/dholChantsState";
@@ -231,6 +232,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   ...createRiverGenesisSlice(set, get, storeApi),
   ...createObservatorySlice(set, get, storeApi),
   ...createKelpCavernSlice(set, get, storeApi),
+  ...createCrossroadsSlice(set, get, storeApi),
   ...createMirrorRealmSlice(set, get, storeApi),
   ...createTorshammarSlice(set, get, storeApi),
   ...createShapeshiftSlice(set, get, storeApi),
@@ -355,6 +357,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         pendingRiverGenesis: null,
         pendingObservatory: null,
         pendingKelpCavern: null,
+        pendingCrossroads: null,
         pendingShapeshift: null,
       };
       return reset as GameState;

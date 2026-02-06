@@ -5820,6 +5820,92 @@ export function handleCustomMessage(
     return;
   }
 
+  // --- Crossroads message handlers ---
+  if (t === "crossroadsBegin") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const siteName = (msg as { siteName?: unknown }).siteName as
+      | string
+      | undefined;
+    const cellKey = (msg as { cellKey?: unknown }).cellKey as
+      | string
+      | undefined;
+    const ownerSeat = (msg as { ownerSeat?: unknown }).ownerSeat as
+      | PlayerKey
+      | undefined;
+    const revealedCount = (msg as { revealedCount?: unknown }).revealedCount as
+      | number
+      | undefined;
+
+    if (!id || !siteName || !cellKey || !ownerSeat) return;
+
+    // Skip if we're the owner - we already have the state
+    const actorKey = get().actorKey;
+    if (actorKey === ownerSeat) return;
+
+    set({
+      pendingCrossroads: {
+        id,
+        siteName,
+        cellKey,
+        ownerSeat,
+        phase: "selecting",
+        revealedCards: [], // Opponent doesn't see cards
+        selectedCardIndex: null,
+        createdAt: Date.now(),
+      },
+    } as Partial<GameState> as GameState);
+
+    try {
+      const playerNum = ownerSeat === "p1" ? "1" : "2";
+      get().log(
+        `[p${playerNum}:PLAYER] ${siteName} Genesis: Looking at top ${revealedCount || "?"} sites in atlas...`,
+      );
+    } catch {}
+    return;
+  }
+
+  if (t === "crossroadsSelect") {
+    // Opponent doesn't need to track selection
+    return;
+  }
+
+  if (t === "crossroadsResolve") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const pending = get().pendingCrossroads;
+    if (!pending || (id && pending.id !== id)) return;
+
+    // Skip if we're the owner - we already have the state
+    const actorKey = get().actorKey;
+    if (actorKey === pending.ownerSeat) return;
+
+    set({ pendingCrossroads: null } as Partial<GameState> as GameState);
+
+    try {
+      const playerNum = pending.ownerSeat === "p1" ? "1" : "2";
+      get().log(
+        `[p${playerNum}:PLAYER] ${pending.siteName} Genesis: Kept 1 site on top, put others on bottom of atlas`,
+      );
+    } catch {}
+    return;
+  }
+
+  if (t === "crossroadsCancel") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const pending = get().pendingCrossroads;
+    if (!pending || (id && pending.id !== id)) return;
+
+    // Skip if we're the owner
+    const actorKey = get().actorKey;
+    if (actorKey === pending.ownerSeat) return;
+
+    set({ pendingCrossroads: null } as Partial<GameState> as GameState);
+
+    try {
+      get().log(`${pending.siteName} Genesis cancelled`);
+    } catch {}
+    return;
+  }
+
   // --- Torshammar Trinket message handlers ---
   if (t === "torshammarReturn") {
     const endingPlayerSeat = (msg as { endingPlayerSeat?: unknown })

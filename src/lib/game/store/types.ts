@@ -944,6 +944,21 @@ export type PendingKelpCavern = {
   createdAt: number;
 };
 
+// --- Crossroads State ------------------------------------------------
+// "Genesis → Look at your next four sites. Put three on the bottom of your atlas."
+export type CrossroadsPhase = "selecting" | "resolving" | "complete";
+
+export type PendingCrossroads = {
+  id: string;
+  siteName: string;
+  cellKey: CellKey;
+  ownerSeat: PlayerKey;
+  phase: CrossroadsPhase;
+  revealedCards: CardRef[];
+  selectedCardIndex: number | null;
+  createdAt: number;
+};
+
 // --- Mirror Realm State ------------------------------------------------
 // "When played, choose a nearby site to copy. Transform into that site."
 export type MirrorRealmPhase = "selecting" | "resolving" | "complete";
@@ -1943,6 +1958,16 @@ export type GameState = {
   selectKelpCavernCard: (cardIndex: number) => void;
   resolveKelpCavern: () => void;
   cancelKelpCavern: () => void;
+  // Crossroads (look at top 4 sites in atlas, keep 1, put 3 on bottom)
+  pendingCrossroads: PendingCrossroads | null;
+  beginCrossroads: (input: {
+    siteName: string;
+    cellKey: CellKey;
+    ownerSeat: PlayerKey;
+  }) => void;
+  selectCrossroadsCard: (cardIndex: number) => void;
+  resolveCrossroads: () => void;
+  cancelCrossroads: () => void;
   // Torshammar Trinket (return to hand at end of turn)
   triggerTorshammarEndOfTurn: (endingPlayerSeat: PlayerKey) => void;
   // Shapeshift (transform allied minion into a minion from top 5 spells)
@@ -2371,6 +2396,9 @@ export type GameState = {
     y: number,
     placeRubble: boolean,
   ) => void;
+  // Transform a site into a minion permanent (Island Leviathan, Horns of Behemoth)
+  // Removes site, places card as permanent, places Rubble underneath
+  transformSite: (x: number, y: number) => void;
   floodSite: (x: number, y: number) => void;
   silenceSite: (x: number, y: number) => void;
   disableSite: (x: number, y: number) => void;

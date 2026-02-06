@@ -24,6 +24,7 @@ import { ClientCanvas } from "@/components/game/ClientCanvas";
 import CollectionButton from "@/components/game/CollectionButton";
 import CommonSenseOverlay from "@/components/game/CommonSenseOverlay";
 import ContextMenu from "@/components/game/ContextMenu";
+import CrossroadsOverlay from "@/components/game/CrossroadsOverlay";
 import DeckSelector from "@/components/game/DeckSelector";
 import DemonicContractOverlay from "@/components/game/DemonicContractOverlay";
 import DholChantsOverlay from "@/components/game/DholChantsOverlay";
@@ -1033,6 +1034,9 @@ export default function PlayPage() {
 
       {/* Kelp Cavern Overlay (pick one from bottom 3 for top) */}
       <KelpCavernOverlay />
+
+      {/* Crossroads Overlay (keep 1 of top 4 atlas sites, rest to bottom) */}
+      <CrossroadsOverlay />
 
       {/* Mirror Realm Overlay (copy nearby site) */}
       <MirrorRealmOverlay />

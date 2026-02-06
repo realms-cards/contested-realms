@@ -28,6 +28,7 @@ import CollectionButton from "@/components/game/CollectionButton";
 import CombatHudOverlay from "@/components/game/CombatHudOverlay";
 import CommonSenseOverlay from "@/components/game/CommonSenseOverlay";
 import ContextMenu from "@/components/game/ContextMenu";
+import CrossroadsOverlay from "@/components/game/CrossroadsOverlay";
 import DemonicContractOverlay from "@/components/game/DemonicContractOverlay";
 import DholChantsOverlay from "@/components/game/DholChantsOverlay";
 import DoomsdayCultOverlay from "@/components/game/DoomsdayCultOverlay";
@@ -3443,6 +3444,8 @@ export default function OnlineMatchPage() {
               <ObservatoryOverlay />
               {/* Kelp Cavern Overlay (pick one from bottom 3 for top) */}
               <KelpCavernOverlay />
+              {/* Crossroads Overlay (keep 1 of top 4 atlas sites, rest to bottom) */}
+              <CrossroadsOverlay />
               {/* Mirror Realm Overlay (copy nearby site) */}
               <MirrorRealmOverlay />
               {/* Shapeshift Overlay (transform minion) */}

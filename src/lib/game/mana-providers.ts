@@ -107,11 +107,14 @@ export const THRESHOLD_GRANT_BY_NAME: Record<
   "aquamarine core": { water: 1 },
   "onyx core": { earth: 1 },
   "ruby core": { fire: 1 },
-  // Arthurian Families (Minion) - provide threshold only
+  // Arthurian Families (Minion) - provide threshold ONLY (no mana)
   "blacksmith family": { fire: 1 },
   "castle servants": { air: 1 },
   "common cottagers": { earth: 1 },
   "fisherman's family": { water: 1 },
+  // Transformed sites (site → minion permanent) - still provide affinity threshold, no mana
+  "island leviathan": { water: 1 },
+  "horns of behemoth": { fire: 1 },
 };
 
 // Artifacts that provide mana/threshold while "in the realm" (on board), without needing attachment.

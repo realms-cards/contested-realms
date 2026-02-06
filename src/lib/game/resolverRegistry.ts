@@ -286,11 +286,35 @@ export const RESOLVER_REGISTRY: ResolverEntry[] = [
       "Genesis: Look at bottom 3 spells, put one on top of spellbook",
   },
   {
+    id: "crossroads",
+    cardName: "Crossroads",
+    category: "site",
+    stateFile: "crossroadsState.ts",
+    description:
+      "Genesis: Look at next 4 sites in atlas, keep 1 on top, put 3 on bottom",
+  },
+  {
     id: "torshammarTrinket",
     cardName: "Torshammar Trinket",
     category: "artifact",
     stateFile: "torshammarState.ts",
     description: "Bearer has +1 power. After each turn, return to owner's hand",
+  },
+  {
+    id: "islandLeviathan",
+    cardName: "Island Leviathan",
+    category: "site",
+    stateFile: "boardState.ts",
+    description:
+      "If you have 8 water threshold — May transform into a Monster with 8 strength. Place Rubble underneath.",
+  },
+  {
+    id: "hornsOfBehemoth",
+    cardName: "Horns of Behemoth",
+    category: "site",
+    stateFile: "boardState.ts",
+    description:
+      "If you have 6 fire threshold — May transform into a Demon with 6 strength. Place Rubble underneath.",
   },
 ];
 

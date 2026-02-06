@@ -479,6 +479,8 @@ export function PermanentStack({
         const tokenName = (p.card.name || "").toLowerCase();
         const tokenDef = isToken ? TOKEN_BY_NAME[tokenName] : undefined;
         const tokenSiteReplace = !!tokenDef?.siteReplacement;
+        // Transformed sites (e.g. Island Leviathan, Horns of Behemoth) keep landscape orientation
+        const isSiteCard = cardType.includes("site") && !isToken;
         // Silenced tokens use the Silence spell card art
         const isSilencedToken = isToken && tokenName === "silenced";
         // Disabled tokens use the Disabled token texture
@@ -497,7 +499,7 @@ export function PermanentStack({
             : TILE_SIZE * 0.5 - marginZ + avatarShiftZ;
         const rotZ =
           (owner === 1 ? 0 : Math.PI) +
-          (tokenSiteReplace ? -Math.PI / 2 : 0) +
+          (tokenSiteReplace || isSiteCard ? -Math.PI / 2 : 0) +
           (p.tapped ? -Math.PI / 2 : 0) +
           (p.tilt || 0);
         const baseOffX = p.offset?.[0] ?? 0;
