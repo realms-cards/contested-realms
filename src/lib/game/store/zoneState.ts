@@ -459,8 +459,8 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
 
       get().log(
         `${who.toUpperCase()} scries ${from} (${
-          decision === "bottom" ? "bottom" : "top"
-        }${top?.name ? ": " + top.name : ""})`,
+          decision === "bottom" ? "put on bottom" : "kept on top"
+        })`,
       );
 
       const tr = get().transport;

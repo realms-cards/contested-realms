@@ -1,6 +1,6 @@
 import type { StateCreator } from "zustand";
 import type { CustomMessage } from "@/lib/net/transport";
-import type { CardRef, CellKey, GameState, PlayerKey } from "./types";
+import type { CardRef, CellKey, GameState, PlayerKey, Zones } from "./types";
 import { opponentSeat } from "./utils/boardHelpers";
 
 function newAccusationId() {
@@ -259,8 +259,19 @@ export const createAccusationSlice: StateCreator<
       pendingAccusation: null,
     } as Partial<GameState> as GameState);
 
-    // NOTE: Do NOT send zone patches for victim's seat - the server will block it.
-    // Instead, the victim updates their own zones when they receive the custom message.
+    // Send victim zone patch if we are the victim (no Evil case) or in hotseat mode.
+    // When the caster resolves (Evil case), the victim handles it via the custom message.
+    const actorKey = get().actorKey;
+    if (handIndex !== -1 && (actorKey === null || actorKey === victimSeat)) {
+      try {
+        get().trySendPatch({
+          zones: { [victimSeat]: zonesNext[victimSeat] } as Record<
+            PlayerKey,
+            Zones
+          >,
+        });
+      } catch {}
+    }
 
     // Move spell to graveyard
     try {
