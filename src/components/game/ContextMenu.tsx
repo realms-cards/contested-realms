@@ -86,6 +86,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   const moveSiteToGraveyardWithRubble = useGameStore(
     (s) => s.moveSiteToGraveyardWithRubble,
   );
+  const transformSite = useGameStore((s) => s.transformSite);
   const floodSite = useGameStore((s) => s.floodSite);
   const silenceSite = useGameStore((s) => s.silenceSite);
   const disableSite = useGameStore((s) => s.disableSite);
@@ -136,6 +137,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   const druidFlipped = useGameStore((s) => s.druidFlipped);
   const flipDruid = useGameStore((s) => s.flipDruid);
   const getAvailableMana = useGameStore((s) => s.getAvailableMana);
+  const getThresholdTotals = useGameStore((s) => s.getThresholdTotals);
   const beginAnnualFair = useGameStore((s) => s.beginAnnualFair);
   const triggerFrontierSettlersAbility = useGameStore(
     (s) => s.triggerFrontierSettlersAbility,
@@ -705,6 +707,29 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
           "Pay (1) to gain Air, Water, Earth, or Fire threshold this turn.",
       });
     }
+
+    // Transform site into minion (Island Leviathan, Horns of Behemoth)
+    const siteNameLc = siteName.toLowerCase();
+    const isIslandLeviathan = siteNameLc.includes("island leviathan");
+    const isHornsOfBehemoth = siteNameLc.includes("horns of behemoth");
+    if (isMine && (isIslandLeviathan || isHornsOfBehemoth)) {
+      const thresholds = getThresholdTotals(ownerKey || "p1");
+      const requiredElement = isIslandLeviathan ? "water" : "fire";
+      const requiredAmount = isIslandLeviathan ? 8 : 6;
+      const currentAmount = thresholds[requiredElement];
+      const meetsThreshold = currentAmount >= requiredAmount;
+      const transformDescription = isIslandLeviathan
+        ? `If you have 8 water threshold — Transform into a Monster with 8 strength. Place Rubble underneath. (Current: ${currentAmount} water)`
+        : `If you have 6 fire threshold — Transform into a Demon with 6 strength. Place Rubble underneath. (Current: ${currentAmount} fire)`;
+
+      extraActions.push({
+        actionId: "__transform_site__",
+        displayText: `Transform${meetsThreshold ? "" : " ⚠️"}`,
+        isEnabled: true,
+        targetPermanentId: "",
+        description: transformDescription,
+      });
+    }
   } else if (t.kind === "permanent") {
     const arr = permanents[t.at] || [];
     const item = arr[t.index];
@@ -716,7 +741,8 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
       (actorKey === "p1" && currentPlayer === 1) ||
       (actorKey === "p2" && currentPlayer === 2) ||
       !actorKey;
-    const canToggle = !actorKey || (ownerKey && actorKey === ownerKey) || isActingPlayer;
+    const canToggle =
+      !actorKey || (ownerKey && actorKey === ownerKey) || isActingPlayer;
     hasToggle = !!canToggle;
     if (canToggle) {
       doToggle = () => {
@@ -1066,8 +1092,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         displayText: "Move Monument",
         isEnabled: true,
         targetPermanentId: "",
-        description:
-          "Move this monument to another tile on the board.",
+        description: "Move this monument to another tile on the board.",
       });
     }
 
@@ -3069,6 +3094,27 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                                 ? seatFromOwner(site.owner)
                                 : "p1";
                               beginAnnualFair(key, ownerSeat);
+                            }
+                            onClose();
+                          }}
+                        >
+                          {action.displayText}
+                        </button>
+                      );
+                    }
+                    // Transform site into minion (Island Leviathan, Horns of Behemoth)
+                    if (action.actionId === "__transform_site__") {
+                      return (
+                        <button
+                          key={action.actionId}
+                          className="w-full text-left rounded bg-red-600/20 hover:bg-red-600/30 px-3 py-1"
+                          title={action.description}
+                          onClick={() => {
+                            if (t.kind === "site") {
+                              transformSite(t.x, t.y);
+                              try {
+                                playCardFlip();
+                              } catch {}
                             }
                             onClose();
                           }}

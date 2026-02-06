@@ -169,6 +169,20 @@ const triggerSiteGenesis = (
     return;
   }
 
+  // Crossroads - Genesis → Look at your next four sites. Put three on the bottom of your atlas.
+  if (lc === "crossroads") {
+    const ownerSeat = owner === 1 ? "p1" : "p2";
+    // Check if resolvers are disabled
+    if (!state.resolversDisabled) {
+      state.beginCrossroads({
+        siteName,
+        cellKey,
+        ownerSeat,
+      });
+    }
+    return;
+  }
+
   // Beacon - Genesis → Gain (1) for each nearby site with an enemy atop it.
   // "Nearby" means 8 directions (orthogonal + diagonals)
   if (BEACON_GENESIS_SITES.has(lc)) {

@@ -49,13 +49,6 @@ export const createDamageActionsSlice: StateCreator<
     set((state) => {
       const owner = seat === "p1" ? 1 : 2;
       const per: Permanents = { ...state.permanents };
-
-      // DEBUG: Track permanents in clearAllDamageForSeat
-      const permCountBefore = Object.values(state.permanents || {}).reduce(
-        (sum, arr) => sum + (Array.isArray(arr) ? arr.length : 0),
-        0,
-      );
-
       const updates: PermanentDeltaUpdate[] = [];
       for (const [cell, list] of Object.entries(per)) {
         const arr = [...(list || [])];
@@ -79,17 +72,6 @@ export const createDamageActionsSlice: StateCreator<
           }
         }
         if (changed) per[cell as CellKey] = arr;
-      }
-
-      // DEBUG: Verify no permanents lost
-      const permCountAfter = Object.values(per || {}).reduce(
-        (sum, arr) => sum + (Array.isArray(arr) ? arr.length : 0),
-        0,
-      );
-      if (permCountAfter !== permCountBefore) {
-        console.error(
-          `[clearAllDamageForSeat] ERROR: Permanent count changed! Before: ${permCountBefore}, After: ${permCountAfter}`,
-        );
       }
 
       if (updates.length > 0) {

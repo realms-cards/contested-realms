@@ -1,6 +1,8 @@
 import type { StateCreator } from "zustand";
 import type { CustomMessage } from "@/lib/net/transport";
+import { isMergedTower } from "./babelTowerState";
 import type {
+  BabelTowerMerge,
   CardRef,
   CellKey,
   GameState,
@@ -166,6 +168,26 @@ export const createMirrorRealmSlice: StateCreator<
 
     sitesNext[mirrorRealmCell] = transformedSite;
 
+    // If target is a merged Tower of Babel, replicate the merge entry
+    // so the copy also counts as a fully constructed Tower.
+    const targetTower = isMergedTower(selectedTarget, state.babelTowers);
+    let babelTowersNext = state.babelTowers;
+    if (targetTower) {
+      const copiedApex: CardRef = {
+        ...targetTower.apexCard,
+        instanceId: `mirror_apex_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+      };
+      const mirrorMerge: BabelTowerMerge = {
+        cellKey: mirrorRealmCell,
+        baseCard: copiedCard, // the copied Base card is already on the site
+        apexCard: copiedApex,
+        towerCard: null,
+        owner: mirrorSite.owner,
+        createdAt: Date.now(),
+      };
+      babelTowersNext = [...state.babelTowers, mirrorMerge];
+    }
+
     const boardNext = {
       ...state.board,
       sites: sitesNext,
@@ -192,6 +214,7 @@ export const createMirrorRealmSlice: StateCreator<
       const patch: ServerPatchT = {
         board: boardNext,
         pendingMirrorRealm: null,
+        ...(targetTower ? { babelTowers: babelTowersNext } : {}),
       };
 
       get().trySendPatch(patch);
@@ -234,6 +257,7 @@ export const createMirrorRealmSlice: StateCreator<
     set({
       board: boardNext,
       pendingMirrorRealm: null,
+      ...(targetTower ? { babelTowers: babelTowersNext } : {}),
     });
   },
 

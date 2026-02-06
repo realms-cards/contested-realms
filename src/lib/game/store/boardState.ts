@@ -37,6 +37,7 @@ type BoardSlice = Pick<
   | "toggleTapSite"
   | "moveSiteToZone"
   | "moveSiteToGraveyardWithRubble"
+  | "transformSite"
   | "floodSite"
   | "silenceSite"
   | "silencePermanent"
@@ -379,6 +380,128 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
         board: boardNext,
         zones,
         ...(placeRubble ? { permanents: permanentsNext } : {}),
+      } as Partial<GameState> as GameState;
+    }),
+
+  // Transform a site into a minion permanent (Island Leviathan, Horns of Behemoth)
+  // Removes the site, places the site card as a permanent, and places Rubble underneath.
+  // The permanent still provides affinity threshold but no mana (handled via THRESHOLD_GRANT_BY_NAME).
+  transformSite: (x: number, y: number) =>
+    set((state) => {
+      get().pushHistory();
+      const key = toCellKey(x, y);
+      const site = state.board.sites[key];
+      if (!site || !site.card) {
+        get().log("No site at this position to transform");
+        return state;
+      }
+
+      // Ownership checks
+      const siteOwner = site.owner;
+      const owner = seatFromOwner(siteOwner);
+      if (state.transport && state.actorKey) {
+        const isOwner = state.actorKey === owner;
+        if (!isOwner) {
+          get().log("Can only transform your own sites");
+          return state;
+        }
+      }
+
+      const siteName = site.card.name || "";
+      const cellNo = getCellNumber(x, y, state.board.size.w);
+      const playerNum = owner === "p1" ? "1" : "2";
+
+      // Remove site from board
+      const sites = { ...state.board.sites };
+      delete sites[key];
+      const boardNext = { ...state.board, sites } as GameState["board"];
+
+      // Place the site card as a permanent (minion) on the same tile
+      const minionCard = prepareCardForSeat(site.card, owner);
+      const permanentsNext = { ...state.permanents };
+      const arr = [...(permanentsNext[key] || [])];
+
+      // Place Rubble token first (underneath)
+      const rubbleDef = TOKEN_BY_NAME["rubble"];
+      if (rubbleDef) {
+        const rubbleCard = prepareCardForSeat(
+          {
+            cardId: newTokenInstanceId(rubbleDef),
+            variantId: null,
+            name: rubbleDef.name,
+            type: "Token",
+            slug: tokenSlug(rubbleDef),
+            thresholds: null,
+          },
+          owner,
+        );
+        arr.push({
+          owner: siteOwner,
+          card: rubbleCard,
+          offset: null,
+          tilt: randomTilt(),
+          tapVersion: 0,
+          tapped: false,
+          version: 0,
+          instanceId: rubbleCard.instanceId ?? newPermanentInstanceId(),
+        });
+      }
+
+      // Place the transformed site card as a permanent on top
+      arr.push({
+        owner: siteOwner,
+        card: minionCard,
+        offset: null,
+        tilt: randomTilt(),
+        tapVersion: 0,
+        tapped: false,
+        version: 0,
+        instanceId: minionCard.instanceId ?? newPermanentInstanceId(),
+      });
+      permanentsNext[key] = arr;
+
+      get().log(
+        `[p${playerNum}:PLAYER] transforms [p${playerNum}card:${siteName}] into a minion at #${cellNo} (Rubble placed)`,
+      );
+
+      // Send patch in online mode
+      const tr = get().transport;
+      if (tr) {
+        // Explicitly set deleted site to null for proper sync
+        const sitesPatch: Record<string, unknown> = { [key]: null };
+        const patch: ServerPatchT = {
+          board: { ...boardNext, sites: sitesPatch as typeof boardNext.sites },
+          permanents: permanentsNext,
+        };
+        get().trySendPatch(patch);
+
+        // Send toast
+        const toastMessage = `[p${playerNum}:PLAYER] transforms [p${playerNum}card:${siteName}] into a minion at #${cellNo}`;
+        try {
+          tr.sendMessage?.({
+            type: "toast",
+            text: toastMessage,
+            cellKey: key,
+            seat: owner,
+          } as never);
+        } catch {}
+      } else {
+        // Offline: show local toast
+        const toastMessage = `[p${playerNum}:PLAYER] transforms [p${playerNum}card:${siteName}] into a minion at #${cellNo}`;
+        try {
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(
+              new CustomEvent("game:toast", {
+                detail: { text: toastMessage, cellKey: key },
+              }),
+            );
+          }
+        } catch {}
+      }
+
+      return {
+        board: boardNext,
+        permanents: permanentsNext,
       } as Partial<GameState> as GameState;
     }),
 
