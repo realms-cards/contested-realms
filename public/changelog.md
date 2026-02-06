@@ -8,7 +8,7 @@
 - **introduce insufficient Mana/Treshold toast message**
 - **interleave chat and event log in matches**
 - **disable auto-tap** for moving cards on the board. you can tap by hitting "t" or richt-click->Tap
-- **custom resolvers for** Seasonal River series, Shapeshift, Observatory, Kelp Cavern, Torshammars Trinket, Mirror Realm
+- **custom resolvers for** Seasonal River series, Shapeshift, Observatory, Kelp Cavern, Torshammars Trinket, Mirror Realm, Island Leviathan, Horns of Behemoth, Crossroads
 - **fix resolver for** Valley of Delight, Pith Imp, Omphalos, Searing Truth
 - **sites can spawn their keyword** frog, foot soldier, skeleton, lance
 
