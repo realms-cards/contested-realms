@@ -11,7 +11,7 @@ export const RIVER_GENESIS_SITES = new Set([
 ]);
 
 export function isRiverGenesisSite(
-  cardName: string | null | undefined
+  cardName: string | null | undefined,
 ): boolean {
   if (!cardName) return false;
   return RIVER_GENESIS_SITES.has(cardName.toLowerCase());
@@ -98,7 +98,7 @@ export const createRiverGenesisSlice: StateCreator<
 
     const playerNum = ownerSeat === "p1" ? "1" : "2";
     state.log(
-      `[p${playerNum}:PLAYER] ${siteName} Genesis: Looking at next spell...`
+      `[p${playerNum}:PLAYER] ${siteName} Genesis: Looking at next spell...`,
     );
   },
 
@@ -107,12 +107,12 @@ export const createRiverGenesisSlice: StateCreator<
     const pending = state.pendingRiverGenesis;
     if (!pending || pending.phase !== "viewing" || !pending.topSpell) return;
 
-    const { ownerSeat, siteName, topSpell } = pending;
+    const { ownerSeat, siteName } = pending;
 
     if (choice === "bottom") {
       // Move the top spell to the bottom of the spellbook
       const spellbook = [...state.zones[ownerSeat].spellbook];
-      
+
       // Remove from top (index 0)
       const [movedCard] = spellbook.splice(0, 1);
       if (movedCard) {
@@ -146,7 +146,7 @@ export const createRiverGenesisSlice: StateCreator<
 
       const playerNum = ownerSeat === "p1" ? "1" : "2";
       state.log(
-        `[p${playerNum}:PLAYER] ${siteName} Genesis: Put ${topSpell.name} on bottom of spellbook`
+        `[p${playerNum}:PLAYER] ${siteName} Genesis: Put spell on bottom of spellbook`,
       );
     } else {
       // Keep on top - no zone changes needed
@@ -154,7 +154,7 @@ export const createRiverGenesisSlice: StateCreator<
 
       const playerNum = ownerSeat === "p1" ? "1" : "2";
       state.log(
-        `[p${playerNum}:PLAYER] ${siteName} Genesis: Kept spell on top of spellbook`
+        `[p${playerNum}:PLAYER] ${siteName} Genesis: Kept spell on top of spellbook`,
       );
     }
 
