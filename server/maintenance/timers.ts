@@ -17,7 +17,7 @@ export interface MaintenanceTimerDeps {
   cleanupMatchNow: (
     matchId: string,
     reason: string,
-    force: boolean
+    force: boolean,
   ) => Promise<void>;
   getOrClaimMatchLeader: (matchId: string) => Promise<string | null>;
   instanceId: string;
@@ -26,6 +26,8 @@ export interface MaintenanceTimerDeps {
   matchControlChannel: string;
   staleWaitingMs: number;
   inactiveMatchCleanupMs: number;
+  staleMatchHumanMs: number;
+  staleMatchBotMs: number;
   prisma: PrismaClient;
   safeErrorMessage: (err: unknown) => unknown;
 }
@@ -45,6 +47,8 @@ export function startMaintenanceTimers({
   matchControlChannel,
   staleWaitingMs,
   inactiveMatchCleanupMs,
+  staleMatchHumanMs,
+  staleMatchBotMs,
   prisma,
   safeErrorMessage,
 }: MaintenanceTimerDeps): NodeJS.Timeout[] {
@@ -79,7 +83,7 @@ export function startMaintenanceTimers({
             console.log(
               `[Match] Periodic cleanup of bot-only match ${match.id} (status=${
                 match.status
-              }, age=${Math.floor(age / 1000)}s)`
+              }, age=${Math.floor(age / 1000)}s)`,
             );
           } catch {
             // Ignore logging failures
@@ -88,7 +92,7 @@ export function startMaintenanceTimers({
             try {
               console.warn(
                 `[Match] Failed to cleanup bot match ${match.id}:`,
-                err
+                err,
               );
             } catch {
               // Ignore logging failures
@@ -96,7 +100,7 @@ export function startMaintenanceTimers({
           });
         }
       }
-    }, 30 * 1000)
+    }, 30 * 1000),
   );
 
   timers.push(
@@ -132,7 +136,7 @@ export function startMaintenanceTimers({
                     matchId: match.id,
                     reason: "stale_waiting",
                     force: true,
-                  } satisfies AnyRecord)
+                  } satisfies AnyRecord),
                 );
               }
               continue;
@@ -170,7 +174,7 @@ export function startMaintenanceTimers({
                     matchId: match.id,
                     reason: "inactive_timeout",
                     force: true,
-                  } satisfies AnyRecord)
+                  } satisfies AnyRecord),
                 );
               }
               continue;
@@ -179,7 +183,7 @@ export function startMaintenanceTimers({
               console.log(
                 `[match] cleanup inactive match ${match.id} (status: ${
                   match.status
-                }, age: ${Math.round(age / 1000 / 60)}min)`
+                }, age: ${Math.round(age / 1000 / 60)}min)`,
               );
             } catch {
               // Ignore logging failures
@@ -190,7 +194,7 @@ export function startMaintenanceTimers({
           }
         }
       }
-    }, 60 * 1000)
+    }, 60 * 1000),
   );
 
   // NOTE: We only clean up "completed" and "cancelled" sessions here.
@@ -199,33 +203,134 @@ export function startMaintenanceTimers({
   // To re-enable retention, see REPLAY_RETENTION_DAYS in server/index.ts.
   // Deleting "ended" sessions would cascade-delete OnlineMatchAction records.
   timers.push(
-    setInterval(async () => {
-      try {
-        const threshold = new Date(Date.now() - inactiveMatchCleanupMs);
-        const result = await prisma.onlineMatchSession.deleteMany({
-          where: {
-            status: { in: ["completed", "cancelled"] },
-            updatedAt: { lt: threshold },
-          },
-        });
+    setInterval(
+      async () => {
+        try {
+          const threshold = new Date(Date.now() - inactiveMatchCleanupMs);
+          const result = await prisma.onlineMatchSession.deleteMany({
+            where: {
+              status: { in: ["completed", "cancelled"] },
+              updatedAt: { lt: threshold },
+            },
+          });
 
-        if (result.count > 0) {
+          if (result.count > 0) {
+            try {
+              console.log(
+                `[db] cleaned up ${result.count} old match(es) from database`,
+              );
+            } catch {
+              // Ignore logging failures
+            }
+          }
+        } catch (err) {
           try {
-            console.log(
-              `[db] cleaned up ${result.count} old match(es) from database`
+            console.warn(`[db] cleanup failed:`, safeErrorMessage(err));
+          } catch {
+            // Ignore logging failures
+          }
+        }
+      },
+      5 * 60 * 1000,
+    ),
+  );
+
+  // Auto-close stale matches: 7 days for human matches, 2 days for bot matches
+  timers.push(
+    setInterval(
+      async () => {
+        try {
+          const now = Date.now();
+          const humanThreshold = new Date(now - staleMatchHumanMs);
+          const botThreshold = new Date(now - staleMatchBotMs);
+
+          // Find stale sessions still in active states
+          const staleSessions = await prisma.onlineMatchSession.findMany({
+            where: {
+              status: { in: ["waiting", "deck_construction", "in_progress"] },
+              updatedAt: { lt: humanThreshold },
+            },
+            select: {
+              id: true,
+              playerIds: true,
+              status: true,
+              updatedAt: true,
+            },
+          });
+
+          // Also find bot matches that are stale at the shorter threshold
+          const botStaleSessions =
+            staleMatchBotMs < staleMatchHumanMs
+              ? await prisma.onlineMatchSession.findMany({
+                  where: {
+                    status: {
+                      in: ["waiting", "deck_construction", "in_progress"],
+                    },
+                    updatedAt: { gte: humanThreshold, lt: botThreshold },
+                  },
+                  select: {
+                    id: true,
+                    playerIds: true,
+                    status: true,
+                    updatedAt: true,
+                  },
+                })
+              : [];
+
+          // Filter bot-only matches from the second query
+          const isBotOnly = (playerIds: string[]) =>
+            playerIds.length > 0 &&
+            playerIds.every((pid) => pid.startsWith("cpu_"));
+
+          const toCancel: string[] = [];
+
+          // All matches past human threshold get cancelled regardless
+          for (const s of staleSessions) {
+            toCancel.push(s.id);
+          }
+
+          // Bot-only matches past bot threshold but before human threshold
+          for (const s of botStaleSessions) {
+            if (isBotOnly(s.playerIds)) {
+              toCancel.push(s.id);
+            }
+          }
+
+          if (toCancel.length === 0) return;
+
+          // Cancel stale sessions in DB
+          const result = await prisma.onlineMatchSession.updateMany({
+            where: { id: { in: toCancel } },
+            data: { status: "cancelled" },
+          });
+
+          // Remove from in-memory map
+          for (const id of toCancel) {
+            matches.delete(id);
+          }
+
+          if (result.count > 0) {
+            try {
+              console.log(
+                `[maintenance] auto-closed ${result.count} stale match(es): ${toCancel.join(", ")}`,
+              );
+            } catch {
+              // Ignore logging failures
+            }
+          }
+        } catch (err) {
+          try {
+            console.warn(
+              `[maintenance] stale match cleanup failed:`,
+              safeErrorMessage(err),
             );
           } catch {
             // Ignore logging failures
           }
         }
-      } catch (err) {
-        try {
-          console.warn(`[db] cleanup failed:`, safeErrorMessage(err));
-        } catch {
-          // Ignore logging failures
-        }
-      }
-    }, 5 * 60 * 1000)
+      },
+      60 * 60 * 1000,
+    ), // Run every hour
   );
 
   return timers;

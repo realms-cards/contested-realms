@@ -2,7 +2,12 @@
 
 import React, { useEffect, useState } from "react";
 import { PLAYER_COLORS } from "@/lib/game/constants";
-import { useGameStore, type CellKey } from "@/lib/game/store";
+import { useGameStore, type CellKey, type Permanents } from "@/lib/game/store";
+import {
+  getBoudiccaBonus,
+  getBoudiccaBonusForAvatar,
+  BOUDICCA_POWER_BONUS,
+} from "@/lib/game/store/boudiccaState";
 import {
   getCellNumber,
   seatFromOwner,
@@ -506,8 +511,39 @@ export default function CombatHudOverlay() {
       if (owner === 1 || owner === 2) {
         const seat: "p1" | "p2" =
           owner === 1 || owner === 2 ? seatFromOwner(owner) : "p1";
+        // Boudicca bonus for site attacks
+        const resolversDisabled = useGameStore.getState().resolversDisabled;
+        let bBonus = 0;
+        if (!resolversDisabled) {
+          if (
+            attackConfirm.attacker.isAvatar &&
+            attackConfirm.attacker.avatarSeat
+          ) {
+            bBonus = getBoudiccaBonusForAvatar({
+              permanents: permanents as Permanents,
+              avatarOwner: attackConfirm.attacker.owner,
+              isAttackingSite: true,
+              resolversDisabled: false,
+            });
+          } else {
+            const atkName =
+              permanents[attackConfirm.attacker.at]?.[
+                attackConfirm.attacker.index
+              ]?.card?.name ?? null;
+            bBonus = getBoudiccaBonus({
+              permanents: permanents as Permanents,
+              attackerOwner: attackConfirm.attacker.owner,
+              attackerAt: attackConfirm.attacker.at as CellKey,
+              attackerIndex: attackConfirm.attacker.index,
+              attackerName: atkName,
+              isAttackingSite: true,
+              resolversDisabled: false,
+            });
+          }
+        }
+        const totalAtk = eff.atk + bBonus;
         const dd = players[seat]?.lifeState === "dd";
-        const dmg = dd ? 0 : Math.max(0, Math.floor(eff.atk));
+        const dmg = dd ? 0 : Math.max(0, Math.floor(totalAtk));
         return (
           <span className="opacity-80">
             - Deal <span className="font-semibold">{dmg}</span> to{" "}
@@ -518,6 +554,11 @@ export default function CombatHudOverlay() {
               {seat.toUpperCase()}
             </span>
             {eff.firstStrike ? " (FS)" : ""}
+            {bBonus > 0 ? (
+              <span className="text-amber-400 ml-1">
+                [Boudicca +{BOUDICCA_POWER_BONUS}]
+              </span>
+            ) : null}
           </span>
         );
       }
@@ -656,8 +697,39 @@ export default function CombatHudOverlay() {
         const seat: "p1" | "p2" =
           owner === 1 ? "p1" : owner === 2 ? "p2" : fallbackSeat;
         if (seat === "p1" || seat === "p2") {
+          // Boudicca bonus for site attacks in defense suggestion
+          const resolversOff = useGameStore.getState().resolversDisabled;
+          let bBonus = 0;
+          if (!resolversOff) {
+            if (
+              pendingCombat.attacker.isAvatar &&
+              pendingCombat.attacker.avatarSeat
+            ) {
+              bBonus = getBoudiccaBonusForAvatar({
+                permanents: permanents as Permanents,
+                avatarOwner: pendingCombat.attacker.owner,
+                isAttackingSite: true,
+                resolversDisabled: false,
+              });
+            } else {
+              const aN =
+                permanents[pendingCombat.attacker.at]?.[
+                  pendingCombat.attacker.index
+                ]?.card?.name ?? null;
+              bBonus = getBoudiccaBonus({
+                permanents: permanents as Permanents,
+                attackerOwner: pendingCombat.attacker.owner,
+                attackerAt: pendingCombat.attacker.at as CellKey,
+                attackerIndex: pendingCombat.attacker.index,
+                attackerName: aN,
+                isAttackingSite: true,
+                resolversDisabled: false,
+              });
+            }
+          }
+          const totalAtk = a.atk + bBonus;
           const dd = players[seat]?.lifeState === "dd";
-          const dmg = dd ? 0 : Math.max(0, Math.floor(a.atk));
+          const dmg = dd ? 0 : Math.max(0, Math.floor(totalAtk));
           const life = Number(players[seat]?.life ?? 0);
           const after = Math.max(0, life - dmg);
           const siteName =
@@ -682,6 +754,11 @@ export default function CombatHudOverlay() {
                 {seat.toUpperCase()}
               </span>{" "}
               life {life} → {after})
+              {bBonus > 0 ? (
+                <span className="text-amber-400 ml-1">
+                  [Boudicca +{BOUDICCA_POWER_BONUS}]
+                </span>
+              ) : null}
             </span>
           );
         }

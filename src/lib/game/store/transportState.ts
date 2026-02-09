@@ -826,11 +826,28 @@ export const createTransportSlice: StateCreator<
             // (no filtering needed for avatars)
 
             // Zones: Only include actor's own zones - these are private
+            // Exception: __allowZoneSeats permits updating specific opponent zones
+            // (e.g., when destroying opponent cards, their graveyard must be updated)
             if (sanitized.zones && typeof sanitized.zones === "object") {
               const z = sanitized.zones as Partial<Record<PlayerKey, Zones>>;
               const outZ: Partial<Record<PlayerKey, Zones>> = {};
+              const patchRecord = sanitized as Record<string, unknown>;
+              const allowedZoneSeats = Array.isArray(
+                patchRecord.__allowZoneSeats,
+              )
+                ? (patchRecord.__allowZoneSeats as string[])
+                : [];
+              // Include actor's own zones
               if (z[actorKey as PlayerKey]) {
                 outZ[actorKey as PlayerKey] = z[actorKey as PlayerKey] as Zones;
+              }
+              // Include zones explicitly allowed via __allowZoneSeats
+              for (const seat of allowedZoneSeats) {
+                if (seat === "p1" || seat === "p2") {
+                  if (z[seat]) {
+                    outZ[seat] = z[seat] as Zones;
+                  }
+                }
               }
               if (Object.keys(outZ).length > 0) {
                 sanitized.zones = outZ as GameState["zones"];

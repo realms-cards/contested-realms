@@ -57,10 +57,17 @@ function CodexTooltipInner({ cardName, className = "" }: CodexTooltipProps) {
   }
 
   // Highlight all [[Card Name]] references in content
+  // SECURITY: HTML-escape content first to prevent XSS via dangerouslySetInnerHTML
   const formatContent = (content: string) => {
-    return content.replace(
+    const escaped = content
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+    return escaped.replace(
       /\[\[([^\]]+)\]\]/g,
-      '<span class="text-amber-300 font-medium">$1</span>'
+      '<span class="text-amber-300 font-medium">$1</span>',
     );
   };
 
@@ -130,7 +137,7 @@ function CodexTooltipInner({ cardName, className = "" }: CodexTooltipProps) {
               </div>
             </div>
           </div>,
-          document.body
+          document.body,
         )}
     </div>
   );

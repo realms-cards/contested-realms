@@ -128,10 +128,7 @@ export async function middleware(req: NextRequest) {
   if (pathname.startsWith("/api")) {
     const flag = (req.headers.get("x-internal-call") || "").toLowerCase();
     const key = req.headers.get("x-internal-key") || "";
-    const expectedKeys = [
-      process.env.INTERNAL_API_KEY || "",
-      process.env.NEXTAUTH_SECRET || "",
-    ].filter(Boolean);
+    const expectedKeys = [process.env.INTERNAL_API_KEY || ""].filter(Boolean);
     const isOn =
       flag === "1" || flag === "true" || flag === "yes" || flag === "on";
     const allowed =

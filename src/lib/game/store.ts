@@ -49,10 +49,7 @@ import { createGardenOfEdenSlice } from "./store/gardenOfEdenState";
 import { createGemTokenSlice } from "./store/gemTokenState";
 import { createHeadlessHauntSlice } from "./store/headlessHauntState";
 import { createHighlandPrincessSlice } from "./store/highlandPrincessState";
-import {
-  createHistorySlice,
-  createInitialHistoryState,
-} from "./store/historyState";
+import { createHistorySlice } from "./store/historyState";
 import {
   createImposterMaskSlice,
   createInitialImposterMasks,
@@ -114,7 +111,9 @@ import { createUiSlice, createInitialUiState } from "./store/uiState";
 import { createDefaultAvatars } from "./store/utils/avatarHelpers";
 import { createDefaultPlayerPositions } from "./store/utils/positionHelpers";
 import {
+  clearHistoryStorage,
   clearSnapshotsStorageFor,
+  loadHistoryFromStorage,
   loadSnapshotsFromStorageFor,
 } from "./store/utils/snapshotHelpers";
 import { createEmptyZonesRecord } from "./store/utils/zoneHelpers";
@@ -245,20 +244,31 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   // Multiplayer transport (injected by online play UI)
   receiveCustomMessage: (msg) => handleCustomMessage(msg, set, get),
 
-  // Clear snapshots for a truly new match (not rejoin/reload)
+  // Clear snapshots and history for a truly new match (not rejoin/reload)
   clearSnapshotsForNewMatch: () => {
     const matchId = get().matchId ?? null;
-    console.log("[game] Clearing snapshots for new match", { matchId });
+    console.log("[game] Clearing snapshots and history for new match", {
+      matchId,
+    });
     try {
       clearSnapshotsStorageFor(matchId);
     } catch {}
-    set({ snapshots: createEmptySnapshots() });
+    try {
+      clearHistoryStorage(matchId);
+    } catch {}
+    set({
+      snapshots: createEmptySnapshots(),
+      history: [],
+      historyByPlayer: { p1: [], p2: [] },
+    });
   },
 
-  // Reset all game state to initial values (preserves snapshots for rejoins)
+  // Reset all game state to initial values (preserves snapshots and history for rejoins)
   resetGameState: () =>
     set((state) => {
-      console.log("[game] Resetting game state (preserving snapshots)");
+      console.log(
+        "[game] Resetting game state (preserving snapshots and history)",
+      );
       // Reload snapshots from storage instead of clearing them
       const matchId = state.matchId ?? null;
       let preservedSnapshots = state.snapshots;
@@ -266,6 +276,20 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         const stored = loadSnapshotsFromStorageFor(matchId);
         if (Array.isArray(stored) && stored.length > 0) {
           preservedSnapshots = stored;
+        }
+      } catch {}
+      // Reload history from sessionStorage instead of clearing it
+      let preservedHistory = state.history;
+      let preservedHistoryByPlayer = state.historyByPlayer;
+      try {
+        const persisted = loadHistoryFromStorage(matchId);
+        if (
+          persisted &&
+          Array.isArray(persisted.history) &&
+          persisted.history.length > 0
+        ) {
+          preservedHistory = persisted.history;
+          preservedHistoryByPlayer = persisted.historyByPlayer;
         }
       } catch {}
       const reset: Partial<GameState> = {
@@ -295,7 +319,8 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         sitePositions: {},
         playerPositions: createDefaultPlayerPositions(),
         ...createInitialDialogState(),
-        ...createInitialHistoryState(),
+        history: preservedHistory,
+        historyByPlayer: preservedHistoryByPlayer,
         mulligans: createInitialMulligans(),
         mulliganDrawn: createInitialMulliganDrawn(),
         events: [],

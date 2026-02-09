@@ -7,7 +7,12 @@ import type {
   PlayerKey,
   ServerPatchT,
 } from "./types";
-import { parseCellKey, toCellKey, getCellNumber } from "./utils/boardHelpers";
+import {
+  parseCellKey,
+  toCellKey,
+  getCellNumber,
+  seatFromOwner,
+} from "./utils/boardHelpers";
 import {
   movePermanentCore,
   ensurePermanentInstanceId,
@@ -37,7 +42,7 @@ export function isHeadlessHaunt(cardName: string | undefined | null): boolean {
 // Detect if Kythera Mechanism is attached to the player's avatar
 export function hasKytheraMechanism(
   permanents: GameState["permanents"],
-  avatarCellKey: CellKey | null
+  avatarCellKey: CellKey | null,
 ): boolean {
   if (!avatarCellKey) return false;
   const cellPerms = permanents[avatarCellKey] || [];
@@ -64,7 +69,7 @@ function getAllBoardTiles(boardWidth: number, boardHeight: number): CellKey[] {
 function pickRandomTile(
   currentCell: CellKey,
   boardWidth: number,
-  boardHeight: number
+  boardHeight: number,
 ): CellKey {
   const allTiles = getAllBoardTiles(boardWidth, boardHeight);
   const otherTiles = allTiles.filter((t) => t !== currentCell);
@@ -124,7 +129,7 @@ export const createHeadlessHauntSlice: StateCreator<
   }) => {
     set((state) => {
       const existing = state.headlessHaunts.find(
-        (h) => h.instanceId === entry.instanceId
+        (h) => h.instanceId === entry.instanceId,
       );
       if (existing) return state;
       return {
@@ -138,7 +143,7 @@ export const createHeadlessHauntSlice: StateCreator<
     set((state) => ({
       ...state,
       headlessHaunts: state.headlessHaunts.filter(
-        (h) => h.instanceId !== instanceId
+        (h) => h.instanceId !== instanceId,
       ),
     }));
   },
@@ -155,7 +160,7 @@ export const createHeadlessHauntSlice: StateCreator<
     if (existingPending) {
       console.log(
         "[HeadlessHaunt] Skipping trigger - already have pending move:",
-        existingPending.id
+        existingPending.id,
       );
       return;
     }
@@ -169,7 +174,7 @@ export const createHeadlessHauntSlice: StateCreator<
       console.log(
         "[HeadlessHaunt] Skipping trigger - already triggered for turn",
         currentTurn,
-        startingPlayerSeat
+        startingPlayerSeat,
       );
       return;
     }
@@ -186,7 +191,7 @@ export const createHeadlessHauntSlice: StateCreator<
       if (!cellPerms) continue;
       cellPerms.forEach((perm, idx) => {
         if (!perm || !perm.card) return;
-        const ownerSeat = perm.owner === 1 ? "p1" : "p2";
+        const ownerSeat = seatFromOwner(perm.owner);
         if (ownerSeat !== startingPlayerSeat) return;
         if (!isHeadlessHaunt(perm.card.name)) return;
         const instanceId = ensurePermanentInstanceId(perm);
@@ -240,7 +245,7 @@ export const createHeadlessHauntSlice: StateCreator<
       } as Partial<GameState> as GameState);
 
       get().log(
-        `[${startingPlayerSeat.toUpperCase()}] Kythera Mechanism allows choosing haunt movement`
+        `[${startingPlayerSeat.toUpperCase()}] Kythera Mechanism allows choosing haunt movement`,
       );
 
       // Broadcast to opponent
@@ -312,7 +317,7 @@ export const createHeadlessHauntSlice: StateCreator<
     get().log(
       `[${ownerSeat.toUpperCase()}] chooses not to move ${
         currentHaunt.cardName
-      }`
+      }`,
     );
 
     // Move to next haunt or complete
@@ -398,7 +403,7 @@ export const createHeadlessHauntSlice: StateCreator<
         const arr = permanents[fromKey] || [];
         // Find the permanent by instanceId
         const permIdx = arr.findIndex(
-          (p) => ensurePermanentInstanceId(p) === currentHaunt.instanceId
+          (p) => ensurePermanentInstanceId(p) === currentHaunt.instanceId,
         );
         if (permIdx >= 0) {
           // Get the permanent before moving
@@ -409,7 +414,7 @@ export const createHeadlessHauntSlice: StateCreator<
             fromKey,
             permIdx,
             toKey,
-            null
+            null,
           );
           permanents = result.per;
 
@@ -437,7 +442,7 @@ export const createHeadlessHauntSlice: StateCreator<
           const cellNo = getCellNumber(x, y, boardWidth);
           const playerNum = ownerSeat === "p1" ? "1" : "2";
           get().log(
-            `[p${playerNum}card:${move.cardName}] moves to #${cellNo} (Kythera Mechanism)`
+            `[p${playerNum}card:${move.cardName}] moves to #${cellNo} (Kythera Mechanism)`,
           );
 
           // Show toast with cell highlight
@@ -458,7 +463,7 @@ export const createHeadlessHauntSlice: StateCreator<
             window.dispatchEvent(
               new CustomEvent("app:toast", {
                 detail: { message: toastMessage, cellKey: move.to },
-              })
+              }),
             );
           }
 
@@ -517,7 +522,7 @@ export const createHeadlessHauntSlice: StateCreator<
           const cellNo = getCellNumber(x, y, boardWidth);
           const playerNum = ownerSeat === "p1" ? "1" : "2";
           get().log(
-            `[p${playerNum}card:${move.cardName}] moves to #${cellNo} (Kythera Mechanism)`
+            `[p${playerNum}card:${move.cardName}] moves to #${cellNo} (Kythera Mechanism)`,
           );
 
           // Show toast with cell highlight
@@ -537,7 +542,7 @@ export const createHeadlessHauntSlice: StateCreator<
               window.dispatchEvent(
                 new CustomEvent("app:toast", {
                   detail: { message: toastMessage, cellKey: move.to },
-                })
+                }),
               );
             }
           }
@@ -584,7 +589,7 @@ export const createHeadlessHauntSlice: StateCreator<
 
         const arr = permanents[fromKey] || [];
         const permIdx = arr.findIndex(
-          (p) => ensurePermanentInstanceId(p) === haunt.instanceId
+          (p) => ensurePermanentInstanceId(p) === haunt.instanceId,
         );
         if (permIdx < 0) continue;
 
@@ -596,7 +601,7 @@ export const createHeadlessHauntSlice: StateCreator<
           fromKey,
           permIdx,
           toKey,
-          null
+          null,
         );
         permanents = result.per;
 
@@ -646,7 +651,7 @@ export const createHeadlessHauntSlice: StateCreator<
           window.dispatchEvent(
             new CustomEvent("app:toast", {
               detail: { message: toastMessage, cellKey: move.to },
-            })
+            }),
           );
         }
       }

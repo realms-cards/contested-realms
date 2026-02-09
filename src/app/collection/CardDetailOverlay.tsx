@@ -58,8 +58,15 @@ function getRarityColor(rarity: string): string {
 }
 
 /** Highlight [[Card Name]] references in codex content */
+// SECURITY: HTML-escape content first to prevent XSS via dangerouslySetInnerHTML
 function formatCodexContent(content: string): string {
-  return content.replace(
+  const escaped = content
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+  return escaped.replace(
     /\[\[([^\]]+)\]\]/g,
     '<span class="text-amber-300 font-medium">$1</span>',
   );

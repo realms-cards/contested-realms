@@ -557,6 +557,12 @@ const STALE_WAITING_MS = Number(
 const INACTIVE_MATCH_CLEANUP_MS = Number(
   process.env.INACTIVE_MATCH_CLEANUP_MS || 3 * 60 * 60 * 1000,
 ); // 3 hours default
+const STALE_MATCH_HUMAN_MS = Number(
+  process.env.STALE_MATCH_HUMAN_MS || 6 * 60 * 60 * 1000,
+); // 6 hours default
+const STALE_MATCH_BOT_MS = Number(
+  process.env.STALE_MATCH_BOT_MS || 1 * 60 * 60 * 1000,
+); // 1 hour default
 const LOBBY_CONTROL_CHANNEL = "lobby:control";
 const LOBBY_STATE_CHANNEL = "lobby:state";
 let clusterStateReady = false; // flip after maps are initialized
@@ -5492,6 +5498,8 @@ startMaintenanceTimers({
   matchControlChannel: MATCH_CONTROL_CHANNEL,
   staleWaitingMs: STALE_WAITING_MS,
   inactiveMatchCleanupMs: INACTIVE_MATCH_CLEANUP_MS,
+  staleMatchHumanMs: STALE_MATCH_HUMAN_MS,
+  staleMatchBotMs: STALE_MATCH_BOT_MS,
   prisma,
   safeErrorMessage,
 });

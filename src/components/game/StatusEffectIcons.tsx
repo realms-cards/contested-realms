@@ -3,12 +3,19 @@
 import { useMemo, useState } from "react";
 import { useGameStore } from "@/lib/game/store";
 import type { PlayerKey } from "@/lib/game/store";
+import {
+  isBoudicca,
+  isPermanentSilenced,
+  BOUDICCA_POWER_BONUS,
+} from "@/lib/game/store/boudiccaState";
+import type { CellKey, Permanents } from "@/lib/game/store/types";
 import { siteHasSilencedToken } from "@/lib/game/store/utils/resourceHelpers";
 
 /** Card image URLs */
 const MORTUARY_IMAGE_URL = "/api/images/bet_mismanaged_mortuary_b_s";
 const ATLANTEAN_FATE_IMAGE_URL = "/api/images/alp_atlantean_fate_b_s";
 const GARDEN_OF_EDEN_IMAGE_URL = "/api/images/alp_garden_of_eden_b_s";
+const BOUDICCA_IMAGE_URL = "/api/images/art-boudicca-b-s";
 
 /** Status effect type for unified display */
 interface StatusEffect {
@@ -22,7 +29,8 @@ interface StatusEffect {
     | "atlanteanFate"
     | "gardenOfEden"
     | "counter"
-    | "aura";
+    | "aura"
+    | "boudicca";
   isSilenced?: boolean; // Whether this effect is silenced (show strikethrough)
 }
 
@@ -239,6 +247,35 @@ export default function PlayerStatusEffects() {
         effectType: "atlanteanFate",
         isSilenced,
       });
+    }
+
+    // --- Boudicca Passive Aura ---
+    // "Other allies have +3 power while successfully attacking sites."
+    // Show icon whenever Boudicca is on the board
+    for (const [cellKey, cellPerms] of Object.entries(permanents)) {
+      const perms = cellPerms || [];
+      for (let idx = 0; idx < perms.length; idx++) {
+        const perm = perms[idx];
+        if (perm.attachedTo) continue;
+        if (!isBoudicca(perm.card?.name)) continue;
+        const ownerSeat: PlayerKey = perm.owner === 1 ? "p1" : "p2";
+        const isSilenced = isPermanentSilenced(
+          permanents as Permanents,
+          cellKey as CellKey,
+          idx,
+        );
+        effects.push({
+          id: `boudicca-${cellKey}-${perm.instanceId || "b"}`,
+          imageUrl: BOUDICCA_IMAGE_URL,
+          title: "Boudicca",
+          description: isSilenced
+            ? "Effect suppressed"
+            : `Allies get +${BOUDICCA_POWER_BONUS} power attacking sites`,
+          controllerSeat: ownerSeat,
+          effectType: "boudicca",
+          isSilenced,
+        });
+      }
     }
 
     // --- Cards with Counters (tracking effects) ---

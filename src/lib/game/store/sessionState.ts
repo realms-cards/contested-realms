@@ -1,6 +1,8 @@
 import type { StateCreator } from "zustand";
 import type { GameState, PlayerKey, SerializedGame } from "./types";
 import {
+  loadHistoryFromStorage,
+  saveHistoryToStorage,
   loadSnapshotsFromStorageFor,
   saveSnapshotsToStorageFor,
 } from "./utils/snapshotHelpers";
@@ -29,16 +31,31 @@ export const createSessionSlice: StateCreator<
       const prevId = state.matchId ?? null;
       const nextId = id ?? null;
       if (prevId === nextId) return state as GameState;
+      // Persist current snapshots for the old match
       const currentSnaps = Array.isArray(state.snapshots)
         ? (state.snapshots as GameState["snapshots"])
         : ([] as unknown as GameState["snapshots"]);
       try {
         saveSnapshotsToStorageFor(prevId, currentSnaps);
       } catch {}
+      // Persist current history for the old match
+      try {
+        saveHistoryToStorage(prevId, {
+          history: state.history,
+          historyByPlayer: state.historyByPlayer as Record<
+            PlayerKey,
+            SerializedGame[]
+          >,
+        });
+      } catch {}
+      // Load snapshots and history for the new match
       const loaded = loadSnapshotsFromStorageFor(nextId);
+      const persisted = loadHistoryFromStorage(nextId);
       return {
         matchId: nextId,
         snapshots: loaded,
+        history: persisted?.history ?? [],
+        historyByPlayer: persisted?.historyByPlayer ?? { p1: [], p2: [] },
       } as Partial<GameState> as GameState;
     }),
 
@@ -50,7 +67,7 @@ export const createSessionSlice: StateCreator<
         return { actorKey: null } as Partial<GameState> as GameState;
       }
       const promotedHistory = state.history.map((snap) =>
-        snap.actorKey ? snap : { ...snap, actorKey: key }
+        snap.actorKey ? snap : { ...snap, actorKey: key },
       );
       const nextHistoryByPlayer = {
         ...state.historyByPlayer,

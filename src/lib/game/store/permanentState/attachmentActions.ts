@@ -2,6 +2,7 @@ import type { StateCreator } from "zustand";
 import { isMinionToken } from "@/lib/game/tokens";
 import { isMonumentByName, isAutomatonByName } from "../omphalosState";
 import type { GameState, Permanents, PlayerKey } from "../types";
+import { seatFromOwner } from "../utils/boardHelpers";
 import { prepareCardForSeat } from "../utils/cardHelpers";
 import {
   cloneCardForPatch,
@@ -110,7 +111,7 @@ export const createAttachmentActionsSlice: StateCreator<
 
       // Carryable artifacts transfer control to whoever holds it.
       const nextOwner: 1 | 2 = isCarryableArtifact ? target.owner : token.owner;
-      const nextOwnerSeat: PlayerKey = nextOwner === 1 ? "p1" : "p2";
+      const nextOwnerSeat: PlayerKey = seatFromOwner(nextOwner);
       const updatedToken = bumpPermanentVersion({
         ...token,
         owner: nextOwner,
