@@ -5330,15 +5330,18 @@ io.on("connection", async (socket: SocketClient) => {
       }
     } catch {}
 
+    // Lookup pid BEFORE player registry disconnect (which deletes from the shared playerIdBySocket Map)
+    const pid = playerIdBySocket.get(socket.id);
+
     // Use player registry for disconnect handling when enabled
     if (REDIS_STATE_ENABLED) {
       playerRegistry.handleDisconnect(socket);
     }
 
-    const pid = playerIdBySocket.get(socket.id);
     if (!pid) {
       // Still cleanup rate limiters even if player not found
       cleanupRateLimits(socket.id);
+      broadcastPlayers();
       return;
     }
     const player = players.get(pid);
