@@ -13,7 +13,11 @@ import type {
   PlayerKey,
   ServerPatchT,
 } from "./types";
-import { parseCellKey, getCellNumber } from "./utils/boardHelpers";
+import {
+  parseCellKey,
+  getCellNumber,
+  seatFromOwner,
+} from "./utils/boardHelpers";
 import { prepareCardForSeat } from "./utils/cardHelpers";
 import { newPermanentInstanceId } from "./utils/idHelpers";
 import { randomTilt } from "./utils/permanentHelpers";
@@ -314,7 +318,7 @@ export const createBabelTowerSlice: StateCreator<
     if (!merge) return false;
 
     // Both cards go to graveyard
-    const ownerSeat: PlayerKey = merge.owner === 1 ? "p1" : "p2";
+    const ownerSeat: PlayerKey = seatFromOwner(merge.owner);
     const zones = state.zones;
     const graveyard = [...(zones[ownerSeat]?.graveyard || [])];
 
@@ -525,7 +529,7 @@ export const createBabelTowerSlice: StateCreator<
     get().pushHistory();
 
     // Both cards go back to hand
-    const ownerSeat: PlayerKey = merge.owner === 1 ? "p1" : "p2";
+    const ownerSeat: PlayerKey = seatFromOwner(merge.owner);
     const zones = state.zones;
     const hand = [...(zones[ownerSeat]?.hand || [])];
 

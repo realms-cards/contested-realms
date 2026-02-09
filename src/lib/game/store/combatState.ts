@@ -1,6 +1,12 @@
 import type { StateCreator } from "zustand";
 import { isInterrogator } from "@/lib/game/avatarAbilities";
 import type { CustomMessage } from "@/lib/net/transport";
+import {
+  getBoudiccaBonus,
+  getBoudiccaBonusForAvatar,
+  isTargetingSite,
+  BOUDICCA_POWER_BONUS,
+} from "./boudiccaState";
 import type {
   CellKey,
   GameState,
@@ -650,6 +656,58 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
         fightingUnit: resolveFightingUnit,
       });
     })();
+
+    // --- Boudicca passive aura for resolveCombat (manual resolution) ---
+    const resolveTileKey = (() => {
+      try {
+        return toCellKey(pending.tile.x, pending.tile.y);
+      } catch {
+        return null;
+      }
+    })();
+    const resolveSiteAtTile = resolveTileKey
+      ? (board.sites[resolveTileKey] as SiteTile | undefined)
+      : undefined;
+    const resolveAttackTargetsSite = isTargetingSite(
+      pending.target as {
+        kind: string;
+        at: CellKey;
+        index: number | null;
+      } | null,
+      resolveSiteAtTile,
+      pending.defenders?.length ?? 0,
+    );
+    let resolveBoudiccaBonus = 0;
+    if (resolveAttackTargetsSite && !get().resolversDisabled) {
+      if (pending.attacker.isAvatar && pending.attacker.avatarSeat) {
+        resolveBoudiccaBonus = getBoudiccaBonusForAvatar({
+          permanents: permanents as Permanents,
+          avatarOwner: pending.attacker.owner,
+          isAttackingSite: true,
+          resolversDisabled: false,
+        });
+      } else {
+        const atkName = getPermanentName(
+          pending.attacker.at,
+          pending.attacker.index,
+        );
+        resolveBoudiccaBonus = getBoudiccaBonus({
+          permanents: permanents as Permanents,
+          attackerOwner: pending.attacker.owner,
+          attackerAt: pending.attacker.at,
+          attackerIndex: pending.attacker.index,
+          attackerName: atkName,
+          isAttackingSite: true,
+          resolversDisabled: false,
+        });
+      }
+      if (resolveBoudiccaBonus > 0) {
+        eff.atk += resolveBoudiccaBonus;
+      }
+    }
+    const boudiccaTag =
+      resolveBoudiccaBonus > 0 ? ` [Boudicca(+${BOUDICCA_POWER_BONUS})]` : "";
+
     let summary = "Combat resolved";
     const attackerName = (() => {
       if (pending.attacker.isAvatar && pending.attacker.avatarSeat) {
@@ -694,7 +752,7 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
         const dmg = dd ? 0 : Math.max(0, Math.floor(eff.atk));
         const siteName = board.sites[pending.target.at]?.card?.name || "Site";
         const ddNote = dd ? " (DD rule)" : "";
-        summary = `Attacker ${attackerName}${effectText}${fsTag} hits Site ${siteName} @#${
+        summary = `Attacker ${attackerName}${effectText}${fsTag}${boudiccaTag} hits Site ${siteName} @#${
           tileNo ?? "?"
         } → Expected: ${dmg} to ${seat.toUpperCase()}${ddNote}`;
       }
@@ -752,7 +810,7 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
           const dmg = dd ? 0 : Math.max(0, Math.floor(eff.atk));
           const siteName = siteAtTile.card?.name || "Site";
           const ddNote = dd ? " (DD rule)" : "";
-          summary = `Attacker ${attackerName}${effectText}${fsTag} hits Site ${siteName} @#${
+          summary = `Attacker ${attackerName}${effectText}${fsTag}${boudiccaTag} hits Site ${siteName} @#${
             tileNo ?? "?"
           } → Expected: ${dmg} to ${seat.toUpperCase()}${ddNote}`;
         }
@@ -1036,6 +1094,64 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
           index: pending.attacker.index,
           fightingUnit: attackerFightingUnit,
         });
+
+    // --- Boudicca passive aura: "Other allies have +3 power while successfully attacking sites." ---
+    // Determine early if attack targets a site (explicit or implied) for Boudicca bonus.
+    const tileKeyEarly = (() => {
+      try {
+        return toCellKey(pending.tile.x, pending.tile.y);
+      } catch {
+        return null;
+      }
+    })();
+    const siteAtTileEarly = tileKeyEarly
+      ? (board.sites[tileKeyEarly] as SiteTile | undefined)
+      : undefined;
+    const attackTargetsSite = isTargetingSite(
+      pending.target as {
+        kind: string;
+        at: CellKey;
+        index: number | null;
+      } | null,
+      siteAtTileEarly,
+      pending.defenders?.length ?? 0,
+    );
+    let boudiccaBonus = 0;
+    if (attackTargetsSite && !get().resolversDisabled) {
+      if (pending.attacker.isAvatar && pending.attacker.avatarSeat) {
+        boudiccaBonus = getBoudiccaBonusForAvatar({
+          permanents: permanents as Permanents,
+          avatarOwner: pending.attacker.owner,
+          isAttackingSite: true,
+          resolversDisabled: false,
+        });
+      } else {
+        const attackerName =
+          (permanents as Permanents)[pending.attacker.at]?.[
+            pending.attacker.index
+          ]?.card?.name ?? null;
+        boudiccaBonus = getBoudiccaBonus({
+          permanents: permanents as Permanents,
+          attackerOwner: pending.attacker.owner,
+          attackerAt: pending.attacker.at,
+          attackerIndex: pending.attacker.index,
+          attackerName,
+          isAttackingSite: true,
+          resolversDisabled: false,
+        });
+      }
+      if (boudiccaBonus > 0) {
+        eff.atk += boudiccaBonus;
+        console.log(
+          `[autoResolveCombat] Boudicca aura: +${boudiccaBonus} power (site attack)`,
+        );
+        try {
+          get().log(
+            `Boudicca's aura grants +${BOUDICCA_POWER_BONUS} power for site attack`,
+          );
+        } catch {}
+      }
+    }
 
     // Helper to get instanceId from a permanent at a given position
     function getInstanceId(at: CellKey, index: number): string | null {
@@ -1444,11 +1560,7 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
       };
 
       // Break lance on surviving attacker
-      if (
-        attackerAlive &&
-        !pending.attacker.isAvatar &&
-        eff.hasLance
-      ) {
+      if (attackerAlive && !pending.attacker.isAvatar && eff.hasLance) {
         breakLanceOn(pending.attacker.at, pending.attacker.index);
       }
 
@@ -1689,7 +1801,9 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
           (get().players as GameState["players"])[seat]?.life ?? before,
         );
         const dmg = Math.max(0, before - after);
-        text = `Attacker "${attackerName}" strikes Site "${siteName}" for ${dmg} damage (${seat.toUpperCase()} life ${before} -> ${after})`;
+        const bTag =
+          boudiccaBonus > 0 ? ` [Boudicca(+${BOUDICCA_POWER_BONUS})]` : "";
+        text = `Attacker "${attackerName}"${bTag} strikes Site "${siteName}" for ${dmg} damage (${seat.toUpperCase()} life ${before} -> ${after})`;
       } else {
         text = `Attacker "${attackerName}" strikes Site "${siteName}"`;
       }
@@ -1707,7 +1821,9 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
           (get().players as GameState["players"])[seat]?.life ?? before,
         );
         const dmg = Math.max(0, before - after);
-        text = `Attacker "${attackerName}" strikes Site "${siteName}" for ${dmg} damage (${seat.toUpperCase()} life ${before} -> ${after})`;
+        const bTag2 =
+          boudiccaBonus > 0 ? ` [Boudicca(+${BOUDICCA_POWER_BONUS})]` : "";
+        text = `Attacker "${attackerName}"${bTag2} strikes Site "${siteName}" for ${dmg} damage (${seat.toUpperCase()} life ${before} -> ${after})`;
       } else {
         text = `Attacker "${attackerName}" strikes Site "${siteName}"`;
       }

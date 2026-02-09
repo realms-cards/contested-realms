@@ -38,7 +38,7 @@ type HoverContext = {
   clearHoverPreview: (sourceKey?: string | null) => void;
   clearHoverPreviewDebounced: (
     sourceKey?: string | null,
-    delay?: number
+    delay?: number,
   ) => void;
   clearTouchTimers: () => void;
   touchPreviewTimerRef: MutableRefObject<number | null>;
@@ -365,7 +365,7 @@ export function AvatarCard({
         p.attachedTo &&
         p.attachedTo.index === -1 &&
         p.attachedTo.at === tileKey &&
-        p.owner === avatarOwner
+        p.owner === avatarOwner,
     );
   const seenIds = new Set<string>();
   const uniqueAttachedItems = attachedItems.filter(({ p }) => {
@@ -466,7 +466,7 @@ export function AvatarCard({
   }
 
   function handlePointerMoveEvent(e: ThreeEvent<PointerEvent>) {
-    if (dragFromHand || dragFromPile) return;
+    if (dragFromHand || dragFromPile || draggingPermanent) return;
     e.stopPropagation();
     const pe = e.nativeEvent as PointerEvent | undefined;
     if (pe && pe.pointerType === "touch") {
@@ -527,7 +527,10 @@ export function AvatarCard({
 
   function handlePointerUp(e: ThreeEvent<PointerEvent>) {
     if (e.button !== 0) return;
-    if (draggingPermanent || dragFromHand || dragFromPile) return;
+    if (draggingPermanent || dragFromHand || dragFromPile) {
+      avatarDragStartRef.current = null;
+      return;
+    }
     if (isSpectator) {
       e.stopPropagation();
       return;
@@ -585,7 +588,7 @@ export function AvatarCard({
           } catch (error) {
             console.warn(
               `[physics] Failed to update body map for ${id}:`,
-              error
+              error,
             );
           }
         }}
@@ -647,7 +650,7 @@ export function AvatarCard({
             setLastTouchedId(avatarId);
             openContextMenu(
               { kind: "avatar", who: seat },
-              { x: e.clientX, y: e.clientY }
+              { x: e.clientX, y: e.clientY },
             );
           }}
         >
@@ -675,8 +678,8 @@ export function AvatarCard({
               hideAvatar
                 ? -5
                 : dragAvatar === seat || isSel || isLastTouched
-                ? 1200
-                : 100
+                  ? 1200
+                  : 100
             }
             onPointerOver={() => {
               if (dragFromHand || dragFromPile) return;

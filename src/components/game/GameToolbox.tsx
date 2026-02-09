@@ -1684,7 +1684,7 @@ export default function GameToolbox({
                         value={selectedAutoId ?? ""}
                         onChange={(v) => setSelectedAutoId(v || null)}
                         options={autoSnapshots
-                          .slice(Math.max(autoSnapshots.length - 5, 0))
+                          .slice(Math.max(autoSnapshots.length - 10, 0))
                           .map((s) => ({
                             value: s.id,
                             label: `${new Date(s.ts).toLocaleTimeString()} · ${s.title}`,
@@ -1703,7 +1703,7 @@ export default function GameToolbox({
                       <div className="mt-1 text-xs opacity-70">
                         {(() => {
                           const pool = autoSnapshots.slice(
-                            Math.max(autoSnapshots.length - 5, 0),
+                            Math.max(autoSnapshots.length - 10, 0),
                           );
                           const sel =
                             pool.find((s) => s.id === selectedAutoId) ||

@@ -13,6 +13,7 @@ import type { PlayerPositionReference } from "../types";
 import { createInitialPlayers } from "./coreState";
 import { filterEchoPatchIfAny } from "./transportState";
 import { normalizeAvatars } from "./utils/avatarHelpers";
+import { seatFromOwner } from "./utils/boardHelpers";
 import { mergeEvents } from "./utils/eventHelpers";
 import {
   deepMergeReplaceArrays,
@@ -23,7 +24,7 @@ import {
   createDefaultPlayerPositions,
   normalizePlayerPositions,
 } from "./utils/positionHelpers";
-import { clearSnapshotsStorageFor } from "./utils/snapshotHelpers";
+// snapshot lifecycle is managed by clearSnapshotsForNewMatch in store.ts
 import { normalizeZones } from "./utils/zoneHelpers";
 
 type NetworkSlice = Pick<
@@ -128,25 +129,27 @@ export const createNetworkSlice: StateCreator<
           }
         } catch {}
       }
-      const shouldClearSnapshots =
-        replaceKeys.has("players") ||
-        replaceKeys.has("board") ||
-        replaceKeys.has("zones") ||
-        replaceKeys.has("avatars") ||
-        replaceKeys.has("permanents");
+      // NOTE: Snapshot clearing was previously done here on every patch with
+      // __replaceKeys for players/board/zones/avatars/permanents, but this was
+      // far too aggressive — it wiped snapshots on every resync and most normal
+      // patches. Snapshot lifecycle is now managed by clearSnapshotsForNewMatch
+      // (called explicitly when starting a truly new match) and the retention
+      // logic inside createSnapshot.
 
       if (p.players !== undefined) {
         // DEBUG: Log mana values before and after merge to track accumulation bug
-        try {
-          const patchPlayers = p.players as Record<string, { mana?: number }>;
-          console.log("[applyServerPatch] players patch:", {
-            isReplace: replaceKeys.has("players"),
-            stateManaP1: state.players?.p1?.mana,
-            stateManaP2: state.players?.p2?.mana,
-            patchManaP1: patchPlayers?.p1?.mana,
-            patchManaP2: patchPlayers?.p2?.mana,
-          });
-        } catch {}
+        if (process.env.NODE_ENV !== "production") {
+          try {
+            const patchPlayers = p.players as Record<string, { mana?: number }>;
+            console.log("[applyServerPatch] players patch:", {
+              isReplace: replaceKeys.has("players"),
+              stateManaP1: state.players?.p1?.mana,
+              stateManaP2: state.players?.p2?.mana,
+              patchManaP1: patchPlayers?.p1?.mana,
+              patchManaP2: patchPlayers?.p2?.mana,
+            });
+          } catch {}
+        }
         next.players = replaceKeys.has("players")
           ? (p.players as GameState["players"])
           : (deepMergeReplaceArrays(
@@ -154,12 +157,14 @@ export const createNetworkSlice: StateCreator<
               p.players,
             ) as GameState["players"]);
         // DEBUG: Log result
-        try {
-          console.log("[applyServerPatch] players result:", {
-            resultManaP1: next.players?.p1?.mana,
-            resultManaP2: next.players?.p2?.mana,
-          });
-        } catch {}
+        if (process.env.NODE_ENV !== "production") {
+          try {
+            console.log("[applyServerPatch] players result:", {
+              resultManaP1: next.players?.p1?.mana,
+              resultManaP2: next.players?.p2?.mana,
+            });
+          } catch {}
+        }
 
         // Play health sounds for life changes from incoming patches
         // This ensures both players hear sounds when either player's life changes
@@ -179,11 +184,13 @@ export const createNetworkSlice: StateCreator<
         // Server snapshot requested players replacement but didn't include players data
         // Reset to initial state to ensure consistent mana tracking
         next.players = createInitialPlayers();
-        try {
-          console.log(
-            "[applyServerPatch] players reset to initial (replaceKeys had players but patch did not)",
-          );
-        } catch {}
+        if (process.env.NODE_ENV !== "production") {
+          try {
+            console.log(
+              "[applyServerPatch] players reset to initial (replaceKeys had players but patch did not)",
+            );
+          } catch {}
+        }
       }
 
       // Track if the turn is changing (for end-of-turn triggers like Lilith)
@@ -211,15 +218,17 @@ export const createNetworkSlice: StateCreator<
           endingPlayerSeat === "p1" ? "p2" : "p1"
         ) as PlayerKey;
         const actorKey = get().actorKey;
-        console.log(
-          "[applyServerPatch] Turn changing:",
-          endingPlayerSeat,
-          "->",
-          startingPlayerSeat,
-          "(we are",
-          actorKey,
-          ")",
-        );
+        if (process.env.NODE_ENV !== "production") {
+          console.log(
+            "[applyServerPatch] Turn changing:",
+            endingPlayerSeat,
+            "->",
+            startingPlayerSeat,
+            "(we are",
+            actorKey,
+            ")",
+          );
+        }
 
         // End-of-turn effects (Lilith) - only trigger if WE are the ending player
         // The Lilith trigger has its own guard but we can skip the call entirely
@@ -251,19 +260,16 @@ export const createNetworkSlice: StateCreator<
           // Headless Haunt start-of-turn movement (slightly delayed after Mother Nature)
           // Only trigger if we ARE the starting player (the one whose haunts should move)
           // The coreState.endTurn() triggers for the OTHER player, so we need this for online sync
-          const myActorKey = get().actorKey;
-          if (myActorKey === startingPlayerSeat) {
-            setTimeout(() => {
-              try {
-                get().triggerHeadlessHauntStartOfTurn(startingPlayerSeat);
-              } catch (e) {
-                console.error(
-                  "[applyServerPatch] Error triggering Headless Haunt:",
-                  e,
-                );
-              }
-            }, 700);
-          }
+          setTimeout(() => {
+            try {
+              get().triggerHeadlessHauntStartOfTurn(startingPlayerSeat);
+            } catch (e) {
+              console.error(
+                "[applyServerPatch] Error triggering Headless Haunt:",
+                e,
+              );
+            }
+          }, 700);
         }
       }
 
@@ -274,13 +280,15 @@ export const createNetworkSlice: StateCreator<
               state.d20Rolls,
               p.d20Rolls,
             ) as GameState["d20Rolls"]);
-        try {
-          console.log("[applyServerPatch] Applied d20Rolls:", {
-            prev: state.d20Rolls,
-            new: next.d20Rolls,
-            isReplace: replaceKeys.has("d20Rolls"),
-          });
-        } catch {}
+        if (process.env.NODE_ENV !== "production") {
+          try {
+            console.log("[applyServerPatch] Applied d20Rolls:", {
+              prev: state.d20Rolls,
+              new: next.d20Rolls,
+              isReplace: replaceKeys.has("d20Rolls"),
+            });
+          } catch {}
+        }
       }
       const patchHasSetupWinner =
         p.setupWinner !== undefined ||
@@ -329,24 +337,25 @@ export const createNetworkSlice: StateCreator<
             string,
             { hand?: unknown[]; graveyard?: unknown[]; banished?: unknown[] }
           >;
-          console.log("[net] zones patch received", {
-            patchKeys: Object.keys(pZones || {}),
-            hasP1: !!pZones?.p1,
-            hasP2: !!pZones?.p2,
-            patchP1Hand: pZones?.p1?.hand?.length,
-            patchP2Hand: pZones?.p2?.hand?.length,
-            patchP1Graveyard: pZones?.p1?.graveyard?.length,
-            patchP2Graveyard: pZones?.p2?.graveyard?.length,
-            patchP1Banished: (pZones?.p1 as { banished?: unknown[] })?.banished
-              ?.length,
-            patchP2Banished: (pZones?.p2 as { banished?: unknown[] })?.banished
-              ?.length,
-            replaceZones: replaceKeys.has("zones"),
-            stateP1Hand: state.zones?.p1?.hand?.length,
-            stateP2Hand: state.zones?.p2?.hand?.length,
-            stateP1Graveyard: state.zones?.p1?.graveyard?.length,
-            stateP2Graveyard: state.zones?.p2?.graveyard?.length,
-          });
+          if (process.env.NODE_ENV !== "production")
+            console.log("[net] zones patch received", {
+              patchKeys: Object.keys(pZones || {}),
+              hasP1: !!pZones?.p1,
+              hasP2: !!pZones?.p2,
+              patchP1Hand: pZones?.p1?.hand?.length,
+              patchP2Hand: pZones?.p2?.hand?.length,
+              patchP1Graveyard: pZones?.p1?.graveyard?.length,
+              patchP2Graveyard: pZones?.p2?.graveyard?.length,
+              patchP1Banished: (pZones?.p1 as { banished?: unknown[] })
+                ?.banished?.length,
+              patchP2Banished: (pZones?.p2 as { banished?: unknown[] })
+                ?.banished?.length,
+              replaceZones: replaceKeys.has("zones"),
+              stateP1Hand: state.zones?.p1?.hand?.length,
+              stateP2Hand: state.zones?.p2?.hand?.length,
+              stateP1Graveyard: state.zones?.p1?.graveyard?.length,
+              stateP2Graveyard: state.zones?.p2?.graveyard?.length,
+            });
         } catch {}
         // When a zones patch includes data for a seat, replace that seat's
         // zones wholesale instead of deep-merging individual zone arrays.
@@ -505,9 +514,10 @@ export const createNetworkSlice: StateCreator<
           pendingSearingTruth.revealedCards.length > 0 &&
           zonesCandidate
         ) {
-          console.log(
-            "[SearingTruth] Filter ACTIVE - filtering cards from spellbook",
-          );
+          if (process.env.NODE_ENV !== "production")
+            console.log(
+              "[SearingTruth] Filter ACTIVE - filtering cards from spellbook",
+            );
           const targetSeat = pendingSearingTruth.targetSeat;
           // Track counts instead of using Set to handle duplicate cardIds
           const revealedCardCounts = new Map<number, number>();
@@ -517,10 +527,11 @@ export const createNetworkSlice: StateCreator<
               (revealedCardCounts.get(c.cardId) || 0) + 1,
             );
           }
-          console.log(
-            "[SearingTruth] Filter cardIds:",
-            Array.from(revealedCardCounts.entries()),
-          );
+          if (process.env.NODE_ENV !== "production")
+            console.log(
+              "[SearingTruth] Filter cardIds:",
+              Array.from(revealedCardCounts.entries()),
+            );
           const filteredZones = { ...zonesCandidate } as Record<
             PlayerKey,
             GameState["zones"][PlayerKey]
@@ -529,10 +540,11 @@ export const createNetworkSlice: StateCreator<
           if (seatZones) {
             // Filter revealed cards from spellbook
             if (Array.isArray(seatZones.spellbook)) {
-              console.log(
-                "[SearingTruth] Spellbook BEFORE filter:",
-                seatZones.spellbook.length,
-              );
+              if (process.env.NODE_ENV !== "production")
+                console.log(
+                  "[SearingTruth] Spellbook BEFORE filter:",
+                  seatZones.spellbook.length,
+                );
               const movedCards: CardRef[] = [];
               const updatedSpellbook = seatZones.spellbook.filter((c) => {
                 const remaining = revealedCardCounts.get(c.cardId) || 0;
@@ -547,12 +559,13 @@ export const createNetworkSlice: StateCreator<
                 return true;
               });
 
-              console.log(
-                "[SearingTruth] Spellbook AFTER filter:",
-                updatedSpellbook.length,
-                "movedCards:",
-                movedCards.length,
-              );
+              if (process.env.NODE_ENV !== "production")
+                console.log(
+                  "[SearingTruth] Spellbook AFTER filter:",
+                  updatedSpellbook.length,
+                  "movedCards:",
+                  movedCards.length,
+                );
 
               // Ensure revealed cards are in hand (add if not present)
               const currentHand = [...(seatZones.hand || [])];
@@ -562,10 +575,11 @@ export const createNetworkSlice: StateCreator<
                   currentHand.push(card);
                 }
               }
-              console.log(
-                "[SearingTruth] Hand AFTER filter:",
-                currentHand.length,
-              );
+              if (process.env.NODE_ENV !== "production")
+                console.log(
+                  "[SearingTruth] Hand AFTER filter:",
+                  currentHand.length,
+                );
 
               filteredZones[targetSeat] = {
                 ...seatZones,
@@ -619,15 +633,16 @@ export const createNetworkSlice: StateCreator<
                   (c) => !c.instanceId || !onBoardInstanceIds.has(c.instanceId),
                 );
                 if (filteredHand.length !== originalCount) {
-                  console.log(
-                    "[applyServerPatch] Filtered cards from hand that are on board:",
-                    {
-                      seat,
-                      originalCount,
-                      filteredCount: filteredHand.length,
-                      removedCount: originalCount - filteredHand.length,
-                    },
-                  );
+                  if (process.env.NODE_ENV !== "production")
+                    console.log(
+                      "[applyServerPatch] Filtered cards from hand that are on board:",
+                      {
+                        seat,
+                        originalCount,
+                        filteredCount: filteredHand.length,
+                        removedCount: originalCount - filteredHand.length,
+                      },
+                    );
                   filteredZones[seat] = {
                     ...seatZones,
                     hand: filteredHand,
@@ -871,7 +886,7 @@ export const createNetworkSlice: StateCreator<
 
             const cardName = (perm.card?.name || "").toLowerCase();
             const cardType = (perm.card?.type || "").toLowerCase();
-            const ownerSeat = (perm.owner === 1 ? "p1" : "p2") as PlayerKey;
+            const ownerSeat = seatFromOwner(perm.owner);
 
             if (cardName === "lilith" && cardType.includes("minion")) {
               if (!registeredLiliths.has(perm.instanceId)) {
@@ -905,10 +920,11 @@ export const createNetworkSlice: StateCreator<
             for (const minion of newMinionsToRegister) {
               try {
                 if (minion.type === "lilith") {
-                  console.log(
-                    "[networkState] Registering Lilith from patch:",
-                    minion,
-                  );
+                  if (process.env.NODE_ENV !== "production")
+                    console.log(
+                      "[networkState] Registering Lilith from patch:",
+                      minion,
+                    );
                   get().registerLilith({
                     instanceId: minion.instanceId,
                     location: minion.location,
@@ -916,10 +932,11 @@ export const createNetworkSlice: StateCreator<
                     cardName: minion.cardName,
                   });
                 } else if (minion.type === "motherNature") {
-                  console.log(
-                    "[networkState] Registering Mother Nature from patch:",
-                    minion,
-                  );
+                  if (process.env.NODE_ENV !== "production")
+                    console.log(
+                      "[networkState] Registering Mother Nature from patch:",
+                      minion,
+                    );
                   get().registerMotherNature({
                     instanceId: minion.instanceId,
                     location: minion.location,
@@ -1076,10 +1093,14 @@ export const createNetworkSlice: StateCreator<
       // Pathfinder used state (tracks if ability was used this turn)
       if (p.pathfinderUsed !== undefined) {
         next.pathfinderUsed = p.pathfinderUsed;
-        console.log("[PATHFINDER] applyServerPatch received pathfinderUsed:", {
-          incoming: p.pathfinderUsed,
-          prev: state.pathfinderUsed,
-        });
+        if (process.env.NODE_ENV !== "production")
+          console.log(
+            "[PATHFINDER] applyServerPatch received pathfinderUsed:",
+            {
+              incoming: p.pathfinderUsed,
+              prev: state.pathfinderUsed,
+            },
+          );
       } else if (replaceKeys.has("pathfinderUsed")) {
         next.pathfinderUsed = { p1: false, p2: false };
       }
@@ -1271,12 +1292,6 @@ export const createNetworkSlice: StateCreator<
         }
       } catch (err) {
         console.error("[net] Error in state loss detection:", err);
-      }
-      if (shouldClearSnapshots) {
-        try {
-          clearSnapshotsStorageFor(get().matchId ?? null);
-        } catch {}
-        (result as GameState).snapshots = [] as GameState["snapshots"];
       }
       return result;
     }),

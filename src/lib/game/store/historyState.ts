@@ -5,8 +5,9 @@ import type {
   SerializedGame,
   ServerPatchT,
 } from "./types";
+import { saveHistoryToStorage } from "./utils/snapshotHelpers";
 
-const HISTORY_LIMIT = 3;
+const HISTORY_LIMIT = 10;
 const UNDO_RETRY_LIMIT = 5;
 let undoRetryCount = 0;
 
@@ -163,6 +164,13 @@ export const createHistorySlice: StateCreator<
         if (nextPlayerHist.length > HISTORY_LIMIT) nextPlayerHist.shift();
         hb[me] = nextPlayerHist;
       }
+      // Persist to sessionStorage (debounced) so history survives reload
+      try {
+        saveHistoryToStorage(state.matchId ?? null, {
+          history: nextHist,
+          historyByPlayer: hb as Record<PlayerKey, SerializedGame[]>,
+        });
+      } catch {}
       return {
         history: nextHist,
         historyByPlayer: hb,
@@ -455,8 +463,17 @@ export const createHistorySlice: StateCreator<
           }
         }
 
+        const nextHistOnline = historyNext ?? state.history;
+        // Persist reduced history after undo
+        try {
+          saveHistoryToStorage(state.matchId ?? null, {
+            history: nextHistOnline,
+            historyByPlayer: hb as Record<PlayerKey, SerializedGame[]>,
+          });
+        } catch {}
+
         return {
-          history: historyNext ?? state.history,
+          history: nextHistOnline,
           historyByPlayer: hb as GameState["historyByPlayer"],
           players: prev.players,
           currentPlayer: prev.currentPlayer,
@@ -484,8 +501,17 @@ export const createHistorySlice: StateCreator<
         } as Partial<GameState> as GameState;
       }
 
+      const nextHistOffline = historyNext ?? state.history;
+      // Persist reduced history after undo (offline)
+      try {
+        saveHistoryToStorage(state.matchId ?? null, {
+          history: nextHistOffline,
+          historyByPlayer: hb as Record<PlayerKey, SerializedGame[]>,
+        });
+      } catch {}
+
       return {
-        history: historyNext ?? state.history,
+        history: nextHistOffline,
         historyByPlayer: hb as GameState["historyByPlayer"],
         players: prev.players,
         currentPlayer: prev.currentPlayer,

@@ -13,7 +13,7 @@ import type {
   SpecialSiteState,
   ValleyOfDelightChoice,
 } from "./types";
-import { parseCellKey } from "./utils/boardHelpers";
+import { parseCellKey, seatFromOwner } from "./utils/boardHelpers";
 import { siteHasSilencedToken } from "./utils/resourceHelpers";
 
 // Map element choices to gem colors for visual feedback on Valley of Delight
@@ -69,7 +69,7 @@ export const createSpecialSiteSlice: StateCreator<
 
   triggerElementChoice: (cellKey: CellKey, siteName: string, owner: 1 | 2) => {
     const state = get();
-    const chooserSeat: PlayerKey = owner === 1 ? "p1" : "p2";
+    const chooserSeat: PlayerKey = seatFromOwner(owner);
 
     set({
       specialSiteState: {
@@ -321,7 +321,7 @@ export const createSpecialSiteSlice: StateCreator<
 
   registerMismanagedMortuary: (cellKey: CellKey, owner: 1 | 2) => {
     const state = get();
-    const ownerSeat: PlayerKey = owner === 1 ? "p1" : "p2";
+    const ownerSeat: PlayerKey = seatFromOwner(owner);
 
     const newAura: MismanagedMortuaryAura = {
       id: newMortuaryAuraId(),

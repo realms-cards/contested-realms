@@ -114,7 +114,7 @@ export const createDemonicContractSlice: StateCreator<
     for (const cell of Object.values(permanents)) {
       if (!Array.isArray(cell)) continue;
       for (const perm of cell) {
-        const ownerSeat = perm.owner === 1 ? "p1" : "p2";
+        const ownerSeat = seatFromOwner(perm.owner);
         if (ownerSeat !== casterSeat) continue;
 
         // Check if it's a Demon

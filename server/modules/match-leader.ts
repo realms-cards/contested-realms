@@ -485,11 +485,10 @@ function syncBattlefieldZones(
         battlefield: battlefield[seat],
       };
     } else {
-      // Patch didn't include this seat - only add battlefield, not full zones
-      existingPatchZones[seat] = {
-        ...ensurePlayerZones(undefined, seat),
-        battlefield: battlefield[seat],
-      } as PlayerZones;
+      // Patch didn't include this seat - DO NOT add zones for it.
+      // The server has stale/empty zone data for private zones (hand, spellbook,
+      // atlas, etc.), so adding them would wipe the client's real data.
+      // Battlefield sync for this seat is already stored in match.game.zones above.
     }
   }
   return {

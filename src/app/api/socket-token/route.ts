@@ -35,7 +35,6 @@ export async function GET() {
     // lifetime reduces API calls without compromising security.
     const userId = (session.user as { id?: string }).id;
     const userName = (session.user as { name?: string | null }).name;
-    const userEmail = (session.user as { email?: string | null }).email;
 
     if (!userId) {
       console.error("[socket-token] User ID is missing from session");
@@ -49,7 +48,6 @@ export async function GET() {
       {
         userId,
         name: userName,
-        email: userEmail,
       },
       secret,
       { expiresIn: "24h" },

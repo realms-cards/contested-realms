@@ -46,7 +46,7 @@ export const createSnapshotSlice: StateCreator<
           playerPositions: state.playerPositions,
           events: state.events,
           eventSeq: state.eventSeq,
-        })
+        }),
       ) as ServerPatchT;
       const item = {
         id,
@@ -54,8 +54,8 @@ export const createSnapshotSlice: StateCreator<
           title && title.length > 0
             ? title
             : kind === "auto"
-            ? `Turn ${state.turn} start (P${state.currentPlayer})`
-            : "Realm Archive",
+              ? `Turn ${state.turn} start (P${state.currentPlayer})`
+              : "Realm Archive",
         ts: Date.now(),
         includePrivate: true,
         kind,
@@ -71,7 +71,7 @@ export const createSnapshotSlice: StateCreator<
       } else {
         const autos = prev.filter((x) => x.kind === "auto");
         const nonAutos = prev.filter((x) => x.kind !== "auto");
-        const keep = autos.slice(Math.max(autos.length - 4, 0));
+        const keep = autos.slice(Math.max(autos.length - 9, 0));
         list = [...nonAutos, ...keep, item];
       }
       try {
@@ -80,7 +80,7 @@ export const createSnapshotSlice: StateCreator<
       try {
         saveSnapshotsToStorageFor(
           get().matchId ?? null,
-          list as GameState["snapshots"]
+          list as GameState["snapshots"],
         );
       } catch {}
       return { snapshots: list } as Partial<GameState> as GameState;
