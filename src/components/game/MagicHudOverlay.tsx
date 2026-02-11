@@ -29,9 +29,10 @@ export default function MagicHudOverlay() {
 
   const ownerSeat = seatFromOwner(pendingMagic.spell.owner);
   const actorIsActive = ownerSeat
-    ? ((actorKey === "p1" && currentPlayer === 1) ||
+    ? !actorKey ||
+      (((actorKey === "p1" && currentPlayer === 1) ||
         (actorKey === "p2" && currentPlayer === 2)) &&
-      actorKey === ownerSeat
+        actorKey === ownerSeat)
     : true;
 
   // Always show overlay for both seats while a spell is pending.
@@ -49,7 +50,7 @@ export default function MagicHudOverlay() {
   const status = pendingMagic.status;
   const getPermanentName = (
     at: string,
-    index?: number | null | undefined
+    index?: number | null | undefined,
   ): string => {
     if (typeof index !== "number") return "Permanent";
     return permanents?.[at]?.[index]?.card?.name || "Permanent";
@@ -441,8 +442,8 @@ export default function MagicHudOverlay() {
             {text === undefined
               ? "Loading rules…"
               : text && text.length > 0
-              ? text
-              : "No rules text available."}
+                ? text
+                : "No rules text available."}
           </div>
           {projectileMismatchWarning}
           {!actorIsActive ? (
