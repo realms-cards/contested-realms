@@ -43,6 +43,7 @@ export default function CombatHudOverlay() {
   const combatGuidesActive = useGameStore((s) => s.combatGuidesActive);
 
   const actorIsActive =
+    !actorKey ||
     (actorKey === "p1" && currentPlayer === 1) ||
     (actorKey === "p2" && currentPlayer === 2);
 
@@ -1148,8 +1149,9 @@ export default function CombatHudOverlay() {
             </button>
           </div>
         ) : pendingCombat &&
-          actorKey &&
-          pendingCombat.defenderSeat === actorKey ? (
+          (actorKey
+            ? pendingCombat.defenderSeat === actorKey
+            : pendingCombat.status !== "committed") ? (
           pendingCombat.status !== "committed" ? (
             <div className="pointer-events-auto px-5 py-3 rounded-full bg-black/90 text-white ring-1 ring-white/20 shadow-lg text-lg md:text-xl flex items-center gap-2">
               <span className="opacity-80">
