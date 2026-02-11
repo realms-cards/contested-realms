@@ -7,7 +7,7 @@ import { getCellNumber } from "@/lib/game/store/utils/boardHelpers";
 import type { GameTransport } from "@/lib/net/transport";
 
 // Minigame constants
-const BASE_SLIDER_SPEED = 1.25; // base pixels per frame (half of original 2.5)
+const BASE_SLIDER_SPEED = 1.3125; // base pixels per frame (+5% from 1.25)
 const SPEED_VARIANCE = 0.5; // random variance added/subtracted on each bounce
 const GREEN_ZONE_SIZE = 15; // percentage of total bar (more forgiving)
 const YELLOW_ZONE_SIZE = 12; // percentage on each side of green

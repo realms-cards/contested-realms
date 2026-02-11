@@ -116,6 +116,7 @@ import {
 } from "@/lib/game/store/portalState";
 import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
 import { useSoatcPlayers } from "@/lib/hooks/useSoatcStatus";
+import { useSmallScreen } from "@/lib/hooks/useTouchDevice";
 import { useZoomKeyboardShortcuts } from "@/lib/hooks/useZoomKeyboardShortcuts";
 import { LegacySeatVideo3D } from "@/lib/rtc/SeatVideo3D";
 import { generateClientLeagueMatchResult } from "@/lib/soatc/clientResult";
@@ -144,6 +145,7 @@ export default function OnlineMatchPage() {
     }
   }, [searchParams]);
   const { updateScreenType } = useVideoOverlay();
+  const isMobile = useSmallScreen();
 
   // Enhanced card preview state using the draft-3d/editor-3d pattern
   const [hoverPreview, setHoverPreview] = useState<CardPreviewData | null>(
@@ -2240,6 +2242,10 @@ export default function OnlineMatchPage() {
   const uiHidden = useGameStore((s) => s.uiHidden);
   const contextMenu = useGameStore((s) => s.contextMenu);
   const closeContextMenu = useGameStore((s) => s.closeContextMenu);
+  // Mobile overlay coordination: suppress card preview when interactive overlays are active
+  const pendingCombat = useGameStore((s) => s.pendingCombat);
+  const attackChoice = useGameStore((s) => s.attackChoice);
+  const pendingMagic = useGameStore((s) => s.pendingMagic);
   const clearSelection = useGameStore((s) => s.clearSelection);
   const selected = useGameStore((s) => s.selectedCard);
   const placementDialog = useGameStore((s) => s.placementDialog);
@@ -2250,12 +2256,16 @@ export default function OnlineMatchPage() {
   const selectedAvatar = useGameStore((s) => s.selectedAvatar);
   const boardSize = useGameStore((s) => s.board.size);
   const toggleHandVisibility = useGameStore((s) => s.toggleHandVisibility);
+  const chaosTwisterPhase = useGameStore(
+    (s) => s.pendingChaosTwister?.phase ?? null,
+  );
 
-  // Space key to toggle hand visibility
+  // Space key to toggle hand visibility (skip when Chaos Twister minigame is active)
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.repeat) return;
       if (e.code !== "Space" && e.key !== " " && e.key !== "Spacebar") return;
+      if (chaosTwisterPhase === "minigame") return;
       const ae = document.activeElement as HTMLElement | null;
       if (
         ae &&
@@ -2270,7 +2280,7 @@ export default function OnlineMatchPage() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [toggleHandVisibility]);
+  }, [toggleHandVisibility, chaosTwisterPhase]);
 
   // Compute playmat extents for camera baselines and clamps
   const baseGridW = boardSize.w * BASE_TILE_SIZE;
@@ -2904,16 +2914,20 @@ export default function OnlineMatchPage() {
     <div className="fixed inset-0 w-screen h-screen select-none">
       {/* Camera controls - left: reset icon + 2D/3D buttons (hidden when uiHidden) */}
       {!uiHidden && (
-        <div className="absolute top-2 left-2 z-30">
-          <div className="bg-black/50 rounded-lg p-1 ring-1 ring-white/10 flex items-center">
+        <div
+          className={`absolute ${isMobile ? "top-0.5 left-0.5" : "top-2 left-2"} z-30`}
+        >
+          <div
+            className={`bg-black/50 rounded-lg ${isMobile ? "p-0.5" : "p-1"} ring-1 ring-white/10 flex items-center`}
+          >
             <button
               onClick={resetCamera}
               aria-label="Reset camera"
               title="Reset camera (Tab)"
-              className="p-2 rounded-full hover:bg-white/10 text-white"
+              className={`${isMobile ? "p-1" : "p-2"} rounded-full hover:bg-white/10 text-white`}
             >
               <svg
-                className="w-4 h-4"
+                className={isMobile ? "w-3 h-3" : "w-4 h-4"}
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
@@ -2930,7 +2944,7 @@ export default function OnlineMatchPage() {
               </svg>
             </button>
             <button
-              className={`ml-1 px-2 py-1 text-xs rounded ${
+              className={`${isMobile ? "ml-0.5 px-1 py-0.5 text-[10px]" : "ml-1 px-2 py-1 text-xs"} rounded ${
                 cameraMode === "topdown"
                   ? "bg-white/20"
                   : "bg-transparent hover:bg-white/10"
@@ -2943,7 +2957,7 @@ export default function OnlineMatchPage() {
               2D
             </button>
             <button
-              className={`ml-1 px-2 py-1 text-xs rounded ${
+              className={`${isMobile ? "ml-0.5 px-1 py-0.5 text-[10px]" : "ml-1 px-2 py-1 text-xs"} rounded ${
                 cameraMode === "orbit"
                   ? "bg-white/20"
                   : "bg-transparent hover:bg-white/10"
@@ -3253,19 +3267,24 @@ export default function OnlineMatchPage() {
           )}
 
           {/* Enhanced Hover Preview Overlay - visible even when uiHidden */}
-          {cardPreviewsEnabled && hoverPreview && !contextMenu && (
-            <CardPreview
-              card={hoverPreview}
-              anchor="top-right"
-              zIndexClass="z-30"
-            />
-          )}
+          {/* On mobile, also suppress when combat/magic overlays are active to prevent stacking */}
+          {cardPreviewsEnabled &&
+            hoverPreview &&
+            !contextMenu &&
+            !(isMobile && (pendingCombat || attackChoice || pendingMagic)) && (
+              <CardPreview
+                card={hoverPreview}
+                anchor="top-right"
+                zIndexClass="z-30"
+              />
+            )}
 
           {/* Legacy Preview Overlay (for compatibility with existing setPreviewCard calls) - visible even when uiHidden */}
           {cardPreviewsEnabled &&
             previewCard?.slug &&
             !hoverPreview &&
-            !contextMenu && (
+            !contextMenu &&
+            !(isMobile && (pendingCombat || attackChoice || pendingMagic)) && (
               <CardPreview
                 card={{
                   slug: previewCard.slug ?? "",

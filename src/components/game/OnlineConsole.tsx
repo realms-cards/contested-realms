@@ -362,15 +362,20 @@ export default function OnlineConsole({
   const headerPadding = collapsed ? "px-1.5 py-1" : "px-3 py-2";
   const filterBtnPadding = "px-2 py-1";
 
+  // On mobile when expanded, use fixed bottom-sheet to avoid overlapping life/hand
+  const mobileExpanded = isMobile && !collapsed && !toastOnly;
+
   return (
     <div
-      className={`absolute ${positionClasses} z-10 ${
+      className={`${mobileExpanded ? "fixed inset-x-0 bottom-0 z-30" : `absolute ${positionClasses} z-10`} ${
         dragFromHand ? "pointer-events-none" : "pointer-events-auto"
-      } text-white ${toastOnly ? "w-80" : containerWidth} transition-all`}
+      } text-white ${toastOnly ? "w-80" : mobileExpanded ? "w-full" : containerWidth} transition-all`}
     >
       {/* Main console UI - hidden when toastOnly */}
       {!toastOnly && (
-        <div className="bg-black/60 backdrop-blur rounded-xl ring-1 ring-white/10 shadow transition-all">
+        <div
+          className={`bg-black/60 backdrop-blur ring-1 ring-white/10 shadow transition-all ${mobileExpanded ? "rounded-t-2xl max-h-[50vh] pb-4" : "rounded-xl"}`}
+        >
           {/* Header - compact icon-only when collapsed, filter toggles when expanded */}
           <div
             className={`flex items-center justify-between ${headerPadding} text-sm ${!collapsed ? "border-b border-white/10" : ""} select-none`}
@@ -378,9 +383,9 @@ export default function OnlineConsole({
           >
             {/* Collapsed: compact icon buttons with badges */}
             {collapsed ? (
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-0.5">
                 <button
-                  className="rounded bg-white/10 hover:bg-white/20 p-1.5 transition-colors relative"
+                  className={`rounded bg-white/10 hover:bg-white/20 ${isMobile ? "p-1" : "p-1.5"} transition-colors relative`}
                   onClick={() => {
                     setConsoleOpen(true);
                     lastOpenReasonRef.current = "manual";
@@ -389,16 +394,18 @@ export default function OnlineConsole({
                   onContextMenu={(e) => e.preventDefault()}
                   title="Events"
                 >
-                  <ScrollText className="w-4 h-4" />
+                  <ScrollText className={isMobile ? "w-3 h-3" : "w-4 h-4"} />
                   {events.length > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-blue-500 text-white text-[9px] min-w-[14px] h-[14px] flex items-center justify-center rounded-full">
+                    <span
+                      className={`absolute -top-1 -right-1 bg-blue-500 text-white flex items-center justify-center rounded-full ${isMobile ? "text-[7px] min-w-[12px] h-[12px]" : "text-[9px] min-w-[14px] h-[14px]"}`}
+                    >
                       {events.length > 99 ? "99+" : events.length}
                     </span>
                   )}
                 </button>
                 {!hideChat && matchChat.length > 0 && (
                   <button
-                    className="rounded bg-white/10 hover:bg-white/20 p-1.5 transition-colors relative"
+                    className={`rounded bg-white/10 hover:bg-white/20 ${isMobile ? "p-1" : "p-1.5"} transition-colors relative`}
                     onClick={() => {
                       setConsoleOpen(true);
                       setShowChat(true);
@@ -408,14 +415,18 @@ export default function OnlineConsole({
                     onContextMenu={(e) => e.preventDefault()}
                     title="Chat"
                   >
-                    <MessageCircle className="w-4 h-4" />
-                    <span className="absolute -top-1 -right-1 bg-green-500 text-white text-[9px] min-w-[14px] h-[14px] flex items-center justify-center rounded-full">
+                    <MessageCircle
+                      className={isMobile ? "w-3 h-3" : "w-4 h-4"}
+                    />
+                    <span
+                      className={`absolute -top-1 -right-1 bg-green-500 text-white flex items-center justify-center rounded-full ${isMobile ? "text-[7px] min-w-[12px] h-[12px]" : "text-[9px] min-w-[14px] h-[14px]"}`}
+                    >
                       {matchChat.length > 99 ? "99+" : matchChat.length}
                     </span>
                   </button>
                 )}
                 <button
-                  className="rounded bg-white/10 hover:bg-white/20 p-1 transition-colors"
+                  className={`rounded bg-white/10 hover:bg-white/20 ${isMobile ? "p-0.5" : "p-1"} transition-colors`}
                   onClick={() => {
                     setConsoleOpen(true);
                     lastOpenReasonRef.current = "manual";
@@ -424,7 +435,7 @@ export default function OnlineConsole({
                   onContextMenu={(e) => e.preventDefault()}
                   title="Expand console"
                 >
-                  <ChevronUp className="w-4 h-4" />
+                  <ChevronUp className={isMobile ? "w-3 h-3" : "w-4 h-4"} />
                 </button>
               </div>
             ) : (
@@ -579,9 +590,7 @@ export default function OnlineConsole({
                         {turnPrefix && (
                           <span
                             className="opacity-70"
-                            style={
-                              turnColor ? { color: turnColor } : undefined
-                            }
+                            style={turnColor ? { color: turnColor } : undefined}
                           >
                             {turnPrefix}
                           </span>

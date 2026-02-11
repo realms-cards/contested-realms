@@ -9,6 +9,7 @@ import type { LifeState, PlayerKey } from "@/lib/game/store";
 import { useGamepadControls } from "@/lib/hooks/useGamepadControls";
 import {
   useGamepadConnected,
+  useSmallScreen,
   useTouchDevice,
 } from "@/lib/hooks/useTouchDevice";
 import { generateInteractionRequestId } from "@/lib/net/interactions";
@@ -71,11 +72,13 @@ function LifeCounter({
   showYou,
   spectatorMode,
   isHotseatMode,
+  compact = false,
 }: LifeCounterProps & {
   showNameAbove: boolean;
   showYou: boolean;
   spectatorMode?: boolean;
   isHotseatMode?: boolean;
+  compact?: boolean;
 }) {
   const playerState = useGameStore((s) => s.players?.[player]);
   const addLife = useGameStore((s) => s.addLife);
@@ -91,27 +94,46 @@ function LifeCounter({
   const canIncrease = canModifyThisPlayer && lifeState !== "dead" && life < 20;
   const canDecrease = canModifyThisPlayer && lifeState !== "dead";
 
+  // Compact (mobile) sizing
+  const counterSize = compact ? "w-7 h-7" : "w-16 h-16";
+  const textSize = compact
+    ? lifeState === "alive"
+      ? "text-sm"
+      : "text-xs"
+    : lifeState === "alive"
+      ? "text-2xl"
+      : "text-xl";
+  const iconSize = compact ? "w-2.5 h-2.5" : "w-4 h-4";
+
   return (
     <div
-      className="flex flex-col items-center gap-2 select-none"
+      className={`flex flex-col items-center ${compact ? "gap-0.5" : "gap-2"} select-none`}
       onContextMenu={(e) => e.preventDefault()}
     >
       {/* Player name above counter (for upper player) */}
       {showNameAbove && (
         <div
-          className={`text-xs font-medium px-2 py-1 rounded-full ${
+          className={`font-medium rounded-full ${
+            compact ? "text-[7px] leading-none px-1 py-px" : "text-xs px-2 py-1"
+          } ${
             isMe
               ? "bg-green-500/20 text-green-400"
               : "bg-gray-500/20 text-gray-400"
           }`}
           onContextMenu={(e) => e.preventDefault()}
         >
-          {playerName}
-          {spectatorMode && isMe
-            ? " (Watching)"
-            : showYou && isMe
-              ? " (You)"
-              : ""}
+          {compact ? (
+            playerName
+          ) : (
+            <>
+              {playerName}
+              {spectatorMode && isMe
+                ? " (Watching)"
+                : showYou && isMe
+                  ? " (You)"
+                  : ""}
+            </>
+          )}
         </div>
       )}
 
@@ -119,7 +141,7 @@ function LifeCounter({
       <div className="group relative" onContextMenu={(e) => e.preventDefault()}>
         {/* Life counter */}
         <div
-          className={`w-16 h-16 grid place-items-center rounded-xl bg-black/70 shadow-lg ring-1 ring-white/10 ${
+          className={`${counterSize} grid place-items-center rounded-xl bg-black/70 shadow-lg ring-1 ring-white/10 ${
             lifeState === "dd"
               ? "ring-orange-400/50 bg-orange-900/20"
               : lifeState === "dead"
@@ -129,81 +151,128 @@ function LifeCounter({
           onContextMenu={(e) => e.preventDefault()}
         >
           <div className="flex flex-col items-center justify-center gap-0.5">
-            {getLifeStateIcon(lifeState)}
+            {compact ? null : getLifeStateIcon(lifeState)}
+            {compact && lifeState !== "alive" && (
+              <span className={iconSize}>
+                {lifeState === "dd" ? (
+                  <AlertTriangle className={iconSize + " text-orange-400"} />
+                ) : (
+                  <Skull className={iconSize + " text-red-400"} />
+                )}
+              </span>
+            )}
             <span
-              className={`${
-                lifeState === "alive" ? "text-2xl" : "text-xl"
-              } font-bold font-fantaisie ${colorClass}`}
+              className={`${textSize} font-bold font-fantaisie ${colorClass}`}
             >
               {lifeDisplay}
             </span>
           </div>
         </div>
 
-        {/* Life modification buttons - absolute positioned to not affect centering */}
-        {/* Only show for own gauge (isMe) unless canModify is true for all (hotseat mode) */}
-        {/* On touch devices, always show buttons since hover doesn't work */}
-        <div
-          className={`absolute left-full top-1/2 -translate-y-1/2 ml-2 flex flex-col gap-1 transition-opacity ${
-            canModifyThisPlayer
-              ? isTouchDevice
-                ? "opacity-100"
-                : "opacity-0 group-hover:opacity-100"
-              : "opacity-0 pointer-events-none"
-          }`}
-          onContextMenu={(e) => e.preventDefault()}
-        >
-          <button
-            className="px-2 py-0.5 rounded bg-white/15 hover:bg-white/25 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            onClick={() => addLife(player, +1)}
-            disabled={dragFromHand || !canIncrease || !canModify}
-            title={
-              !canIncrease
-                ? isMe
-                  ? "Cannot increase life (max 20 or dead)"
-                  : "Can only modify your own life"
-                : "Increase life"
-            }
+        {/* Life modification buttons */}
+        {/* On compact/mobile: show below the counter inline */}
+        {/* On desktop: absolute positioned to the right, shown on hover */}
+        {compact ? (
+          canModifyThisPlayer && (
+            <div
+              className="flex gap-1 mt-0.5 justify-center"
+              onContextMenu={(e) => e.preventDefault()}
+            >
+              <button
+                className="w-4 h-4 flex items-center justify-center rounded bg-white/15 hover:bg-white/25 disabled:opacity-30 text-[8px] font-bold transition-colors"
+                onClick={() => addLife(player, +1)}
+                disabled={dragFromHand || !canIncrease || !canModify}
+                onContextMenu={(e) => e.preventDefault()}
+              >
+                +
+              </button>
+              <button
+                className="w-4 h-4 flex items-center justify-center rounded bg-white/15 hover:bg-white/25 disabled:opacity-30 text-[8px] font-bold transition-colors"
+                onClick={() => {
+                  if (lifeState === "dd") {
+                    setShowDeathConfirm(true);
+                  } else {
+                    addLife(player, -1);
+                  }
+                }}
+                disabled={dragFromHand || !canDecrease || !canModify}
+                onContextMenu={(e) => e.preventDefault()}
+              >
+                -
+              </button>
+            </div>
+          )
+        ) : (
+          <div
+            className={`absolute left-full top-1/2 -translate-y-1/2 ml-2 flex flex-col gap-1 transition-opacity ${
+              canModifyThisPlayer
+                ? isTouchDevice
+                  ? "opacity-100"
+                  : "opacity-0 group-hover:opacity-100"
+                : "opacity-0 pointer-events-none"
+            }`}
             onContextMenu={(e) => e.preventDefault()}
           >
-            +
-          </button>
-          <button
-            className="px-2 py-0.5 rounded bg-white/15 hover:bg-white/25 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            onClick={() => {
-              if (lifeState === "dd") {
-                setShowDeathConfirm(true);
-              } else {
-                addLife(player, -1);
+            <button
+              className="px-2 py-0.5 rounded bg-white/15 hover:bg-white/25 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              onClick={() => addLife(player, +1)}
+              disabled={dragFromHand || !canIncrease || !canModify}
+              title={
+                !canIncrease
+                  ? isMe
+                    ? "Cannot increase life (max 20 or dead)"
+                    : "Can only modify your own life"
+                  : "Increase life"
               }
-            }}
-            disabled={dragFromHand || !canDecrease || !canModify}
-            title={
-              !canDecrease
-                ? isMe
-                  ? "Cannot decrease life (dead)"
-                  : "Can only modify your own life"
-                : "Decrease life"
-            }
-            onContextMenu={(e) => e.preventDefault()}
-          >
-            -
-          </button>
-        </div>
+              onContextMenu={(e) => e.preventDefault()}
+            >
+              +
+            </button>
+            <button
+              className="px-2 py-0.5 rounded bg-white/15 hover:bg-white/25 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              onClick={() => {
+                if (lifeState === "dd") {
+                  setShowDeathConfirm(true);
+                } else {
+                  addLife(player, -1);
+                }
+              }}
+              disabled={dragFromHand || !canDecrease || !canModify}
+              title={
+                !canDecrease
+                  ? isMe
+                    ? "Cannot decrease life (dead)"
+                    : "Can only modify your own life"
+                  : "Decrease life"
+              }
+              onContextMenu={(e) => e.preventDefault()}
+            >
+              -
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Player name below counter (for lower player) */}
       {!showNameAbove && (
         <div
-          className={`text-xs font-medium px-2 py-1 rounded-full ${
+          className={`font-medium rounded-full ${
+            compact ? "text-[7px] leading-none px-1 py-px" : "text-xs px-2 py-1"
+          } ${
             isMe
               ? "bg-green-500/20 text-green-400"
               : "bg-gray-500/20 text-gray-400"
           }`}
           onContextMenu={(e) => e.preventDefault()}
         >
-          {playerName}
-          {spectatorMode && isMe ? " (Watching)" : isMe ? " (You)" : ""}
+          {compact ? (
+            playerName
+          ) : (
+            <>
+              {playerName}
+              {spectatorMode && isMe ? " (Watching)" : isMe ? " (You)" : ""}
+            </>
+          )}
         </div>
       )}
 
@@ -346,14 +415,20 @@ export default function OnlineLifeCounters({
     }
   };
 
+  const isMobileScreen = useSmallScreen();
+
   // iPhone notch compensation: use safe-area-inset-left plus extra padding
   const leftPosition = isIPhone
-    ? "left-[max(0.75rem,calc(env(safe-area-inset-left)+0.5rem))]"
-    : "left-3";
+    ? isMobileScreen
+      ? "left-[max(0.25rem,calc(env(safe-area-inset-left)+0.25rem))]"
+      : "left-[max(0.75rem,calc(env(safe-area-inset-left)+0.5rem))]"
+    : isMobileScreen
+      ? "left-0.5"
+      : "left-3";
 
   return (
     <div
-      className={`absolute ${leftPosition} top-1/2 -translate-y-1/2 z-10 flex flex-col gap-4 ${
+      className={`absolute ${leftPosition} top-1/2 -translate-y-1/2 z-10 flex flex-col ${isMobileScreen ? "gap-1" : "gap-4"} ${
         dragFromHand ? "pointer-events-none" : "pointer-events-auto"
       } text-white select-none`}
       onContextMenu={(e) => e.preventDefault()}
@@ -369,6 +444,7 @@ export default function OnlineLifeCounters({
         showYou={showYouLabels}
         spectatorMode={readOnly}
         isHotseatMode={isHotseatMode}
+        compact={isMobileScreen}
       />
 
       {/* P2 Life - name below */}
@@ -382,10 +458,11 @@ export default function OnlineLifeCounters({
         showYou={showYouLabels}
         spectatorMode={readOnly}
         isHotseatMode={isHotseatMode}
+        compact={isMobileScreen}
       />
 
       {/* Gamepad hint - show when gamepad connected, setting enabled, and can modify life */}
-      {hasGamepad && gamepadLifeEnabled && canModifyLife && (
+      {hasGamepad && gamepadLifeEnabled && canModifyLife && !isMobileScreen && (
         <div
           className="text-[10px] text-gray-400 text-center px-1"
           title="Use gamepad shoulder buttons to adjust your life"
@@ -397,7 +474,7 @@ export default function OnlineLifeCounters({
       {/* Tie button shown between/under life counters */}
       {showTie && (
         <button
-          className="mt-1 px-3 py-1 rounded bg-amber-600/90 hover:bg-amber-500 text-white text-sm flex items-center gap-1.5 self-start"
+          className={`mt-1 ${isMobileScreen ? "px-2 py-0.5 text-xs" : "px-3 py-1 text-sm"} rounded bg-amber-600/90 hover:bg-amber-500 text-white flex items-center gap-1.5 self-start`}
           onClick={() => {
             const ok = window.confirm(
               "Declare a tie? This ends the match as a draw.",
@@ -406,8 +483,8 @@ export default function OnlineLifeCounters({
           }}
           onContextMenu={(e) => e.preventDefault()}
         >
-          <Users className="w-3.5 h-3.5" />
-          Tie Game
+          <Users className={isMobileScreen ? "w-3 h-3" : "w-3.5 h-3.5"} />
+          Tie
         </button>
       )}
     </div>

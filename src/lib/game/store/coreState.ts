@@ -525,17 +525,8 @@ export const createCoreSlice: StateCreator<
         [nextKey]: { ...state.avatars[nextKey], tapped: false },
       } as GameState["avatars"];
 
-      // Reset pathfinder usage for the next player's turn
-      const pathfinderUsedNext = {
-        ...state.pathfinderUsed,
-        [nextKey]: false,
-      };
-
-      console.log("[PATHFINDER] nextPhase reset:", {
-        nextKey,
-        pathfinderUsedBefore: state.pathfinderUsed,
-        pathfinderUsedAfter: pathfinderUsedNext,
-      });
+      // Reset pathfinder usage for both players on turn change
+      const pathfinderUsedNext = { p1: false, p2: false };
 
       // Don't send turn in patch - server increments turn when currentPlayer changes
       // Include avatars to ensure correct position is broadcast (e.g., after Pathfinder move)
@@ -682,19 +673,8 @@ export const createCoreSlice: StateCreator<
       [nextKey]: false, // Reset for the player whose turn is starting
     };
 
-    // Reset pathfinder usage for the next player's turn
-    const pathfinderUsedNext = {
-      ...state.pathfinderUsed,
-      [nextKey]: false, // Reset for the player whose turn is starting
-    };
-
-    console.log("[PATHFINDER] endTurn reset:", {
-      nextKey,
-      pathfinderUsedBefore: state.pathfinderUsed,
-      pathfinderUsedAfter: pathfinderUsedNext,
-      avatarsP1Pos: state.avatars?.p1?.pos,
-      avatarsP2Pos: state.avatars?.p2?.pos,
-    });
+    // Reset pathfinder usage for both players on turn change
+    const pathfinderUsedNext = { p1: false, p2: false };
 
     // Track which Ether Cores are currently in the void at turn start
     // Ether Core only provides 3 mana if it was cast this turn OR started the turn in the void

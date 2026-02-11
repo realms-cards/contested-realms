@@ -8,7 +8,6 @@ import {
 } from "@/hooks/useGraphicsSettings";
 import type { CardPreviewData } from "@/lib/game/card-preview.types";
 import { TOKEN_BY_KEY, tokenTextureUrl } from "@/lib/game/tokens";
-import { useMobileDevice } from "@/lib/hooks/useTouchDevice";
 
 const SITE_SIZE_MULTIPLIER = 1.5;
 
@@ -160,12 +159,8 @@ export default function CardPreview({
     [],
   );
   const { settings: graphicsSettings } = useGraphicsSettings();
-  const { isMobile } = useMobileDevice();
 
-  // On mobile, default to 2.5x scale for better visibility
-  // User can still override via settings
-  const baseScale = graphicsSettings.cardPreviewScale || initialScale;
-  const previewScale = isMobile && baseScale === 1.0 ? 2.5 : baseScale;
+  const previewScale = graphicsSettings.cardPreviewScale || initialScale;
 
   // Compute layout synchronously on first render to avoid "blow up" effect
   const initialLayout = useMemo(() => computeLayout(isSite), [isSite]);
@@ -232,29 +227,29 @@ export default function CardPreview({
     ? "aspect-[4/3] rounded-xl overflow-hidden bg-black/20 backdrop-blur-sm shadow-2xl ring-1 ring-white/10"
     : "aspect-[3/4] rounded-xl overflow-hidden bg-black/20 backdrop-blur-sm shadow-2xl ring-1 ring-white/10";
 
-  // Use simple Image component instead of 3D Canvas to avoid WebGL context leaks
-  // The tournament draft was creating hundreds of WebGL contexts and crashing browsers
+  const imageEl = (
+    <div className={`relative ${base}`} style={{ width }}>
+      <Image
+        src={imageSrc}
+        alt={card?.name || "Card preview"}
+        fill
+        className={`${
+          isSite
+            ? "object-contain rotate-90 scale-[1.333] origin-center"
+            : "object-contain"
+        } object-center`}
+        sizes={`${Math.round(width)}px`}
+        priority
+        unoptimized
+      />
+    </div>
+  );
+
   return (
     <div
       className={`${anchorClasses} ${zIndexClass} pointer-events-none ${className}`}
     >
-      <div className="relative">
-        <div className={`relative ${base}`} style={{ width }}>
-          <Image
-            src={imageSrc}
-            alt={card?.name || "Card preview"}
-            fill
-            className={`${
-              isSite
-                ? "object-contain rotate-90 scale-[1.333] origin-center"
-                : "object-contain"
-            } object-center`}
-            sizes={`${Math.round(width)}px`}
-            priority
-            unoptimized
-          />
-        </div>
-      </div>
+      <div className="relative">{imageEl}</div>
     </div>
   );
 }

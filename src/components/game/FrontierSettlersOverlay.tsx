@@ -8,6 +8,12 @@ import {
   getCellNumber,
 } from "@/lib/game/store/utils/boardHelpers";
 
+/**
+ * FrontierSettlersOverlay — compact floating panel for Frontier Settlers ability.
+ *
+ * Shows the revealed site card and target tile buttons without blocking the
+ * board view. Mobile-friendly layout anchored to the bottom-left.
+ */
 export default function FrontierSettlersOverlay() {
   const pending = useGameStore((s) => s.pendingFrontierSettlers);
   const actorKey = useGameStore((s) => s.actorKey);
@@ -22,131 +28,113 @@ export default function FrontierSettlersOverlay() {
     pending;
   const isOwner = actorKey === null || ownerSeat === actorKey;
 
-  return (
-    <div className="fixed inset-0 z-[200] pointer-events-none">
-      {/* Top bar with status */}
-      <div className="fixed inset-x-0 top-6 z-[201] pointer-events-none flex justify-center">
-        <div className="pointer-events-auto px-5 py-3 rounded-full bg-black/90 text-white ring-1 ring-green-500/50 shadow-lg text-lg md:text-xl flex items-center gap-3 select-none">
-          <span className="text-green-400 font-fantaisie">
-            🏕️ Frontier Settlers
-          </span>
-          <span className="opacity-80">
-            {phase === "revealing" && "Revealing top site..."}
-            {phase === "selecting_target" &&
-              isOwner &&
-              (selectedTarget
-                ? "Confirm placement"
-                : "Select adjacent void or rubble")}
-            {phase === "selecting_target" &&
-              !isOwner &&
-              `${ownerSeat.toUpperCase()} is placing a site...`}
-            {phase === "complete" && "Done!"}
-          </span>
+  // Opponent view — small indicator
+  if (!isOwner && phase === "selecting_target") {
+    return (
+      <div className="fixed left-4 bottom-28 z-[201] pointer-events-none">
+        <div className="rounded-xl bg-black/85 backdrop-blur-sm ring-1 ring-green-500/40 shadow-lg px-3 py-2">
+          <div className="text-green-400 font-medium text-sm">
+            Frontier Settlers
+          </div>
+          <div className="text-gray-400 text-[11px]">
+            {ownerSeat.toUpperCase()} is placing a site…
+          </div>
         </div>
       </div>
+    );
+  }
 
-      {/* Reveal and target selection - visible to owner */}
-      {(phase === "revealing" || phase === "selecting_target") && isOwner && (
-        <div className="fixed inset-0 flex items-center justify-center pointer-events-auto bg-black/70">
-          <div className="bg-black/95 rounded-xl p-6 max-w-lg w-full mx-4 ring-1 ring-green-500/30">
-            <h2 className="text-2xl font-fantaisie text-green-400 mb-4 text-center">
-              Frontier Settlers Ability
-            </h2>
+  // Owner view — compact floating panel
+  if (!isOwner || (phase !== "revealing" && phase !== "selecting_target"))
+    return null;
 
-            {/* Show revealed site */}
-            {revealedSite && (
-              <div className="flex flex-col items-center mb-6">
-                <p className="text-gray-400 text-center mb-3">
-                  Revealed from atlas:
-                </p>
-                <div className="relative w-32 aspect-[2.5/3.5] rounded-lg overflow-hidden ring-2 ring-green-500">
-                  <Image
-                    src={`/api/images/${
-                      revealedSite.slug || revealedSite.cardId
-                    }`}
-                    alt={revealedSite.name || "Site"}
-                    fill
-                    className="object-cover"
-                    unoptimized
-                  />
-                </div>
-                <p className="mt-2 text-green-400 font-medium">
-                  {revealedSite.name || "Site"}
-                </p>
+  return (
+    <div className="fixed left-4 bottom-28 z-[201] pointer-events-auto">
+      <div
+        className="rounded-xl bg-black/85 backdrop-blur-sm ring-1 ring-green-500/60 shadow-2xl overflow-hidden"
+        style={{ width: 190 }}
+      >
+        {/* Revealed site card image */}
+        {revealedSite && (
+          <div className="relative w-full">
+            <Image
+              src={`/api/images/${revealedSite.slug || revealedSite.cardId}`}
+              alt={revealedSite.name || "Site"}
+              width={190}
+              height={136}
+              className="w-full h-auto object-cover"
+              unoptimized
+            />
+          </div>
+        )}
+
+        <div className="px-3 py-2 flex flex-col gap-1.5">
+          {/* Site name */}
+          <div className="text-green-400 font-medium text-sm truncate">
+            {revealedSite?.name || "Site"}
+          </div>
+
+          {/* Target selection */}
+          {phase === "selecting_target" && (
+            <>
+              <div className="text-gray-400 text-[11px] leading-tight">
+                Select a tile:
               </div>
-            )}
+              <div className="flex flex-wrap gap-1">
+                {validTargets.map((cellKey) => {
+                  const { x, y } = parseCellKey(cellKey);
+                  const cellNum = getCellNumber(x, y, board.size.w);
+                  const existingSite = board.sites[cellKey];
+                  const isRubble =
+                    existingSite?.card?.name?.toLowerCase() === "rubble";
+                  const isSelected = selectedTarget === cellKey;
 
-            {/* Target selection */}
-            {phase === "selecting_target" && (
-              <>
-                <p className="text-gray-400 text-center mb-4">
-                  Select an adjacent tile to place this site:
-                </p>
-                <div className="grid grid-cols-2 gap-3 mb-6">
-                  {validTargets.map((cellKey) => {
-                    const { x, y } = parseCellKey(cellKey);
-                    const cellNum = getCellNumber(x, y, board.size.w);
-                    const existingSite = board.sites[cellKey];
-                    const isRubble =
-                      existingSite?.card?.name?.toLowerCase() === "rubble";
-                    const isSelected = selectedTarget === cellKey;
+                  return (
+                    <button
+                      key={cellKey}
+                      onClick={() => selectTarget(cellKey)}
+                      className={`px-2 py-1 rounded text-[11px] font-medium transition-colors ${
+                        isSelected
+                          ? "bg-green-600 text-white ring-1 ring-green-400"
+                          : "bg-gray-700/60 hover:bg-gray-600/60 text-gray-300"
+                      }`}
+                    >
+                      #{cellNum} {isRubble ? "🪨" : "◻️"}
+                    </button>
+                  );
+                })}
+              </div>
 
-                    return (
-                      <button
-                        key={cellKey}
-                        onClick={() => selectTarget(cellKey)}
-                        className={`p-3 rounded-lg border-2 transition-all ${
-                          isSelected
-                            ? "border-green-500 bg-green-500/20"
-                            : "border-gray-600 hover:border-green-400 bg-gray-800/50"
-                        }`}
-                      >
-                        <div className="text-lg font-bold text-white">
-                          Tile #{cellNum}
-                        </div>
-                        <div className="text-sm text-gray-400">
-                          {isRubble ? "🪨 Rubble" : "◻️ Void"}
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
+              {/* Action buttons */}
+              <button
+                onClick={resolve}
+                disabled={!selectedTarget}
+                className={`w-full mt-1 px-2 py-1 rounded-lg text-xs font-medium transition-colors ${
+                  selectedTarget
+                    ? "bg-green-600 hover:bg-green-500 text-white"
+                    : "bg-gray-700 text-gray-500 cursor-not-allowed"
+                }`}
+              >
+                Place & Move
+              </button>
+            </>
+          )}
 
-                {/* Action buttons */}
-                <div className="flex justify-center gap-4">
-                  <button
-                    onClick={resolve}
-                    disabled={!selectedTarget}
-                    className={`px-6 py-2 rounded-lg font-medium transition-colors ${
-                      selectedTarget
-                        ? "bg-green-600 hover:bg-green-500 text-white"
-                        : "bg-gray-600 text-gray-400 cursor-not-allowed"
-                    }`}
-                  >
-                    Place Site & Move
-                  </button>
-                  <button
-                    onClick={cancel}
-                    className="px-6 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-lg font-medium transition-colors"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
+          {/* Revealing phase — just waiting */}
+          {phase === "revealing" && (
+            <div className="text-gray-400 text-[11px]">
+              Revealing from atlas…
+            </div>
+          )}
+
+          <button
+            onClick={cancel}
+            className="w-full px-2 py-1 rounded-lg bg-gray-700/60 hover:bg-gray-600/60 text-gray-300 text-xs font-medium transition-colors"
+          >
+            Cancel
+          </button>
         </div>
-      )}
-
-      {/* Opponent view */}
-      {phase === "selecting_target" && !isOwner && (
-        <div className="fixed bottom-24 inset-x-0 z-[201] pointer-events-none flex justify-center">
-          <div className="pointer-events-auto px-4 py-2 rounded-lg bg-black/90 text-sm text-green-300 ring-1 ring-green-500/30">
-            {ownerSeat.toUpperCase()} is using Frontier Settlers to place a
-            site...
-          </div>
-        </div>
-      )}
+      </div>
     </div>
   );
 }

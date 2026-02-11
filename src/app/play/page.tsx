@@ -141,6 +141,9 @@ export default function PlayPage() {
   const togglePlaymat = useGameStore((s) => s.togglePlaymat);
   const togglePlaymatOverlay = useGameStore((s) => s.togglePlaymatOverlay);
   const toggleHandVisibility = useGameStore((s) => s.toggleHandVisibility);
+  const chaosTwisterPhase = useGameStore(
+    (s) => s.pendingChaosTwister?.phase ?? null,
+  );
   const currentPlayerKey = currentPlayer === 1 ? "p1" : "p2";
 
   // Restore camera mode and playmat settings from API (authenticated users) or localStorage after hydration
@@ -759,11 +762,12 @@ export default function PlayPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, [toggleCardPreviews]);
 
-  // Space key to toggle hand visibility
+  // Space key to toggle hand visibility (skip when Chaos Twister minigame is active)
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.repeat) return;
       if (e.code !== "Space" && e.key !== " " && e.key !== "Spacebar") return;
+      if (chaosTwisterPhase === "minigame") return;
       const ae = document.activeElement as HTMLElement | null;
       if (
         ae &&
@@ -778,7 +782,7 @@ export default function PlayPage() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [toggleHandVisibility]);
+  }, [toggleHandVisibility, chaosTwisterPhase]);
 
   // Determine if camera panning should be enabled
   const canPanCamera =
