@@ -1110,23 +1110,52 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
       const sourcePerms = [...(state.permanents[sourceKey] || [])];
       const targetPerms = [...(state.permanents[targetKey] || [])];
 
+      // Update attachedTo.at references so relics/attachments follow their host
+      const updateAttachedToRefs = (
+        perms: typeof sourcePerms,
+        oldKey: CellKey,
+        newKey: CellKey,
+      ) =>
+        perms.map((p) => {
+          if (p.attachedTo && p.attachedTo.at === oldKey) {
+            return { ...p, attachedTo: { ...p.attachedTo, at: newKey } };
+          }
+          return p;
+        });
+
       if (isSwap) {
         // Swap: source gets target's permanents, target gets source's permanents
-        if (targetPerms.length > 0) {
-          permanents[sourceKey] = targetPerms;
+        // Update attachedTo.at: perms moving from target→source, source→target
+        const updatedTargetPerms = updateAttachedToRefs(
+          targetPerms,
+          targetKey,
+          sourceKey,
+        );
+        const updatedSourcePerms = updateAttachedToRefs(
+          sourcePerms,
+          sourceKey,
+          targetKey,
+        );
+        if (updatedTargetPerms.length > 0) {
+          permanents[sourceKey] = updatedTargetPerms;
         } else {
           delete permanents[sourceKey];
         }
-        if (sourcePerms.length > 0) {
-          permanents[targetKey] = sourcePerms;
+        if (updatedSourcePerms.length > 0) {
+          permanents[targetKey] = updatedSourcePerms;
         } else {
           delete permanents[targetKey];
         }
       } else {
         // Move to void: target gets source's permanents, source becomes empty
+        const updatedSourcePerms = updateAttachedToRefs(
+          sourcePerms,
+          sourceKey,
+          targetKey,
+        );
         delete permanents[sourceKey];
-        if (sourcePerms.length > 0) {
-          permanents[targetKey] = sourcePerms;
+        if (updatedSourcePerms.length > 0) {
+          permanents[targetKey] = updatedSourcePerms;
         }
       }
 

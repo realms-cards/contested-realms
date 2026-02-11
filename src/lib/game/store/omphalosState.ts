@@ -14,6 +14,15 @@ function newOmphalosId() {
     .slice(2, 6)}`;
 }
 
+// Module-level tracking: which Omphalos IDs have already drawn this end-of-turn cycle
+const _drawnThisCycle = new Set<string>();
+export function markOmphalosDrawnThisCycle(id: string) {
+  _drawnThisCycle.add(id);
+}
+export function clearOmphalosDrawnCycle() {
+  _drawnThisCycle.clear();
+}
+
 // Omphalos private hand entry - similar to Morgana but for artifacts
 export type OmphalosHandEntry = {
   id: string;
@@ -162,7 +171,7 @@ export const createOmphalosSlice: StateCreator<
     get().log(
       `[${input.ownerSeat.toUpperCase()}] ${
         input.artifact.card.name
-      } enters the realm`
+      } enters the realm`,
     );
   },
 
@@ -174,7 +183,7 @@ export const createOmphalosSlice: StateCreator<
 
     // Find all Omphalos owned by the ending player
     const playerOmphalos = omphalosHands.filter(
-      (o) => o.ownerSeat === endingPlayerSeat
+      (o) => o.ownerSeat === endingPlayerSeat,
     );
 
     if (playerOmphalos.length === 0) return;
@@ -183,19 +192,32 @@ export const createOmphalosSlice: StateCreator<
     if (actorKey && actorKey !== endingPlayerSeat) return;
 
     console.log(
-      `[Omphalos] End of turn trigger for ${endingPlayerSeat}, found ${playerOmphalos.length} Omphalos`
+      `[Omphalos] End of turn trigger for ${endingPlayerSeat}, found ${playerOmphalos.length} Omphalos`,
     );
 
-    // Process each Omphalos with confirmation
-    for (const omphalos of playerOmphalos) {
+    // Filter out Omphalos that already drew this end-of-turn cycle
+    const unprocessed = playerOmphalos.filter(
+      (o) => !_drawnThisCycle.has(o.id),
+    );
+
+    if (unprocessed.length === 0) {
+      // All Omphalos have drawn this cycle - clear tracking
+      _drawnThisCycle.clear();
+      return;
+    }
+
+    // Process each unprocessed Omphalos with confirmation
+    for (const omphalos of unprocessed) {
       const spellbook = zones[endingPlayerSeat]?.spellbook || [];
 
       if (spellbook.length === 0) {
         get().log(
           `[${endingPlayerSeat.toUpperCase()}] ${
             omphalos.artifact.card.name
-          }: No spells in spellbook to draw`
+          }: No spells in spellbook to draw`,
         );
+        // Mark as drawn so we skip it on re-trigger
+        _drawnThisCycle.add(omphalos.id);
         continue;
       }
 
@@ -221,7 +243,7 @@ export const createOmphalosSlice: StateCreator<
     omphalosId: string,
     cardIndex: number,
     // For minions, targetTile MUST be the Omphalos location
-    targetTile: { x: number; y: number }
+    targetTile: { x: number; y: number },
   ) => {
     const omphalosHands = get().omphalosHands;
     const omphalosEntry = omphalosHands.find((o) => o.id === omphalosId);
@@ -244,13 +266,26 @@ export const createOmphalosSlice: StateCreator<
       (targetTile.x !== omphalosX || targetTile.y !== omphalosY)
     ) {
       get().log(
-        `Minions cast by ${omphalosEntry.artifact.card.name} must be summoned at its location`
+        `Minions cast by ${omphalosEntry.artifact.card.name} must be summoned at its location`,
       );
       return;
     }
 
+    // Deduct mana cost for the card being cast
+    const manaCost = card.cost ?? 0;
+    if (manaCost > 0) {
+      const ownerSeat = omphalosEntry.ownerSeat;
+      const availableMana = get().getAvailableMana(ownerSeat);
+      if (availableMana < manaCost) {
+        get().log(
+          `Warning: not enough mana to cast ${card.name} (need ${manaCost}, have ${availableMana})`,
+        );
+      }
+      get().addMana(ownerSeat, -manaCost);
+    }
+
     console.log(
-      `[Omphalos] Casting ${card.name} from ${omphalosEntry.artifact.card.name} at tile (${targetTile.x}, ${targetTile.y})`
+      `[Omphalos] Casting ${card.name} from ${omphalosEntry.artifact.card.name} at tile (${targetTile.x}, ${targetTile.y})`,
     );
 
     // Remove card from Omphalos's hand
@@ -258,7 +293,7 @@ export const createOmphalosSlice: StateCreator<
     newHand.splice(cardIndex, 1);
 
     const updatedOmphalosHands = omphalosHands.map((o) =>
-      o.id === omphalosId ? { ...o, hand: newHand } : o
+      o.id === omphalosId ? { ...o, hand: newHand } : o,
     );
 
     // Place the spell on the board
@@ -308,13 +343,13 @@ export const createOmphalosSlice: StateCreator<
     get().log(
       `${omphalosEntry.artifact.card.name} casts ${card.name}${
         isMinion ? " (summoned at its location)" : ""
-      }`
+      }`,
     );
   },
 
   removeOmphalosHand: (
     artifactInstanceId: string | null,
-    artifactAt: CellKey
+    artifactAt: CellKey,
   ) => {
     const omphalosHands = get().omphalosHands;
     const zones = get().zones;
@@ -323,7 +358,7 @@ export const createOmphalosSlice: StateCreator<
     const omphalosEntry = omphalosHands.find(
       (o) =>
         o.artifact.at === artifactAt ||
-        (artifactInstanceId && o.artifact.instanceId === artifactInstanceId)
+        (artifactInstanceId && o.artifact.instanceId === artifactInstanceId),
     );
 
     if (!omphalosEntry) return;
@@ -349,7 +384,7 @@ export const createOmphalosSlice: StateCreator<
     const remainingOmphalosHands = omphalosHands.filter(
       (o) =>
         o.artifact.at !== artifactAt &&
-        (!artifactInstanceId || o.artifact.instanceId !== artifactInstanceId)
+        (!artifactInstanceId || o.artifact.instanceId !== artifactInstanceId),
     );
 
     set({
@@ -384,20 +419,20 @@ export const createOmphalosSlice: StateCreator<
           omphalosEntry.artifact.card.name
         }'s ${discardedCount} remaining spell${
           discardedCount !== 1 ? "s" : ""
-        } go to graveyard`
+        } go to graveyard`,
       );
     }
   },
 
   getOmphalosHandForArtifact: (
     artifactInstanceId: string | null,
-    artifactAt: CellKey
+    artifactAt: CellKey,
   ): CardRef[] => {
     const omphalosHands = get().omphalosHands;
     const entry = omphalosHands.find(
       (o) =>
         o.artifact.at === artifactAt ||
-        (artifactInstanceId && o.artifact.instanceId === artifactInstanceId)
+        (artifactInstanceId && o.artifact.instanceId === artifactInstanceId),
     );
     return entry?.hand || [];
   },

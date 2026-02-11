@@ -26,7 +26,7 @@ export default function ChaosTwisterOverlay({
   const board = useGameStore((s) => s.board);
 
   const completeChaosTwisterMinigame = useGameStore(
-    (s) => s.completeChaosTwisterMinigame
+    (s) => s.completeChaosTwisterMinigame,
   );
   const resolveChaosTwister = useGameStore((s) => s.resolveChaosTwister);
   const cancelChaosTwister = useGameStore((s) => s.cancelChaosTwister);
@@ -41,13 +41,16 @@ export default function ChaosTwisterOverlay({
 
   // Start the minigame animation when entering minigame phase
   useEffect(() => {
-    if (pending?.phase === "minigame" && pending.casterSeat === actorKey) {
+    if (
+      pending?.phase === "minigame" &&
+      (!actorKey || pending.casterSeat === actorKey)
+    ) {
       setIsRunning(true);
       setSliderPosition(0);
       setSliderDirection(1);
       // Randomize initial speed
       setCurrentSpeed(
-        BASE_SLIDER_SPEED + (Math.random() * 2 - 1) * SPEED_VARIANCE
+        BASE_SLIDER_SPEED + (Math.random() * 2 - 1) * SPEED_VARIANCE,
       );
     } else {
       setIsRunning(false);
@@ -72,14 +75,14 @@ export default function ChaosTwisterOverlay({
           setSliderDirection(-1);
           // Randomize speed on bounce
           setCurrentSpeed(
-            BASE_SLIDER_SPEED + (Math.random() * 2 - 1) * SPEED_VARIANCE
+            BASE_SLIDER_SPEED + (Math.random() * 2 - 1) * SPEED_VARIANCE,
           );
         } else if (next <= 0) {
           next = 0;
           setSliderDirection(1);
           // Randomize speed on bounce
           setCurrentSpeed(
-            BASE_SLIDER_SPEED + (Math.random() * 2 - 1) * SPEED_VARIANCE
+            BASE_SLIDER_SPEED + (Math.random() * 2 - 1) * SPEED_VARIANCE,
           );
         }
         // Update ref for broadcasting
@@ -99,7 +102,8 @@ export default function ChaosTwisterOverlay({
   }, [isRunning, sliderDirection, currentSpeed]);
 
   // Determine if current user is the caster (needed before handleStop)
-  const isCaster = pending?.casterSeat === actorKey;
+  // In hotseat mode (actorKey is null), always treat as caster since both players share the screen
+  const isCaster = !actorKey || pending?.casterSeat === actorKey;
 
   // Handle stop button click
   const handleStop = useCallback(() => {
@@ -176,7 +180,7 @@ export default function ChaosTwisterOverlay({
   // Use synced slider position for opponent, local position for caster
   const displaySliderPosition = isCaster
     ? sliderPosition
-    : pending.sliderPosition ?? 0;
+    : (pending.sliderPosition ?? 0);
 
   // Calculate zone positions for display
   const greenStart = GREEN_ZONE_CENTER - GREEN_ZONE_SIZE / 2;
@@ -265,7 +269,7 @@ export default function ChaosTwisterOverlay({
                     ? getCellNumber(
                         pending.targetSite.x,
                         pending.targetSite.y,
-                        board.size.w
+                        board.size.w,
                       )
                     : "?"}
                 </span>
@@ -349,8 +353,8 @@ export default function ChaosTwisterOverlay({
               pending.minigameResult.accuracy === "green"
                 ? "bg-green-900/90 ring-green-500/50"
                 : pending.minigameResult.accuracy === "yellow"
-                ? "bg-yellow-900/90 ring-yellow-500/50"
-                : "bg-red-900/90 ring-red-500/50"
+                  ? "bg-yellow-900/90 ring-yellow-500/50"
+                  : "bg-red-900/90 ring-red-500/50"
             }`}
           >
             <span
@@ -358,15 +362,15 @@ export default function ChaosTwisterOverlay({
                 pending.minigameResult.accuracy === "green"
                   ? "text-green-400"
                   : pending.minigameResult.accuracy === "yellow"
-                  ? "text-yellow-400"
-                  : "text-red-400"
+                    ? "text-yellow-400"
+                    : "text-red-400"
               }`}
             >
               {pending.minigameResult.accuracy === "green"
                 ? "🎯 Perfect!"
                 : pending.minigameResult.accuracy === "yellow"
-                ? "🌀 Close!"
-                : "Missed!"}
+                  ? "🌀 Close!"
+                  : "Missed!"}
             </span>
             <span className="text-white/80 text-sm">
               <span className="text-red-400 font-bold">
@@ -377,7 +381,7 @@ export default function ChaosTwisterOverlay({
                 ? getCellNumber(
                     pending.landingSite.x,
                     pending.landingSite.y,
-                    board.size.w
+                    board.size.w,
                   )
                 : "?"}
             </span>

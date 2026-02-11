@@ -859,7 +859,7 @@ export default function OnlineMatchPage() {
   const initPortalState = useGameStore((s) => s.initPortalState);
   const avatars = useGameStore((s) => s.avatars);
 
-  // Track when THIS player confirms mulligan (before portal phase)
+  // Track when THIS player confirms mulligan
   const [mulliganReady, setMulliganReady] = useState<boolean>(false);
   // Note: Seer phase is now handled within OnlineMulliganScreen
   const [portalPhaseInitialized, setPortalPhaseInitialized] =
@@ -874,10 +874,10 @@ export default function OnlineMatchPage() {
     [avatars],
   );
 
-  // Detect if Harbinger portal phase is needed (after BOTH players finish mulligan, before game starts)
+  // Detect if Harbinger portal phase is needed (after deck selection, before D20 roll)
   // Portal phase should show for BOTH players when:
   // 1. Portal state exists (initialized by harbinger player) and is not complete, OR
-  // 2. Both players ready and any player has Harbinger avatar, OR
+  // 2. Deck prepared and any player has Harbinger avatar, OR
   // 3. Harbinger detected but portals not fully assigned (catch edge cases)
   const needsPortalPhase = useMemo(() => {
     // If portal setup already done locally AND portals are fully assigned, skip
@@ -905,27 +905,19 @@ export default function OnlineMatchPage() {
       return true;
     }
 
-    // Only check for new Harbinger detection after BOTH players are mulligan-ready
-    if (!bothPlayersReady) return false;
+    // Only check for new Harbinger detection after deck is prepared
+    if (!prepared) return false;
 
     // Final check: any Harbinger avatar present
     return hasAnyHarbinger(avatars);
-  }, [
-    bothPlayersReady,
-    portalSetupComplete,
-    portalState,
-    avatars,
-    harbingerSeats,
-  ]);
+  }, [prepared, portalSetupComplete, portalState, avatars, harbingerSeats]);
 
-  // Initialize portal state when BOTH players ready and Harbinger is detected
+  // Initialize portal state after deck selection when Harbinger is detected
+  // Portal phase happens BEFORE D20 roll, right after avatars are placed
   // Also handle case where portal state already exists from server (reload/resync)
   useEffect(() => {
-    // Skip if match status is not in_progress yet (still waiting for both players)
-    // This prevents stale portal state from previous matches from being used
-    if (match?.status !== "in_progress" && match?.status !== "ended") {
-      return;
-    }
+    // Skip if deck not prepared yet
+    if (!prepared) return;
 
     // If portal state already exists from server (e.g., after reload) AND is fully complete,
     // mark as initialized and complete. Otherwise, let the normal flow handle it.
@@ -948,7 +940,6 @@ export default function OnlineMatchPage() {
       // so the normal flow below can run initPortalState() or show the portal UI
     }
 
-    if (!bothPlayersReady) return;
     if (portalPhaseInitialized) return;
 
     // Wait until both avatars have their card data populated before checking for Harbinger.
@@ -973,14 +964,7 @@ export default function OnlineMatchPage() {
       // No Harbinger, mark portal phase as complete and proceed
       setPortalSetupComplete(true);
     }
-  }, [
-    match?.status,
-    bothPlayersReady,
-    portalPhaseInitialized,
-    portalState,
-    avatars,
-    initPortalState,
-  ]);
+  }, [prepared, portalPhaseInitialized, portalState, avatars, initPortalState]);
 
   // Watch for portal setup completion - only mark complete if portals are actually assigned
   useEffect(() => {
@@ -1024,12 +1008,11 @@ export default function OnlineMatchPage() {
     match?.draftConfig?.enableSeer,
   ]);
 
-  // After portal phase completes, call finishSetup to finalize game start
+  // After both players finish mulligan, call finishSetup to finalize game start
+  // Portal phase is already complete (happens before D20 roll)
   // Note: Seer phase is now handled within OnlineMulliganScreen (before mulliganReady is set)
-  // IMPORTANT: Only proceed if no Harbinger OR if portals are fully assigned
   useEffect(() => {
     if (!bothPlayersReady) return;
-    if (!portalSetupComplete) return;
 
     // If Harbinger is present, verify portals are actually assigned
     if (harbingerSeats.length > 0) {
@@ -1044,7 +1027,7 @@ export default function OnlineMatchPage() {
 
     finishSetup();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bothPlayersReady, portalSetupComplete, harbingerSeats, portalState]); // finishSetup intentionally excluded - not memoized
+  }, [bothPlayersReady, harbingerSeats, portalState]); // finishSetup intentionally excluded - not memoized
 
   // Track sealed submission flag for this match (used to decide when to load decks)
   const hasSubmittedSealedDeck = useMemo(() => {
@@ -2067,13 +2050,8 @@ export default function OnlineMatchPage() {
     } else if (shouldShowDraft) {
       desired = false;
     } else if (gameActuallyStarted) {
-      // Keep overlay open during Harbinger portal phase (between mulligan and game start)
-      // Note: Seer phase is now handled within OnlineMulliganScreen
-      if (needsPortalPhase && !portalSetupComplete) {
-        desired = true;
-      } else {
-        desired = false;
-      }
+      // Portal phase is complete before D20/mulligan, so no portal check needed here
+      desired = false;
       // Only mark as prepared if we've actually loaded a deck for this match
       // Otherwise we'll skip the deck loading step on constructed matches
       if (!prepared && deckLoadedForMatchRef.current === matchId) {
@@ -2123,8 +2101,6 @@ export default function OnlineMatchPage() {
     setD20RollingComplete,
     storeSetupWinner,
     storeD20Rolls,
-    needsPortalPhase,
-    portalSetupComplete,
   ]);
 
   useEffect(() => {
@@ -3123,6 +3099,13 @@ export default function OnlineMatchPage() {
                 />
               </div>
             )
+          ) : needsPortalPhase && !portalSetupComplete ? (
+            /* Harbinger portal phase - after deck selection, before D20 roll */
+            <HarbingerPortalScreen
+              myPlayerKey={myPlayerKey}
+              playerNames={playerNames}
+              onSetupComplete={() => setPortalSetupComplete(true)}
+            />
           ) : serverPhase === "Setup" ? (
             <OnlineD20Screen
               myPlayerKey={myPlayerKey}
@@ -3147,12 +3130,6 @@ export default function OnlineMatchPage() {
               </div>
               <div className="animate-pulse text-green-400">Ready!</div>
             </div>
-          ) : needsPortalPhase && !portalSetupComplete ? (
-            <HarbingerPortalScreen
-              myPlayerKey={myPlayerKey}
-              playerNames={playerNames}
-              onSetupComplete={() => setPortalSetupComplete(true)}
-            />
           ) : (
             <div className="text-center text-white">
               <div className="animate-pulse">Starting game...</div>
