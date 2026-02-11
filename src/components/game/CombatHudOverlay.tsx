@@ -12,6 +12,7 @@ import {
   getCellNumber,
   seatFromOwner,
 } from "@/lib/game/store/utils/boardHelpers";
+import { useSmallScreen } from "@/lib/hooks/useTouchDevice";
 
 export default function CombatHudOverlay() {
   const actorKey = useGameStore((s) => s.actorKey);
@@ -305,8 +306,10 @@ export default function CombatHudOverlay() {
     const committed = pc.status === "committed";
 
     return (
-      <div className="fixed inset-x-0 bottom-24 z-[100] pointer-events-none flex justify-center">
-        <div className="pointer-events-auto px-5 py-3 rounded-full bg-black/90 text-white ring-1 ring-white/20 shadow-lg text-base md:text-lg flex items-center gap-3">
+      <div
+        className={`fixed inset-x-0 ${isMobileScreen ? "bottom-16" : "bottom-24"} z-[100] pointer-events-none flex justify-center`}
+      >
+        <div className={barMd}>
           {!committed ? (
             <span className="text-xs opacity-75 mr-1">
               Waiting for defense commit…
@@ -995,6 +998,20 @@ export default function CombatHudOverlay() {
     return () => window.clearTimeout(id);
   }, [lastCombatSummary, setLastCombatSummary]);
 
+  const isMobileScreen = useSmallScreen();
+
+  // Shared mobile-responsive bar classes
+  const barBase = isMobileScreen
+    ? "pointer-events-auto px-3 py-2 rounded-2xl bg-black/90 text-white ring-1 ring-white/20 shadow-lg text-xs flex flex-wrap items-center gap-1.5 max-w-[95vw]"
+    : "pointer-events-auto px-5 py-3 rounded-full bg-black/90 text-white ring-1 ring-white/20 shadow-lg";
+  const barLg = isMobileScreen
+    ? barBase
+    : barBase + " text-lg md:text-xl flex items-center gap-2";
+  const barMd = isMobileScreen
+    ? barBase
+    : barBase + " text-base md:text-lg flex items-center gap-3";
+  const btnSm = isMobileScreen ? "text-[10px] px-2 py-0.5" : "px-3 py-1";
+
   if (!combatGuidesActive) return null;
 
   return (
@@ -1002,7 +1019,7 @@ export default function CombatHudOverlay() {
       {/* Top bar */}
       <div className="fixed inset-x-0 top-6 z-[100] pointer-events-none flex justify-center">
         {attackChoice && actorIsActive ? (
-          <div className="pointer-events-auto px-5 py-3 rounded-full bg-black/90 text-white ring-1 ring-white/20 shadow-lg text-lg md:text-xl flex items-center gap-2">
+          <div className={barLg}>
             <span className="opacity-80">
               {tileNum ? `[T${tileNum}] ` : ""}
               <span
@@ -1028,7 +1045,7 @@ export default function CombatHudOverlay() {
               </span>
             </span>
             <button
-              className="mx-1 rounded bg-white/15 hover:bg-white/25 px-3 py-1"
+              className={`mx-1 rounded bg-white/15 hover:bg-white/25 ${btnSm}`}
               onClick={() => {
                 try {
                   // Tap the moved minion now that user has chosen to just move
@@ -1048,7 +1065,7 @@ export default function CombatHudOverlay() {
               Moves Only
             </button>
             <button
-              className="mx-1 rounded bg-emerald-600/90 hover:bg-emerald-500 px-3 py-1"
+              className={`mx-1 rounded bg-emerald-600/90 hover:bg-emerald-500 ${btnSm}`}
               onClick={() => {
                 // Tap the moved minion now that user has chosen to attack
                 if (!attackChoice.attacker.isAvatar) {
@@ -1069,7 +1086,7 @@ export default function CombatHudOverlay() {
               Moves &amp; Attacks
             </button>
             <button
-              className="mx-1 rounded bg-white/15 hover:bg-white/25 px-3 py-1"
+              className={`mx-1 rounded bg-white/15 hover:bg-white/25 ${btnSm}`}
               onClick={() => {
                 setAttackChoice(null);
                 requestRevertCrossMove(); // Revert the movement
@@ -1079,13 +1096,13 @@ export default function CombatHudOverlay() {
             </button>
           </div>
         ) : attackTargetChoice && !attackConfirm ? (
-          <div className="pointer-events-auto px-5 py-3 rounded-full bg-black/90 text-white ring-1 ring-white/20 shadow-lg text-lg md:text-xl flex items-center gap-2">
+          <div className={barLg}>
             <span className="opacity-80">
               Select a target at{" "}
               <span className="font-fantaisie">T{tileNum}</span>
             </span>
             <button
-              className="mx-2 rounded bg-white/15 hover:bg-white/25 px-3 py-1"
+              className={`mx-2 rounded bg-white/15 hover:bg-white/25 ${btnSm}`}
               onClick={() => {
                 setAttackTargetChoice(null);
               }}
@@ -1094,7 +1111,7 @@ export default function CombatHudOverlay() {
             </button>
           </div>
         ) : attackConfirm ? (
-          <div className="pointer-events-auto px-5 py-3 rounded-full bg-black/90 text-white ring-1 ring-white/20 shadow-lg text-lg md:text-xl flex items-center gap-2">
+          <div className={barLg}>
             <span className="opacity-80">
               {tileNum ? `[T${tileNum}] ` : ""}
               <span
@@ -1125,7 +1142,7 @@ export default function CombatHudOverlay() {
             </span>
             <SuggestionConfirm />
             <button
-              className="mx-2 rounded bg-emerald-600/90 hover:bg-emerald-500 px-3 py-1"
+              className={`mx-2 rounded bg-emerald-600/90 hover:bg-emerald-500 ${btnSm}`}
               onClick={() => {
                 try {
                   declareAttack(
@@ -1142,7 +1159,7 @@ export default function CombatHudOverlay() {
               Confirm
             </button>
             <button
-              className="rounded bg-white/15 hover:bg-white/25 px-3 py-1"
+              className={`rounded bg-white/15 hover:bg-white/25 ${btnSm}`}
               onClick={() => setAttackConfirm(null)}
             >
               Back
@@ -1153,7 +1170,7 @@ export default function CombatHudOverlay() {
             ? pendingCombat.defenderSeat === actorKey
             : pendingCombat.status !== "committed") ? (
           pendingCombat.status !== "committed" ? (
-            <div className="pointer-events-auto px-5 py-3 rounded-full bg-black/90 text-white ring-1 ring-white/20 shadow-lg text-lg md:text-xl flex items-center gap-2">
+            <div className={barLg}>
               <span className="opacity-80">
                 {pendingCombat.target == null ? (
                   <>
@@ -1201,7 +1218,7 @@ export default function CombatHudOverlay() {
               </span>
               <SuggestionDefense />
               <button
-                className="rounded bg-emerald-600/90 hover:bg-emerald-500 px-3 py-1"
+                className={`rounded bg-emerald-600/90 hover:bg-emerald-500 ${btnSm}`}
                 onClick={() => {
                   commitDefenders();
                 }}
@@ -1214,7 +1231,7 @@ export default function CombatHudOverlay() {
               const isIntercept = !pendingCombat.target;
               if (isIntercept) {
                 return (
-                  <div className="pointer-events-auto px-5 py-3 rounded-full bg-black/90 text-white ring-1 ring-white/20 shadow-lg text-base md:text-lg flex items-center gap-3">
+                  <div className={barMd}>
                     <div>Defenders committed.</div>
                     {combatHasArtifacts ? (
                       <>
@@ -1247,7 +1264,7 @@ export default function CombatHudOverlay() {
                 );
               }
               return (
-                <div className="pointer-events-auto px-5 py-3 rounded-full bg-black/90 text-white ring-1 ring-white/20 shadow-lg text-base md:text-lg">
+                <div className={barMd}>
                   Defenders committed. Waiting for attacker…
                 </div>
               );
@@ -1255,7 +1272,7 @@ export default function CombatHudOverlay() {
           )
         ) : pendingCombat &&
           (actorKey ? pendingCombat.defenderSeat !== actorKey : true) ? (
-          <div className="pointer-events-auto px-5 py-3 rounded-full bg-black/90 text-white ring-1 ring-white/20 shadow-lg text-base md:text-lg flex items-center gap-3">
+          <div className={barMd}>
             <div>
               Defenders:{" "}
               {pendingCombat.defenders?.length ? defenderNames() : "—"}
@@ -1360,8 +1377,10 @@ export default function CombatHudOverlay() {
             const ac = actor ? PLAYER_COLORS[actor] : "#aaaaaa";
             const tc = targetSeat ? PLAYER_COLORS[targetSeat] : "#aaaaaa";
             return (
-              <div className="fixed inset-x-0 top-28 z-[100] pointer-events-none flex justify-center">
-                <div className="pointer-events-auto px-5 py-3 rounded-full bg-black/90 text-white ring-1 ring-white/20 shadow-lg text-base md:text-lg flex items-center gap-3">
+              <div
+                className={`fixed inset-x-0 ${isMobileScreen ? "top-16" : "top-28"} z-[100] pointer-events-none flex justify-center`}
+              >
+                <div className={barMd}>
                   <div className="min-w-0">
                     {actor || targetSeat ? (
                       <div className="text-xs opacity-90 mb-1">

@@ -88,6 +88,15 @@ export default function Hand3D({
   const handVisibilityMode = useGameStore((s) => s.handVisibilityMode);
   const setHandVisibilityMode = useGameStore((s) => s.setHandVisibilityMode);
   const castPlacementMode = useGameStore((s) => s.castPlacementMode);
+  // Overlay/dialog states – on mobile we collapse the hand when any of these are active
+  const contextMenu = useGameStore((s) => s.contextMenu);
+  const searchDialog = useGameStore((s) => s.searchDialog);
+  const peekDialog = useGameStore((s) => s.peekDialog);
+  const placementDialog = useGameStore((s) => s.placementDialog);
+  const switchSiteSource = useGameStore((s) => s.switchSiteSource);
+  const attackTargetChoice = useGameStore((s) => s.attackTargetChoice);
+  const attackChoice = useGameStore((s) => s.attackChoice);
+  const attackConfirm = useGameStore((s) => s.attackConfirm);
   const { playCardSelect } = useSound();
 
   const hand = useMemo(() => zones?.[owner]?.hand ?? [], [zones, owner]);
@@ -511,6 +520,20 @@ export default function Hand3D({
     let targetShown: number;
     if (!showCardBacks && castPlacementMode) {
       // Hide hand during cast placement (user is clicking a tile)
+      targetShown = 0;
+    } else if (
+      !showCardBacks &&
+      isCoarsePointer &&
+      (contextMenu ||
+        searchDialog ||
+        peekDialog ||
+        placementDialog ||
+        switchSiteSource ||
+        attackTargetChoice ||
+        attackChoice ||
+        attackConfirm)
+    ) {
+      // On mobile, collapse hand when any overlay or board-selection prompt is active
       targetShown = 0;
     } else if (!showCardBacks && handVisibilityMode === "hidden") {
       targetShown = 0;

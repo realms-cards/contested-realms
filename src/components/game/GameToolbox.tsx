@@ -1180,7 +1180,11 @@ export default function GameToolbox({
         </button>
       ) : (
         <div
-          className={`bg-black/60 backdrop-blur rounded-xl ring-1 ring-white/10 shadow-lg ${containerWidthClass} max-h-[85vh] overflow-y-auto transition-all`}
+          className={`bg-black/60 backdrop-blur ring-1 ring-white/10 shadow-lg ${containerWidthClass} overflow-y-auto transition-all ${
+            typeof window !== "undefined" && window.innerWidth < 768
+              ? "fixed inset-x-0 bottom-0 z-50 rounded-t-2xl max-h-[70vh] pb-6"
+              : "rounded-xl max-h-[85vh]"
+          }`}
         >
           <div
             className={`flex items-center justify-between ${headerPaddingClass} border-b border-white/10`}

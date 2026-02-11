@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useLayoutEffect, useRef, useState, useEffect } from "react";
 import { useSound } from "@/lib/contexts/SoundContext";
 import {
@@ -57,6 +58,7 @@ import {
   isMinionToken,
 } from "@/lib/game/tokens";
 import type { ContextMenuAction } from "@/lib/game/types";
+import { useSmallScreen } from "@/lib/hooks/useTouchDevice";
 
 interface ContextMenuProps {
   onClose: () => void;
@@ -167,6 +169,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   const [menuPos, setMenuPos] = useState<{ left: number; top: number } | null>(
     null,
   );
+  const isMobileScreen = useSmallScreen();
   const [positionActions, setPositionActions] = useState<ContextMenuAction[]>(
     [],
   );
@@ -1614,6 +1617,24 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     header = t.card.name || "Hand Card";
   }
 
+  // Resolve card slug for mobile inline preview
+  let previewSlug: string | null = null;
+  let previewIsSite = false;
+  if (t.kind === "site") {
+    const sKey = toCellKey(t.x, t.y);
+    const siteCard = board.sites[sKey]?.card;
+    previewSlug = siteCard?.slug ?? null;
+    previewIsSite = true;
+  } else if (t.kind === "permanent") {
+    const pCard = (permanents[t.at] || [])[t.index]?.card;
+    previewSlug = pCard?.slug ?? null;
+    previewIsSite = (pCard?.type || "").toLowerCase().includes("site");
+  } else if (t.kind === "avatar") {
+    previewSlug = avatars[t.who]?.card?.slug ?? null;
+  } else if (t.kind === "handCard") {
+    previewSlug = t.card.slug ?? null;
+  }
+
   const label = tapped ? "Untap" : "Tap";
 
   // Handle attachment target selection
@@ -1695,7 +1716,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         </div>
       )}
       <div
-        className="absolute inset-0 z-30"
+        className={`${isMobileScreen ? "fixed inset-0 z-30 bg-black/40" : "absolute inset-0 z-30"}`}
         onClick={onClose}
         onContextMenu={(e) => {
           e.preventDefault();
@@ -1705,17 +1726,56 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
       >
         <div
           ref={menuRef}
-          className="absolute bg-zinc-900/90 backdrop-blur rounded-xl ring-1 ring-white/10 shadow-lg p-3 w-56 text-white pointer-events-auto"
-          style={{
-            left: (menuPos?.left ?? contextMenu?.screen?.x ?? 16) + "px",
-            top: (menuPos?.top ?? contextMenu?.screen?.y ?? 16) + "px",
-          }}
+          className={
+            isMobileScreen
+              ? "fixed bottom-0 left-0 right-0 z-40 bg-zinc-900/95 backdrop-blur rounded-t-2xl ring-1 ring-white/10 shadow-lg p-4 pb-8 text-white pointer-events-auto max-h-[60vh] overflow-y-auto"
+              : "absolute bg-zinc-900/90 backdrop-blur rounded-xl ring-1 ring-white/10 shadow-lg p-3 w-56 text-white pointer-events-auto"
+          }
+          style={
+            isMobileScreen
+              ? undefined
+              : {
+                  left: (menuPos?.left ?? contextMenu?.screen?.x ?? 16) + "px",
+                  top: (menuPos?.top ?? contextMenu?.screen?.y ?? 16) + "px",
+                }
+          }
           onClick={(e) => e.stopPropagation()}
         >
           <div>
-            <div className="text-sm font-semibold mb-2 truncate" title={header}>
-              {header}
-            </div>
+            {/* Mobile: inline card preview at top of bottom sheet */}
+            {isMobileScreen && previewSlug && (
+              <div className="flex items-start gap-3 mb-3">
+                <div
+                  className={`relative shrink-0 rounded-lg overflow-hidden bg-black/30 ring-1 ring-white/10 ${previewIsSite ? "w-20 aspect-[4/3]" : "w-14 aspect-[3/4]"}`}
+                >
+                  <Image
+                    src={`/api/images/${previewSlug}`}
+                    alt={header}
+                    fill
+                    className={`${previewIsSite ? "object-contain rotate-90 scale-[1.333] origin-center" : "object-contain"} object-center`}
+                    sizes="80px"
+                    unoptimized
+                  />
+                </div>
+                <div className="min-w-0 pt-1">
+                  <div
+                    className="text-sm font-semibold truncate"
+                    title={header}
+                  >
+                    {header}
+                  </div>
+                </div>
+              </div>
+            )}
+            {/* Desktop: text-only header */}
+            {!isMobileScreen && (
+              <div
+                className="text-sm font-semibold mb-2 truncate"
+                title={header}
+              >
+                {header}
+              </div>
+            )}
             <div className="space-y-2">
               {hasToggle && doToggle && (
                 <button

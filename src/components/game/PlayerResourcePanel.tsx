@@ -9,7 +9,7 @@ import {
   computeThresholdTotals,
   siteProvidesMana,
 } from "@/lib/game/store/utils/resourceHelpers";
-import { useTouchDevice } from "@/lib/hooks/useTouchDevice";
+import { useSmallScreen, useTouchDevice } from "@/lib/hooks/useTouchDevice";
 
 // Element config matching Threshold3D exactly
 // Use static paths from public/ folder for production compatibility
@@ -20,8 +20,9 @@ const ELEMENTS = [
   { key: "fire" as const, icon: "/fire.png", color: "#f87171" },
 ];
 
-// Icon size for threshold symbols
+// Icon size for threshold symbols (desktop)
 const ICON_SIZE = 14;
+const ICON_SIZE_COMPACT = 10;
 
 /**
  * Renders threshold symbols in arranged groups:
@@ -35,16 +36,19 @@ function ThresholdSymbols({
   count,
   icon,
   alt,
+  compact = false,
 }: {
   count: number;
   icon: string;
   alt: string;
+  compact?: boolean;
 }) {
   if (count === 0) return null;
 
   // For counts 1-4, use specific layouts. For 5+, use rows of 2.
+  const size = compact ? ICON_SIZE_COMPACT : ICON_SIZE;
   const Img = ({ src, alt: imgAlt }: { src: string; alt: string }) => (
-    <img src={src} alt={imgAlt} width={ICON_SIZE} height={ICON_SIZE} />
+    <img src={src} alt={imgAlt} width={size} height={size} />
   );
 
   if (count === 1) {
@@ -116,15 +120,43 @@ interface ThresholdRowProps {
   thresholds: { air: number; earth: number; fire: number; water: number };
 }
 
-function ThresholdRow({ thresholds }: ThresholdRowProps) {
+function ThresholdRow({
+  thresholds,
+  compact = false,
+}: ThresholdRowProps & { compact?: boolean }) {
   // Only show elements that have at least 1 threshold
   const activeElements = ELEMENTS.filter((el) => (thresholds[el.key] ?? 0) > 0);
 
-  // DEBUG: Show placeholder when no thresholds (remove after debugging)
   if (activeElements.length === 0) {
-    return (
+    return compact ? null : (
       <div className="text-xs text-gray-500" title={JSON.stringify(thresholds)}>
         (no thresh)
+      </div>
+    );
+  }
+
+  // Ultra-compact mobile: tiny element icon + count number in a row
+  if (compact) {
+    return (
+      <div className="flex items-center gap-0.5">
+        {activeElements.map((el) => {
+          const count = thresholds[el.key] ?? 0;
+          return (
+            <div
+              key={el.key}
+              className="flex items-center gap-px"
+              title={`${el.key}: ${count}`}
+            >
+              <img src={el.icon} alt={el.key} width={8} height={8} />
+              <span
+                className="text-[8px] font-bold leading-none"
+                style={{ color: el.color }}
+              >
+                {count}
+              </span>
+            </div>
+          );
+        })}
       </div>
     );
   }
@@ -139,7 +171,12 @@ function ThresholdRow({ thresholds }: ThresholdRowProps) {
             className="flex flex-col items-center"
             title={`${el.key}: ${count}`}
           >
-            <ThresholdSymbols count={count} icon={el.icon} alt={el.key} />
+            <ThresholdSymbols
+              count={count}
+              icon={el.icon}
+              alt={el.key}
+              compact={compact}
+            />
           </div>
         );
       })}
@@ -161,7 +198,8 @@ function ManaRow({
   canAdjust,
   onIncrement,
   onDecrement,
-}: ManaRowProps) {
+  compact = false,
+}: ManaRowProps & { compact?: boolean }) {
   const isTouchDevice = useTouchDevice();
   const manaColor =
     mana === 0 ? "#ef4444" : mana < baseMana ? "#fbbf24" : "#ffffff";
@@ -174,7 +212,7 @@ function ManaRow({
         title={`${mana} available / ${baseMana} total mana`}
       >
         <span
-          className="text-sm font-bold tabular-nums font-fantaisie"
+          className={`${compact ? "text-[9px] leading-none" : "text-sm"} font-bold tabular-nums font-fantaisie`}
           style={{ color: manaColor }}
         >
           {mana}/{baseMana}
@@ -190,7 +228,7 @@ function ManaRow({
           <button
             type="button"
             onClick={onDecrement}
-            className="w-4 h-4 flex items-center justify-center rounded-full bg-rose-600/80 hover:bg-rose-500 text-white text-[10px] font-bold transition-colors"
+            className={`${compact ? "w-3 h-3 text-[7px]" : "w-4 h-4 text-[10px]"} flex items-center justify-center rounded-full bg-rose-600/80 hover:bg-rose-500 text-white font-bold transition-colors`}
             title="Decrease mana"
           >
             −
@@ -198,7 +236,7 @@ function ManaRow({
           <button
             type="button"
             onClick={onIncrement}
-            className="w-4 h-4 flex items-center justify-center rounded-full bg-emerald-600/80 hover:bg-emerald-500 text-white text-[10px] font-bold transition-colors"
+            className={`${compact ? "w-3 h-3 text-[7px]" : "w-4 h-4 text-[10px]"} flex items-center justify-center rounded-full bg-emerald-600/80 hover:bg-emerald-500 text-white font-bold transition-colors`}
             title="Increase mana"
           >
             +
@@ -324,13 +362,19 @@ export function PlayerResourceColumn({
     !dragFromHand &&
     isMe;
 
+  const isMobileScreen = useSmallScreen();
+
   return (
     <div
-      className="flex flex-col items-center gap-1 p-1.5 rounded-lg bg-black/40"
-      style={{ border: `1px solid ${PLAYER_COLORS[player]}` }}
+      className={`flex flex-col items-center ${isMobileScreen ? "gap-0 px-1 py-0.5 rounded bg-black/30" : "gap-1 p-1.5 rounded-lg bg-black/40"}`}
+      style={
+        isMobileScreen
+          ? { borderLeft: `2px solid ${PLAYER_COLORS[player]}` }
+          : { border: `1px solid ${PLAYER_COLORS[player]}` }
+      }
     >
-      {/* Thresholds (vertical) */}
-      <ThresholdRow thresholds={thresholds} />
+      {/* Thresholds */}
+      <ThresholdRow thresholds={thresholds} compact={isMobileScreen} />
       {/* Mana */}
       <ManaRow
         mana={mana}
@@ -338,6 +382,7 @@ export function PlayerResourceColumn({
         canAdjust={canAdjust}
         onIncrement={() => addMana(player, 1)}
         onDecrement={() => addMana(player, -1)}
+        compact={isMobileScreen}
       />
     </div>
   );
@@ -366,6 +411,8 @@ export default function PlayerResourcePanels({
   void playerNames;
   void showYouLabels;
 
+  const isMobileScreen = useSmallScreen();
+
   // Determine which player is "me" and which is opponent
   // Default to p1 as "me" if myPlayerKey is null (hotseat/spectator)
   const meKey = myPlayerKey ?? "p1";
@@ -373,7 +420,7 @@ export default function PlayerResourcePanels({
 
   return (
     <div
-      className={`absolute right-3 top-1/2 -translate-y-1/2 z-10 flex flex-col gap-6 ${
+      className={`absolute ${isMobileScreen ? "right-0.5" : "right-3"} top-1/2 -translate-y-1/2 z-10 flex flex-col ${isMobileScreen ? "gap-1" : "gap-6"} ${
         dragFromHand ? "pointer-events-none" : "pointer-events-auto"
       } text-white select-none`}
     >
