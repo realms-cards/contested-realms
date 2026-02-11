@@ -168,18 +168,21 @@ export const createPathfinderSlice: StateCreator<
 
     const validTargets: CellKey[] = [];
 
-    // Always allow the avatar's current position (important for playing the first site)
+    // Check if there's a site under the avatar
     const currentSite = board.sites[avatarCellKey];
-    if (!currentSite || isRubble(currentSite.card?.name)) {
-      validTargets.push(avatarCellKey);
-    }
+    const hasNoSiteUnderAvatar =
+      !currentSite || isRubble(currentSite.card?.name);
 
-    // Add adjacent cells
-    for (const cellKey of adjacentCells) {
-      const site = board.sites[cellKey];
-      // Valid if void (no site) or Rubble
-      if (!site || isRubble(site.card?.name)) {
-        validTargets.push(cellKey);
+    if (hasNoSiteUnderAvatar) {
+      // First turn: must play a site under the avatar before moving to adjacent tiles
+      validTargets.push(avatarCellKey);
+    } else {
+      // Subsequent turns: can play to adjacent void or Rubble tiles
+      for (const cellKey of adjacentCells) {
+        const site = board.sites[cellKey];
+        if (!site || isRubble(site.card?.name)) {
+          validTargets.push(cellKey);
+        }
       }
     }
 

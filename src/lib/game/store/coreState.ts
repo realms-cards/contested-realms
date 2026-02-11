@@ -1,5 +1,6 @@
 import type { StateCreator } from "zustand";
 import { soundManager } from "@/lib/audio/soundManager";
+import { clearOmphalosDrawnCycle } from "./omphalosState";
 import type {
   CellKey,
   GameState,
@@ -599,6 +600,7 @@ export const createCoreSlice: StateCreator<
     // Trigger Omphalos end-of-turn draws for the ending player
     const endingPlayerSeat = (cur === 1 ? "p1" : "p2") as PlayerKey;
     try {
+      clearOmphalosDrawnCycle();
       get().triggerOmphalosEndOfTurn(endingPlayerSeat);
     } catch {}
 

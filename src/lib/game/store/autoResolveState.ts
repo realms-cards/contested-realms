@@ -1,5 +1,6 @@
 import type { StateCreator } from "zustand";
 import type { CustomMessage } from "@/lib/net/transport";
+import { markOmphalosDrawnThisCycle } from "./omphalosState";
 import type {
   CardRef,
   CellKey,
@@ -99,6 +100,12 @@ export const createAutoResolveSlice: StateCreator<
         // Execute Omphalos draw effect
         const omphalosId = callbackData.omphalosId as string;
         get()._executeOmphalosDrawEffect(omphalosId, ownerSeat);
+        // Mark this Omphalos as drawn so re-trigger skips it
+        markOmphalosDrawnThisCycle(omphalosId);
+        // Chain: re-trigger for remaining Omphalos after a short delay
+        setTimeout(() => {
+          get().triggerOmphalosEndOfTurn(ownerSeat);
+        }, 100);
         break;
       }
       case "morgana_genesis": {

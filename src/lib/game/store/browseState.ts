@@ -1,7 +1,6 @@
 import type { StateCreator } from "zustand";
 import type { CustomMessage } from "@/lib/net/transport";
 import type { GameState, PlayerKey, ServerPatchT, Zones } from "./types";
-import { getHaystackLimit } from "./utils/boardHelpers";
 
 function newBrowseId() {
   return `browse_${Date.now().toString(36)}_${Math.random()
@@ -32,11 +31,8 @@ export const createBrowseSlice: StateCreator<GameState, [], [], BrowseSlice> = (
     const spellbook = zones[casterSeat]?.spellbook || [];
 
     // Take up to 7 cards from the top of spellbook
-    // Haystack limits opponent's searches to top 3
-    const board = get().board;
-    const haystackLimit = getHaystackLimit(casterSeat, board.sites || {});
-    const searchLimit = haystackLimit ?? 7;
-    const revealedCards = spellbook.slice(0, searchLimit);
+    // Note: Browse is NOT a search (it says "Look at"), so Haystack does not apply
+    const revealedCards = spellbook.slice(0, 7);
 
     if (revealedCards.length === 0) {
       get().log(

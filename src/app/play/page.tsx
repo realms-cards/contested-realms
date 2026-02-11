@@ -221,7 +221,7 @@ export default function PlayPage() {
   const [p2Ready, setP2Ready] = useState<boolean>(false);
 
   // Harbinger portal phase state (Gothic expansion)
-  // Portal phase happens AFTER mulligan, before game starts
+  // Portal phase happens AFTER deck selection, before mulligan
   const [mulliganComplete, setMulliganComplete] = useState<boolean>(false);
   // Seer state from game store (synced)
   const seerState = useGameStore((s) => s.seerState);
@@ -425,9 +425,10 @@ export default function PlayPage() {
     };
   }, [transport]);
 
-  // After mulligan complete, check for Harbinger avatars and initialize portal state
+  // After deck selection, check for Harbinger avatars and initialize portal state
+  // Portal phase happens BEFORE mulligan, right after avatars are placed
   useEffect(() => {
-    if (!mulliganComplete || portalPhaseInitialized) return;
+    if (!prepared || portalPhaseInitialized) return;
     setPortalPhaseInitialized(true);
 
     // Check if any player has a Harbinger avatar
@@ -441,7 +442,7 @@ export default function PlayPage() {
     }
     // No Harbingers, skip portal phase
     setPortalSetupComplete(true);
-  }, [mulliganComplete, portalPhaseInitialized, avatars, initPortalState]);
+  }, [prepared, portalPhaseInitialized, avatars, initPortalState]);
 
   // Mark portal phase complete when portalState indicates completion
   useEffect(() => {
@@ -574,12 +575,13 @@ export default function PlayPage() {
     }
   }, [prepared, p1Ready, p2Ready, mulliganComplete]);
 
-  // Start game after portal phase is complete (or immediately if no Harbinger)
+  // Start game after mulligan and seer are complete
+  // Portal phase is already done (happens before mulligan)
   useEffect(() => {
-    if (mulliganComplete && portalSetupComplete) {
+    if (mulliganComplete && seerComplete) {
       startGame();
     }
-  }, [mulliganComplete, portalSetupComplete, startGame]);
+  }, [mulliganComplete, seerComplete, startGame]);
 
   // Auto-save game state to localStorage when game is in progress
   // Subscribe to store changes and debounce saves
@@ -962,6 +964,13 @@ export default function PlayPage() {
                 setPrepared(true);
               }}
             />
+          ) : needsPortalPhase && !portalSetupComplete ? (
+            /* Harbinger portal phase - after deck selection, before mulligan */
+            <HarbingerPortalScreen
+              myPlayerKey={portalState?.currentRoller ?? "p1"}
+              playerNames={{ p1: "Player 1", p2: "Player 2" }}
+              onSetupComplete={() => setPortalSetupComplete(true)}
+            />
           ) : !mulliganComplete ? (
             /* Mulligan phase - sequential: P1 first, then P2 */
             !p1Ready ? (
@@ -991,15 +1000,8 @@ export default function PlayPage() {
                 // The SeerScreen handles the state update via completeSeer()
               }}
             />
-          ) : needsPortalPhase && !portalSetupComplete ? (
-            /* Harbinger portal phase - after mulligan, before game starts */
-            <HarbingerPortalScreen
-              myPlayerKey={portalState?.currentRoller ?? "p1"}
-              playerNames={{ p1: "Player 1", p2: "Player 2" }}
-              onSetupComplete={() => setPortalSetupComplete(true)}
-            />
           ) : (
-            /* Waiting for portal phase to complete */
+            /* Waiting for game to start */
             <div className="text-center text-white">
               <div className="animate-pulse">Starting game...</div>
             </div>
@@ -1159,7 +1161,7 @@ export default function PlayPage() {
       {/* End Turn Confirmation Dialog - always visible (for untapped avatar warning) */}
       <EndTurnConfirmDialog />
       {/* Turn Start Overlay - announces turn number and draw reminder */}
-      <TurnStartOverlay gameStarted={mulliganComplete && portalSetupComplete} />
+      <TurnStartOverlay gameStarted={mulliganComplete && seerComplete} />
       {/* Audio Controls - hidden visually when uiHidden but stays mounted to keep music playing */}
       {uiHidden && (
         <div className="sr-only">
