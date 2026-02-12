@@ -47,6 +47,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
+  width: "device-width",
   viewportFit: "cover",
   themeColor: "#111111",
   // Prevent browser zoom from pinch gestures on mobile/touch devices
