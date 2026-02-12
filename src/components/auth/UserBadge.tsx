@@ -82,6 +82,7 @@ export default function UserBadge({
     toggleEnhanced3DCards,
     toggleShowTable,
     setCardPreviewScale,
+    setHandCardScale,
     setUiTextScale,
     toggleHandSortOrder,
     toggleGamepadLifeControls,
@@ -1066,8 +1067,8 @@ export default function UserBadge({
                 </button>
               </div>
 
-              {/* Scale sliders - Card Preview and Text Size */}
-              <div className="mt-3 px-1 grid grid-cols-2 gap-3">
+              {/* Scale sliders - Card Preview, Hand Cards, and Text Size */}
+              <div className="mt-3 px-1 grid grid-cols-3 gap-3">
                 {/* Card Preview Size */}
                 <div>
                   <div className="flex items-center justify-between mb-1">
@@ -1086,6 +1087,28 @@ export default function UserBadge({
                     value={graphicsSettings.cardPreviewScale * 100}
                     onChange={(e) =>
                       setCardPreviewScale(Number(e.target.value) / 100)
+                    }
+                    className="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                  />
+                </div>
+                {/* Hand Card Size */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[11px] text-slate-200 font-medium">
+                      Hand Cards
+                    </span>
+                    <span className="text-[10px] text-slate-400">
+                      {Math.round((graphicsSettings.handCardScale ?? 1) * 100)}%
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="50"
+                    max="200"
+                    step="10"
+                    value={(graphicsSettings.handCardScale ?? 1) * 100}
+                    onChange={(e) =>
+                      setHandCardScale(Number(e.target.value) / 100)
                     }
                     className="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-purple-500"
                   />

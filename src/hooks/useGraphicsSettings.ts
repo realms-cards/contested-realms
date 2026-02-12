@@ -13,6 +13,8 @@ export interface GraphicsSettings {
   showTable: boolean;
   /** Scale multiplier for card preview size (0.5 - 2.5, default 1.0, mobile default 2.5) */
   cardPreviewScale: number;
+  /** Scale multiplier for hand card size (0.5 - 2.0, default 1.0) */
+  handCardScale: number;
   /** Scale multiplier for console/toolbox text size (0.5 - 1.5, default 1.0) */
   uiTextScale: number;
   /** Hand card sort order: sites first (default) or spells first */
@@ -30,6 +32,7 @@ const DEFAULT_SETTINGS: GraphicsSettings = {
   lightingIntensity: 1.0,
   showTable: true,
   cardPreviewScale: 1.0,
+  handCardScale: 1.0,
   uiTextScale: 1.0,
   handSortOrder: "sitesFirst",
   gamepadLifeControls: false,
@@ -137,6 +140,15 @@ export function useGraphicsSettings() {
     [setSettings],
   );
 
+  const setHandCardScale = useCallback(
+    (scale: number) => {
+      setSettings({
+        handCardScale: Math.max(0.5, Math.min(2.0, scale)),
+      });
+    },
+    [setSettings],
+  );
+
   const setUiTextScale = useCallback(
     (scale: number) => {
       setSettings({
@@ -169,6 +181,7 @@ export function useGraphicsSettings() {
     setLightingIntensity,
     toggleShowTable,
     setCardPreviewScale,
+    setHandCardScale,
     setUiTextScale,
     toggleHandSortOrder,
     toggleGamepadLifeControls,
