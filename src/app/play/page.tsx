@@ -104,6 +104,7 @@ import {
 import { Physics } from "@/lib/game/physics";
 import { useGameStore } from "@/lib/game/store";
 import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
+import { useSmallScreen } from "@/lib/hooks/useTouchDevice";
 import { useZoomKeyboardShortcuts } from "@/lib/hooks/useZoomKeyboardShortcuts";
 import { LocalTransport } from "@/lib/net/localTransport";
 
@@ -145,6 +146,7 @@ export default function PlayPage() {
     (s) => s.pendingChaosTwister?.phase ?? null,
   );
   const currentPlayerKey = currentPlayer === 1 ? "p1" : "p2";
+  const isMobile = useSmallScreen();
 
   // Restore camera mode and playmat settings from API (authenticated users) or localStorage after hydration
   const settingsRestoredRef = useRef(false);
@@ -895,10 +897,14 @@ export default function PlayPage() {
     <div className="relative h-screen [height:100dvh] w-full select-none">
       {/* Camera mode toggle (hidden when uiHidden) */}
       {!uiHidden && (
-        <div className="absolute top-2 left-2 z-30">
-          <div className="bg-black/50 rounded-lg p-1 ring-1 ring-white/10">
+        <div
+          className={`absolute ${isMobile ? "top-0.5 left-0.5" : "top-2 left-2"} z-30`}
+        >
+          <div
+            className={`bg-black/50 rounded-lg ${isMobile ? "p-0.5" : "p-1"} ring-1 ring-white/10 flex items-center`}
+          >
             <button
-              className={`px-2 py-1 text-xs rounded ${
+              className={`${isMobile ? "px-1 py-0.5 text-[10px]" : "px-2 py-1 text-xs"} rounded ${
                 cameraMode === "topdown"
                   ? "bg-white/20"
                   : "bg-transparent hover:bg-white/10"
@@ -912,7 +918,7 @@ export default function PlayPage() {
               2D
             </button>
             <button
-              className={`ml-1 px-2 py-1 text-xs rounded ${
+              className={`${isMobile ? "ml-0.5 px-1 py-0.5 text-[10px]" : "ml-1 px-2 py-1 text-xs"} rounded ${
                 cameraMode === "orbit"
                   ? "bg-white/20"
                   : "bg-transparent hover:bg-white/10"
@@ -1198,15 +1204,17 @@ export default function PlayPage() {
       {/* Event Console - hidden when uiHidden */}
       {!uiHidden && (
         <div
-          className={`absolute left-3 bottom-2 z-10 ${
+          className={`absolute ${isMobile ? "left-1 bottom-1" : "left-3 bottom-2"} z-10 ${
             dragFromHand ? "pointer-events-none" : "pointer-events-auto"
-          } text-white w-80`}
+          } text-white ${isMobile ? "w-48" : "w-80"}`}
         >
           <div className="bg-black/60 backdrop-blur rounded-xl ring-1 ring-white/10 shadow">
-            <div className="flex items-center justify-between px-3 py-2 text-sm">
+            <div
+              className={`flex items-center justify-between ${isMobile ? "px-2 py-1 text-[10px]" : "px-3 py-2 text-sm"}`}
+            >
               <span className="font-semibold opacity-90">Console</span>
               <button
-                className="rounded bg-white/10 hover:bg-white/20 px-2 py-0.5 text-xs"
+                className={`rounded bg-white/10 hover:bg-white/20 ${isMobile ? "px-1.5 py-px text-[9px]" : "px-2 py-0.5 text-xs"}`}
                 onClick={() => setConsoleOpen((o) => !o)}
               >
                 {consoleOpen ? "Collapse" : "Expand"}
