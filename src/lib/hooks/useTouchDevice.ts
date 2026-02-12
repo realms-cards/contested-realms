@@ -115,12 +115,13 @@ function getInitialTouchState(): boolean {
  * @returns boolean - true if touch/gamepad device, false if mouse/trackpad
  */
 export function useTouchDevice(): boolean {
-  const [isNativeTouchDevice, setIsNativeTouchDevice] = useState(getInitialTouchState);
+  const [isNativeTouchDevice, setIsNativeTouchDevice] =
+    useState(getInitialTouchState);
   const hasGamepad = useGamepadConnected();
   const override = useSyncExternalStore(
     subscribeOverride,
     getOverride,
-    () => null
+    () => null,
   );
 
   useEffect(() => {
@@ -181,7 +182,7 @@ export function useTouchOverride() {
   const override = useSyncExternalStore(
     subscribeOverride,
     getOverride,
-    () => null
+    () => null,
   );
 
   useEffect(() => {
@@ -213,10 +214,10 @@ export function useTouchOverride() {
     override === "mouse"
       ? "mouse"
       : override === "touch"
-      ? "touch"
-      : isNativeTouch
-      ? "touch"
-      : "mouse";
+        ? "touch"
+        : isNativeTouch
+          ? "touch"
+          : "mouse";
 
   return {
     isNativeTouch,
@@ -228,11 +229,19 @@ export function useTouchOverride() {
 }
 
 /**
+ * SSR-safe initial check for small screen
+ */
+function getInitialSmallScreen(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.innerWidth < 768;
+}
+
+/**
  * Detects if the device has a small screen (mobile phone)
  * @returns boolean - true if screen width < 768px
  */
 export function useSmallScreen(): boolean {
-  const [isSmall, setIsSmall] = useState(false);
+  const [isSmall, setIsSmall] = useState(getInitialSmallScreen);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
