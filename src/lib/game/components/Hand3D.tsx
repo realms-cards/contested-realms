@@ -1269,7 +1269,7 @@ export default function Hand3D({
         const isDragging = isHandDrag; // Only block interactions for actual hand drags
         const isSite = (c.type || "").toLowerCase().includes("site");
 
-        const baseScale = HAND_CARD_SCALE;
+        const baseScale = HAND_CARD_SCALE * (graphicsSettings.handCardScale ?? 1);
         const scale = baseScale * layoutScale;
         // Spells should render on top of sites: sites get lower render order, spells get higher
         // When spells first (sites on right), invert site order so leftmost site overlaps rightmost

@@ -229,16 +229,28 @@ export function useTouchOverride() {
 }
 
 /**
- * SSR-safe initial check for small screen
+ * SSR-safe initial check for small/compact screen.
+ * The game is played in landscape, so phone viewports are wide:
+ *   iPhone 16 Pro Max ~956px, Galaxy S24 Ultra ~915px, etc.
+ * Compact when:
+ *  - width < 1024  (all phones in landscape – always compact)
+ *  - width < 1366 AND coarse pointer (tablets: iPad Mini 1024, Air 1180,
+ *    Pro 11" 1194 – but NOT iPad Pro 12.9" at 1366)
  */
 function getInitialSmallScreen(): boolean {
   if (typeof window === "undefined") return false;
-  return window.innerWidth < 768;
+  const w = window.innerWidth;
+  if (w < 1024) return true;
+  // Tablets in landscape: coarse pointer + width under 1366
+  try {
+    if (w < 1366 && window.matchMedia("(pointer: coarse)").matches) return true;
+  } catch {}
+  return false;
 }
 
 /**
- * Detects if the device has a small screen (mobile phone)
- * @returns boolean - true if screen width < 768px
+ * Detects if the device should use compact/mobile game UI.
+ * Returns true for phones (portrait & landscape) and small tablets.
  */
 export function useSmallScreen(): boolean {
   const [isSmall, setIsSmall] = useState(getInitialSmallScreen);
@@ -246,11 +258,31 @@ export function useSmallScreen(): boolean {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const checkSize = () => setIsSmall(window.innerWidth < 768);
+    let coarseMq: MediaQueryList | null = null;
+    try {
+      coarseMq = window.matchMedia("(pointer: coarse)");
+    } catch {}
+
+    const checkSize = () => {
+      const w = window.innerWidth;
+      const isCoarse = coarseMq?.matches ?? false;
+      setIsSmall(w < 1024 || (w < 1366 && isCoarse));
+    };
     checkSize();
 
     window.addEventListener("resize", checkSize);
-    return () => window.removeEventListener("resize", checkSize);
+    // Also listen for pointer capability changes (e.g. tablet keyboard dock)
+    const onPointerChange = () => checkSize();
+    if (coarseMq && typeof coarseMq.addEventListener === "function") {
+      coarseMq.addEventListener("change", onPointerChange);
+    }
+
+    return () => {
+      window.removeEventListener("resize", checkSize);
+      if (coarseMq && typeof coarseMq.removeEventListener === "function") {
+        coarseMq.removeEventListener("change", onPointerChange);
+      }
+    };
   }, []);
 
   return isSmall;
