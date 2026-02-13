@@ -64,6 +64,7 @@ export default function MouseTracker({ cards, onHover }: MouseTrackerProps) {
       raycaster.setFromCamera(pointer, camera);
 
       // Perform raycasting
+      // @ts-expect-error - Type conflict between @react-three/xr augmented Object3D and base three.js types
       const intersects = raycaster.intersectObjects(interactableObjects, true);
 
       if (intersects.length > 0) {
