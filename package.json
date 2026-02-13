@@ -92,6 +92,7 @@
     "@react-three/drei": "^10.7.3",
     "@react-three/fiber": "^9.3.0",
     "@react-three/rapier": "^2.1.0",
+    "@react-three/xr": "^6.6.29",
     "@simplewebauthn/browser": "^9.0.1",
     "@simplewebauthn/server": "^9.0.2",
     "@simplewebauthn/types": "^9.0.1",

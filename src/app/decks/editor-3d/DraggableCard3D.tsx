@@ -26,8 +26,9 @@ function isPrimaryCardHit(e: ThreeEvent<PointerEvent>): boolean {
     return true;
   }
 
-  const primaryObject = (intersections[0]?.object ?? null) as Object3D | null;
-  const eventObject = (e.object as Object3D | undefined) ?? null;
+  const primaryObject = (intersections[0]?.object ??
+    null) as unknown as Object3D | null;
+  const eventObject = (e.object as unknown as Object3D | undefined) ?? null;
 
   if (!primaryObject || !eventObject) {
     return true;
@@ -37,20 +38,21 @@ function isPrimaryCardHit(e: ThreeEvent<PointerEvent>): boolean {
     return true;
   }
 
-  let cursor: Object3D | null = eventObject.parent ?? null;
+  let cursor: Object3D | null =
+    (eventObject.parent as unknown as Object3D) ?? null;
   while (cursor) {
     if (cursor.uuid === primaryObject.uuid) {
       return true;
     }
-    cursor = cursor.parent ?? null;
+    cursor = (cursor.parent as unknown as Object3D) ?? null;
   }
 
-  cursor = primaryObject.parent ?? null;
+  cursor = (primaryObject.parent as unknown as Object3D) ?? null;
   while (cursor) {
     if (cursor.uuid === eventObject.uuid) {
       return true;
     }
-    cursor = cursor.parent ?? null;
+    cursor = (cursor.parent as unknown as Object3D) ?? null;
   }
 
   return false;
@@ -138,7 +140,7 @@ function DraggableCard3DInner({
         name: cardName,
         type: cardType ?? null,
       }),
-    [cardId, slug, cardName, cardType]
+    [cardId, slug, cardName, cardType],
   );
 
   // Reset render order to base when not dragging
@@ -158,7 +160,7 @@ function DraggableCard3DInner({
       if (!ref.current) return;
       ref.current.position.set(wx, lift ? 0.25 : cardY, wz);
     },
-    [cardY]
+    [cardY],
   );
 
   const rotZ =

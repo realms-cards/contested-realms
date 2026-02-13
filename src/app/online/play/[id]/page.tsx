@@ -124,6 +124,8 @@ import { useZoomKeyboardShortcuts } from "@/lib/hooks/useZoomKeyboardShortcuts";
 import { LegacySeatVideo3D } from "@/lib/rtc/SeatVideo3D";
 import { generateClientLeagueMatchResult } from "@/lib/soatc/clientResult";
 import type { LeagueMatchResult } from "@/lib/soatc/types";
+import { VRCameraController, VRStatusBar } from "@/lib/vr";
+import VREntryButton from "@/components/game/VREntryButton";
 import {
   useBoardPingListener,
   useBotActionToastListener,
@@ -3356,6 +3358,7 @@ export default function OnlineMatchPage() {
           {/* Toolbox and Collection buttons (bottom-right) */}
           {showToolbox && (
             <div className="absolute bottom-3 right-3 z-20 flex items-end gap-2">
+              <VREntryButton disabled={isSpectatorView} />
               <CollectionButton mySeat={myPlayerKey} />
               <GameToolbox
                 myPlayerId={myPlayerId || null}
@@ -3537,6 +3540,7 @@ export default function OnlineMatchPage() {
                 camera={cameraOptions}
                 shadows
                 gl={glOptions}
+                enableXR={true}
                 onPointerMissed={() => {
                   if (!dragFromHand && !dragFromPile) {
                     clearSelection();
@@ -3739,6 +3743,16 @@ export default function OnlineMatchPage() {
                   viewPlayerNumber={(viewPlayerNumber ?? 1) as 1 | 2}
                 />
                 <TrackpadOrbitAdapter />
+
+                {/* VR Support Components */}
+                <VRCameraController controlsRef={controlsRef} />
+                <VRStatusBar
+                  playerLife={useGameStore.getState().players?.p1?.life ?? 20}
+                  opponentLife={useGameStore.getState().players?.p2?.life ?? 20}
+                  currentTurn={useGameStore.getState().currentPlayer ?? 1}
+                  playerNumber={(viewPlayerNumber ?? 1) as 1 | 2}
+                  phase={useGameStore.getState().phase}
+                />
               </ClientCanvas>
             </div>
           )}

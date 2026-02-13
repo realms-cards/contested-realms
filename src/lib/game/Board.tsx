@@ -112,7 +112,7 @@ function findCardInstanceNode(object: Object3D | null): Object3D | null {
     ) {
       return current;
     }
-    current = current.parent ?? null;
+    current = (current.parent as unknown as Object3D) ?? null;
   }
   return null;
 }
@@ -122,8 +122,9 @@ function isPrimaryCardHit(e: ThreeEvent<PointerEvent | MouseEvent>): boolean {
   if (!intersections || intersections.length === 0) {
     return true;
   }
-  const primaryObject = intersections[0]?.object ?? null;
-  const eventObject = (e.object as Object3D | undefined) ?? null;
+  const primaryObject =
+    (intersections[0]?.object as unknown as Object3D) ?? null;
+  const eventObject = (e.object as unknown as Object3D | undefined) ?? null;
   if (!primaryObject || !eventObject) {
     return true;
   }
@@ -131,19 +132,20 @@ function isPrimaryCardHit(e: ThreeEvent<PointerEvent | MouseEvent>): boolean {
     return true;
   }
 
-  let cursor: Object3D | null = eventObject.parent ?? null;
+  let cursor: Object3D | null =
+    (eventObject.parent as unknown as Object3D) ?? null;
   while (cursor) {
     if (cursor.uuid === primaryObject.uuid) {
       return true;
     }
-    cursor = cursor.parent ?? null;
+    cursor = (cursor.parent as unknown as Object3D) ?? null;
   }
-  cursor = primaryObject.parent ?? null;
+  cursor = (primaryObject.parent as unknown as Object3D) ?? null;
   while (cursor) {
     if (cursor.uuid === eventObject.uuid) {
       return true;
     }
-    cursor = cursor.parent ?? null;
+    cursor = (cursor.parent as unknown as Object3D) ?? null;
   }
 
   const primaryCard = findCardInstanceNode(primaryObject);
