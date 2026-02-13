@@ -151,5 +151,8 @@
     "typescript": "^5",
     "vite": "^7.1.5",
     "vitest": "^3.2.4"
+  },
+  "overrides": {
+    "three": "^0.179.1"
   }
 }
