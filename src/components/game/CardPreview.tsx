@@ -53,8 +53,8 @@ function computeLayout(isSite: boolean): LayoutState {
   const aspectWidthOverHeight = 3 / 4;
   const widthFromHeight = cappedHeight * aspectWidthOverHeight;
 
-  // Mobile-first sizing: larger preview on small screens
-  const isMobileWidth = innerWidth < 768;
+  // Mobile-first sizing: larger preview on small screens (matches useSmallScreen threshold)
+  const isMobileWidth = innerWidth < 1024;
   const baseVwFraction = isMobileWidth ? 0.35 : 0.21; // Larger fraction on mobile
   const heightShortness = Math.max(0, Math.min(1, (780 - innerHeight) / 360));
   const widthShortness = Math.max(0, Math.min(1, (1400 - innerWidth) / 600));

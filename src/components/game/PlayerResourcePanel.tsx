@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { IN_PLAY_ARTIFACT_PROVIDERS } from "@/lib/game/mana-providers";
+import { MANA_PROVIDER_BY_NAME } from "@/lib/game/mana-providers";
 import { useGameStore } from "@/lib/game/store";
 import type { PlayerKey } from "@/lib/game/store";
 import {
@@ -317,14 +317,19 @@ export function PlayerResourceColumn({
         total++;
       }
     }
-    // Add mana from permanents (cores provide mana while in play)
+    // Add mana from permanents (cores provide mana only when carried/attached)
     for (const arr of Object.values(permanents ?? {})) {
       const list = Array.isArray(arr) ? arr : [];
       for (const p of list) {
         if (!p || p.owner !== owner) continue;
         const nm = String(p.card?.name || "").toLowerCase();
-        // Cores provide mana while in play
-        if (IN_PLAY_ARTIFACT_PROVIDERS.has(nm)) {
+        const cardType = String(p.card?.type || "").toLowerCase();
+        // Artifact mana providers only count when attached (carried)
+        if (
+          MANA_PROVIDER_BY_NAME.has(nm) &&
+          cardType.includes("artifact") &&
+          p.attachedTo
+        ) {
           total++;
         }
       }

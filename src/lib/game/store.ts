@@ -54,6 +54,8 @@ import {
   createImposterMaskSlice,
   createInitialImposterMasks,
 } from "./store/imposterMaskState";
+import { createInquisitionSlice } from "./store/inquisitionState";
+import { createInquisitionSummonSlice } from "./store/inquisitionSummonState";
 import { createInteractionSlice } from "./store/interactionState";
 import { createInterrogatorSlice } from "./store/interrogatorState";
 import { createKelpCavernSlice } from "./store/kelpCavernState";
@@ -183,6 +185,8 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   ...createBrowseSlice(set, get, storeApi),
   ...createCallToWarSlice(set, get, storeApi),
   ...createSearingTruthSlice(set, get, storeApi),
+  ...createInquisitionSlice(set, get, storeApi),
+  ...createInquisitionSummonSlice(set, get, storeApi),
   ...createAccusationSlice(set, get, storeApi),
   ...createCommonSenseSlice(set, get, storeApi),
   ...createEarthquakeSlice(set, get, storeApi),
@@ -240,6 +244,8 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   harbingerPortalDiscountUsed: { p1: false, p2: false },
   // Ether Core turn-start tracking (for void mana calculation)
   etherCoresInVoidAtTurnStart: [],
+  // Cores carried at turn start (for carried-core mana calculation)
+  coresCarriedAtTurnStart: [],
 
   // Multiplayer transport (injected by online play UI)
   receiveCustomMessage: (msg) => handleCustomMessage(msg, set, get),
@@ -343,6 +349,8 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         pendingBrowse: null,
         pendingCallToWar: null,
         pendingSearingTruth: null,
+        pendingInquisition: null,
+        pendingInquisitionSummon: null,
         pendingAccusation: null,
         pendingCommonSense: null,
         pendingEarthquake: null,
@@ -372,6 +380,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         necromancerSkeletonUsed: createInitialNecromancerSkeletonUsed(),
         harbingerPortalDiscountUsed: { p1: false, p2: false },
         etherCoresInVoidAtTurnStart: [],
+        coresCarriedAtTurnStart: [],
         druidFlipped: createInitialDruidFlipped(),
         specialSiteState: getEmptySpecialSiteState(),
         headlessHaunts: [],

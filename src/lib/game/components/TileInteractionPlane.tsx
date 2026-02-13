@@ -46,6 +46,9 @@ export type TileInteractionPlaneProps = {
   // Pathfinder target selection support
   pendingPathfinderPlay?: GameState["pendingPathfinderPlay"];
   selectPathfinderTarget?: GameState["selectPathfinderTarget"];
+  // Inquisition summon cell selection support
+  pendingInquisitionSummon?: GameState["pendingInquisitionSummon"];
+  placeInquisitionSummon?: GameState["placeInquisitionSummon"];
   // Cast placement from context menu
   castPlacementMode?: GameState["castPlacementMode"];
 };
@@ -81,6 +84,8 @@ export function TileInteractionPlane({
   selectMephistophelesSummonTarget,
   pendingPathfinderPlay,
   selectPathfinderTarget,
+  pendingInquisitionSummon,
+  placeInquisitionSummon,
   castPlacementMode,
 }: TileInteractionPlaneProps) {
   const { dragAvatar, dragging, setGhost, draggedBody, moveDraggedBody } =
@@ -125,8 +130,11 @@ export function TileInteractionPlane({
       onPointerUp={(e: ThreeEvent<PointerEvent>) => {
         // Complete switch site if a source is selected - check this first before other handlers
         // (Skip during earthquake rearranging - earthquake has its own swap handler below)
-        if (switchSiteSource && onCompleteSwitchSite &&
-            !(pendingEarthquake?.phase === "rearranging")) {
+        if (
+          switchSiteSource &&
+          onCompleteSwitchSite &&
+          !(pendingEarthquake?.phase === "rearranging")
+        ) {
           e.stopPropagation();
           onCompleteSwitchSite(tileX, tileY);
           return;
@@ -194,6 +202,20 @@ export function TileInteractionPlane({
             return;
           }
         }
+        // Inquisition summon cell selection - click on valid target tiles
+        if (
+          pendingInquisitionSummon &&
+          pendingInquisitionSummon.phase === "selectingCell" &&
+          (pendingInquisitionSummon.ownerSeat === actorKey || !actorKey) &&
+          placeInquisitionSummon
+        ) {
+          const cellKey = `${tileX},${tileY}`;
+          if (pendingInquisitionSummon.validCells.includes(cellKey)) {
+            e.stopPropagation();
+            placeInquisitionSummon(cellKey);
+            return;
+          }
+        }
         // Earthquake swap - click on tiles within the 2x2 area to swap
         if (
           pendingEarthquake &&
@@ -215,7 +237,7 @@ export function TileInteractionPlane({
               window.dispatchEvent(
                 new CustomEvent("earthquake:tileClick", {
                   detail: { x: tileX, y: tileY },
-                })
+                }),
               );
             }
             return;

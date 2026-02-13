@@ -1,6 +1,7 @@
 import type { StateCreator } from "zustand";
 import type { CustomMessage } from "@/lib/net/transport";
 import type { CardRef, CellKey, GameState, PlayerKey, Zones } from "./types";
+import { findInquisitionInCards } from "./inquisitionSummonState";
 import { opponentSeat } from "./utils/boardHelpers";
 
 function newAccusationId() {
@@ -171,6 +172,23 @@ export const createAccusationSlice: StateCreator<
         victimHand.length
       } cards)`,
     );
+
+    // Check if The Inquisition is in the victim's revealed hand
+    // The victim owns it and gets the offer to summon it reactively
+    const inqIdx = findInquisitionInCards(victimHand);
+    if (inqIdx !== -1) {
+      setTimeout(() => {
+        try {
+          get().offerInquisitionSummon({
+            ownerSeat: victimSeat,
+            triggerSource: "accusation",
+            card: victimHand[inqIdx],
+            sourceZone: "hand",
+            cardIndex: inqIdx,
+          });
+        } catch {}
+      }, 800);
+    }
 
     // Automatically transition to selecting phase after a brief reveal
     setTimeout(() => {

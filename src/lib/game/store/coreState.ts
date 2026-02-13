@@ -679,13 +679,25 @@ export const createCoreSlice: StateCreator<
     // Track which Ether Cores are currently in the void at turn start
     // Ether Core only provides 3 mana if it was cast this turn OR started the turn in the void
     const etherCoresInVoidAtTurnStartNext: string[] = [];
+    // Track which core artifacts are currently carried (attached) at turn start
+    // Cores only provide mana if summoned this turn OR were carried at turn start
+    const coresCarriedAtTurnStartNext: string[] = [];
     for (const [cellKey, cellPerms] of Object.entries(permanents)) {
       const isVoidCell = !state.board?.sites?.[cellKey];
-      if (!isVoidCell) continue;
       for (const perm of cellPerms || []) {
         const cardName = String(perm.card?.name || "").toLowerCase();
-        if (cardName === "ether core" && perm.instanceId) {
+        if (!perm.instanceId) continue;
+        // Ether Core void tracking
+        if (isVoidCell && cardName === "ether core") {
           etherCoresInVoidAtTurnStartNext.push(perm.instanceId);
+        }
+        // Core carried tracking - cores that are attached to a unit at turn start
+        const cardType = String(perm.card?.type || "").toLowerCase();
+        if (cardType.includes("artifact") && perm.attachedTo) {
+          const isCoreArtifact = cardName.includes("core");
+          if (isCoreArtifact) {
+            coresCarriedAtTurnStartNext.push(perm.instanceId);
+          }
         }
       }
     }
@@ -710,6 +722,7 @@ export const createCoreSlice: StateCreator<
       harbingerPortalDiscountUsed: harbingerPortalDiscountUsedNext,
       pathfinderUsed: pathfinderUsedNext,
       etherCoresInVoidAtTurnStart: etherCoresInVoidAtTurnStartNext,
+      coresCarriedAtTurnStart: coresCarriedAtTurnStartNext,
       // Include full permanents after all end-of-turn triggers
       permanents,
       // Include avatars to ensure correct positions are synced
@@ -736,6 +749,7 @@ export const createCoreSlice: StateCreator<
       harbingerPortalDiscountUsed: harbingerPortalDiscountUsedNext,
       pathfinderUsed: pathfinderUsedNext,
       etherCoresInVoidAtTurnStart: etherCoresInVoidAtTurnStartNext,
+      coresCarriedAtTurnStart: coresCarriedAtTurnStartNext,
       selectedCard: null,
       selectedPermanent: null,
     });

@@ -1114,6 +1114,20 @@ export default function Board({
     }),
     [pendingPathfinderPlay, selectPathfinderTarget],
   );
+  // Inquisition summon cell selection
+  const pendingInquisitionSummon = useScopedStore(
+    (s) => s.pendingInquisitionSummon,
+  );
+  const placeInquisitionSummon = useScopedStore(
+    (s) => s.placeInquisitionSummon,
+  );
+  const inquisitionSummonContext = useMemo(
+    () => ({
+      pendingInquisitionSummon,
+      placeInquisitionSummon,
+    }),
+    [pendingInquisitionSummon, placeInquisitionSummon],
+  );
   const counterHandlers = useMemo(
     () => ({
       increment: incrementPermanentCounter,
@@ -1357,6 +1371,7 @@ export default function Board({
               atlanteanFateContext={atlanteanFateContext}
               mephistophelesSummonContext={mephistophelesSummonContext}
               pathfinderContext={pathfinderContext}
+              inquisitionSummonContext={inquisitionSummonContext}
               counterHandlers={counterHandlers}
               movementHandlers={movementHandlers}
               handlePointerMove={handlePointerMove}

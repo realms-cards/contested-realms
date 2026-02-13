@@ -37,7 +37,10 @@ import GameToolbox from "@/components/game/GameToolbox";
 import HarbingerPortalScreen from "@/components/game/HarbingerPortalScreen";
 import HeadlessHauntOverlay from "@/components/game/HeadlessHauntOverlay";
 import HighlandPrincessOverlay from "@/components/game/HighlandPrincessOverlay";
+import InquisitionOverlay from "@/components/game/InquisitionOverlay";
+import InquisitionSummonOverlay from "@/components/game/InquisitionSummonOverlay";
 import { InteractionConsentDialog } from "@/components/game/InteractionConsentDialog";
+import OverlayBackdrop from "@/components/game/OverlayBackdrop";
 import InterrogatorChoiceOverlay from "@/components/game/InterrogatorChoiceOverlay";
 import KelpCavernOverlay from "@/components/game/KelpCavernOverlay";
 import LegionOfGallOverlay from "@/components/game/LegionOfGallOverlay";
@@ -145,6 +148,7 @@ export default function PlayPage() {
   const chaosTwisterPhase = useGameStore(
     (s) => s.pendingChaosTwister?.phase ?? null,
   );
+  const turnOverlayActive = useGameStore((s) => s.turnOverlayActive);
   const currentPlayerKey = currentPlayer === 1 ? "p1" : "p2";
   const isMobile = useSmallScreen();
 
@@ -898,7 +902,12 @@ export default function PlayPage() {
       {/* Camera mode toggle (hidden when uiHidden) */}
       {!uiHidden && (
         <div
-          className={`absolute ${isMobile ? "top-0.5 left-0.5" : "top-2 left-2"} z-30`}
+          className={`absolute ${isMobile ? "left-0.5" : "top-2 left-2"} z-30`}
+          style={
+            isMobile
+              ? { top: "max(0.125rem, env(safe-area-inset-top, 0.125rem))" }
+              : undefined
+          }
         >
           <div
             className={`bg-black/50 rounded-lg ${isMobile ? "p-0.5" : "p-1"} ring-1 ring-white/10 flex items-center`}
@@ -1026,127 +1035,140 @@ export default function PlayPage() {
         playerNameById={offlineNameById}
       />
 
-      {/* Switch Site HUD Overlay */}
-      <SwitchSiteHudOverlay />
+      {/* Defer all game overlays while Turn overlay is active */}
+      {!turnOverlayActive && (
+        <>
+          {/* Switch Site HUD Overlay */}
+          <SwitchSiteHudOverlay />
 
-      {/* Chaos Twister Overlay (dexterity minigame) */}
-      <ChaosTwisterOverlay />
+          {/* Chaos Twister Overlay (dexterity minigame) */}
+          <ChaosTwisterOverlay />
 
-      {/* Earthquake Overlay (site rearrangement) */}
-      <EarthquakeOverlay />
+          {/* Earthquake Overlay (site rearrangement) */}
+          <EarthquakeOverlay />
 
-      {/* Element Choice Overlay (Valley of Delight, etc.) */}
-      <ElementChoiceOverlay />
+          {/* Element Choice Overlay (Valley of Delight, etc.) */}
+          <ElementChoiceOverlay />
 
-      {/* River Genesis Overlay (Spring/Summer/Autumn/Winter River) */}
-      <RiverGenesisOverlay />
+          {/* River Genesis Overlay (Spring/Summer/Autumn/Winter River) */}
+          <RiverGenesisOverlay />
 
-      {/* Observatory Overlay (reorder top 3 spells) */}
-      <ObservatoryOverlay />
+          {/* Observatory Overlay (reorder top 3 spells) */}
+          <ObservatoryOverlay />
 
-      {/* Kelp Cavern Overlay (pick one from bottom 3 for top) */}
-      <KelpCavernOverlay />
+          {/* Kelp Cavern Overlay (pick one from bottom 3 for top) */}
+          <KelpCavernOverlay />
 
-      {/* Crossroads Overlay (keep 1 of top 4 atlas sites, rest to bottom) */}
-      <CrossroadsOverlay />
+          {/* Crossroads Overlay (keep 1 of top 4 atlas sites, rest to bottom) */}
+          <CrossroadsOverlay />
 
-      {/* Mirror Realm Overlay (copy nearby site) */}
-      <MirrorRealmOverlay />
+          {/* Mirror Realm Overlay (copy nearby site) */}
+          <MirrorRealmOverlay />
 
-      {/* Shapeshift Overlay (transform minion) */}
-      <ShapeshiftOverlay />
+          {/* Shapeshift Overlay (transform minion) */}
+          <ShapeshiftOverlay />
 
-      {/* Animist Cast Choice Overlay (magic or spirit) */}
-      <AnimistCastChoiceOverlay />
+          {/* Animist Cast Choice Overlay (magic or spirit) */}
+          <AnimistCastChoiceOverlay />
 
-      {/* Browse Overlay (spell selection) */}
-      <BrowseOverlay />
+          {/* Browse Overlay (spell selection) */}
+          <BrowseOverlay />
 
-      {/* Common Sense Overlay (search for Ordinary card) */}
-      <CommonSenseOverlay />
+          {/* Common Sense Overlay (search for Ordinary card) */}
+          <CommonSenseOverlay />
 
-      {/* Call to War Overlay (search for Exceptional Mortal) */}
-      <CallToWarOverlay />
+          {/* Call to War Overlay (search for Exceptional Mortal) */}
+          <CallToWarOverlay />
 
-      {/* Searing Truth Overlay (reveal and damage) */}
-      <SearingTruthOverlay />
+          {/* Shared backdrop for tiled overlays */}
+          <OverlayBackdrop />
+          {/* Searing Truth Overlay (reveal and damage) */}
+          <SearingTruthOverlay />
 
-      {/* Accusation Overlay (reveal opponent hand, banish) */}
-      <AccusationOverlay />
+          {/* Accusation Overlay (reveal opponent hand, banish) */}
+          <AccusationOverlay />
 
-      {/* Lilith Overlay (end of turn reveal) */}
-      <LilithOverlay />
+          {/* The Inquisition Overlay (Genesis: reveal opponent hand, may banish) */}
+          <InquisitionOverlay />
 
-      {/* Mother Nature Overlay (start of turn reveal) */}
-      <MotherNatureOverlay />
+          {/* The Inquisition Passive Summon Overlay (revealed by opponent, may summon) */}
+          <InquisitionSummonOverlay />
 
-      {/* Headless Haunt Overlay (start of turn movement - Kythera Mechanism) */}
-      <HeadlessHauntOverlay />
+          {/* Lilith Overlay (end of turn reveal) */}
+          <LilithOverlay />
 
-      {/* Interrogator Choice Overlay (pay life or allow spell draw) */}
-      <InterrogatorChoiceOverlay />
+          {/* Mother Nature Overlay (start of turn reveal) */}
+          <MotherNatureOverlay />
 
-      {/* Atlantean Fate Overlay (4x4 area selection for flood aura) */}
-      <AtlanteanFateOverlay />
+          {/* Headless Haunt Overlay (start of turn movement - Kythera Mechanism) */}
+          <HeadlessHauntOverlay />
 
-      {/* Mephistopheles Overlay (avatar replacement confirmation) */}
-      <MephistophelesOverlay />
+          {/* Interrogator Choice Overlay (pay life or allow spell draw) */}
+          <InterrogatorChoiceOverlay />
 
-      {/* Mephistopheles Summon Overlay (Evil minion summoning) */}
-      <MephistophelesSummonOverlay />
+          {/* Atlantean Fate Overlay (4x4 area selection for flood aura) */}
+          <AtlanteanFateOverlay />
 
-      {/* Pathfinder Play Overlay (reveal and play site) */}
-      <PathfinderPlayOverlay />
+          {/* Mephistopheles Overlay (avatar replacement confirmation) */}
+          <MephistophelesOverlay />
 
-      {/* Babel Tower Overlay (Apex of Babel placement choice) */}
-      <BabelTowerOverlay />
+          {/* Mephistopheles Summon Overlay (Evil minion summoning) */}
+          <MephistophelesSummonOverlay />
 
-      {/* Black Mass Overlay (search for Evil minions) */}
-      <BlackMassOverlay />
+          {/* Pathfinder Play Overlay (reveal and play site) */}
+          <PathfinderPlayOverlay />
 
-      {/* Highland Princess Overlay (search for artifact) */}
-      <HighlandPrincessOverlay />
+          {/* Babel Tower Overlay (Apex of Babel placement choice) */}
+          <BabelTowerOverlay />
 
-      {/* Assorted Animals Overlay (search for Beasts) */}
-      <AssortedAnimalsOverlay />
+          {/* Black Mass Overlay (search for Evil minions) */}
+          <BlackMassOverlay />
 
-      {/* Frontier Settlers Overlay (tap: place site) */}
-      <FrontierSettlersOverlay />
+          {/* Highland Princess Overlay (search for artifact) */}
+          <HighlandPrincessOverlay />
 
-      {/* Pigs of the Sounder Overlay (Deathrite) */}
-      <PigsOfTheSounderOverlay />
+          {/* Assorted Animals Overlay (search for Beasts) */}
+          <AssortedAnimalsOverlay />
 
-      {/* Demonic Contract Overlay */}
-      <DemonicContractOverlay />
+          {/* Frontier Settlers Overlay (tap: place site) */}
+          <FrontierSettlersOverlay />
 
-      {/* Raise Dead Overlay */}
-      <RaiseDeadOverlay />
-      {/* Legion of Gall Overlay (inspect and banish from opponent collection) */}
-      <LegionOfGallOverlay />
-      {/* Artifact Cast Overlay (Toolbox, Silver Bullet) */}
-      <ArtifactCastOverlay />
-      {/* Auto-Resolve Confirmation Overlay (for silence effects) */}
-      <AutoResolveConfirmOverlay />
-      {/* Dhol Chants Overlay */}
-      <DholChantsOverlay />
+          {/* Pigs of the Sounder Overlay (Deathrite) */}
+          <PigsOfTheSounderOverlay />
 
-      {/* Reveal Overlay (prominent display for revealed cards) */}
-      <RevealOverlayWrapper />
+          {/* Demonic Contract Overlay */}
+          <DemonicContractOverlay />
 
-      {/* Annual Fair Overlay (activated ability element choice) */}
-      <AnnualFairOverlay />
+          {/* Raise Dead Overlay */}
+          <RaiseDeadOverlay />
+          {/* Legion of Gall Overlay (inspect and banish from opponent collection) */}
+          <LegionOfGallOverlay />
+          {/* Artifact Cast Overlay (Toolbox, Silver Bullet) */}
+          <ArtifactCastOverlay />
+          {/* Auto-Resolve Confirmation Overlay (for silence effects) */}
+          <AutoResolveConfirmOverlay />
+          {/* Dhol Chants Overlay */}
+          <DholChantsOverlay />
 
-      {/* Doomsday Cult Overlay (continuous reveal) */}
-      <DoomsdayCultOverlay />
+          {/* Reveal Overlay (prominent display for revealed cards) */}
+          <RevealOverlayWrapper />
 
-      {/* Unit hands overlay (Morgana, Omphalos) */}
-      <UnitHandsOverlay />
+          {/* Annual Fair Overlay (activated ability element choice) */}
+          <AnnualFairOverlay />
 
-      {/* Pith Imp stolen card notification */}
-      <PithImpOverlay />
+          {/* Doomsday Cult Overlay (continuous reveal) */}
+          <DoomsdayCultOverlay />
 
-      {/* Private hand targeting overlay (Morgana/Omphalos) */}
-      <PrivateHandTargetingOverlay />
+          {/* Unit hands overlay (Morgana, Omphalos) */}
+          <UnitHandsOverlay />
+
+          {/* Pith Imp stolen card notification */}
+          <PithImpOverlay />
+
+          {/* Private hand targeting overlay (Morgana/Omphalos) */}
+          <PrivateHandTargetingOverlay />
+        </>
+      )}
 
       {/* Toolbox and Collection buttons (bottom-right) */}
       {showToolbox && (

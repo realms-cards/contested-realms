@@ -1742,28 +1742,26 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
           onClick={(e) => e.stopPropagation()}
         >
           <div>
-            {/* Mobile: inline card preview at top of bottom sheet */}
+            {/* Mobile: readable card preview at top of bottom sheet */}
             {isMobileScreen && previewSlug && (
-              <div className="flex items-start gap-3 mb-3">
+              <div className="flex flex-col items-center mb-3">
                 <div
-                  className={`relative shrink-0 rounded-lg overflow-hidden bg-black/30 ring-1 ring-white/10 ${previewIsSite ? "w-20 aspect-[4/3]" : "w-14 aspect-[3/4]"}`}
+                  className={`relative rounded-lg overflow-hidden bg-black/30 ring-1 ring-white/10 ${previewIsSite ? "w-44 aspect-[4/3]" : "w-28 aspect-[3/4]"}`}
                 >
                   <Image
                     src={`/api/images/${previewSlug}`}
                     alt={header}
                     fill
                     className={`${previewIsSite ? "object-contain rotate-90 scale-[1.333] origin-center" : "object-contain"} object-center`}
-                    sizes="80px"
+                    sizes="180px"
                     unoptimized
                   />
                 </div>
-                <div className="min-w-0 pt-1">
-                  <div
-                    className="text-sm font-semibold truncate"
-                    title={header}
-                  >
-                    {header}
-                  </div>
+                <div
+                  className="text-xs font-semibold mt-1.5 truncate max-w-full text-center"
+                  title={header}
+                >
+                  {header}
                 </div>
               </div>
             )}

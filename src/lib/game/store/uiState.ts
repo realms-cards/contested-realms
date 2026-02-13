@@ -129,6 +129,8 @@ export type UiSlice = Pick<
   | "uiHidden"
   | "setUiHidden"
   | "toggleUiHidden"
+  | "turnOverlayActive"
+  | "setTurnOverlayActive"
   | "selectHandCard"
   | "selectAvatar"
   | "clearSelection"
@@ -176,6 +178,7 @@ type UiStateDefaults = Pick<
   | "previewCard"
   | "cardPreviewsEnabled"
   | "uiHidden"
+  | "turnOverlayActive"
   | "switchSiteSource"
   | "switchSitePending"
   | "showEndTurnConfirm"
@@ -199,6 +202,7 @@ export const createInitialUiState = (): UiStateDefaults => ({
   previewCard: null,
   cardPreviewsEnabled: loadCardPreviewsEnabled(),
   uiHidden: loadUiHidden(),
+  turnOverlayActive: false,
   switchSiteSource: null,
   switchSitePending: null,
   showEndTurnConfirm: false,
@@ -317,6 +321,8 @@ export const createUiSlice: StateCreator<GameState, [], [], UiSlice> = (
       saveUiHidden(newHidden);
       return { uiHidden: newHidden };
     }),
+
+  setTurnOverlayActive: (active: boolean) => set({ turnOverlayActive: active }),
 
   // End turn confirmation actions
   requestEndTurn: () => {

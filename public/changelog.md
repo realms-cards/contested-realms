@@ -2,6 +2,15 @@
 
 ## February 2026
 
+### Feb 12 - Codex update and Mobile improvements
+
+- **optimizations for mobile view in offline and online matches**
+- **add Hand card size slider** to User setttings
+- **widen detection for triggering mobile layouts**
+- **move Harbinger portals before roll for first player** this was clarified in a Codex update
+- **add automated resolver for The Inquisition**
+- **add Overlay manager and storyline indicator** Try playing Accusation when Inquisition is in opponents hand. 🤯
+
 ### Feb 05 - More resolvers
 
 - **introduce Turn change Overlay** and change sound at turn start

@@ -96,13 +96,13 @@ export const ACTIVATED_MANA_SITES = new Set<string>([
 ]);
 
 // Permanents that grant element thresholds.
-// Cores provide both threshold AND mana (via MANA_PROVIDER_BY_NAME).
+// Cores provide both threshold AND mana (via MANA_PROVIDER_BY_NAME) but ONLY when carried (attached).
 // Arthurian Families provide threshold ONLY (no mana).
 export const THRESHOLD_GRANT_BY_NAME: Record<
   string,
   Partial<{ air: number; water: number; earth: number; fire: number }>
 > = {
-  // Cores (Artifact) - provide threshold + mana while in play (no attachment required)
+  // Cores (Artifact) - provide threshold + mana only when carried (attached to a unit)
   "amethyst core": { air: 1 },
   "aquamarine core": { water: 1 },
   "onyx core": { earth: 1 },
@@ -116,16 +116,6 @@ export const THRESHOLD_GRANT_BY_NAME: Record<
   "island leviathan": { water: 1 },
   "horns of behemoth": { fire: 1 },
 };
-
-// Artifacts that provide mana/threshold while "in the realm" (on board), without needing attachment.
-// These follow the "Provides X to its controller" pattern - they work as long as they're in play.
-// Other artifacts typically require being attached/carried to provide benefits.
-export const IN_PLAY_ARTIFACT_PROVIDERS = new Set<string>([
-  "amethyst core",
-  "aquamarine core",
-  "onyx core",
-  "ruby core",
-]);
 
 // Sites that should NOT provide mana at all.
 export const NON_MANA_SITE_IDENTIFIERS = new Set<string>([

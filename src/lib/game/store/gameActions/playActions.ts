@@ -324,6 +324,7 @@ export const createPlayActionsSlice: StateCreator<
           state.turn,
           state.etherCoresInVoidAtTurnStart,
           state.babelTowers,
+          state.coresCarriedAtTurnStart,
         );
         const manaInsufficient = cardManaCost > currentMana;
 
@@ -917,6 +918,7 @@ export const createPlayActionsSlice: StateCreator<
       const isLegionOfGall = cardNameLower === "legion of gall";
       const isShapeshift = cardNameLower === "shapeshift";
       const isTorshammarTrinket = cardNameLower === "torshammar trinket";
+      const isTheInquisition = cardNameLower === "the inquisition";
 
       // If this is Torshammar Trinket, show a toast that it will return to hand automatically
       if (isTorshammarTrinket && newest && type.includes("artifact")) {
@@ -1275,6 +1277,28 @@ export const createPlayActionsSlice: StateCreator<
           });
         } catch (e) {
           console.error("[playActions] Error registering Mother Nature:", e);
+        }
+      }
+      // If this is The Inquisition minion, trigger Genesis (reveal opponent hand, may banish)
+      if (isTheInquisition && newest && type.includes("minion")) {
+        console.log("[playActions] Triggering The Inquisition Genesis:", {
+          at: key,
+          owner: newest.owner,
+          ownerSeat: who,
+        });
+        try {
+          get().beginInquisition({
+            minion: {
+              at: key,
+              index: arr.length - 1,
+              instanceId: newest.instanceId ?? null,
+              owner: newest.owner,
+              card: newest.card as CardRef,
+            },
+            casterSeat: who,
+          });
+        } catch (e) {
+          console.error("[playActions] Error triggering The Inquisition:", e);
         }
       }
       // If this is Highland Princess minion, trigger Genesis (search for artifact ≤1)
