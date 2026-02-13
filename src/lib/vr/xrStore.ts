@@ -7,15 +7,28 @@ import { createXRStore } from "@react-three/xr";
  * Created once and shared across the application.
  */
 export const xrStore = createXRStore({
-  // Optional: Configure hand tracking
+  // Configure hand tracking with grab and touch pointers for card interactions
   hand: {
     teleportPointer: false,
     rayPointer: true,
+    grabPointer: {
+      // Pinch gesture radius for grabbing cards
+      radius: 0.05,
+    },
+    touchPointer: {
+      // Finger tip touch for tapping cards
+      hoverRadius: 0.03,
+      downRadius: 0.01,
+    },
   },
-  // Optional: Configure controller defaults
+  // Configure controller with grab and ray pointers
   controller: {
     teleportPointer: false,
     rayPointer: true,
+    grabPointer: {
+      // Grip button grab radius
+      radius: 0.08,
+    },
   },
 });
 
