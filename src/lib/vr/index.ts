@@ -24,3 +24,16 @@ export {
   type PinchState,
 } from "./VRHandTracking";
 export { VRCardPlacement, useVRCardPlacement } from "./VRCardPlacement";
+
+// Drag integration and visual feedback
+export { VRDragBridge, type VRDragState } from "./VRDragBridge";
+export {
+  VRCardHighlight,
+  VRTileHighlight,
+  VRDropZone,
+} from "./VRCardHighlight";
+export {
+  VRRadialMenu,
+  defaultCardMenuItems,
+  type RadialMenuItem,
+} from "./VRRadialMenu";
