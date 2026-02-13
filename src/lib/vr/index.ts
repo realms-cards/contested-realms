@@ -37,3 +37,4 @@ export {
   defaultCardMenuItems,
   type RadialMenuItem,
 } from "./VRRadialMenu";
+export { VRBoardIntegration } from "./VRBoardIntegration";

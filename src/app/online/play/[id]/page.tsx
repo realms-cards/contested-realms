@@ -124,7 +124,7 @@ import { useZoomKeyboardShortcuts } from "@/lib/hooks/useZoomKeyboardShortcuts";
 import { LegacySeatVideo3D } from "@/lib/rtc/SeatVideo3D";
 import { generateClientLeagueMatchResult } from "@/lib/soatc/clientResult";
 import type { LeagueMatchResult } from "@/lib/soatc/types";
-import { VRCameraController, VRStatusBar } from "@/lib/vr";
+import { VRCameraController, VRStatusBar, VRBoardIntegration } from "@/lib/vr";
 import VREntryButton from "@/components/game/VREntryButton";
 import {
   useBoardPingListener,
@@ -3752,6 +3752,17 @@ export default function OnlineMatchPage() {
                   currentTurn={useGameStore.getState().currentPlayer ?? 1}
                   playerNumber={(viewPlayerNumber ?? 1) as 1 | 2}
                   phase={useGameStore.getState().phase}
+                />
+                <VRBoardIntegration
+                  viewPlayerKey={viewPlayerKey}
+                  isSpectator={isSpectatorView}
+                  boardWidth={useGameStore.getState().board.size.w}
+                  boardHeight={useGameStore.getState().board.size.h}
+                  onCardAction={(action, cardId) => {
+                    console.log(
+                      `[VR] Card action: ${action} on card ${cardId}`,
+                    );
+                  }}
                 />
               </ClientCanvas>
             </div>
