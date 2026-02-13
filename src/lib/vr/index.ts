@@ -10,3 +10,17 @@ export { VRSceneSetup } from "./VRSceneSetup";
 export { VRHand3D } from "./VRHand3D";
 export { VRLifeCounter, VRTurnIndicator, VRStatusBar } from "./VRSpatialUI";
 export { VRCameraController } from "./VRCameraController";
+
+// Hand tracking and interactions
+export {
+  VRCardInteraction,
+  useVRGrabState,
+  type VRGrabState,
+} from "./VRCardInteraction";
+export { VRGrabbable, useVRGrab, type VRGrabbableRef } from "./VRGrabbable";
+export {
+  VRHandTracking,
+  useHandPinch,
+  type PinchState,
+} from "./VRHandTracking";
+export { VRCardPlacement, useVRCardPlacement } from "./VRCardPlacement";
