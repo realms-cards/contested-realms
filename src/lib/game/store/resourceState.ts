@@ -81,6 +81,7 @@ export const createResourceSlice: StateCreator<
       state.turn,
       state.etherCoresInVoidAtTurnStart,
       state.babelTowers,
+      state.coresCarriedAtTurnStart,
     );
     const offset = Number(state.players[who]?.mana || 0);
     return Math.max(0, base + offset);

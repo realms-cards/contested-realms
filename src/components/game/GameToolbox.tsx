@@ -21,6 +21,7 @@ import {
 } from "@/lib/game/store";
 import { GEM_COLORS } from "@/lib/game/store/gemTokenState";
 import { seatFromOwner } from "@/lib/game/store/utils/boardHelpers";
+import { useSmallScreen } from "@/lib/hooks/useTouchDevice";
 import {
   generateInteractionRequestId,
   type InteractionRequestKind,
@@ -60,6 +61,7 @@ export default function GameToolbox({
 
   // Graphics settings for font scaling
   const { settings: graphicsSettings } = useGraphicsSettings();
+  const isMobileScreen = useSmallScreen();
 
   // Calculate font size based on uiTextScale (0.5-1.5 maps to 10px-16px)
   // Base size is 12px (text-xs), scaled with min 10px and max 16px
@@ -1181,8 +1183,8 @@ export default function GameToolbox({
       ) : (
         <div
           className={`bg-black/60 backdrop-blur ring-1 ring-white/10 shadow-lg ${containerWidthClass} overflow-y-auto transition-all ${
-            typeof window !== "undefined" && window.innerWidth < 768
-              ? "fixed inset-x-0 bottom-0 z-50 rounded-t-2xl max-h-[70vh] pb-6"
+            isMobileScreen
+              ? "fixed right-0 bottom-0 z-50 rounded-tl-2xl max-h-[70vh] pb-6"
               : "rounded-xl max-h-[85vh]"
           }`}
         >

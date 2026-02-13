@@ -21,6 +21,7 @@ export default function TurnStartOverlay({ gameStarted }: TurnStartOverlayProps 
   const phase = useGameStore((s) => s.phase);
   const hasDrawnThisTurn = useGameStore((s) => s.hasDrawnThisTurn);
   const actorKey = useGameStore((s) => s.actorKey);
+  const setTurnOverlayActive = useGameStore((s) => s.setTurnOverlayActive);
   const { playTurnGong } = useSound();
 
   const [visible, setVisible] = useState(false);
@@ -79,6 +80,7 @@ export default function TurnStartOverlay({ gameStarted }: TurnStartOverlayProps 
       setShowDrawReminder(turn > 1);
       setVisible(true);
       setFading("in");
+      setTurnOverlayActive(true);
 
       try {
         playTurnGong();
@@ -97,6 +99,7 @@ export default function TurnStartOverlay({ gameStarted }: TurnStartOverlayProps 
         timerRef.current = setTimeout(() => {
           setVisible(false);
           setFading(null);
+          setTurnOverlayActive(false);
         }, 500);
       }, 1500);
     }
@@ -119,9 +122,10 @@ export default function TurnStartOverlay({ gameStarted }: TurnStartOverlayProps 
     const t = setTimeout(() => {
       setVisible(false);
       setFading(null);
+      setTurnOverlayActive(false);
     }, 300);
     return () => clearTimeout(t);
-  }, [hasDrawnThisTurn, visible]);
+  }, [hasDrawnThisTurn, visible, setTurnOverlayActive]);
 
   // Dismiss overlay on click
   const handleDismiss = () => {
@@ -133,6 +137,7 @@ export default function TurnStartOverlay({ gameStarted }: TurnStartOverlayProps 
     setTimeout(() => {
       setVisible(false);
       setFading(null);
+      setTurnOverlayActive(false);
     }, 300);
   };
 

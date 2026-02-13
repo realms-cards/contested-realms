@@ -4,6 +4,7 @@ import { AtlanteanFateAreaOverlay } from "@/lib/game/components/AtlanteanFateAre
 import { AuraPreviewOverlay } from "@/lib/game/components/AuraPreviewOverlay";
 import { ChaosTwisterLandingOverlay } from "@/lib/game/components/ChaosTwisterLandingOverlay";
 import { MagicTargetOverlay } from "@/lib/game/components/MagicTargetOverlay";
+import { InquisitionSummonTargetOverlay } from "@/lib/game/components/InquisitionSummonTargetOverlay";
 import { MephistophelesSummonTargetOverlay } from "@/lib/game/components/MephistophelesSummonTargetOverlay";
 import { PathfinderTargetOverlay } from "@/lib/game/components/PathfinderTargetOverlay";
 import {
@@ -69,6 +70,10 @@ type BoardTileProps = {
   pathfinderContext: {
     pendingPathfinderPlay: GameState["pendingPathfinderPlay"];
     selectPathfinderTarget: GameState["selectPathfinderTarget"];
+  };
+  inquisitionSummonContext: {
+    pendingInquisitionSummon: GameState["pendingInquisitionSummon"];
+    placeInquisitionSummon: GameState["placeInquisitionSummon"];
   };
   counterHandlers: PermanentStackProps["counterHandlers"];
   movementHandlers: PermanentStackProps["movementHandlers"];
@@ -149,6 +154,7 @@ export function BoardTile({
   atlanteanFateContext,
   mephistophelesSummonContext,
   pathfinderContext,
+  inquisitionSummonContext,
   counterHandlers,
   movementHandlers,
   handlePointerMove,
@@ -233,6 +239,10 @@ export function BoardTile({
         }
         pendingPathfinderPlay={pathfinderContext.pendingPathfinderPlay}
         selectPathfinderTarget={pathfinderContext.selectPathfinderTarget}
+        pendingInquisitionSummon={
+          inquisitionSummonContext.pendingInquisitionSummon
+        }
+        placeInquisitionSummon={inquisitionSummonContext.placeInquisitionSummon}
         castPlacementMode={castPlacementMode}
       />
 
@@ -270,6 +280,15 @@ export function BoardTile({
         tileX={tileX}
         tileY={tileY}
         pendingPathfinderPlay={pathfinderContext.pendingPathfinderPlay}
+      />
+
+      {/* Inquisition summon target overlay - rendered under cards */}
+      <InquisitionSummonTargetOverlay
+        tileX={tileX}
+        tileY={tileY}
+        pendingInquisitionSummon={
+          inquisitionSummonContext.pendingInquisitionSummon
+        }
       />
 
       {/* Generic Aura spell 2x2 preview - only when Magic Interactions enabled */}

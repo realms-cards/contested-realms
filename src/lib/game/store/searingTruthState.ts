@@ -8,6 +8,7 @@ import type {
   ServerPatchT,
   Zones,
 } from "./types";
+import { findInquisitionInCards } from "./inquisitionSummonState";
 
 function newSearingTruthId() {
   return `st_${Date.now().toString(36)}_${Math.random()
@@ -195,6 +196,29 @@ export const createSearingTruthSlice: StateCreator<
     get().log(
       `[p${targetNumForLog}:PLAYER] draws and reveals ${cardNames} - will take ${maxCost} damage`,
     );
+
+    // Check if The Inquisition is among the revealed spellbook cards
+    // The target owns the revealed cards; if caster is the opponent, the target gets the offer
+    const casterIsOpponent = pending.casterSeat !== targetSeat;
+    if (casterIsOpponent) {
+      const inqIdx = findInquisitionInCards(drawnCards);
+      if (inqIdx !== -1) {
+        // Find the card's index in the target's updated hand
+        const handBefore = zones[targetSeat]?.hand || [];
+        const handIdx = handBefore.length + inqIdx; // drawnCards were appended to hand
+        setTimeout(() => {
+          try {
+            get().offerInquisitionSummon({
+              ownerSeat: targetSeat,
+              triggerSource: "searing_truth",
+              card: drawnCards[inqIdx],
+              sourceZone: "hand", // Card was moved from spellbook to hand by Searing Truth
+              cardIndex: handIdx,
+            });
+          } catch {}
+        }, 800);
+      }
+    }
 
     // Increment cards drawn counter for Garden of Eden tracking
     get().incrementCardsDrawn(targetSeat, drawnCards.length);

@@ -41,7 +41,10 @@ import GameToolbox from "@/components/game/GameToolbox";
 import HarbingerPortalScreen from "@/components/game/HarbingerPortalScreen";
 import HeadlessHauntOverlay from "@/components/game/HeadlessHauntOverlay";
 import HighlandPrincessOverlay from "@/components/game/HighlandPrincessOverlay";
+import InquisitionOverlay from "@/components/game/InquisitionOverlay";
+import InquisitionSummonOverlay from "@/components/game/InquisitionSummonOverlay";
 import { InteractionConsentDialog } from "@/components/game/InteractionConsentDialog";
+import OverlayBackdrop from "@/components/game/OverlayBackdrop";
 import InterrogatorChoiceOverlay from "@/components/game/InterrogatorChoiceOverlay";
 import KelpCavernOverlay from "@/components/game/KelpCavernOverlay";
 import LegionOfGallOverlay from "@/components/game/LegionOfGallOverlay";
@@ -2259,6 +2262,7 @@ export default function OnlineMatchPage() {
   const chaosTwisterPhase = useGameStore(
     (s) => s.pendingChaosTwister?.phase ?? null,
   );
+  const turnOverlayActive = useGameStore((s) => s.turnOverlayActive);
 
   // Space key to toggle hand visibility (skip when Chaos Twister minigame is active)
   useEffect(() => {
@@ -2915,7 +2919,12 @@ export default function OnlineMatchPage() {
       {/* Camera controls - left: reset icon + 2D/3D buttons (hidden when uiHidden) */}
       {!uiHidden && (
         <div
-          className={`absolute ${isMobile ? "top-0.5 left-0.5" : "top-2 left-2"} z-30`}
+          className={`absolute ${isMobile ? "left-0.5" : "top-2 left-2"} z-30`}
+          style={
+            isMobile
+              ? { top: "max(0.125rem, env(safe-area-inset-top, 0.125rem))" }
+              : undefined
+          }
         >
           <div
             className={`bg-black/50 rounded-lg ${isMobile ? "p-0.5" : "p-1"} ring-1 ring-white/10 flex items-center`}
@@ -3421,8 +3430,8 @@ export default function OnlineMatchPage() {
             allowContinue={false}
           />
 
-          {/* All player-interactive overlays hidden for spectators */}
-          {!isSpectatorView && (
+          {/* All player-interactive overlays hidden for spectators; deferred while Turn overlay is active */}
+          {!isSpectatorView && !turnOverlayActive && (
             <>
               {/* Combat HUD Overlay (layout-level, not inside Canvas) */}
               <CombatHudOverlay />
@@ -3454,10 +3463,16 @@ export default function OnlineMatchPage() {
               <CommonSenseOverlay />
               {/* Call to War Overlay (search for Exceptional Mortal) */}
               <CallToWarOverlay />
+              {/* Shared backdrop for tiled overlays */}
+              <OverlayBackdrop />
               {/* Searing Truth Overlay (reveal and damage) */}
               <SearingTruthOverlay playerNames={playerNames} />
               {/* Accusation Overlay (reveal opponent hand, banish) */}
               <AccusationOverlay />
+              {/* The Inquisition Overlay (Genesis: reveal opponent hand, may banish) */}
+              <InquisitionOverlay />
+              {/* The Inquisition Passive Summon Overlay (revealed by opponent, may summon) */}
+              <InquisitionSummonOverlay />
               {/* Lilith Overlay (end of turn reveal) */}
               <LilithOverlay playerNames={playerNames} />
               {/* Mother Nature Overlay (start of turn reveal) */}

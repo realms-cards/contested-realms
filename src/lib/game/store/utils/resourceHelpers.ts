@@ -7,7 +7,6 @@ import {
   CONDITIONAL_THRESHOLD_SITES,
   ELEMENT_CHOICE_SITES,
   GENESIS_MANA_SITES,
-  IN_PLAY_ARTIFACT_PROVIDERS,
   MANA_PROVIDER_BY_NAME,
   MULTI_THRESHOLD_SITES,
   NON_MANA_SITE_IDENTIFIERS,
@@ -324,7 +323,9 @@ export const computeThresholdTotals = (
       totals.earth += 1;
       // If merged with Apex, also grant air threshold
       if (babelTowers) {
-        const merge = babelTowers.find((t) => t.cellKey === (cellKey as CellKey));
+        const merge = babelTowers.find(
+          (t) => t.cellKey === (cellKey as CellKey),
+        );
         if (merge) {
           totals.air += 1;
         }
@@ -361,14 +362,8 @@ export const computeThresholdTotals = (
         if (grant) {
           const cardType = String(p.card?.type || "").toLowerCase();
           const isArtifact = cardType.includes("artifact");
-          // Cores (IN_PLAY_ARTIFACT_PROVIDERS) provide threshold while in play - no attachment needed
-          // Other artifacts only provide threshold when attached (being carried)
-          if (
-            isArtifact &&
-            !p.attachedTo &&
-            !IN_PLAY_ARTIFACT_PROVIDERS.has(nm)
-          ) {
-            // Non-core artifact not attached - does not provide threshold
+          // ALL artifacts (including cores) only provide threshold when attached (being carried)
+          if (isArtifact && !p.attachedTo) {
             continue;
           }
           accumulateThresholds(totals, grant as Partial<Thresholds>);
@@ -462,6 +457,7 @@ export const computeAvailableMana = (
   currentTurn?: number,
   etherCoresInVoidAtTurnStart?: string[],
   babelTowers?: BabelTowerMerge[],
+  coresCarriedAtTurnStart?: string[],
 ): number => {
   const owner = playerKeyToOwner(who);
   const opponent: PlayerKey = who === "p1" ? "p2" : "p1";
@@ -557,7 +553,8 @@ export const computeAvailableMana = (
     // Tower of Babel provides 2 mana (merged from Base + Apex)
     if (
       isTowerOfBabel(siteName) ||
-      (babelTowers && isBaseOfBabel(siteName) &&
+      (babelTowers &&
+        isBaseOfBabel(siteName) &&
         babelTowers.some((t) => t.cellKey === (cellKey as CellKey)))
     ) {
       mana += 2;
@@ -612,15 +609,24 @@ export const computeAvailableMana = (
         }
         // Regular mana providers
         if (MANA_PROVIDER_BY_NAME.has(nm)) {
-          // Cores (IN_PLAY_ARTIFACT_PROVIDERS) provide mana while in play - no attachment needed
-          // Other artifacts only provide mana when attached (being carried)
-          if (
-            isArtifact &&
-            !p.attachedTo &&
-            !IN_PLAY_ARTIFACT_PROVIDERS.has(nm)
-          ) {
-            // Non-core artifact not attached - does not provide mana
+          // ALL artifacts (including cores) only provide mana when attached (being carried)
+          if (isArtifact && !p.attachedTo) {
             continue;
+          }
+          // Artifact cores additionally need mana timing check:
+          // only provide mana if summoned this turn OR was carried at turn start
+          if (isArtifact && nm.includes("core")) {
+            const instanceId = p.instanceId ?? null;
+            const enteredThisTurn =
+              currentTurn !== undefined &&
+              p.enteredOnTurn !== undefined &&
+              p.enteredOnTurn === currentTurn;
+            const wasCarriedAtStart =
+              instanceId !== null &&
+              coresCarriedAtTurnStart?.includes(instanceId);
+            if (!enteredThisTurn && !wasCarriedAtStart) {
+              continue;
+            }
           }
           mana += 1;
         }

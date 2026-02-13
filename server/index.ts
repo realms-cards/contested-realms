@@ -4314,6 +4314,15 @@ io.on("connection", async (socket: SocketClient) => {
       type === "accusationSelectCard" ||
       type === "accusationResolve" ||
       type === "accusationCancel" ||
+      type === "inquisitionBegin" ||
+      type === "inquisitionSelectCard" ||
+      type === "inquisitionResolve" ||
+      type === "inquisitionSkip" ||
+      type === "inquisitionCancel" ||
+      type === "inquisitionSummonOffer" ||
+      type === "inquisitionSummonAccept" ||
+      type === "inquisitionSummonPlace" ||
+      type === "inquisitionSummonDecline" ||
       type === "legionOfGallBegin" ||
       type === "legionOfGallConfirm" ||
       type === "legionOfGallSelect" ||

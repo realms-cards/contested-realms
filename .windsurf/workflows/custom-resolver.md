@@ -918,15 +918,17 @@ get().movePermanentToZone(spell.at, spell.index, "graveyard");
 
 ## Existing Resolvers Reference
 
-| Card              | State File                 | Overlay                       | Message Types                 | Notes                         |
-| ----------------- | -------------------------- | ----------------------------- | ----------------------------- | ----------------------------- |
-| Browse            | `browseState.ts`           | `BrowseOverlay.tsx`           | browseBegin, browseResolve    | Search top 5 spells           |
-| Common Sense      | `commonSenseState.ts`      | `CommonSenseOverlay.tsx`      | commonSenseBegin, etc.        | Search spellbook for spell    |
-| Dhol Chants       | `dholChantsState.ts`       | `DholChantsOverlay.tsx`       | dholChantsBegin, etc.         | Tap allies for damage         |
-| Demonic Contract  | `demonicContractState.ts`  | `DemonicContractOverlay.tsx`  | demonicContractBegin, etc.    | Search with rarity limit      |
-| Highland Princess | `highlandPrincessState.ts` | `HighlandPrincessOverlay.tsx` | highlandPrincessGenesis, etc. | Search for artifact ≤1        |
-| Legion of Gall    | `legionOfGallState.ts`     | `LegionOfGallOverlay.tsx`     | legionOfGallBegin, etc.       | Inspect opponent's collection |
-| Raise Dead        | `raiseDeadState.ts`        | `RaiseDeadOverlay.tsx`        | raiseDeadBegin, etc.          | Summon random dead minion     |
+| Card                      | State File                  | Overlay                        | Message Types                                                                                     | Notes                                                                 |
+| ------------------------- | --------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| Browse                    | `browseState.ts`            | `BrowseOverlay.tsx`            | browseBegin, browseResolve                                                                        | Search top 5 spells                                                   |
+| Common Sense              | `commonSenseState.ts`       | `CommonSenseOverlay.tsx`       | commonSenseBegin, etc.                                                                            | Search spellbook for spell                                            |
+| Dhol Chants               | `dholChantsState.ts`        | `DholChantsOverlay.tsx`        | dholChantsBegin, etc.                                                                             | Tap allies for damage                                                 |
+| Demonic Contract          | `demonicContractState.ts`   | `DemonicContractOverlay.tsx`   | demonicContractBegin, etc.                                                                        | Search with rarity limit                                              |
+| Highland Princess         | `highlandPrincessState.ts`  | `HighlandPrincessOverlay.tsx`  | highlandPrincessGenesis, etc.                                                                     | Search for artifact ≤1                                                |
+| Legion of Gall            | `legionOfGallState.ts`      | `LegionOfGallOverlay.tsx`      | legionOfGallBegin, etc.                                                                           | Inspect opponent's collection                                         |
+| Raise Dead                | `raiseDeadState.ts`         | `RaiseDeadOverlay.tsx`         | raiseDeadBegin, etc.                                                                              | Summon random dead minion                                             |
+| The Inquisition (Genesis) | `inquisitionState.ts`       | `InquisitionOverlay.tsx`       | inquisitionBegin, inquisitionSelectCard, inquisitionResolve, inquisitionSkip, inquisitionCancel   | Reveal opponent hand, may banish. Adapted from Accusation             |
+| The Inquisition (Passive) | `inquisitionSummonState.ts` | `InquisitionSummonOverlay.tsx` | inquisitionSummonOffer, inquisitionSummonAccept, inquisitionSummonPlace, inquisitionSummonDecline | Reactive summon when revealed. Cross-cutting hooks in 4 trigger files |
 
 Use these as reference implementations.
 
@@ -1033,3 +1035,105 @@ Special sites are **NOT** custom resolvers - they don't have overlays or user in
 - Trigger: `src/lib/game/store/gameActions/playActions.ts` (~line 848)
 - Handlers: `src/lib/game/store/customMessageHandlers.ts` (~line 3112)
 - Store: Integrated in `src/lib/game/store.ts` (line 187, line 302)
+
+---
+
+## Recent Example: The Inquisition (Multi-Part Resolver + Passive Ability)
+
+**Card Text:**
+
+> When an opponent can see this card in your hand or spellbook, you may summon it.
+> Genesis → Target opponent reveals their hand. You may banish a card from it.
+
+This card required **two separate resolvers** — one for the Genesis ability and one for the passive "summon when revealed" ability — plus cross-resolver detection hooks.
+
+### Part 1: Genesis Resolver (Reveal + Banish)
+
+**Pattern:** Adapted from Accusation (both reveal opponent's hand and banish a card).
+
+**Key differences from Accusation:**
+
+- The Inquisition is a **minion** (spell field → `minion` field in pending state)
+- No Evil-card mechanic — caster always chooses which card to banish
+- Added a **Skip** option (caster can decline to banish)
+
+**Files:**
+
+- State: `src/lib/game/store/inquisitionState.ts`
+- Overlay: `src/components/game/InquisitionOverlay.tsx`
+- Types: `InquisitionPhase`, `PendingInquisition` in `types.ts`
+- Trigger: `playActions.ts` — detects `cardNameLower === "the inquisition"` and calls `beginInquisition()`
+- Handlers: `customMessageHandlers.ts` — `inquisitionBegin`, `inquisitionSelectCard`, `inquisitionResolve`, `inquisitionSkip`, `inquisitionCancel`
+- Server: All 5 message types added to `server/index.ts` relay whitelist
+
+**Debugging lesson — server message relay:**
+The initial implementation had everything correct on the client side but banish wasn't working in online play. Root cause: the server's `socket.on("message")` handler has an **explicit whitelist** of message types in a long `if/else if` chain. Any message type NOT in the whitelist is **silently dropped**. The inquisition messages were missing from this whitelist. **Always register new message types in `server/index.ts`** (see Pitfall 6 above).
+
+**Zone patching lesson:**
+The caster should NOT send `trySendPatch` for the victim's zones. Only the zone owner (victim) sends the authoritative patch. In hotseat mode (`actorKey === null`), the caster handles everything locally. In online mode, the victim receives the `inquisitionResolve` custom message and updates their own zones + sends their own patch.
+
+### Part 2: Passive Summon Ability ("When an opponent can see this card...")
+
+This is a **reactive/cross-cutting ability** — it fires as an interrupt when any effect reveals The Inquisition to the opponent.
+
+**Architecture: Detection Utility + Trigger Hooks**
+
+A shared utility function scans revealed cards:
+
+```typescript
+// src/lib/game/store/inquisitionSummonState.ts
+export function findInquisitionInCards(cards: CardRef[]): number {
+  return cards.findIndex(
+    (c) => (c.name || "").toLowerCase() === "the inquisition",
+  );
+}
+```
+
+This is called from each trigger point with a `setTimeout(() => ..., 800)` delay so the original reveal UI shows first.
+
+**4 trigger points (Mother Nature excluded — it already auto-summons minions):**
+
+| #   | Trigger                 | Where hooked                                                                            | Source zone                 | Who gets the offer                 |
+| --- | ----------------------- | --------------------------------------------------------------------------------------- | --------------------------- | ---------------------------------- |
+| 1   | Accusation              | `accusationState.ts` → `beginAccusation()`                                              | hand                        | Victim (hand owner)                |
+| 2   | The Inquisition Genesis | `inquisitionState.ts` → `beginInquisition()`                                            | hand                        | Victim (hand owner)                |
+| 3   | Searing Truth           | `searingTruthState.ts` → `selectSearingTruthTarget()`                                   | hand (moved from spellbook) | Target (only when caster ≠ target) |
+| 4   | Lilith                  | `lilithState.ts` (hotseat) + `customMessageHandlers.ts` `lilithRevealResponse` (online) | spellbook                   | Opponent (spellbook owner)         |
+
+**State slice:** `inquisitionSummonState.ts`
+
+- `offerInquisitionSummon(input)` — sets `phase: "offered"`, broadcasts to opponent
+- `acceptInquisitionSummon()` — transitions to `phase: "selectingCell"`
+- `placeInquisitionSummon(cell)` — removes card from zone, creates permanent, sends patches, then auto-triggers Genesis after 500ms delay
+- `declineInquisitionSummon()` — clears state
+
+**Overlay:** `InquisitionSummonOverlay.tsx`
+
+- **Offered phase:** Card preview + "Summon It" / "Decline" buttons
+- **SelectingCell phase:** Self-contained clickable board grid rendered in DOM (avoids complex 3D board integration). Shows valid cells (adjacent to owner's sites) highlighted in purple. Legend: ★ = your site, ◆ = opponent site, ● = occupied
+- **Opponent view:** "Opponent is deciding..." / "Opponent is choosing where to summon..."
+
+**Server relay:** 4 message types — `inquisitionSummonOffer`, `inquisitionSummonAccept`, `inquisitionSummonPlace`, `inquisitionSummonDecline`
+
+**Message handlers:** In `customMessageHandlers.ts` — offer (sets pending for non-owner), accept (phase transition), place (opponent updates zones/permanents locally), decline (clears state)
+
+**Genesis chaining:** After `placeInquisitionSummon` creates the permanent, it calls `beginInquisition()` after a 500ms delay to trigger the Genesis ability (reveal opponent's hand, may banish).
+
+**Files:**
+
+- State: `src/lib/game/store/inquisitionSummonState.ts`
+- Overlay: `src/components/game/InquisitionSummonOverlay.tsx`
+- Types: `InquisitionSummonPhase`, `PendingInquisitionSummon` in `types.ts`
+- Detection hooks: `accusationState.ts`, `inquisitionState.ts`, `searingTruthState.ts`, `lilithState.ts`, `customMessageHandlers.ts` (lilithRevealResponse)
+- Handlers: `customMessageHandlers.ts` (offer/accept/place/decline)
+- Server: 4 message types in `server/index.ts` relay whitelist
+- Store: `pendingInquisitionSummon: null` in `resetGameState()`
+- Pages: Overlay mounted in both `src/app/online/play/[id]/page.tsx` and `src/app/play/page.tsx`
+
+### Key Design Patterns Learned
+
+1. **Cross-cutting reactive abilities** require a detection utility + hooks at each trigger point, NOT a single centralized handler
+2. **Board cell selection in overlays** can use a self-contained DOM grid rather than integrating with the 3D board — much simpler and fully self-contained
+3. **Genesis chaining** after reactive summon uses a `setTimeout` delay to let the placement settle before triggering the next resolver
+4. **Trigger source tracking** (`triggerSource` field) helps debugging which effect caused the summon offer
+5. **Dual-path Lilith detection** — hotseat in the state file, online in the message handler — because Lilith's reveal flow differs between modes

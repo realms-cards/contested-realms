@@ -1066,6 +1066,12 @@ export const createNetworkSlice: StateCreator<
       } else if (replaceKeys.has("etherCoresInVoidAtTurnStart")) {
         next.etherCoresInVoidAtTurnStart = [];
       }
+      // Cores carried at turn start (for carried-core mana calculation)
+      if (p.coresCarriedAtTurnStart !== undefined) {
+        next.coresCarriedAtTurnStart = p.coresCarriedAtTurnStart;
+      } else if (replaceKeys.has("coresCarriedAtTurnStart")) {
+        next.coresCarriedAtTurnStart = [];
+      }
       // Mephistopheles summon used state (Gothic expansion)
       if (p.mephistophelesSummonUsed !== undefined) {
         next.mephistophelesSummonUsed = p.mephistophelesSummonUsed;
@@ -1511,6 +1517,10 @@ export const createNetworkSlice: StateCreator<
       // Ether Core turn-start tracking - applyPatch version
       if (p.etherCoresInVoidAtTurnStart !== undefined) {
         next.etherCoresInVoidAtTurnStart = p.etherCoresInVoidAtTurnStart;
+      }
+      // Cores carried at turn start - applyPatch version
+      if (p.coresCarriedAtTurnStart !== undefined) {
+        next.coresCarriedAtTurnStart = p.coresCarriedAtTurnStart;
       }
       // Mephistopheles summon used state - applyPatch version
       if (p.mephistophelesSummonUsed !== undefined) {

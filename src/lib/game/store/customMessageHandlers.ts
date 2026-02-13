@@ -1,6 +1,7 @@
 import type { StateCreator } from "zustand";
 import { extractMagicTargetingHintsSync } from "@/lib/game/cardAbilities";
 import { hasCustomResolver } from "@/lib/game/resolverRegistry";
+import { findInquisitionInCards } from "./inquisitionSummonState";
 import type { CustomMessage } from "@/lib/net/transport";
 import type {
   GameState,
@@ -2230,6 +2231,365 @@ export function handleCustomMessage(
     return;
   }
 
+  // --- The Inquisition minion Genesis message handlers ---
+  if (t === "inquisitionBegin") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const minionAny = (msg as { minion?: unknown }).minion as unknown;
+    const casterSeat = (msg as { casterSeat?: unknown }).casterSeat as
+      | PlayerKey
+      | undefined;
+    const victimSeat = (msg as { victimSeat?: unknown }).victimSeat as
+      | PlayerKey
+      | undefined;
+    const handSize = (msg as { handSize?: unknown }).handSize as
+      | number
+      | undefined;
+    if (!id || !minionAny || !casterSeat || !victimSeat) return;
+
+    // Skip if we already have this inquisition
+    const existing = get().pendingInquisition;
+    if (existing?.id === id) return;
+
+    const rec = minionAny as Record<string, unknown>;
+
+    // Get victim's hand (they can see their own cards)
+    const zones = get().zones;
+    const actorKey = get().actorKey;
+    const isVictim = actorKey === victimSeat;
+    const revealedHand = isVictim ? zones[victimSeat]?.hand || [] : [];
+
+    set({
+      pendingInquisition: {
+        id,
+        minion: {
+          at: rec.at as CellKey,
+          index: Number(rec.index),
+          instanceId: (rec.instanceId as string | null) ?? null,
+          owner: Number(rec.owner) as 1 | 2,
+          card: rec.card as CardRef,
+        },
+        casterSeat,
+        phase: "revealing",
+        victimSeat,
+        revealedHand,
+        selectedCardIndex: null,
+        createdAt: Date.now(),
+      },
+    } as Partial<GameState> as GameState);
+    try {
+      get().log(
+        `[${casterSeat.toUpperCase()}] The Inquisition Genesis - ${victimSeat.toUpperCase()}'s hand is revealed (${
+          handSize ?? "?"
+        } cards)`,
+      );
+    } catch {}
+
+    // Auto-transition to selecting phase
+    setTimeout(() => {
+      const current = get().pendingInquisition;
+      if (current?.id === id && current.phase === "revealing") {
+        set({
+          pendingInquisition: {
+            ...current,
+            phase: "selecting",
+          },
+        } as Partial<GameState> as GameState);
+      }
+    }, 1500);
+    return;
+  }
+  if (t === "inquisitionSelectCard") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const cardIndex = (msg as { cardIndex?: unknown }).cardIndex as
+      | number
+      | undefined;
+    if (!id || cardIndex == null) return;
+    set((s) => {
+      if (!s.pendingInquisition || s.pendingInquisition.id !== id)
+        return s as GameState;
+      return {
+        pendingInquisition: {
+          ...s.pendingInquisition,
+          selectedCardIndex: cardIndex,
+        },
+      } as Partial<GameState> as GameState;
+    });
+    return;
+  }
+  if (t === "inquisitionResolve") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const casterSeat = (msg as { casterSeat?: unknown }).casterSeat as
+      | PlayerKey
+      | undefined;
+    const victimSeat = (msg as { victimSeat?: unknown }).victimSeat as
+      | PlayerKey
+      | undefined;
+    const selectedCardIndex = (msg as { selectedCardIndex?: unknown })
+      .selectedCardIndex as number | undefined;
+    const selectedCard = (msg as { selectedCard?: unknown }).selectedCard as
+      | CardRef
+      | undefined;
+
+    if (!id || !casterSeat || !victimSeat) return;
+
+    // Skip if we're the caster - we already handled it locally
+    const actorKey = get().actorKey;
+    if (actorKey === casterSeat) {
+      set({ pendingInquisition: null } as Partial<GameState> as GameState);
+      return;
+    }
+
+    // We are the victim - update our own zones
+    if (
+      actorKey === victimSeat &&
+      selectedCard &&
+      typeof selectedCardIndex === "number"
+    ) {
+      const zones = get().zones;
+      const hand = [...(zones[victimSeat]?.hand || [])];
+      const banished = [...(zones[victimSeat]?.banished || [])];
+
+      // Find and remove the card from hand
+      const handIndex = hand.findIndex(
+        (c) =>
+          c.cardId === selectedCard.cardId &&
+          c.slug === selectedCard.slug &&
+          c.name === selectedCard.name,
+      );
+
+      if (handIndex !== -1) {
+        hand.splice(handIndex, 1);
+      }
+
+      // Add to banished
+      banished.push(selectedCard);
+
+      const zonesNext = {
+        ...zones,
+        [victimSeat]: {
+          ...zones[victimSeat],
+          hand,
+          banished,
+        },
+      };
+
+      set({
+        zones: zonesNext,
+        pendingInquisition: null,
+      } as Partial<GameState> as GameState);
+
+      // Persist zone changes to server
+      try {
+        get().trySendPatch({
+          zones: { [victimSeat]: zonesNext[victimSeat] } as Record<
+            PlayerKey,
+            Zones
+          >,
+        });
+      } catch {}
+
+      try {
+        get().log(
+          `The Inquisition resolved: ${
+            selectedCard.name ?? "a card"
+          } banished from ${victimSeat.toUpperCase()}'s hand`,
+        );
+      } catch {}
+    } else {
+      // Spectator or other case
+      set({ pendingInquisition: null } as Partial<GameState> as GameState);
+      try {
+        get().log(
+          `The Inquisition resolved: a card banished from ${
+            victimSeat?.toUpperCase() ?? "opponent"
+          }'s hand`,
+        );
+      } catch {}
+    }
+    return;
+  }
+  if (t === "inquisitionSkip") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    set((s) => {
+      if (!s.pendingInquisition || (id && s.pendingInquisition.id !== id))
+        return s as GameState;
+      return { pendingInquisition: null } as Partial<GameState> as GameState;
+    });
+    try {
+      get().log("The Inquisition: chose not to banish a card");
+    } catch {}
+    return;
+  }
+  if (t === "inquisitionCancel") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    set((s) => {
+      if (!s.pendingInquisition || (id && s.pendingInquisition.id !== id))
+        return s as GameState;
+      return { pendingInquisition: null } as Partial<GameState> as GameState;
+    });
+    try {
+      get().log("The Inquisition cancelled");
+    } catch {}
+    return;
+  }
+
+  // --- The Inquisition passive summon message handlers ---
+  if (t === "inquisitionSummonOffer") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const ownerSeat = (msg as { ownerSeat?: unknown }).ownerSeat as
+      | PlayerKey
+      | undefined;
+    const triggerSource = (msg as { triggerSource?: unknown }).triggerSource as
+      | string
+      | undefined;
+    const card = (msg as { card?: unknown }).card as CardRef | undefined;
+    const sourceZone = (msg as { sourceZone?: unknown }).sourceZone as
+      | "hand"
+      | "spellbook"
+      | undefined;
+    const cardIndex = (msg as { cardIndex?: unknown }).cardIndex as
+      | number
+      | undefined;
+
+    if (!id || !ownerSeat || !card || !sourceZone || cardIndex == null) return;
+
+    // Skip if we already have this exact offer (the triggering client set it locally)
+    if (get().pendingInquisitionSummon?.id === id) return;
+
+    set({
+      pendingInquisitionSummon: {
+        id,
+        ownerSeat,
+        triggerSource: triggerSource || "unknown",
+        card,
+        sourceZone,
+        cardIndex,
+        phase: "offered",
+        selectedCell: null,
+        validCells: [],
+        createdAt: Date.now(),
+      },
+    } as Partial<GameState> as GameState);
+    try {
+      get().log(
+        `[${ownerSeat.toUpperCase()}] The Inquisition was revealed! May summon it from ${sourceZone}.`,
+      );
+    } catch {}
+    return;
+  }
+  if (t === "inquisitionSummonAccept") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const validCells = (msg as { validCells?: unknown }).validCells as
+      | CellKey[]
+      | undefined;
+    if (!id) return;
+    set((s) => {
+      const cur = s.pendingInquisitionSummon;
+      if (!cur || cur.id !== id) return s as GameState;
+      return {
+        pendingInquisitionSummon: {
+          ...cur,
+          phase: "selectingCell",
+          validCells: validCells || cur.validCells || [],
+        },
+      } as Partial<GameState> as GameState;
+    });
+    return;
+  }
+  if (t === "inquisitionSummonPlace") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const ownerSeat = (msg as { ownerSeat?: unknown }).ownerSeat as
+      | PlayerKey
+      | undefined;
+    const cell = (msg as { cell?: unknown }).cell as CellKey | undefined;
+    const card = (msg as { card?: unknown }).card as CardRef | undefined;
+    const sourceZone = (msg as { sourceZone?: unknown }).sourceZone as
+      | "hand"
+      | "spellbook"
+      | undefined;
+    const instanceId = (msg as { instanceId?: unknown }).instanceId as
+      | string
+      | undefined;
+
+    if (!id || !ownerSeat || !cell || !card || !sourceZone) return;
+
+    // Skip if we're the owner - we already handled locally
+    const actorKey = get().actorKey;
+    if (actorKey === ownerSeat) {
+      set({
+        pendingInquisitionSummon: null,
+      } as Partial<GameState> as GameState);
+      return;
+    }
+
+    // Opponent placed The Inquisition — update our view of their zones and permanents
+    const zones = get().zones;
+    const permanents = get().permanents;
+    const ownerNum = ownerSeat === "p1" ? 1 : 2;
+
+    // Remove the card from the owner's source zone
+    const zoneArr = [...(zones[ownerSeat]?.[sourceZone] || [])];
+    const removeIdx = zoneArr.findIndex(
+      (c) => c.cardId === card.cardId && c.name === card.name,
+    );
+    if (removeIdx !== -1) {
+      zoneArr.splice(removeIdx, 1);
+    }
+
+    // Add the permanent
+    const newPermanent = {
+      card,
+      owner: ownerNum as 1 | 2,
+      tapped: false,
+      tapVersion: 0,
+      version: 0,
+      instanceId: instanceId || `${card.cardId}_${Date.now()}`,
+      counters: 0,
+      damage: 0,
+      summoningSickness: true,
+    };
+
+    const cellPerms = permanents[cell] || [];
+    const permanentsNext = {
+      ...permanents,
+      [cell]: [...cellPerms, newPermanent],
+    };
+    const zonesNext = {
+      ...zones,
+      [ownerSeat]: {
+        ...zones[ownerSeat],
+        [sourceZone]: zoneArr,
+      },
+    };
+
+    set({
+      zones: zonesNext,
+      permanents: permanentsNext,
+      pendingInquisitionSummon: null,
+    } as Partial<GameState> as GameState);
+
+    try {
+      get().log(
+        `[${ownerSeat.toUpperCase()}] summons The Inquisition from ${sourceZone}!`,
+      );
+    } catch {}
+    return;
+  }
+  if (t === "inquisitionSummonDecline") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    set((s) => {
+      const cur = s.pendingInquisitionSummon;
+      if (!cur || (id && cur.id !== id)) return s as GameState;
+      return {
+        pendingInquisitionSummon: null,
+      } as Partial<GameState> as GameState;
+    });
+    try {
+      get().log("The Inquisition: owner declines to summon.");
+    } catch {}
+    return;
+  }
+
   // --- Pith Imp message handlers ---
   if (t === "pithImpSteal") {
     const id = (msg as { id?: unknown }).id as string | undefined;
@@ -3982,6 +4342,26 @@ export function handleCustomMessage(
         } from opponent's spellbook`,
       );
     } catch {}
+
+    // Check if The Inquisition was revealed from opponent's spellbook
+    // The opponent (whose spellbook was searched) owns it and gets the offer
+    if (revealedCard && lilithOwner) {
+      const opponentSeat = lilithOwner === "p1" ? "p2" : "p1";
+      if (findInquisitionInCards([revealedCard]) !== -1) {
+        setTimeout(() => {
+          try {
+            get().offerInquisitionSummon({
+              ownerSeat: opponentSeat,
+              triggerSource: "lilith",
+              card: revealedCard,
+              sourceZone: "spellbook",
+              cardIndex: 0,
+            });
+          } catch {}
+        }, 800);
+      }
+    }
+
     return;
   }
 

@@ -662,6 +662,51 @@ export type PendingSearingTruth = {
   createdAt: number;
 };
 
+// --- The Inquisition Passive Summon State ------------------------------------
+// "When an opponent can see this card in your hand or spellbook, you may summon it."
+export type InquisitionSummonPhase =
+  | "offered" // Owner is being asked if they want to summon
+  | "selectingCell" // Owner accepted, picking a board cell
+  | "complete"; // Summoned
+
+export type PendingInquisitionSummon = {
+  id: string;
+  ownerSeat: PlayerKey; // Owner of The Inquisition
+  triggerSource: string; // What revealed the card (e.g., "accusation", "inquisition", "searing_truth", "lilith")
+  card: CardRef; // The Inquisition card ref
+  sourceZone: "hand" | "spellbook"; // Where the card was when revealed
+  cardIndex: number; // Index in the source zone array
+  phase: InquisitionSummonPhase;
+  selectedCell: CellKey | null;
+  validCells: CellKey[]; // Valid board cells for placement (computed on accept)
+  createdAt: number;
+};
+
+// --- The Inquisition Minion State -------------------------------------------
+// Genesis: "Target opponent reveals their hand. You may banish a card from it."
+export type InquisitionPhase =
+  | "revealing" // Opponent's hand is being revealed
+  | "selecting" // Caster selects a card to banish (or skips)
+  | "resolving"
+  | "complete";
+
+export type PendingInquisition = {
+  id: string;
+  minion: {
+    at: CellKey;
+    index: number;
+    instanceId?: string | null;
+    owner: 1 | 2;
+    card: CardRef;
+  };
+  casterSeat: PlayerKey;
+  phase: InquisitionPhase;
+  victimSeat: PlayerKey;
+  revealedHand: CardRef[];
+  selectedCardIndex: number | null;
+  createdAt: number;
+};
+
 // --- Accusation Spell State ------------------------------------------------
 // "Target opponent reveals their hand and banishes a card. If any of their cards or allies are Evil, you may choose which."
 export type AccusationPhase =
@@ -1475,6 +1520,9 @@ export type GameState = {
   uiHidden: boolean;
   setUiHidden: (hidden: boolean) => void;
   toggleUiHidden: () => void;
+  // Turn overlay active flag – other overlays should defer while this is true
+  turnOverlayActive: boolean;
+  setTurnOverlayActive: (active: boolean) => void;
   // Card meta cache (subset) used to detect base power and rarity
   metaByCardId: Record<
     number,
@@ -1744,6 +1792,34 @@ export type GameState = {
   selectSearingTruthTarget: (targetSeat: PlayerKey) => Promise<void>;
   resolveSearingTruth: () => void;
   cancelSearingTruth: () => void;
+  // The Inquisition passive summon offer flow
+  pendingInquisitionSummon: PendingInquisitionSummon | null;
+  offerInquisitionSummon: (input: {
+    ownerSeat: PlayerKey;
+    triggerSource: string;
+    card: CardRef;
+    sourceZone: "hand" | "spellbook";
+    cardIndex: number;
+  }) => void;
+  acceptInquisitionSummon: () => void;
+  placeInquisitionSummon: (cell: CellKey) => void;
+  declineInquisitionSummon: () => void;
+  // The Inquisition minion Genesis flow
+  pendingInquisition: PendingInquisition | null;
+  beginInquisition: (input: {
+    minion: {
+      at: CellKey;
+      index: number;
+      instanceId?: string | null;
+      owner: 1 | 2;
+      card: CardRef;
+    };
+    casterSeat: PlayerKey;
+  }) => void;
+  selectInquisitionCard: (cardIndex: number) => void;
+  resolveInquisition: () => void;
+  skipInquisition: () => void;
+  cancelInquisition: () => void;
   // Accusation spell flow
   pendingAccusation: PendingAccusation | null;
   beginAccusation: (input: {
@@ -2493,6 +2569,10 @@ export type GameState = {
   // Tracks which Ether Core instanceIds were in the void at the start of the turn
   // Ether Core only provides 3 mana if cast this turn OR started the turn in the void
   etherCoresInVoidAtTurnStart: string[];
+  // Cores Carried At Turn Start State
+  // Tracks which core artifact instanceIds were attached (carried) at the start of the turn
+  // Cores only provide mana if summoned this turn OR were carried at turn start
+  coresCarriedAtTurnStart: string[];
   // Druid Flip State (Arthurian Legends)
   // Tracks whether each player's Druid has been flipped (one-way transformation)
   druidFlipped: Record<PlayerKey, boolean>;
@@ -2949,6 +3029,7 @@ export type ServerPatchT = Partial<{
   necromancerSkeletonUsed: GameState["necromancerSkeletonUsed"];
   harbingerPortalDiscountUsed: GameState["harbingerPortalDiscountUsed"];
   etherCoresInVoidAtTurnStart: GameState["etherCoresInVoidAtTurnStart"];
+  coresCarriedAtTurnStart: GameState["coresCarriedAtTurnStart"];
   druidFlipped: GameState["druidFlipped"];
   stolenCards: GameState["stolenCards"];
   pithImpHands: GameState["pithImpHands"];

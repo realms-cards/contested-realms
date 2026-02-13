@@ -1,6 +1,7 @@
 import type { StateCreator } from "zustand";
 import type { CustomMessage } from "@/lib/net/transport";
 import type { GameState, PlayerKey } from "./types";
+import { findInquisitionInCards } from "./inquisitionSummonState";
 
 function newLilithRevealId() {
   return `lilith_${Date.now().toString(36)}_${Math.random()
@@ -21,7 +22,7 @@ export type LilithSlice = Pick<
 
 export const createLilithSlice: StateCreator<GameState, [], [], LilithSlice> = (
   set,
-  get
+  get,
 ) => ({
   lilithMinions: [],
   pendingLilithReveal: null,
@@ -45,7 +46,7 @@ export const createLilithSlice: StateCreator<GameState, [], [], LilithSlice> = (
     set((state) => ({
       ...state,
       lilithMinions: state.lilithMinions.filter(
-        (l) => l.instanceId !== instanceId
+        (l) => l.instanceId !== instanceId,
       ),
     }));
   },
@@ -53,7 +54,7 @@ export const createLilithSlice: StateCreator<GameState, [], [], LilithSlice> = (
   // Trigger end of turn - reveals opponent's top spell for each Lilith owned by the ending player
   triggerLilithEndOfTurn: async (
     endingPlayerSeat: PlayerKey,
-    skipConfirmation?: boolean
+    skipConfirmation?: boolean,
   ) => {
     const lilithMinions = get().lilithMinions;
     const zones = get().zones;
@@ -70,7 +71,7 @@ export const createLilithSlice: StateCreator<GameState, [], [], LilithSlice> = (
 
     // Find all Lilith minions owned by the ending player
     const playerLiliths = lilithMinions.filter(
-      (l) => l.ownerSeat === endingPlayerSeat
+      (l) => l.ownerSeat === endingPlayerSeat,
     );
 
     console.log("[Lilith] Player Liliths found:", {
@@ -85,7 +86,7 @@ export const createLilithSlice: StateCreator<GameState, [], [], LilithSlice> = (
       // Verify Lilith is still on the battlefield
       const cellPerms = permanents[lilith.location];
       const lilithPerm = cellPerms?.find(
-        (p) => p.instanceId === lilith.instanceId
+        (p) => p.instanceId === lilith.instanceId,
       );
       if (!lilithPerm) {
         // Lilith no longer exists, unregister
@@ -124,7 +125,7 @@ export const createLilithSlice: StateCreator<GameState, [], [], LilithSlice> = (
       // Skip if we are the opponent - we'll respond when we receive the request
       if (actorKey === opponentSeat) {
         console.log(
-          "[Lilith] We are opponent, skipping - will respond to request"
+          "[Lilith] We are opponent, skipping - will respond to request",
         );
         continue;
       }
@@ -134,7 +135,7 @@ export const createLilithSlice: StateCreator<GameState, [], [], LilithSlice> = (
       if (actorKey === endingPlayerSeat) {
         // We ARE the Lilith owner - request the card from opponent
         console.log(
-          "[Lilith] We are Lilith owner, requesting opponent's top card"
+          "[Lilith] We are Lilith owner, requesting opponent's top card",
         );
 
         // Send request to opponent
@@ -174,7 +175,7 @@ export const createLilithSlice: StateCreator<GameState, [], [], LilithSlice> = (
           get().log(
             `[${endingPlayerSeat.toUpperCase()}] ${
               lilith.cardName
-            }: Opponent's spellbook is empty`
+            }: Opponent's spellbook is empty`,
           );
           continue;
         }
@@ -184,7 +185,7 @@ export const createLilithSlice: StateCreator<GameState, [], [], LilithSlice> = (
 
         // Fetch card meta
         const cardIds = [revealedCard.cardId].filter(
-          (cid) => Number.isFinite(cid) && cid > 0
+          (cid) => Number.isFinite(cid) && cid > 0,
         );
         if (cardIds.length > 0) {
           try {
@@ -215,8 +216,23 @@ export const createLilithSlice: StateCreator<GameState, [], [], LilithSlice> = (
         get().log(
           `[${endingPlayerSeat.toUpperCase()}] ${lilith.cardName} reveals ${
             revealedCard.name
-          } from opponent's spellbook`
+          } from opponent's spellbook`,
         );
+
+        // Check if The Inquisition was revealed from opponent's spellbook
+        if (findInquisitionInCards([revealedCard]) !== -1) {
+          setTimeout(() => {
+            try {
+              get().offerInquisitionSummon({
+                ownerSeat: opponentSeat,
+                triggerSource: "lilith",
+                card: revealedCard,
+                sourceZone: "spellbook",
+                cardIndex: 0, // top of spellbook
+              });
+            } catch {}
+          }, 800);
+        }
       }
     }
   },
@@ -289,7 +305,7 @@ export const createLilithSlice: StateCreator<GameState, [], [], LilithSlice> = (
         });
 
         get().log(
-          `[${lilithOwner.toUpperCase()}] Lilith summons ${revealedCard.name}!`
+          `[${lilithOwner.toUpperCase()}] Lilith summons ${revealedCard.name}!`,
         );
       } else {
         // Not a minion - just mark complete, opponent handles their spellbook
@@ -300,7 +316,7 @@ export const createLilithSlice: StateCreator<GameState, [], [], LilithSlice> = (
         get().log(
           `[${lilithOwner.toUpperCase()}] ${
             revealedCard.name
-          } goes to the bottom of ${opponentSeat.toUpperCase()}'s spellbook`
+          } goes to the bottom of ${opponentSeat.toUpperCase()}'s spellbook`,
         );
       }
 
@@ -358,7 +374,7 @@ export const createLilithSlice: StateCreator<GameState, [], [], LilithSlice> = (
       };
 
       get().log(
-        `[${lilithOwner.toUpperCase()}] Lilith summons ${revealedCard.name}!`
+        `[${lilithOwner.toUpperCase()}] Lilith summons ${revealedCard.name}!`,
       );
     } else {
       // Put card at the bottom of opponent's spellbook
@@ -373,7 +389,7 @@ export const createLilithSlice: StateCreator<GameState, [], [], LilithSlice> = (
       get().log(
         `[${lilithOwner.toUpperCase()}] ${
           revealedCard.name
-        } goes to the bottom of ${opponentSeat.toUpperCase()}'s spellbook`
+        } goes to the bottom of ${opponentSeat.toUpperCase()}'s spellbook`,
       );
     }
 

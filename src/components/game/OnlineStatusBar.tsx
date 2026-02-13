@@ -101,9 +101,14 @@ export default function OnlineStatusBar({
 
   return (
     <div
-      className={`absolute ${isMobileScreen ? "top-1" : "top-3"} left-1/2 -translate-x-1/2 z-10 ${
+      className={`absolute left-1/2 -translate-x-1/2 z-10 ${
         dragFromHand ? "pointer-events-none" : "pointer-events-auto"
       } select-none`}
+      style={{
+        top: isMobileScreen
+          ? "max(0.25rem, env(safe-area-inset-top, 0.25rem))"
+          : "0.75rem",
+      }}
       onContextMenu={(e) => e.preventDefault()}
     >
       <div
