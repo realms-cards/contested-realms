@@ -71,7 +71,33 @@ export function VRCameraController({
   const tiltAngle = -0.5; // radians, ~30 degrees down
   const originRotation: [number, number, number] = [tiltAngle, 0, 0];
 
-  return <XROrigin position={originPosition} rotation={originRotation} />;
+  // Debug: render colored cubes at known positions to verify VR rendering works
+  const showDebug = session !== null;
+
+  return (
+    <>
+      <XROrigin position={originPosition} rotation={originRotation} />
+      {showDebug && (
+        <group>
+          {/* Red cube at origin */}
+          <mesh position={[0, 0.5, 0]}>
+            <boxGeometry args={[0.3, 0.3, 0.3]} />
+            <meshBasicMaterial color="red" />
+          </mesh>
+          {/* Green cube at board center */}
+          <mesh position={[0, 0.1, 0]}>
+            <boxGeometry args={[0.2, 0.2, 0.2]} />
+            <meshBasicMaterial color="green" />
+          </mesh>
+          {/* Blue cube where cards should be */}
+          <mesh position={[1, 0.05, 1]}>
+            <boxGeometry args={[0.5, 0.1, 0.7]} />
+            <meshBasicMaterial color="blue" />
+          </mesh>
+        </group>
+      )}
+    </>
+  );
 }
 
 export default VRCameraController;
