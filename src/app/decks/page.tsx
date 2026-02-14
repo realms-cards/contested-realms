@@ -1,6 +1,6 @@
 "use client";
 
-import { Grid3X3, List } from "lucide-react";
+import { Grid3X3, List, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -465,6 +465,17 @@ export default function DecksPage() {
                       </span>
                     </h2>
                     <div className="flex items-center gap-3">
+                      {/* Refresh */}
+                      <button
+                        onClick={() => void fetchDecks(true)}
+                        disabled={loading}
+                        className="p-1.5 rounded-md text-slate-400 hover:text-slate-100 hover:bg-slate-700/60 transition-colors disabled:opacity-40"
+                        aria-label="Refresh decks"
+                        title="Refresh decks"
+                      >
+                        <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+                      </button>
+
                       {/* View mode toggle */}
                       <div className="flex items-center rounded-md bg-slate-800/60 p-0.5">
                         <button

@@ -39,13 +39,7 @@ export function VRLifeCounter({
           {label}
         </Text>
       )}
-      <Text
-        fontSize={0.08}
-        color={color}
-        anchorX="center"
-        anchorY="middle"
-        font="/fonts/inter-bold.woff"
-      >
+      <Text fontSize={0.08} color={color} anchorX="center" anchorY="middle">
         {life}
       </Text>
       <mesh position={[0, 0, -0.01]}>

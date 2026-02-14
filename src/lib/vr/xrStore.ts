@@ -7,6 +7,8 @@ import { createXRStore } from "@react-three/xr";
  * Created once and shared across the application.
  */
 export const xrStore = createXRStore({
+  // Disable default Enter XR button and emulator - we use our own VREntryButton in MatchInfoPopup
+  emulate: false,
   // Configure hand tracking with grab and touch pointers for card interactions
   hand: {
     teleportPointer: false,

@@ -125,7 +125,6 @@ import { LegacySeatVideo3D } from "@/lib/rtc/SeatVideo3D";
 import { generateClientLeagueMatchResult } from "@/lib/soatc/clientResult";
 import type { LeagueMatchResult } from "@/lib/soatc/types";
 import { VRCameraController, VRStatusBar, VRBoardIntegration } from "@/lib/vr";
-import VREntryButton from "@/components/game/VREntryButton";
 import {
   useBoardPingListener,
   useBotActionToastListener,
@@ -3358,7 +3357,6 @@ export default function OnlineMatchPage() {
           {/* Toolbox and Collection buttons (bottom-right) */}
           {showToolbox && (
             <div className="absolute bottom-3 right-3 z-20 flex items-end gap-2">
-              <VREntryButton disabled={isSpectatorView} />
               <CollectionButton mySeat={myPlayerKey} />
               <GameToolbox
                 myPlayerId={myPlayerId || null}

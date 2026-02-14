@@ -2,6 +2,7 @@
 
 import { X, Users, Hash, Eye, Check, Copy } from "lucide-react";
 import { useState, useCallback } from "react";
+import { VREntryButton } from "@/components/game/VREntryButton";
 import { useGameStore } from "@/lib/game/store";
 
 interface MatchInfoPopupProps {
@@ -247,6 +248,13 @@ export default function MatchInfoPopup({
               )}
             </div>
           </div>
+
+          {/* VR Mode - only shows on supported hardware */}
+          {!spectatorMode && (
+            <div className="space-y-2 pt-2 border-t border-white/10">
+              <VREntryButton className="w-full justify-center" />
+            </div>
+          )}
 
           {/* Connection Status */}
           <div className="space-y-2 pt-2 border-t border-white/10">
