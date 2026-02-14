@@ -1,11 +1,11 @@
 "use client";
 
 import clsx from "clsx";
-import { Globe, Lock, Trash2, FileText, List, Pencil, RefreshCw } from "lucide-react";
+import { Globe, Lock, Trash2, FileText, List, MoreVertical, Pencil, RefreshCw } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
 
 type DeckItemProps = {
   deck: {
@@ -76,6 +76,24 @@ export default function DeckItem({
   );
   const [exportingText, setExportingText] = useState(false);
   const [copiedMsg, setCopiedMsg] = useState<string | null>(null);
+  const [mobileActionsOpen, setMobileActionsOpen] = useState(false);
+  const mobileActionsRef = useRef<HTMLDivElement>(null);
+
+  // Close mobile actions when tapping outside
+  useEffect(() => {
+    if (!mobileActionsOpen) return;
+    function handleOutside(e: globalThis.MouseEvent | TouchEvent) {
+      if (mobileActionsRef.current && !mobileActionsRef.current.contains(e.target as Node)) {
+        setMobileActionsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleOutside);
+    document.addEventListener("touchstart", handleOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleOutside);
+      document.removeEventListener("touchstart", handleOutside);
+    };
+  }, [mobileActionsOpen]);
 
   async function handleDelete(e: MouseEvent) {
     e.preventDefault();
@@ -311,8 +329,28 @@ export default function DeckItem({
           {new Date(deck.updatedAt).toLocaleDateString()}
         </div>
 
-        {/* All actions on hover */}
-        <div className="flex-shrink-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        {/* Mobile: always-visible more button + actions */}
+        <div ref={variant === "list" ? mobileActionsRef : undefined} className="flex-shrink-0 flex items-center gap-1">
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setMobileActionsOpen((prev) => !prev);
+            }}
+            className="p-1.5 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-700/60 md:hidden"
+            aria-label="More actions"
+            title="More actions"
+          >
+            <MoreVertical className="h-4 w-4" />
+          </button>
+
+          {/* Actions: visible on desktop hover OR mobile toggle */}
+          <div className={clsx(
+            "flex items-center gap-1 transition-opacity",
+            mobileActionsOpen
+              ? "opacity-100"
+              : "opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto"
+          )}>
           {/* Edit */}
           <button
             onClick={(e) => {
@@ -603,6 +641,7 @@ export default function DeckItem({
               <Trash2 className="h-3.5 w-3.5" />
             </button>
           )}
+          </div>
         </div>
       </Link>
     );
@@ -628,8 +667,29 @@ export default function DeckItem({
         {avatarPreview}
       </div>
 
+      {/* Mobile: always-visible more button for grid */}
+      <button
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setMobileActionsOpen((prev) => !prev);
+        }}
+        className="absolute top-2 right-2 z-20 p-1.5 rounded-md bg-black/50 text-slate-300 hover:text-white hover:bg-black/70 md:hidden"
+        aria-label="More actions"
+        title="More actions"
+      >
+        <MoreVertical className="h-4 w-4" />
+      </button>
+
       {/* Full card overlay with action buttons */}
-      <div className="absolute inset-0 z-10 flex items-center justify-center gap-3 rounded-lg bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div
+        ref={variant === "grid" ? mobileActionsRef : undefined}
+        className={clsx(
+          "absolute inset-0 z-10 flex items-center justify-center gap-3 rounded-lg bg-black/70 transition-opacity",
+          mobileActionsOpen
+            ? "opacity-100"
+            : "opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto"
+        )}>
         {copiedMsg && (
           <div
             className="absolute top-2 left-2 rounded bg-black/90 text-white text-xs px-2 py-1 ring-1 ring-white/20"
