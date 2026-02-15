@@ -1202,6 +1202,27 @@ export type PendingRaiseDead = {
   createdAt: number;
 };
 
+// --- Sea Raider / Captain Baldassare Piracy State --------------------
+// "Discard topmost N spells from defender's spellbook, may cast them this turn"
+export type PiracyPhase = "revealing" | "complete";
+
+export type PendingPiracy = {
+  id: string;
+  source: {
+    at: CellKey;
+    index: number;
+    instanceId: string | null;
+    owner: 1 | 2;
+    card: CardRef;
+  };
+  attackerSeat: PlayerKey;
+  defenderSeat: PlayerKey;
+  discardCount: number;
+  discardedCards: CardRef[];
+  phase: PiracyPhase;
+  createdAt: number;
+};
+
 // --- Artifact Cast State (Toolbox, Silver Bullet) ---------------------
 // Allows bearer to cast a spell from collection with rarity restriction
 export type ArtifactCastType = "toolbox" | "silver_bullet";
@@ -2182,6 +2203,20 @@ export type GameState = {
   }) => Promise<void>;
   resolveRaiseDead: () => void;
   cancelRaiseDead: () => void;
+  // Sea Raider / Captain Baldassare piracy ability
+  pendingPiracy: PendingPiracy | null;
+  triggerPiracy: (input: {
+    source: {
+      at: CellKey;
+      index: number;
+      instanceId: string | null;
+      owner: 1 | 2;
+      card: CardRef;
+    };
+    attackerSeat: PlayerKey;
+    discardCount: number;
+  }) => void;
+  dismissPiracy: () => void;
   // Generic auto-resolve confirmation (for silence effects)
   pendingAutoResolve: PendingAutoResolve | null;
   beginAutoResolve: (
