@@ -59,6 +59,23 @@ export async function GET(request: Request): Promise<NextResponse> {
     const format = parseFormat(url.searchParams.get("format"));
     const category = parseCategory(url.searchParams.get("category"));
 
+    // Try serving from pre-computed cache
+    const snapshot = await prisma.metaStatsSnapshot.findUnique({
+      where: { key: `cards:${format}:${category}:${order}` },
+    });
+    if (snapshot) {
+      const cached = snapshot.data as Record<string, unknown>;
+      // Apply client-requested limit to cached stats
+      const cachedStats = Array.isArray(cached.stats) ? cached.stats.slice(0, limit) : cached.stats;
+      return NextResponse.json({
+        ...cached,
+        stats: cachedStats,
+        limit,
+        generatedAt: snapshot.computedAt.toISOString(),
+      });
+    }
+
+    // Fallback: compute on-the-fly
     // When filtering by category, fetch more rows so we have enough after filtering
     const fetchLimit = category === "all" ? limit : limit * 4;
 

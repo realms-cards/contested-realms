@@ -24,6 +24,7 @@ import { ClientCanvas } from "@/components/game/ClientCanvas";
 import CollectionButton from "@/components/game/CollectionButton";
 import CommonSenseOverlay from "@/components/game/CommonSenseOverlay";
 import ContextMenu from "@/components/game/ContextMenu";
+import CorpseExplosionOverlay from "@/components/game/CorpseExplosionOverlay";
 import CrossroadsOverlay from "@/components/game/CrossroadsOverlay";
 import DeckSelector from "@/components/game/DeckSelector";
 import DemonicContractOverlay from "@/components/game/DemonicContractOverlay";
@@ -1043,6 +1044,9 @@ export default function PlayPage() {
 
           {/* Chaos Twister Overlay (dexterity minigame) */}
           <ChaosTwisterOverlay />
+
+          {/* Corpse Explosion Overlay (corpse assignment to 2x2 area) */}
+          <CorpseExplosionOverlay />
 
           {/* Earthquake Overlay (site rearrangement) */}
           <EarthquakeOverlay />

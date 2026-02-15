@@ -28,6 +28,7 @@ import {
   createInitialD20Rolls,
   createInitialPlayers,
 } from "./store/coreState";
+import { createCorpseExplosionSlice } from "./store/corpseExplosionState";
 import { createCrossroadsSlice } from "./store/crossroadsState";
 import { handleCustomMessage } from "./store/customMessageHandlers";
 import { createDemonicContractSlice } from "./store/demonicContractState";
@@ -190,6 +191,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   ...createInquisitionSummonSlice(set, get, storeApi),
   ...createAccusationSlice(set, get, storeApi),
   ...createCommonSenseSlice(set, get, storeApi),
+  ...createCorpseExplosionSlice(set, get, storeApi),
   ...createEarthquakeSlice(set, get, storeApi),
   ...createPithImpSlice(set, get, storeApi),
   ...createMorganaSlice(set, get, storeApi),
@@ -355,6 +357,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         pendingInquisitionSummon: null,
         pendingAccusation: null,
         pendingCommonSense: null,
+        pendingCorpseExplosion: null,
         pendingEarthquake: null,
         stolenCards: [],
         pithImpHands: [],

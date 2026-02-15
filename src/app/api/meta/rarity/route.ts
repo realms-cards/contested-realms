@@ -4,8 +4,8 @@ import { prisma } from "@/lib/prisma";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type CostStatRow = {
-  cost: number | null;
+type RarityStatRow = {
+  rarity: string | null;
   plays: bigint;
   wins: bigint;
 };
@@ -17,7 +17,7 @@ export async function GET(request: Request): Promise<NextResponse> {
 
     // Try serving from pre-computed cache
     const snapshot = await prisma.metaStatsSnapshot.findUnique({
-      where: { key: `costs:${format}` },
+      where: { key: `rarity:${format}` },
     });
     if (snapshot) {
       const cached = snapshot.data as Record<string, unknown>;
@@ -28,27 +28,27 @@ export async function GET(request: Request): Promise<NextResponse> {
     }
 
     // Fallback: compute on-the-fly
-    const rows = await prisma.$queryRaw<CostStatRow[]>`
-      SELECT m.cost, 
-             SUM(h.plays)::bigint as plays, 
+    const rows = await prisma.$queryRaw<RarityStatRow[]>`
+      SELECT m.rarity::text as rarity,
+             SUM(h.plays)::bigint as plays,
              SUM(h.wins)::bigint as wins
       FROM "HumanCardStats" h
       JOIN LATERAL (
-        SELECT cost FROM "CardSetMetadata" 
-        WHERE "cardId" = h."cardId" 
+        SELECT rarity FROM "CardSetMetadata"
+        WHERE "cardId" = h."cardId"
         LIMIT 1
       ) m ON true
       WHERE h.format = ${format}::"GameFormat"
-        AND m.cost IS NOT NULL
-      GROUP BY m.cost
-      ORDER BY m.cost ASC
+        AND m.rarity IS NOT NULL
+      GROUP BY m.rarity
+      ORDER BY SUM(h.plays) DESC
     `;
 
     const stats = rows.map((row) => {
       const plays = Number(row.plays);
       const wins = Number(row.wins);
       return {
-        cost: row.cost ?? 0,
+        rarity: row.rarity || "Unknown",
         plays,
         wins,
         winRate: plays > 0 ? wins / plays : 0,
@@ -61,9 +61,9 @@ export async function GET(request: Request): Promise<NextResponse> {
       generatedAt: new Date().toISOString(),
     });
   } catch (error) {
-    console.error("Failed to load cost stats:", error);
+    console.error("Failed to load rarity stats:", error);
     return NextResponse.json(
-      { error: "Failed to load cost stats" },
+      { error: "Failed to load rarity stats" },
       { status: 500 }
     );
   }

@@ -857,7 +857,7 @@ export function handleCustomMessage(
       },
     } as Partial<GameState> as GameState);
     try {
-      const cellNo = getCellNumber(x, y, get().board.size.w);
+      const cellNo = getCellNumber(x, y, get().board.size.w, get().board.size.h);
       get().log(`Attack declared at #${cellNo}`);
     } catch {}
     return;
@@ -1097,7 +1097,7 @@ export function handleCustomMessage(
           const x = Number(tileMsg?.x);
           const y = Number(tileMsg?.y);
           if (Number.isFinite(x) && Number.isFinite(y)) {
-            return getCellNumber(x, y, get().board.size.w);
+            return getCellNumber(x, y, get().board.size.w, get().board.size.h);
           }
         } catch {}
         return null as number | null;
@@ -3333,7 +3333,7 @@ export function handleCustomMessage(
       const cellNos = cells
         .map((cell) => {
           const [cx, cy] = cell.split(",").map(Number);
-          return `#${getCellNumber(cx, cy, board.size.w)}`;
+          return `#${getCellNumber(cx, cy, board.size.w, board.size.h)}`;
         })
         .join(", ");
       get().log(`Earthquake area selected: ${cellNos}`);
@@ -3376,8 +3376,8 @@ export function handleCustomMessage(
 
     try {
       const board = get().board;
-      const fromNo = getCellNumber(from.x, from.y, board.size.w);
-      const toNo = getCellNumber(to.x, to.y, board.size.w);
+      const fromNo = getCellNumber(from.x, from.y, board.size.w, board.size.h);
+      const toNo = getCellNumber(to.x, to.y, board.size.w, board.size.h);
       get().log(`Earthquake: swapped sites #${fromNo} <-> #${toNo}`);
     } catch {}
     return;
@@ -3439,6 +3439,249 @@ export function handleCustomMessage(
     });
     try {
       get().log("Earthquake cancelled");
+    } catch {}
+    return;
+  }
+
+  // --- Corpse Explosion message handlers ---
+  if (t === "corpseExplosionBegin") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const spellAny = (msg as { spell?: unknown }).spell as unknown;
+    const casterSeat = (msg as { casterSeat?: unknown }).casterSeat as
+      | PlayerKey
+      | undefined;
+    const eligibleCount = (msg as { eligibleCount?: unknown })
+      .eligibleCount as number | undefined;
+    if (!id || !spellAny || !casterSeat) return;
+    const rec = spellAny as Record<string, unknown>;
+    // Opponent sees Corpse Explosion begin
+    set({
+      pendingCorpseExplosion: {
+        id,
+        spell: {
+          at: rec.at as CellKey,
+          index: Number(rec.index),
+          instanceId: (rec.instanceId as string | null) ?? null,
+          owner: Number(rec.owner) as 1 | 2,
+          card: rec.card as CardRef,
+        },
+        casterSeat,
+        phase: "selectingArea",
+        areaCorner: null,
+        affectedCells: [],
+        assignments: [],
+        eligibleCorpses: [],
+        selectedCorpse: null,
+        resolvedReport: null,
+        createdAt: Date.now(),
+      },
+    } as Partial<GameState> as GameState);
+    try {
+      get().log(
+        `[${casterSeat.toUpperCase()}] casts Corpse Explosion — ${eligibleCount ?? "?"} dead minion(s) available`,
+      );
+    } catch {}
+    return;
+  }
+  if (t === "corpseExplosionSelectArea") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const corner = (msg as { corner?: unknown }).corner as
+      | { x: number; y: number }
+      | undefined;
+    const affectedCells = (msg as { affectedCells?: unknown })
+      .affectedCells as CellKey[] | undefined;
+    if (!id || !corner) return;
+    set((s) => {
+      if (!s.pendingCorpseExplosion || s.pendingCorpseExplosion.id !== id)
+        return s as GameState;
+      return {
+        pendingCorpseExplosion: {
+          ...s.pendingCorpseExplosion,
+          areaCorner: corner,
+          affectedCells: affectedCells || [],
+          phase: "assigningCorpses",
+        },
+      } as Partial<GameState> as GameState;
+    });
+    try {
+      const board = get().board;
+      const cells = affectedCells || [];
+      const cellNos = cells
+        .map((cell) => {
+          const [cx, cy] = cell.split(",").map(Number);
+          return `#${getCellNumber(cx, cy, board.size.w, board.size.h)}`;
+        })
+        .join(", ");
+      get().log(`Corpse Explosion area selected: ${cellNos}`);
+    } catch {}
+    return;
+  }
+  if (t === "corpseExplosionAssign") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const corpseName = (msg as { corpseName?: unknown }).corpseName as
+      | string
+      | undefined;
+    const power = (msg as { power?: unknown }).power as number | undefined;
+    const cellKey = (msg as { cellKey?: unknown }).cellKey as
+      | CellKey
+      | undefined;
+    const fromSeat = (msg as { fromSeat?: unknown }).fromSeat as
+      | PlayerKey
+      | undefined;
+    if (!id || !cellKey) return;
+
+    // Skip if we're the caster
+    const pending = get().pendingCorpseExplosion;
+    const actorKey = get().actorKey;
+    if (pending && actorKey === pending.casterSeat) return;
+
+    // Add assignment to opponent's pending state
+    set((s) => {
+      if (!s.pendingCorpseExplosion || s.pendingCorpseExplosion.id !== id)
+        return s as GameState;
+      return {
+        pendingCorpseExplosion: {
+          ...s.pendingCorpseExplosion,
+          assignments: [
+            ...s.pendingCorpseExplosion.assignments,
+            {
+              cellKey,
+              corpse: { name: corpseName || "?" } as CardRef,
+              fromSeat: fromSeat || "p1",
+              power: power ?? 0,
+            },
+          ],
+        },
+      } as Partial<GameState> as GameState;
+    });
+    try {
+      const board = get().board;
+      const [cx, cy] = cellKey.split(",").map(Number);
+      const cellNo = getCellNumber(cx, cy, board.size.w, board.size.h);
+      get().log(
+        `Corpse Explosion: assigned ${corpseName || "?"} (ATK ${power ?? "?"}) to tile #${cellNo}`,
+      );
+    } catch {}
+    return;
+  }
+  if (t === "corpseExplosionResolve") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const assignments = (msg as { assignments?: unknown }).assignments as
+      | Array<{
+          cellKey: CellKey;
+          corpseName: string;
+          power: number;
+          fromSeat: PlayerKey;
+        }>
+      | undefined;
+    const report = (msg as { report?: unknown }).report as
+      | Array<{
+          cellKey: CellKey;
+          corpseName: string;
+          power: number;
+          unitsHit: Array<{ name: string; damageTaken: number }>;
+        }>
+      | undefined;
+    const pending = get().pendingCorpseExplosion;
+    if (!pending || (id && pending.id !== id)) return;
+
+    // Skip damage application if we're the caster - we already handled it locally
+    const actorKey = get().actorKey;
+    if (actorKey === pending.casterSeat) {
+      // Caster already resolved locally, just make sure we show the report
+      return;
+    }
+
+    // Apply damage on opponent's side
+    const permanents = get().permanents;
+    const resolvedReport: Array<{
+      cellKey: CellKey;
+      corpseName: string;
+      power: number;
+      unitsHit: Array<{ name: string; damageTaken: number }>;
+    }> = [];
+
+    if (report) {
+      // Use report from caster (includes unit hit info)
+      for (const entry of report) {
+        resolvedReport.push(entry);
+        // Apply damage to units at this cell
+        const cellPerms = permanents[entry.cellKey] || [];
+        for (let i = 0; i < cellPerms.length; i++) {
+          const perm = cellPerms[i];
+          if (!perm || perm.attachedTo) continue;
+          const permType = (perm.card?.type || "").toLowerCase();
+          if (permType.includes("minion") || permType.includes("unit")) {
+            try {
+              get().applyDamageToPermanent(entry.cellKey, i, entry.power);
+            } catch {}
+          }
+        }
+      }
+    } else if (assignments) {
+      // Fallback: build report from assignments
+      for (const a of assignments) {
+        const cellPerms = permanents[a.cellKey] || [];
+        const unitsHit: Array<{ name: string; damageTaken: number }> = [];
+        for (let i = 0; i < cellPerms.length; i++) {
+          const perm = cellPerms[i];
+          if (!perm || perm.attachedTo) continue;
+          const permType = (perm.card?.type || "").toLowerCase();
+          if (permType.includes("minion") || permType.includes("unit")) {
+            try {
+              get().applyDamageToPermanent(a.cellKey, i, a.power);
+            } catch {}
+            unitsHit.push({
+              name: perm.card?.name || "unit",
+              damageTaken: a.power,
+            });
+          }
+        }
+        resolvedReport.push({
+          cellKey: a.cellKey,
+          corpseName: a.corpseName,
+          power: a.power,
+          unitsHit,
+        });
+      }
+    }
+
+    // Note: Corpse banishment is handled by the caster's patch
+
+    // Set resolved state with report
+    set({
+      pendingCorpseExplosion: {
+        ...pending,
+        phase: "resolved",
+        resolvedReport,
+      },
+    } as Partial<GameState> as GameState);
+
+    try {
+      const board = get().board;
+      const summary = (assignments || [])
+        .map((a) => {
+          const [cx, cy] = a.cellKey.split(",").map(Number);
+          const cellNo = getCellNumber(cx, cy, board.size.w, board.size.h);
+          return `${a.corpseName} (ATK ${a.power}) → #${cellNo}`;
+        })
+        .join(", ");
+      get().log(`Corpse Explosion resolved! ${summary}. Corpses banished.`);
+    } catch {}
+    return;
+  }
+  if (t === "corpseExplosionCancel") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    set((s) => {
+      if (
+        !s.pendingCorpseExplosion ||
+        (id && s.pendingCorpseExplosion.id !== id)
+      )
+        return s as GameState;
+      return { pendingCorpseExplosion: null } as Partial<GameState> as GameState;
+    });
+    try {
+      get().log("Corpse Explosion cancelled");
     } catch {}
     return;
   }

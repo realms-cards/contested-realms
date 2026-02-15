@@ -87,6 +87,14 @@ export const RESOLVER_REGISTRY: ResolverEntry[] = [
     description: "Sacrifice minions for effect",
   },
   {
+    id: "corpseExplosion",
+    cardName: "Corpse Explosion",
+    category: "spell",
+    stateFile: "corpseExplosionState.ts",
+    description:
+      "Deal dead minions to 2x2 area sites, deal damage equal to power, banish corpses",
+  },
+  {
     id: "demonicContract",
     cardName: "Demonic Contract",
     category: "spell",

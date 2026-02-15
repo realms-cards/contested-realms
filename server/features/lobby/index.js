@@ -680,8 +680,7 @@ function createLobbyFeature(deps) {
           : null,
       draftConfig: matchType === "draft" ? draftConfig : null,
       soatcLeagueMatch: soatcLeagueMatch || null,
-      playerDecks:
-        matchType === "sealed" || matchType === "draft" ? new Map() : null,
+      playerDecks: new Map(),
       draftState: null,
       game: {
         phase: "Setup",

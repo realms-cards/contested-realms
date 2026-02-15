@@ -74,7 +74,7 @@ export const createMirrorRealmSlice: StateCreator<
 
     const cellNo = getCellNumber(
       ...(mirrorRealmCell.split(",").map(Number) as [number, number]),
-      state.board.size.w,
+      state.board.size.w, state.board.size.h,
     );
 
     get().log(
@@ -196,11 +196,11 @@ export const createMirrorRealmSlice: StateCreator<
     // Get cell numbers for logging
     const mirrorCellNo = getCellNumber(
       ...(mirrorRealmCell.split(",").map(Number) as [number, number]),
-      state.board.size.w,
+      state.board.size.w, state.board.size.h,
     );
     const targetCellNo = getCellNumber(
       ...(selectedTarget.split(",").map(Number) as [number, number]),
-      state.board.size.w,
+      state.board.size.w, state.board.size.h,
     );
 
     const playerNum = casterSeat === "p1" ? "1" : "2";

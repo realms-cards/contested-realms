@@ -38,7 +38,7 @@ export default function MagicHudOverlay() {
   // Always show overlay for both seats while a spell is pending.
 
   const tileNum = pendingMagic
-    ? getCellNumber(pendingMagic.tile.x, pendingMagic.tile.y, board.size.w)
+    ? getCellNumber(pendingMagic.tile.x, pendingMagic.tile.y, board.size.w, board.size.h)
     : null;
   const cardName = (() => {
     try {
@@ -308,7 +308,7 @@ export default function MagicHudOverlay() {
     if (!pm || pm.status !== "confirm") return null;
     const textRaw = pm.summaryText;
     const text = typeof textRaw === "string" ? textRaw.trim() : textRaw;
-    const tileNo = getCellNumber(pm.tile.x, pm.tile.y, board.size.w);
+    const tileNo = getCellNumber(pm.tile.x, pm.tile.y, board.size.w, board.size.h);
     const t = pm.target;
     const seatByCell: Record<string, "p1" | "p2"> = (() => {
       const map: Record<string, "p1" | "p2"> = {};

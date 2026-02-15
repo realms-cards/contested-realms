@@ -154,7 +154,8 @@ export const createChaosTwisterSlice: StateCreator<
     const cellNo = getCellNumber(
       parseInt(minion.at.split(",")[0]),
       parseInt(minion.at.split(",")[1]),
-      get().board.size.w
+      get().board.size.w,
+      get().board.size.h
     );
     get().log(
       `Selected ${minion.card.name} (Power: ${minion.power}) at #${cellNo} - now select a target site!`
@@ -188,7 +189,7 @@ export const createChaosTwisterSlice: StateCreator<
       } catch {}
     }
 
-    const cellNo = getCellNumber(site.x, site.y, get().board.size.w);
+    const cellNo = getCellNumber(site.x, site.y, get().board.size.w, get().board.size.h);
     get().log(`Target site #${cellNo} selected - time for the dexterity test!`);
   },
 
@@ -244,7 +245,8 @@ export const createChaosTwisterSlice: StateCreator<
     const landingCellNo = getCellNumber(
       landingSite.x,
       landingSite.y,
-      board.size.w
+      board.size.w,
+      board.size.h
     );
     get().log(
       `${accuracyLabel} The minion lands at #${landingCellNo} (${offset} tile${
@@ -311,7 +313,8 @@ export const createChaosTwisterSlice: StateCreator<
     const landingCellNo = getCellNumber(
       pending.landingSite.x,
       pending.landingSite.y,
-      get().board.size.w
+      get().board.size.w,
+      get().board.size.h
     );
     const damageList =
       damageRecords.length > 0

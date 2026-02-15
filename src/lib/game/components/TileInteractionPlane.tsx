@@ -49,6 +49,9 @@ export type TileInteractionPlaneProps = {
   // Inquisition summon cell selection support
   pendingInquisitionSummon?: GameState["pendingInquisitionSummon"];
   placeInquisitionSummon?: GameState["placeInquisitionSummon"];
+  // Corpse Explosion 2x2 area and tile assignment support
+  pendingCorpseExplosion?: GameState["pendingCorpseExplosion"];
+  selectCorpseExplosionArea?: GameState["selectCorpseExplosionArea"];
   // Cast placement from context menu
   castPlacementMode?: GameState["castPlacementMode"];
 };
@@ -86,6 +89,8 @@ export function TileInteractionPlane({
   selectPathfinderTarget,
   pendingInquisitionSummon,
   placeInquisitionSummon,
+  pendingCorpseExplosion,
+  selectCorpseExplosionArea,
   castPlacementMode,
 }: TileInteractionPlaneProps) {
   const { dragAvatar, dragging, setGhost, draggedBody, moveDraggedBody } =
@@ -161,6 +166,42 @@ export function TileInteractionPlane({
           e.stopPropagation();
           selectEarthquakeArea({ x: tileX, y: tileY });
           return;
+        }
+        // Corpse Explosion area selection - click on any tile to select 2x2 area corner
+        if (
+          pendingCorpseExplosion &&
+          pendingCorpseExplosion.phase === "selectingArea" &&
+          (pendingCorpseExplosion.casterSeat === actorKey || !actorKey) &&
+          selectCorpseExplosionArea
+        ) {
+          e.stopPropagation();
+          selectCorpseExplosionArea({ x: tileX, y: tileY });
+          return;
+        }
+        // Corpse Explosion tile assignment - click on tile in 2x2 area to assign corpse
+        if (
+          pendingCorpseExplosion &&
+          pendingCorpseExplosion.phase === "assigningCorpses" &&
+          pendingCorpseExplosion.areaCorner &&
+          (pendingCorpseExplosion.casterSeat === actorKey || !actorKey)
+        ) {
+          const { areaCorner } = pendingCorpseExplosion;
+          const inArea =
+            tileX >= areaCorner.x &&
+            tileX < areaCorner.x + 2 &&
+            tileY >= areaCorner.y &&
+            tileY < areaCorner.y + 2;
+          if (inArea) {
+            e.stopPropagation();
+            if (typeof window !== "undefined") {
+              window.dispatchEvent(
+                new CustomEvent("corpseExplosion:tileClick", {
+                  detail: { x: tileX, y: tileY },
+                }),
+              );
+            }
+            return;
+          }
         }
         // Atlantean Fate corner selection - click on any tile to select 2x2 area (cursor is lower-right)
         if (

@@ -4785,6 +4785,36 @@ io.on("connection", async (socket: SocketClient) => {
     }
   });
 
+  // Submit constructed deck for meta statistics tracking (fire-and-forget, no validation)
+  socket.on("submitConstructedDeck", (payload: Record<string, unknown>) => {
+    if (!authed) return;
+    const player = getPlayerBySocket(socket);
+    if (!player?.matchId) return;
+    const match = matches.get(player.matchId);
+    if (!match) return;
+    // Only accept for constructed/precon matches
+    if (match.matchType !== "constructed" && match.matchType !== "precon") return;
+    if (!(match.playerDecks instanceof Map)) {
+      match.playerDecks = new Map<string, unknown>();
+    }
+    // Idempotency: don't overwrite if already submitted
+    if (match.playerDecks.has(player.id)) return;
+    const deck = payload?.deck;
+    if (!Array.isArray(deck) || deck.length === 0) return;
+    // Store simplified card list (no validation - client already validated)
+    const cards = (deck as Array<Record<string, unknown>>).map((c) => ({
+      name: typeof c.name === "string" ? c.name : "",
+      type: typeof c.type === "string" ? c.type : "",
+      zone: typeof c.zone === "string" ? c.zone : "",
+    }));
+    match.playerDecks.set(player.id, cards);
+    try {
+      persistMatchUpdate(match, null, player.id, Date.now());
+    } catch {
+      // Non-critical - best effort persistence
+    }
+  });
+
   // Submit sealed deck during deck construction phase (with validation)
   socket.on("submitDeck", (payload) => {
     if (!authed) {

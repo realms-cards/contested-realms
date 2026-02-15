@@ -90,7 +90,7 @@ export default function CombatHudOverlay() {
       attackTargetChoice?.tile ??
       attackConfirm?.tile ??
       null;
-    return source ? getCellNumber(source.x, source.y, board.size.w) : null;
+    return source ? getCellNumber(source.x, source.y, board.size.w, board.size.h) : null;
   })();
 
   const attackerLabel = (() => {

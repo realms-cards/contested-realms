@@ -83,7 +83,7 @@ export default function FrontierSettlersOverlay() {
               <div className="flex flex-wrap gap-1">
                 {validTargets.map((cellKey) => {
                   const { x, y } = parseCellKey(cellKey);
-                  const cellNum = getCellNumber(x, y, board.size.w);
+                  const cellNum = getCellNumber(x, y, board.size.w, board.size.h);
                   const existingSite = board.sites[cellKey];
                   const isRubble =
                     existingSite?.card?.name?.toLowerCase() === "rubble";

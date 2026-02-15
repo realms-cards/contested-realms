@@ -30,7 +30,7 @@ export default function HeadlessHauntOverlay() {
           key: toCellKey(x, y),
           x,
           y,
-          cellNo: getCellNumber(x, y, boardSize.w),
+          cellNo: getCellNumber(x, y, boardSize.w, boardSize.h),
         });
       }
     }
@@ -54,7 +54,7 @@ export default function HeadlessHauntOverlay() {
 
   // Get current haunt location
   const [curX, curY] = currentHaunt.location.split(",").map(Number);
-  const currentCellNo = getCellNumber(curX, curY, boardSize.w);
+  const currentCellNo = getCellNumber(curX, curY, boardSize.w, boardSize.h);
 
   return (
     <div className="fixed inset-0 z-[200] pointer-events-none">

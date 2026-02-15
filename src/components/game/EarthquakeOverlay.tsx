@@ -19,6 +19,7 @@ export default function EarthquakeOverlay({
   const selectEarthquakeArea = useGameStore((s) => s.selectEarthquakeArea);
   const performEarthquakeSwap = useGameStore((s) => s.performEarthquakeSwap);
   const resolveEarthquake = useGameStore((s) => s.resolveEarthquake);
+  const repickEarthquakeArea = useGameStore((s) => s.repickEarthquakeArea);
   const cancelEarthquake = useGameStore((s) => s.cancelEarthquake);
   const setSwitchSiteSource = useGameStore((s) => s.setSwitchSiteSource);
   const switchSiteSource = useGameStore((s) => s.switchSiteSource);
@@ -122,7 +123,7 @@ export default function EarthquakeOverlay({
         if (x < board.size.w && y < board.size.h) {
           const cellKey = toCellKey(x, y);
           const site = board.sites[cellKey];
-          const cellNo = getCellNumber(x, y, board.size.w);
+          const cellNo = getCellNumber(x, y, board.size.w, board.size.h);
           cells.push(
             `#${cellNo}${site ? ` (${site.card?.name || "site"})` : " (void)"}`
           );
@@ -143,7 +144,7 @@ export default function EarthquakeOverlay({
           <span className="opacity-80">
             {phase === "selectingArea" &&
               (isCaster
-                ? "Click a tile to select 2×2 area"
+                ? "Click the upper-left tile of the 2×2 area"
                 : `${pending.casterSeat.toUpperCase()} is selecting an area...`)}
             {phase === "rearranging" &&
               (isCaster
@@ -186,7 +187,8 @@ export default function EarthquakeOverlay({
                         {getCellNumber(
                           switchSiteSource.x,
                           switchSiteSource.y,
-                          board.size.w
+                          board.size.w,
+                          board.size.h
                         )}
                       </span>{" "}
                       - Click another site to swap
@@ -200,6 +202,12 @@ export default function EarthquakeOverlay({
                         onClick={() => resolveEarthquake()}
                       >
                         Resolve & Burrow
+                      </button>
+                      <button
+                        className="px-4 py-2 rounded-lg bg-white/15 hover:bg-white/25 text-white transition-colors"
+                        onClick={() => repickEarthquakeArea()}
+                      >
+                        Re-pick area
                       </button>
                       <button
                         className="px-4 py-2 rounded-lg bg-white/15 hover:bg-white/25 text-white transition-colors"

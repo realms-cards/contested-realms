@@ -1,5 +1,6 @@
 import { Text } from "@react-three/drei";
 import type { MutableRefObject } from "react";
+import { AreaSelectionOverlay3D } from "@/lib/game/components/AreaSelectionOverlay3D";
 import { AtlanteanFateAreaOverlay } from "@/lib/game/components/AtlanteanFateAreaOverlay";
 import { AuraPreviewOverlay } from "@/lib/game/components/AuraPreviewOverlay";
 import { ChaosTwisterLandingOverlay } from "@/lib/game/components/ChaosTwisterLandingOverlay";
@@ -57,6 +58,10 @@ type BoardTileProps = {
     pendingEarthquake: GameState["pendingEarthquake"];
     selectEarthquakeArea: GameState["selectEarthquakeArea"];
     performEarthquakeSwap: GameState["performEarthquakeSwap"];
+  };
+  corpseExplosionContext: {
+    pendingCorpseExplosion: GameState["pendingCorpseExplosion"];
+    selectCorpseExplosionArea: GameState["selectCorpseExplosionArea"];
   };
   atlanteanFateContext: {
     pendingAtlanteanFate: GameState["pendingAtlanteanFate"];
@@ -151,6 +156,7 @@ export function BoardTile({
   chaosTwisterContext,
   shapeshiftContext,
   earthquakeContext,
+  corpseExplosionContext,
   atlanteanFateContext,
   mephistophelesSummonContext,
   pathfinderContext,
@@ -243,6 +249,8 @@ export function BoardTile({
           inquisitionSummonContext.pendingInquisitionSummon
         }
         placeInquisitionSummon={inquisitionSummonContext.placeInquisitionSummon}
+        pendingCorpseExplosion={corpseExplosionContext.pendingCorpseExplosion}
+        selectCorpseExplosionArea={corpseExplosionContext.selectCorpseExplosionArea}
         castPlacementMode={castPlacementMode}
       />
 
@@ -264,6 +272,64 @@ export function BoardTile({
         permanents={permanents}
         boardWidth={boardSize.w}
         boardHeight={boardSize.h}
+      />
+
+      {/* Earthquake 2x2 area highlight */}
+      <AreaSelectionOverlay3D
+        tileX={tileX}
+        tileY={tileY}
+        affectedCells={earthquakeContext.pendingEarthquake?.affectedCells || []}
+        color="#f59e0b"
+        active={
+          earthquakeContext.pendingEarthquake?.phase === "rearranging" ||
+          earthquakeContext.pendingEarthquake?.phase === "resolving"
+        }
+      />
+
+      {/* Corpse Explosion 2x2 area highlight */}
+      <AreaSelectionOverlay3D
+        tileX={tileX}
+        tileY={tileY}
+        affectedCells={
+          corpseExplosionContext.pendingCorpseExplosion?.affectedCells || []
+        }
+        color={
+          corpseExplosionContext.pendingCorpseExplosion?.assignments.some(
+            (a) => a.cellKey === tileKey,
+          )
+            ? "#22c55e"
+            : "#ef4444"
+        }
+        active={
+          corpseExplosionContext.pendingCorpseExplosion?.phase ===
+            "assigningCorpses" ||
+          corpseExplosionContext.pendingCorpseExplosion?.phase === "resolving" ||
+          corpseExplosionContext.pendingCorpseExplosion?.phase === "resolved"
+        }
+        labelName={(() => {
+          const ce = corpseExplosionContext.pendingCorpseExplosion;
+          if (!ce) return undefined;
+          if (ce.phase === "resolved" && ce.resolvedReport) {
+            const entry = ce.resolvedReport.find((r) => r.cellKey === tileKey);
+            return entry?.corpseName;
+          }
+          const a = ce.assignments.find((assign) => assign.cellKey === tileKey);
+          return a?.corpse.name;
+        })()}
+        labelDamage={(() => {
+          const ce = corpseExplosionContext.pendingCorpseExplosion;
+          if (!ce) return undefined;
+          if (ce.phase === "resolved" && ce.resolvedReport) {
+            const entry = ce.resolvedReport.find((r) => r.cellKey === tileKey);
+            if (!entry) return undefined;
+            const hits = entry.unitsHit.length > 0
+              ? entry.unitsHit.map((u) => `${u.damageTaken} dmg → ${u.name}`).join("\n")
+              : "No units hit";
+            return `ATK ${entry.power}\n${hits}`;
+          }
+          const a = ce.assignments.find((assign) => assign.cellKey === tileKey);
+          return a ? `ATK ${a.power}` : undefined;
+        })()}
       />
 
       {/* Mephistopheles summon target overlay - rendered under cards */}

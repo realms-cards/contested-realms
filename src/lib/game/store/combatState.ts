@@ -373,7 +373,7 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
         }
       }
       try {
-        const cellNo = getCellNumber(tile.x, tile.y, state.board.size.w);
+        const cellNo = getCellNumber(tile.x, tile.y, state.board.size.w, state.board.size.h);
         if (targetLabel) {
           get().log(`${attackerLabel} attacks ${targetLabel} at #${cellNo}`);
         } else {
@@ -732,6 +732,7 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
           pending.tile.x,
           pending.tile.y,
           get().board.size.w,
+          get().board.size.h,
         );
       } catch {
         return null;

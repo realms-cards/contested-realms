@@ -2,7 +2,6 @@
 
 import clsx from "clsx";
 import Image from "next/image";
-import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { CustomSelect } from "@/components/ui/CustomSelect";
@@ -46,11 +45,66 @@ type MatchStat = {
   avgDurationSec: number | null;
 };
 
-const ELEMENT_COLORS: Record<string, { bg: string; border: string; text: string; bar: string }> = {
-  Fire: { bg: "bg-red-950/40", border: "border-red-700/60", text: "text-red-300", bar: "bg-red-500" },
-  Water: { bg: "bg-blue-950/40", border: "border-blue-700/60", text: "text-blue-300", bar: "bg-blue-500" },
-  Earth: { bg: "bg-amber-950/40", border: "border-amber-700/60", text: "text-amber-300", bar: "bg-amber-500" },
-  Air: { bg: "bg-cyan-950/40", border: "border-cyan-700/60", text: "text-cyan-300", bar: "bg-cyan-400" },
+type RarityStat = {
+  rarity: string;
+  plays: number;
+  wins: number;
+  winRate: number;
+};
+
+type CardPairSynergy = {
+  cardA: string;
+  cardB: string;
+  slugA: string | null;
+  slugB: string | null;
+  coOccurrences: number;
+  wins: number;
+  losses: number;
+  draws: number;
+  winRate: number;
+};
+
+type DeckArchetype = {
+  avatarName: string;
+  avatarSlug: string | null;
+  avatarCardId: number;
+  elements: Record<string, number>;
+  totalCards: number;
+  matches: number;
+  wins: number;
+  losses: number;
+  draws: number;
+  winRate: number;
+};
+
+const ELEMENT_COLORS: Record<
+  string,
+  { bg: string; border: string; text: string; bar: string }
+> = {
+  Fire: {
+    bg: "bg-red-950/40",
+    border: "border-red-700/60",
+    text: "text-red-300",
+    bar: "bg-red-500",
+  },
+  Water: {
+    bg: "bg-blue-950/40",
+    border: "border-blue-700/60",
+    text: "text-blue-300",
+    bar: "bg-blue-500",
+  },
+  Earth: {
+    bg: "bg-amber-950/40",
+    border: "border-amber-700/60",
+    text: "text-amber-300",
+    bar: "bg-amber-500",
+  },
+  Air: {
+    bg: "bg-cyan-950/40",
+    border: "border-cyan-700/60",
+    text: "text-cyan-300",
+    bar: "bg-cyan-400",
+  },
 };
 
 const DEFAULT_ELEMENT_STYLE = {
@@ -59,6 +113,103 @@ const DEFAULT_ELEMENT_STYLE = {
   text: "text-slate-300",
   bar: "bg-slate-500",
 };
+
+const RARITY_STYLES: Record<
+  string,
+  { bg: string; border: string; text: string; bar: string }
+> = {
+  Unique: {
+    bg: "bg-yellow-950/40",
+    border: "border-yellow-600/60",
+    text: "text-yellow-300",
+    bar: "bg-yellow-500",
+  },
+  Elite: {
+    bg: "bg-violet-950/40",
+    border: "border-violet-600/60",
+    text: "text-violet-300",
+    bar: "bg-violet-500",
+  },
+  Exceptional: {
+    bg: "bg-sky-950/40",
+    border: "border-sky-600/60",
+    text: "text-sky-300",
+    bar: "bg-sky-500",
+  },
+  Ordinary: {
+    bg: "bg-slate-900/60",
+    border: "border-slate-600",
+    text: "text-slate-300",
+    bar: "bg-slate-400",
+  },
+};
+
+const ELEMENT_BAR_COLORS: Record<string, string> = {
+  Fire: "#ef4444",
+  Water: "#3b82f6",
+  Earth: "#f59e0b",
+  Air: "#22d3ee",
+  None: "#64748b",
+};
+
+/** Stacked horizontal bar showing element distribution in a deck */
+function ElementDistributionBar({
+  elements,
+}: {
+  elements: Record<string, number>;
+}) {
+  const entries = Object.entries(elements)
+    .filter(([, pct]) => pct > 0)
+    .sort((a, b) => b[1] - a[1]);
+  if (entries.length === 0) return null;
+  return (
+    <div className="flex items-center gap-2 mt-1.5">
+      <div className="flex-1 flex h-3 rounded-full overflow-hidden bg-slate-800">
+        {entries.map(([el, pct]) => (
+          <div
+            key={el}
+            className="h-full first:rounded-l-full last:rounded-r-full"
+            style={{
+              width: `${pct}%`,
+              backgroundColor:
+                ELEMENT_BAR_COLORS[el] || ELEMENT_BAR_COLORS.None,
+            }}
+            title={`${el}: ${pct}%`}
+          />
+        ))}
+      </div>
+      <div className="flex gap-1.5 flex-shrink-0">
+        {entries.map(([el, pct]) => (
+          <span
+            key={el}
+            className="text-[10px] tabular-nums"
+            style={{ color: ELEMENT_BAR_COLORS[el] || ELEMENT_BAR_COLORS.None }}
+          >
+            {pct}%
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Legend for the element colors */
+function ElementLegend() {
+  const elements = ["Fire", "Water", "Earth", "Air"];
+  return (
+    <div className="flex gap-3 text-[10px] text-slate-400">
+      {elements.map((el) => (
+        <span key={el} className="flex items-center gap-1">
+          <span
+            className="inline-block w-2 h-2 rounded-full"
+            style={{ backgroundColor: ELEMENT_BAR_COLORS[el] }}
+          />
+          {el}
+        </span>
+      ))}
+    </div>
+  );
+}
 
 function getElementStyle(element: string) {
   // Handle multi-element (e.g. "Fire,Water" or "Fire Water")
@@ -87,14 +238,20 @@ function StatCard({
       <div className="mt-1 text-2xl font-semibold text-white">
         {typeof value === "number"
           ? new Intl.NumberFormat().format(value)
-          : value ?? "—"}
+          : (value ?? "—")}
       </div>
       {sublabel && <div className="text-xs text-slate-400">{sublabel}</div>}
     </div>
   );
 }
 
-function WinRateBar({ winRate, barColor }: { winRate: number; barColor: string }) {
+function WinRateBar({
+  winRate,
+  barColor,
+}: {
+  winRate: number;
+  barColor: string;
+}) {
   const pct = Math.round(winRate * 100);
   return (
     <div className="flex items-center gap-2 mt-1.5">
@@ -163,7 +320,7 @@ function CardStatsTable({
               value={limit}
               onChange={(e) =>
                 setLimit(
-                  Math.max(1, Math.min(200, Number(e.target.value) || 50))
+                  Math.max(1, Math.min(200, Number(e.target.value) || 50)),
                 )
               }
               className="w-20 rounded border border-slate-600 bg-slate-900 px-2 py-1 text-slate-200"
@@ -212,8 +369,7 @@ function CardStatsTable({
                   key={row.cardId}
                   className="border-t border-slate-800/60 hover:bg-slate-800/40 cursor-pointer"
                   onMouseEnter={() =>
-                    row.slug &&
-                    onHoverCard({ slug: row.slug, type: row.type })
+                    row.slug && onHoverCard({ slug: row.slug, type: row.type })
                   }
                   onMouseLeave={onLeaveCard}
                 >
@@ -242,7 +398,7 @@ function CardStatsTable({
 
 export default function PublicMetaDashboard() {
   const [format, setFormat] = useState<"constructed" | "sealed" | "draft">(
-    "constructed"
+    "constructed",
   );
 
   // Avatar stats
@@ -261,7 +417,7 @@ export default function PublicMetaDashboard() {
   // Spellbook stats
   const [spellbookStats, setSpellbookStats] = useState<CardStat[]>([]);
   const [spellbookStatsError, setSpellbookStatsError] = useState<string | null>(
-    null
+    null,
   );
   const [spellbookStatsLoading, setSpellbookStatsLoading] = useState(false);
   const [spellbookStatsOrder, setSpellbookStatsOrder] = useState<
@@ -290,11 +446,28 @@ export default function PublicMetaDashboard() {
   const [matchStats, setMatchStats] = useState<MatchStat[]>([]);
   const [matchStatsLoading, setMatchStatsLoading] = useState(false);
 
+  // Rarity stats
+  const [rarityStats, setRarityStats] = useState<RarityStat[]>([]);
+  const [rarityStatsLoading, setRarityStatsLoading] = useState(false);
+
+  // Deck archetype stats
+  const [deckArchetypes, setDeckArchetypes] = useState<DeckArchetype[]>([]);
+  const [deckArchetypesLoading, setDeckArchetypesLoading] = useState(false);
+
+  // Synergy stats
+  const [synergies, setSynergies] = useState<CardPairSynergy[]>([]);
+  const [antiSynergies, setAntiSynergies] = useState<CardPairSynergy[]>([]);
+  const [synergiesLoading, setSynergiesLoading] = useState(false);
+  const [synergyTotalDecks, setSynergyTotalDecks] = useState(0);
+
+  // Cache timestamp from server
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+
   const fetchCategoryStats = useCallback(
     async (
       category: CardCategory,
       order: "plays" | "wins" | "winRate",
-      limit: number
+      limit: number,
     ) => {
       const params = new URLSearchParams();
       params.set("format", format);
@@ -314,7 +487,7 @@ export default function PublicMetaDashboard() {
       const payload = (await response.json()) as { stats: CardStat[] };
       return payload.stats || [];
     },
-    [format]
+    [format],
   );
 
   const refreshAvatarStats = useCallback(async () => {
@@ -334,12 +507,12 @@ export default function PublicMetaDashboard() {
       const stats = await fetchCategoryStats(
         "site",
         siteStatsOrder,
-        siteStatsLimit
+        siteStatsLimit,
       );
       setSiteStats(stats);
     } catch (error) {
       setSiteStatsError(
-        error instanceof Error ? error.message : "Failed to load stats"
+        error instanceof Error ? error.message : "Failed to load stats",
       );
     } finally {
       setSiteStatsLoading(false);
@@ -353,12 +526,12 @@ export default function PublicMetaDashboard() {
       const stats = await fetchCategoryStats(
         "spellbook",
         spellbookStatsOrder,
-        spellbookStatsLimit
+        spellbookStatsLimit,
       );
       setSpellbookStats(stats);
     } catch (error) {
       setSpellbookStatsError(
-        error instanceof Error ? error.message : "Failed to load stats"
+        error instanceof Error ? error.message : "Failed to load stats",
       );
     } finally {
       setSpellbookStatsLoading(false);
@@ -372,8 +545,9 @@ export default function PublicMetaDashboard() {
         cache: "no-store",
       });
       if (response.ok) {
-        const payload = (await response.json()) as { stats: ElementStat[] };
+        const payload = (await response.json()) as { stats: ElementStat[]; generatedAt?: string };
         setElementStats(payload.stats || []);
+        if (payload.generatedAt) setLastUpdated(payload.generatedAt);
       }
     } finally {
       setElementStatsLoading(false);
@@ -429,6 +603,59 @@ export default function PublicMetaDashboard() {
     }
   }, []);
 
+  const refreshRarityStats = useCallback(async () => {
+    setRarityStatsLoading(true);
+    try {
+      const response = await fetch(`/api/meta/rarity?format=${format}`, {
+        cache: "no-store",
+      });
+      if (response.ok) {
+        const payload = (await response.json()) as { stats: RarityStat[] };
+        setRarityStats(payload.stats || []);
+      }
+    } finally {
+      setRarityStatsLoading(false);
+    }
+  }, [format]);
+
+  const refreshDeckArchetypes = useCallback(async () => {
+    setDeckArchetypesLoading(true);
+    try {
+      const response = await fetch(`/api/meta/decks?format=${format}`, {
+        cache: "no-store",
+      });
+      if (response.ok) {
+        const payload = (await response.json()) as {
+          archetypes: DeckArchetype[];
+        };
+        setDeckArchetypes(payload.archetypes || []);
+      }
+    } finally {
+      setDeckArchetypesLoading(false);
+    }
+  }, [format]);
+
+  const refreshSynergies = useCallback(async () => {
+    setSynergiesLoading(true);
+    try {
+      const response = await fetch(`/api/meta/synergies?format=${format}`, {
+        cache: "no-store",
+      });
+      if (response.ok) {
+        const payload = (await response.json()) as {
+          synergies: CardPairSynergy[];
+          antiSynergies: CardPairSynergy[];
+          totalDecks: number;
+        };
+        setSynergies(payload.synergies || []);
+        setAntiSynergies(payload.antiSynergies || []);
+        setSynergyTotalDecks(payload.totalDecks || 0);
+      }
+    } finally {
+      setSynergiesLoading(false);
+    }
+  }, [format]);
+
   const refreshAll = useCallback(() => {
     void refreshAvatarStats();
     void refreshSiteStats();
@@ -437,6 +664,9 @@ export default function PublicMetaDashboard() {
     void refreshTypeStats();
     void refreshCostStats();
     void refreshMatchStats();
+    void refreshRarityStats();
+    void refreshDeckArchetypes();
+    void refreshSynergies();
   }, [
     refreshAvatarStats,
     refreshSiteStats,
@@ -445,6 +675,9 @@ export default function PublicMetaDashboard() {
     refreshTypeStats,
     refreshCostStats,
     refreshMatchStats,
+    refreshRarityStats,
+    refreshDeckArchetypes,
+    refreshSynergies,
   ]);
 
   useEffect(() => {
@@ -487,24 +720,19 @@ export default function PublicMetaDashboard() {
   }, [avatarStats, siteStats, spellbookStats, format]);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <div className="mx-auto flex max-w-6xl flex-col gap-10 px-6 py-10">
+    <div className="flex flex-col gap-10">
         <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="text-3xl font-semibold tracking-tight text-white">
-              Meta Statistics
-            </h1>
             <p className="text-sm text-slate-400">
-              Card win rates, element distribution, mana curves, and more
+              All statistics from matches played on this simulator
             </p>
+            {lastUpdated && (
+              <p className="text-xs text-slate-500 mt-0.5">
+                Last updated: {new Date(lastUpdated).toLocaleString()}
+              </p>
+            )}
           </div>
           <div className="flex items-center gap-3">
-            <Link
-              href="/"
-              className="inline-flex items-center justify-center rounded border border-slate-600 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-800"
-            >
-              ← Home
-            </Link>
             <button
               onClick={refreshAll}
               className="inline-flex items-center justify-center rounded border border-emerald-400 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-200 hover:bg-emerald-500/20"
@@ -515,7 +743,9 @@ export default function PublicMetaDashboard() {
               onClick={exportToCsv}
               className="inline-flex items-center rounded border border-amber-500/50 bg-amber-500/10 px-4 py-2 text-sm font-medium text-amber-200 hover:bg-amber-500/20"
               disabled={
-                avatarStats.length + siteStats.length + spellbookStats.length ===
+                avatarStats.length +
+                  siteStats.length +
+                  spellbookStats.length ===
                 0
               }
             >
@@ -535,7 +765,7 @@ export default function PublicMetaDashboard() {
                 "rounded px-3 py-1.5 text-sm font-medium transition",
                 format === f
                   ? "bg-emerald-500/20 text-emerald-200 border border-emerald-400"
-                  : "bg-slate-800 text-slate-300 border border-slate-600 hover:bg-slate-700"
+                  : "bg-slate-800 text-slate-300 border border-slate-600 hover:bg-slate-700",
               )}
             >
               {f.charAt(0).toUpperCase() + f.slice(1)}
@@ -607,7 +837,10 @@ export default function PublicMetaDashboard() {
                     <WinRateBar winRate={a.winRate} barColor="bg-purple-500" />
                     <div className="flex items-center gap-3 text-xs text-slate-400 mt-1.5">
                       <span>{a.plays} played</span>
-                      <span>{a.wins}W / {a.losses}L{a.draws > 0 ? ` / ${a.draws}D` : ""}</span>
+                      <span>
+                        {a.wins}W / {a.losses}L
+                        {a.draws > 0 ? ` / ${a.draws}D` : ""}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -615,6 +848,178 @@ export default function PublicMetaDashboard() {
             </div>
           )}
         </section>
+
+        {/* Deck Composition - Avatar + Element Combos */}
+        <section>
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-lg font-semibold text-white">
+                Deck Composition
+              </h2>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Avatar performance with spellbook element distribution ({format})
+              </p>
+            </div>
+            <ElementLegend />
+          </div>
+          {deckArchetypesLoading ? (
+            <p className="text-sm text-slate-400">Loading...</p>
+          ) : deckArchetypes.length === 0 ? (
+            <p className="text-sm text-slate-400">
+              No deck composition data available.
+            </p>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {deckArchetypes.map((d) => (
+                <div
+                  key={d.avatarCardId}
+                  className="flex gap-3 rounded border border-indigo-700/30 bg-indigo-950/15 p-3 hover:bg-indigo-950/30 transition overflow-hidden"
+                >
+                  {d.avatarSlug && (
+                    <div className="relative w-14 h-[75px] flex-shrink-0 rounded-md overflow-hidden bg-black/40">
+                      <Image
+                        src={`/api/images/${d.avatarSlug}`}
+                        alt={d.avatarName}
+                        fill
+                        className="object-cover"
+                        sizes="56px"
+                        unoptimized
+                      />
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-white truncate text-sm">
+                        {d.avatarName}
+                      </span>
+                      <span className="text-sm font-semibold text-indigo-300 ml-2 flex-shrink-0">
+                        {(d.winRate * 100).toFixed(1)}%
+                      </span>
+                    </div>
+                    <ElementDistributionBar elements={d.elements} />
+                    <div className="flex items-center gap-3 text-[11px] text-slate-400 mt-1">
+                      <span>{d.matches} decks</span>
+                      <span>
+                        {d.wins}W / {d.losses}L
+                        {d.draws > 0 ? ` / ${d.draws}D` : ""}
+                      </span>
+                      <span>~{d.totalCards} spells</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* Card Synergies — hidden until 100+ deck observations */}
+        {synergyTotalDecks >= 100 && (
+          <>
+            <section>
+              <h2 className="text-lg font-semibold text-white mb-1">
+                Top Card Synergies
+              </h2>
+              <p className="text-xs text-slate-400 mb-4">
+                Spellbook card pairs with the highest win rate when played together (min. 3 co-occurrences)
+              </p>
+              {synergiesLoading ? (
+                <p className="text-sm text-slate-400">Loading...</p>
+              ) : synergies.length === 0 ? (
+                <p className="text-sm text-slate-400">
+                  No synergy data available yet.
+                </p>
+              ) : (
+                <div className="overflow-auto rounded border border-slate-800 bg-slate-900/40">
+                  <table className="min-w-full text-left text-xs text-slate-200">
+                    <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400">
+                      <tr>
+                        <th className="px-3 py-2">Card A</th>
+                        <th className="px-3 py-2">Card B</th>
+                        <th className="px-3 py-2">Paired</th>
+                        <th className="px-3 py-2">Wins</th>
+                        <th className="px-3 py-2">Losses</th>
+                        <th className="px-3 py-2">Win Rate</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {synergies.slice(0, 20).map((pair) => (
+                        <tr
+                          key={`${pair.cardA}||${pair.cardB}`}
+                          className="border-t border-slate-800/60 hover:bg-slate-800/40 cursor-pointer"
+                          onMouseEnter={() =>
+                            pair.slugA && setHoveredCard({ slug: pair.slugA, type: null })
+                          }
+                          onMouseLeave={() => setHoveredCard(null)}
+                        >
+                          <td className="px-3 py-2 font-medium text-emerald-200">{pair.cardA}</td>
+                          <td className="px-3 py-2 font-medium text-emerald-200">{pair.cardB}</td>
+                          <td className="px-3 py-2">{pair.coOccurrences}</td>
+                          <td className="px-3 py-2">{pair.wins}</td>
+                          <td className="px-3 py-2">{pair.losses}</td>
+                          <td className="px-3 py-2 text-emerald-300 font-medium">
+                            {(pair.winRate * 100).toFixed(1)}%
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+
+            <section>
+              <h2 className="text-lg font-semibold text-white mb-1">
+                Anti-Synergies
+              </h2>
+              <p className="text-xs text-slate-400 mb-4">
+                Card pairs with the lowest win rate when played together
+              </p>
+              {synergiesLoading ? (
+                <p className="text-sm text-slate-400">Loading...</p>
+              ) : antiSynergies.length === 0 ? (
+                <p className="text-sm text-slate-400">
+                  No anti-synergy data available yet.
+                </p>
+              ) : (
+                <div className="overflow-auto rounded border border-slate-800 bg-slate-900/40">
+                  <table className="min-w-full text-left text-xs text-slate-200">
+                    <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400">
+                      <tr>
+                        <th className="px-3 py-2">Card A</th>
+                        <th className="px-3 py-2">Card B</th>
+                        <th className="px-3 py-2">Paired</th>
+                        <th className="px-3 py-2">Wins</th>
+                        <th className="px-3 py-2">Losses</th>
+                        <th className="px-3 py-2">Win Rate</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {antiSynergies.slice(0, 20).map((pair) => (
+                        <tr
+                          key={`${pair.cardA}||${pair.cardB}`}
+                          className="border-t border-slate-800/60 hover:bg-slate-800/40 cursor-pointer"
+                          onMouseEnter={() =>
+                            pair.slugA && setHoveredCard({ slug: pair.slugA, type: null })
+                          }
+                          onMouseLeave={() => setHoveredCard(null)}
+                        >
+                          <td className="px-3 py-2 font-medium text-rose-200">{pair.cardA}</td>
+                          <td className="px-3 py-2 font-medium text-rose-200">{pair.cardB}</td>
+                          <td className="px-3 py-2">{pair.coOccurrences}</td>
+                          <td className="px-3 py-2">{pair.wins}</td>
+                          <td className="px-3 py-2">{pair.losses}</td>
+                          <td className="px-3 py-2 text-rose-300 font-medium">
+                            {(pair.winRate * 100).toFixed(1)}%
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+          </>
+        )}
 
         {/* Element Distribution */}
         <section>
@@ -678,11 +1083,49 @@ export default function PublicMetaDashboard() {
                   </div>
                   <WinRateBar winRate={t.winRate} barColor="bg-emerald-500" />
                   <div className="text-xs text-slate-400 mt-1">
-                    {t.wins.toLocaleString()} wins of{" "}
-                    {t.plays.toLocaleString()} plays
+                    {t.wins.toLocaleString()} wins of {t.plays.toLocaleString()}{" "}
+                    plays
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+        </section>
+
+        {/* Rarity Distribution */}
+        <section>
+          <h2 className="text-lg font-semibold text-white mb-4">
+            Win Rate by Rarity
+          </h2>
+          {rarityStatsLoading ? (
+            <p className="text-sm text-slate-400">Loading...</p>
+          ) : rarityStats.length === 0 ? (
+            <p className="text-sm text-slate-400">No rarity data available.</p>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {rarityStats.map((r) => {
+                const style = RARITY_STYLES[r.rarity] || RARITY_STYLES.Ordinary;
+                return (
+                  <div
+                    key={r.rarity}
+                    className={`rounded border ${style.border} ${style.bg} px-4 py-3`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className={`font-medium ${style.text}`}>
+                        {r.rarity}
+                      </span>
+                      <span className="text-xs text-slate-400">
+                        {r.plays.toLocaleString()} plays
+                      </span>
+                    </div>
+                    <WinRateBar winRate={r.winRate} barColor={style.bar} />
+                    <div className="text-xs text-slate-400 mt-1">
+                      {r.wins.toLocaleString()} wins of{" "}
+                      {r.plays.toLocaleString()} plays
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </section>
@@ -763,7 +1206,6 @@ export default function PublicMetaDashboard() {
             showType
           />
         </section>
-      </div>
 
       {/* Card Preview Overlay - rendered via portal to ensure viewport-fixed positioning */}
       {hoveredCard &&
@@ -792,7 +1234,7 @@ export default function PublicMetaDashboard() {
               />
             </div>
           </div>,
-          document.body
+          document.body,
         )}
     </div>
   );

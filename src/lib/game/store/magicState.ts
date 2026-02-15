@@ -46,7 +46,7 @@ export const createMagicSlice: StateCreator<GameState, [], [], MagicSlice> = (
       if (transport?.sendMessage) {
         try {
           const cardName = spell.card?.name || "Magic";
-          const cellNo = getCellNumber(tile.x, tile.y, get().board.size.w);
+          const cellNo = getCellNumber(tile.x, tile.y, get().board.size.w, get().board.size.h);
           const playerNum = ownerSeat === "p1" ? "1" : "2";
           transport.sendMessage({
             type: "toast",
@@ -116,7 +116,7 @@ export const createMagicSlice: StateCreator<GameState, [], [], MagicSlice> = (
         } as unknown as CustomMessage);
         // Also show a toast for UX feedback
         const cardName = spell.card?.name || "Magic";
-        const cellNo = getCellNumber(tile.x, tile.y, get().board.size.w);
+        const cellNo = getCellNumber(tile.x, tile.y, get().board.size.w, get().board.size.h);
         transport.sendMessage({
           type: "toast",
           text: `Casting '${cardName}' at #${cellNo}`,

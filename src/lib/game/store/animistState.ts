@@ -105,7 +105,7 @@ export const createAnimistSlice: StateCreator<
 
     // Get board dimensions for cell number
     const [x, y] = cellKey.split(",").map(Number);
-    const cellNo = getCellNumber(x, y, state.board.size.w);
+    const cellNo = getCellNumber(x, y, state.board.size.w, state.board.size.h);
     const ownerNum = who === "p1" ? 1 : 2;
     const playerNum = who === "p1" ? "1" : "2";
 

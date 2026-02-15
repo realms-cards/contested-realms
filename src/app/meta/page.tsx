@@ -1,7 +1,12 @@
+"use client";
+
+import OnlinePageShell from "@/components/online/OnlinePageShell";
 import PublicMetaDashboard from "@/components/meta/PublicMetaDashboard";
 
-export const dynamic = "force-dynamic";
-
 export default function MetaPage() {
-  return <PublicMetaDashboard />;
+  return (
+    <OnlinePageShell>
+      <PublicMetaDashboard />
+    </OnlinePageShell>
+  );
 }

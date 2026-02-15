@@ -15,8 +15,19 @@ export async function GET(request: Request): Promise<NextResponse> {
     const url = new URL(request.url);
     const format = url.searchParams.get("format") || "constructed";
 
-    // Get play/win stats grouped by card type from HumanCardStats joined with CardSetMetadata
-    // We take the first matching set metadata for each card
+    // Try serving from pre-computed cache
+    const snapshot = await prisma.metaStatsSnapshot.findUnique({
+      where: { key: `types:${format}` },
+    });
+    if (snapshot) {
+      const cached = snapshot.data as Record<string, unknown>;
+      return NextResponse.json({
+        ...cached,
+        generatedAt: snapshot.computedAt.toISOString(),
+      });
+    }
+
+    // Fallback: compute on-the-fly
     const rows = await prisma.$queryRaw<TypeStatRow[]>`
       SELECT m.type, 
              SUM(h.plays)::bigint as plays, 

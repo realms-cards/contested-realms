@@ -496,7 +496,7 @@ export const createAtlanteanFateSlice: StateCreator<
       } catch {}
     }
 
-    const cellNo = getCellNumber(x, y, board.size.w);
+    const cellNo = getCellNumber(x, y, board.size.w, board.size.h);
     get().log(
       `Selected corner #${cellNo} for Atlantean Fate - click Confirm to place`,
     );
@@ -663,7 +663,7 @@ export const createAtlanteanFateSlice: StateCreator<
       } catch {}
     }
 
-    const cellNo = getCellNumber(cornerX, cornerY, board.size.w);
+    const cellNo = getCellNumber(cornerX, cornerY, board.size.w, board.size.h);
     const floodCount = floodedSites.length;
     const submergeMsg =
       submergedCount > 0

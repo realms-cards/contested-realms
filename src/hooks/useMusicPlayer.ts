@@ -2,10 +2,11 @@
  * useMusicPlayer Hook
  *
  * Manages background music playback during gameplay with persistent settings.
- * Handles audio element lifecycle, playlist rotation, and localStorage persistence.
+ * Uses a module-level singleton audio element so all consumers share one player
+ * (prevents double-play when multiple components call useMusicPlayer).
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
   MUSIC_TRACKS,
   MUSIC_DEFAULTS,
@@ -112,274 +113,300 @@ function saveSetting<T>(key: string, value: T): void {
   }
 }
 
-export function useMusicPlayer(): [MusicPlayerState, MusicPlayerControls] {
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [autoplayBlocked, setAutoplayBlocked] = useState(false);
-  // Track playback intent separately from audio.paused state
-  // This ensures we continue playing after track ends
-  const shouldBePlayingRef = useRef(false);
+// ─── Singleton music store ───────────────────────────────────────────────
+// All state lives at module scope so every useMusicPlayer() consumer
+// shares one audio element and one set of state values.
 
-  // Game state for mood-based track selection (stored as ref for callback access)
-  const gameStateRef = useRef<GameMusicState>({
-    currentHealth: 20,
-    isDeathsDoor: false,
-    recentHealthChange: 0,
-  });
+interface SingletonState {
+  isEnabled: boolean;
+  isPlaying: boolean;
+  volume: number;
+  isExpanded: boolean;
+  currentTrackIndex: number;
+  autoplayBlocked: boolean;
+}
 
-  // Load initial settings from localStorage
-  const [isEnabled, setIsEnabled] = useState<boolean>(() =>
-    loadSetting(MUSIC_STORAGE_KEYS.enabled, MUSIC_DEFAULTS.enabled)
-  );
-  const [volume, setVolumeState] = useState<number>(() =>
-    loadSetting(MUSIC_STORAGE_KEYS.volume, MUSIC_DEFAULTS.volume)
-  );
-  const [isExpanded, setIsExpandedState] = useState<boolean>(() =>
-    loadSetting(MUSIC_STORAGE_KEYS.expanded, MUSIC_DEFAULTS.expanded)
-  );
-  const [currentTrackIndex, setCurrentTrackIndexState] = useState<number>(() =>
-    loadSetting(MUSIC_STORAGE_KEYS.currentTrackIndex, 0)
-  );
-  const [isPlaying, setIsPlaying] = useState(false);
+let singletonAudio: HTMLAudioElement | null = null;
+let shouldBePlaying = false;
+const gameState: GameMusicState = {
+  currentHealth: 20,
+  isDeathsDoor: false,
+  recentHealthChange: 0,
+};
 
-  const currentTrack = getTrackByIndex(currentTrackIndex);
+// Subscriber list for useSyncExternalStore
+const listeners = new Set<() => void>();
+function emitChange() {
+  for (const listener of listeners) {
+    listener();
+  }
+}
 
-  // Initialize audio element (runs once on mount)
-  useEffect(() => {
-    if (typeof window === "undefined") return;
+// Current snapshot (replaced on every state change to trigger re-renders)
+let snapshot: SingletonState = {
+  isEnabled: typeof window !== "undefined"
+    ? loadSetting(MUSIC_STORAGE_KEYS.enabled, MUSIC_DEFAULTS.enabled)
+    : MUSIC_DEFAULTS.enabled,
+  isPlaying: false,
+  volume: typeof window !== "undefined"
+    ? loadSetting(MUSIC_STORAGE_KEYS.volume, MUSIC_DEFAULTS.volume)
+    : MUSIC_DEFAULTS.volume,
+  isExpanded: typeof window !== "undefined"
+    ? loadSetting(MUSIC_STORAGE_KEYS.expanded, MUSIC_DEFAULTS.expanded)
+    : MUSIC_DEFAULTS.expanded,
+  currentTrackIndex: typeof window !== "undefined"
+    ? loadSetting(MUSIC_STORAGE_KEYS.currentTrackIndex, 0)
+    : 0,
+  autoplayBlocked: false,
+};
 
-    // Create audio element only once
-    if (!audioRef.current) {
-      audioRef.current = new Audio();
-      audioRef.current.preload = "auto";
-    }
+// SSR snapshot (stable reference)
+const serverSnapshot: SingletonState = {
+  isEnabled: MUSIC_DEFAULTS.enabled,
+  isPlaying: false,
+  volume: MUSIC_DEFAULTS.volume,
+  isExpanded: MUSIC_DEFAULTS.expanded,
+  currentTrackIndex: 0,
+  autoplayBlocked: false,
+};
 
-    // Handle track end - select next track based on game state mood
-    const handleEnded = () => {
-      const { currentHealth, isDeathsDoor, recentHealthChange } =
-        gameStateRef.current;
+function updateSnapshot(partial: Partial<SingletonState>) {
+  snapshot = { ...snapshot, ...partial };
+  emitChange();
+}
+
+function subscribe(listener: () => void) {
+  listeners.add(listener);
+  return () => { listeners.delete(listener); };
+}
+
+function getSnapshot() {
+  return snapshot;
+}
+
+function getServerSnapshot() {
+  return serverSnapshot;
+}
+
+/** Ensure the singleton audio element exists (browser only) */
+function ensureAudio(): HTMLAudioElement {
+  if (!singletonAudio) {
+    singletonAudio = new Audio();
+    singletonAudio.preload = "auto";
+    singletonAudio.volume = snapshot.volume;
+
+    // Set initial source
+    const track = getTrackByIndex(snapshot.currentTrackIndex);
+    singletonAudio.src = track.path;
+
+    // Handle track end — select next track based on game state mood
+    singletonAudio.addEventListener("ended", () => {
       const nextIndex = selectTrackForGameState(
-        currentHealth,
-        isDeathsDoor,
-        recentHealthChange,
-        currentTrackIndex
+        gameState.currentHealth,
+        gameState.isDeathsDoor,
+        gameState.recentHealthChange,
+        snapshot.currentTrackIndex,
       );
-      setCurrentTrackIndexState(nextIndex);
-      saveSetting(MUSIC_STORAGE_KEYS.currentTrackIndex, nextIndex);
-    };
+      changeTrack(nextIndex);
+    });
 
-    // Handle audio errors - skip to next track (use mood-based selection)
-    const handleError = (e: ErrorEvent) => {
-      console.error("Music playback error:", e);
-      const { currentHealth, isDeathsDoor, recentHealthChange } =
-        gameStateRef.current;
+    // Handle errors — skip to next track
+    singletonAudio.addEventListener("error", () => {
       const nextIndex = selectTrackForGameState(
-        currentHealth,
-        isDeathsDoor,
-        recentHealthChange,
-        currentTrackIndex
+        gameState.currentHealth,
+        gameState.isDeathsDoor,
+        gameState.recentHealthChange,
+        snapshot.currentTrackIndex,
       );
-      setCurrentTrackIndexState(nextIndex);
-      saveSetting(MUSIC_STORAGE_KEYS.currentTrackIndex, nextIndex);
-    };
+      changeTrack(nextIndex);
+    });
+  }
+  return singletonAudio;
+}
 
-    audioRef.current.addEventListener("ended", handleEnded);
-    audioRef.current.addEventListener("error", handleError as EventListener);
+function changeTrack(index: number) {
+  const audio = ensureAudio();
+  const track = getTrackByIndex(index);
+  audio.src = track.path;
+  saveSetting(MUSIC_STORAGE_KEYS.currentTrackIndex, index);
 
-    return () => {
-      if (audioRef.current) {
-        audioRef.current.removeEventListener("ended", handleEnded);
-        audioRef.current.removeEventListener(
-          "error",
-          handleError as EventListener
-        );
-      }
-    };
-  }, [currentTrackIndex]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
-      }
-    };
-  }, []);
-
-  // Update audio source when track changes
-  useEffect(() => {
-    if (!audioRef.current) return;
-
-    // Use shouldBePlayingRef instead of audio.paused because when a track ends,
-    // paused becomes true even though we want to continue playing the next track
-    const wasPlaying = shouldBePlayingRef.current;
-    audioRef.current.src = currentTrack.path;
-
-    if (wasPlaying && isEnabled) {
-      const playPromise = audioRef.current.play();
-      if (playPromise) {
-        playPromise
-          .then(() => {
-            setIsPlaying(true);
-          })
-          .catch((error) => {
-            console.warn("Autoplay blocked or playback failed:", error);
-            setAutoplayBlocked(true);
-            setIsPlaying(false);
-            shouldBePlayingRef.current = false;
-          });
-      }
-    }
-  }, [currentTrack, isEnabled]);
-
-  // Auto-play when enabled
-  useEffect(() => {
-    if (!audioRef.current || !isEnabled) return;
-
-    shouldBePlayingRef.current = true;
-    const playPromise = audioRef.current.play();
+  if (shouldBePlaying && snapshot.isEnabled) {
+    const playPromise = audio.play();
     if (playPromise) {
       playPromise
         .then(() => {
-          setIsPlaying(true);
-          setAutoplayBlocked(false);
+          updateSnapshot({ currentTrackIndex: index, isPlaying: true });
         })
-        .catch((error) => {
-          console.warn("Autoplay blocked:", error);
-          setAutoplayBlocked(true);
-          setIsPlaying(false);
-          shouldBePlayingRef.current = false;
+        .catch(() => {
+          shouldBePlaying = false;
+          updateSnapshot({ currentTrackIndex: index, isPlaying: false, autoplayBlocked: true });
         });
     }
-  }, [isEnabled]);
+  } else {
+    updateSnapshot({ currentTrackIndex: index });
+  }
+}
 
-  // Update volume when changed
+function tryPlay() {
+  const audio = ensureAudio();
+  shouldBePlaying = true;
+  const playPromise = audio.play();
+  if (playPromise) {
+    playPromise
+      .then(() => {
+        updateSnapshot({ isPlaying: true, autoplayBlocked: false });
+      })
+      .catch(() => {
+        shouldBePlaying = false;
+        updateSnapshot({ isPlaying: false, autoplayBlocked: true });
+      });
+  }
+}
+
+// Track how many hook instances are mounted so we know when to clean up
+let mountCount = 0;
+
+export function useMusicPlayer(): [MusicPlayerState, MusicPlayerControls] {
+  const state = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+
+  // Track whether this instance has already triggered the initial auto-play
+  const didAutoPlayRef = useRef(false);
+
+  // On first mount (browser only), ensure audio element exists and auto-play if enabled
   useEffect(() => {
-    if (audioRef.current) {
-      audioRef.current.volume = volume;
+    mountCount++;
+    ensureAudio();
+
+    // Auto-play on first mount if enabled (only once across all consumers)
+    if (state.isEnabled && !didAutoPlayRef.current) {
+      didAutoPlayRef.current = true;
+      tryPlay();
     }
-  }, [volume]);
+
+    return () => {
+      mountCount--;
+      // When no consumers remain, pause and clean up
+      if (mountCount <= 0) {
+        mountCount = 0;
+        if (singletonAudio) {
+          singletonAudio.pause();
+          singletonAudio = null;
+        }
+        shouldBePlaying = false;
+        updateSnapshot({ isPlaying: false });
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const currentTrack = getTrackByIndex(state.currentTrackIndex);
 
   // Controls
   const togglePlay = useCallback(() => {
-    if (!audioRef.current) return;
+    const audio = ensureAudio();
 
-    if (audioRef.current.paused) {
-      shouldBePlayingRef.current = true;
-      // Also set enabled so it persists across reloads
-      setIsEnabled(true);
+    if (audio.paused) {
+      shouldBePlaying = true;
       saveSetting(MUSIC_STORAGE_KEYS.enabled, true);
-      const playPromise = audioRef.current.play();
+      const playPromise = audio.play();
       if (playPromise) {
         playPromise
           .then(() => {
-            setIsPlaying(true);
-            setAutoplayBlocked(false);
+            updateSnapshot({ isEnabled: true, isPlaying: true, autoplayBlocked: false });
           })
-          .catch((error) => {
-            console.warn("Play failed:", error);
-            setAutoplayBlocked(true);
-            shouldBePlayingRef.current = false;
+          .catch(() => {
+            shouldBePlaying = false;
+            updateSnapshot({ autoplayBlocked: true });
           });
       }
     } else {
-      shouldBePlayingRef.current = false;
-      // Also set enabled to false so it stays paused on reload
-      setIsEnabled(false);
+      shouldBePlaying = false;
       saveSetting(MUSIC_STORAGE_KEYS.enabled, false);
-      audioRef.current.pause();
-      setIsPlaying(false);
+      audio.pause();
+      updateSnapshot({ isEnabled: false, isPlaying: false });
     }
   }, []);
 
   const setVolume = useCallback((newVolume: number) => {
     const clampedVolume = Math.max(0, Math.min(1, newVolume));
-    setVolumeState(clampedVolume);
+    if (singletonAudio) singletonAudio.volume = clampedVolume;
     saveSetting(MUSIC_STORAGE_KEYS.volume, clampedVolume);
+    updateSnapshot({ volume: clampedVolume });
   }, []);
 
   const nextTrack = useCallback(() => {
-    const nextIndex = getNextTrackIndex(currentTrackIndex);
-    setCurrentTrackIndexState(nextIndex);
-    saveSetting(MUSIC_STORAGE_KEYS.currentTrackIndex, nextIndex);
-  }, [currentTrackIndex]);
+    const nextIndex = getNextTrackIndex(snapshot.currentTrackIndex);
+    changeTrack(nextIndex);
+  }, []);
 
   const previousTrack = useCallback(() => {
-    const prevIndex = getPreviousTrackIndex(currentTrackIndex);
-    setCurrentTrackIndexState(prevIndex);
-    saveSetting(MUSIC_STORAGE_KEYS.currentTrackIndex, prevIndex);
-  }, [currentTrackIndex]);
+    const prevIndex = getPreviousTrackIndex(snapshot.currentTrackIndex);
+    changeTrack(prevIndex);
+  }, []);
 
   const selectTrack = useCallback((index: number) => {
     if (index < 0 || index >= MUSIC_TRACKS.length) {
       console.warn(`Invalid track index: ${index}`);
       return;
     }
-    setCurrentTrackIndexState(index);
-    saveSetting(MUSIC_STORAGE_KEYS.currentTrackIndex, index);
+    changeTrack(index);
   }, []);
 
   const toggleEnabled = useCallback(() => {
-    const newEnabled = !isEnabled;
-    setIsEnabled(newEnabled);
+    const newEnabled = !snapshot.isEnabled;
     saveSetting(MUSIC_STORAGE_KEYS.enabled, newEnabled);
 
-    if (!newEnabled && audioRef.current) {
-      shouldBePlayingRef.current = false;
-      audioRef.current.pause();
-      setIsPlaying(false);
+    if (newEnabled) {
+      updateSnapshot({ isEnabled: true });
+      tryPlay();
+    } else {
+      shouldBePlaying = false;
+      if (singletonAudio) singletonAudio.pause();
+      updateSnapshot({ isEnabled: false, isPlaying: false });
     }
-  }, [isEnabled]);
-
-  const toggleExpanded = useCallback(() => {
-    const newExpanded = !isExpanded;
-    setIsExpandedState(newExpanded);
-    saveSetting(MUSIC_STORAGE_KEYS.expanded, newExpanded);
-  }, [isExpanded]);
-
-  const setExpanded = useCallback((expanded: boolean) => {
-    setIsExpandedState(expanded);
-    saveSetting(MUSIC_STORAGE_KEYS.expanded, expanded);
   }, []);
 
-  // Update game state for mood-based track selection
+  const toggleExpanded = useCallback(() => {
+    const newExpanded = !snapshot.isExpanded;
+    saveSetting(MUSIC_STORAGE_KEYS.expanded, newExpanded);
+    updateSnapshot({ isExpanded: newExpanded });
+  }, []);
+
+  const setExpanded = useCallback((expanded: boolean) => {
+    saveSetting(MUSIC_STORAGE_KEYS.expanded, expanded);
+    updateSnapshot({ isExpanded: expanded });
+  }, []);
+
   const updateGameState = useCallback(
     (
       currentHealth: number,
       isDeathsDoor: boolean,
-      recentHealthChange: number
+      recentHealthChange: number,
     ) => {
-      gameStateRef.current = {
-        currentHealth,
-        isDeathsDoor,
-        recentHealthChange,
-      };
+      gameState.currentHealth = currentHealth;
+      gameState.isDeathsDoor = isDeathsDoor;
+      gameState.recentHealthChange = recentHealthChange;
     },
-    []
+    [],
   );
 
-  // Reset to starting track (The Autumn Equinox) for new matches
   const resetToStartingTrack = useCallback(() => {
     const startingIndex = getStartingTrackIndex();
-    setCurrentTrackIndexState(startingIndex);
-    saveSetting(MUSIC_STORAGE_KEYS.currentTrackIndex, startingIndex);
-    // Reset game state to defaults
-    gameStateRef.current = {
-      currentHealth: 20,
-      isDeathsDoor: false,
-      recentHealthChange: 0,
-    };
+    gameState.currentHealth = 20;
+    gameState.isDeathsDoor = false;
+    gameState.recentHealthChange = 0;
+    changeTrack(startingIndex);
   }, []);
 
   return [
     {
       currentTrack,
-      currentTrackIndex,
-      isPlaying,
-      isEnabled,
-      volume,
-      isExpanded,
-      autoplayBlocked,
+      currentTrackIndex: state.currentTrackIndex,
+      isPlaying: state.isPlaying,
+      isEnabled: state.isEnabled,
+      volume: state.volume,
+      isExpanded: state.isExpanded,
+      autoplayBlocked: state.autoplayBlocked,
       currentMood: currentTrack.mood,
     },
     {

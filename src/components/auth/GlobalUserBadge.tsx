@@ -20,7 +20,8 @@ export default function GlobalUserBadge() {
     (pathname.startsWith("/replay") ||
       pathname.startsWith("/leaderboard") ||
       pathname.startsWith("/decks") ||
-      pathname.startsWith("/cubes"))
+      pathname.startsWith("/cubes") ||
+      pathname.startsWith("/meta"))
   ) {
     return null;
   }
