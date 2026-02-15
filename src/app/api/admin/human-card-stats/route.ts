@@ -17,8 +17,25 @@ function parseFormat(raw: string | null): "constructed" | "sealed" | "draft" {
   return "constructed";
 }
 
+type CardCategory = "avatar" | "site" | "spellbook" | "all";
+
+function parseCategory(raw: string | null): CardCategory {
+  if (raw === "avatar") return "avatar";
+  if (raw === "site") return "site";
+  if (raw === "spellbook") return "spellbook";
+  return "all";
+}
+
+function matchesCategory(type: string | undefined, category: CardCategory): boolean {
+  if (category === "all") return true;
+  const lower = (type || "").toLowerCase();
+  if (category === "avatar") return lower === "avatar";
+  if (category === "site") return lower.includes("site");
+  return lower !== "avatar" && !lower.includes("site");
+}
+
 type HumanCardStatRow = { cardId: number; plays: number; wins: number; losses: number; draws: number };
-type HumanCardStatOut = HumanCardStatRow & { name: string; winRate: number };
+type HumanCardStatOut = HumanCardStatRow & { name: string; winRate: number; type: string | null };
 
 export async function GET(request: Request): Promise<NextResponse> {
   try {
@@ -29,6 +46,9 @@ export async function GET(request: Request): Promise<NextResponse> {
     const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(1, Math.floor(limitRaw)), 200) : 50;
     const order = parseOrder(url.searchParams.get("order"));
     const format = parseFormat(url.searchParams.get("format"));
+    const category = parseCategory(url.searchParams.get("category"));
+
+    const fetchLimit = category === "all" ? limit : limit * 4;
 
     const client = prisma as unknown as Record<string, unknown>;
     const model = client["humanCardStats"] as {
@@ -41,18 +61,36 @@ export async function GET(request: Request): Promise<NextResponse> {
     };
     const rows = await model.findMany({
       where: { format },
-      take: limit,
+      take: fetchLimit,
       orderBy: order === "plays" ? { plays: "desc" } : order === "wins" ? { wins: "desc" } : { plays: "desc" },
       select: { cardId: true, plays: true, wins: true, losses: true, draws: true },
     });
 
-    const ids = rows.map((r) => r.cardId);
-    const cards = ids.length
-      ? await prisma.card.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } })
-      : [];
-    const nameMap = new Map(cards.map((c) => [c.id, c.name] as const));
+    // Filter out cardId 0 (invalid/placeholder)
+    const validRows = rows.filter((r) => r.cardId > 0);
+    const ids = validRows.map((r) => r.cardId);
 
-    const stats: HumanCardStatOut[] = rows
+    const [cards, cardMeta] = ids.length
+      ? await Promise.all([
+          prisma.card.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } }),
+          prisma.cardSetMetadata.findMany({
+            where: { cardId: { in: ids } },
+            select: { cardId: true, type: true },
+            distinct: ["cardId"],
+          }),
+        ])
+      : [[], []];
+
+    const nameMap = new Map(cards.map((c) => [c.id, c.name] as const));
+    const typeMap = new Map<number, string>();
+    for (const m of cardMeta) {
+      if (!typeMap.has(m.cardId) && m.type) {
+        typeMap.set(m.cardId, m.type);
+      }
+    }
+
+    const stats: HumanCardStatOut[] = validRows
+      .filter((r) => matchesCategory(typeMap.get(r.cardId), category))
       .map((r: HumanCardStatRow): HumanCardStatOut => {
         const denom = r.wins + r.losses;
         const winRate = denom > 0 ? r.wins / denom : 0;
@@ -64,6 +102,7 @@ export async function GET(request: Request): Promise<NextResponse> {
           losses: r.losses,
           draws: r.draws,
           winRate,
+          type: typeMap.get(r.cardId) || null,
         };
       })
       .sort((a: HumanCardStatOut, b: HumanCardStatOut) => {
@@ -73,7 +112,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       })
       .slice(0, limit);
 
-    return NextResponse.json({ stats, format, order, limit, generatedAt: new Date().toISOString() });
+    return NextResponse.json({ stats, format, order, limit, category, generatedAt: new Date().toISOString() });
   } catch {
     return NextResponse.json({ error: "Failed to load human card stats" }, { status: 500 });
   }

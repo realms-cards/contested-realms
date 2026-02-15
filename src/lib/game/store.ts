@@ -91,6 +91,7 @@ import { createRemoteCursorSlice } from "./store/remoteCursorState";
 import { createResourceSlice } from "./store/resourceState";
 import { createRevealOverlaySlice } from "./store/revealOverlayState";
 import { createRiverGenesisSlice } from "./store/riverGenesisState";
+import { createSeaRaiderSlice } from "./store/seaRaiderState";
 import { createSearingTruthSlice } from "./store/searingTruthState";
 import { createSeerSlice } from "./store/seerState";
 import { createSessionSlice } from "./store/sessionState";
@@ -238,6 +239,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   ...createCrossroadsSlice(set, get, storeApi),
   ...createMirrorRealmSlice(set, get, storeApi),
   ...createTorshammarSlice(set, get, storeApi),
+  ...createSeaRaiderSlice(set, get, storeApi),
   ...createShapeshiftSlice(set, get, storeApi),
   cardScale: 1,
   // Harbinger portal discount (Gothic expansion) - once per turn mana reduction
@@ -392,6 +394,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         pendingObservatory: null,
         pendingKelpCavern: null,
         pendingCrossroads: null,
+        pendingPiracy: null,
         pendingShapeshift: null,
       };
       return reset as GameState;

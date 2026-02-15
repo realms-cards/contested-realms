@@ -153,6 +153,22 @@ export const RESOLVER_REGISTRY: ResolverEntry[] = [
     description: "Summon pig tokens",
   },
   {
+    id: "captainBaldassare",
+    cardName: "Captain Baldassare",
+    category: "minion",
+    stateFile: "seaRaiderState.ts",
+    description:
+      "When attacks a unit or site, defender discards top 3 spells. May cast them this turn ignoring threshold.",
+  },
+  {
+    id: "seaRaider",
+    cardName: "Sea Raider",
+    category: "minion",
+    stateFile: "seaRaiderState.ts",
+    description:
+      "When attacks and kills an enemy, defender discards top spell. May cast it this turn ignoring threshold.",
+  },
+  {
     id: "headlessHaunt",
     cardName: "Headless Haunt / Hauntless Head",
     category: "minion",

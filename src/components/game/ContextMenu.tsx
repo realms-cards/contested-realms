@@ -149,6 +149,9 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   );
   const interactionGuides = useGameStore((s) => s.interactionGuides);
 
+  // Piracy actions (Captain Baldassare / Sea Raider)
+  const triggerPiracy = useGameStore((s) => s.triggerPiracy);
+
   // Gem token actions
   const gemTokens = useGameStore((s) => s.gemTokens);
   const duplicateGemToken = useGameStore((s) => s.duplicateGemToken);
@@ -1086,6 +1089,25 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
             "Place a Silenced token on this permanent (removes abilities).",
         });
       }
+    }
+
+    // Captain Baldassare / Sea Raider piracy action
+    const permName = (item?.card?.name || "").toLowerCase();
+    const isCaptainBaldassare = permName === "captain baldassare";
+    const isSeaRaider = permName === "sea raider";
+    if ((isCaptainBaldassare || isSeaRaider) && isMine) {
+      const piracyLabel = isCaptainBaldassare
+        ? "Piracy (discard 3)"
+        : "Piracy (discard 1)";
+      extraActions.push({
+        actionId: "__piracy_trigger__",
+        displayText: piracyLabel,
+        isEnabled: true,
+        targetPermanentId: "",
+        description: isCaptainBaldassare
+          ? "Discard opponent's topmost 3 spells. You may cast each this turn, ignoring threshold."
+          : "Discard opponent's topmost spell. You may cast it this turn, ignoring threshold.",
+      });
     }
 
     // Monument move action (monuments can be relocated via context menu)
@@ -3194,6 +3216,43 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                               try {
                                 playCardFlip();
                               } catch {}
+                            }
+                            onClose();
+                          }}
+                        >
+                          {action.displayText}
+                        </button>
+                      );
+                    }
+                    // Piracy action (Captain Baldassare / Sea Raider)
+                    if (action.actionId === "__piracy_trigger__") {
+                      return (
+                        <button
+                          key={action.actionId}
+                          className="w-full text-left rounded bg-cyan-600/20 hover:bg-cyan-600/30 px-3 py-1"
+                          title={action.description}
+                          onClick={() => {
+                            if (t.kind === "permanent") {
+                              const itm = (permanents[t.at] || [])[t.index];
+                              if (itm) {
+                                const ownerSeat = seatFromOwner(itm.owner);
+                                const cardName = (
+                                  itm.card?.name || ""
+                                ).toLowerCase();
+                                const count =
+                                  cardName === "captain baldassare" ? 3 : 1;
+                                triggerPiracy({
+                                  source: {
+                                    at: t.at,
+                                    index: t.index,
+                                    instanceId: itm.instanceId ?? null,
+                                    owner: itm.owner as 1 | 2,
+                                    card: itm.card,
+                                  },
+                                  attackerSeat: ownerSeat,
+                                  discardCount: count,
+                                });
+                              }
                             }
                             onClose();
                           }}

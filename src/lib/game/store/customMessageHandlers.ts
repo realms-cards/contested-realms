@@ -3806,6 +3806,40 @@ export function handleCustomMessage(
     return;
   }
 
+  // --- Piracy message handler (Captain Baldassare / Sea Raider) ---
+  if (t === "piracyTrigger") {
+    const payload = msg as {
+      id?: string;
+      sourceName?: string;
+      attackerSeat?: PlayerKey;
+      defenderSeat?: PlayerKey;
+      discardedCards?: CardRef[];
+      ts?: number;
+    };
+    const cards = Array.isArray(payload.discardedCards)
+      ? payload.discardedCards
+      : [];
+    if (cards.length > 0) {
+      // Show the discarded cards to the receiving player
+      get().openRevealOverlay(
+        `${payload.sourceName ?? "Piracy"} — Piracy`,
+        cards,
+        payload.attackerSeat,
+      );
+    }
+    const cardNames = cards.map((c) => c.name).join(", ");
+    try {
+      get().log(
+        `[${
+          payload.attackerSeat?.toUpperCase() ?? "PLAYER"
+        }] ${payload.sourceName ?? "Piracy"}: Discarded ${
+          cards.length
+        } spell(s) — ${cardNames}. May cast them this turn (ignoring threshold).`,
+      );
+    } catch {}
+    return;
+  }
+
   // --- Legion of Gall message handlers ---
   if (t === "legionOfGallBegin") {
     const id = (msg as { id?: unknown }).id as string | undefined;

@@ -16,6 +16,24 @@ function parseFormat(raw: string | null): "constructed" | "sealed" | "draft" {
   return "constructed";
 }
 
+type CardCategory = "avatar" | "site" | "spellbook" | "all";
+
+function parseCategory(raw: string | null): CardCategory {
+  if (raw === "avatar") return "avatar";
+  if (raw === "site") return "site";
+  if (raw === "spellbook") return "spellbook";
+  return "all";
+}
+
+function matchesCategory(type: string | undefined, category: CardCategory): boolean {
+  if (category === "all") return true;
+  const lower = (type || "").toLowerCase();
+  if (category === "avatar") return lower === "avatar";
+  if (category === "site") return lower.includes("site");
+  // spellbook = everything that isn't avatar or site
+  return lower !== "avatar" && !lower.includes("site");
+}
+
 type HumanCardStatRow = {
   cardId: number;
   plays: number;
@@ -39,6 +57,10 @@ export async function GET(request: Request): Promise<NextResponse> {
       : 50;
     const order = parseOrder(url.searchParams.get("order"));
     const format = parseFormat(url.searchParams.get("format"));
+    const category = parseCategory(url.searchParams.get("category"));
+
+    // When filtering by category, fetch more rows so we have enough after filtering
+    const fetchLimit = category === "all" ? limit : limit * 4;
 
     const client = prisma as unknown as Record<string, unknown>;
     const model = client["humanCardStats"] as {
@@ -51,7 +73,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     };
     const rows = await model.findMany({
       where: { format },
-      take: limit,
+      take: fetchLimit,
       orderBy:
         order === "plays"
           ? { plays: "desc" }
@@ -108,6 +130,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     }
 
     const stats: HumanCardStatOut[] = validRows
+      .filter((r) => matchesCategory(typeMap.get(r.cardId), category))
       .map((r: HumanCardStatRow): HumanCardStatOut => {
         const denom = r.wins + r.losses;
         const winRate = denom > 0 ? r.wins / denom : 0;
@@ -136,6 +159,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       format,
       order,
       limit,
+      category,
       generatedAt: new Date().toISOString(),
     });
   } catch {

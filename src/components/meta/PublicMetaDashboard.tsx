@@ -46,6 +46,30 @@ type MatchStat = {
   avgDurationSec: number | null;
 };
 
+const ELEMENT_COLORS: Record<string, { bg: string; border: string; text: string; bar: string }> = {
+  Fire: { bg: "bg-red-950/40", border: "border-red-700/60", text: "text-red-300", bar: "bg-red-500" },
+  Water: { bg: "bg-blue-950/40", border: "border-blue-700/60", text: "text-blue-300", bar: "bg-blue-500" },
+  Earth: { bg: "bg-amber-950/40", border: "border-amber-700/60", text: "text-amber-300", bar: "bg-amber-500" },
+  Air: { bg: "bg-cyan-950/40", border: "border-cyan-700/60", text: "text-cyan-300", bar: "bg-cyan-400" },
+};
+
+const DEFAULT_ELEMENT_STYLE = {
+  bg: "bg-slate-900/60",
+  border: "border-slate-700",
+  text: "text-slate-300",
+  bar: "bg-slate-500",
+};
+
+function getElementStyle(element: string) {
+  // Handle multi-element (e.g. "Fire,Water" or "Fire Water")
+  const parts = element.split(/[,\s/]+/).map((s) => s.trim());
+  for (const part of parts) {
+    const match = ELEMENT_COLORS[part];
+    if (match) return match;
+  }
+  return DEFAULT_ELEMENT_STYLE;
+}
+
 function StatCard({
   label,
   value,
@@ -70,19 +94,181 @@ function StatCard({
   );
 }
 
+function WinRateBar({ winRate, barColor }: { winRate: number; barColor: string }) {
+  const pct = Math.round(winRate * 100);
+  return (
+    <div className="flex items-center gap-2 mt-1.5">
+      <div className="flex-1 h-2 rounded-full bg-slate-800 overflow-hidden">
+        <div
+          className={`h-full rounded-full ${barColor} transition-all`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <span className="text-xs font-medium text-white tabular-nums w-12 text-right">
+        {(winRate * 100).toFixed(1)}%
+      </span>
+    </div>
+  );
+}
+
+type CardCategory = "avatar" | "site" | "spellbook";
+
+function CardStatsTable({
+  stats,
+  loading,
+  error,
+  order,
+  setOrder,
+  limit,
+  setLimit,
+  onRefresh,
+  onHoverCard,
+  onLeaveCard,
+  showType,
+}: {
+  stats: CardStat[];
+  loading: boolean;
+  error: string | null;
+  order: "plays" | "wins" | "winRate";
+  setOrder: (v: "plays" | "wins" | "winRate") => void;
+  limit: number;
+  setLimit: (v: number) => void;
+  onRefresh: () => void;
+  onHoverCard: (card: { slug: string; type: string | null }) => void;
+  onLeaveCard: () => void;
+  showType?: boolean;
+}) {
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-end">
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <label className="flex items-center gap-1">
+            <span className="text-slate-300">Order</span>
+            <CustomSelect
+              value={order}
+              onChange={(v) => setOrder(v as typeof order)}
+              options={[
+                { value: "plays", label: "plays" },
+                { value: "wins", label: "wins" },
+                { value: "winRate", label: "win rate" },
+              ]}
+            />
+          </label>
+          <label className="flex items-center gap-1">
+            <span className="text-slate-300">Limit</span>
+            <input
+              type="number"
+              min={1}
+              max={200}
+              value={limit}
+              onChange={(e) =>
+                setLimit(
+                  Math.max(1, Math.min(200, Number(e.target.value) || 50))
+                )
+              }
+              className="w-20 rounded border border-slate-600 bg-slate-900 px-2 py-1 text-slate-200"
+            />
+          </label>
+          <button
+            onClick={onRefresh}
+            className="inline-flex items-center rounded border border-slate-600 px-3 py-1 text-xs font-medium text-slate-200 hover:bg-slate-800"
+            disabled={loading}
+          >
+            {loading ? "Refreshing…" : "Refresh"}
+          </button>
+        </div>
+      </div>
+      {error && (
+        <div className="rounded border border-rose-500/50 bg-rose-500/10 px-3 py-2 text-xs text-rose-100">
+          {error}
+        </div>
+      )}
+      <div className="overflow-auto rounded border border-slate-800 bg-slate-900/40">
+        <table className="min-w-full text-left text-xs text-slate-200">
+          <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400">
+            <tr>
+              <th className="px-3 py-2">Card</th>
+              {showType && <th className="px-3 py-2">Type</th>}
+              <th className="px-3 py-2">Plays</th>
+              <th className="px-3 py-2">Wins</th>
+              <th className="px-3 py-2">Losses</th>
+              <th className="px-3 py-2">Draws</th>
+              <th className="px-3 py-2">Win Rate</th>
+            </tr>
+          </thead>
+          <tbody>
+            {stats.length === 0 ? (
+              <tr>
+                <td
+                  className="px-3 py-2 text-slate-300"
+                  colSpan={showType ? 7 : 6}
+                >
+                  No stats yet. Play some matches or adjust filters.
+                </td>
+              </tr>
+            ) : (
+              stats.map((row) => (
+                <tr
+                  key={row.cardId}
+                  className="border-t border-slate-800/60 hover:bg-slate-800/40 cursor-pointer"
+                  onMouseEnter={() =>
+                    row.slug &&
+                    onHoverCard({ slug: row.slug, type: row.type })
+                  }
+                  onMouseLeave={onLeaveCard}
+                >
+                  <td className="px-3 py-2">
+                    <span className="font-medium text-white">{row.name}</span>
+                  </td>
+                  {showType && (
+                    <td className="px-3 py-2 text-slate-400">{row.type}</td>
+                  )}
+                  <td className="px-3 py-2">{row.plays}</td>
+                  <td className="px-3 py-2">{row.wins}</td>
+                  <td className="px-3 py-2">{row.losses}</td>
+                  <td className="px-3 py-2">{row.draws}</td>
+                  <td className="px-3 py-2">
+                    {(row.winRate * 100).toFixed(1)}%
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 export default function PublicMetaDashboard() {
   const [format, setFormat] = useState<"constructed" | "sealed" | "draft">(
     "constructed"
   );
 
-  // Card stats
-  const [cardStats, setCardStats] = useState<CardStat[]>([]);
-  const [cardStatsError, setCardStatsError] = useState<string | null>(null);
-  const [cardStatsLoading, setCardStatsLoading] = useState(false);
-  const [cardStatsOrder, setCardStatsOrder] = useState<
+  // Avatar stats
+  const [avatarStats, setAvatarStats] = useState<CardStat[]>([]);
+  const [avatarStatsLoading, setAvatarStatsLoading] = useState(false);
+
+  // Site stats
+  const [siteStats, setSiteStats] = useState<CardStat[]>([]);
+  const [siteStatsError, setSiteStatsError] = useState<string | null>(null);
+  const [siteStatsLoading, setSiteStatsLoading] = useState(false);
+  const [siteStatsOrder, setSiteStatsOrder] = useState<
     "plays" | "wins" | "winRate"
   >("plays");
-  const [cardStatsLimit, setCardStatsLimit] = useState(50);
+  const [siteStatsLimit, setSiteStatsLimit] = useState(50);
+
+  // Spellbook stats
+  const [spellbookStats, setSpellbookStats] = useState<CardStat[]>([]);
+  const [spellbookStatsError, setSpellbookStatsError] = useState<string | null>(
+    null
+  );
+  const [spellbookStatsLoading, setSpellbookStatsLoading] = useState(false);
+  const [spellbookStatsOrder, setSpellbookStatsOrder] = useState<
+    "plays" | "wins" | "winRate"
+  >("plays");
+  const [spellbookStatsLimit, setSpellbookStatsLimit] = useState(50);
+
   const [hoveredCard, setHoveredCard] = useState<{
     slug: string;
     type: string | null;
@@ -104,14 +290,17 @@ export default function PublicMetaDashboard() {
   const [matchStats, setMatchStats] = useState<MatchStat[]>([]);
   const [matchStatsLoading, setMatchStatsLoading] = useState(false);
 
-  const refreshCardStats = useCallback(async () => {
-    setCardStatsLoading(true);
-    setCardStatsError(null);
-    try {
+  const fetchCategoryStats = useCallback(
+    async (
+      category: CardCategory,
+      order: "plays" | "wins" | "winRate",
+      limit: number
+    ) => {
       const params = new URLSearchParams();
       params.set("format", format);
-      params.set("order", cardStatsOrder);
-      params.set("limit", String(cardStatsLimit));
+      params.set("order", order);
+      params.set("limit", String(limit));
+      params.set("category", category);
       const response = await fetch(`/api/meta/cards?${params.toString()}`, {
         method: "GET",
         cache: "no-store",
@@ -123,15 +312,58 @@ export default function PublicMetaDashboard() {
         throw new Error(body?.error || `HTTP ${response.status}`);
       }
       const payload = (await response.json()) as { stats: CardStat[] };
-      setCardStats(payload.stats || []);
+      return payload.stats || [];
+    },
+    [format]
+  );
+
+  const refreshAvatarStats = useCallback(async () => {
+    setAvatarStatsLoading(true);
+    try {
+      const stats = await fetchCategoryStats("avatar", "plays", 50);
+      setAvatarStats(stats);
+    } finally {
+      setAvatarStatsLoading(false);
+    }
+  }, [fetchCategoryStats]);
+
+  const refreshSiteStats = useCallback(async () => {
+    setSiteStatsLoading(true);
+    setSiteStatsError(null);
+    try {
+      const stats = await fetchCategoryStats(
+        "site",
+        siteStatsOrder,
+        siteStatsLimit
+      );
+      setSiteStats(stats);
     } catch (error) {
-      setCardStatsError(
+      setSiteStatsError(
         error instanceof Error ? error.message : "Failed to load stats"
       );
     } finally {
-      setCardStatsLoading(false);
+      setSiteStatsLoading(false);
     }
-  }, [format, cardStatsOrder, cardStatsLimit]);
+  }, [fetchCategoryStats, siteStatsOrder, siteStatsLimit]);
+
+  const refreshSpellbookStats = useCallback(async () => {
+    setSpellbookStatsLoading(true);
+    setSpellbookStatsError(null);
+    try {
+      const stats = await fetchCategoryStats(
+        "spellbook",
+        spellbookStatsOrder,
+        spellbookStatsLimit
+      );
+      setSpellbookStats(stats);
+    } catch (error) {
+      setSpellbookStatsError(
+        error instanceof Error ? error.message : "Failed to load stats"
+      );
+    } finally {
+      setSpellbookStatsLoading(false);
+    }
+  }, [fetchCategoryStats, spellbookStatsOrder, spellbookStatsLimit]);
 
   const refreshElementStats = useCallback(async () => {
     setElementStatsLoading(true);
@@ -156,7 +388,11 @@ export default function PublicMetaDashboard() {
       });
       if (response.ok) {
         const payload = (await response.json()) as { stats: TypeStat[] };
-        setTypeStats(payload.stats || []);
+        const filtered = (payload.stats || []).filter((t) => {
+          const lower = t.type.toLowerCase();
+          return lower !== "avatar" && !lower.includes("site");
+        });
+        setTypeStats(filtered);
       }
     } finally {
       setTypeStatsLoading(false);
@@ -194,13 +430,17 @@ export default function PublicMetaDashboard() {
   }, []);
 
   const refreshAll = useCallback(() => {
-    void refreshCardStats();
+    void refreshAvatarStats();
+    void refreshSiteStats();
+    void refreshSpellbookStats();
     void refreshElementStats();
     void refreshTypeStats();
     void refreshCostStats();
     void refreshMatchStats();
   }, [
-    refreshCardStats,
+    refreshAvatarStats,
+    refreshSiteStats,
+    refreshSpellbookStats,
     refreshElementStats,
     refreshTypeStats,
     refreshCostStats,
@@ -212,19 +452,22 @@ export default function PublicMetaDashboard() {
   }, [refreshAll]);
 
   const exportToCsv = useCallback(() => {
-    if (cardStats.length === 0) return;
+    const allCards = [...avatarStats, ...siteStats, ...spellbookStats];
+    if (allCards.length === 0) return;
     const headers = [
       "Card Name",
       "Card ID",
+      "Type",
       "Plays",
       "Wins",
       "Losses",
       "Draws",
       "Win Rate",
     ];
-    const rows = cardStats.map((row) => [
+    const rows = allCards.map((row) => [
       `"${row.name.replace(/"/g, '""')}"`,
       row.cardId,
+      `"${row.type || ""}"`,
       row.plays,
       row.wins,
       row.losses,
@@ -241,7 +484,7 @@ export default function PublicMetaDashboard() {
     }.csv`;
     link.click();
     URL.revokeObjectURL(url);
-  }, [cardStats, format]);
+  }, [avatarStats, siteStats, spellbookStats, format]);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
@@ -267,6 +510,16 @@ export default function PublicMetaDashboard() {
               className="inline-flex items-center justify-center rounded border border-emerald-400 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-200 hover:bg-emerald-500/20"
             >
               Refresh All
+            </button>
+            <button
+              onClick={exportToCsv}
+              className="inline-flex items-center rounded border border-amber-500/50 bg-amber-500/10 px-4 py-2 text-sm font-medium text-amber-200 hover:bg-amber-500/20"
+              disabled={
+                avatarStats.length + siteStats.length + spellbookStats.length ===
+                0
+              }
+            >
+              Export CSV
             </button>
           </div>
         </header>
@@ -314,6 +567,55 @@ export default function PublicMetaDashboard() {
           )}
         </section>
 
+        {/* Avatar Win Rates */}
+        <section>
+          <h2 className="text-lg font-semibold text-white mb-4">
+            Avatar Win Rates
+          </h2>
+          {avatarStatsLoading ? (
+            <p className="text-sm text-slate-400">Loading...</p>
+          ) : avatarStats.length === 0 ? (
+            <p className="text-sm text-slate-400">No avatar data available.</p>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {avatarStats.map((a) => (
+                <div
+                  key={a.cardId}
+                  className="flex gap-3 rounded border border-purple-700/40 bg-purple-950/20 p-3 hover:bg-purple-950/40 transition overflow-hidden"
+                >
+                  {a.slug && (
+                    <div className="relative w-16 h-[86px] flex-shrink-0 rounded-md overflow-hidden bg-black/40">
+                      <Image
+                        src={`/api/images/${a.slug}`}
+                        alt={a.name}
+                        fill
+                        className="object-cover"
+                        sizes="64px"
+                        unoptimized
+                      />
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-white truncate">
+                        {a.name}
+                      </span>
+                      <span className="text-sm font-semibold text-purple-300 ml-2 flex-shrink-0">
+                        {(a.winRate * 100).toFixed(1)}%
+                      </span>
+                    </div>
+                    <WinRateBar winRate={a.winRate} barColor="bg-purple-500" />
+                    <div className="flex items-center gap-3 text-xs text-slate-400 mt-1.5">
+                      <span>{a.plays} played</span>
+                      <span>{a.wins}W / {a.losses}L{a.draws > 0 ? ` / ${a.draws}D` : ""}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
         {/* Element Distribution */}
         <section>
           <h2 className="text-lg font-semibold text-white mb-4">
@@ -324,26 +626,30 @@ export default function PublicMetaDashboard() {
           ) : elementStats.length === 0 ? (
             <p className="text-sm text-slate-400">No element data available.</p>
           ) : (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {elementStats.map((e) => (
-                <div
-                  key={e.element}
-                  className="rounded border border-slate-700 bg-slate-900/60 px-4 py-3"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium text-white">
-                      {e.element || "None"}
-                    </span>
-                    <span className="text-sm text-emerald-300">
-                      {(e.winRate * 100).toFixed(1)}%
-                    </span>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {elementStats.map((e) => {
+                const style = getElementStyle(e.element);
+                return (
+                  <div
+                    key={e.element}
+                    className={`rounded border ${style.border} ${style.bg} px-4 py-3`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className={`font-medium ${style.text}`}>
+                        {e.element || "None"}
+                      </span>
+                      <span className="text-xs text-slate-400">
+                        {e.plays.toLocaleString()} plays
+                      </span>
+                    </div>
+                    <WinRateBar winRate={e.winRate} barColor={style.bar} />
+                    <div className="text-xs text-slate-400 mt-1">
+                      {e.wins.toLocaleString()} wins of{" "}
+                      {e.plays.toLocaleString()} plays
+                    </div>
                   </div>
-                  <div className="text-xs text-slate-400 mt-1">
-                    {e.plays.toLocaleString()} plays • {e.wins.toLocaleString()}{" "}
-                    wins
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </section>
@@ -366,13 +672,14 @@ export default function PublicMetaDashboard() {
                 >
                   <div className="flex items-center justify-between">
                     <span className="font-medium text-white">{t.type}</span>
-                    <span className="text-sm text-emerald-300">
-                      {(t.winRate * 100).toFixed(1)}%
+                    <span className="text-xs text-slate-400">
+                      {t.plays.toLocaleString()} plays
                     </span>
                   </div>
+                  <WinRateBar winRate={t.winRate} barColor="bg-emerald-500" />
                   <div className="text-xs text-slate-400 mt-1">
-                    {t.plays.toLocaleString()} plays • {t.wins.toLocaleString()}{" "}
-                    wins
+                    {t.wins.toLocaleString()} wins of{" "}
+                    {t.plays.toLocaleString()} plays
                   </div>
                 </div>
               ))}
@@ -417,109 +724,44 @@ export default function PublicMetaDashboard() {
           )}
         </section>
 
-        {/* Card Stats Table */}
+        {/* Site Win Rates */}
         <section className="flex flex-col gap-3">
-          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <h2 className="text-lg font-semibold text-white">Card Win Rates</h2>
-            <div className="flex flex-wrap items-center gap-2 text-xs">
-              <label className="flex items-center gap-1">
-                <span className="text-slate-300">Order</span>
-                <CustomSelect
-                  value={cardStatsOrder}
-                  onChange={(v) =>
-                    setCardStatsOrder(v as typeof cardStatsOrder)
-                  }
-                  options={[
-                    { value: "plays", label: "plays" },
-                    { value: "wins", label: "wins" },
-                    { value: "winRate", label: "win rate" },
-                  ]}
-                />
-              </label>
-              <label className="flex items-center gap-1">
-                <span className="text-slate-300">Limit</span>
-                <input
-                  type="number"
-                  min={1}
-                  max={200}
-                  value={cardStatsLimit}
-                  onChange={(e) =>
-                    setCardStatsLimit(
-                      Math.max(1, Math.min(200, Number(e.target.value) || 50))
-                    )
-                  }
-                  className="w-20 rounded border border-slate-600 bg-slate-900 px-2 py-1 text-slate-200"
-                />
-              </label>
-              <button
-                onClick={() => void refreshCardStats()}
-                className="inline-flex items-center rounded border border-slate-600 px-3 py-1 text-xs font-medium text-slate-200 hover:bg-slate-800"
-                disabled={cardStatsLoading}
-              >
-                {cardStatsLoading ? "Refreshing…" : "Refresh"}
-              </button>
-              <button
-                onClick={exportToCsv}
-                className="inline-flex items-center rounded border border-amber-500/50 bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-200 hover:bg-amber-500/20"
-                disabled={cardStats.length === 0}
-              >
-                Export CSV
-              </button>
-            </div>
-          </div>
-          {cardStatsError && (
-            <div className="rounded border border-rose-500/50 bg-rose-500/10 px-3 py-2 text-xs text-rose-100">
-              {cardStatsError}
-            </div>
-          )}
-          <div className="overflow-auto rounded border border-slate-800 bg-slate-900/40">
-            <table className="min-w-full text-left text-xs text-slate-200">
-              <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400">
-                <tr>
-                  <th className="px-3 py-2">Card</th>
-                  <th className="px-3 py-2">Plays</th>
-                  <th className="px-3 py-2">Wins</th>
-                  <th className="px-3 py-2">Losses</th>
-                  <th className="px-3 py-2">Draws</th>
-                  <th className="px-3 py-2">Win Rate</th>
-                </tr>
-              </thead>
-              <tbody>
-                {cardStats.length === 0 ? (
-                  <tr>
-                    <td className="px-3 py-2 text-slate-300" colSpan={6}>
-                      No stats yet. Play some matches or adjust filters.
-                    </td>
-                  </tr>
-                ) : (
-                  cardStats.map((row) => (
-                    <tr
-                      key={row.cardId}
-                      className="border-t border-slate-800/60 hover:bg-slate-800/40 cursor-pointer"
-                      onMouseEnter={() =>
-                        row.slug &&
-                        setHoveredCard({ slug: row.slug, type: row.type })
-                      }
-                      onMouseLeave={() => setHoveredCard(null)}
-                    >
-                      <td className="px-3 py-2">
-                        <span className="font-medium text-white">
-                          {row.name}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2">{row.plays}</td>
-                      <td className="px-3 py-2">{row.wins}</td>
-                      <td className="px-3 py-2">{row.losses}</td>
-                      <td className="px-3 py-2">{row.draws}</td>
-                      <td className="px-3 py-2">
-                        {(row.winRate * 100).toFixed(1)}%
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+          <h2 className="text-lg font-semibold text-white">Site Win Rates</h2>
+          <CardStatsTable
+            stats={siteStats}
+            loading={siteStatsLoading}
+            error={siteStatsError}
+            order={siteStatsOrder}
+            setOrder={setSiteStatsOrder}
+            limit={siteStatsLimit}
+            setLimit={setSiteStatsLimit}
+            onRefresh={() => void refreshSiteStats()}
+            onHoverCard={setHoveredCard}
+            onLeaveCard={() => setHoveredCard(null)}
+          />
+        </section>
+
+        {/* Spellbook Win Rates */}
+        <section className="flex flex-col gap-3">
+          <h2 className="text-lg font-semibold text-white">
+            Spellbook Win Rates
+          </h2>
+          <p className="text-xs text-slate-400 -mt-2">
+            Minions, Auras, Artifacts, Magic, and other non-site cards
+          </p>
+          <CardStatsTable
+            stats={spellbookStats}
+            loading={spellbookStatsLoading}
+            error={spellbookStatsError}
+            order={spellbookStatsOrder}
+            setOrder={setSpellbookStatsOrder}
+            limit={spellbookStatsLimit}
+            setLimit={setSpellbookStatsLimit}
+            onRefresh={() => void refreshSpellbookStats()}
+            onHoverCard={setHoveredCard}
+            onLeaveCard={() => setHoveredCard(null)}
+            showType
+          />
         </section>
       </div>
 
