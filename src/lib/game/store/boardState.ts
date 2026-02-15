@@ -130,7 +130,7 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
         z.banished = [...z.banished, movedSiteCard];
       }
       zones[owner] = z;
-      const cellNo = getCellNumber(x, y, state.board.size.w);
+      const cellNo = getCellNumber(x, y, state.board.size.w, state.board.size.h);
       const label =
         target === "hand"
           ? "hand"
@@ -307,12 +307,13 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
               x,
               y,
               state.board.size.w,
+              state.board.size.h,
             )}`,
           );
         }
       }
 
-      const cellNo = getCellNumber(x, y, state.board.size.w);
+      const cellNo = getCellNumber(x, y, state.board.size.w, state.board.size.h);
       const playerNum = owner === "p1" ? "1" : "2";
       get().log(
         `[p${playerNum}:PLAYER] moved site [p${playerNum}card:${site.card.name}] from #${cellNo} to cemetery`,
@@ -408,7 +409,7 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
       }
 
       const siteName = site.card.name || "";
-      const cellNo = getCellNumber(x, y, state.board.size.w);
+      const cellNo = getCellNumber(x, y, state.board.size.w, state.board.size.h);
       const playerNum = owner === "p1" ? "1" : "2";
 
       // Remove site from board
@@ -565,7 +566,7 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
       });
       permanentsNext[key] = arr;
 
-      const cellNo = getCellNumber(x, y, state.board.size.w);
+      const cellNo = getCellNumber(x, y, state.board.size.w, state.board.size.h);
       const playerNum = owner === "p1" ? "1" : "2";
       get().log(
         `[p${playerNum}:PLAYER] places [p${playerNum}card:Flooded] on site at #${cellNo}`,
@@ -669,7 +670,7 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
       });
       permanentsNext[key] = arr;
 
-      const cellNo = getCellNumber(x, y, state.board.size.w);
+      const cellNo = getCellNumber(x, y, state.board.size.w, state.board.size.h);
       const playerNum = owner === "p1" ? "1" : "2";
       get().log(
         `[p${playerNum}:PLAYER] places [p${playerNum}card:Silenced] on site at #${cellNo}`,
@@ -772,7 +773,7 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
       });
       permanentsNext[key] = arr;
 
-      const cellNo = getCellNumber(x, y, state.board.size.w);
+      const cellNo = getCellNumber(x, y, state.board.size.w, state.board.size.h);
       const playerNum = owner === "p1" ? "1" : "2";
       get().log(
         `[p${playerNum}:PLAYER] places [p${playerNum}card:Disabled] on site at #${cellNo}`,
@@ -890,7 +891,7 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
       permanentsNext[cellKey] = cellArr;
 
       const { x, y } = parseCellKey(cellKey);
-      const cellNo = getCellNumber(x, y, state.board.size.w);
+      const cellNo = getCellNumber(x, y, state.board.size.w, state.board.size.h);
       const playerNum = ownerKey === "p1" ? "1" : "2";
       get().log(
         `[p${playerNum}:PLAYER] places [p${playerNum}card:Silenced] on ${cardName} at #${cellNo}`,
@@ -979,6 +980,7 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
           x,
           y,
           state.board.size.w,
+          state.board.size.h,
         )} transfers to P${newOwner}`,
       );
       const tr = get().transport;
@@ -1179,8 +1181,8 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
       }
 
       const boardNext = { ...state.board, sites } as GameState["board"];
-      const sourceCellNo = getCellNumber(sourceX, sourceY, state.board.size.w);
-      const targetCellNo = getCellNumber(targetX, targetY, state.board.size.w);
+      const sourceCellNo = getCellNumber(sourceX, sourceY, state.board.size.w, state.board.size.h);
+      const targetCellNo = getCellNumber(targetX, targetY, state.board.size.w, state.board.size.h);
 
       if (isSwap) {
         get().log(

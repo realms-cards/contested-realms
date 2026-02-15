@@ -539,7 +539,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     const towerMerge = isMergedTower(key, babelTowers);
     header = towerMerge
       ? "The Tower of Babel"
-      : site?.card?.name || `Site #${getCellNumber(t.x, t.y, board.size.w)}`;
+      : site?.card?.name || `Site #${getCellNumber(t.x, t.y, board.size.w, board.size.h)}`;
     tapped = !!site?.tapped;
     // Sites do not tap in Sorcery: never show a toggle for sites
     hasToggle = false;
@@ -1182,7 +1182,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
 
       if (rangedTargets.length > 0 && item && interactionGuides) {
         for (const p of rangedTargets) {
-          const cellNo = getCellNumber(p.x, p.y, board.size.w);
+          const cellNo = getCellNumber(p.x, p.y, board.size.w, board.size.h);
           extraActions.push({
             actionId: `__attack_adj_${p.x}_${p.y}__`,
             displayText: `Ranged attack T${cellNo}`,

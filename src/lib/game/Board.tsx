@@ -777,6 +777,10 @@ export default function Board({
   const selectEarthquakeArea = useScopedStore((s) => s.selectEarthquakeArea);
   const performEarthquakeSwap = useScopedStore((s) => s.performEarthquakeSwap);
 
+  // Corpse Explosion spell flow (2x2 area + corpse assignment)
+  const pendingCorpseExplosion = useScopedStore((s) => s.pendingCorpseExplosion);
+  const selectCorpseExplosionArea = useScopedStore((s) => s.selectCorpseExplosionArea);
+
   // Atlantean Fate spell flow (4x4 area selection)
   const pendingAtlanteanFate = useScopedStore((s) => s.pendingAtlanteanFate);
   const setAtlanteanFatePreview = useScopedStore(
@@ -1089,6 +1093,13 @@ export default function Board({
     }),
     [pendingEarthquake, selectEarthquakeArea, performEarthquakeSwap],
   );
+  const corpseExplosionContext = useMemo(
+    () => ({
+      pendingCorpseExplosion,
+      selectCorpseExplosionArea,
+    }),
+    [pendingCorpseExplosion, selectCorpseExplosionArea],
+  );
   const atlanteanFateContext = useMemo(
     () => ({
       pendingAtlanteanFate,
@@ -1370,6 +1381,7 @@ export default function Board({
               chaosTwisterContext={chaosTwisterContext}
               shapeshiftContext={shapeshiftContext}
               earthquakeContext={earthquakeContext}
+              corpseExplosionContext={corpseExplosionContext}
               atlanteanFateContext={atlanteanFateContext}
               mephistophelesSummonContext={mephistophelesSummonContext}
               pathfinderContext={pathfinderContext}

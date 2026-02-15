@@ -15,10 +15,22 @@ export async function GET(request: Request): Promise<NextResponse> {
     const url = new URL(request.url);
     const format = url.searchParams.get("format") || "constructed";
 
-    // Get play/win stats grouped by element from HumanCardStats joined with Card
+    // Try serving from pre-computed cache
+    const snapshot = await prisma.metaStatsSnapshot.findUnique({
+      where: { key: `elements:${format}` },
+    });
+    if (snapshot) {
+      const cached = snapshot.data as Record<string, unknown>;
+      return NextResponse.json({
+        ...cached,
+        generatedAt: snapshot.computedAt.toISOString(),
+      });
+    }
+
+    // Fallback: compute on-the-fly
     const rows = await prisma.$queryRaw<ElementStatRow[]>`
-      SELECT c.elements, 
-             SUM(h.plays)::bigint as plays, 
+      SELECT c.elements,
+             SUM(h.plays)::bigint as plays,
              SUM(h.wins)::bigint as wins
       FROM "HumanCardStats" h
       JOIN "Card" c ON c.id = h."cardId"

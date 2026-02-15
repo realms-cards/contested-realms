@@ -23,7 +23,7 @@ export default function MirrorRealmOverlay() {
 
   const mirrorCellNo = getCellNumber(
     ...mirrorRealmCell.split(",").map(Number) as [number, number],
-    boardSize.w
+    boardSize.w, boardSize.h
   );
 
   return (
@@ -69,7 +69,7 @@ export default function MirrorRealmOverlay() {
                     const site = sites[cellKey];
                     const cellNo = getCellNumber(
                       ...cellKey.split(",").map(Number) as [number, number],
-                      boardSize.w
+                      boardSize.w, boardSize.h
                     );
                     const isSelected = selectedTarget === cellKey;
 

@@ -375,7 +375,7 @@ export const createBabelTowerSlice: StateCreator<
         const { x, y } = parseCellKey(cellKey);
         const playerNum = ownerSeat === "p1" ? "1" : "2";
         get().log(
-          `[p${playerNum}:PLAYER] places [p${playerNum}card:Rubble] at #${getCellNumber(x, y, state.board.size.w)}`,
+          `[p${playerNum}:PLAYER] places [p${playerNum}card:Rubble] at #${getCellNumber(x, y, state.board.size.w, state.board.size.h)}`,
         );
       }
     }

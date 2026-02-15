@@ -2,6 +2,12 @@
 
 ## February 2026
 
+### Feb 15 - Meta
+
+- **much better view for Meta** Meta is now discerning win rates in different panels per card type (Avatars, Spells, Sites)
+- **add support for VR hardware** check out the Info panel in matches when connecting a headset to activate VR mode
+- **add resolvers** Captain Baldassare, Sea Raider, Corpse Explosion
+
 ### Feb 12 - Codex update and Mobile improvements
 
 - **optimizations for mobile view in offline and online matches**

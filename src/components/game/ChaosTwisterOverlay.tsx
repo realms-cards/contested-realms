@@ -270,6 +270,7 @@ export default function ChaosTwisterOverlay({
                         pending.targetSite.x,
                         pending.targetSite.y,
                         board.size.w,
+                        board.size.h,
                       )
                     : "?"}
                 </span>
@@ -382,6 +383,7 @@ export default function ChaosTwisterOverlay({
                     pending.landingSite.x,
                     pending.landingSite.y,
                     board.size.w,
+                    board.size.h,
                   )
                 : "?"}
             </span>

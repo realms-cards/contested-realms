@@ -12,8 +12,19 @@ type MatchStatRow = {
 
 export async function GET(): Promise<NextResponse> {
   try {
-    // Get match counts and average duration by format
-    // MatchResult has: duration (seconds), completedAt
+    // Try serving from pre-computed cache
+    const snapshot = await prisma.metaStatsSnapshot.findUnique({
+      where: { key: "matches" },
+    });
+    if (snapshot) {
+      const cached = snapshot.data as Record<string, unknown>;
+      return NextResponse.json({
+        ...cached,
+        generatedAt: snapshot.computedAt.toISOString(),
+      });
+    }
+
+    // Fallback: compute on-the-fly
     const rows = await prisma.$queryRaw<MatchStatRow[]>`
       SELECT 
         format::text as format,

@@ -773,6 +773,50 @@ export type PendingEarthquake = {
   createdAt: number;
 };
 
+// --- Corpse Explosion Spell State ------------------------------------------------
+// "Deal a dead minion to each site in a two-by-two area. Deal damage equal to each
+//  corpse's power to units there, then banish the corpses."
+export type CorpseExplosionPhase =
+  | "selectingArea" // Player is selecting the top-left corner of a 2x2 area
+  | "assigningCorpses" // Player picks corpses from cemetery and assigns to tiles
+  | "resolving" // Damage applied simultaneously, corpses banished
+  | "resolved" // Report shown — player can dismiss
+  | "complete";
+
+export type CorpseAssignment = {
+  cellKey: CellKey;
+  corpse: CardRef;
+  fromSeat: PlayerKey;
+  power: number;
+};
+
+export type CorpseExplosionDamageEntry = {
+  cellKey: CellKey;
+  corpseName: string;
+  power: number;
+  unitsHit: Array<{ name: string; damageTaken: number }>;
+};
+
+export type PendingCorpseExplosion = {
+  id: string;
+  spell: {
+    at: CellKey;
+    index: number;
+    instanceId: string | null;
+    owner: 1 | 2;
+    card: CardRef;
+  };
+  casterSeat: PlayerKey;
+  phase: CorpseExplosionPhase;
+  areaCorner: { x: number; y: number } | null;
+  affectedCells: CellKey[];
+  assignments: CorpseAssignment[];
+  eligibleCorpses: Array<{ card: CardRef; fromSeat: PlayerKey }>;
+  selectedCorpse: { card: CardRef; fromSeat: PlayerKey } | null;
+  resolvedReport: CorpseExplosionDamageEntry[] | null;
+  createdAt: number;
+};
+
 // --- Pith Imp Private Hand State ------------------------------------------------
 // "Genesis → Steals a random spell from your opponent's hand until it leaves the realm."
 // Uses private hand approach like Omphalos - stolen cards stored in hand array (face-down/hidden)
@@ -1869,12 +1913,33 @@ export type GameState = {
     casterSeat: PlayerKey;
   }) => void;
   selectEarthquakeArea: (corner: { x: number; y: number }) => void;
+  repickEarthquakeArea: () => void;
   performEarthquakeSwap: (
     from: { x: number; y: number },
     to: { x: number; y: number },
   ) => void;
   resolveEarthquake: () => void;
   cancelEarthquake: () => void;
+  // Corpse Explosion spell flow
+  pendingCorpseExplosion: PendingCorpseExplosion | null;
+  beginCorpseExplosion: (input: {
+    spell: {
+      at: CellKey;
+      index: number;
+      instanceId: string | null;
+      owner: 1 | 2;
+      card: CardRef;
+    };
+    casterSeat: PlayerKey;
+  }) => void;
+  selectCorpseExplosionArea: (corner: { x: number; y: number }) => void;
+  repickCorpseExplosionArea: () => void;
+  selectCorpse: (card: CardRef, fromSeat: PlayerKey) => void;
+  assignCorpseToTile: (cellKey: CellKey) => void;
+  unassignCorpse: (cellKey: CellKey) => void;
+  resolveCorpseExplosion: () => void;
+  dismissCorpseExplosionReport: () => void;
+  cancelCorpseExplosion: () => void;
   // Pith Imp private hands (stolen cards, hidden/face-down)
   pithImpHands: PithImpHandEntry[];
   stolenCards: PendingStolenCard[]; // Legacy - kept for backwards compatibility
@@ -3073,6 +3138,7 @@ export type ServerPatchT = Partial<{
   cardScale: GameState["cardScale"];
   specialSiteState: GameState["specialSiteState"];
   pendingEarthquake: GameState["pendingEarthquake"];
+  pendingCorpseExplosion: GameState["pendingCorpseExplosion"];
   pendingAnimistCast: GameState["pendingAnimistCast"];
   pendingInterrogatorChoice: GameState["pendingInterrogatorChoice"];
   pendingAtlanteanFate: GameState["pendingAtlanteanFate"];

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { useOnline } from "@/app/online/online-context";
 import { CustomSelect } from "@/components/ui/CustomSelect";
 import type { PlayerKey } from "@/lib/game/store";
 
@@ -33,6 +34,7 @@ export default function OnlineDeckSelector({
   onPrepareComplete,
   matchType,
 }: OnlineDeckSelectorProps) {
+  const { transport } = useOnline();
   const curiosaEnabled =
     process.env.NEXT_PUBLIC_ENABLE_CURIOSA_IMPORT === "true";
   const [myDecks, setMyDecks] = useState<MyDeckInfo[]>([]);
@@ -100,6 +102,32 @@ export default function OnlineDeckSelector({
       );
 
       if (success) {
+        // Send deck card list to server for meta statistics tracking
+        try {
+          const state = useGameStore.getState();
+          const zones = state.zones?.[myPlayerKey];
+          const avatar = state.avatars?.[myPlayerKey];
+          if (zones && transport) {
+            type ZoneCard = { name?: string | null; type?: string | null };
+            const toDeckCard = (c: ZoneCard, zone: string) => ({
+              name: c.name || "",
+              type: c.type || "",
+              zone,
+            });
+            const deckCards = [
+              ...(avatar?.card
+                ? [{ name: avatar.card.name || "", type: avatar.card.type || "Avatar", zone: "avatar" }]
+                : []),
+              ...(zones.spellbook || []).map((c: ZoneCard) => toDeckCard(c, "spellbook")),
+              ...(zones.hand || []).map((c: ZoneCard) => toDeckCard(c, "spellbook")),
+              ...(zones.atlas || []).map((c: ZoneCard) => toDeckCard(c, "atlas")),
+            ];
+            transport.emit("submitConstructedDeck", { deck: deckCards });
+          }
+        } catch {
+          // Non-critical: don't block gameplay if deck emission fails
+        }
+
         useGameStore.getState().setPhase("Setup");
         onPrepareComplete();
       }

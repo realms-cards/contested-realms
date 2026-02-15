@@ -14,6 +14,7 @@ export type EarthquakeSlice = Pick<
   | "pendingEarthquake"
   | "beginEarthquake"
   | "selectEarthquakeArea"
+  | "repickEarthquakeArea"
   | "performEarthquakeSwap"
   | "resolveEarthquake"
   | "cancelEarthquake"
@@ -108,7 +109,7 @@ export const createEarthquakeSlice: StateCreator<
 
     // Validate corner is valid (allows 2x2 area within board)
     if (x < 0 || y < 0 || x + 1 >= board.size.w || y + 1 >= board.size.h) {
-      get().log(`Invalid area corner: #${getCellNumber(x, y, board.size.w)}`);
+      get().log(`Invalid area corner: #${getCellNumber(x, y, board.size.w, board.size.h)}`);
       return;
     }
 
@@ -140,10 +141,29 @@ export const createEarthquakeSlice: StateCreator<
     const cellNos = affectedCells
       .map((cell) => {
         const [cx, cy] = cell.split(",").map(Number);
-        return `#${getCellNumber(cx, cy, board.size.w)}`;
+        return `#${getCellNumber(cx, cy, board.size.w, board.size.h)}`;
       })
       .join(", ");
     get().log(`Earthquake area selected: ${cellNos}`);
+  },
+
+  repickEarthquakeArea: () => {
+    const pending = get().pendingEarthquake;
+    if (!pending || pending.phase !== "rearranging") return;
+
+    // Note: swaps already performed are NOT undone — the sites stay in their swapped positions.
+    // The player just gets to pick a new 2x2 area for the burrow effect.
+    set({
+      pendingEarthquake: {
+        ...pending,
+        phase: "selectingArea",
+        areaCorner: null,
+        affectedCells: [],
+        swaps: [],
+      },
+    } as Partial<GameState> as GameState);
+
+    get().log("Earthquake: re-selecting area");
   },
 
   performEarthquakeSwap: (from, to) => {
@@ -192,8 +212,8 @@ export const createEarthquakeSlice: StateCreator<
     }
 
     const board = get().board;
-    const fromNo = getCellNumber(from.x, from.y, board.size.w);
-    const toNo = getCellNumber(to.x, to.y, board.size.w);
+    const fromNo = getCellNumber(from.x, from.y, board.size.w, board.size.h);
+    const toNo = getCellNumber(to.x, to.y, board.size.w, board.size.h);
     get().log(`Earthquake: swapped sites #${fromNo} <-> #${toNo}`);
   },
 

@@ -77,7 +77,7 @@ export const createPermanentMovementSlice: StateCreator<
       );
       const { per, movedName, removed, added, updated, newIndex } =
         movePermanentCore(state.permanents, fromKey, sel.index, toKey, null);
-      const cellNo = getCellNumber(x, y, state.board.size.w);
+      const cellNo = getCellNumber(x, y, state.board.size.w, state.board.size.h);
       const ownerKey = seatFromOwner(exists.owner);
       const ownerPlayerNum = ownerKey === "p1" ? "1" : "2";
       let finalPer = per;
@@ -177,7 +177,7 @@ export const createPermanentMovementSlice: StateCreator<
       }
       const { per, movedName, removed, added, updated, newIndex } =
         movePermanentCore(state.permanents, fromKey, sel.index, toKey, offset);
-      const cellNo = getCellNumber(x, y, state.board.size.w);
+      const cellNo = getCellNumber(x, y, state.board.size.w, state.board.size.h);
       const ownerKey = seatFromOwner(exists.owner);
       const ownerPlayerNum = ownerKey === "p1" ? "1" : "2";
       let finalPer = per;
@@ -461,7 +461,7 @@ export const createPermanentMovementSlice: StateCreator<
       }
 
       const { x, y } = parseCellKey(at);
-      const cellNo = getCellNumber(x, y, state.board.size.w);
+      const cellNo = getCellNumber(x, y, state.board.size.w, state.board.size.h);
       const playerNum = owner === "p1" ? "1" : "2";
       const zoneLabel =
         finalTarget === "hand"
@@ -736,7 +736,7 @@ export const createPermanentMovementSlice: StateCreator<
         }
       }
       const { x, y } = parseCellKey(at);
-      const cellNo = getCellNumber(x, y, state.board.size.w);
+      const cellNo = getCellNumber(x, y, state.board.size.w, state.board.size.h);
       const newOwnerNum = newOwner === 1 ? "1" : "2";
       get().log(
         `Control of [p${newOwnerNum}card:${item.card.name}] at #${cellNo} transferred to P${newOwner}`,
@@ -837,7 +837,7 @@ export const createPermanentMovementSlice: StateCreator<
 
       // Log the action
       const { x, y } = parseCellKey(at);
-      const cellNo = getCellNumber(x, y, state.board.size.w);
+      const cellNo = getCellNumber(x, y, state.board.size.w, state.board.size.h);
       const playerNum = ownerKey === "p1" ? "1" : "2";
       get().log(
         `[p${playerNum}:PLAYER] created a token copy of [p${playerNum}card:${item.card.name}] at #${cellNo}`,

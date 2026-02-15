@@ -28,6 +28,7 @@ import CollectionButton from "@/components/game/CollectionButton";
 import CombatHudOverlay from "@/components/game/CombatHudOverlay";
 import CommonSenseOverlay from "@/components/game/CommonSenseOverlay";
 import ContextMenu from "@/components/game/ContextMenu";
+import CorpseExplosionOverlay from "@/components/game/CorpseExplosionOverlay";
 import CrossroadsOverlay from "@/components/game/CrossroadsOverlay";
 import DemonicContractOverlay from "@/components/game/DemonicContractOverlay";
 import DholChantsOverlay from "@/components/game/DholChantsOverlay";
@@ -3440,6 +3441,8 @@ export default function OnlineMatchPage() {
               <MagicHudOverlay />
               {/* Chaos Twister Overlay (dexterity minigame) */}
               <ChaosTwisterOverlay transport={transport} />
+              {/* Corpse Explosion Overlay (corpse assignment to 2x2 area) */}
+              <CorpseExplosionOverlay />
               {/* Earthquake Overlay (site rearrangement) */}
               <EarthquakeOverlay transport={transport} />
               {/* Element Choice Overlay (Valley of Delight, etc.) */}

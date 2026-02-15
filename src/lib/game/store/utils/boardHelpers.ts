@@ -10,8 +10,12 @@ export const parseCellKey = (key: CellKey): { x: number; y: number } => {
   };
 };
 
-export const getCellNumber = (x: number, y: number, width: number): number =>
-  y * width + x + 1;
+export const getCellNumber = (
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+): number => (height - 1 - y) * width + x + 1;
 
 export const seatFromOwner = (owner: 1 | 2): PlayerKey =>
   owner === 1 ? "p1" : "p2";

@@ -41,7 +41,7 @@ export default function AtlanteanFateOverlay() {
 
     return {
       cornerCell,
-      cellNo: getCellNumber(x, y, board.size.w),
+      cellNo: getCellNumber(x, y, board.size.w, board.size.h),
       coveredCells,
       floodCount,
       sitesToFlood: [...new Set(sitesToFlood)], // unique names

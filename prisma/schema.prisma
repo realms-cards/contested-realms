@@ -675,6 +675,14 @@ model SocketBroadcastHealth {
   @@index([eventType])
 }
 
+/// Pre-computed meta statistics cache. Populated periodically by the server.
+/// Each key represents a specific stat type + format combination.
+model MetaStatsSnapshot {
+  key        String   @id // e.g. "cards:constructed:avatar", "elements:draft", "decks:all"
+  data       Json // Pre-computed result payload
+  computedAt DateTime @default(now()) @updatedAt
+}
+
 model CardEvaluation {
   id                 Int      @id @default(autoincrement())
   cardId             Int      @unique

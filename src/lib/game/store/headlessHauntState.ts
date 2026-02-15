@@ -439,7 +439,7 @@ export const createHeadlessHauntSlice: StateCreator<
         if (movedHaunts.length > 0 && movedPerm) {
           const move = movedHaunts[0];
           const { x, y } = parseCellKey(move.to);
-          const cellNo = getCellNumber(x, y, boardWidth);
+          const cellNo = getCellNumber(x, y, boardWidth, boardHeight);
           const playerNum = ownerSeat === "p1" ? "1" : "2";
           get().log(
             `[p${playerNum}card:${move.cardName}] moves to #${cellNo} (Kythera Mechanism)`,
@@ -519,7 +519,7 @@ export const createHeadlessHauntSlice: StateCreator<
         if (movedHaunts.length > 0) {
           const move = movedHaunts[0];
           const { x, y } = parseCellKey(move.to);
-          const cellNo = getCellNumber(x, y, boardWidth);
+          const cellNo = getCellNumber(x, y, boardWidth, boardHeight);
           const playerNum = ownerSeat === "p1" ? "1" : "2";
           get().log(
             `[p${playerNum}card:${move.cardName}] moves to #${cellNo} (Kythera Mechanism)`,
@@ -630,7 +630,7 @@ export const createHeadlessHauntSlice: StateCreator<
       const playerNum = ownerSeat === "p1" ? "1" : "2";
       for (const move of movedHaunts) {
         const { x, y } = parseCellKey(move.to);
-        const cellNo = getCellNumber(x, y, boardWidth);
+        const cellNo = getCellNumber(x, y, boardWidth, boardHeight);
         get().log(`[p${playerNum}card:${move.cardName}] wanders to #${cellNo}`);
 
         // Show toast with cell highlight

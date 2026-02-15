@@ -3,6 +3,7 @@
 import type { PrismaClient } from "@prisma/client";
 import type { Redis } from "ioredis";
 import type { Server as SocketIOServer } from "socket.io";
+import { computeAllMetaStats } from "../modules/meta-stats-compute";
 import type { AnyRecord, LobbyState, ServerMatchState } from "../types";
 
 export interface MaintenanceTimerDeps {
@@ -331,6 +332,30 @@ export function startMaintenanceTimers({
       },
       60 * 60 * 1000,
     ), // Run every hour
+  );
+
+  // Pre-compute meta statistics every 10 minutes
+  // Also run on startup after a short delay to populate initial cache
+  const META_STATS_INTERVAL = 10 * 60 * 1000; // 10 minutes
+  setTimeout(() => {
+    computeAllMetaStats(prisma).catch((err) => {
+      try {
+        console.warn("[maintenance] Initial meta stats computation failed:", safeErrorMessage(err));
+      } catch {
+        // Ignore logging failures
+      }
+    });
+  }, 15_000); // 15s delay for startup
+  timers.push(
+    setInterval(() => {
+      computeAllMetaStats(prisma).catch((err) => {
+        try {
+          console.warn("[maintenance] Meta stats computation failed:", safeErrorMessage(err));
+        } catch {
+          // Ignore logging failures
+        }
+      });
+    }, META_STATS_INTERVAL),
   );
 
   return timers;

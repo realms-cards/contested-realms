@@ -437,7 +437,7 @@ export const createPlayActionsSlice: StateCreator<
       const hand = [...state.zones[who].hand];
       hand.splice(index, 1);
       const key: CellKey = toCellKey(x, y);
-      const cellNo = getCellNumber(x, y, state.board.size.w);
+      const cellNo = getCellNumber(x, y, state.board.size.w, state.board.size.h);
       if (type.includes("site")) {
         // Check for Apex of Babel special placement
         if (isApexOfBabel(card.name)) {
@@ -899,6 +899,7 @@ export const createPlayActionsSlice: StateCreator<
       const isChaosTwister = cardNameLower.includes("chaos twister");
       const isBrowse = cardNameLower === "browse";
       const isCommonSense = cardNameLower === "common sense";
+      const isCorpseExplosion = cardNameLower === "corpse explosion";
       const isCallToWar = cardNameLower === "call to war";
       const isSearingTruth = cardNameLower === "searing truth";
       const isAccusation = cardNameLower === "accusation";
@@ -953,6 +954,7 @@ export const createPlayActionsSlice: StateCreator<
         isCallToWar,
         isSearingTruth,
         isAccusation,
+        isCorpseExplosion,
         isEarthquake,
         isMorgana,
         isPithImp,
@@ -1136,6 +1138,21 @@ export const createPlayActionsSlice: StateCreator<
       else if (isEarthquake && newest) {
         try {
           get().beginEarthquake({
+            spell: {
+              at: key,
+              index: arr.length - 1,
+              instanceId: newest.instanceId ?? null,
+              owner: newest.owner,
+              card: newest.card as CardRef,
+            },
+            casterSeat: who,
+          });
+        } catch {}
+      }
+      // If this is Corpse Explosion, begin the corpse assignment flow
+      else if (isCorpseExplosion && newest) {
+        try {
+          get().beginCorpseExplosion({
             spell: {
               at: key,
               index: arr.length - 1,
@@ -1596,7 +1613,7 @@ export const createPlayActionsSlice: StateCreator<
         }
       }
       const key: CellKey = toCellKey(x, y);
-      const cellNo = getCellNumber(x, y, state.board.size.w);
+      const cellNo = getCellNumber(x, y, state.board.size.w, state.board.size.h);
       const isRubble =
         type.includes("token") &&
         TOKEN_BY_NAME[(card.name || "").toLowerCase()]?.siteReplacement;
