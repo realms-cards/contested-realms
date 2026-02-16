@@ -1,5 +1,6 @@
 "use client";
 
+import { useThree } from "@react-three/fiber";
 import type { ThreeEvent } from "@react-three/fiber";
 import { useMemo, useRef, useEffect } from "react";
 import { cardbackAtlasUrl, cardbackSpellbookUrl } from "@/lib/assets";
@@ -53,6 +54,7 @@ export default function Piles3D({
   showCardPreview,
   hideCardPreview,
 }: Piles3DProps) {
+  const { gl } = useThree();
   const zones = useGameStore((s) => s.zones);
   const boardSize = useGameStore((s) => s.board.size);
   const cardbackUrls = useGameStore((s) => s.cardbackUrls);
@@ -322,6 +324,32 @@ export default function Piles3D({
                       clearHoverPreview();
                     }}
                     onPointerDown={(e: ThreeEvent<PointerEvent>) => {
+                      // XR mode: draw from pile immediately on pinch
+                      // (bypasses clientX/clientY-dependent drag tracking)
+                      if (gl.xr.isPresenting) {
+                        e.stopPropagation();
+                        const isDragging = !!dragFromHand || !!dragFromPile;
+                        if (isDragging || isCemetery) return;
+                        if (
+                          (isAtlas || key === "spellbook") &&
+                          cards.length > 0
+                        ) {
+                          const store = useGameStore.getState();
+                          const actorKey = store.actorKey;
+                          const isMine = !actorKey || actorKey === owner;
+                          if (store.transport && !isMine) return;
+                          const from = isAtlas
+                            ? ("atlas" as const)
+                            : ("spellbook" as const);
+                          store.drawFrom(owner, from, 1);
+                          try {
+                            playCardSelect();
+                          } catch {
+                            /* sound may fail */
+                          }
+                        }
+                        return;
+                      }
                       if (e.button !== 0) return; // left button only
                       const isDragging = !!dragFromHand || !!dragFromPile;
                       if (isDragging) return;

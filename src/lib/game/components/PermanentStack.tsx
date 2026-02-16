@@ -1,4 +1,5 @@
 import { Text } from "@react-three/drei";
+import { useThree } from "@react-three/fiber";
 import type { ThreeEvent } from "@react-three/fiber";
 import { CuboidCollider, RigidBody } from "@react-three/rapier";
 import {
@@ -338,6 +339,7 @@ export function PermanentStack({
   hasSite = false,
   isBabelTower = false,
 }: PermanentStackProps) {
+  const { gl } = useThree();
   if (items.length === 0) {
     return null;
   }
@@ -877,6 +879,21 @@ export function PermanentStack({
                     }
                     return;
                   }
+                }
+                // XR mode: select permanent immediately on pinch
+                // (bypasses touch/button handlers that depend on clientX/clientY)
+                if (gl.xr.isPresenting) {
+                  e.stopPropagation();
+                  selectPermanent(key, idx);
+                  setLastTouchedId(permId);
+                  dragStartRef.current = {
+                    at: key,
+                    index: idx,
+                    start: [e.point.x, e.point.z],
+                    time: Date.now(),
+                  };
+                  clearHoverPreview(hoverKey);
+                  return;
                 }
                 const pe = e.nativeEvent as PointerEvent | undefined;
                 if (pe && pe.pointerType === "touch") {
@@ -1480,16 +1497,19 @@ export function PermanentStack({
                         </group>
                       );
                     }
-                    if (isArtifact && token.card.slug) {
+                    // Carryable artifacts, carried units, and any other attached card
+                    // with a slug: render as 60% scale card art overlay.
+                    // This fallback ensures carried units render even if isCarried
+                    // is lost during network sync.
+                    if (token.card.slug) {
                       const artifactW = CARD_SHORT * 0.6;
                       const artifactH = CARD_LONG * 0.6;
-                      const artifactHoverKey = `artifact:${key}:${idx}:${attachIdx}`;
+                      const artifactHoverKey = `${token.isCarried ? "carried" : "artifact"}:${key}:${idx}:${attachIdx}`;
                       const parentRenderOrder = isBurrowed
                         ? -10
                         : isDraggingPermanent || isSel || isLastTouched
                           ? 1000
                           : 100;
-                      // Carryable artifacts render ON TOP of their parent card
                       return (
                         <group
                           key={`attached-${attachIdx}`}

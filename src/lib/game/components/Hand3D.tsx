@@ -130,7 +130,7 @@ export default function Hand3D({
     });
   }, [hand, graphicsSettings.handSortOrder]);
   const rootRef = useRef<Group | null>(null);
-  const { camera } = useThree();
+  const { camera, gl } = useThree();
   // Get mouse zone state from store
   const mouseInZone = useGameStore((s) => s.mouseInHandZone);
   // Get hover count state from store
@@ -456,10 +456,12 @@ export default function Hand3D({
 
     // Performance optimization: Skip expensive calculations if hand is stable AND camera hasn't moved
     // Check if all lerps are close to their targets (threshold: 0.01)
+    const isXRPresenting = gl.xr.isPresenting;
     const isEdgePlacementCheck =
       (typeof placement === "string" &&
         (placement === "edgeTop" || placement === "edgeBottom")) ||
-      showCardBacks;
+      showCardBacks ||
+      isXRPresenting;
     const targetShownCheck = isEdgePlacementCheck
       ? 1
       : overCardsArea || mouseInZone
@@ -509,7 +511,8 @@ export default function Hand3D({
     const isEdgePlacement =
       (hasExplicitPlacement &&
         (placement === "edgeTop" || placement === "edgeBottom")) ||
-      (!hasExplicitPlacement && showCardBacks);
+      (!hasExplicitPlacement && showCardBacks) ||
+      isXRPresenting;
     const overlayTop = false; // with implicit edge for opponent, overlay top is no longer used
 
     const bottomY = -worldH / 2 + margin + CARD_LONG * 0.5 * HAND_CARD_SCALE; // Bottom overlay baseline
@@ -544,16 +547,23 @@ export default function Hand3D({
     } else {
       targetShown = overCardsArea || mouseInZone ? 1 : 0;
     }
-    // When dragging from hand, only show hand in a small return zone
-    if (!showCardBacks && dragFromHand && selected && selected.who === owner) {
+    // When dragging from hand, only show hand in a small return zone (desktop/mobile only)
+    // In XR, the hand stays visible at the board edge during drag
+    if (
+      !isXRPresenting &&
+      !showCardBacks &&
+      dragFromHand &&
+      selected &&
+      selected.who === owner
+    ) {
       const hScr = window.innerHeight || 1;
       const DRAG_RETURN_ZONE_PX = 20; // Tiny zone at bottom edge for returning cards
       const inReturnZone =
         lastMousePosRef.current.y >= hScr - DRAG_RETURN_ZONE_PX;
       targetShown = inReturnZone ? 1 : 0;
     }
-    // Hide hand completely during any other board drag (permanents, avatars, sites)
-    if (!showCardBacks && (boardDragActive || draggingSite)) {
+    // Hide hand completely during any other board drag (desktop/mobile only)
+    if (!isXRPresenting && !showCardBacks && (boardDragActive || draggingSite)) {
       targetShown = 0;
     }
 
@@ -1403,6 +1413,22 @@ export default function Hand3D({
                 }}
                 onPointerDown={(e) => {
                   if (isDragging) return; // don't start another drag
+
+                  // XR mode: immediately select card on pinch (no drag threshold)
+                  // clientX/clientY are unavailable in XR, so bypass the desktop/mobile flow
+                  if (gl.xr.isPresenting) {
+                    e.stopPropagation();
+                    selectHandCard(owner, originalIndex);
+                    setDragFromHand(true);
+                    clearHoverPreview();
+                    try {
+                      playCardSelect();
+                    } catch {
+                      /* sound may fail */
+                    }
+                    return;
+                  }
+
                   // Only handle left-click for drag; right-click handled by onContextMenu
                   if (e.button !== 0) return;
                   e.stopPropagation();

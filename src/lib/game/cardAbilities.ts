@@ -438,3 +438,31 @@ export function detectLanceAbilitySync(
 ): boolean {
   return LANCE_CARDS.has(cardName);
 }
+
+// --- Carry keyword detection ---
+
+// Static set of cards with the Carry keyword
+const CARRY_CARDS = new Set([
+  "Hyperparasite",
+]);
+
+/**
+ * Detect if a card has the Carry keyword (instant lookup from static map)
+ * @param cardName The card name to check
+ * @returns Promise resolving to true if card has carry keyword
+ */
+export async function detectCarryAbility(cardName: string): Promise<boolean> {
+  return CARRY_CARDS.has(cardName);
+}
+
+/**
+ * Detect if a card has the Carry keyword (instant lookup from static map)
+ * @param cardName The card name to check
+ * @returns true if card has carry keyword
+ */
+export function detectCarryAbilitySync(
+  cardName: string,
+  _rulesText?: string | null
+): boolean {
+  return CARRY_CARDS.has(cardName);
+}

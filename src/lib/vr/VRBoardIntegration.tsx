@@ -549,13 +549,11 @@ export function VRBoardIntegration({
     const handleSelectEnd = (event: XRInputSourceEvent) => {
       const inputSource = event.inputSource;
 
-      // AVP transient-pointer: check if this was a long-press or short tap
+      // AVP transient-pointer: only handle long-press menu dismissal
       if (
         !capabilities.hasControllers &&
         inputSource.targetRayMode === "transient-pointer"
       ) {
-        const elapsed = Date.now() - selectStartTime.current;
-
         if (longPressTriggered.current) {
           // Long-press already handled (menu opened) — don't do anything else
           longPressTriggered.current = false;
@@ -588,25 +586,9 @@ export function VRBoardIntegration({
           return;
         }
 
-        // Short tap while not dragging — initiate a grab if a card was targeted at selectstart
-        if (
-          elapsed < LONG_PRESS_THRESHOLD_MS &&
-          selectStartCardId.current !== null
-        ) {
-          const startPos =
-            selectStartCardPosition.current ?? new THREE.Vector3();
-          setVrDragState({
-            isDragging: true,
-            cardId: selectStartCardId.current,
-            cardSlug: null,
-            hand: "right",
-            startPosition: startPos.clone(),
-            currentTile: null,
-          });
-          console.log(
-            `[VR/AVP] Gaze-pinch grabbed card ${selectStartCardId.current}`,
-          );
-        }
+        // Short tap: card selection is handled by R3F pointer events on card meshes
+        // (Hand3D, PermanentStack, Piles3D have XR-aware onPointerDown handlers)
+        // VRBoardIntegration only handles long-press radial menu for AVP
         return;
       }
 

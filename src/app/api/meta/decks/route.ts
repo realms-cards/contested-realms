@@ -275,6 +275,7 @@ export async function GET(request: Request): Promise<NextResponse> {
         let avatarName: string | null = null;
         const elementCounts: Record<string, number> = {};
         let spellCardCount = 0;
+        let siteCardCount = 0;
 
         for (const card of cards) {
           if (!card?.name) continue;
@@ -285,17 +286,21 @@ export async function GET(request: Request): Promise<NextResponse> {
             continue;
           }
 
-          // Skip sites - we only want spellbook element distribution
-          if (isSiteType(card.type)) continue;
+          if (isSiteType(card.type)) {
+            siteCardCount++;
+            continue;
+          }
 
           // Count element for spellbook cards
           const element = elementByName.get(card.name) || "None";
-          // Handle multi-element cards (e.g. "Fire" or "Water" - single element per card in Sorcery)
           elementCounts[element] = (elementCounts[element] || 0) + 1;
           spellCardCount++;
         }
 
         if (!avatarName) continue;
+
+        // Skip small decklists for constructed (filters precon decks with ~36 cards)
+        if (format === "constructed" && (spellCardCount + siteCardCount) < 60) continue;
 
         // Determine outcome for this player
         const isWinner = session.winnerId === playerId;
