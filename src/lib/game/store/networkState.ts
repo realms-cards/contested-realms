@@ -1060,6 +1060,18 @@ export const createNetworkSlice: StateCreator<
       } else if (replaceKeys.has("harbingerPortalDiscountUsed")) {
         next.harbingerPortalDiscountUsed = { p1: false, p2: false };
       }
+      // Assimilator Snail used state
+      if (p.assimilatorSnailUsed !== undefined) {
+        next.assimilatorSnailUsed = p.assimilatorSnailUsed;
+      } else if (replaceKeys.has("assimilatorSnailUsed")) {
+        next.assimilatorSnailUsed = { p1: false, p2: false };
+      }
+      // Assimilator Snail transform tracking
+      if (p.assimilatorSnailTransforms !== undefined) {
+        next.assimilatorSnailTransforms = p.assimilatorSnailTransforms;
+      } else if (replaceKeys.has("assimilatorSnailTransforms")) {
+        next.assimilatorSnailTransforms = [];
+      }
       // Ether Core turn-start tracking (for void mana calculation)
       if (p.etherCoresInVoidAtTurnStart !== undefined) {
         next.etherCoresInVoidAtTurnStart = p.etherCoresInVoidAtTurnStart;

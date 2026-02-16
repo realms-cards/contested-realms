@@ -673,6 +673,44 @@ export const createCoreSlice: StateCreator<
       [nextKey]: false, // Reset for the player whose turn is starting
     };
 
+    // Reset assimilator snail usage for the next player's turn
+    const assimilatorSnailUsedNext = {
+      ...state.assimilatorSnailUsed,
+      [nextKey]: false, // Reset for the player whose turn is starting
+    };
+
+    // Revert Assimilator Snail transformations for the player whose turn is starting
+    // (the card text says "until your next turn")
+    const snailTransformsToRevert = state.assimilatorSnailTransforms.filter(
+      (t) => t.ownerSeat === nextKey,
+    );
+    if (snailTransformsToRevert.length > 0) {
+      for (const transform of snailTransformsToRevert) {
+        const cellPerms = [...(permanents[transform.snailAt] || [])];
+        const snailIndex = cellPerms.findIndex(
+          (p) =>
+            (p.instanceId && p.instanceId === transform.snailInstanceId) ||
+            (p.card?.instanceId &&
+              p.card.instanceId === transform.snailInstanceId),
+        );
+        if (snailIndex !== -1) {
+          cellPerms[snailIndex] = {
+            ...cellPerms[snailIndex],
+            card: {
+              ...transform.originalCard,
+              instanceId: cellPerms[snailIndex].card.instanceId,
+              owner: cellPerms[snailIndex].card.owner,
+            },
+            isCopy: false,
+            version: (cellPerms[snailIndex].version ?? 0) + 1,
+          };
+          permanents[transform.snailAt] = cellPerms;
+        }
+      }
+    }
+    const assimilatorSnailTransformsNext =
+      state.assimilatorSnailTransforms.filter((t) => t.ownerSeat !== nextKey);
+
     // Reset pathfinder usage for both players on turn change
     const pathfinderUsedNext = { p1: false, p2: false };
 
@@ -720,6 +758,8 @@ export const createCoreSlice: StateCreator<
       necromancerSkeletonUsed: necromancerSkeletonUsedNext,
       mephistophelesSummonUsed: mephistophelesSummonUsedNext,
       harbingerPortalDiscountUsed: harbingerPortalDiscountUsedNext,
+      assimilatorSnailUsed: assimilatorSnailUsedNext,
+      assimilatorSnailTransforms: assimilatorSnailTransformsNext,
       pathfinderUsed: pathfinderUsedNext,
       etherCoresInVoidAtTurnStart: etherCoresInVoidAtTurnStartNext,
       coresCarriedAtTurnStart: coresCarriedAtTurnStartNext,
@@ -747,6 +787,8 @@ export const createCoreSlice: StateCreator<
       necromancerSkeletonUsed: necromancerSkeletonUsedNext,
       mephistophelesSummonUsed: mephistophelesSummonUsedNext,
       harbingerPortalDiscountUsed: harbingerPortalDiscountUsedNext,
+      assimilatorSnailUsed: assimilatorSnailUsedNext,
+      assimilatorSnailTransforms: assimilatorSnailTransformsNext,
       pathfinderUsed: pathfinderUsedNext,
       etherCoresInVoidAtTurnStart: etherCoresInVoidAtTurnStartNext,
       coresCarriedAtTurnStart: coresCarriedAtTurnStartNext,

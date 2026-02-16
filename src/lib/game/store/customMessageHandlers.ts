@@ -6954,4 +6954,153 @@ export function handleCustomMessage(
     set({ pendingMirrorRealm: null } as Partial<GameState> as GameState);
     return;
   }
+
+  // --- Assimilator Snail message handlers ---
+  if (t === "assimilatorSnailBegin") {
+    const payload = msg as {
+      id?: string;
+      snail?: unknown;
+      activatorSeat?: PlayerKey;
+      eligibleCount?: number;
+    };
+    const { id, activatorSeat, eligibleCount } = payload;
+    if (!id || !activatorSeat) return;
+
+    // Skip if we're the activator - we already have the state
+    const actorKey = get().actorKey;
+    if (actorKey === activatorSeat) return;
+
+    const snailAny = payload.snail as Record<string, unknown> | undefined;
+
+    // Set pending state so the opponent sees the overlay
+    // (eligible corpses are gathered from opponent's local zones for their perspective)
+    const zones = get().zones;
+    const eligibleCorpses: Array<{ card: CardRef; fromSeat: PlayerKey }> = [];
+    for (const seat of ["p1", "p2"] as PlayerKey[]) {
+      const graveyard = zones[seat]?.graveyard || [];
+      for (const card of graveyard) {
+        const cardType = (card.type || "").toLowerCase();
+        if (cardType.includes("minion")) {
+          eligibleCorpses.push({ card, fromSeat: seat });
+        }
+      }
+    }
+
+    set({
+      pendingAssimilatorSnail: {
+        id,
+        snail: snailAny
+          ? {
+              at: snailAny.at as CellKey,
+              index: Number(snailAny.index),
+              instanceId: (snailAny.instanceId as string | null) ?? null,
+              owner: Number(snailAny.owner) as 1 | 2,
+              card: snailAny.card as CardRef,
+            }
+          : { at: "0,0" as CellKey, index: 0, instanceId: null, owner: 1, card: {} as CardRef },
+        activatorSeat,
+        phase: "selectingCorpse" as const,
+        eligibleCorpses,
+        selectedCorpseIndex: null,
+        createdAt: Date.now(),
+      },
+    } as Partial<GameState> as GameState);
+
+    try {
+      get().log(
+        `[${activatorSeat.toUpperCase()}] activates Assimilator Snail (${
+          eligibleCount ?? "?"
+        } dead minions eligible)`,
+      );
+    } catch {}
+    return;
+  }
+
+  if (t === "assimilatorSnailSelectCorpse") {
+    const payload = msg as {
+      id?: string;
+      corpseIndex?: number;
+    };
+    // Opponent sees the selection but doesn't need to track it locally
+    // The resolve message will handle the actual state change
+    if (!payload.id) return;
+    return;
+  }
+
+  if (t === "assimilatorSnailResolve") {
+    const payload = msg as {
+      id?: string;
+      activatorSeat?: PlayerKey;
+      banishedMinionName?: string;
+    };
+    const { id, activatorSeat, banishedMinionName } = payload;
+    if (!activatorSeat) return;
+
+    // Skip if we're the activator - we already have the state
+    const actorKey = get().actorKey;
+    if (actorKey === activatorSeat) return;
+
+    const pending = get().pendingAssimilatorSnail;
+    if (!pending || (id && pending.id !== id)) return;
+
+    set({ pendingAssimilatorSnail: null } as Partial<GameState> as GameState);
+
+    try {
+      get().log(
+        `[${activatorSeat.toUpperCase()}] Assimilator Snail banishes ${
+          banishedMinionName ?? "a minion"
+        } and becomes a copy of it`,
+      );
+    } catch {}
+    return;
+  }
+
+  if (t === "assimilatorSnailCancel") {
+    const payload = msg as {
+      id?: string;
+      activatorSeat?: PlayerKey;
+    };
+    const { id, activatorSeat } = payload;
+    if (!activatorSeat) return;
+
+    // Skip if we're the activator - we already have the state
+    const actorKey = get().actorKey;
+    if (actorKey === activatorSeat) return;
+
+    set((s) => {
+      if (
+        !s.pendingAssimilatorSnail ||
+        (id && s.pendingAssimilatorSnail.id !== id)
+      )
+        return s as GameState;
+      return {
+        pendingAssimilatorSnail: null,
+      } as Partial<GameState> as GameState;
+    });
+
+    try {
+      get().log("Assimilator Snail ability cancelled");
+    } catch {}
+    return;
+  }
+
+  if (t === "assimilatorSnailRevert") {
+    const payload = msg as {
+      who?: PlayerKey;
+    };
+    const { who } = payload;
+    if (!who) return;
+
+    // Skip if we're the owner - we already have the state
+    const actorKey = get().actorKey;
+    if (actorKey === who) return;
+
+    const playerNum = who === "p1" ? "1" : "2";
+    try {
+      get().log(
+        `[p${playerNum}:PLAYER] Assimilator Snail reverts to its original form`,
+      );
+    } catch {}
+    return;
+  }
 }
