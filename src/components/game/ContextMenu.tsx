@@ -1879,6 +1879,16 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                       Play Site
                     </button>
                     <button
+                      className="w-full text-left rounded bg-purple-900/30 hover:bg-purple-900/50 px-3 py-1"
+                      onClick={() => {
+                        selectHandCard(t.who, t.index);
+                        moveCardFromHandToPile(t.who, "collection", "top");
+                        closeContextMenu();
+                      }}
+                    >
+                      Move to Collection
+                    </button>
+                    <button
                       className="w-full text-left rounded bg-red-900/30 hover:bg-red-900/50 px-3 py-1"
                       onClick={() => {
                         selectHandCard(t.who, t.index);
@@ -1917,6 +1927,16 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                       }}
                     >
                       Cast Subsurface
+                    </button>
+                    <button
+                      className="w-full text-left rounded bg-purple-900/30 hover:bg-purple-900/50 px-3 py-1"
+                      onClick={() => {
+                        selectHandCard(t.who, t.index);
+                        moveCardFromHandToPile(t.who, "collection", "top");
+                        closeContextMenu();
+                      }}
+                    >
+                      Move to Collection
                     </button>
                     <button
                       className="w-full text-left rounded bg-red-900/30 hover:bg-red-900/50 px-3 py-1"
