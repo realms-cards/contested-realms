@@ -2563,7 +2563,7 @@ export type GameState = {
   drawFromPileToHand: () => void;
   moveCardFromHandToPile: (
     who: PlayerKey,
-    pile: "spellbook" | "atlas" | "graveyard",
+    pile: "spellbook" | "atlas" | "graveyard" | "collection",
     position: "top" | "bottom",
   ) => void;
   selectPermanent: (at: CellKey, index: number) => void;
