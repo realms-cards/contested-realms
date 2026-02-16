@@ -554,6 +554,11 @@ export function VRBoardIntegration({
         !capabilities.hasControllers &&
         inputSource.targetRayMode === "transient-pointer"
       ) {
+        // Reset pinch tracking so the long-press interval stops checking
+        selectStartTime.current = 0;
+        selectStartCardId.current = null;
+        selectStartCardPosition.current = null;
+
         if (longPressTriggered.current) {
           // Long-press already handled (menu opened) — don't do anything else
           longPressTriggered.current = false;

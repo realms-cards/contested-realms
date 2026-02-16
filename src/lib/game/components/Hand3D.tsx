@@ -190,6 +190,8 @@ export default function Hand3D({
   // Track touch count for two-finger face-down gesture
   const activeTouchCountRef = useRef(0);
 
+  // XR pinch start time — used to distinguish short tap (play) from long press (menu)
+  const xrPinchStartTime = useRef(0);
   // Timeout ref for delayed hover cleanup
   const hoverCleanupTimeoutRef = useRef<number | null>(null);
   // Track last mouse position
@@ -1414,12 +1416,13 @@ export default function Hand3D({
                 onPointerDown={(e) => {
                   if (isDragging) return; // don't start another drag
 
-                  // XR mode: immediately select card on pinch (no drag threshold)
-                  // clientX/clientY are unavailable in XR, so bypass the desktop/mobile flow
+                  // XR mode: select card on pinch but defer dragFromHand to pointerUp
+                  // This allows the long-press radial menu (500ms) to trigger before
+                  // committing to "play card to tile" mode
                   if (gl.xr.isPresenting) {
                     e.stopPropagation();
+                    xrPinchStartTime.current = Date.now();
                     selectHandCard(owner, originalIndex);
-                    setDragFromHand(true);
                     clearHoverPreview();
                     try {
                       playCardSelect();
@@ -1490,6 +1493,17 @@ export default function Hand3D({
                   }
                 }}
                 onPointerUp={(e) => {
+                  // XR mode: short tap completes card selection for playing
+                  // Long-press (>500ms) opens radial menu instead (VRBoardIntegration)
+                  if (gl.xr.isPresenting) {
+                    const elapsed = Date.now() - xrPinchStartTime.current;
+                    xrPinchStartTime.current = 0;
+                    if (elapsed < 500) {
+                      e.stopPropagation();
+                      setDragFromHand(true);
+                    }
+                    return;
+                  }
                   // Mobile tap-to-select handling
                   if (!isCoarsePointer) return;
                   const tap = tapStartRef.current;
