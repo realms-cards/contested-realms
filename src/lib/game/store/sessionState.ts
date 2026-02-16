@@ -1,4 +1,5 @@
 import type { StateCreator } from "zustand";
+import type { CustomMessage } from "@/lib/net/transport";
 import type { GameState, PlayerKey, SerializedGame } from "./types";
 import {
   loadHistoryFromStorage,
@@ -83,6 +84,40 @@ export const createSessionSlice: StateCreator<
       } as Partial<GameState> as GameState;
     });
     if (key) {
+      // Online mode: reset opponent's guide prefs to false (unknown until they sync)
+      // and send our own guide preferences so the opponent knows our state.
+      const opponentSeat: PlayerKey = key === "p1" ? "p2" : "p1";
+      const localCombat = !!get().interactionGuides;
+      const localMagic = !!get().magicGuides;
+      set((state) => {
+        const combatPrefs = {
+          ...state.combatGuideSeatPrefs,
+          [key]: localCombat,
+          [opponentSeat]: false,
+        } as Record<PlayerKey, boolean>;
+        const magicPrefs = {
+          ...state.magicGuideSeatPrefs,
+          [key]: localMagic,
+          [opponentSeat]: false,
+        } as Record<PlayerKey, boolean>;
+        return {
+          combatGuideSeatPrefs: combatPrefs,
+          combatGuidesActive: combatPrefs.p1 && combatPrefs.p2,
+          magicGuideSeatPrefs: magicPrefs,
+          magicGuidesActive: magicPrefs.p1 && magicPrefs.p2,
+        } as Partial<GameState> as GameState;
+      });
+      // Send initial guide preferences so the opponent can update their state
+      try {
+        const transport = get().transport;
+        transport?.sendMessage?.({
+          type: "guidePref",
+          seat: key,
+          combatGuides: localCombat,
+          magicGuides: localMagic,
+        } as unknown as CustomMessage);
+      } catch {}
+
       try {
         get().flushPendingPatches();
       } catch {}
