@@ -107,22 +107,30 @@ export async function GET(request: Request): Promise<NextResponse> {
         const spells = avatarSpells[avatarFilter] || [];
         const avatarElementCombos = (cached.avatarElementCombos as Record<string, AvatarElementComboEntry[]> | undefined) || {};
         const elementCombos = avatarElementCombos[avatarFilter] || [];
+        const avatarComboSites = (cached.avatarComboSites as Record<string, Record<string, AvatarSitePairing[]>> | undefined) || {};
+        const comboSites = avatarComboSites[avatarFilter] || {};
+        const avatarComboSpells = (cached.avatarComboSpells as Record<string, Record<string, AvatarSpellEntry[]>> | undefined) || {};
+        const comboSpells = avatarComboSpells[avatarFilter] || {};
 
         return NextResponse.json({
           avatar: avatar || null,
           sites,
           spells,
           elementCombos,
+          comboSites,
+          comboSpells,
           format,
           generatedAt: snapshot.computedAt.toISOString(),
         });
       }
 
       // Overview: omit avatarSites/avatarSpells from response to save bandwidth
-      const { avatarSites: _unusedSites, avatarSpells: _unusedSpells, avatarElementCombos: _unusedCombos, ...rest } = cached;
+      const { avatarSites: _unusedSites, avatarSpells: _unusedSpells, avatarElementCombos: _unusedCombos, avatarComboSites: _unusedComboSites, avatarComboSpells: _unusedComboSpells, ...rest } = cached;
       void _unusedSites;
       void _unusedSpells;
       void _unusedCombos;
+      void _unusedComboSites;
+      void _unusedComboSpells;
       return NextResponse.json({
         ...rest,
         generatedAt: snapshot.computedAt.toISOString(),
@@ -170,6 +178,8 @@ export async function GET(request: Request): Promise<NextResponse> {
           sites: [],
           spells: [],
           elementCombos: [],
+          comboSites: {},
+          comboSpells: {},
           format,
           generatedAt: new Date().toISOString(),
         });
@@ -354,6 +364,8 @@ export async function GET(request: Request): Promise<NextResponse> {
         sites: [],
         spells: [],
         elementCombos: [],
+        comboSites: {},
+        comboSpells: {},
         format,
         generatedAt: new Date().toISOString(),
       });
