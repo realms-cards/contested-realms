@@ -83,9 +83,10 @@ export const createPermanentMovementSlice: StateCreator<
       let finalPer = per;
       const finalUpdated = updated;
       let finalAdded = added;
-      // When combat interactions are ON, don't tap on move - tap happens after selecting combat option
+      // When combat interactions are ON (both players opted in), don't tap on move - tap happens after selecting combat option
       // When combat interactions are OFF, tap normally on move (unless autoTapOnMove is disabled)
-      const shouldTapOnMove = state.autoTapOnMove && !state.interactionGuides;
+      // Use combatGuidesActive (requires both players to opt in) instead of local-only interactionGuides
+      const shouldTapOnMove = state.autoTapOnMove && !state.combatGuidesActive;
       if (fromKey !== toKey && newIndex >= 0) {
         const movedUnit = finalPer[toKey]?.[newIndex];
         if (shouldTapOnMove && movedUnit && !movedUnit.tapped) {
@@ -183,9 +184,10 @@ export const createPermanentMovementSlice: StateCreator<
       let finalPer = per;
       const finalUpdated = updated;
       let finalAdded = added;
-      // When combat interactions are ON, don't tap on move - tap happens after selecting combat option
+      // When combat interactions are ON (both players opted in), don't tap on move - tap happens after selecting combat option
       // When combat interactions are OFF, tap normally on move (unless autoTapOnMove is disabled)
-      const shouldTapOnMove = state.autoTapOnMove && !state.interactionGuides;
+      // Use combatGuidesActive (requires both players to opt in) instead of local-only interactionGuides
+      const shouldTapOnMove = state.autoTapOnMove && !state.combatGuidesActive;
       if (fromKey !== toKey && newIndex >= 0) {
         const movedUnit = finalPer[toKey]?.[newIndex];
         if (shouldTapOnMove && movedUnit && !movedUnit.tapped) {
