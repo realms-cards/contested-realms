@@ -251,36 +251,53 @@ function ElementDistributionBar({
 }: {
   elements: Record<string, number>;
 }) {
+  const KNOWN_ELEMENTS = ["Fire", "Water", "Earth", "Air"];
   const entries = Object.entries(elements)
     .filter(([, pct]) => pct > 0)
     .sort((a, b) => b[1] - a[1]);
   if (entries.length === 0) return null;
+
+  // Separate known elements from "other"
+  const known = entries.filter(([el]) => KNOWN_ELEMENTS.includes(el));
+  const otherPct = entries
+    .filter(([el]) => !KNOWN_ELEMENTS.includes(el))
+    .reduce((sum, [, pct]) => sum + pct, 0);
+
+  // Bar segments: known elements + aggregated other
+  const barSegments = [
+    ...known.map(([el, pct]) => ({ el, pct, color: ELEMENT_BAR_COLORS[el] })),
+    ...(otherPct > 0 ? [{ el: "Other", pct: otherPct, color: ELEMENT_BAR_COLORS.None }] : []),
+  ];
+
+  // Full breakdown for tooltip
+  const tooltipText = entries.map(([el, pct]) => `${el}: ${pct}%`).join("\n");
+
   return (
-    <div className="flex items-center gap-2 mt-1.5">
-      <div className="flex-1 flex h-3 rounded-full overflow-hidden bg-slate-800">
-        {entries.map(([el, pct]) => (
+    <div className="flex flex-col gap-1 mt-1.5" title={tooltipText}>
+      <div className="flex h-3 rounded-full overflow-hidden bg-slate-800">
+        {barSegments.map((seg) => (
           <div
-            key={el}
+            key={seg.el}
             className="h-full first:rounded-l-full last:rounded-r-full"
             style={{
-              width: `${pct}%`,
-              backgroundColor:
-                ELEMENT_BAR_COLORS[el] || ELEMENT_BAR_COLORS.None,
+              width: `${seg.pct}%`,
+              backgroundColor: seg.color,
             }}
-            title={`${el}: ${pct}%`}
           />
         ))}
       </div>
-      <div className="flex gap-1.5 flex-shrink-0">
-        {entries.map(([el, pct]) => (
-          <span
-            key={el}
-            className="text-[10px] tabular-nums"
-            style={{ color: ELEMENT_BAR_COLORS[el] || ELEMENT_BAR_COLORS.None }}
-          >
-            {pct}%
+      <div className="flex gap-2 flex-wrap">
+        {known.map(([el, pct]) => (
+          <span key={el} className="inline-flex items-center gap-0.5 text-[10px] tabular-nums">
+            <ElementIcon element={el} size={10} />
+            <span style={{ color: ELEMENT_BAR_COLORS[el] }}>{pct}%</span>
           </span>
         ))}
+        {otherPct > 0 && (
+          <span className="text-[10px] tabular-nums text-slate-500">
+            Other {otherPct}%
+          </span>
+        )}
       </div>
     </div>
   );
