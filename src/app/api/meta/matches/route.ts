@@ -31,6 +31,7 @@ export async function GET(): Promise<NextResponse> {
         COUNT(*)::bigint as count,
         AVG(duration)::float as "avgDuration"
       FROM "MatchResult"
+      WHERE "isPrecon" = false
       GROUP BY format
       ORDER BY COUNT(*) DESC
     `;

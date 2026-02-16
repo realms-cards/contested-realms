@@ -151,6 +151,7 @@ export async function GET(request: Request): Promise<NextResponse> {
           FROM "OnlineMatchSession" oms
           JOIN "MatchResult" mr ON oms.id = mr."matchId"
           WHERE oms."playerDecks" IS NOT NULL
+            AND oms."isPrecon" = false
           ORDER BY mr."completedAt" DESC
           LIMIT 500
         `
@@ -167,6 +168,7 @@ export async function GET(request: Request): Promise<NextResponse> {
           JOIN "MatchResult" mr ON oms.id = mr."matchId"
           WHERE mr.format = ${format}::"GameFormat"
             AND oms."playerDecks" IS NOT NULL
+            AND oms."isPrecon" = false
           ORDER BY mr."completedAt" DESC
           LIMIT 500
         `;

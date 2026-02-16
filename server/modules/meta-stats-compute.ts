@@ -181,6 +181,7 @@ async function computeMatches(prisma: AnyPrisma): Promise<unknown> {
       COUNT(*)::bigint as count,
       AVG(duration)::float as "avgDuration"
     FROM "MatchResult"
+    WHERE "isPrecon" = false
     GROUP BY format
     ORDER BY COUNT(*) DESC
   `;
@@ -765,6 +766,7 @@ async function fetchSessions(prisma: AnyPrisma, format: string): Promise<Session
         FROM "OnlineMatchSession" oms
         JOIN "MatchResult" mr ON oms.id = mr."matchId"
         WHERE oms."playerDecks" IS NOT NULL
+          AND oms."isPrecon" = false
         ORDER BY mr."completedAt" DESC
         LIMIT 500
       `
@@ -776,6 +778,7 @@ async function fetchSessions(prisma: AnyPrisma, format: string): Promise<Session
         JOIN "MatchResult" mr ON oms.id = mr."matchId"
         WHERE mr.format = ${format}::"GameFormat"
           AND oms."playerDecks" IS NOT NULL
+          AND oms."isPrecon" = false
         ORDER BY mr."completedAt" DESC
         LIMIT 500
       `;

@@ -512,6 +512,7 @@ model OnlineMatchSession {
   turn         String?
   winnerId     String?
   matchType    GameFormat
+  isPrecon     Boolean             @default(false)
   sealedConfig Json?
   draftConfig  Json?
   draftState   Json?
@@ -547,6 +548,7 @@ model MatchResult {
   loserId      String?
   isDraw       Boolean    @default(false)
   format       GameFormat
+  isPrecon     Boolean    @default(false)
   tournamentId String?
   players      Json
   duration     Int?
