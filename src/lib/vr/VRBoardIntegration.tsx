@@ -13,6 +13,10 @@ import {
 } from "./VRCardHighlight";
 import { VRHandTracking } from "./VRHandTracking";
 import { VRRadialMenu, defaultCardMenuItems } from "./VRRadialMenu";
+import { useXRDeviceCapabilities } from "./xrDeviceCapabilities";
+
+/** Threshold in ms for long-press to open radial menu (AVP) */
+const LONG_PRESS_THRESHOLD_MS = 500;
 
 interface VRBoardIntegrationProps {
   /** Current player seat (p1 or p2) */
@@ -43,11 +47,11 @@ interface VRDragState {
 
 /**
  * VR Board Integration - Main component that wires up all VR interactions
- * with the game board. This component should be placed inside the Canvas
- * alongside the Board component.
+ * with the game board. Supports both Meta Quest (controllers) and
+ * Apple Vision Pro (transient-pointer gaze+pinch).
  */
 export function VRBoardIntegration({
-  viewPlayerKey = "p1",
+  viewPlayerKey: _viewPlayerKey = "p1",
   isSpectator = false,
   boardWidth = 7,
   boardHeight = 5,
@@ -57,7 +61,8 @@ export function VRBoardIntegration({
   onCardAction,
 }: VRBoardIntegrationProps) {
   const session = useXR((state) => state.session);
-  const { scene, raycaster } = useThree();
+  const { scene, raycaster, gl } = useThree();
+  const capabilities = useXRDeviceCapabilities();
 
   const leftController = useXRInputSourceState("controller", "left");
   const rightController = useXRInputSourceState("controller", "right");
@@ -83,6 +88,11 @@ export function VRBoardIntegration({
     null,
   );
 
+  // Menu position for gaze-based radial menu (AVP)
+  const [menuWorldPosition, setMenuWorldPosition] = useState<THREE.Vector3>(
+    new THREE.Vector3(),
+  );
+
   // Drop zone preview
   const [dropZone, setDropZone] = useState<{
     position: [number, number, number];
@@ -95,6 +105,12 @@ export function VRBoardIntegration({
   >([]);
 
   const lastHapticTime = useRef(0);
+
+  // Long-press tracking for AVP radial menu
+  const selectStartTime = useRef(0);
+  const selectStartCardId = useRef<number | null>(null);
+  const selectStartCardPosition = useRef<THREE.Vector3 | null>(null);
+  const longPressTriggered = useRef(false);
 
   // Connect to game store
   const dragFromHand = useGameStore((s) => s.dragFromHand);
@@ -113,6 +129,34 @@ export function VRBoardIntegration({
       return position;
     },
     [leftController, rightController],
+  );
+
+  // Get position from transient-pointer input source via XR frame
+  const getTransientPointerPosition = useCallback(
+    (gl: THREE.WebGLRenderer): THREE.Vector3 | null => {
+      const xrManager = gl.xr;
+      const xrSession = xrManager.getSession();
+      const refSpace = xrManager.getReferenceSpace();
+      if (!xrSession || !refSpace) return null;
+
+      const frame = xrManager.getFrame?.();
+      if (!frame) return null;
+
+      for (const source of xrSession.inputSources) {
+        if (source.targetRayMode === "transient-pointer") {
+          const pose = frame.getPose(source.targetRaySpace, refSpace);
+          if (pose) {
+            return new THREE.Vector3(
+              pose.transform.position.x,
+              pose.transform.position.y,
+              pose.transform.position.z,
+            );
+          }
+        }
+      }
+      return null;
+    },
+    [],
   );
 
   // Convert world position to board tile
@@ -155,7 +199,7 @@ export function VRBoardIntegration({
     [boardWidth, boardHeight, tileSize],
   );
 
-  // Find card under controller ray
+  // Find card under controller ray (Quest controllers only)
   const findCardUnderRay = useCallback(
     (
       hand: "left" | "right",
@@ -192,13 +236,65 @@ export function VRBoardIntegration({
     [leftController, rightController, raycaster, scene],
   );
 
-  // Trigger haptic feedback
+  // Find card under a transient-pointer (gaze) ray from an XR event (AVP)
+  const findCardFromXREvent = useCallback(
+    (
+      event: XRInputSourceEvent,
+    ): { cardId: number; slug: string; position: THREE.Vector3 } | null => {
+      const frame = event.frame;
+      const inputSource = event.inputSource;
+      const refSpace = gl.xr.getReferenceSpace();
+      if (!frame || !refSpace) return null;
+
+      const pose = frame.getPose(inputSource.targetRaySpace, refSpace);
+      if (!pose) return null;
+
+      const origin = new THREE.Vector3(
+        pose.transform.position.x,
+        pose.transform.position.y,
+        pose.transform.position.z,
+      );
+      const orientation = pose.transform.orientation;
+      const direction = new THREE.Vector3(0, 0, -1).applyQuaternion(
+        new THREE.Quaternion(
+          orientation.x,
+          orientation.y,
+          orientation.z,
+          orientation.w,
+        ),
+      );
+
+      raycaster.set(origin, direction);
+      const intersects = raycaster.intersectObjects(scene.children, true);
+
+      for (const intersect of intersects) {
+        const userData = intersect.object.userData as {
+          cardId?: number;
+          slug?: string;
+        };
+        if (userData.cardId && userData.slug) {
+          return {
+            cardId: userData.cardId,
+            slug: userData.slug,
+            position: intersect.point.clone(),
+          };
+        }
+      }
+
+      return null;
+    },
+    [gl, raycaster, scene],
+  );
+
+  // Trigger haptic feedback (no-op on devices without haptics)
   const triggerHaptic = useCallback(
     (
       hand: "left" | "right",
       intensity: number = 0.5,
       duration: number = 50,
     ) => {
+      if (!capabilities.hasHaptics) return;
+
       const now = Date.now();
       if (now - lastHapticTime.current < 50) return;
       lastHapticTime.current = now;
@@ -213,10 +309,10 @@ export function VRBoardIntegration({
         );
       }
     },
-    [leftController, rightController],
+    [leftController, rightController, capabilities.hasHaptics],
   );
 
-  // Handle card grab start
+  // Handle card grab start (Quest controllers)
   const handleGrabStart = useCallback(
     (hand: "left" | "right") => {
       if (vrDragState.isDragging || isSpectator) return;
@@ -290,12 +386,11 @@ export function VRBoardIntegration({
     worldToTile,
     dragFromHand,
     playSelectedTo,
-    viewPlayerKey,
     setDragFromHand,
     triggerHaptic,
   ]);
 
-  // Handle pinch gesture from hand tracking
+  // Handle pinch gesture from hand tracking (when hand joints are available)
   const handlePinchStart = useCallback(
     (hand: "left" | "right", position: THREE.Vector3) => {
       if (isSpectator) return;
@@ -359,33 +454,37 @@ export function VRBoardIntegration({
       );
       onCardAction?.(actionId, selectedCardForMenu);
 
-      // Handle built-in actions via callbacks
-      // The actual action handling is delegated to the parent component
-      // via onCardAction callback since game state methods vary
-
       setSelectedCardForMenu(null);
     },
     [selectedCardForMenu, onCardAction],
   );
 
   // Update hover state and drop zone each frame
-  useFrame(() => {
+  useFrame((_state) => {
     if (!session) return;
 
-    // Check for hovered cards
-    for (const hand of ["left", "right"] as const) {
-      const card = findCardUnderRay(hand);
-      if (card && !vrDragState.isDragging) {
-        setHoveredCard({ cardId: card.cardId, position: card.position });
-        break;
-      } else if (!card) {
-        setHoveredCard(null);
+    // Controller-based hover detection (Quest only)
+    // AVP hover is handled by @react-three/xr pointer events on card meshes
+    if (capabilities.hasControllers) {
+      for (const hand of ["left", "right"] as const) {
+        const card = findCardUnderRay(hand);
+        if (card && !vrDragState.isDragging) {
+          setHoveredCard({ cardId: card.cardId, position: card.position });
+          break;
+        } else if (!card) {
+          setHoveredCard(null);
+        }
       }
     }
 
     // Update drop zone during drag
     if (vrDragState.isDragging && vrDragState.hand) {
-      const position = getControllerPosition(vrDragState.hand);
+      // Try controller position first (Quest), fall back to transient-pointer (AVP)
+      let position = getControllerPosition(vrDragState.hand);
+      if (!position && capabilities.hasTransientPointer) {
+        position = getTransientPointerPosition(_state.gl);
+      }
+
       if (position) {
         const tile = worldToTile(position);
         if (tile) {
@@ -413,42 +512,177 @@ export function VRBoardIntegration({
     }
   });
 
-  // Listen for XR controller events
+  // Listen for XR input events — supports both Quest controllers and AVP transient-pointer
   useEffect(() => {
     if (!session) return;
 
     const handleSelectStart = (event: XRInputSourceEvent) => {
-      const hand = event.inputSource.handedness === "left" ? "left" : "right";
+      const inputSource = event.inputSource;
+      const hand =
+        inputSource.handedness === "left" ? "left" : ("right" as const);
+
+      // AVP transient-pointer: track for long-press detection
+      if (
+        !capabilities.hasControllers &&
+        inputSource.targetRayMode === "transient-pointer"
+      ) {
+        selectStartTime.current = Date.now();
+        longPressTriggered.current = false;
+
+        // Raycast from gaze ray to find card under the user's gaze
+        const card = findCardFromXREvent(event);
+        selectStartCardId.current = card?.cardId ?? null;
+        selectStartCardPosition.current = card?.position ?? null;
+
+        if (card) {
+          console.log(
+            `[VR/AVP] Gaze target: card ${card.cardId} (${card.slug})`,
+          );
+        }
+        return;
+      }
+
+      // Quest controllers: immediate grab
       handleGrabStart(hand);
     };
 
-    const handleSelectEnd = () => {
-      handleGrabEnd();
-    };
+    const handleSelectEnd = (event: XRInputSourceEvent) => {
+      const inputSource = event.inputSource;
 
-    const handleSqueezeStart = (_event: XRInputSourceEvent) => {
-      // Squeeze opens radial menu on hovered card
-      if (hoveredCard && !vrDragState.isDragging) {
-        setSelectedCardForMenu(hoveredCard.cardId);
+      // AVP transient-pointer: check if this was a long-press or short tap
+      if (
+        !capabilities.hasControllers &&
+        inputSource.targetRayMode === "transient-pointer"
+      ) {
+        const elapsed = Date.now() - selectStartTime.current;
+
+        if (longPressTriggered.current) {
+          // Long-press already handled (menu opened) — don't do anything else
+          longPressTriggered.current = false;
+          return;
+        }
+
+        // Short tap on AVP: handle drag end if dragging, otherwise ignore
+        if (vrDragState.isDragging) {
+          // Drop at the last known tile position
+          if (vrDragState.currentTile && vrDragState.cardId) {
+            const tile = vrDragState.currentTile;
+            if (dragFromHand) {
+              playSelectedTo(tile.col, tile.row);
+              setDragFromHand(false);
+              console.log(
+                `[VR/AVP] Dropped card ${vrDragState.cardId} at tile (${tile.col}, ${tile.row})`,
+              );
+            }
+          }
+
+          setVrDragState({
+            isDragging: false,
+            cardId: null,
+            cardSlug: null,
+            hand: null,
+            startPosition: null,
+            currentTile: null,
+          });
+          setDropZone({ position: [0, 0, 0], visible: false });
+          return;
+        }
+
+        // Short tap while not dragging — initiate a grab if a card was targeted at selectstart
+        if (
+          elapsed < LONG_PRESS_THRESHOLD_MS &&
+          selectStartCardId.current !== null
+        ) {
+          const startPos =
+            selectStartCardPosition.current ?? new THREE.Vector3();
+          setVrDragState({
+            isDragging: true,
+            cardId: selectStartCardId.current,
+            cardSlug: null,
+            hand: "right",
+            startPosition: startPos.clone(),
+            currentTile: null,
+          });
+          console.log(
+            `[VR/AVP] Gaze-pinch grabbed card ${selectStartCardId.current}`,
+          );
+        }
+        return;
       }
+
+      // Quest controllers: normal grab end
+      handleGrabEnd();
     };
 
     session.addEventListener("selectstart", handleSelectStart);
     session.addEventListener("selectend", handleSelectEnd);
-    session.addEventListener("squeezestart", handleSqueezeStart);
+
+    // Squeeze events only on devices that support them (Quest)
+    let handleSqueezeStart: ((event: XRInputSourceEvent) => void) | null =
+      null;
+    if (capabilities.hasSqueeze) {
+      handleSqueezeStart = (_event: XRInputSourceEvent) => {
+        // Squeeze opens radial menu on hovered card
+        if (hoveredCard && !vrDragState.isDragging) {
+          setSelectedCardForMenu(hoveredCard.cardId);
+          setMenuWorldPosition(hoveredCard.position.clone());
+        }
+      };
+      session.addEventListener("squeezestart", handleSqueezeStart);
+    }
 
     return () => {
       session.removeEventListener("selectstart", handleSelectStart);
       session.removeEventListener("selectend", handleSelectEnd);
-      session.removeEventListener("squeezestart", handleSqueezeStart);
+      if (handleSqueezeStart) {
+        session.removeEventListener("squeezestart", handleSqueezeStart);
+      }
     };
   }, [
     session,
+    capabilities.hasControllers,
+    capabilities.hasSqueeze,
+    capabilities.hasTransientPointer,
+    findCardFromXREvent,
     handleGrabStart,
     handleGrabEnd,
     hoveredCard,
     vrDragState.isDragging,
+    vrDragState.currentTile,
+    vrDragState.cardId,
+    dragFromHand,
+    playSelectedTo,
+    setDragFromHand,
   ]);
+
+  // AVP long-press detection: check elapsed time during ongoing select
+  useEffect(() => {
+    if (!session || capabilities.hasControllers) return;
+
+    const checkLongPress = setInterval(() => {
+      if (
+        selectStartTime.current > 0 &&
+        !longPressTriggered.current &&
+        !vrDragState.isDragging
+      ) {
+        const elapsed = Date.now() - selectStartTime.current;
+        if (elapsed >= LONG_PRESS_THRESHOLD_MS) {
+          // Long-press detected — open radial menu
+          const cardId = selectStartCardId.current;
+          if (cardId != null) {
+            longPressTriggered.current = true;
+            setSelectedCardForMenu(cardId);
+            if (selectStartCardPosition.current) {
+              setMenuWorldPosition(selectStartCardPosition.current.clone());
+            }
+            console.log(`[VR/AVP] Long-press menu for card ${cardId}`);
+          }
+        }
+      }
+    }, 50);
+
+    return () => clearInterval(checkLongPress);
+  }, [session, capabilities.hasControllers, vrDragState.isDragging]);
 
   // Calculate valid drop tiles based on game state
   useEffect(() => {
@@ -527,6 +761,8 @@ export function VRBoardIntegration({
           onSelect={handleMenuAction}
           onClose={() => setSelectedCardForMenu(null)}
           controlHand="right"
+          useGazeSelection={!capabilities.hasThumbstick}
+          menuWorldPosition={menuWorldPosition}
         />
       )}
     </group>

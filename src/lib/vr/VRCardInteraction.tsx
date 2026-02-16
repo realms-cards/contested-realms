@@ -3,6 +3,7 @@
 import { useXR, useXRInputSourceState } from "@react-three/xr";
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as THREE from "three";
+import { useXRDeviceCapabilities } from "./xrDeviceCapabilities";
 
 export interface VRGrabState {
   isGrabbing: boolean;
@@ -34,6 +35,7 @@ export function VRCardInteraction({
   onCardHover,
 }: VRCardInteractionProps) {
   const session = useXR((state) => state.session);
+  const capabilities = useXRDeviceCapabilities();
   const leftController = useXRInputSourceState("controller", "left");
   const rightController = useXRInputSourceState("controller", "right");
   const _leftHand = useXRInputSourceState("hand", "left");
@@ -50,13 +52,15 @@ export function VRCardInteraction({
   const hoveredCardRef = useRef<number | null>(null);
   const lastHapticTime = useRef<number>(0);
 
-  // Trigger haptic feedback
+  // Trigger haptic feedback (no-op on devices without haptics)
   const triggerHaptic = useCallback(
     (
       hand: "left" | "right",
       intensity: number = 0.5,
       duration: number = 50,
     ) => {
+      if (!capabilities.hasHaptics) return;
+
       const now = Date.now();
       // Debounce haptics
       if (now - lastHapticTime.current < 50) return;
@@ -72,7 +76,7 @@ export function VRCardInteraction({
         );
       }
     },
-    [leftController, rightController],
+    [leftController, rightController, capabilities.hasHaptics],
   );
 
   // Handle card grab start (exported via context for use in card components)

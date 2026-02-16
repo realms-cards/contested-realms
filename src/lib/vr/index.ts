@@ -25,6 +25,12 @@ export {
 } from "./VRHandTracking";
 export { VRCardPlacement, useVRCardPlacement } from "./VRCardPlacement";
 
+// Device capability detection
+export {
+  useXRDeviceCapabilities,
+  type XRDeviceCapabilities,
+} from "./xrDeviceCapabilities";
+
 // Drag integration and visual feedback
 export { VRDragBridge, type VRDragState } from "./VRDragBridge";
 export {

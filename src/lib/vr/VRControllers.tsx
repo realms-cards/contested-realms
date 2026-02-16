@@ -7,6 +7,7 @@ import {
 } from "@react-three/xr";
 import { useCallback } from "react";
 import * as THREE from "three";
+import { useXRDeviceCapabilities } from "./xrDeviceCapabilities";
 
 interface VRControllersProps {
   onSelect?: (hand: "left" | "right", point: THREE.Vector3 | null) => void;
@@ -16,10 +17,11 @@ interface VRControllersProps {
 /**
  * VR Controllers component that handles input events for VR interactions.
  * Controller models are automatically rendered by the XR component.
- * This component provides callback hooks for select/squeeze events.
+ * Squeeze events are only bound on devices that support them (Quest).
  */
 export function VRControllers({ onSelect, onSqueeze }: VRControllersProps) {
   const session = useXR((state) => state.session);
+  const capabilities = useXRDeviceCapabilities();
   const leftController = useXRInputSourceState("controller", "left");
   const rightController = useXRInputSourceState("controller", "right");
 
@@ -41,6 +43,7 @@ export function VRControllers({ onSelect, onSqueeze }: VRControllersProps) {
     [onSqueeze],
   );
 
+  // Select events work on all devices (Quest controllers, AVP transient-pointer)
   useXRInputSourceEvent(leftController?.inputSource, "select", handleSelect, [
     handleSelect,
   ]);
@@ -49,16 +52,23 @@ export function VRControllers({ onSelect, onSqueeze }: VRControllersProps) {
     handleSelect,
   ]);
 
-  useXRInputSourceEvent(leftController?.inputSource, "squeeze", handleSqueeze, [
+  // Squeeze events only on devices that support them — pass undefined to disable
+  const leftSqueezeSource = capabilities.hasSqueeze
+    ? leftController?.inputSource
+    : undefined;
+  const rightSqueezeSource = capabilities.hasSqueeze
+    ? rightController?.inputSource
+    : undefined;
+
+  useXRInputSourceEvent(leftSqueezeSource, "squeeze", handleSqueeze, [
     handleSqueeze,
+    leftSqueezeSource,
   ]);
 
-  useXRInputSourceEvent(
-    rightController?.inputSource,
-    "squeeze",
+  useXRInputSourceEvent(rightSqueezeSource, "squeeze", handleSqueeze, [
     handleSqueeze,
-    [handleSqueeze],
-  );
+    rightSqueezeSource,
+  ]);
 
   if (!session) {
     return null;

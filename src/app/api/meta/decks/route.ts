@@ -55,10 +55,21 @@ function isCollectionZone(card: DeckCard): boolean {
   return typeof card?.zone === "string" && card.zone.toLowerCase() === "collection";
 }
 
+type AvatarSitePairing = {
+  siteName: string;
+  siteSlug: string | null;
+  matches: number;
+  wins: number;
+  losses: number;
+  draws: number;
+  winRate: number;
+};
+
 export async function GET(request: Request): Promise<NextResponse> {
   try {
     const url = new URL(request.url);
     const format = url.searchParams.get("format") || "all";
+    const avatarFilter = url.searchParams.get("avatar");
 
     // Try serving from pre-computed cache
     const snapshot = await prisma.metaStatsSnapshot.findUnique({
@@ -66,8 +77,27 @@ export async function GET(request: Request): Promise<NextResponse> {
     });
     if (snapshot) {
       const cached = snapshot.data as Record<string, unknown>;
+
+      // Per-avatar drill-down: return avatar details + site pairings
+      if (avatarFilter) {
+        const archetypes = (cached.archetypes as AvatarElementCombo[]) || [];
+        const avatar = archetypes.find((a) => a.avatarName === avatarFilter);
+        const avatarSites = (cached.avatarSites as Record<string, AvatarSitePairing[]> | undefined) || {};
+        const sites = avatarSites[avatarFilter] || [];
+
+        return NextResponse.json({
+          avatar: avatar || null,
+          sites,
+          format,
+          generatedAt: snapshot.computedAt.toISOString(),
+        });
+      }
+
+      // Overview: omit avatarSites from response to save bandwidth
+      const { avatarSites: _unused, ...rest } = cached;
+      void _unused;
       return NextResponse.json({
-        ...cached,
+        ...rest,
         generatedAt: snapshot.computedAt.toISOString(),
       });
     }
@@ -107,6 +137,14 @@ export async function GET(request: Request): Promise<NextResponse> {
         `;
 
     if (sessions.length === 0) {
+      if (avatarFilter) {
+        return NextResponse.json({
+          avatar: null,
+          sites: [],
+          format,
+          generatedAt: new Date().toISOString(),
+        });
+      }
       return NextResponse.json({
         archetypes: [],
         format,
@@ -278,6 +316,17 @@ export async function GET(request: Request): Promise<NextResponse> {
         };
       })
       .sort((a, b) => b.matches - a.matches);
+
+    // On-the-fly path: avatar drill-down without cache returns avatar only (no site data)
+    if (avatarFilter) {
+      const avatar = archetypes.find((a) => a.avatarName === avatarFilter);
+      return NextResponse.json({
+        avatar: avatar || null,
+        sites: [],
+        format,
+        generatedAt: new Date().toISOString(),
+      });
+    }
 
     return NextResponse.json({
       archetypes,

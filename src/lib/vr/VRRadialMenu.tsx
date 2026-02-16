@@ -1,7 +1,7 @@
 "use client";
 
 import { Text } from "@react-three/drei";
-import { useFrame } from "@react-three/fiber";
+import { useFrame, type ThreeEvent } from "@react-three/fiber";
 import { useXR, useXRInputSourceState } from "@react-three/xr";
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as THREE from "three";
@@ -18,18 +18,25 @@ interface VRRadialMenuProps {
   items: RadialMenuItem[];
   onSelect?: (itemId: string) => void;
   onClose?: () => void;
-  /** Which hand's thumbstick controls the menu */
+  /** Which hand's thumbstick controls the menu (Quest) */
   controlHand?: "left" | "right";
   /** Menu radius in meters */
   radius?: number;
   /** Distance from controller */
   distance?: number;
+  /** Use gaze-based selection instead of thumbstick (for AVP) */
+  useGazeSelection?: boolean;
+  /** World position for gaze-based menu (AVP) */
+  menuWorldPosition?: THREE.Vector3;
 }
 
+/** Auto-close timeout for gaze menu in ms */
+const GAZE_MENU_TIMEOUT_MS = 8000;
+
 /**
- * VR Radial Menu - Context action menu controlled by thumbstick.
- * Opens when grip is held and closed when released.
- * Thumbstick direction selects menu items.
+ * VR Radial Menu - Context action menu with dual input modes:
+ * - Quest: Squeeze to open, thumbstick to navigate, squeeze release to confirm
+ * - AVP: Gaze at items to highlight, pinch to select, auto-close on timeout
  */
 export function VRRadialMenu({
   items,
@@ -38,22 +45,29 @@ export function VRRadialMenu({
   controlHand = "right",
   radius = 0.15,
   distance = 0.3,
+  useGazeSelection = false,
+  menuWorldPosition,
 }: VRRadialMenuProps) {
   const session = useXR((state) => state.session);
   const controller = useXRInputSourceState("controller", controlHand);
 
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(useGazeSelection);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
-  const [menuPosition, setMenuPosition] = useState(new THREE.Vector3());
+  const [menuPosition, setMenuPosition] = useState(
+    () => menuWorldPosition ?? new THREE.Vector3(),
+  );
 
   const groupRef = useRef<THREE.Group>(null);
-  const lastThumbstick = useRef({ x: 0, y: 0 });
+  const lastInteractionTime = useRef(Date.now());
 
   // Calculate segment angle for each item
   const segmentAngle = (2 * Math.PI) / items.length;
 
+  // --- Quest: Thumbstick-based navigation ---
+
   // Get thumbstick values from gamepad
   const getThumbstick = useCallback((): { x: number; y: number } => {
+    if (useGazeSelection) return { x: 0, y: 0 };
     const gamepad = controller?.inputSource?.gamepad;
     if (!gamepad?.axes || gamepad.axes.length < 4) {
       return { x: 0, y: 0 };
@@ -63,7 +77,7 @@ export function VRRadialMenu({
       x: gamepad.axes[2] ?? 0,
       y: gamepad.axes[3] ?? 0,
     };
-  }, [controller]);
+  }, [controller, useGazeSelection]);
 
   // Determine selected item based on thumbstick angle
   const getSelectedFromThumbstick = useCallback(
@@ -79,51 +93,97 @@ export function VRRadialMenu({
       const index = Math.floor(angle / segmentAngle);
       return Math.min(index, items.length - 1);
     },
-    [segmentAngle, items.length]
+    [segmentAngle, items.length],
   );
 
-  // Update menu state each frame
+  // --- AVP: Gaze-based interaction handlers ---
+
+  const handleItemPointerEnter = useCallback(
+    (index: number) => {
+      if (!useGazeSelection) return;
+      setSelectedIndex(index);
+      lastInteractionTime.current = Date.now();
+    },
+    [useGazeSelection],
+  );
+
+  const handleItemPointerLeave = useCallback(
+    (index: number) => {
+      if (!useGazeSelection) return;
+      setSelectedIndex((current) => (current === index ? null : current));
+    },
+    [useGazeSelection],
+  );
+
+  const handleItemClick = useCallback(
+    (e: ThreeEvent<MouseEvent>, item: RadialMenuItem) => {
+      if (!useGazeSelection) return;
+      e.stopPropagation();
+      if (!item.disabled) {
+        onSelect?.(item.id);
+        onClose?.();
+      }
+    },
+    [useGazeSelection, onSelect, onClose],
+  );
+
+  // --- Frame update ---
+
   useFrame(() => {
-    if (!session || !controller?.object) return;
+    if (!session) return;
 
-    // Update menu position to follow controller
-    if (isOpen && groupRef.current) {
-      const controllerPos = new THREE.Vector3();
-      const controllerDir = new THREE.Vector3(0, 0, -1);
-      controller.object.getWorldPosition(controllerPos);
-      controller.object.getWorldDirection(controllerDir);
+    if (useGazeSelection) {
+      // Gaze menu: position at world position, face the camera
+      if (groupRef.current && menuWorldPosition) {
+        groupRef.current.position.copy(menuWorldPosition);
+        groupRef.current.position.y += 0.15; // Slightly above the card
+      }
+    } else if (controller?.object) {
+      // Quest: update menu position to follow controller
+      if (isOpen && groupRef.current) {
+        const controllerPos = new THREE.Vector3();
+        const controllerDir = new THREE.Vector3(0, 0, -1);
+        controller.object.getWorldPosition(controllerPos);
+        controller.object.getWorldDirection(controllerDir);
 
-      // Position menu in front of controller
-      const menuPos = controllerPos.clone().add(controllerDir.multiplyScalar(distance));
-      setMenuPosition(menuPos);
-      groupRef.current.position.copy(menuPos);
+        // Position menu in front of controller
+        const menuPos = controllerPos
+          .clone()
+          .add(controllerDir.multiplyScalar(distance));
+        setMenuPosition(menuPos);
+        groupRef.current.position.copy(menuPos);
 
-      // Make menu face the camera/player
-      groupRef.current.lookAt(controllerPos);
-    }
+        // Make menu face the camera/player
+        groupRef.current.lookAt(controllerPos);
+      }
 
-    // Update selected item based on thumbstick
-    const thumbstick = getThumbstick();
-    const newSelected = getSelectedFromThumbstick(thumbstick.x, thumbstick.y);
+      // Update selected item based on thumbstick
+      const thumbstick = getThumbstick();
+      const newSelected = getSelectedFromThumbstick(
+        thumbstick.x,
+        thumbstick.y,
+      );
 
-    if (newSelected !== selectedIndex) {
-      setSelectedIndex(newSelected);
+      if (newSelected !== selectedIndex) {
+        setSelectedIndex(newSelected);
 
-      // Haptic feedback on selection change
-      if (newSelected !== null) {
-        const gamepad = controller?.inputSource?.gamepad;
-        if (gamepad?.hapticActuators?.[0]) {
-          (gamepad.hapticActuators[0] as GamepadHapticActuator).pulse?.(0.2, 30);
+        // Haptic feedback on selection change
+        if (newSelected !== null) {
+          const gamepad = controller?.inputSource?.gamepad;
+          if (gamepad?.hapticActuators?.[0]) {
+            (gamepad.hapticActuators[0] as GamepadHapticActuator).pulse?.(
+              0.2,
+              30,
+            );
+          }
         }
       }
     }
-
-    lastThumbstick.current = thumbstick;
   });
 
-  // Handle menu open/close via squeeze button
+  // Quest: handle menu open/close via squeeze button
   useEffect(() => {
-    if (!session) return;
+    if (!session || useGazeSelection) return;
 
     const handleSqueezeStart = (event: XRInputSourceEvent) => {
       if (event.inputSource.handedness !== controlHand) return;
@@ -150,7 +210,10 @@ export function VRRadialMenu({
           // Confirm haptic
           const gamepad = controller?.inputSource?.gamepad;
           if (gamepad?.hapticActuators?.[0]) {
-            (gamepad.hapticActuators[0] as GamepadHapticActuator).pulse?.(0.5, 100);
+            (gamepad.hapticActuators[0] as GamepadHapticActuator).pulse?.(
+              0.5,
+              100,
+            );
           }
         }
       }
@@ -167,9 +230,37 @@ export function VRRadialMenu({
       session.removeEventListener("squeezestart", handleSqueezeStart);
       session.removeEventListener("squeezeend", handleSqueezeEnd);
     };
-  }, [session, controlHand, controller, isOpen, selectedIndex, items, onSelect, onClose]);
+  }, [
+    session,
+    controlHand,
+    controller,
+    isOpen,
+    selectedIndex,
+    items,
+    onSelect,
+    onClose,
+    useGazeSelection,
+  ]);
 
-  if (!session || !isOpen) {
+  // AVP: auto-close on timeout
+  useEffect(() => {
+    if (!useGazeSelection || !session) return;
+
+    lastInteractionTime.current = Date.now();
+
+    const checkTimeout = setInterval(() => {
+      if (Date.now() - lastInteractionTime.current > GAZE_MENU_TIMEOUT_MS) {
+        onClose?.();
+      }
+    }, 500);
+
+    return () => clearInterval(checkTimeout);
+  }, [useGazeSelection, session, onClose]);
+
+  // Gaze menu is always "open" when rendered; Quest menu requires squeeze
+  const shouldRender = useGazeSelection || isOpen;
+
+  if (!session || !shouldRender) {
     return null;
   }
 
@@ -178,7 +269,12 @@ export function VRRadialMenu({
       {/* Background circle */}
       <mesh>
         <circleGeometry args={[radius * 1.2, 32]} />
-        <meshBasicMaterial color="#1a1a2e" transparent opacity={0.9} side={THREE.DoubleSide} />
+        <meshBasicMaterial
+          color="#1a1a2e"
+          transparent
+          opacity={0.9}
+          side={THREE.DoubleSide}
+        />
       </mesh>
 
       {/* Menu items */}
@@ -191,8 +287,24 @@ export function VRRadialMenu({
 
         return (
           <group key={item.id} position={[x, y, 0.01]}>
-            {/* Item background */}
-            <mesh>
+            {/* Item background — interactive in gaze mode */}
+            <mesh
+              onPointerEnter={
+                useGazeSelection
+                  ? () => handleItemPointerEnter(index)
+                  : undefined
+              }
+              onPointerLeave={
+                useGazeSelection
+                  ? () => handleItemPointerLeave(index)
+                  : undefined
+              }
+              onClick={
+                useGazeSelection
+                  ? (e) => handleItemClick(e, item)
+                  : undefined
+              }
+            >
               <circleGeometry args={[radius * 0.25, 16]} />
               <meshBasicMaterial
                 color={isSelected ? (item.color ?? "#4a90d9") : "#2a2a4e"}
@@ -216,11 +328,38 @@ export function VRRadialMenu({
         );
       })}
 
-      {/* Center indicator */}
-      <mesh position={[0, 0, 0.02]}>
+      {/* Center close button — interactive in gaze mode */}
+      <mesh
+        position={[0, 0, 0.02]}
+        onClick={
+          useGazeSelection
+            ? (e) => {
+                e.stopPropagation();
+                onClose?.();
+              }
+            : undefined
+        }
+      >
         <circleGeometry args={[radius * 0.1, 16]} />
-        <meshBasicMaterial color="#ffffff" transparent opacity={0.3} />
+        <meshBasicMaterial
+          color={useGazeSelection ? "#ff4444" : "#ffffff"}
+          transparent
+          opacity={useGazeSelection ? 0.6 : 0.3}
+        />
       </mesh>
+
+      {/* Close button label for gaze mode */}
+      {useGazeSelection && (
+        <Text
+          position={[0, 0, 0.03]}
+          fontSize={0.012}
+          color="#ffffff"
+          anchorX="center"
+          anchorY="middle"
+        >
+          X
+        </Text>
+      )}
 
       {/* Selected item label */}
       {selectedIndex !== null && items[selectedIndex] && (
@@ -242,12 +381,12 @@ export function VRRadialMenu({
  * Default card context menu items
  */
 export const defaultCardMenuItems: RadialMenuItem[] = [
-  { id: "tap", label: "Tap/Untap", icon: "↻", color: "#4a90d9" },
-  { id: "flip", label: "Flip", icon: "🔄", color: "#9b59b6" },
-  { id: "destroy", label: "Destroy", icon: "💀", color: "#e74c3c" },
-  { id: "return", label: "Return to Hand", icon: "✋", color: "#2ecc71" },
-  { id: "exile", label: "Exile", icon: "✨", color: "#f39c12" },
-  { id: "copy", label: "Copy", icon: "📋", color: "#3498db" },
+  { id: "tap", label: "Tap/Untap", icon: "T", color: "#4a90d9" },
+  { id: "flip", label: "Flip", icon: "F", color: "#9b59b6" },
+  { id: "destroy", label: "Destroy", icon: "D", color: "#e74c3c" },
+  { id: "return", label: "Return to Hand", icon: "R", color: "#2ecc71" },
+  { id: "exile", label: "Exile", icon: "E", color: "#f39c12" },
+  { id: "copy", label: "Copy", icon: "C", color: "#3498db" },
 ];
 
 export type { RadialMenuItem };
