@@ -54,6 +54,7 @@ import { createGardenOfEdenSlice } from "./store/gardenOfEdenState";
 import { createGemTokenSlice } from "./store/gemTokenState";
 import { createHeadlessHauntSlice } from "./store/headlessHauntState";
 import { createHighlandPrincessSlice } from "./store/highlandPrincessState";
+import { createHyperparasiteSlice } from "./store/hyperparasiteState";
 import { createHistorySlice } from "./store/historyState";
 import {
   createImposterMaskSlice,
@@ -248,6 +249,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   ...createSeaRaiderSlice(set, get, storeApi),
   ...createShapeshiftSlice(set, get, storeApi),
   ...createAssimilatorSnailSlice(set, get, storeApi),
+  ...createHyperparasiteSlice(set, get, storeApi),
   cardScale: 1,
   // Harbinger portal discount (Gothic expansion) - once per turn mana reduction
   harbingerPortalDiscountUsed: { p1: false, p2: false },
@@ -407,7 +409,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         pendingAssimilatorSnail: null,
         assimilatorSnailUsed: createInitialAssimilatorSnailUsed(),
         assimilatorSnailTransforms: [],
-      };
+};
       return reset as GameState;
     }),
 });

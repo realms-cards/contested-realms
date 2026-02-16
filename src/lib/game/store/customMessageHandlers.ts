@@ -7103,4 +7103,7 @@ export function handleCustomMessage(
     } catch {}
     return;
   }
+
+  // Hyperparasite carry now syncs via permanents patches (generic carry mechanism)
+  // No custom message handlers needed
 }

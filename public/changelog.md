@@ -2,6 +2,12 @@
 
 ## February 2026
 
+### Feb 16 - Meta2 and new resolvers
+
+- **make Meta even better** we are now recording decklists per match which should give us all the possibilities we like to explore, also made Meta section much more useful IMO
+- **add resolvers** Very cool ones! Assimilator snail (right click), Hyperparasite (right click)
+- **add carry keyword support** Any card that can carry other cards should now have a right click action to pick up/drop a minion "here". Carried Minions are attached to carriers like artifacts
+
 ### Feb 15 - Meta
 
 - **much better view for Meta** Meta is now discerning win rates in different panels per card type (Avatars, Spells, Sites)

@@ -59,11 +59,36 @@ export const createPermanentMovementSlice: StateCreator<
       const toKey: CellKey = toCellKey(x, y);
       const exists = (state.permanents[fromKey] || [])[sel.index];
       if (!exists) return state;
+      // Block Hyperparasite movement while carrying a minion
+      const existsInstanceId =
+        exists.instanceId ?? exists.card?.instanceId ?? null;
+      if (
+        existsInstanceId &&
+        (exists.card?.name || "").toLowerCase() === "hyperparasite"
+      ) {
+        const cellPerms = state.permanents[fromKey] || [];
+        const hasCarried = cellPerms.some(
+          (p) =>
+            p.isCarried &&
+            p.attachedTo?.at === fromKey &&
+            p.attachedTo?.index === sel.index,
+        );
+        if (hasCarried) {
+          get().log(
+            "Hyperparasite cannot move while carrying a minion. Drop it first.",
+          );
+          return state;
+        }
+      }
       // Only enforce ownership checks in online mode when actorKey is set
       // In hotseat mode (actorKey is null), allow all actions
+      // Active player can move opponent's permanents (for combat, effects, etc.)
       if (state.transport && state.localPlayerId && state.actorKey) {
         const ownerSeat = seatFromOwner(exists.owner);
-        if (state.actorKey !== ownerSeat) {
+        const isActingPlayer =
+          (state.actorKey === "p1" && state.currentPlayer === 1) ||
+          (state.actorKey === "p2" && state.currentPlayer === 2);
+        if (state.actorKey !== ownerSeat && !isActingPlayer) {
           return state;
         }
       }
@@ -154,6 +179,30 @@ export const createPermanentMovementSlice: StateCreator<
         }
         get().trySendPatch(patch);
       }
+      // Move carried avatar with the carrier
+      if (fromKey !== toKey && existsInstanceId) {
+        setTimeout(() => {
+          const s = get();
+          const freshAvatars = { ...s.avatars };
+          let avatarMoved = false;
+          for (const seat of ["p1", "p2"] as const) {
+            const av = freshAvatars[seat];
+            if (av?.carriedBy?.instanceId === existsInstanceId) {
+              const dest = parseCellKey(toKey);
+              freshAvatars[seat] = {
+                ...av,
+                pos: [dest.x, dest.y],
+                carriedBy: { ...av.carriedBy, at: toKey },
+              };
+              avatarMoved = true;
+            }
+          }
+          if (avatarMoved) {
+            set({ avatars: freshAvatars } as Partial<GameState> as GameState);
+            s.trySendPatch({ avatars: freshAvatars });
+          }
+        }, 0);
+      }
       return {
         permanents: finalPer,
         selectedPermanent: null,
@@ -170,9 +219,13 @@ export const createPermanentMovementSlice: StateCreator<
       if (!exists) return state;
       // Only enforce ownership checks in online mode when actorKey is set
       // In hotseat mode (actorKey is null), allow all actions
+      // Active player can move opponent's permanents (for combat, effects, etc.)
       if (state.transport && state.localPlayerId && state.actorKey) {
         const ownerSeat = seatFromOwner(exists.owner);
-        if (state.actorKey !== ownerSeat) {
+        const isActingPlayer =
+          (state.actorKey === "p1" && state.currentPlayer === 1) ||
+          (state.actorKey === "p2" && state.currentPlayer === 2);
+        if (state.actorKey !== ownerSeat && !isActingPlayer) {
           return state;
         }
       }
@@ -245,6 +298,22 @@ export const createPermanentMovementSlice: StateCreator<
   movePermanentToZone: (at, index, target, position) =>
     set((state) => {
       get().pushHistory();
+      // Auto-drop carried avatar when carrier is destroyed
+      const itemForDrop = (state.permanents[at] || [])[index];
+      if (itemForDrop) {
+        const dropInstanceId =
+          itemForDrop.instanceId ?? itemForDrop.card?.instanceId ?? null;
+        if (dropInstanceId) {
+          // Drop any avatar carried by this permanent
+          setTimeout(() => {
+            get().carryDropAvatar(dropInstanceId);
+          }, 0);
+          // Force-drop Hyperparasite carried minion
+          setTimeout(() => {
+            get().forceDropHyperparasiteCarried(dropInstanceId, "destroy");
+          }, 0);
+        }
+      }
       const per: Permanents = { ...state.permanents };
       const arr = [...(per[at] || [])];
       const item = arr[index];
@@ -296,8 +365,10 @@ export const createPermanentMovementSlice: StateCreator<
           attachSubTypes.includes("automaton") || isAutomatonByName(attachName);
         const isCarryableArtifact = isArtifact && !isMonument && !isAutomaton;
 
-        if (isCarryableArtifact) {
-          // Carryable artifacts stay on the tile, detached
+        const isCarriedUnit = attached.isCarried === true;
+
+        if (isCarryableArtifact || isCarriedUnit) {
+          // Carryable artifacts and carried units stay on the tile, detached
           attachmentsToKeep.push({ idx, item: attached });
         } else {
           // Tokens and other attachments go to zones
@@ -332,10 +403,11 @@ export const createPermanentMovementSlice: StateCreator<
         );
 
         if (isKeptArtifact) {
-          // Clear attachedTo for artifacts that stay on tile
+          // Clear attachedTo (and isCarried) for artifacts/carried units that stay on tile
           arr[idx] = bumpPermanentVersion({
             ...perm,
             attachedTo: null,
+            isCarried: false,
           });
         } else if (perm.attachedTo && perm.attachedTo.at === at) {
           // Update attachedTo indices for other remaining permanents
@@ -671,9 +743,13 @@ export const createPermanentMovementSlice: StateCreator<
       if (!item) return state;
       // Only enforce ownership checks in online mode when actorKey is set
       // In hotseat mode (actorKey is null), allow all actions
+      // Active player can transfer control of opponent's permanents (steal effects)
       if (state.transport && state.actorKey) {
         const ownerSeat = seatFromOwner(item.owner);
-        if (state.actorKey !== ownerSeat) {
+        const isActingPlayer =
+          (state.actorKey === "p1" && state.currentPlayer === 1) ||
+          (state.actorKey === "p2" && state.currentPlayer === 2);
+        if (state.actorKey !== ownerSeat && !isActingPlayer) {
           get().log("Cannot transfer opponent permanent");
           return state as GameState;
         }
@@ -805,9 +881,12 @@ export const createPermanentMovementSlice: StateCreator<
       if (!item) return state;
 
       const ownerKey = seatFromOwner(item.owner);
-      // Only allow copying your own permanents in online mode
+      // Only allow copying in online mode for owner or active player
       if (state.transport && state.localPlayerId && state.actorKey) {
-        if (state.actorKey !== ownerKey) {
+        const isActingPlayer =
+          (state.actorKey === "p1" && state.currentPlayer === 1) ||
+          (state.actorKey === "p2" && state.currentPlayer === 2);
+        if (state.actorKey !== ownerKey && !isActingPlayer) {
           get().log("Cannot copy opponent's permanent");
           return state as GameState;
         }

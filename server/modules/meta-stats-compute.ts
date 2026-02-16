@@ -393,6 +393,14 @@ async function computeDecks(prisma: AnyPrisma, format: string): Promise<unknown>
       }
 
       if (!avatarName) continue;
+
+      // Skip small decklists for constructed (filters precon decks with ~36 cards)
+      let siteCardCount = 0;
+      for (const c of siteCounts.values()) siteCardCount += c;
+      const totalDeckCards = spellCardCount + siteCardCount;
+      const sessionFormat = session.format || format;
+      if (sessionFormat === "constructed" && totalDeckCards < 60) continue;
+
       const isWinner = session.winnerId === playerId;
       const isLoser = session.loserId === playerId;
       const isDraw = session.isDraw;
@@ -812,13 +820,19 @@ async function computeSynergies(prisma: AnyPrisma, format: string): Promise<unkn
 
       // Extract non-avatar card names (exclude avatar, collection; include sites + spells)
       const deckCardNames = new Set<string>();
+      let deckTotalCards = 0;
       for (const card of cards) {
         if (!card?.name) continue;
         if (isCollectionZone(card)) continue;
         if (isAvatarType(card.type)) continue;
         deckCardNames.add(card.name);
         allCardNames.add(card.name);
+        deckTotalCards++;
       }
+
+      // Skip small decklists for constructed (filters precon decks with ~36 cards)
+      const sessionFormat = session.format || format;
+      if (sessionFormat === "constructed" && deckTotalCards < 60) continue;
 
       const names = [...deckCardNames].sort();
       if (names.length < 2) continue;

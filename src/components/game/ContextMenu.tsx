@@ -15,6 +15,8 @@ import {
 import {
   detectBurrowSubmergeAbilities,
   detectBurrowSubmergeAbilitiesSync,
+  detectCarryAbility,
+  detectCarryAbilitySync,
   detectLanceAbility,
   detectLanceAbilitySync,
   detectRangedAbilitySync,
@@ -30,6 +32,7 @@ import { useGameStore } from "@/lib/game/store";
 import type { CardRef } from "@/lib/game/store";
 import { isMergedTower } from "@/lib/game/store/babelTowerState";
 import { GEM_COLORS } from "@/lib/game/store/gemTokenState";
+import { isHyperparasite } from "@/lib/game/store/hyperparasiteState";
 import { isMasked } from "@/lib/game/store/imposterMaskState";
 import {
   isMonumentByName,
@@ -152,7 +155,18 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   // Assimilator Snail activated ability
   const assimilatorSnailUsed = useGameStore((s) => s.assimilatorSnailUsed);
   const beginAssimilatorSnail = useGameStore((s) => s.beginAssimilatorSnail);
+  const assimilatorSnailTransforms = useGameStore(
+    (s) => s.assimilatorSnailTransforms,
+  );
+  const revertAssimilatorSnailTransforms = useGameStore(
+    (s) => s.revertAssimilatorSnailTransforms,
+  );
 
+  // Generic carry actions
+  const carryPickUp = useGameStore((s) => s.carryPickUp);
+  const carryDrop = useGameStore((s) => s.carryDrop);
+  const carryPickUpAvatar = useGameStore((s) => s.carryPickUpAvatar);
+  const carryDropAvatar = useGameStore((s) => s.carryDropAvatar);
   // Piracy actions (Captain Baldassare / Sea Raider)
   const triggerPiracy = useGameStore((s) => s.triggerPiracy);
 
@@ -180,10 +194,11 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   const [positionActions, setPositionActions] = useState<ContextMenuAction[]>(
     [],
   );
-  // Track if current permanent/site has stealth/ward/lance keyword ability
+  // Track if current permanent/site has stealth/ward/lance/carry keyword ability
   const [hasStealthAbility, setHasStealthAbility] = useState(false);
   const [hasWardAbility, setHasWardAbility] = useState(false);
   const [hasLanceAbility, setHasLanceAbility] = useState(false);
+  const [hasCarryAbility, setHasCarryAbility] = useState(false);
   const [siteHasWardAbility, setSiteHasWardAbility] = useState(false);
   // Token names this site can spawn based on its rulesText keywords
   const [siteSpawnableTokens, setSiteSpawnableTokens] = useState<string[]>([]);
@@ -240,6 +255,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
       setHasStealthAbility(false);
       setHasWardAbility(false);
       setHasLanceAbility(false);
+      setHasCarryAbility(false);
       setSiteHasWardAbility(false);
       setSiteSpawnableTokens([]);
       return;
@@ -296,13 +312,15 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         // Fetch abilities asynchronously from API
         (async () => {
           try {
-            // Detect stealth, ward, and lance abilities
+            // Detect stealth, ward, lance, and carry abilities
             const hasStealth = await detectStealthAbility(item.card.name);
             setHasStealthAbility(hasStealth);
             const hasWard = await detectWardAbility(item.card.name);
             setHasWardAbility(hasWard);
             const hasLance = await detectLanceAbility(item.card.name);
             setHasLanceAbility(hasLance);
+            const hasCarry = await detectCarryAbility(item.card.name);
+            setHasCarryAbility(hasCarry);
 
             const abilities = await detectBurrowSubmergeAbilities(
               item.card.name,
@@ -376,6 +394,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
             setHasStealthAbility(detectStealthAbilitySync(item.card.name));
             setHasWardAbility(detectWardAbilitySync(item.card.name));
             setHasLanceAbility(detectLanceAbilitySync(item.card.name));
+            setHasCarryAbility(detectCarryAbilitySync(item.card.name));
             const abilities = detectBurrowSubmergeAbilitiesSync(item.card.name);
             const canBurrow = abilities.canBurrow;
             const canSubmerge = abilities.canSubmerge;
@@ -1891,6 +1910,209 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                       {`Assimilate Dead Minion${hasUsed ? " \u2713" : ""}`}
                     </button>
                   );
+                })()}
+
+              {/* Assimilator Snail - Revert to original (failsafe) */}
+              {t.kind === "permanent" &&
+                isMine &&
+                (() => {
+                  const arr = permanents[t.at] || [];
+                  const item = arr[t.index];
+                  if (!item?.card) return null;
+                  const itemInstanceId =
+                    item.instanceId ?? item.card.instanceId ?? null;
+                  if (!itemInstanceId) return null;
+                  // Check if this permanent is a transformed Assimilator Snail
+                  const transform = assimilatorSnailTransforms.find(
+                    (tr) => tr.snailInstanceId === itemInstanceId,
+                  );
+                  if (!transform) return null;
+                  return (
+                    <button
+                      className="w-full text-left rounded bg-purple-600/30 hover:bg-purple-600/50 px-3 py-1"
+                      title="Revert this copy back to Assimilator Snail"
+                      onClick={() => {
+                        revertAssimilatorSnailTransforms(
+                          transform.ownerSeat,
+                        );
+                        onClose();
+                      }}
+                    >
+                      Revert to Assimilator Snail
+                    </button>
+                  );
+                })()}
+
+              {/* Generic Carry - Pick Up buttons for each eligible target */}
+              {t.kind === "permanent" &&
+                isMine &&
+                hasCarryAbility &&
+                (() => {
+                  const arr = permanents[t.at] || [];
+                  const item = arr[t.index];
+                  if (!item?.card) return null;
+                  const carrierInstanceId =
+                    item.instanceId ?? item.card.instanceId ?? null;
+                  const isHp = isHyperparasite(item.card.name);
+
+                  // Gather eligible minions on the same tile
+                  const eligible: Array<{ name: string; index: number }> = [];
+                  for (let i = 0; i < arr.length; i++) {
+                    if (i === t.index) continue;
+                    const p = arr[i];
+                    if (!p.card) continue;
+                    if (p.attachedTo) continue;
+                    if (p.isCarried) continue;
+                    const ct = (p.card.type || "").toLowerCase();
+                    if (ct.includes("token")) continue;
+                    if (!ct.includes("minion")) continue;
+                    eligible.push({ name: p.card.name || "Minion", index: i });
+                  }
+
+                  // Gather eligible avatars on the same tile
+                  const eligibleAvatars: Array<{ name: string; seat: "p1" | "p2" }> = [];
+                  for (const seat of ["p1", "p2"] as const) {
+                    const avatar = avatars[seat];
+                    if (!avatar?.pos) continue;
+                    const [ax, ay] = avatar.pos;
+                    const avatarKey = toCellKey(ax, ay);
+                    if (avatarKey !== t.at) continue;
+                    if (avatar.carriedBy) continue;
+                    eligibleAvatars.push({ name: avatar.card?.name || "Avatar", seat });
+                  }
+
+                  // Gather currently carried units (for drop buttons)
+                  const carried: Array<{ name: string; instanceId: string }> = [];
+                  for (let i = 0; i < arr.length; i++) {
+                    const p = arr[i];
+                    if (!p.isCarried) continue;
+                    if (p.attachedTo?.at !== t.at || p.attachedTo?.index !== t.index) continue;
+                    const pId = p.instanceId ?? p.card?.instanceId ?? null;
+                    if (!pId) continue;
+                    carried.push({ name: p.card?.name || "Minion", instanceId: pId });
+                  }
+
+                  // Check for carried avatars
+                  const carriedAvatars: Array<{ name: string; seat: "p1" | "p2" }> = [];
+                  if (carrierInstanceId) {
+                    for (const seat of ["p1", "p2"] as const) {
+                      const avatar = avatars[seat];
+                      if (avatar?.carriedBy?.instanceId === carrierInstanceId) {
+                        carriedAvatars.push({ name: avatar.card?.name || "Avatar", seat });
+                      }
+                    }
+                  }
+
+                  const buttons: React.ReactNode[] = [];
+
+                  // Pick Up buttons for minions
+                  for (const target of eligible) {
+                    buttons.push(
+                      <button
+                        key={`carry-pick-${target.index}`}
+                        className="w-full text-left rounded bg-green-600/30 hover:bg-green-600/50 px-3 py-1"
+                        title={`Pick up ${target.name}`}
+                        onClick={() => {
+                          carryPickUp(t.at, t.index, target.index);
+                          // Hyperparasite-specific: disable (tap) the carried unit
+                          if (isHp) {
+                            setTimeout(() => {
+                              const state = useGameStore.getState();
+                              const cellPerms = [...(state.permanents[t.at] || [])];
+                              const carried2 = cellPerms[target.index];
+                              if (carried2?.isCarried) {
+                                cellPerms[target.index] = {
+                                  ...carried2,
+                                  tapped: true,
+                                };
+                                const permsNext = { ...state.permanents, [t.at]: cellPerms };
+                                useGameStore.setState({ permanents: permsNext } as Partial<typeof state> as typeof state);
+                                state.trySendPatch({ permanents: { [t.at]: cellPerms } });
+                              }
+                            }, 0);
+                          }
+                          onClose();
+                        }}
+                      >
+                        {`Pick Up ${target.name}`}
+                      </button>,
+                    );
+                  }
+
+                  // Pick Up buttons for avatars
+                  for (const target of eligibleAvatars) {
+                    buttons.push(
+                      <button
+                        key={`carry-pick-avatar-${target.seat}`}
+                        className="w-full text-left rounded bg-green-600/30 hover:bg-green-600/50 px-3 py-1"
+                        title={`Pick up ${target.name}`}
+                        onClick={() => {
+                          carryPickUpAvatar(t.at, t.index, target.seat);
+                          onClose();
+                        }}
+                      >
+                        {`Pick Up ${target.name}`}
+                      </button>,
+                    );
+                  }
+
+                  // Drop buttons for carried minions
+                  for (const c of carried) {
+                    buttons.push(
+                      <button
+                        key={`carry-drop-${c.instanceId}`}
+                        className="w-full text-left rounded bg-yellow-600/30 hover:bg-yellow-600/50 px-3 py-1"
+                        title={`Drop ${c.name}`}
+                        onClick={() => {
+                          if (!carrierInstanceId) return;
+                          carryDrop(t.at, carrierInstanceId, c.instanceId);
+                          // Hyperparasite-specific: re-enable (untap) the dropped unit
+                          if (isHp) {
+                            setTimeout(() => {
+                              const state = useGameStore.getState();
+                              const cellPerms = [...(state.permanents[t.at] || [])];
+                              const droppedIdx = cellPerms.findIndex((p) => {
+                                const pId = p.instanceId ?? p.card?.instanceId ?? null;
+                                return pId === c.instanceId;
+                              });
+                              if (droppedIdx !== -1 && cellPerms[droppedIdx].tapped) {
+                                cellPerms[droppedIdx] = {
+                                  ...cellPerms[droppedIdx],
+                                  tapped: false,
+                                };
+                                const permsNext = { ...state.permanents, [t.at]: cellPerms };
+                                useGameStore.setState({ permanents: permsNext } as Partial<typeof state> as typeof state);
+                                state.trySendPatch({ permanents: { [t.at]: cellPerms } });
+                              }
+                            }, 0);
+                          }
+                          onClose();
+                        }}
+                      >
+                        {`Drop ${c.name}`}
+                      </button>,
+                    );
+                  }
+
+                  // Drop buttons for carried avatars
+                  for (const c of carriedAvatars) {
+                    buttons.push(
+                      <button
+                        key={`carry-drop-avatar-${c.seat}`}
+                        className="w-full text-left rounded bg-yellow-600/30 hover:bg-yellow-600/50 px-3 py-1"
+                        title={`Drop ${c.name}`}
+                        onClick={() => {
+                          if (!carrierInstanceId) return;
+                          carryDropAvatar(carrierInstanceId);
+                          onClose();
+                        }}
+                      >
+                        {`Drop ${c.name}`}
+                      </button>,
+                    );
+                  }
+
+                  return buttons.length > 0 ? <>{buttons}</> : null;
                 })()}
 
               {/* Gem token actions - Copy and Delete */}

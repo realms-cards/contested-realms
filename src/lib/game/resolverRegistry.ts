@@ -198,6 +198,14 @@ export const RESOLVER_REGISTRY: ResolverEntry[] = [
     description:
       "Once per turn, banish a dead minion to become a copy of it until next turn",
   },
+  {
+    id: "hyperparasite",
+    cardName: "Hyperparasite",
+    category: "minion",
+    stateFile: "hyperparasiteState.ts",
+    description:
+      "Pick up a single minion (disabled), can't move while carrying",
+  },
 
   // ─── AVATAR ABILITY RESOLVERS ──────────────────────────────────────
   {

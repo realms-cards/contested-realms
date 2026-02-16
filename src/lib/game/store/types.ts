@@ -147,6 +147,7 @@ export type AvatarState = EntityBase<CardRef | null> & {
   pos: [number, number] | null;
   counters?: number | null;
   champion?: ChampionRef | null; // Dragonlord champion dragon
+  carriedBy?: { at: CellKey; instanceId: string } | null; // Avatar is being carried by a carry-keyword minion
 };
 
 // --- Imposter Mask State (Gothic expansion) --------------------------------
@@ -454,6 +455,7 @@ export type PermanentItem = EntityBase<CardRef> & {
   damage?: number | null;
   faceDown?: boolean; // Card is flipped face-down (hidden from opponent)
   isCopy?: boolean; // Token copy - goes to banished instead of graveyard when leaving
+  isCarried?: boolean; // This unit is being carried by a carry-keyword minion
   enteredOnTurn?: number; // Turn number when this permanent entered the realm (for Savior ward ability)
 };
 export type Permanents = Record<CellKey, PermanentItem[]>;
@@ -2720,6 +2722,28 @@ export type GameState = {
   cancelAssimilatorSnail: () => void;
   // Revert transformations at start of owner's next turn
   revertAssimilatorSnailTransforms: (who: PlayerKey) => void;
+  // Hyperparasite: force-drop on silence/destroy/force-move (uses generic carry mechanism)
+  forceDropHyperparasiteCarried: (
+    instanceId: string,
+    reason: "silence" | "destroy" | "force-move",
+  ) => boolean;
+  // Generic Carry Actions (for any minion with carry keyword)
+  carryPickUp: (
+    carrierAt: CellKey,
+    carrierIndex: number,
+    targetIndex: number,
+  ) => void;
+  carryDrop: (
+    carrierAt: CellKey,
+    carrierInstanceId: string,
+    carriedInstanceId: string,
+  ) => void;
+  carryPickUpAvatar: (
+    carrierAt: CellKey,
+    carrierIndex: number,
+    avatarSeat: PlayerKey,
+  ) => void;
+  carryDropAvatar: (carrierInstanceId: string) => void;
   // Ether Core Turn Start State
   // Tracks which Ether Core instanceIds were in the void at the start of the turn
   // Ether Core only provides 3 mana if cast this turn OR started the turn in the void

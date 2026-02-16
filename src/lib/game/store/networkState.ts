@@ -242,6 +242,21 @@ export const createNetworkSlice: StateCreator<
           }, 0);
         }
 
+        // Revert Assimilator Snail transformations at start of owner's turn
+        // The starting player's snails should revert - trigger on the owner's client
+        if (actorKey === startingPlayerSeat) {
+          setTimeout(() => {
+            try {
+              get().revertAssimilatorSnailTransforms(startingPlayerSeat);
+            } catch (e) {
+              console.error(
+                "[applyServerPatch] Error reverting Assimilator Snail:",
+                e,
+              );
+            }
+          }, 0);
+        }
+
         // Start-of-turn effects (Mother Nature) - only trigger if WE are the starting player
         // The Mother Nature trigger has its own guard but we can skip the call entirely
         if (actorKey === startingPlayerSeat) {

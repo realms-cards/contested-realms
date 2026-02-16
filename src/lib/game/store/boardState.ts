@@ -20,7 +20,7 @@ import {
 } from "./utils/boardHelpers";
 import { prepareCardForSeat } from "./utils/cardHelpers";
 import { newPermanentInstanceId } from "./utils/idHelpers";
-import { randomTilt } from "./utils/permanentHelpers";
+import { bumpPermanentVersion, randomTilt } from "./utils/permanentHelpers";
 import {
   createZonesPatchFor,
   removeCardInstanceFromAllZones,
@@ -44,6 +44,10 @@ type BoardSlice = Pick<
   | "disableSite"
   | "transferSiteControl"
   | "switchSitePosition"
+  | "carryPickUp"
+  | "carryDrop"
+  | "carryPickUpAvatar"
+  | "carryDropAvatar"
 >;
 
 export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
@@ -890,6 +894,19 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
       });
       permanentsNext[cellKey] = cellArr;
 
+      // Auto-drop if the silenced permanent is carried by a Hyperparasite
+      const silencedInstanceId =
+        item.instanceId ?? item.card?.instanceId ?? null;
+      if (silencedInstanceId) {
+        // Schedule force-drop outside of set() since it calls set() internally
+        setTimeout(() => {
+          get().forceDropHyperparasiteCarried(
+            silencedInstanceId,
+            "silence",
+          );
+        }, 0);
+      }
+
       const { x, y } = parseCellKey(cellKey);
       const cellNo = getCellNumber(x, y, state.board.size.w, state.board.size.h);
       const playerNum = ownerKey === "p1" ? "1" : "2";
@@ -1229,4 +1246,120 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
         babelTowers: babelTowersNext,
       } as Partial<GameState> as GameState;
     }),
+
+  // ── Generic Carry Actions ─────────────────────────────────────────────
+
+  carryPickUp: (carrierAt, carrierIndex, targetIndex) => {
+    const state = get();
+    const cellPerms = [...(state.permanents[carrierAt] || [])];
+    const carrier = cellPerms[carrierIndex];
+    const target = cellPerms[targetIndex];
+    if (!carrier || !target) return;
+
+    // Mark target as carried and attach to carrier
+    cellPerms[targetIndex] = bumpPermanentVersion({
+      ...target,
+      attachedTo: { at: carrierAt, index: carrierIndex },
+      isCarried: true,
+    });
+
+    const permanents = { ...state.permanents, [carrierAt]: cellPerms };
+
+    set({ permanents } as Partial<GameState> as GameState);
+
+    get().trySendPatch({
+      permanents: { [carrierAt]: cellPerms },
+    });
+
+    const carrierName = carrier.card?.name || "Carrier";
+    const targetName = target.card?.name || "minion";
+    get().log(`${carrierName} picks up ${targetName}`);
+  },
+
+  carryDrop: (carrierAt, carrierInstanceId, carriedInstanceId) => {
+    const state = get();
+    const cellPerms = [...(state.permanents[carrierAt] || [])];
+
+    const carriedIndex = cellPerms.findIndex((p) => {
+      const pId = p.instanceId ?? p.card?.instanceId ?? null;
+      return pId === carriedInstanceId;
+    });
+    if (carriedIndex === -1) return;
+
+    const carried = cellPerms[carriedIndex];
+
+    // Detach and clear isCarried
+    cellPerms[carriedIndex] = bumpPermanentVersion({
+      ...carried,
+      attachedTo: null,
+      isCarried: false,
+    });
+
+    const permanents = { ...state.permanents, [carrierAt]: cellPerms };
+
+    set({ permanents } as Partial<GameState> as GameState);
+
+    get().trySendPatch({
+      permanents: { [carrierAt]: cellPerms },
+    });
+
+    const carriedName = carried.card?.name || "minion";
+    get().log(`Dropped ${carriedName}`);
+  },
+
+  carryPickUpAvatar: (carrierAt, carrierIndex, avatarSeat) => {
+    const state = get();
+    const carrier = (state.permanents[carrierAt] || [])[carrierIndex];
+    if (!carrier) return;
+
+    const carrierInstanceId =
+      carrier.instanceId ?? carrier.card?.instanceId ?? null;
+    if (!carrierInstanceId) return;
+
+    const avatars = { ...state.avatars };
+    const avatar = avatars[avatarSeat];
+    if (!avatar) return;
+
+    avatars[avatarSeat] = {
+      ...avatar,
+      carriedBy: { at: carrierAt, instanceId: carrierInstanceId },
+    };
+
+    set({ avatars } as Partial<GameState> as GameState);
+
+    get().trySendPatch({ avatars });
+
+    const carrierName = carrier.card?.name || "Carrier";
+    const avatarName = avatar.card?.name || "Avatar";
+    get().log(`${carrierName} picks up ${avatarName}`);
+  },
+
+  carryDropAvatar: (carrierInstanceId) => {
+    const state = get();
+    const avatars = { ...state.avatars };
+
+    // Find which avatar is carried by this carrier
+    let droppedSeat: string | null = null;
+    for (const seat of ["p1", "p2"] as const) {
+      const avatar = avatars[seat];
+      if (avatar?.carriedBy?.instanceId === carrierInstanceId) {
+        avatars[seat] = {
+          ...avatar,
+          carriedBy: null,
+        };
+        droppedSeat = seat;
+        break;
+      }
+    }
+
+    if (!droppedSeat) return;
+
+    set({ avatars } as Partial<GameState> as GameState);
+
+    get().trySendPatch({ avatars });
+
+    const avatarName =
+      avatars[droppedSeat as "p1" | "p2"]?.card?.name || "Avatar";
+    get().log(`Dropped ${avatarName}`);
+  },
 });
