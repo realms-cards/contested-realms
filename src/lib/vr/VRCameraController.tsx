@@ -10,18 +10,20 @@ interface VRCameraControllerProps {
   controlsRef: React.RefObject<OrbitControlsImpl | null>;
   /** Height of VR user above the board (meters) */
   userHeight?: number;
-  /** Distance from board center to user (meters) */
+  /** Distance behind board center to user position (meters) */
   userDistance?: number;
 }
 
 /**
  * Component that manages camera controls and VR origin positioning.
- * Uses XROrigin to position the VR user above and in front of the game board.
+ * Uses XROrigin to position the VR user behind and above the game board,
+ * like sitting at a table. The board (7×5 grid) spans ~10×7 world units
+ * centered at the origin, so the user must be beyond Z=3.5 to see it.
  */
 export function VRCameraController({
   controlsRef,
-  userHeight = 1.5,
-  userDistance = 2.5,
+  userHeight = 3.0,
+  userDistance = 5.5,
 }: VRCameraControllerProps) {
   const session = useXR((state) => state.session);
   const { camera } = useThree();
@@ -67,8 +69,9 @@ export function VRCameraController({
     userDistance,
   ];
 
-  // Tilt user's view down toward the board (about 30 degrees)
-  const tiltAngle = -0.5; // radians, ~30 degrees down
+  // Mild downward tilt so the board is in the user's natural field of view
+  // Keep it subtle — on AVP, aggressive tilt feels disorienting with passthrough
+  const tiltAngle = -0.3; // radians, ~17 degrees down
   const originRotation: [number, number, number] = [tiltAngle, 0, 0];
 
   return <XROrigin position={originPosition} rotation={originRotation} />;
