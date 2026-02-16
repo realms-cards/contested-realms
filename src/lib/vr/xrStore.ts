@@ -9,6 +9,8 @@ import { createXRStore } from "@react-three/xr";
 export const xrStore = createXRStore({
   // Disable default Enter XR button and emulator - we use our own VREntryButton in MatchInfoPopup
   emulate: false,
+  // Request hand tracking (no-op on Quest, enables AVP hand joint permission prompt)
+  handTracking: true,
   // Configure hand tracking with grab and touch pointers for card interactions
   hand: {
     teleportPointer: false,
@@ -23,7 +25,7 @@ export const xrStore = createXRStore({
       downRadius: 0.01,
     },
   },
-  // Configure controller with grab and ray pointers
+  // Configure controller with grab and ray pointers (Quest, Index, etc.)
   controller: {
     teleportPointer: false,
     rayPointer: true,
@@ -32,6 +34,8 @@ export const xrStore = createXRStore({
       radius: 0.08,
     },
   },
+  // Enable transient-pointer for Apple Vision Pro gaze+pinch interaction
+  transientPointer: true,
 });
 
 /**

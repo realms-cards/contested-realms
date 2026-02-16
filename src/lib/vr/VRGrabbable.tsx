@@ -14,6 +14,7 @@ import {
 } from "react";
 import type { ReactNode } from "react";
 import * as THREE from "three";
+import { useXRDeviceCapabilities } from "./xrDeviceCapabilities";
 
 // Context for VR grab state
 interface VRGrabContextValue {
@@ -49,7 +50,8 @@ export interface VRGrabbableRef {
 
 /**
  * VRGrabbable wrapper component that makes children interactive in VR.
- * Supports both controller grip button and hand pinch gesture.
+ * Supports Quest controllers (grip button), hand pinch gestures,
+ * and AVP gaze+pinch (via pointer events).
  */
 export const VRGrabbable = forwardRef<VRGrabbableRef, VRGrabbableProps>(
   function VRGrabbable(
@@ -66,6 +68,7 @@ export const VRGrabbable = forwardRef<VRGrabbableRef, VRGrabbableProps>(
   ) {
     const groupRef = useRef<THREE.Group>(null);
     const session = useXR((state) => state.session);
+    const capabilities = useXRDeviceCapabilities();
     const leftController = useXRInputSourceState("controller", "left");
     const rightController = useXRInputSourceState("controller", "right");
 
@@ -156,9 +159,11 @@ export const VRGrabbable = forwardRef<VRGrabbableRef, VRGrabbableProps>(
       onRelease?.(position);
     }, [isGrabbed, onRelease]);
 
-    // Update hover state
+    // Controller-based hover detection (Quest only)
+    // AVP uses pointer events (onPointerEnter/onPointerLeave) below
     useFrame(() => {
       if (disabled || !session || isGrabbed) return;
+      if (!capabilities.hasControllers) return;
 
       const leftHover = isWithinGrabRadius("left");
       const rightHover = isWithinGrabRadius("right");
@@ -194,16 +199,34 @@ export const VRGrabbable = forwardRef<VRGrabbableRef, VRGrabbableProps>(
         <group
           ref={groupRef}
           onPointerDown={(e) => {
-            // Handle VR grab via pointer events (squeeze/select)
+            // Handle VR grab via pointer events (works for both Quest and AVP)
             if (session && !disabled) {
-              // Determine hand from pointer ID or event
-              const hand = e.pointerId % 2 === 0 ? "left" : "right";
+              // Determine hand from the pointer event's input source handedness
+              const nativeEvent = e.nativeEvent as PointerEvent & {
+                inputSource?: { handedness?: string };
+              };
+              const handedness = nativeEvent.inputSource?.handedness;
+              const hand: "left" | "right" =
+                handedness === "left" ? "left" : "right";
               handleGrabStart(hand);
             }
           }}
           onPointerUp={() => {
             if (session && isGrabbed) {
               handleGrabEnd();
+            }
+          }}
+          onPointerEnter={() => {
+            // Gaze-based hover (works on both Quest ray and AVP gaze ray)
+            if (session && !disabled && !isGrabbed) {
+              setIsHovered(true);
+              onHover?.(true);
+            }
+          }}
+          onPointerLeave={() => {
+            if (session && !disabled && !isGrabbed) {
+              setIsHovered(false);
+              onHover?.(false);
             }
           }}
         >

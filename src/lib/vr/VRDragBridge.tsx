@@ -4,6 +4,7 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { useXR, useXRInputSourceState } from "@react-three/xr";
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as THREE from "three";
+import { useXRDeviceCapabilities } from "./xrDeviceCapabilities";
 
 interface VRDragState {
   isDragging: boolean;
@@ -18,7 +19,10 @@ interface VRDragState {
 
 interface VRDragBridgeProps {
   onDragStart?: (state: VRDragState) => void;
-  onDragMove?: (position: THREE.Vector3, tileCoords: { row: number; col: number } | null) => void;
+  onDragMove?: (
+    position: THREE.Vector3,
+    tileCoords: { row: number; col: number } | null,
+  ) => void;
   onDragEnd?: (state: VRDragState, dropPosition: THREE.Vector3) => void;
   onDragCancel?: () => void;
   /** Reference to the board drag controls for integration */
@@ -31,8 +35,8 @@ interface VRDragBridgeProps {
 
 /**
  * VR Drag Bridge - Connects VR controller/hand grab events to the existing
- * board drag control system. This component detects when a card is grabbed
- * in VR and translates those events into the format expected by the game.
+ * board drag control system. Supports both Quest controllers and
+ * AVP transient-pointer (gaze+pinch).
  */
 export function VRDragBridge({
   onDragStart,
@@ -46,6 +50,7 @@ export function VRDragBridge({
 }: VRDragBridgeProps) {
   const session = useXR((state) => state.session);
   const { scene, raycaster } = useThree();
+  const capabilities = useXRDeviceCapabilities();
   const leftController = useXRInputSourceState("controller", "left");
   const rightController = useXRInputSourceState("controller", "right");
 
@@ -73,12 +78,42 @@ export function VRDragBridge({
       controller.object.getWorldPosition(position);
       return position;
     },
-    [leftController, rightController]
+    [leftController, rightController],
+  );
+
+  // Get position from transient-pointer input source via XR frame
+  const getTransientPointerPosition = useCallback(
+    (gl: THREE.WebGLRenderer): THREE.Vector3 | null => {
+      const xrManager = gl.xr;
+      const xrSession = xrManager.getSession();
+      const refSpace = xrManager.getReferenceSpace();
+      if (!xrSession || !refSpace) return null;
+
+      const frame = xrManager.getFrame?.();
+      if (!frame) return null;
+
+      for (const source of xrSession.inputSources) {
+        if (source.targetRayMode === "transient-pointer") {
+          const pose = frame.getPose(source.targetRaySpace, refSpace);
+          if (pose) {
+            return new THREE.Vector3(
+              pose.transform.position.x,
+              pose.transform.position.y,
+              pose.transform.position.z,
+            );
+          }
+        }
+      }
+      return null;
+    },
+    [],
   );
 
   // Convert world position to board tile
   const worldToTile = useCallback(
-    (worldPos: THREE.Vector3): { row: number; col: number; x: number; z: number } | null => {
+    (
+      worldPos: THREE.Vector3,
+    ): { row: number; col: number; x: number; z: number } | null => {
       const playmat = scene.getObjectByName("playmat-mesh");
       if (!playmat) return null;
 
@@ -91,7 +126,12 @@ export function VRDragBridge({
       const halfWidth = (boardSize.width * tileSize) / 2;
       const halfHeight = (boardSize.height * tileSize) / 2;
 
-      if (relX < -halfWidth || relX > halfWidth || relZ < -halfHeight || relZ > halfHeight) {
+      if (
+        relX < -halfWidth ||
+        relX > halfWidth ||
+        relZ < -halfHeight ||
+        relZ > halfHeight
+      ) {
         return null;
       }
 
@@ -101,17 +141,26 @@ export function VRDragBridge({
       const clampedCol = Math.max(0, Math.min(boardSize.width - 1, col));
       const clampedRow = Math.max(0, Math.min(boardSize.height - 1, row));
 
-      const tileX = playmatWorld.x - halfWidth + clampedCol * tileSize + tileSize / 2;
-      const tileZ = playmatWorld.z - halfHeight + clampedRow * tileSize + tileSize / 2;
+      const tileX =
+        playmatWorld.x - halfWidth + clampedCol * tileSize + tileSize / 2;
+      const tileZ =
+        playmatWorld.z - halfHeight + clampedRow * tileSize + tileSize / 2;
 
       return { row: clampedRow, col: clampedCol, x: tileX, z: tileZ };
     },
-    [scene, boardSize.width, boardSize.height, tileSize]
+    [scene, boardSize.width, boardSize.height, tileSize],
   );
 
   // Find card under controller ray
   const findCardUnderRay = useCallback(
-    (hand: "left" | "right"): { cardId: number; slug: string; zone: string; index: number } | null => {
+    (
+      hand: "left" | "right",
+    ): {
+      cardId: number;
+      slug: string;
+      zone: string;
+      index: number;
+    } | null => {
       const controller = hand === "left" ? leftController : rightController;
       if (!controller?.object) return null;
 
@@ -146,12 +195,18 @@ export function VRDragBridge({
 
       return null;
     },
-    [leftController, rightController, raycaster, scene]
+    [leftController, rightController, raycaster, scene],
   );
 
-  // Trigger haptic feedback
+  // Trigger haptic feedback (no-op on devices without haptics)
   const triggerHaptic = useCallback(
-    (hand: "left" | "right", intensity: number = 0.5, duration: number = 50) => {
+    (
+      hand: "left" | "right",
+      intensity: number = 0.5,
+      duration: number = 50,
+    ) => {
+      if (!capabilities.hasHaptics) return;
+
       const now = Date.now();
       if (now - lastHapticTime.current < 50) return;
       lastHapticTime.current = now;
@@ -160,10 +215,13 @@ export function VRDragBridge({
       const gamepad = controller?.inputSource?.gamepad;
 
       if (gamepad?.hapticActuators?.[0]) {
-        (gamepad.hapticActuators[0] as GamepadHapticActuator).pulse?.(intensity, duration);
+        (gamepad.hapticActuators[0] as GamepadHapticActuator).pulse?.(
+          intensity,
+          duration,
+        );
       }
     },
-    [leftController, rightController]
+    [leftController, rightController, capabilities.hasHaptics],
   );
 
   // Handle grab start (called from pointer events)
@@ -198,7 +256,14 @@ export function VRDragBridge({
 
       onDragStart?.(newState);
     },
-    [dragState.isDragging, findCardUnderRay, getControllerPosition, triggerHaptic, setDragging, onDragStart]
+    [
+      dragState.isDragging,
+      findCardUnderRay,
+      getControllerPosition,
+      triggerHaptic,
+      setDragging,
+      onDragStart,
+    ],
   );
 
   // Handle grab end
@@ -240,13 +305,24 @@ export function VRDragBridge({
       startPosition: null,
       currentPosition: null,
     });
-  }, [dragState, getControllerPosition, triggerHaptic, setDragging, onDragEnd, onDragCancel]);
+  }, [
+    dragState,
+    getControllerPosition,
+    triggerHaptic,
+    setDragging,
+    onDragEnd,
+    onDragCancel,
+  ]);
 
   // Update drag position each frame
-  useFrame(() => {
+  useFrame((_state) => {
     if (!dragState.isDragging || !dragState.hand) return;
 
-    const position = getControllerPosition(dragState.hand);
+    // Try controller position first (Quest), fall back to transient-pointer (AVP)
+    let position = getControllerPosition(dragState.hand);
+    if (!position && capabilities.hasTransientPointer) {
+      position = getTransientPointerPosition(_state.gl);
+    }
     if (!position) return;
 
     // Update current position
@@ -267,18 +343,24 @@ export function VRDragBridge({
     }
 
     // Haptic feedback when entering new tile
-    if (tile && (!lastValidTile.current || tile.row !== lastValidTile.current.row || tile.col !== lastValidTile.current.col)) {
+    if (
+      tile &&
+      (!lastValidTile.current ||
+        tile.row !== lastValidTile.current.row ||
+        tile.col !== lastValidTile.current.col)
+    ) {
       lastValidTile.current = { row: tile.row, col: tile.col };
       triggerHaptic(dragState.hand, 0.15, 30);
     }
   });
 
-  // Listen for controller squeeze events
+  // Listen for controller/session events
   useEffect(() => {
     if (!session) return;
 
     const handleSelectStart = (event: XRInputSourceEvent) => {
-      const hand = event.inputSource.handedness === "left" ? "left" : "right";
+      const hand =
+        event.inputSource.handedness === "left" ? "left" : ("right" as const);
       handleGrabStart(hand);
     };
 
@@ -288,16 +370,22 @@ export function VRDragBridge({
 
     session.addEventListener("selectstart", handleSelectStart);
     session.addEventListener("selectend", handleSelectEnd);
-    session.addEventListener("squeezestart", handleSelectStart);
-    session.addEventListener("squeezeend", handleSelectEnd);
+
+    // Only add squeeze listeners if device supports them (Quest)
+    if (capabilities.hasSqueeze) {
+      session.addEventListener("squeezestart", handleSelectStart);
+      session.addEventListener("squeezeend", handleSelectEnd);
+    }
 
     return () => {
       session.removeEventListener("selectstart", handleSelectStart);
       session.removeEventListener("selectend", handleSelectEnd);
-      session.removeEventListener("squeezestart", handleSelectStart);
-      session.removeEventListener("squeezeend", handleSelectEnd);
+      if (capabilities.hasSqueeze) {
+        session.removeEventListener("squeezestart", handleSelectStart);
+        session.removeEventListener("squeezeend", handleSelectEnd);
+      }
     };
-  }, [session, handleGrabStart, handleGrabEnd]);
+  }, [session, handleGrabStart, handleGrabEnd, capabilities.hasSqueeze]);
 
   if (!session) {
     return null;

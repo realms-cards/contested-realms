@@ -348,7 +348,7 @@ async function computeDecks(prisma: AnyPrisma, format: string): Promise<unknown>
   }
 
   // Aggregate per avatar
-  const avatarAgg = new Map<string, {
+  type AvatarAggEntry = {
     avatarName: string;
     avatarCardId: number;
     avatarSlug: string | null;
@@ -358,7 +358,9 @@ async function computeDecks(prisma: AnyPrisma, format: string): Promise<unknown>
     wins: number;
     losses: number;
     draws: number;
-  }>();
+    siteAgg: Map<string, { matches: number; wins: number; losses: number; draws: number }>;
+  };
+  const avatarAgg = new Map<string, AvatarAggEntry>();
 
   for (const session of sessions) {
     if (!session.playerDecks) continue;
@@ -367,12 +369,13 @@ async function computeDecks(prisma: AnyPrisma, format: string): Promise<unknown>
       let avatarName: string | null = null;
       const elementCounts: Record<string, number> = {};
       let spellCardCount = 0;
+      const siteNames: string[] = [];
 
       for (const card of cards) {
         if (!card?.name) continue;
         if (isCollectionZone(card)) continue;
         if (isAvatarType(card.type)) { avatarName = card.name; continue; }
-        if (isSiteType(card.type)) continue;
+        if (isSiteType(card.type)) { siteNames.push(card.name); continue; }
         const element = elementByName.get(card.name) || "None";
         elementCounts[element] = (elementCounts[element] || 0) + 1;
         spellCardCount++;
@@ -393,8 +396,33 @@ async function computeDecks(prisma: AnyPrisma, format: string): Promise<unknown>
           existing.elementCounts[el] = (existing.elementCounts[el] || 0) + count;
         }
         existing.totalSpellCards += spellCardCount;
+        for (const siteName of siteNames) {
+          const s = existing.siteAgg.get(siteName);
+          if (s) {
+            s.matches++;
+            if (isWinner) s.wins++;
+            else if (isLoser) s.losses++;
+            else if (isDraw) s.draws++;
+          } else {
+            existing.siteAgg.set(siteName, {
+              matches: 1,
+              wins: isWinner ? 1 : 0,
+              losses: isLoser ? 1 : 0,
+              draws: isDraw ? 1 : 0,
+            });
+          }
+        }
       } else {
         const cid = cardIdByName.get(avatarName) || 0;
+        const siteAgg = new Map<string, { matches: number; wins: number; losses: number; draws: number }>();
+        for (const siteName of siteNames) {
+          siteAgg.set(siteName, {
+            matches: 1,
+            wins: isWinner ? 1 : 0,
+            losses: isLoser ? 1 : 0,
+            draws: isDraw ? 1 : 0,
+          });
+        }
         avatarAgg.set(avatarName, {
           avatarName,
           avatarCardId: cid,
@@ -405,9 +433,56 @@ async function computeDecks(prisma: AnyPrisma, format: string): Promise<unknown>
           wins: isWinner ? 1 : 0,
           losses: isLoser ? 1 : 0,
           draws: isDraw ? 1 : 0,
+          siteAgg,
         });
       }
     }
+  }
+
+  // Resolve site slugs for avatarSites output
+  const allSiteNames = new Set<string>();
+  for (const agg of avatarAgg.values()) {
+    for (const siteName of agg.siteAgg.keys()) {
+      allSiteNames.add(siteName);
+    }
+  }
+  const siteCardIds = [...allSiteNames]
+    .map((name) => cardIdByName.get(name))
+    .filter((id): id is number => id !== undefined);
+  const siteVariants = siteCardIds.length > 0
+    ? await prisma.variant.findMany({
+        where: { cardId: { in: siteCardIds } },
+        select: { cardId: true, slug: true },
+        distinct: ["cardId"],
+      })
+    : [];
+  const siteSlugMap = new Map<number, string>();
+  for (const v of siteVariants) {
+    if (!siteSlugMap.has(v.cardId)) siteSlugMap.set(v.cardId, v.slug);
+  }
+
+  // Build avatarSites lookup
+  const avatarSites: Record<string, Array<{
+    siteName: string; siteSlug: string | null;
+    matches: number; wins: number; losses: number; draws: number; winRate: number;
+  }>> = {};
+  for (const agg of avatarAgg.values()) {
+    if (agg.siteAgg.size === 0) continue;
+    avatarSites[agg.avatarName] = [...agg.siteAgg.entries()]
+      .map(([siteName, s]) => {
+        const denom = s.wins + s.losses;
+        const cid = cardIdByName.get(siteName);
+        return {
+          siteName,
+          siteSlug: cid ? siteSlugMap.get(cid) || null : null,
+          matches: s.matches,
+          wins: s.wins,
+          losses: s.losses,
+          draws: s.draws,
+          winRate: denom > 0 ? s.wins / denom : 0,
+        };
+      })
+      .sort((a, b) => b.matches - a.matches);
   }
 
   const archetypes = [...avatarAgg.values()]
@@ -439,6 +514,7 @@ async function computeDecks(prisma: AnyPrisma, format: string): Promise<unknown>
 
   return {
     archetypes,
+    avatarSites,
     format,
     totalDecks: archetypes.reduce((sum, a) => sum + a.matches, 0),
   };
@@ -498,18 +574,17 @@ async function computeSynergies(prisma: AnyPrisma, format: string): Promise<unkn
     for (const [playerId, cards] of Object.entries(session.playerDecks)) {
       if (!Array.isArray(cards)) continue;
 
-      // Extract spellbook card names (exclude avatar, site, collection)
-      const spellNames = new Set<string>();
+      // Extract non-avatar card names (exclude avatar, collection; include sites + spells)
+      const deckCardNames = new Set<string>();
       for (const card of cards) {
         if (!card?.name) continue;
         if (isCollectionZone(card)) continue;
         if (isAvatarType(card.type)) continue;
-        if (isSiteType(card.type)) continue;
-        spellNames.add(card.name);
+        deckCardNames.add(card.name);
         allCardNames.add(card.name);
       }
 
-      const names = [...spellNames].sort();
+      const names = [...deckCardNames].sort();
       if (names.length < 2) continue;
       totalDecks++;
 
@@ -606,7 +681,7 @@ async function computeSynergies(prisma: AnyPrisma, format: string): Promise<unkn
     .sort((a, b) => b.coOccurrences - a.coOccurrences || b.winRate - a.winRate)
     .slice(0, SYNERGY_LIMIT);
 
-  return { synergies, antiSynergies, popular, format, totalDecks };
+  return { synergies, antiSynergies, popular, allPairs: qualified, format, totalDecks };
 }
 
 /**
