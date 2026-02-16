@@ -35,8 +35,10 @@ function buildFingerprint(cards) {
       card.zone.toLowerCase() === "collection"
     )
       continue;
-    // Skip avatar type
+    // Skip avatar (by type from playerDecks JSON, or by zone from DeckCard)
     if (typeof card.type === "string" && card.type.toLowerCase().includes("avatar"))
+      continue;
+    if (typeof card.zone === "string" && card.zone.toLowerCase() === "avatar")
       continue;
     names.push(card.name);
   }
@@ -64,7 +66,7 @@ async function main() {
     },
     include: {
       cards: {
-        include: { card: { select: { name: true, type: true } } },
+        include: { card: { select: { name: true } } },
       },
     },
   });
@@ -73,18 +75,12 @@ async function main() {
   // 3. Build fingerprints
   const preconFingerprints = new Set();
   for (const deck of preconDecks) {
-    const deckCards = deck.cards.map((dc) => ({
-      name: dc.card.name,
-      type: dc.card.type,
-      zone: dc.zone,
-    }));
     // Expand by count (some cards have count > 1)
     const expanded = [];
     for (const dc of deck.cards) {
       for (let i = 0; i < dc.count; i++) {
         expanded.push({
           name: dc.card.name,
-          type: dc.card.type,
           zone: dc.zone,
         });
       }
