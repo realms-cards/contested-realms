@@ -86,6 +86,16 @@ type AvatarSitePairing = {
   winRate: number;
 };
 
+type AvatarSpellEntry = {
+  spellName: string;
+  spellSlug: string | null;
+  matches: number;
+  wins: number;
+  losses: number;
+  draws: number;
+  winRate: number;
+};
+
 type MetaDashboardProps = {
   adminName?: string | null;
 };
@@ -559,6 +569,7 @@ export default function MetaDashboard({ adminName }: MetaDashboardProps) {
   // Avatar drill-down state
   const [expandedAvatar, setExpandedAvatar] = useState<string | null>(null);
   const [expandedAvatarSites, setExpandedAvatarSites] = useState<AvatarSitePairing[]>([]);
+  const [expandedAvatarSpells, setExpandedAvatarSpells] = useState<AvatarSpellEntry[]>([]);
   const [expandedAvatarLoading, setExpandedAvatarLoading] = useState(false);
 
   // Cache timestamp from server
@@ -797,11 +808,13 @@ export default function MetaDashboard({ adminName }: MetaDashboardProps) {
       if (expandedAvatar === avatarName) {
         setExpandedAvatar(null);
         setExpandedAvatarSites([]);
+        setExpandedAvatarSpells([]);
         return;
       }
       setExpandedAvatar(avatarName);
       setExpandedAvatarLoading(true);
       setExpandedAvatarSites([]);
+      setExpandedAvatarSpells([]);
       try {
         const response = await fetch(
           `/api/meta/decks?format=${format}&avatar=${encodeURIComponent(avatarName)}`,
@@ -810,8 +823,10 @@ export default function MetaDashboard({ adminName }: MetaDashboardProps) {
         if (response.ok) {
           const payload = (await response.json()) as {
             sites: AvatarSitePairing[];
+            spells: AvatarSpellEntry[];
           };
           setExpandedAvatarSites(payload.sites || []);
+          setExpandedAvatarSpells(payload.spells || []);
         }
       } finally {
         setExpandedAvatarLoading(false);
@@ -1026,43 +1041,75 @@ export default function MetaDashboard({ adminName }: MetaDashboardProps) {
                     {isAvatarExpanded && (
                       <div className="col-span-full rounded border border-slate-700/20 bg-slate-900/10 p-3">
                         {expandedAvatarLoading ? (
-                          <p className="text-xs text-slate-400">Loading site pairings...</p>
-                        ) : expandedAvatarSites.length === 0 ? (
-                          <p className="text-xs text-slate-400">No site pairing data available.</p>
+                          <p className="text-xs text-slate-400">Loading deck details...</p>
+                        ) : expandedAvatarSites.length === 0 && expandedAvatarSpells.length === 0 ? (
+                          <p className="text-xs text-slate-400">No deck detail data available yet. Data appears after the server recomputes statistics.</p>
                         ) : (
-                          <div>
-                            <h4 className="text-xs font-semibold text-slate-300 mb-2">
-                              Site Pairings
-                            </h4>
-                            <div className="overflow-auto rounded border border-slate-800 bg-slate-900/40">
-                              <table className="min-w-full text-left text-xs text-slate-200">
-                                <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400">
-                                  <tr>
-                                    <th className="px-3 py-1.5">Site</th>
-                                    <th className="px-3 py-1.5">Decks</th>
-                                    <th className="px-3 py-1.5">Wins</th>
-                                    <th className="px-3 py-1.5">Losses</th>
-                                    <th className="px-3 py-1.5">Win Rate</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {expandedAvatarSites.map((s) => (
-                                    <tr
-                                      key={s.siteName}
-                                      className="border-t border-slate-800/60 hover:bg-slate-800/40"
-                                    >
-                                      <td className="px-3 py-1.5 font-medium text-white">{s.siteName}</td>
-                                      <td className="px-3 py-1.5">{s.matches}</td>
-                                      <td className="px-3 py-1.5">{s.wins}</td>
-                                      <td className="px-3 py-1.5">{s.losses}</td>
-                                      <td className="px-3 py-1.5 text-slate-300 font-medium">
-                                        {(s.winRate * 100).toFixed(1)}%
-                                      </td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
+                          <div className="grid gap-4 md:grid-cols-2">
+                            {expandedAvatarSites.length > 0 && (
+                              <div>
+                                <h4 className="text-xs font-semibold text-slate-300 mb-2">
+                                  Most Used Sites
+                                </h4>
+                                <div className="overflow-auto rounded border border-slate-800 bg-slate-900/40">
+                                  <table className="min-w-full text-left text-xs text-slate-200">
+                                    <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400">
+                                      <tr>
+                                        <th className="px-3 py-1.5">Site</th>
+                                        <th className="px-3 py-1.5">Decks</th>
+                                        <th className="px-3 py-1.5">Win Rate</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {expandedAvatarSites.slice(0, 10).map((s) => (
+                                        <tr
+                                          key={s.siteName}
+                                          className="border-t border-slate-800/60 hover:bg-slate-800/40"
+                                        >
+                                          <td className="px-3 py-1.5 font-medium text-white">{s.siteName}</td>
+                                          <td className="px-3 py-1.5">{s.matches}</td>
+                                          <td className="px-3 py-1.5 text-slate-300 font-medium">
+                                            {(s.winRate * 100).toFixed(1)}%
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            )}
+                            {expandedAvatarSpells.length > 0 && (
+                              <div>
+                                <h4 className="text-xs font-semibold text-slate-300 mb-2">
+                                  Most Used Spells
+                                </h4>
+                                <div className="overflow-auto rounded border border-slate-800 bg-slate-900/40">
+                                  <table className="min-w-full text-left text-xs text-slate-200">
+                                    <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400">
+                                      <tr>
+                                        <th className="px-3 py-1.5">Spell</th>
+                                        <th className="px-3 py-1.5">Decks</th>
+                                        <th className="px-3 py-1.5">Win Rate</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {expandedAvatarSpells.slice(0, 10).map((s) => (
+                                        <tr
+                                          key={s.spellName}
+                                          className="border-t border-slate-800/60 hover:bg-slate-800/40"
+                                        >
+                                          <td className="px-3 py-1.5 font-medium text-white">{s.spellName}</td>
+                                          <td className="px-3 py-1.5">{s.matches}</td>
+                                          <td className="px-3 py-1.5 text-slate-300 font-medium">
+                                            {(s.winRate * 100).toFixed(1)}%
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
@@ -1083,6 +1130,11 @@ export default function MetaDashboard({ adminName }: MetaDashboardProps) {
               </h2>
               <p className="text-xs text-slate-400 mt-0.5">
                 Avatar performance with spellbook element distribution ({format})
+                {deckArchetypes.length > 0 && (
+                  <span className="ml-1">
+                    &middot; {deckArchetypes.reduce((sum, d) => sum + d.matches, 0)} decks analyzed
+                  </span>
+                )}
               </p>
             </div>
             <ElementLegend />
@@ -1128,43 +1180,75 @@ export default function MetaDashboard({ adminName }: MetaDashboardProps) {
                     {isAvatarExpanded && (
                       <div className="col-span-full rounded border border-indigo-700/20 bg-indigo-950/10 p-3">
                         {expandedAvatarLoading ? (
-                          <p className="text-xs text-slate-400">Loading site pairings...</p>
-                        ) : expandedAvatarSites.length === 0 ? (
-                          <p className="text-xs text-slate-400">No site pairing data available.</p>
+                          <p className="text-xs text-slate-400">Loading deck details...</p>
+                        ) : expandedAvatarSites.length === 0 && expandedAvatarSpells.length === 0 ? (
+                          <p className="text-xs text-slate-400">No deck detail data available yet. Data appears after the server recomputes statistics.</p>
                         ) : (
-                          <div>
-                            <h4 className="text-xs font-semibold text-indigo-300 mb-2">
-                              Site Pairings
-                            </h4>
-                            <div className="overflow-auto rounded border border-slate-800 bg-slate-900/40">
-                              <table className="min-w-full text-left text-xs text-slate-200">
-                                <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400">
-                                  <tr>
-                                    <th className="px-3 py-1.5">Site</th>
-                                    <th className="px-3 py-1.5">Decks</th>
-                                    <th className="px-3 py-1.5">Wins</th>
-                                    <th className="px-3 py-1.5">Losses</th>
-                                    <th className="px-3 py-1.5">Win Rate</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {expandedAvatarSites.map((s) => (
-                                    <tr
-                                      key={s.siteName}
-                                      className="border-t border-slate-800/60 hover:bg-slate-800/40"
-                                    >
-                                      <td className="px-3 py-1.5 font-medium text-white">{s.siteName}</td>
-                                      <td className="px-3 py-1.5">{s.matches}</td>
-                                      <td className="px-3 py-1.5">{s.wins}</td>
-                                      <td className="px-3 py-1.5">{s.losses}</td>
-                                      <td className="px-3 py-1.5 text-indigo-300 font-medium">
-                                        {(s.winRate * 100).toFixed(1)}%
-                                      </td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
+                          <div className="grid gap-4 md:grid-cols-2">
+                            {expandedAvatarSites.length > 0 && (
+                              <div>
+                                <h4 className="text-xs font-semibold text-indigo-300 mb-2">
+                                  Most Used Sites
+                                </h4>
+                                <div className="overflow-auto rounded border border-slate-800 bg-slate-900/40">
+                                  <table className="min-w-full text-left text-xs text-slate-200">
+                                    <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400">
+                                      <tr>
+                                        <th className="px-3 py-1.5">Site</th>
+                                        <th className="px-3 py-1.5">Decks</th>
+                                        <th className="px-3 py-1.5">Win Rate</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {expandedAvatarSites.slice(0, 10).map((s) => (
+                                        <tr
+                                          key={s.siteName}
+                                          className="border-t border-slate-800/60 hover:bg-slate-800/40"
+                                        >
+                                          <td className="px-3 py-1.5 font-medium text-white">{s.siteName}</td>
+                                          <td className="px-3 py-1.5">{s.matches}</td>
+                                          <td className="px-3 py-1.5 text-indigo-300 font-medium">
+                                            {(s.winRate * 100).toFixed(1)}%
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            )}
+                            {expandedAvatarSpells.length > 0 && (
+                              <div>
+                                <h4 className="text-xs font-semibold text-indigo-300 mb-2">
+                                  Most Used Spells
+                                </h4>
+                                <div className="overflow-auto rounded border border-slate-800 bg-slate-900/40">
+                                  <table className="min-w-full text-left text-xs text-slate-200">
+                                    <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400">
+                                      <tr>
+                                        <th className="px-3 py-1.5">Spell</th>
+                                        <th className="px-3 py-1.5">Decks</th>
+                                        <th className="px-3 py-1.5">Win Rate</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {expandedAvatarSpells.slice(0, 10).map((s) => (
+                                        <tr
+                                          key={s.spellName}
+                                          className="border-t border-slate-800/60 hover:bg-slate-800/40"
+                                        >
+                                          <td className="px-3 py-1.5 font-medium text-white">{s.spellName}</td>
+                                          <td className="px-3 py-1.5">{s.matches}</td>
+                                          <td className="px-3 py-1.5 text-indigo-300 font-medium">
+                                            {(s.winRate * 100).toFixed(1)}%
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
