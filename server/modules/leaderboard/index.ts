@@ -337,6 +337,7 @@ export function createLeaderboardService({
               winnerId: safeWinnerId,
               loserId: safeLoserId,
               format,
+              isPrecon: match.matchType === "precon",
               players: playerInfos.map((info) => ({
                 id: info.id,
                 displayName: info.displayName,

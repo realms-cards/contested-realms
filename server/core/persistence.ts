@@ -103,6 +103,7 @@ const createPersistenceLayerInternal = ({
         match.matchType === "precon"
           ? "constructed"
           : match.matchType || "constructed",
+      isPrecon: match.matchType === "precon",
       sealedConfig: match.sealedConfig || null,
       draftConfig: match.draftConfig || null,
       draftState: match.draftState || null,

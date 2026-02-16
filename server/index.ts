@@ -1288,7 +1288,7 @@ async function finalizeMatch(
       Array.isArray(match.playerIds) &&
       match.playerIds.length > 0 &&
       match.playerIds.every((pid) => !isCpuPlayerId(pid));
-    if (allHuman) {
+    if (allHuman && match.matchType !== "precon") {
       const rec = matchRecordings.get(match.id);
       const formatRaw =
         match.matchType === "draft" ||
