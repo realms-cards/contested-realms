@@ -362,6 +362,8 @@ async function computeDecks(prisma: AnyPrisma, format: string): Promise<unknown>
     siteAgg: Map<string, AggCounts>;
     spellAgg: Map<string, AggCounts>;
     elementComboAgg: Map<string, { matches: number; wins: number; losses: number; draws: number }>;
+    comboSiteAgg: Map<string, Map<string, AggCounts>>;
+    comboSpellAgg: Map<string, Map<string, AggCounts>>;
   };
   const avatarAgg = new Map<string, AvatarAggEntry>();
 
@@ -461,6 +463,51 @@ async function computeDecks(prisma: AnyPrisma, format: string): Promise<unknown>
             draws: isDraw ? 1 : 0,
           });
         }
+        // Combo-specific site/spell aggregation
+        let comboSiteMap = existing.comboSiteAgg.get(elementCombo);
+        if (!comboSiteMap) {
+          comboSiteMap = new Map<string, AggCounts>();
+          existing.comboSiteAgg.set(elementCombo, comboSiteMap);
+        }
+        for (const [siteName, copies] of siteCounts.entries()) {
+          const cs = comboSiteMap.get(siteName);
+          if (cs) {
+            cs.matches++;
+            cs.totalCopies += copies;
+            if (isWinner) cs.wins++;
+            else if (isLoser) cs.losses++;
+            else if (isDraw) cs.draws++;
+          } else {
+            comboSiteMap.set(siteName, {
+              matches: 1, totalCopies: copies,
+              wins: isWinner ? 1 : 0,
+              losses: isLoser ? 1 : 0,
+              draws: isDraw ? 1 : 0,
+            });
+          }
+        }
+        let comboSpellMap = existing.comboSpellAgg.get(elementCombo);
+        if (!comboSpellMap) {
+          comboSpellMap = new Map<string, AggCounts>();
+          existing.comboSpellAgg.set(elementCombo, comboSpellMap);
+        }
+        for (const [spellName, copies] of spellCounts.entries()) {
+          const cs = comboSpellMap.get(spellName);
+          if (cs) {
+            cs.matches++;
+            cs.totalCopies += copies;
+            if (isWinner) cs.wins++;
+            else if (isLoser) cs.losses++;
+            else if (isDraw) cs.draws++;
+          } else {
+            comboSpellMap.set(spellName, {
+              matches: 1, totalCopies: copies,
+              wins: isWinner ? 1 : 0,
+              losses: isLoser ? 1 : 0,
+              draws: isDraw ? 1 : 0,
+            });
+          }
+        }
       } else {
         const cid = cardIdByName.get(avatarName) || 0;
         const siteAgg = new Map<string, AggCounts>();
@@ -488,6 +535,24 @@ async function computeDecks(prisma: AnyPrisma, format: string): Promise<unknown>
           losses: isLoser ? 1 : 0,
           draws: isDraw ? 1 : 0,
         });
+        const comboSiteAgg = new Map<string, Map<string, AggCounts>>();
+        const initComboSiteMap = new Map<string, AggCounts>();
+        for (const [siteName, copies] of siteCounts.entries()) {
+          initComboSiteMap.set(siteName, {
+            matches: 1, totalCopies: copies,
+            wins: isWinner ? 1 : 0, losses: isLoser ? 1 : 0, draws: isDraw ? 1 : 0,
+          });
+        }
+        comboSiteAgg.set(elementCombo, initComboSiteMap);
+        const comboSpellAgg = new Map<string, Map<string, AggCounts>>();
+        const initComboSpellMap = new Map<string, AggCounts>();
+        for (const [spellName, copies] of spellCounts.entries()) {
+          initComboSpellMap.set(spellName, {
+            matches: 1, totalCopies: copies,
+            wins: isWinner ? 1 : 0, losses: isLoser ? 1 : 0, draws: isDraw ? 1 : 0,
+          });
+        }
+        comboSpellAgg.set(elementCombo, initComboSpellMap);
         avatarAgg.set(avatarName, {
           avatarName,
           avatarCardId: cid,
@@ -501,6 +566,8 @@ async function computeDecks(prisma: AnyPrisma, format: string): Promise<unknown>
           siteAgg,
           spellAgg,
           elementComboAgg,
+          comboSiteAgg,
+          comboSpellAgg,
         });
       }
     }
@@ -628,11 +695,59 @@ async function computeDecks(prisma: AnyPrisma, format: string): Promise<unknown>
       .sort((a, b) => b.matches - a.matches);
   }
 
+  // Build per-combo site and spell lookups
+  type ComboSiteEntry = { siteName: string; siteSlug: string | null; matches: number; wins: number; losses: number; draws: number; winRate: number; avgCopies: number };
+  type ComboSpellEntry = { spellName: string; spellSlug: string | null; matches: number; wins: number; losses: number; draws: number; winRate: number; avgCopies: number };
+  const avatarComboSites: Record<string, Record<string, ComboSiteEntry[]>> = {};
+  const avatarComboSpells: Record<string, Record<string, ComboSpellEntry[]>> = {};
+  for (const agg of avatarAgg.values()) {
+    if (agg.comboSiteAgg.size > 0) {
+      const byCombo: Record<string, ComboSiteEntry[]> = {};
+      for (const [combo, siteMap] of agg.comboSiteAgg.entries()) {
+        byCombo[combo] = [...siteMap.entries()]
+          .map(([siteName, s]) => {
+            const denom = s.wins + s.losses;
+            const cid = cardIdByName.get(siteName);
+            return {
+              siteName,
+              siteSlug: cid ? deckSlugMap.get(cid) || null : null,
+              matches: s.matches, wins: s.wins, losses: s.losses, draws: s.draws,
+              winRate: denom > 0 ? s.wins / denom : 0,
+              avgCopies: s.matches > 0 ? Math.round((s.totalCopies / s.matches) * 10) / 10 : 0,
+            };
+          })
+          .sort((a, b) => b.matches - a.matches);
+      }
+      avatarComboSites[agg.avatarName] = byCombo;
+    }
+    if (agg.comboSpellAgg.size > 0) {
+      const byCombo: Record<string, ComboSpellEntry[]> = {};
+      for (const [combo, spellMap] of agg.comboSpellAgg.entries()) {
+        byCombo[combo] = [...spellMap.entries()]
+          .map(([spellName, s]) => {
+            const denom = s.wins + s.losses;
+            const cid = cardIdByName.get(spellName);
+            return {
+              spellName,
+              spellSlug: cid ? deckSlugMap.get(cid) || null : null,
+              matches: s.matches, wins: s.wins, losses: s.losses, draws: s.draws,
+              winRate: denom > 0 ? s.wins / denom : 0,
+              avgCopies: s.matches > 0 ? Math.round((s.totalCopies / s.matches) * 10) / 10 : 0,
+            };
+          })
+          .sort((a, b) => b.matches - a.matches);
+      }
+      avatarComboSpells[agg.avatarName] = byCombo;
+    }
+  }
+
   return {
     archetypes,
     avatarSites,
     avatarSpells,
     avatarElementCombos,
+    avatarComboSites,
+    avatarComboSpells,
     format,
     totalDecks: archetypes.reduce((sum, a) => sum + a.matches, 0),
   };

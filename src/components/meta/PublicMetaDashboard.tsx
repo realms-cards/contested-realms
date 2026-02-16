@@ -657,6 +657,9 @@ export default function PublicMetaDashboard() {
   const [expandedAvatarSpells, setExpandedAvatarSpells] = useState<AvatarSpellEntry[]>([]);
   const [expandedAvatarLoading, setExpandedAvatarLoading] = useState(false);
   const [expandedAvatarElementCombos, setExpandedAvatarElementCombos] = useState<AvatarElementComboEntry[]>([]);
+  const [selectedCombo, setSelectedCombo] = useState<string | null>(null);
+  const [expandedAvatarComboSites, setExpandedAvatarComboSites] = useState<Record<string, AvatarSitePairing[]>>({});
+  const [expandedAvatarComboSpells, setExpandedAvatarComboSpells] = useState<Record<string, AvatarSpellEntry[]>>({});
 
   // Element card drill-down state
   const [expandedElement, setExpandedElement] = useState<string | null>(null);
@@ -896,6 +899,9 @@ export default function PublicMetaDashboard() {
         setExpandedAvatarSites([]);
         setExpandedAvatarSpells([]);
         setExpandedAvatarElementCombos([]);
+        setExpandedAvatarComboSites({});
+        setExpandedAvatarComboSpells({});
+        setSelectedCombo(null);
         return;
       }
       setExpandedAvatar(avatarName);
@@ -903,6 +909,9 @@ export default function PublicMetaDashboard() {
       setExpandedAvatarSites([]);
       setExpandedAvatarSpells([]);
       setExpandedAvatarElementCombos([]);
+      setExpandedAvatarComboSites({});
+      setExpandedAvatarComboSpells({});
+      setSelectedCombo(null);
       try {
         const response = await fetch(
           `/api/meta/decks?format=${format}&avatar=${encodeURIComponent(avatarName)}`,
@@ -913,10 +922,14 @@ export default function PublicMetaDashboard() {
             sites: AvatarSitePairing[];
             spells: AvatarSpellEntry[];
             elementCombos: AvatarElementComboEntry[];
+            comboSites: Record<string, AvatarSitePairing[]>;
+            comboSpells: Record<string, AvatarSpellEntry[]>;
           };
           setExpandedAvatarSites(payload.sites || []);
           setExpandedAvatarSpells(payload.spells || []);
           setExpandedAvatarElementCombos(payload.elementCombos || []);
+          setExpandedAvatarComboSites(payload.comboSites || {});
+          setExpandedAvatarComboSpells(payload.comboSpells || {});
         }
       } finally {
         setExpandedAvatarLoading(false);
@@ -994,6 +1007,14 @@ export default function PublicMetaDashboard() {
     link.click();
     URL.revokeObjectURL(url);
   }, [avatarStats, siteStats, spellbookStats, format]);
+
+  // Derived: filtered sites/spells based on selected element combo
+  const displayedSites = selectedCombo
+    ? (expandedAvatarComboSites[selectedCombo] || [])
+    : expandedAvatarSites;
+  const displayedSpells = selectedCombo
+    ? (expandedAvatarComboSpells[selectedCombo] || [])
+    : expandedAvatarSpells;
 
   return (
     <div className="flex flex-col gap-10">
@@ -1138,8 +1159,28 @@ export default function PublicMetaDashboard() {
                               <div>
                                 <h4 className="text-xs font-semibold text-slate-300 mb-2">Element Combinations</h4>
                                 <div className="flex flex-wrap gap-2">
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); setSelectedCombo(null); }}
+                                    className={clsx(
+                                      "rounded border px-3 py-1.5 text-xs transition cursor-pointer",
+                                      selectedCombo === null
+                                        ? "border-slate-400 bg-slate-700/50 ring-1 ring-slate-400/50"
+                                        : "border-slate-700/40 bg-slate-800/30 hover:bg-slate-700/40",
+                                    )}
+                                  >
+                                    <span className="text-slate-200 font-medium">All</span>
+                                  </button>
                                   {expandedAvatarElementCombos.map((ec) => (
-                                    <div key={ec.combo} className="rounded border border-slate-700/40 bg-slate-800/30 px-3 py-1.5 text-xs">
+                                    <button
+                                      key={ec.combo}
+                                      onClick={(e) => { e.stopPropagation(); setSelectedCombo(selectedCombo === ec.combo ? null : ec.combo); }}
+                                      className={clsx(
+                                        "rounded border px-3 py-1.5 text-xs transition cursor-pointer",
+                                        selectedCombo === ec.combo
+                                          ? "border-slate-400 bg-slate-700/50 ring-1 ring-slate-400/50"
+                                          : "border-slate-700/40 bg-slate-800/30 hover:bg-slate-700/40",
+                                      )}
+                                    >
                                       <span className="inline-flex items-center gap-1 mr-2">
                                         <ElementIcons element={ec.combo} size={12} />
                                       </span>
@@ -1147,15 +1188,15 @@ export default function PublicMetaDashboard() {
                                       <span className="mx-1.5 text-slate-600">|</span>
                                       <span className="text-slate-200 font-medium">{(ec.winRate * 100).toFixed(1)}%</span>
                                       <span className="ml-1.5 text-slate-500">{ec.wins}W/{ec.losses}L{ec.draws > 0 ? `/${ec.draws}D` : ""}</span>
-                                    </div>
+                                    </button>
                                   ))}
                                 </div>
                               </div>
                             )}
                             <div className="grid gap-4 md:grid-cols-2">
-                              {expandedAvatarSites.length > 0 && (
+                              {displayedSites.length > 0 && (
                                 <div>
-                                  <h4 className="text-xs font-semibold text-slate-300 mb-2">Most Used Sites</h4>
+                                  <h4 className="text-xs font-semibold text-slate-300 mb-2">Most Used Sites{selectedCombo ? ` (${selectedCombo})` : ""}</h4>
                                   <div className="overflow-auto rounded border border-slate-800 bg-slate-900/40">
                                     <table className="min-w-full text-left text-xs text-slate-200">
                                       <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400">
@@ -1170,7 +1211,7 @@ export default function PublicMetaDashboard() {
                                         </tr>
                                       </thead>
                                       <tbody>
-                                        {expandedAvatarSites.slice(0, 15).map((s) => (
+                                        {displayedSites.slice(0, 45).map((s) => (
                                           <tr
                                             key={s.siteName}
                                             className="border-t border-slate-800/60 hover:bg-slate-800/40"
@@ -1195,9 +1236,9 @@ export default function PublicMetaDashboard() {
                                   </div>
                                 </div>
                               )}
-                              {expandedAvatarSpells.length > 0 && (
+                              {displayedSpells.length > 0 && (
                                 <div>
-                                  <h4 className="text-xs font-semibold text-slate-300 mb-2">Most Used Spells</h4>
+                                  <h4 className="text-xs font-semibold text-slate-300 mb-2">Most Used Spells{selectedCombo ? ` (${selectedCombo})` : ""}</h4>
                                   <div className="overflow-auto rounded border border-slate-800 bg-slate-900/40">
                                     <table className="min-w-full text-left text-xs text-slate-200">
                                       <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400">
@@ -1212,7 +1253,7 @@ export default function PublicMetaDashboard() {
                                         </tr>
                                       </thead>
                                       <tbody>
-                                        {expandedAvatarSpells.slice(0, 15).map((s) => (
+                                        {displayedSpells.slice(0, 45).map((s) => (
                                           <tr
                                             key={s.spellName}
                                             className="border-t border-slate-800/60 hover:bg-slate-800/40"
@@ -1330,8 +1371,28 @@ export default function PublicMetaDashboard() {
                               <div>
                                 <h4 className="text-xs font-semibold text-indigo-300 mb-2">Element Combinations</h4>
                                 <div className="flex flex-wrap gap-2">
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); setSelectedCombo(null); }}
+                                    className={clsx(
+                                      "rounded border px-3 py-1.5 text-xs transition cursor-pointer",
+                                      selectedCombo === null
+                                        ? "border-indigo-400 bg-indigo-800/50 ring-1 ring-indigo-400/50"
+                                        : "border-indigo-700/30 bg-indigo-950/20 hover:bg-indigo-900/30",
+                                    )}
+                                  >
+                                    <span className="text-indigo-200 font-medium">All</span>
+                                  </button>
                                   {expandedAvatarElementCombos.map((ec) => (
-                                    <div key={ec.combo} className="rounded border border-indigo-700/30 bg-indigo-950/20 px-3 py-1.5 text-xs">
+                                    <button
+                                      key={ec.combo}
+                                      onClick={(e) => { e.stopPropagation(); setSelectedCombo(selectedCombo === ec.combo ? null : ec.combo); }}
+                                      className={clsx(
+                                        "rounded border px-3 py-1.5 text-xs transition cursor-pointer",
+                                        selectedCombo === ec.combo
+                                          ? "border-indigo-400 bg-indigo-800/50 ring-1 ring-indigo-400/50"
+                                          : "border-indigo-700/30 bg-indigo-950/20 hover:bg-indigo-900/30",
+                                      )}
+                                    >
                                       <span className="inline-flex items-center gap-1 mr-2">
                                         <ElementIcons element={ec.combo} size={12} />
                                       </span>
@@ -1339,15 +1400,15 @@ export default function PublicMetaDashboard() {
                                       <span className="mx-1.5 text-slate-600">|</span>
                                       <span className="text-indigo-200 font-medium">{(ec.winRate * 100).toFixed(1)}%</span>
                                       <span className="ml-1.5 text-slate-500">{ec.wins}W/{ec.losses}L{ec.draws > 0 ? `/${ec.draws}D` : ""}</span>
-                                    </div>
+                                    </button>
                                   ))}
                                 </div>
                               </div>
                             )}
                             <div className="grid gap-4 md:grid-cols-2">
-                              {expandedAvatarSites.length > 0 && (
+                              {displayedSites.length > 0 && (
                                 <div>
-                                  <h4 className="text-xs font-semibold text-indigo-300 mb-2">Most Used Sites</h4>
+                                  <h4 className="text-xs font-semibold text-indigo-300 mb-2">Most Used Sites{selectedCombo ? ` (${selectedCombo})` : ""}</h4>
                                   <div className="overflow-auto rounded border border-slate-800 bg-slate-900/40">
                                     <table className="min-w-full text-left text-xs text-slate-200">
                                       <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400">
@@ -1362,7 +1423,7 @@ export default function PublicMetaDashboard() {
                                         </tr>
                                       </thead>
                                       <tbody>
-                                        {expandedAvatarSites.slice(0, 15).map((s) => (
+                                        {displayedSites.slice(0, 45).map((s) => (
                                           <tr
                                             key={s.siteName}
                                             className="border-t border-slate-800/60 hover:bg-slate-800/40"
@@ -1387,9 +1448,9 @@ export default function PublicMetaDashboard() {
                                   </div>
                                 </div>
                               )}
-                              {expandedAvatarSpells.length > 0 && (
+                              {displayedSpells.length > 0 && (
                                 <div>
-                                  <h4 className="text-xs font-semibold text-indigo-300 mb-2">Most Used Spells</h4>
+                                  <h4 className="text-xs font-semibold text-indigo-300 mb-2">Most Used Spells{selectedCombo ? ` (${selectedCombo})` : ""}</h4>
                                   <div className="overflow-auto rounded border border-slate-800 bg-slate-900/40">
                                     <table className="min-w-full text-left text-xs text-slate-200">
                                       <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400">
@@ -1404,7 +1465,7 @@ export default function PublicMetaDashboard() {
                                         </tr>
                                       </thead>
                                       <tbody>
-                                        {expandedAvatarSpells.slice(0, 15).map((s) => (
+                                        {displayedSpells.slice(0, 45).map((s) => (
                                           <tr
                                             key={s.spellName}
                                             className="border-t border-slate-800/60 hover:bg-slate-800/40"
