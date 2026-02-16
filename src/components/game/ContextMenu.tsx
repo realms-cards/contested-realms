@@ -149,6 +149,10 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   );
   const interactionGuides = useGameStore((s) => s.interactionGuides);
 
+  // Assimilator Snail activated ability
+  const assimilatorSnailUsed = useGameStore((s) => s.assimilatorSnailUsed);
+  const beginAssimilatorSnail = useGameStore((s) => s.beginAssimilatorSnail);
+
   // Piracy actions (Captain Baldassare / Sea Raider)
   const triggerPiracy = useGameStore((s) => s.triggerPiracy);
 
@@ -1839,6 +1843,55 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                   Copy (token)
                 </button>
               )}
+
+              {/* Assimilator Snail - activated ability: banish dead minion, become copy */}
+              {t.kind === "permanent" &&
+                isMine &&
+                (() => {
+                  const arr = permanents[t.at] || [];
+                  const item = arr[t.index];
+                  if (!item?.card) return null;
+                  const name = (item.card.name || "").toLowerCase();
+                  if (name !== "assimilator snail") return null;
+                  const ownerSeat = seatFromOwner(item.owner);
+                  const currentSeat =
+                    currentPlayer === 1 ? "p1" : "p2";
+                  const isMyTurn = ownerSeat === currentSeat;
+                  const hasUsed = assimilatorSnailUsed[ownerSeat];
+                  const canActivate = isMyTurn && !hasUsed;
+                  const description = hasUsed
+                    ? "Already used this turn"
+                    : !isMyTurn
+                      ? "Can only activate on your turn"
+                      : "Banish a dead minion from your graveyard. Become a copy until next turn.";
+                  return (
+                    <button
+                      className={`w-full text-left rounded px-3 py-1 ${
+                        canActivate
+                          ? "bg-purple-600/30 hover:bg-purple-600/50"
+                          : "bg-gray-600/20 text-white/40 cursor-not-allowed"
+                      }`}
+                      title={description}
+                      disabled={!canActivate}
+                      onClick={() => {
+                        if (!canActivate) return;
+                        beginAssimilatorSnail({
+                          snail: {
+                            at: t.at,
+                            index: t.index,
+                            instanceId: item.instanceId ?? item.card.instanceId ?? null,
+                            owner: item.owner,
+                            card: item.card,
+                          },
+                          activatorSeat: ownerSeat,
+                        });
+                        onClose();
+                      }}
+                    >
+                      {`Assimilate Dead Minion${hasUsed ? " \u2713" : ""}`}
+                    </button>
+                  );
+                })()}
 
               {/* Gem token actions - Copy and Delete */}
               {t.kind === "gemToken" && (

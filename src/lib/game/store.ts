@@ -3,6 +3,10 @@ import { createAccusationSlice } from "./store/accusationState";
 import { createAnimistSlice } from "./store/animistState";
 import { createAnnualFairSlice } from "./store/annualFairState";
 import { createArtifactCastSlice } from "./store/artifactCastState";
+import {
+  createAssimilatorSnailSlice,
+  createInitialAssimilatorSnailUsed,
+} from "./store/assimilatorSnailState";
 import { createAssortedAnimalsSlice } from "./store/assortedAnimalsState";
 import { createAtlanteanFateSlice } from "./store/atlanteanFateState";
 import { createAutoResolveSlice } from "./store/autoResolveState";
@@ -243,6 +247,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   ...createTorshammarSlice(set, get, storeApi),
   ...createSeaRaiderSlice(set, get, storeApi),
   ...createShapeshiftSlice(set, get, storeApi),
+  ...createAssimilatorSnailSlice(set, get, storeApi),
   cardScale: 1,
   // Harbinger portal discount (Gothic expansion) - once per turn mana reduction
   harbingerPortalDiscountUsed: { p1: false, p2: false },
@@ -399,6 +404,9 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         pendingCrossroads: null,
         pendingPiracy: null,
         pendingShapeshift: null,
+        pendingAssimilatorSnail: null,
+        assimilatorSnailUsed: createInitialAssimilatorSnailUsed(),
+        assimilatorSnailTransforms: [],
       };
       return reset as GameState;
     }),

@@ -9,6 +9,7 @@ import AccusationOverlay from "@/components/game/AccusationOverlay";
 import { AnimistCastChoiceOverlay } from "@/components/game/AnimistCastChoiceOverlay";
 import AnnualFairOverlay from "@/components/game/AnnualFairOverlay";
 import ArtifactCastOverlay from "@/components/game/ArtifactCastOverlay";
+import AssimilatorSnailOverlay from "@/components/game/AssimilatorSnailOverlay";
 import AssortedAnimalsOverlay from "@/components/game/AssortedAnimalsOverlay";
 import AtlanteanFateOverlay from "@/components/game/AtlanteanFateOverlay";
 import AudioControls from "@/components/game/AudioControls";
@@ -1145,6 +1146,8 @@ export default function PlayPage() {
 
           {/* Raise Dead Overlay */}
           <RaiseDeadOverlay />
+          {/* Assimilator Snail Overlay (banish dead minion, become copy) */}
+          <AssimilatorSnailOverlay />
           {/* Legion of Gall Overlay (inspect and banish from opponent collection) */}
           <LegionOfGallOverlay />
           {/* Artifact Cast Overlay (Toolbox, Silver Bullet) */}

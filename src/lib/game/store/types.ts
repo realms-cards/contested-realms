@@ -1062,6 +1062,35 @@ export type PendingMirrorRealm = {
   createdAt: number;
 };
 
+// --- Assimilator Snail State ------------------------------------------
+// "Once on your turn, you may banish a dead minion. Assimilator Snail
+// becomes a copy of that minion until your next turn."
+export type AssimilatorSnailPhase = "selectingCorpse" | "resolved";
+
+export type PendingAssimilatorSnail = {
+  id: string;
+  snail: {
+    at: CellKey;
+    index: number;
+    instanceId: string | null;
+    owner: 1 | 2;
+    card: CardRef;
+  };
+  activatorSeat: PlayerKey;
+  phase: AssimilatorSnailPhase;
+  eligibleCorpses: Array<{ card: CardRef; fromSeat: PlayerKey }>;
+  selectedCorpseIndex: number | null;
+  createdAt: number;
+};
+
+export type AssimilatorSnailTransform = {
+  snailAt: CellKey;
+  snailInstanceId: string;
+  originalCard: CardRef;
+  ownerSeat: PlayerKey;
+  appliedOnTurn: number;
+};
+
 // --- Shapeshift State ------------------------------------------------
 // "An allied minion tries to transform. Look at your next five spells:
 // you may choose a minion among them to be the new form.
@@ -2665,6 +2694,32 @@ export type GameState = {
   // Tracks whether each player has used their once-per-turn portal mana discount
   // When Harbinger casts a minion to a portal tile, mana cost is reduced by 1
   harbingerPortalDiscountUsed: Record<PlayerKey, boolean>;
+  // Assimilator Snail State
+  // Tracks whether each player has used Assimilator Snail ability this turn
+  assimilatorSnailUsed: Record<PlayerKey, boolean>;
+  // Active Assimilator Snail transformations (reverted at start of owner's next turn)
+  assimilatorSnailTransforms: AssimilatorSnailTransform[];
+  // Pending Assimilator Snail ability resolution
+  pendingAssimilatorSnail: PendingAssimilatorSnail | null;
+  // Begin the ability: select a dead minion from graveyard
+  beginAssimilatorSnail: (input: {
+    snail: {
+      at: CellKey;
+      index: number;
+      instanceId: string | null;
+      owner: 1 | 2;
+      card: CardRef;
+    };
+    activatorSeat: PlayerKey;
+  }) => void;
+  // Select which dead minion to banish and copy
+  selectAssimilatorSnailCorpse: (corpseIndex: number) => void;
+  // Resolve: banish the corpse, transform snail into copy
+  resolveAssimilatorSnail: () => void;
+  // Cancel the ability
+  cancelAssimilatorSnail: () => void;
+  // Revert transformations at start of owner's next turn
+  revertAssimilatorSnailTransforms: (who: PlayerKey) => void;
   // Ether Core Turn Start State
   // Tracks which Ether Core instanceIds were in the void at the start of the turn
   // Ether Core only provides 3 mana if cast this turn OR started the turn in the void
@@ -3128,6 +3183,8 @@ export type ServerPatchT = Partial<{
   imposterMasks: GameState["imposterMasks"];
   necromancerSkeletonUsed: GameState["necromancerSkeletonUsed"];
   harbingerPortalDiscountUsed: GameState["harbingerPortalDiscountUsed"];
+  assimilatorSnailUsed: GameState["assimilatorSnailUsed"];
+  assimilatorSnailTransforms: GameState["assimilatorSnailTransforms"];
   etherCoresInVoidAtTurnStart: GameState["etherCoresInVoidAtTurnStart"];
   coresCarriedAtTurnStart: GameState["coresCarriedAtTurnStart"];
   druidFlipped: GameState["druidFlipped"];

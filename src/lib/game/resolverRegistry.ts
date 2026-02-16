@@ -190,6 +190,14 @@ export const RESOLVER_REGISTRY: ResolverEntry[] = [
     stateFile: "lilithState.ts",
     description: "Special demon summoning mechanics",
   },
+  {
+    id: "assimilatorSnail",
+    cardName: "Assimilator Snail",
+    category: "minion",
+    stateFile: "assimilatorSnailState.ts",
+    description:
+      "Once per turn, banish a dead minion to become a copy of it until next turn",
+  },
 
   // ─── AVATAR ABILITY RESOLVERS ──────────────────────────────────────
   {
