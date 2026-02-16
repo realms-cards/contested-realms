@@ -65,6 +65,25 @@ type AvatarSitePairing = {
   winRate: number;
 };
 
+type AvatarSpellEntry = {
+  spellName: string;
+  spellSlug: string | null;
+  matches: number;
+  wins: number;
+  losses: number;
+  draws: number;
+  winRate: number;
+};
+
+type AvatarElementComboEntry = {
+  combo: string;
+  matches: number;
+  wins: number;
+  losses: number;
+  draws: number;
+  winRate: number;
+};
+
 export async function GET(request: Request): Promise<NextResponse> {
   try {
     const url = new URL(request.url);
@@ -78,24 +97,32 @@ export async function GET(request: Request): Promise<NextResponse> {
     if (snapshot) {
       const cached = snapshot.data as Record<string, unknown>;
 
-      // Per-avatar drill-down: return avatar details + site pairings
+      // Per-avatar drill-down: return avatar details + sites + spells
       if (avatarFilter) {
         const archetypes = (cached.archetypes as AvatarElementCombo[]) || [];
         const avatar = archetypes.find((a) => a.avatarName === avatarFilter);
         const avatarSites = (cached.avatarSites as Record<string, AvatarSitePairing[]> | undefined) || {};
         const sites = avatarSites[avatarFilter] || [];
+        const avatarSpells = (cached.avatarSpells as Record<string, AvatarSpellEntry[]> | undefined) || {};
+        const spells = avatarSpells[avatarFilter] || [];
+        const avatarElementCombos = (cached.avatarElementCombos as Record<string, AvatarElementComboEntry[]> | undefined) || {};
+        const elementCombos = avatarElementCombos[avatarFilter] || [];
 
         return NextResponse.json({
           avatar: avatar || null,
           sites,
+          spells,
+          elementCombos,
           format,
           generatedAt: snapshot.computedAt.toISOString(),
         });
       }
 
-      // Overview: omit avatarSites from response to save bandwidth
-      const { avatarSites: _unused, ...rest } = cached;
-      void _unused;
+      // Overview: omit avatarSites/avatarSpells from response to save bandwidth
+      const { avatarSites: _unusedSites, avatarSpells: _unusedSpells, avatarElementCombos: _unusedCombos, ...rest } = cached;
+      void _unusedSites;
+      void _unusedSpells;
+      void _unusedCombos;
       return NextResponse.json({
         ...rest,
         generatedAt: snapshot.computedAt.toISOString(),
@@ -141,6 +168,8 @@ export async function GET(request: Request): Promise<NextResponse> {
         return NextResponse.json({
           avatar: null,
           sites: [],
+          spells: [],
+          elementCombos: [],
           format,
           generatedAt: new Date().toISOString(),
         });
@@ -317,12 +346,14 @@ export async function GET(request: Request): Promise<NextResponse> {
       })
       .sort((a, b) => b.matches - a.matches);
 
-    // On-the-fly path: avatar drill-down without cache returns avatar only (no site data)
+    // On-the-fly path: avatar drill-down without cache returns avatar only (no site/spell data)
     if (avatarFilter) {
       const avatar = archetypes.find((a) => a.avatarName === avatarFilter);
       return NextResponse.json({
         avatar: avatar || null,
         sites: [],
+        spells: [],
+        elementCombos: [],
         format,
         generatedAt: new Date().toISOString(),
       });

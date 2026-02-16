@@ -85,6 +85,27 @@ type AvatarSitePairing = {
   losses: number;
   draws: number;
   winRate: number;
+  avgCopies: number;
+};
+
+type AvatarSpellEntry = {
+  spellName: string;
+  spellSlug: string | null;
+  matches: number;
+  wins: number;
+  losses: number;
+  draws: number;
+  winRate: number;
+  avgCopies: number;
+};
+
+type AvatarElementComboEntry = {
+  combo: string;
+  matches: number;
+  wins: number;
+  losses: number;
+  draws: number;
+  winRate: number;
 };
 
 const ELEMENT_COLORS: Record<
@@ -633,7 +654,12 @@ export default function PublicMetaDashboard() {
   // Avatar drill-down state
   const [expandedAvatar, setExpandedAvatar] = useState<string | null>(null);
   const [expandedAvatarSites, setExpandedAvatarSites] = useState<AvatarSitePairing[]>([]);
+  const [expandedAvatarSpells, setExpandedAvatarSpells] = useState<AvatarSpellEntry[]>([]);
   const [expandedAvatarLoading, setExpandedAvatarLoading] = useState(false);
+  const [expandedAvatarElementCombos, setExpandedAvatarElementCombos] = useState<AvatarElementComboEntry[]>([]);
+
+  // Element card drill-down state
+  const [expandedElement, setExpandedElement] = useState<string | null>(null);
 
   // Cache timestamp from server
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
@@ -868,11 +894,15 @@ export default function PublicMetaDashboard() {
       if (expandedAvatar === avatarName) {
         setExpandedAvatar(null);
         setExpandedAvatarSites([]);
+        setExpandedAvatarSpells([]);
+        setExpandedAvatarElementCombos([]);
         return;
       }
       setExpandedAvatar(avatarName);
       setExpandedAvatarLoading(true);
       setExpandedAvatarSites([]);
+      setExpandedAvatarSpells([]);
+      setExpandedAvatarElementCombos([]);
       try {
         const response = await fetch(
           `/api/meta/decks?format=${format}&avatar=${encodeURIComponent(avatarName)}`,
@@ -881,14 +911,25 @@ export default function PublicMetaDashboard() {
         if (response.ok) {
           const payload = (await response.json()) as {
             sites: AvatarSitePairing[];
+            spells: AvatarSpellEntry[];
+            elementCombos: AvatarElementComboEntry[];
           };
           setExpandedAvatarSites(payload.sites || []);
+          setExpandedAvatarSpells(payload.spells || []);
+          setExpandedAvatarElementCombos(payload.elementCombos || []);
         }
       } finally {
         setExpandedAvatarLoading(false);
       }
     },
     [expandedAvatar, format],
+  );
+
+  const handleElementClick = useCallback(
+    (element: string) => {
+      setExpandedElement(expandedElement === element ? null : element);
+    },
+    [expandedElement],
   );
 
   const refreshAll = useCallback(() => {
@@ -1088,46 +1129,114 @@ export default function PublicMetaDashboard() {
                     {isAvatarExpanded && (
                       <div className="col-span-full rounded border border-slate-700/20 bg-slate-900/10 p-3">
                         {expandedAvatarLoading ? (
-                          <p className="text-xs text-slate-400">Loading site pairings...</p>
-                        ) : expandedAvatarSites.length === 0 ? (
-                          <p className="text-xs text-slate-400">No site pairing data available.</p>
+                          <p className="text-xs text-slate-400">Loading deck details...</p>
+                        ) : expandedAvatarSites.length === 0 && expandedAvatarSpells.length === 0 && expandedAvatarElementCombos.length === 0 ? (
+                          <p className="text-xs text-slate-400">No deck detail data available yet. Data appears after the server recomputes statistics.</p>
                         ) : (
-                          <div>
-                            <h4 className="text-xs font-semibold text-slate-300 mb-2">
-                              Site Pairings
-                            </h4>
-                            <div className="overflow-auto rounded border border-slate-800 bg-slate-900/40">
-                              <table className="min-w-full text-left text-xs text-slate-200">
-                                <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400">
-                                  <tr>
-                                    <th className="px-3 py-1.5">Site</th>
-                                    <th className="px-3 py-1.5">Decks</th>
-                                    <th className="px-3 py-1.5">Wins</th>
-                                    <th className="px-3 py-1.5">Losses</th>
-                                    <th className="px-3 py-1.5">Win Rate</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {expandedAvatarSites.map((s) => (
-                                    <tr
-                                      key={s.siteName}
-                                      className="border-t border-slate-800/60 hover:bg-slate-800/40"
-                                      onMouseEnter={() =>
-                                        s.siteSlug && setHoveredCard({ slug: s.siteSlug, type: "Site" })
-                                      }
-                                      onMouseLeave={() => setHoveredCard(null)}
-                                    >
-                                      <td className="px-3 py-1.5 font-medium text-white">{s.siteName}</td>
-                                      <td className="px-3 py-1.5">{s.matches}</td>
-                                      <td className="px-3 py-1.5">{s.wins}</td>
-                                      <td className="px-3 py-1.5">{s.losses}</td>
-                                      <td className="px-3 py-1.5 text-slate-300 font-medium">
-                                        {(s.winRate * 100).toFixed(1)}%
-                                      </td>
-                                    </tr>
+                          <div className="flex flex-col gap-4">
+                            {expandedAvatarElementCombos.length > 0 && (
+                              <div>
+                                <h4 className="text-xs font-semibold text-slate-300 mb-2">Element Combinations</h4>
+                                <div className="flex flex-wrap gap-2">
+                                  {expandedAvatarElementCombos.map((ec) => (
+                                    <div key={ec.combo} className="rounded border border-slate-700/40 bg-slate-800/30 px-3 py-1.5 text-xs">
+                                      <span className="inline-flex items-center gap-1 mr-2">
+                                        <ElementIcons element={ec.combo} size={12} />
+                                      </span>
+                                      <span className="text-slate-300">{ec.matches} decks</span>
+                                      <span className="mx-1.5 text-slate-600">|</span>
+                                      <span className="text-slate-200 font-medium">{(ec.winRate * 100).toFixed(1)}%</span>
+                                      <span className="ml-1.5 text-slate-500">{ec.wins}W/{ec.losses}L{ec.draws > 0 ? `/${ec.draws}D` : ""}</span>
+                                    </div>
                                   ))}
-                                </tbody>
-                              </table>
+                                </div>
+                              </div>
+                            )}
+                            <div className="grid gap-4 md:grid-cols-2">
+                              {expandedAvatarSites.length > 0 && (
+                                <div>
+                                  <h4 className="text-xs font-semibold text-slate-300 mb-2">Most Used Sites</h4>
+                                  <div className="overflow-auto rounded border border-slate-800 bg-slate-900/40">
+                                    <table className="min-w-full text-left text-xs text-slate-200">
+                                      <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400">
+                                        <tr>
+                                          <th className="px-2 py-1.5">Site</th>
+                                          <th className="px-2 py-1.5">Avg#</th>
+                                          <th className="px-2 py-1.5">Decks</th>
+                                          <th className="px-2 py-1.5">W</th>
+                                          <th className="px-2 py-1.5">L</th>
+                                          <th className="px-2 py-1.5">D</th>
+                                          <th className="px-2 py-1.5">Win%</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {expandedAvatarSites.slice(0, 15).map((s) => (
+                                          <tr
+                                            key={s.siteName}
+                                            className="border-t border-slate-800/60 hover:bg-slate-800/40"
+                                            onMouseEnter={() =>
+                                              s.siteSlug && setHoveredCard({ slug: s.siteSlug, type: "Site" })
+                                            }
+                                            onMouseLeave={() => setHoveredCard(null)}
+                                          >
+                                            <td className="px-2 py-1.5 font-medium text-white">{s.siteName}</td>
+                                            <td className="px-2 py-1.5 text-slate-400">{s.avgCopies}</td>
+                                            <td className="px-2 py-1.5">{s.matches}</td>
+                                            <td className="px-2 py-1.5 text-emerald-400">{s.wins}</td>
+                                            <td className="px-2 py-1.5 text-rose-400">{s.losses}</td>
+                                            <td className="px-2 py-1.5 text-slate-400">{s.draws}</td>
+                                            <td className="px-2 py-1.5 text-slate-300 font-medium">
+                                              {(s.winRate * 100).toFixed(1)}%
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              )}
+                              {expandedAvatarSpells.length > 0 && (
+                                <div>
+                                  <h4 className="text-xs font-semibold text-slate-300 mb-2">Most Used Spells</h4>
+                                  <div className="overflow-auto rounded border border-slate-800 bg-slate-900/40">
+                                    <table className="min-w-full text-left text-xs text-slate-200">
+                                      <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400">
+                                        <tr>
+                                          <th className="px-2 py-1.5">Spell</th>
+                                          <th className="px-2 py-1.5">Avg#</th>
+                                          <th className="px-2 py-1.5">Decks</th>
+                                          <th className="px-2 py-1.5">W</th>
+                                          <th className="px-2 py-1.5">L</th>
+                                          <th className="px-2 py-1.5">D</th>
+                                          <th className="px-2 py-1.5">Win%</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {expandedAvatarSpells.slice(0, 15).map((s) => (
+                                          <tr
+                                            key={s.spellName}
+                                            className="border-t border-slate-800/60 hover:bg-slate-800/40"
+                                            onMouseEnter={() =>
+                                              s.spellSlug && setHoveredCard({ slug: s.spellSlug, type: null })
+                                            }
+                                            onMouseLeave={() => setHoveredCard(null)}
+                                          >
+                                            <td className="px-2 py-1.5 font-medium text-white">{s.spellName}</td>
+                                            <td className="px-2 py-1.5 text-slate-400">{s.avgCopies}</td>
+                                            <td className="px-2 py-1.5">{s.matches}</td>
+                                            <td className="px-2 py-1.5 text-emerald-400">{s.wins}</td>
+                                            <td className="px-2 py-1.5 text-rose-400">{s.losses}</td>
+                                            <td className="px-2 py-1.5 text-slate-400">{s.draws}</td>
+                                            <td className="px-2 py-1.5 text-slate-300 font-medium">
+                                              {(s.winRate * 100).toFixed(1)}%
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           </div>
                         )}
@@ -1149,6 +1258,11 @@ export default function PublicMetaDashboard() {
               </h2>
               <p className="text-xs text-slate-400 mt-0.5">
                 Avatar performance with spellbook element distribution ({format})
+                {deckArchetypes.length > 0 && (
+                  <span className="ml-1">
+                    &middot; {deckArchetypes.reduce((sum, d) => sum + d.matches, 0)} decks analyzed
+                  </span>
+                )}
               </p>
             </div>
             <ElementLegend />
@@ -1207,46 +1321,114 @@ export default function PublicMetaDashboard() {
                     {isAvatarExpanded && (
                       <div className="col-span-full rounded border border-indigo-700/20 bg-indigo-950/10 p-3">
                         {expandedAvatarLoading ? (
-                          <p className="text-xs text-slate-400">Loading site pairings...</p>
-                        ) : expandedAvatarSites.length === 0 ? (
-                          <p className="text-xs text-slate-400">No site pairing data available.</p>
+                          <p className="text-xs text-slate-400">Loading deck details...</p>
+                        ) : expandedAvatarSites.length === 0 && expandedAvatarSpells.length === 0 && expandedAvatarElementCombos.length === 0 ? (
+                          <p className="text-xs text-slate-400">No deck detail data available yet. Data appears after the server recomputes statistics.</p>
                         ) : (
-                          <div>
-                            <h4 className="text-xs font-semibold text-indigo-300 mb-2">
-                              Site Pairings
-                            </h4>
-                            <div className="overflow-auto rounded border border-slate-800 bg-slate-900/40">
-                              <table className="min-w-full text-left text-xs text-slate-200">
-                                <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400">
-                                  <tr>
-                                    <th className="px-3 py-1.5">Site</th>
-                                    <th className="px-3 py-1.5">Decks</th>
-                                    <th className="px-3 py-1.5">Wins</th>
-                                    <th className="px-3 py-1.5">Losses</th>
-                                    <th className="px-3 py-1.5">Win Rate</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {expandedAvatarSites.map((s) => (
-                                    <tr
-                                      key={s.siteName}
-                                      className="border-t border-slate-800/60 hover:bg-slate-800/40"
-                                      onMouseEnter={() =>
-                                        s.siteSlug && setHoveredCard({ slug: s.siteSlug, type: "Site" })
-                                      }
-                                      onMouseLeave={() => setHoveredCard(null)}
-                                    >
-                                      <td className="px-3 py-1.5 font-medium text-white">{s.siteName}</td>
-                                      <td className="px-3 py-1.5">{s.matches}</td>
-                                      <td className="px-3 py-1.5">{s.wins}</td>
-                                      <td className="px-3 py-1.5">{s.losses}</td>
-                                      <td className="px-3 py-1.5 text-indigo-300 font-medium">
-                                        {(s.winRate * 100).toFixed(1)}%
-                                      </td>
-                                    </tr>
+                          <div className="flex flex-col gap-4">
+                            {expandedAvatarElementCombos.length > 0 && (
+                              <div>
+                                <h4 className="text-xs font-semibold text-indigo-300 mb-2">Element Combinations</h4>
+                                <div className="flex flex-wrap gap-2">
+                                  {expandedAvatarElementCombos.map((ec) => (
+                                    <div key={ec.combo} className="rounded border border-indigo-700/30 bg-indigo-950/20 px-3 py-1.5 text-xs">
+                                      <span className="inline-flex items-center gap-1 mr-2">
+                                        <ElementIcons element={ec.combo} size={12} />
+                                      </span>
+                                      <span className="text-slate-300">{ec.matches} decks</span>
+                                      <span className="mx-1.5 text-slate-600">|</span>
+                                      <span className="text-indigo-200 font-medium">{(ec.winRate * 100).toFixed(1)}%</span>
+                                      <span className="ml-1.5 text-slate-500">{ec.wins}W/{ec.losses}L{ec.draws > 0 ? `/${ec.draws}D` : ""}</span>
+                                    </div>
                                   ))}
-                                </tbody>
-                              </table>
+                                </div>
+                              </div>
+                            )}
+                            <div className="grid gap-4 md:grid-cols-2">
+                              {expandedAvatarSites.length > 0 && (
+                                <div>
+                                  <h4 className="text-xs font-semibold text-indigo-300 mb-2">Most Used Sites</h4>
+                                  <div className="overflow-auto rounded border border-slate-800 bg-slate-900/40">
+                                    <table className="min-w-full text-left text-xs text-slate-200">
+                                      <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400">
+                                        <tr>
+                                          <th className="px-2 py-1.5">Site</th>
+                                          <th className="px-2 py-1.5">Avg#</th>
+                                          <th className="px-2 py-1.5">Decks</th>
+                                          <th className="px-2 py-1.5">W</th>
+                                          <th className="px-2 py-1.5">L</th>
+                                          <th className="px-2 py-1.5">D</th>
+                                          <th className="px-2 py-1.5">Win%</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {expandedAvatarSites.slice(0, 15).map((s) => (
+                                          <tr
+                                            key={s.siteName}
+                                            className="border-t border-slate-800/60 hover:bg-slate-800/40"
+                                            onMouseEnter={() =>
+                                              s.siteSlug && setHoveredCard({ slug: s.siteSlug, type: "Site" })
+                                            }
+                                            onMouseLeave={() => setHoveredCard(null)}
+                                          >
+                                            <td className="px-2 py-1.5 font-medium text-white">{s.siteName}</td>
+                                            <td className="px-2 py-1.5 text-slate-400">{s.avgCopies}</td>
+                                            <td className="px-2 py-1.5">{s.matches}</td>
+                                            <td className="px-2 py-1.5 text-emerald-400">{s.wins}</td>
+                                            <td className="px-2 py-1.5 text-rose-400">{s.losses}</td>
+                                            <td className="px-2 py-1.5 text-slate-400">{s.draws}</td>
+                                            <td className="px-2 py-1.5 text-indigo-300 font-medium">
+                                              {(s.winRate * 100).toFixed(1)}%
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              )}
+                              {expandedAvatarSpells.length > 0 && (
+                                <div>
+                                  <h4 className="text-xs font-semibold text-indigo-300 mb-2">Most Used Spells</h4>
+                                  <div className="overflow-auto rounded border border-slate-800 bg-slate-900/40">
+                                    <table className="min-w-full text-left text-xs text-slate-200">
+                                      <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400">
+                                        <tr>
+                                          <th className="px-2 py-1.5">Spell</th>
+                                          <th className="px-2 py-1.5">Avg#</th>
+                                          <th className="px-2 py-1.5">Decks</th>
+                                          <th className="px-2 py-1.5">W</th>
+                                          <th className="px-2 py-1.5">L</th>
+                                          <th className="px-2 py-1.5">D</th>
+                                          <th className="px-2 py-1.5">Win%</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {expandedAvatarSpells.slice(0, 15).map((s) => (
+                                          <tr
+                                            key={s.spellName}
+                                            className="border-t border-slate-800/60 hover:bg-slate-800/40"
+                                            onMouseEnter={() =>
+                                              s.spellSlug && setHoveredCard({ slug: s.spellSlug, type: null })
+                                            }
+                                            onMouseLeave={() => setHoveredCard(null)}
+                                          >
+                                            <td className="px-2 py-1.5 font-medium text-white">{s.spellName}</td>
+                                            <td className="px-2 py-1.5 text-slate-400">{s.avgCopies}</td>
+                                            <td className="px-2 py-1.5">{s.matches}</td>
+                                            <td className="px-2 py-1.5 text-emerald-400">{s.wins}</td>
+                                            <td className="px-2 py-1.5 text-rose-400">{s.losses}</td>
+                                            <td className="px-2 py-1.5 text-slate-400">{s.draws}</td>
+                                            <td className="px-2 py-1.5 text-indigo-300 font-medium">
+                                              {(s.winRate * 100).toFixed(1)}%
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           </div>
                         )}
@@ -1383,29 +1565,82 @@ export default function PublicMetaDashboard() {
                 const style = getElementStyle(e.element);
                 const gradientStyle = getElementGradientStyle(e.element);
                 const hasGradient = Object.keys(gradientStyle).length > 0;
+                const isElementExpanded = expandedElement === e.element;
+                // Filter deck archetypes: avatars whose element distribution includes this element
+                const elementParts = parseElements(e.element);
+                const matchingAvatars = isElementExpanded
+                  ? deckArchetypes
+                      .filter((d) => elementParts.some((ep) => (d.elements[ep] || 0) > 0))
+                      .sort((a, b) => b.winRate - a.winRate)
+                  : [];
                 return (
-                  <div
-                    key={e.element}
-                    className={clsx(
-                      "rounded border px-4 py-3",
-                      !hasGradient && `${style.border} ${style.bg}`,
-                    )}
-                    style={hasGradient ? gradientStyle : undefined}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className={`font-medium ${style.text} inline-flex items-center gap-1.5`}>
-                        <ElementIcons element={e.element} size={16} />
-                      </span>
-                      <span className="text-xs text-slate-400">
+                  <React.Fragment key={e.element}>
+                    <div
+                      className={clsx(
+                        "rounded border px-4 py-3 cursor-pointer transition hover:brightness-110",
+                        !hasGradient && `${style.border} ${style.bg}`,
+                        isElementExpanded && "ring-1 ring-white/20",
+                      )}
+                      style={hasGradient ? gradientStyle : undefined}
+                      onClick={() => handleElementClick(e.element)}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className={`font-medium ${style.text} inline-flex items-center gap-1.5`}>
+                          <ElementIcons element={e.element} size={16} />
+                        </span>
+                        <span className="text-xs text-slate-400">
+                          {e.plays.toLocaleString()} plays
+                        </span>
+                      </div>
+                      <WinRateBar winRate={e.winRate} barColor={style.bar} />
+                      <div className="text-xs text-slate-400 mt-1">
+                        {e.wins.toLocaleString()} wins of{" "}
                         {e.plays.toLocaleString()} plays
-                      </span>
+                      </div>
                     </div>
-                    <WinRateBar winRate={e.winRate} barColor={style.bar} />
-                    <div className="text-xs text-slate-400 mt-1">
-                      {e.wins.toLocaleString()} wins of{" "}
-                      {e.plays.toLocaleString()} plays
-                    </div>
-                  </div>
+                    {isElementExpanded && (
+                      <div className="col-span-full rounded border border-slate-700/20 bg-slate-900/10 p-3">
+                        <h4 className="text-xs font-semibold text-slate-300 mb-2">
+                          Avatar Win Rates with <ElementIcons element={e.element} size={14} />
+                        </h4>
+                        {matchingAvatars.length === 0 ? (
+                          <p className="text-xs text-slate-400">No deck composition data for this element yet.</p>
+                        ) : (
+                          <div className="overflow-auto rounded border border-slate-800 bg-slate-900/40">
+                            <table className="min-w-full text-left text-xs text-slate-200">
+                              <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400">
+                                <tr>
+                                  <th className="px-3 py-1.5">Avatar</th>
+                                  <th className="px-3 py-1.5">Element %</th>
+                                  <th className="px-3 py-1.5">Decks</th>
+                                  <th className="px-3 py-1.5">W</th>
+                                  <th className="px-3 py-1.5">L</th>
+                                  <th className="px-3 py-1.5">D</th>
+                                  <th className="px-3 py-1.5">Win Rate</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {matchingAvatars.map((d) => {
+                                  const elemPct = elementParts.reduce((sum, ep) => sum + (d.elements[ep] || 0), 0);
+                                  return (
+                                    <tr key={d.avatarCardId} className="border-t border-slate-800/60 hover:bg-slate-800/40">
+                                      <td className="px-3 py-1.5 font-medium text-white">{d.avatarName}</td>
+                                      <td className="px-3 py-1.5 text-slate-400">{elemPct}%</td>
+                                      <td className="px-3 py-1.5">{d.matches}</td>
+                                      <td className="px-3 py-1.5 text-emerald-400">{d.wins}</td>
+                                      <td className="px-3 py-1.5 text-rose-400">{d.losses}</td>
+                                      <td className="px-3 py-1.5 text-slate-400">{d.draws}</td>
+                                      <td className="px-3 py-1.5 font-medium">{(d.winRate * 100).toFixed(1)}%</td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </React.Fragment>
                 );
               })}
             </div>
