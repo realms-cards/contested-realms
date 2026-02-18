@@ -1636,7 +1636,9 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     doSearchPile = () => {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { TOKEN_DEFS, tokenSlug } = require("@/lib/game/tokens");
-      const tokenCards = (TOKEN_DEFS || []).map(
+      const tokenCards = (TOKEN_DEFS || []).filter(
+        (def: { markerOnly?: boolean }) => !def.markerOnly,
+      ).map(
         (def: { name: string; key: string; size?: string }) => ({
           cardId: -1,
           variantId: null,

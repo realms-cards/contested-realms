@@ -139,36 +139,38 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
       )
         return state;
 
-      // Check Garden of Eden draw limit
-      const canDraw = get().canDrawCard(who, count);
-      if (!canDraw.allowed) {
-        get().log(
-          `[${who.toUpperCase()}] Garden of Eden prevents drawing ${count} card(s) - only ${canDraw.remaining} draw(s) remaining this turn`,
-        );
-        // Show toast notification to the player trying to draw
-        const toastMessage =
-          "[card:Garden of Eden] blocks cards drawn after the first";
-        try {
-          if (typeof window !== "undefined") {
-            window.dispatchEvent(
-              new CustomEvent("app:toast", {
-                detail: { message: toastMessage, seat: who, showToSelf: true },
-              }),
-            );
-          }
-        } catch {}
-        // Also send to opponent via transport
-        const toastTr = get().transport;
-        if (toastTr?.sendMessage) {
+      // Garden of Eden only restricts spell draws, not site draws
+      if (from === "spellbook") {
+        const canDraw = get().canDrawCard(who, count);
+        if (!canDraw.allowed) {
+          get().log(
+            `[${who.toUpperCase()}] Garden of Eden prevents drawing ${count} spell(s) - only ${canDraw.remaining} spell draw(s) remaining this turn`,
+          );
+          // Show toast notification to the player trying to draw
+          const toastMessage =
+            "[card:Garden of Eden] blocks spell draws after the first";
           try {
-            toastTr.sendMessage({
-              type: "toast",
-              text: toastMessage,
-              seat: who,
-            } as never);
+            if (typeof window !== "undefined") {
+              window.dispatchEvent(
+                new CustomEvent("app:toast", {
+                  detail: { message: toastMessage, seat: who, showToSelf: true },
+                }),
+              );
+            }
           } catch {}
+          // Also send to opponent via transport
+          const toastTr = get().transport;
+          if (toastTr?.sendMessage) {
+            try {
+              toastTr.sendMessage({
+                type: "toast",
+                text: toastMessage,
+                seat: who,
+              } as never);
+            } catch {}
+          }
+          return state;
         }
-        return state;
       }
 
       // Drawing from atlas is always allowed - card effects can grant draws from atlas
@@ -232,8 +234,10 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
       // Mark that player has drawn this turn (for Draw phase enforcement)
       const shouldMarkDrawn = isFreeDraw;
 
-      // Increment Garden of Eden draw counter
-      get().incrementCardsDrawn(who, count);
+      // Increment Garden of Eden draw counter only for spell draws
+      if (from === "spellbook") {
+        get().incrementCardsDrawn(who, count);
+      }
 
       const tr = get().transport;
       if (tr) {
@@ -278,39 +282,41 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
         );
       }
 
-      // Check Garden of Eden draw limit
-      const canDraw = get().canDrawCard(who, count);
-      if (!canDraw.allowed) {
-        get().log(
-          `[${who.toUpperCase()}] Garden of Eden prevents drawing ${count} card(s) - only ${canDraw.remaining} draw(s) remaining this turn`,
-        );
-        // Show toast notification to the player trying to draw
-        const toastMessage =
-          "[card:Garden of Eden] blocks cards drawn after the first";
-        try {
-          if (typeof window !== "undefined") {
-            window.dispatchEvent(
-              new CustomEvent("app:toast", {
-                detail: { message: toastMessage, seat: who, showToSelf: true },
-              }),
-            );
-          }
-        } catch {}
-        // Also send to opponent via transport
-        const toastTr = get().transport;
-        if (toastTr?.sendMessage) {
+      // Garden of Eden only restricts spell draws, not site draws
+      if (from === "spellbook") {
+        const canDraw = get().canDrawCard(who, count);
+        if (!canDraw.allowed) {
+          get().log(
+            `[${who.toUpperCase()}] Garden of Eden prevents drawing ${count} spell(s) - only ${canDraw.remaining} spell draw(s) remaining this turn`,
+          );
+          // Show toast notification to the player trying to draw
+          const toastMessage =
+            "[card:Garden of Eden] blocks spell draws after the first";
           try {
-            toastTr.sendMessage({
-              type: "toast",
-              text: toastMessage,
-              seat: who,
-            } as never);
+            if (typeof window !== "undefined") {
+              window.dispatchEvent(
+                new CustomEvent("app:toast", {
+                  detail: { message: toastMessage, seat: who, showToSelf: true },
+                }),
+              );
+            }
           } catch {}
+          // Also send to opponent via transport
+          const toastTr = get().transport;
+          if (toastTr?.sendMessage) {
+            try {
+              toastTr.sendMessage({
+                type: "toast",
+                text: toastMessage,
+                seat: who,
+              } as never);
+            } catch {}
+          }
+          return state;
         }
-        return state;
       }
 
-      // Drawing from atlas is always allowed - card effects can grant draws from atlas
+      // Drawing from atlas is always allowed - Garden of Eden only restricts spells
       // Avatar tapping is only required when PLAYING a site from atlas, not drawing
       // Track if this is the free draw at start of turn
       const isFreeDraw =
@@ -375,8 +381,10 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
       // Mark that player has drawn this turn (for Draw phase enforcement)
       const shouldMarkDrawn = isFreeDraw;
 
-      // Increment Garden of Eden draw counter
-      get().incrementCardsDrawn(who, count);
+      // Increment Garden of Eden draw counter only for spell draws
+      if (from === "spellbook") {
+        get().incrementCardsDrawn(who, count);
+      }
 
       const tr = get().transport;
       if (tr) {
