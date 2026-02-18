@@ -622,7 +622,13 @@ export default function Hand3D({
           : viewerPlayerNumber === 1
             ? Math.PI
             : 0;
-      rootRef.current.rotation.set(0, rotation, 0);
+      // In VR, the user sits behind the board at +Z. Flip own hand so card faces
+      // point toward +Z (toward the user) instead of -Z (toward the board).
+      const vrRotation =
+        isXRPresenting && !showCardBacks
+          ? (rotation + Math.PI) % (2 * Math.PI)
+          : rotation;
+      rootRef.current.rotation.set(0, vrRotation, 0);
     } else {
       // Overlay placement relative to camera (bottom for own, top for opponent when backs)
       rootRef.current.position.copy(cam.position);
@@ -1351,7 +1357,8 @@ export default function Hand3D({
                 position={[0, 0, 0.05]}
                 onPointerOver={(e) => {
                   // Skip hover handling on touch devices - use tap instead
-                  if (isCoarsePointer) return;
+                  // Exception: allow in XR mode so AVP gaze hover works
+                  if (isCoarsePointer && !gl.xr.isPresenting) return;
                   if (isDragging) return; // allow bubbling while dragging
                   e.stopPropagation();
 
@@ -1373,7 +1380,8 @@ export default function Hand3D({
                 }}
                 onPointerOut={(e) => {
                   // Skip hover handling on touch devices - use tap instead
-                  if (isCoarsePointer) return;
+                  // Exception: allow in XR mode so AVP gaze hover clears properly
+                  if (isCoarsePointer && !gl.xr.isPresenting) return;
                   if (isDragging) return; // allow bubbling while dragging
                   e.stopPropagation();
 
