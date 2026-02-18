@@ -204,11 +204,11 @@ export const createAutoResolveSlice: StateCreator<
     const canDraw = get().canDrawCard(ownerSeat, 1);
     if (!canDraw.allowed) {
       get().log(
-        `[${ownerSeat.toUpperCase()}] Garden of Eden prevents Omphalos from drawing (limit: 1 card per turn)`,
+        `[${ownerSeat.toUpperCase()}] Garden of Eden prevents Omphalos from drawing (limit: 1 spell per turn)`,
       );
       // Show toast notification to the player trying to draw
       const toastMessage =
-        "[card:Garden of Eden] blocks cards drawn after the first";
+        "[card:Garden of Eden] blocks spell draws after the first";
       try {
         if (typeof window !== "undefined") {
           window.dispatchEvent(

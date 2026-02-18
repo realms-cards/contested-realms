@@ -8,6 +8,7 @@ export type TokenDef = {
   siteReplacement?: boolean; // true for tokens meant to replace sites (rotate like sites)
   textureRotation?: number;
   isMinion?: boolean; // true for minion tokens that can carry artifacts (Skeleton, Frog, etc.)
+  markerOnly?: boolean; // true for tokens that are only used as markers (not shown in token pile)
 };
 
 // Registry of known tokens. Extend this list as new tokens are added.
@@ -61,7 +62,7 @@ export const TOKEN_DEFS: TokenDef[] = [
     textureRotation: -Math.PI / 2,
   },
   { key: "Burned", name: "Burned", fileBase: "burned", size: "small" },
-  { key: "Silenced", name: "Silenced", fileBase: "Silenced", size: "small" },
+  { key: "Silenced", name: "Silenced", fileBase: "Silenced", size: "small", markerOnly: true },
 ];
 
 export const TOKEN_BY_KEY = Object.fromEntries(

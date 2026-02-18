@@ -148,7 +148,7 @@ export default function TokenPile3D({
           onPointerMove={() => bumpInteractClock()}
         >
           {(() => {
-            const defsAll = TOKEN_DEFS;
+            const defsAll = TOKEN_DEFS.filter((d) => !d.markerOnly);
             const small = defsAll.filter((d) => d.size !== "normal");
             const leftCount = Math.floor(small.length / 2);
             const left = small.slice(0, leftCount);
@@ -235,7 +235,7 @@ export default function TokenPile3D({
           onPointerMove={() => bumpInteractClock()}
         >
           {(() => {
-            const big = TOKEN_DEFS.filter((d) => d.size === "normal");
+            const big = TOKEN_DEFS.filter((d) => d.size === "normal" && !d.markerOnly);
             if (big.length === 0) return null;
             const gapRadius = 0.55;
             const baseZ = Math.cos(0) * gapRadius * (owner === "p2" ? 1 : -1);

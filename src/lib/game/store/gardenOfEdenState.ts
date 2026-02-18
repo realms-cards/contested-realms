@@ -90,7 +90,7 @@ export const createGardenOfEdenSlice: StateCreator<
     }
 
     get().log(
-      `[${ownerSeat.toUpperCase()}] ${site.card.name ?? "Garden of Eden"} enters the realm - card draws are now limited`,
+      `[${ownerSeat.toUpperCase()}] ${site.card.name ?? "Garden of Eden"} enters the realm - spell draws are now limited`,
     );
   },
 
@@ -125,7 +125,7 @@ export const createGardenOfEdenSlice: StateCreator<
     }
 
     get().log(
-      `[${ownerSeat.toUpperCase()}] Garden of Eden leaves - card draw limits removed`,
+      `[${ownerSeat.toUpperCase()}] Garden of Eden leaves - spell draw limits removed`,
     );
   },
 
