@@ -13,9 +13,9 @@ import { siteHasSilencedToken } from "@/lib/game/store/utils/resourceHelpers";
 import { getCardImageUrl } from "@/lib/utils/cdnUrl";
 
 /** Card image URLs - use CDN-aware URL builder (same as all other card art) */
-const MORTUARY_IMAGE_URL = getCardImageUrl("bet_mismanaged_mortuary_b_s");
+const MORTUARY_IMAGE_URL = getCardImageUrl("got_mismanaged_mortuary_b_s");
 const ATLANTEAN_FATE_IMAGE_URL = getCardImageUrl("alp_atlantean_fate_b_s");
-const GARDEN_OF_EDEN_IMAGE_URL = getCardImageUrl("alp_garden_of_eden_b_s");
+const GARDEN_OF_EDEN_IMAGE_URL = getCardImageUrl("got_garden_of_eden_b_s");
 const BOUDICCA_IMAGE_URL = getCardImageUrl("art_boudicca_b_s");
 
 /** Status effect type for unified display */
