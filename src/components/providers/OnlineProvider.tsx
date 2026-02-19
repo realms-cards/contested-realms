@@ -1538,6 +1538,19 @@ export default function OnlineProvider({
     };
   }, [transport, session, sessionStatus, queueServerPatch]);
 
+  // Periodic re-sync of socket-driven player list (fallback in case a broadcast was missed)
+  useEffect(() => {
+    if (!transport || !connected) return;
+    const id = setInterval(() => {
+      try {
+        transport.requestPlayers();
+      } catch {
+        // Ignore errors
+      }
+    }, 90 * 1000);
+    return () => clearInterval(id);
+  }, [transport, connected]);
+
   // Rate limiting for available players fetcher - minimum 10 seconds between requests
   const lastAvailablePlayersRequestRef = useRef<number>(0);
   const AVAILABLE_PLAYERS_MIN_INTERVAL_MS = 10000; // 10 seconds

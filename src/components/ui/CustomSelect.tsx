@@ -2,6 +2,7 @@
 
 import { ChevronDown } from "lucide-react";
 import { useEffect, useRef, useState, useCallback } from "react";
+import { createPortal } from "react-dom";
 
 export interface CustomSelectOption {
   value: string;
@@ -34,25 +35,52 @@ export function CustomSelect({
   const containerRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
+  const [dropdownPos, setDropdownPos] = useState<{
+    top: number;
+    left: number;
+    width: number;
+  } | null>(null);
+
   const selectedOption = options.find((opt) => opt.value === value);
   const displayLabel = selectedOption?.label ?? placeholder;
 
+  // Compute dropdown position when opening
+  useEffect(() => {
+    if (isOpen && containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      setDropdownPos({
+        top: rect.bottom + 4,
+        left: rect.left,
+        width: rect.width,
+      });
+    }
+  }, [isOpen]);
+
   // Close dropdown when clicking outside
   useEffect(() => {
+    if (!isOpen) return undefined;
+
     const handleClickOutside = (event: MouseEvent) => {
       if (
         containerRef.current &&
-        !containerRef.current.contains(event.target as Node)
+        !containerRef.current.contains(event.target as Node) &&
+        listRef.current &&
+        !listRef.current.contains(event.target as Node)
       ) {
         setIsOpen(false);
       }
     };
 
-    if (isOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
-      return () => document.removeEventListener("mousedown", handleClickOutside);
-    }
-    return undefined;
+    const handleScrollOrResize = () => setIsOpen(false);
+
+    document.addEventListener("mousedown", handleClickOutside);
+    window.addEventListener("scroll", handleScrollOrResize, true);
+    window.addEventListener("resize", handleScrollOrResize);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      window.removeEventListener("scroll", handleScrollOrResize, true);
+      window.removeEventListener("resize", handleScrollOrResize);
+    };
   }, [isOpen]);
 
   // Keyboard navigation
@@ -155,39 +183,47 @@ export function CustomSelect({
         />
       </button>
 
-      {/* Dropdown menu */}
-      {isOpen && (
-        <div
-          ref={listRef}
-          className="
-            absolute z-50 w-full mt-1
-            bg-zinc-900 border border-white/20
-            rounded-md shadow-lg
-            max-h-48 overflow-y-auto
-            py-1
-          "
-          role="listbox"
-        >
-          {options.map((option, index) => (
-            <div
-              key={option.value}
-              className={`
-                px-2 py-1.5 text-sm cursor-pointer
-                transition-colors duration-100
-                ${option.value === value ? "bg-white/20 text-white" : "text-white/90"}
-                ${highlightedIndex === index ? "bg-white/15" : ""}
-                hover:bg-white/15
-              `}
-              onClick={() => handleOptionClick(option.value)}
-              onMouseEnter={() => setHighlightedIndex(index)}
-              role="option"
-              aria-selected={option.value === value}
-            >
-              {option.label}
-            </div>
-          ))}
-        </div>
-      )}
+      {/* Dropdown menu rendered via portal to escape overflow containers */}
+      {isOpen &&
+        dropdownPos &&
+        createPortal(
+          <div
+            ref={listRef}
+            className="
+              fixed z-[9999]
+              bg-zinc-900 border border-white/20
+              rounded-md shadow-lg
+              max-h-48 overflow-y-auto
+              py-1
+            "
+            style={{
+              top: dropdownPos.top,
+              left: dropdownPos.left,
+              width: dropdownPos.width,
+            }}
+            role="listbox"
+          >
+            {options.map((option, index) => (
+              <div
+                key={option.value || "__none__"}
+                className={`
+                  px-2 py-1.5 text-sm cursor-pointer
+                  transition-colors duration-100
+                  ${option.value === value ? "bg-white/20 text-white" : "text-white/90"}
+                  ${highlightedIndex === index ? "bg-white/15" : ""}
+                  hover:bg-white/15
+                `}
+                onClick={() => handleOptionClick(option.value)}
+                onMouseEnter={() => setHighlightedIndex(index)}
+                role="option"
+                aria-selected={option.value === value}
+              >
+                {option.label}
+              </div>
+            ))}
+          </div>,
+          document.body
+        )}
     </div>
   );
 }
