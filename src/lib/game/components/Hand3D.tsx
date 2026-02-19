@@ -1527,9 +1527,14 @@ export default function Hand3D({
                   if (dist < TAP_THRESHOLD_PX && duration < TAP_THRESHOLD_MS) {
                     e.stopPropagation();
 
-                    // If this card is already touch-selected, start drag
-                    if (touchSelectedIndex === originalIndex) {
-                      // Second tap on same card = select and start drag mode
+                    // Devices without a precise pointer (AVP gaze+pinch, phones):
+                    // single tap = select + ready to play. No double-tap needed.
+                    const hasFinePointer = window.matchMedia(
+                      "(pointer: fine)",
+                    ).matches;
+
+                    if (touchSelectedIndex === originalIndex || !hasFinePointer) {
+                      // Select card and enter play mode immediately
                       selectHandCard(owner, originalIndex);
                       try {
                         playCardSelect();
@@ -1537,7 +1542,7 @@ export default function Hand3D({
                       setDragFromHand(true);
                       setTouchSelectedIndex(null);
                     } else {
-                      // First tap = select this card and show preview
+                      // Fine pointer + touch (e.g. tablet with stylus): first tap = preview
                       setTouchSelectedIndex(originalIndex);
                       setHoveredCard(originalIndex);
                       focusTargetRef.current = i; // Focus on this card in fan

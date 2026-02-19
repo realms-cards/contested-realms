@@ -233,7 +233,13 @@ export function SiteCard({
 
   function handleTouchPreview(e: ThreeEvent<PointerEvent>) {
     const pe = e.nativeEvent as PointerEvent | undefined;
-    if (pe && pe.pointerType === "touch") {
+    // Long-press for touch AND coarse-pointer devices (AVP gaze+pinch
+    // reports pointerType "mouse" but has no right-click)
+    const needsLongPress =
+      pe &&
+      (pe.pointerType === "touch" ||
+        !window.matchMedia("(pointer: fine)").matches);
+    if (needsLongPress) {
       clearTouchTimers();
       if (site.card) {
         touchPreviewTimerRef.current = window.setTimeout(() => {
@@ -374,7 +380,12 @@ export function SiteCard({
               onPointerUp={handlePointerUp}
               onPointerMove={(e) => {
                 const pe = e.nativeEvent as PointerEvent | undefined;
-                if (pe && pe.pointerType === "touch") clearTouchTimers();
+                if (
+                  pe &&
+                  (pe.pointerType === "touch" ||
+                    !window.matchMedia("(pointer: fine)").matches)
+                )
+                  clearTouchTimers();
               }}
               onPointerOver={(e) => {
                 if (dragFromHand || dragFromPile) return;

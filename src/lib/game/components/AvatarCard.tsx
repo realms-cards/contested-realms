@@ -440,7 +440,13 @@ export function AvatarCard({
     }
 
     const pe = e.nativeEvent as PointerEvent | undefined;
-    if (pe && pe.pointerType === "touch") {
+    // Long-press for touch AND coarse-pointer devices (AVP gaze+pinch
+    // reports pointerType "mouse" but has no right-click)
+    const needsLongPress =
+      pe &&
+      (pe.pointerType === "touch" ||
+        !window.matchMedia("(pointer: fine)").matches);
+    if (needsLongPress) {
       clearTouchTimers();
       const cx = e.clientX;
       const cy = e.clientY;
@@ -469,7 +475,11 @@ export function AvatarCard({
     if (dragFromHand || dragFromPile || draggingPermanent) return;
     e.stopPropagation();
     const pe = e.nativeEvent as PointerEvent | undefined;
-    if (pe && pe.pointerType === "touch") {
+    if (
+      pe &&
+      (pe.pointerType === "touch" ||
+        !window.matchMedia("(pointer: fine)").matches)
+    ) {
       clearTouchTimers();
     }
     handlePointerMove(e.point.x, e.point.z);

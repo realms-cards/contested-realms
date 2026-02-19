@@ -171,9 +171,6 @@ export type PermanentStackProps = {
   isSpectator: boolean;
   actorKey: PlayerKey | null;
   currentPlayer: 1 | 2;
-  phase: GameState["phase"];
-  hasDrawnThisTurn: boolean;
-  turn: number;
   dragContext: DragContext;
   hoverContext: HoverContext;
   touchContext: TouchContext;
@@ -314,9 +311,6 @@ export function PermanentStack({
   isSpectator,
   actorKey,
   currentPlayer,
-  phase,
-  hasDrawnThisTurn,
-  turn,
   dragContext,
   hoverContext,
   touchContext,
@@ -896,7 +890,13 @@ export function PermanentStack({
                   return;
                 }
                 const pe = e.nativeEvent as PointerEvent | undefined;
-                if (pe && pe.pointerType === "touch") {
+                // Start long-press timer for touch AND coarse-pointer devices (AVP gaze+pinch
+                // reports pointerType "mouse" but has no right-click for context menu)
+                const needsLongPress =
+                  pe &&
+                  (pe.pointerType === "touch" ||
+                    !window.matchMedia("(pointer: fine)").matches);
+                if (needsLongPress) {
                   clearTouchTimers();
                   const cx = e.clientX;
                   const cy = e.clientY;
@@ -934,18 +934,10 @@ export function PermanentStack({
                       clearHoverPreview(hoverKey);
                       return;
                     }
-                    // Block board movement until the acting player has drawn
-                    // (Sorcery rules: must draw before any actions, except turn 1)
-                    const isFirstTurn = turn === 1;
-                    if (
-                      actorIsActive &&
-                      (phase === "Start" || phase === "Draw") &&
-                      !hasDrawnThisTurn &&
-                      !isFirstTurn
-                    ) {
-                      clearHoverPreview(hoverKey);
-                      return;
-                    }
+                    // Board movement is allowed before drawing so players can
+                    // resolve effects like Hauntless Head or "once on your
+                    // turn" move abilities. Playing cards from hand is still
+                    // gated by the draw requirement in playActions.
                   }
                   dragStartRef.current = {
                     at: key,
