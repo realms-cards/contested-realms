@@ -69,7 +69,7 @@ export function createPlayerRegistry(config: PlayerRegistryConfig) {
   async function registerPlayer(
     playerId: string,
     displayName: string,
-    socket: Socket
+    socket: Socket,
   ): Promise<PlayerRecord> {
     const socketId = socket.id;
     const now = Date.now();
@@ -162,7 +162,7 @@ export function createPlayerRegistry(config: PlayerRegistryConfig) {
    * Get player by socket ID - checks local map first, then Redis
    */
   async function getPlayerBySocket(
-    socketId: string
+    socketId: string,
   ): Promise<PlayerRecord | null> {
     // Check local mapping first
     const playerId = playerIdBySocket.get(socketId);
@@ -182,7 +182,7 @@ export function createPlayerRegistry(config: PlayerRegistryConfig) {
    */
   async function updatePlayerMatch(
     playerId: string,
-    matchId: string | null
+    matchId: string | null,
   ): Promise<void> {
     const player = await getPlayer(playerId);
     if (player) {
@@ -200,7 +200,7 @@ export function createPlayerRegistry(config: PlayerRegistryConfig) {
    */
   async function updatePlayerLobby(
     playerId: string,
-    lobbyId: string | null
+    lobbyId: string | null,
   ): Promise<void> {
     const player = await getPlayer(playerId);
     if (player) {
@@ -226,9 +226,10 @@ export function createPlayerRegistry(config: PlayerRegistryConfig) {
     playerIdBySocket.delete(socketId);
     void redisState.clearPlayerSocket(socketId);
 
-    // Update local record
+    // Update local record - only null socketId if it still matches the disconnecting socket
+    // (prevents race where player reconnects before this fires, wiping the new socketId)
     const player = players.get(playerId);
-    if (player) {
+    if (player && player.socketId === socketId) {
       player.socketId = null;
     }
 
@@ -245,7 +246,7 @@ export function createPlayerRegistry(config: PlayerRegistryConfig) {
    */
   function startDisconnectTimer(
     playerId: string,
-    matchIdAtDisconnect: string | null
+    matchIdAtDisconnect: string | null,
   ): void {
     // Cancel existing timer if any
     cancelDisconnectTimer(playerId);
@@ -256,7 +257,7 @@ export function createPlayerRegistry(config: PlayerRegistryConfig) {
       if (player && !player.socketId) {
         // Player didn't reconnect - trigger forfeit callback if they were in a match
         console.log(
-          `[PlayerRegistry] Player ${playerId} disconnect grace period expired (was in match: ${matchIdAtDisconnect})`
+          `[PlayerRegistry] Player ${playerId} disconnect grace period expired (was in match: ${matchIdAtDisconnect})`,
         );
         if (matchIdAtDisconnect && onGracePeriodExpired) {
           try {
@@ -264,7 +265,7 @@ export function createPlayerRegistry(config: PlayerRegistryConfig) {
           } catch (err) {
             console.error(
               `[PlayerRegistry] onGracePeriodExpired callback failed:`,
-              err
+              err,
             );
           }
         }
@@ -320,7 +321,7 @@ export function createPlayerRegistry(config: PlayerRegistryConfig) {
    */
   function handleRemoteConnect(
     playerId: string,
-    remoteInstanceId: string
+    remoteInstanceId: string,
   ): void {
     if (remoteInstanceId === instanceId) return;
 
@@ -352,7 +353,7 @@ export function createPlayerRegistry(config: PlayerRegistryConfig) {
    * Set the callback for grace period expiry (late binding support)
    */
   function setOnGracePeriodExpired(
-    callback: (playerId: string, matchId: string | null) => void
+    callback: (playerId: string, matchId: string | null) => void,
   ): void {
     onGracePeriodExpired = callback;
   }

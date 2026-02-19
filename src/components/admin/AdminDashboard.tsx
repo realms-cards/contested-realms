@@ -1590,6 +1590,7 @@ export default function AdminDashboard({
                           disabled={updatingPatronTier === user.id}
                           placeholder="None"
                           options={[
+                            { value: "", label: "None" },
                             { value: "apprentice", label: "Apprentice" },
                             { value: "grandmaster", label: "Grandmaster" },
                             { value: "kingofthe", label: "KingOfThe" },

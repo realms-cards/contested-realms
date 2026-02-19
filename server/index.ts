@@ -4793,7 +4793,8 @@ io.on("connection", async (socket: SocketClient) => {
     const match = matches.get(player.matchId);
     if (!match) return;
     // Only accept for constructed/precon matches
-    if (match.matchType !== "constructed" && match.matchType !== "precon") return;
+    if (match.matchType !== "constructed" && match.matchType !== "precon")
+      return;
     if (!(match.playerDecks instanceof Map)) {
       match.playerDecks = new Map<string, unknown>();
     }
@@ -5507,7 +5508,10 @@ io.on("connection", async (socket: SocketClient) => {
       }
 
       // Keep player record for potential rejoin, just clear socket association
-      player.socketId = null;
+      // Guard: only null if still matches the disconnecting socket (reconnect race safety)
+      if (player.socketId === socket.id) {
+        player.socketId = null;
+      }
 
       // NOTE: Disconnects do NOT end matches - players can rejoin anytime.
       // Matches only end naturally (game over) or via explicit "Leave Match" button in lobby.
@@ -5530,6 +5534,7 @@ startMaintenanceTimers({
   matches,
   botManager,
   broadcastLobbies,
+  broadcastPlayers,
   lobbyHasHumanPlayers,
   matchHasHumanPlayers,
   cleanupMatchNow,

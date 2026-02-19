@@ -13,6 +13,7 @@ export interface MaintenanceTimerDeps {
     cleanupBotsForLobby: (lobbyId: string) => void;
   };
   broadcastLobbies: () => void;
+  broadcastPlayers: () => void;
   lobbyHasHumanPlayers: (lobby: LobbyState | null | undefined) => boolean;
   matchHasHumanPlayers: (match: ServerMatchState | null | undefined) => boolean;
   cleanupMatchNow: (
@@ -38,6 +39,7 @@ export function startMaintenanceTimers({
   matches,
   botManager,
   broadcastLobbies,
+  broadcastPlayers,
   lobbyHasHumanPlayers,
   matchHasHumanPlayers,
   cleanupMatchNow,
@@ -54,6 +56,18 @@ export function startMaintenanceTimers({
   safeErrorMessage,
 }: MaintenanceTimerDeps): NodeJS.Timeout[] {
   const timers: NodeJS.Timeout[] = [];
+
+  // Periodic player list heartbeat: re-broadcast every 60s so clients stay in sync
+  // even if they missed a connect/disconnect event.
+  timers.push(
+    setInterval(() => {
+      try {
+        broadcastPlayers();
+      } catch {
+        // Ignore broadcast errors
+      }
+    }, 60 * 1000),
+  );
 
   timers.push(
     setInterval(() => {
@@ -340,7 +354,10 @@ export function startMaintenanceTimers({
   setTimeout(() => {
     computeAllMetaStats(prisma).catch((err) => {
       try {
-        console.warn("[maintenance] Initial meta stats computation failed:", safeErrorMessage(err));
+        console.warn(
+          "[maintenance] Initial meta stats computation failed:",
+          safeErrorMessage(err),
+        );
       } catch {
         // Ignore logging failures
       }
@@ -350,7 +367,10 @@ export function startMaintenanceTimers({
     setInterval(() => {
       computeAllMetaStats(prisma).catch((err) => {
         try {
-          console.warn("[maintenance] Meta stats computation failed:", safeErrorMessage(err));
+          console.warn(
+            "[maintenance] Meta stats computation failed:",
+            safeErrorMessage(err),
+          );
         } catch {
           // Ignore logging failures
         }
