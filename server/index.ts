@@ -2060,6 +2060,29 @@ function broadcastPlayers() {
   io.emit("playerList", { players: playersArray() });
 }
 
+/**
+ * Reap stale player entries whose socketId references a socket that no longer exists.
+ * This catches cases where disconnect events were missed (network drops, browser kills,
+ * mobile backgrounding, etc.) and ensures the online player count stays accurate.
+ */
+function reapStalePlayers(): number {
+  let reaped = 0;
+  const connectedSockets = io.sockets.sockets;
+  for (const player of players.values()) {
+    if (player.socketId && !connectedSockets.has(player.socketId)) {
+      try {
+        console.log(
+          `[reap] Clearing stale socketId ${player.socketId} for ${player.displayName} (${player.id.slice(-6)})`,
+        );
+      } catch {}
+      playerIdBySocket.delete(player.socketId);
+      player.socketId = null;
+      reaped++;
+    }
+  }
+  return reaped;
+}
+
 const REQUIRE_JWT = Boolean(
   (process.env.SOCKET_REQUIRE_JWT || "").toLowerCase() === "1" ||
   (process.env.SOCKET_REQUIRE_JWT || "").toLowerCase() === "true",
@@ -2303,11 +2326,13 @@ io.on("connection", async (socket: SocketClient) => {
 
     // Disconnect any existing sockets for this player to prevent duplicates
     // This handles cases where a user has multiple tabs or reconnects without proper cleanup
-    const existingSocketId = playerIdBySocket.get(playerId)
-      ? Array.from(playerIdBySocket.entries()).find(
-          ([, pid]) => pid === playerId,
-        )?.[0]
-      : null;
+    let existingSocketId: string | null = null;
+    for (const [sid, pid] of playerIdBySocket.entries()) {
+      if (pid === playerId && sid !== socket.id) {
+        existingSocketId = sid;
+        break;
+      }
+    }
 
     if (existingSocketId && existingSocketId !== socket.id) {
       const existingSocket = io.sockets.sockets.get(existingSocketId);
@@ -5535,6 +5560,7 @@ startMaintenanceTimers({
   botManager,
   broadcastLobbies,
   broadcastPlayers,
+  reapStalePlayers,
   lobbyHasHumanPlayers,
   matchHasHumanPlayers,
   cleanupMatchNow,
