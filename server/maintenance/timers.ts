@@ -14,6 +14,7 @@ export interface MaintenanceTimerDeps {
   };
   broadcastLobbies: () => void;
   broadcastPlayers: () => void;
+  reapStalePlayers: () => number;
   lobbyHasHumanPlayers: (lobby: LobbyState | null | undefined) => boolean;
   matchHasHumanPlayers: (match: ServerMatchState | null | undefined) => boolean;
   cleanupMatchNow: (
@@ -40,6 +41,7 @@ export function startMaintenanceTimers({
   botManager,
   broadcastLobbies,
   broadcastPlayers,
+  reapStalePlayers,
   lobbyHasHumanPlayers,
   matchHasHumanPlayers,
   cleanupMatchNow,
@@ -57,11 +59,19 @@ export function startMaintenanceTimers({
 }: MaintenanceTimerDeps): NodeJS.Timeout[] {
   const timers: NodeJS.Timeout[] = [];
 
-  // Periodic player list heartbeat: re-broadcast every 60s so clients stay in sync
-  // even if they missed a connect/disconnect event.
+  // Periodic player list heartbeat: reap stale entries then re-broadcast every 60s
+  // so clients stay in sync even if they missed a connect/disconnect event.
   timers.push(
     setInterval(() => {
       try {
+        const reaped = reapStalePlayers();
+        if (reaped > 0) {
+          try {
+            console.log(
+              `[maintenance] Reaped ${reaped} stale player(s) from online list`,
+            );
+          } catch {}
+        }
         broadcastPlayers();
       } catch {
         // Ignore broadcast errors
