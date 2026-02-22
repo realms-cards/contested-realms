@@ -659,6 +659,9 @@ export default function PublicMetaDashboard() {
   const [antiSynergies, setAntiSynergies] = useState<CardPairSynergy[]>([]);
   const [synergiesLoading, setSynergiesLoading] = useState(false);
   const [synergyTotalDecks, setSynergyTotalDecks] = useState(0);
+  const SYNERGY_PAGE_SIZE = 20;
+  const [synergyVisible, setSynergyVisible] = useState(SYNERGY_PAGE_SIZE);
+  const [antiSynergyVisible, setAntiSynergyVisible] = useState(SYNERGY_PAGE_SIZE);
 
   // Card drill-down state
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
@@ -1519,114 +1522,7 @@ export default function PublicMetaDashboard() {
           )}
         </section>
 
-        {/* Card Synergies — hidden until 100+ deck observations */}
-        {synergyTotalDecks >= 100 && (
-          <>
-            <section>
-              <h2 className="text-lg font-semibold text-white mb-1">
-                Top Card Synergies
-              </h2>
-              <p className="text-xs text-slate-400 mb-4">
-                Spellbook card pairs with the highest win rate when played together (min. 3 co-occurrences)
-              </p>
-              {synergiesLoading ? (
-                <p className="text-sm text-slate-400">Loading...</p>
-              ) : synergies.length === 0 ? (
-                <p className="text-sm text-slate-400">
-                  No synergy data available yet.
-                </p>
-              ) : (
-                <div className="overflow-auto rounded border border-slate-800 bg-slate-900/40">
-                  <table className="min-w-full text-left text-xs text-slate-200">
-                    <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400">
-                      <tr>
-                        <th className="px-3 py-2">Card A</th>
-                        <th className="px-3 py-2">Card B</th>
-                        <th className="px-3 py-2">Paired</th>
-                        <th className="px-3 py-2">Wins</th>
-                        <th className="px-3 py-2">Losses</th>
-                        <th className="px-3 py-2">Win Rate</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {synergies.slice(0, 20).map((pair) => (
-                        <tr
-                          key={`${pair.cardA}||${pair.cardB}`}
-                          className="border-t border-slate-800/60 hover:bg-slate-800/40 cursor-pointer"
-                          onMouseEnter={() =>
-                            pair.slugA && setHoveredCard({ slug: pair.slugA, type: null })
-                          }
-                          onMouseLeave={() => setHoveredCard(null)}
-                        >
-                          <td className="px-3 py-2 font-medium text-emerald-200">{pair.cardA}</td>
-                          <td className="px-3 py-2 font-medium text-emerald-200">{pair.cardB}</td>
-                          <td className="px-3 py-2">{pair.coOccurrences}</td>
-                          <td className="px-3 py-2">{pair.wins}</td>
-                          <td className="px-3 py-2">{pair.losses}</td>
-                          <td className="px-3 py-2 text-emerald-300 font-medium">
-                            {(pair.winRate * 100).toFixed(1)}%
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </section>
-
-            <section>
-              <h2 className="text-lg font-semibold text-white mb-1">
-                Anti-Synergies
-              </h2>
-              <p className="text-xs text-slate-400 mb-4">
-                Card pairs with the lowest win rate when played together
-              </p>
-              {synergiesLoading ? (
-                <p className="text-sm text-slate-400">Loading...</p>
-              ) : antiSynergies.length === 0 ? (
-                <p className="text-sm text-slate-400">
-                  No anti-synergy data available yet.
-                </p>
-              ) : (
-                <div className="overflow-auto rounded border border-slate-800 bg-slate-900/40">
-                  <table className="min-w-full text-left text-xs text-slate-200">
-                    <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400">
-                      <tr>
-                        <th className="px-3 py-2">Card A</th>
-                        <th className="px-3 py-2">Card B</th>
-                        <th className="px-3 py-2">Paired</th>
-                        <th className="px-3 py-2">Wins</th>
-                        <th className="px-3 py-2">Losses</th>
-                        <th className="px-3 py-2">Win Rate</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {antiSynergies.slice(0, 20).map((pair) => (
-                        <tr
-                          key={`${pair.cardA}||${pair.cardB}`}
-                          className="border-t border-slate-800/60 hover:bg-slate-800/40 cursor-pointer"
-                          onMouseEnter={() =>
-                            pair.slugA && setHoveredCard({ slug: pair.slugA, type: null })
-                          }
-                          onMouseLeave={() => setHoveredCard(null)}
-                        >
-                          <td className="px-3 py-2 font-medium text-rose-200">{pair.cardA}</td>
-                          <td className="px-3 py-2 font-medium text-rose-200">{pair.cardB}</td>
-                          <td className="px-3 py-2">{pair.coOccurrences}</td>
-                          <td className="px-3 py-2">{pair.wins}</td>
-                          <td className="px-3 py-2">{pair.losses}</td>
-                          <td className="px-3 py-2 text-rose-300 font-medium">
-                            {(pair.winRate * 100).toFixed(1)}%
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </section>
-          </>
-        )}
+        {/* Card Synergies — moved to bottom, see below */}
 
         {/* Element Distribution */}
         <section>
@@ -1880,6 +1776,135 @@ export default function PublicMetaDashboard() {
             onRowClick={handleCardClick}
           />
         </section>
+
+        {/* Spell Synergies — at the bottom, lazy-loaded */}
+        {synergyTotalDecks >= 100 && (
+          <>
+            <section>
+              <h2 className="text-lg font-semibold text-white mb-1">
+                Top Spell Synergies
+              </h2>
+              <p className="text-xs text-slate-400 mb-4">
+                Spell pairs with the highest win rate when played together (min. 3 co-occurrences)
+              </p>
+              {synergiesLoading ? (
+                <p className="text-sm text-slate-400">Loading...</p>
+              ) : synergies.length === 0 ? (
+                <p className="text-sm text-slate-400">
+                  No synergy data available yet.
+                </p>
+              ) : (
+                <div className="max-h-[600px] overflow-auto rounded border border-slate-800 bg-slate-900/40">
+                  <table className="min-w-full text-left text-xs text-slate-200">
+                    <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400 sticky top-0 z-10">
+                      <tr>
+                        <th className="px-3 py-2">Card A</th>
+                        <th className="px-3 py-2">Card B</th>
+                        <th className="px-3 py-2">Paired</th>
+                        <th className="px-3 py-2">Wins</th>
+                        <th className="px-3 py-2">Losses</th>
+                        <th className="px-3 py-2">Win Rate</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {synergies.slice(0, synergyVisible).map((pair) => (
+                        <tr
+                          key={`${pair.cardA}||${pair.cardB}`}
+                          className="border-t border-slate-800/60 hover:bg-slate-800/40 cursor-pointer"
+                          onMouseEnter={() =>
+                            pair.slugA && setHoveredCard({ slug: pair.slugA, type: null })
+                          }
+                          onMouseLeave={() => setHoveredCard(null)}
+                        >
+                          <td className="px-3 py-2 font-medium text-emerald-200">{pair.cardA}</td>
+                          <td className="px-3 py-2 font-medium text-emerald-200">{pair.cardB}</td>
+                          <td className="px-3 py-2">{pair.coOccurrences}</td>
+                          <td className="px-3 py-2">{pair.wins}</td>
+                          <td className="px-3 py-2">{pair.losses}</td>
+                          <td className="px-3 py-2 text-emerald-300 font-medium">
+                            {(pair.winRate * 100).toFixed(1)}%
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {synergyVisible < synergies.length && (
+                    <div className="flex justify-center py-3 border-t border-slate-800/60">
+                      <button
+                        onClick={() => setSynergyVisible((v) => v + SYNERGY_PAGE_SIZE)}
+                        className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
+                      >
+                        Show more ({synergies.length - synergyVisible} remaining)
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </section>
+
+            <section>
+              <h2 className="text-lg font-semibold text-white mb-1">
+                Spell Anti-Synergies
+              </h2>
+              <p className="text-xs text-slate-400 mb-4">
+                Spell pairs with the lowest win rate when played together
+              </p>
+              {synergiesLoading ? (
+                <p className="text-sm text-slate-400">Loading...</p>
+              ) : antiSynergies.length === 0 ? (
+                <p className="text-sm text-slate-400">
+                  No anti-synergy data available yet.
+                </p>
+              ) : (
+                <div className="max-h-[600px] overflow-auto rounded border border-slate-800 bg-slate-900/40">
+                  <table className="min-w-full text-left text-xs text-slate-200">
+                    <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400 sticky top-0 z-10">
+                      <tr>
+                        <th className="px-3 py-2">Card A</th>
+                        <th className="px-3 py-2">Card B</th>
+                        <th className="px-3 py-2">Paired</th>
+                        <th className="px-3 py-2">Wins</th>
+                        <th className="px-3 py-2">Losses</th>
+                        <th className="px-3 py-2">Win Rate</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {antiSynergies.slice(0, antiSynergyVisible).map((pair) => (
+                        <tr
+                          key={`${pair.cardA}||${pair.cardB}`}
+                          className="border-t border-slate-800/60 hover:bg-slate-800/40 cursor-pointer"
+                          onMouseEnter={() =>
+                            pair.slugA && setHoveredCard({ slug: pair.slugA, type: null })
+                          }
+                          onMouseLeave={() => setHoveredCard(null)}
+                        >
+                          <td className="px-3 py-2 font-medium text-rose-200">{pair.cardA}</td>
+                          <td className="px-3 py-2 font-medium text-rose-200">{pair.cardB}</td>
+                          <td className="px-3 py-2">{pair.coOccurrences}</td>
+                          <td className="px-3 py-2">{pair.wins}</td>
+                          <td className="px-3 py-2">{pair.losses}</td>
+                          <td className="px-3 py-2 text-rose-300 font-medium">
+                            {(pair.winRate * 100).toFixed(1)}%
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {antiSynergyVisible < antiSynergies.length && (
+                    <div className="flex justify-center py-3 border-t border-slate-800/60">
+                      <button
+                        onClick={() => setAntiSynergyVisible((v) => v + SYNERGY_PAGE_SIZE)}
+                        className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
+                      >
+                        Show more ({antiSynergies.length - antiSynergyVisible} remaining)
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </section>
+          </>
+        )}
 
       {/* Card Preview Overlay - rendered via portal to ensure viewport-fixed positioning */}
       {hoveredCard &&

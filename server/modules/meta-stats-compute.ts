@@ -763,7 +763,7 @@ async function computeDecks(prisma: AnyPrisma, format: string): Promise<unknown>
 }
 
 const MIN_PAIR_OCCURRENCES = 3;
-const SYNERGY_LIMIT = 50;
+const SYNERGY_LIMIT = 200;
 
 async function fetchSessions(prisma: AnyPrisma, format: string): Promise<SessionRow[]> {
   return format === "all"
@@ -818,16 +818,17 @@ async function computeSynergies(prisma: AnyPrisma, format: string): Promise<unkn
     for (const [playerId, cards] of Object.entries(session.playerDecks)) {
       if (!Array.isArray(cards)) continue;
 
-      // Extract non-avatar card names (exclude avatar, collection; include sites + spells)
+      // Extract spell card names only (exclude avatar, collection, sites)
       const deckCardNames = new Set<string>();
       let deckTotalCards = 0;
       for (const card of cards) {
         if (!card?.name) continue;
         if (isCollectionZone(card)) continue;
         if (isAvatarType(card.type)) continue;
+        deckTotalCards++;
+        if (isSiteType(card.type)) continue;
         deckCardNames.add(card.name);
         allCardNames.add(card.name);
-        deckTotalCards++;
       }
 
       // Skip small decklists for constructed (filters precon decks with ~36 cards)
