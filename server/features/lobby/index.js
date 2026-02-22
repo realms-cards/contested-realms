@@ -986,11 +986,15 @@ function createLobbyFeature(deps) {
 
   function playersArray() {
     const arr = [];
+    const connectedSockets = io.sockets.sockets;
     for (const p of players.values()) {
-      // Only include players with an active socket connection (not disconnected)
-      if (p.socketId && !p.displayName.startsWith("Replay_")) {
-        arr.push(getPlayerInfo(p.id));
+      if (!p.socketId || p.displayName.startsWith("Replay_")) continue;
+      // Validate the socket actually exists — clears ghost entries from missed disconnects
+      if (!connectedSockets.has(p.socketId)) {
+        p.socketId = null;
+        continue;
       }
+      arr.push(getPlayerInfo(p.id));
     }
     return arr;
   }

@@ -2365,6 +2365,10 @@ io.on("connection", async (socket: SocketClient) => {
         };
         players.set(playerId, player);
       } else {
+        // Clean up old socket mapping before overwriting
+        if (existing.socketId && existing.socketId !== socket.id) {
+          playerIdBySocket.delete(existing.socketId);
+        }
         existing.displayName = displayName;
         existing.socketId = socket.id;
         player = existing;
