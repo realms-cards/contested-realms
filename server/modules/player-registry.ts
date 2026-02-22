@@ -89,6 +89,10 @@ export function createPlayerRegistry(config: PlayerRegistryConfig) {
       };
       players.set(playerId, player);
     } else {
+      // Clean up old socket mapping before overwriting
+      if (player.socketId && player.socketId !== socketId) {
+        playerIdBySocket.delete(player.socketId);
+      }
       player.displayName = displayName;
       player.socketId = socketId;
     }
