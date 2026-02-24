@@ -157,6 +157,8 @@ export type UiSlice = Pick<
   | "requestEndTurn"
   | "confirmEndTurn"
   | "dismissEndTurnConfirm"
+  | "tutorialActionGate"
+  | "setTutorialActionGate"
 >;
 
 type UiStateDefaults = Pick<
@@ -182,6 +184,7 @@ type UiStateDefaults = Pick<
   | "switchSiteSource"
   | "switchSitePending"
   | "showEndTurnConfirm"
+  | "tutorialActionGate"
 >;
 
 export const createInitialUiState = (): UiStateDefaults => ({
@@ -206,6 +209,7 @@ export const createInitialUiState = (): UiStateDefaults => ({
   switchSiteSource: null,
   switchSitePending: null,
   showEndTurnConfirm: false,
+  tutorialActionGate: { active: false, validate: null, onReject: null },
 });
 
 export const createUiSlice: StateCreator<GameState, [], [], UiSlice> = (
@@ -349,4 +353,6 @@ export const createUiSlice: StateCreator<GameState, [], [], UiSlice> = (
   dismissEndTurnConfirm: () => {
     set({ showEndTurnConfirm: false });
   },
+
+  setTutorialActionGate: (gate) => set({ tutorialActionGate: gate }),
 });

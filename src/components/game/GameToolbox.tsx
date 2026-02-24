@@ -59,8 +59,8 @@ export default function GameToolbox({
   const isOnline =
     !!myPlayerId && !!matchId && !!opponentPlayerId && !!opponentSeat;
 
-  // Graphics settings for font scaling
-  const { settings: graphicsSettings } = useGraphicsSettings();
+  // Graphics settings for font scaling + resolver glow toggle
+  const { settings: graphicsSettings, setSettings: setGraphicsSettings } = useGraphicsSettings();
   const isMobileScreen = useSmallScreen();
 
   // Calculate font size based on uiTextScale (0.5-1.5 maps to 10px-16px)
@@ -1541,6 +1541,15 @@ export default function GameToolbox({
                   className="w-4 h-4 rounded bg-white/10 border-white/20 text-red-500 focus:ring-red-500/50"
                 />
                 <span className="text-xs">Disable all card resolvers</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={graphicsSettings.showResolverGlow}
+                  onChange={() => setGraphicsSettings({ showResolverGlow: !graphicsSettings.showResolverGlow })}
+                  className="w-4 h-4 rounded bg-white/10 border-white/20 text-violet-500 focus:ring-violet-500/50"
+                />
+                <span className="text-xs">Show resolver glow on cards</span>
               </label>
               {/* Goldfish Mode (hotseat only) */}
               {!isOnline && (

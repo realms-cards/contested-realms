@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "additionalDirectories": [
+      "/Users/geleeroyale/CascadeProjects/sorcery-client/src/app/tutorial"
+    ],
+    "allow": [
+      "Bash(head:*)"
+    ]
+  }
+}
