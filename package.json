@@ -47,6 +47,7 @@
     "assets:webp": "node scripts/convert-webp.js",
     "assets:webp:out": "node scripts/convert-webp.js --input data --outDir data-webp",
     "assets:ascii:export": "node scripts/render-ascii-svg.js",
+    "pdf:minify": "node scripts/minify-pdf.js",
     "assets:pwa:icons": "node scripts/generate-pwa-icons.js",
     "assets:pwa:screens": "node scripts/generate-pwa-screenshots.js",
     "assets:process": "node scripts/process-card-art.js",

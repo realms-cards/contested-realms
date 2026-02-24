@@ -19,6 +19,9 @@ interface CardGlowProps {
   elevation?: number;
   color?: string;
   renderOrder?: number;
+  /** When true (default), the glow lies flat in the XZ plane (for board cards).
+   *  When false, it stays in the XY plane (for upright hand cards). */
+  flat?: boolean;
 }
 
 export default function CardGlow({
@@ -28,6 +31,7 @@ export default function CardGlow({
   elevation = 0,
   color = "#93c5fd",
   renderOrder = 10000,
+  flat = true,
 }: CardGlowProps) {
   const aspect = width / height;
   
@@ -44,9 +48,9 @@ export default function CardGlow({
 
   return (
     <mesh
-      rotation-x={-Math.PI / 2}
+      rotation-x={flat ? -Math.PI / 2 : 0}
       rotation-z={rotationZ}
-      position={[0, elevation, 0]}
+      position={flat ? [0, elevation, 0] : [0, 0, elevation]}
       renderOrder={renderOrder}
       raycast={noopRaycast}
     >

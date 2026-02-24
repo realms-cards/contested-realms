@@ -1,8 +1,10 @@
 import type { ThreeEvent } from "@react-three/fiber";
 import type { MutableRefObject } from "react";
+import { getGraphicsSettings } from "@/hooks/useGraphicsSettings";
 import { BASE_CARD_ELEVATION } from "@/lib/game/boardShared";
 import CardOutline from "@/lib/game/components/CardOutline";
 import CardPlane from "@/lib/game/components/CardPlane";
+import { hasCustomResolver } from "@/lib/game/resolverRegistry";
 import { CARD_LONG, CARD_SHORT, PLAYER_COLORS } from "@/lib/game/constants";
 import type {
   BabelTowerMerge,
@@ -355,6 +357,24 @@ export function SiteCard({
             color={highlight}
             renderOrder={1202}
             pulse={shouldPulse}
+          />
+        </group>
+      )}
+      {/* Purple glow for sites with custom resolvers */}
+      {!highlight && getGraphicsSettings().showResolverGlow && hasCustomResolver(site.card?.name) && (
+        <group position={[edgeOffset.x, 0, edgeOffset.z]}>
+          <CardOutline
+            width={CARD_SHORT * 1.08}
+            height={CARD_LONG * 1.08}
+            rotationZ={rotZ}
+            elevation={0.0001}
+            color="#8b5cf6"
+            renderOrder={1100}
+            opacity={0.4}
+            pulse
+            pulseSpeed={0.6}
+            pulseMin={0.2}
+            pulseMax={0.45}
           />
         </group>
       )}

@@ -222,7 +222,9 @@ export function createPlayerRegistry(config: PlayerRegistryConfig) {
    */
   function handleDisconnect(socket: Socket): void {
     const socketId = socket.id;
-    const playerId = playerIdBySocket.get(socketId);
+    const playerId =
+      playerIdBySocket.get(socketId) ||
+      Array.from(players.values()).find((p) => p.socketId === socketId)?.id;
 
     if (!playerId) return;
 

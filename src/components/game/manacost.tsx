@@ -58,8 +58,8 @@ export function NumberBadge({
           cx={50}
           cy={50}
           r={radius}
-          fill="#000"
-          stroke="#6B7280"
+          fill="#fff"
+          stroke="#000"
           strokeWidth={strokeWidth}
           fillOpacity={backgroundOpacity}
         />
@@ -69,7 +69,7 @@ export function NumberBadge({
             y={50}
             textAnchor="middle"
             dominantBaseline="central"
-            fill="#fff"
+            fill="#000"
             fontWeight={800}
             fontSize={fontScale * 100}
             className="font-fantaisie select-none"
@@ -87,7 +87,7 @@ export function NumberBadge({
             top: "50%",
             left: "50%",
             transform: "translate(-50%, -50%)",
-            color: "#fff",
+            color: "#000",
             fontWeight: 800,
             fontSize: fontScale * size,
             lineHeight: 1,
