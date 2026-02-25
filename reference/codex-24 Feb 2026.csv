@@ -171,15 +171,16 @@ takes damage for them.' Bruin is an ((earth)) minion. See [[Druid]].",""
 Typically an effect will cause the minion to unburrow, for example [[Awakened Mummies]].",""
 "Burrowing","Keyword Ability. A minion with Burrowing can be summoned to underground locations and survive 
 underground. By using one step, a minion with Burrowing can move between the surface and subsurface 
-of a land site, or between adjacent underground locations. For example, [[Cave Trolls]] can be 
-summoned underground to one of your land sites. Then, after their summoning sickness wore off, they 
-could use their Move and Attack ability to take a step from underground to the surface of that site 
-(and that would use up their step). If they were on the surface of a land site, they could use their 
-step to move from the surface to underground of that site. To 'burrow' means to move from the 
-surface to the underground of a land site. When an effect 'burrows' a card, you forcefully move that 
-card from the surface to underground, even if it doesn't have the Burrowing ability. If an effect 
-tries to forcefully burrow (e.g. [[Bury]]) a card that occupies at least one water site, the effect 
-fails.",""
+of a land site, or between adjacent underground locations. A minion with both the Burrowing and 
+Submerge abilities can move directly from an underground location to an underwater location in an 
+adjacent square, and vice versa, in one step. For example, [[Cave Trolls]] can be summoned 
+underground to one of your land sites. Then, after their summoning sickness wore off, they could use 
+their Move and Attack ability to take a step from underground to the surface of that site (and that 
+would use up their step). If they were on the surface of a land site, they could use their step to 
+move from the surface to underground of that site. To 'burrow' means to move from the surface to the 
+underground of a land site. When an effect 'burrows' a card, you forcefully move that card from the 
+surface to underground, even if it doesn't have the Burrowing ability. If an effect tries to 
+forcefully burrow (e.g. [[Bury]]) a card that occupies at least one water site, the effect fails.",""
 "Can vs. Can't","If one or more effects say you 'can' do something and one or more effects say you 'can't' do that 
 same thing, the 'can't' effects always take precedence. For example, [[Queen Guinevere]] explicitly 
 allows you to untap an allied minion, while [[Rhitta Gawr of Snowdonia]] prohibits other minions 
@@ -234,8 +235,9 @@ carrying an artifact, the artifact is immediately dropped. If a unit is forceful
 they're carrying moves with them, e.g. [[Bury]]. If a minion leaves the realm, anything they're 
 carrying remains in the realm, e.g. [[Fey Changeling]], [[Cast into Exile]], [[Monster Hunter]].",""
 "Carrying Units","Normally, units cannot be carried by other units, but some effects allow it, e.g. [[War Horse]]. 
-Such units have modified Pick Up and Drop basic abilities, as described in those codex entries. If 
-such a unit loses the ability to carry other units, the carried units are immediately dropped. A 
+Such effects are worded 'may carry...' or 'can pick up...' or similar, but all work in the same way. 
+Such units have ))modified(( Pick Up and Drop basic abilities, as described in those codex entries. 
+If such a unit loses the ability to carry other units, the carried units are immediately dropped. A 
 unit that's being carried must share at least one location with the unit that's carrying it. If they 
 ever share no locations, the carried unit is automatically dropped. Similar to carrying artifacts, 
 the carried units are moved along with the unit that's carrying them. This is considered forced 
@@ -243,17 +245,17 @@ movement. If a carried unit cannot enter the location, the carried unit won't mo
 dropped as usual if they no longer share a location with the carrying unit). For example, if a War 
 Horse tries to carry a [[Bosk Troll]] into a [[Gnome Hollows]], the War Horse can enter the Gnome 
 Hollows but the Troll cannot, and thus the Troll remains where it was and is automatically dropped. 
-Units that can carry other units confer their movement abilities to the carried units while they're 
-carried. For example, [[Phantom Steed]] can pick up a [[Bosk Troll]] and then carry the Troll into 
-the Void. The Troll will have Voidwalk while being carried by the Phantom Steed, and thus be able to 
-survive in the void. Carried units may take the Move and Attack action normally (once the Storyline 
-is empty). Therefore, even if the carrying unit can't Drop that turn, the carried unit could still 
-move themselves normally. For that first step, they will have any movement abilities conferred to 
-them by being carried, which are lost as soon as they're no longer carried. For example, a Bosk 
-Troll on a Phantom Steed in the void could step from the void onto the surface of an adjacent site, 
-using the Voidwalk ability conferred to them by being carried. Once the Troll is on the surface of a 
-site, it's no longer being carried by the Phantom Steed, but by that point it's safely in on the 
-surface.",""
+Units that can carry other units confer Airborne, Burrowing, Submerge, and/or Voidwalk to the 
+carried units while they're carried. For example, [[Phantom Steed]] can pick up a [[Bosk Troll]] and 
+then carry the Troll into the Void. The Troll will have Voidwalk while being carried by the Phantom 
+Steed, and thus be able to survive in the void. Carried units may take the Move and Attack action 
+normally (once the Storyline is empty). Therefore, even if the carrying unit ))can't Drop(( that 
+turn, the carried unit could still move themselves normally. For that first step, they will have any 
+movement abilities conferred to them by being carried, which are lost as soon as they're no longer 
+carried. For example, a Bosk Troll on a Phantom Steed in the void could step from the void onto the 
+surface of an adjacent site, using the Voidwalk ability conferred to them by being carried. Once the 
+Troll is on the surface of a site, it's no longer being carried by the Phantom Steed, but by that 
+point it's safely out of the void and on the surface.",""
 "Casting Spells","Spells are the main way Avatars and other Spellcasters influence the realm. You cast minions, 
 artifacts, auras, and magics. You can only cast a spell during your main phase, while the storyline 
 is empty. (A few cards like [[Dodge Roll]] grant a timing exception.) When you cast a spell, follow 
@@ -298,110 +300,6 @@ resolving from the storyline, and then the ally (not the magic!) does the target
 discarded, destroyed, or resolved, place them face-up in your cemetery. Players may freely examine 
 the contents of any cemetery at any time, and the order of the cards in a cemetery is irrelevant. 
 Each cemetery is a zone in the game.",""
-"Changelog","When the codex or card FAQs have notable changes, we'll list them in this entry.",""
-"","","Changelog - July 14, 2025:  Codex Fixed the order of layers in '((Apply Ongoing Effects In Order))' 
-so that disabling and silencing effects apply before control changing effects, so that [[King of the 
-Realm]]'s ability can be properly disabled and silenced! FAQ Clarified that [[Silence]], [[Sisters 
-of Silence]], and [[Magnetic Muzzle]] are silence effects. Yes, that confirms Magnetic Muzzle has no 
-effect on Avatars."
-"","","Changelog - July 10, 2025:  First release of the codex! Notable rule updates include: When attacking 
-undefended sites, the attacking unit strikes the site, damaging it. When a site is damaged, the 
-controlling avatar loses life equal to the damage dealt. This impacts cards like [[Mask of Mayhem]], 
-[[Daperyll Vampire]], and [[Free City]], among others. For Move and Attack, you don't declare your 
-attack target in advance; you simply resolve your movement (and any triggered abilities), and then 
-choose to attack if you want. 'Attack' triggers only happen once, based on the initial target of the 
-attack (e.g. [[Dodge Roll]] only works if the target was directly attacked, not if they Defend.) 
-'Attack and kill' triggers (e.g. [[Battlemage]], [[Sea Raider]]) resolve as long as there was an 
-attack, for each minion killed, based on kill credit. When a unit defends, it automatically becomes 
-a legal target for the attack, superseding the silver rule. (e.g. If I attack [[White Hart]] and you 
-defend with a different minion, that minion is now a legal target for the attack) Intercept triggers 
-when an attack doesn't happen, not when a unit enters a location. Therefore, movement never gets 
-stopped by intercept, and speedy units with Movement +X can slip by defenses. 'You' means the 
-player, so for [[Deathspeaker]], [[Enchantress]], [[Templar]], and [[Sparkmage]], any of your 
-spellcasters can cast the spell, not just your avatar. Stealth breaks when you interact with the 
-realm. Non-minions can't have stealth. A unit can't activate the Drop ability after they interact 
-with the realm in a given turn. Airborne works on avatars! Immobile means can't move itself. 
-Immobile units can now attack and defend at their location. Units that carry other units - if the 
-carried unit can't move in the chosen direction, the unit doing the carrying still moves. If the two 
-units then don't share a location, the carried unit is automatically dropped. Auras can be cast to 
-anywhere, including all void if desired. Oversized units (often called large units in the past) have 
-an official term. Also, effects that specify 'its site' or 'its location' mean 'a site it occupies' 
-or 'a location it occupies' for oversized units. This is relevant for cards like [[Spin Attack]]. 
-Clarified how ((cost)) is calculated, including alternate costs like [[Aramos Mercenaries]] combined 
-with [[Maddening Bells]]. Clarified the application of ongoing effects, which changed some previous 
-FAQs, like [[King of the Realm]] vs. [[King of the Realm]]. Clarified application of damage 
-replacement and damage prevention effects. Replacement effects always go first (e.g. Lance, 
-[[Critical Strike]], [[Golden Harp]], and get ordered by the controlling player as they wish. Damage 
-prevention effects (e.g. [[Shield Maidens]], [[Tufted Turtles]]) always go last. As if adjacent 
-effects allow the controller to choose the cardinal direction. Clarified kill credit. FAQ Changes 
-Removed many superfluous FAQs that are covered directly by the codex. [[Battlemage]] and [[Sea 
-Raider]] abilities trigger for each minion they attack and kill, even if multiple minions defend the 
-attack, or they get kill credit in other ways during the attack (e.g. [[Flaming Sword]]). [[Seirawan 
-Hydra]] is immune to non-lethal damage, as in the keyword. So even a [[Major Explosion]] or a strike 
-from [[Great Old One]] isn't enough to kill it. Of course, a single point of damage from [[Pit 
-Vipers]] or [[Poison Nova]] will still kill it, or being underwater, underground, etc., and it's 
-still vulnerable to [[Mesmerism]], [[Infiltrate]], etc. [[Merlin]]'s ability is clarified to be a 
-passive ability, so you can look at your top spell any time on your turn, but you can still only 
-cast a spell when it's normally allowed. Typically you can only cast spells during your main phase. 
-If a [[Crave Golem]] were attacking during your Start Phase, you could use Merlin's ability to cast 
-a [[Dodge Roll]] then. Let me know if you ever do that in a real game! -Ira Clarified that 
-[[Awakened Mummies]] cause a fight when they unburrow. Clarified [[Crave Golem]]'s ability. Some 
-cards were updated, including: [[Askelon Phoenix]] [[Druid]] [[Updraft Ridge]] [[Archimago]] 
-[[Geomancer]] [[Vivien the Enchantress]]"
-"","","Changelog - August 3, 2025:  Added Dragonlord FAQs!"
-"","","Changelog - November 25, 2025:  Cards with updated text now show that updated text immediately when 
-you click on them. FAQs with 'treat it as' text have been removed, since the updated text now serves 
-that purpose. The most significant updated card is [[Druid]]. The majority of updated cards are 
-minor updates for rules clarity or design intent, e.g. [[Magnetic Muzzle]] uses the keyword 
-'silence' now. You can see all the updated cards in the '((Updated Cards))' Codex entry, as well as 
-doing a card search for the word 'updated.' Note that [[Skirmishers of Mu]] are played as-written. 
-See its FAQs for clarity. Updated the definition of ((basic movement)) to include all basic 
-abilities, i.e. Move and Attack, and Defend."
-"","","Changelog - December 5, 2025:  FAQ Added Gothic FAQs! Have fun! [[Land Deed]] when carried by an 
-oversized unit now only affects a single site, which matches design intent. Clarified that [[Twist 
-of Fate]] is not healing. Codex Updated ((Spellbook)), which must contain 60 or more spells. Added 
-((Collection)). Added ((Evil)). Added ((Ward)). Updated ((Transform)) to clarify that Ward tokens 
-carry over just like Stealth tokens when a minion is transformed. Updated ((Stealth)) so that 
-artifacts cannot be targeted while they're carried by a minion with Stealth. Clarified that if 
-you're on ((Death's Door)) without actually being at 0 life (e.g. [[Orpheus' Crossing]]), you can 
-still take damage and lose life. Clarified that you can still take damage the turn you go to Death's 
-Door, you just won't die. For example, if you put me on Death's Door and then later that same turn 
-you strike my Avatar with a [[Daperyll Vampire]], I still take the 4 damage and you could heal. The 
-Pick Up basic ability now targets the picked up unit. This is relevant for [[Bodach Bogeyman]] when 
-trying to pick up Stealth minions. Note that Warded minions can still be picked up by the Bogeyman, 
-since Pick Up is a basic ability, not a special ability (and then their Ward would go away when 
-they're disabled). Also clarified that an Oversized Unit may simultaneously Pick Up from all 
-locations it occupies. Changed 'takes X less damage' to be considered an effect ((preventing 
-damage)) and thus always gets applied after effects ((modifying damage)). (This isn't really a 
-change, just a correction to make the rules function as we intended all along and to match player 
-intuition.) Clarified that size is a characteristic and thus isn't silenced. Relevant to only a few 
-cards, e.g. [[Megamoeba]] and [[Yog Sothoth]]. Updated ((Cost)) and added '((For Free))' to clarify 
-how to cast spells ((for free)). This is a minor powerup to a [[Deathspeaker]] on Death's Door while 
-also nearby [[Maddening Bells]], so that (0) really means (0)! Updated ((Can't Be Modified)) to 
-clarify how it applies to minions like [[Monks of Kobalsa]]. Added '((Moving to a Specific Location 
-Via a Special Ability or Magic))' as a subcodex of ((Move)) to provide a consistent way to deal with 
-effects like [[Giant Shark]], [[Mount Ussar Sanctuary]], [[Guardian Angel]], [[Darkest Dungeon]], 
-[[Harpyon Urge]], etc. Added a Codex entry for '((Must Be Cast))' (which also covers 'Must be 
-Summoned') to clarify that it's an additional restriction, and you still must choose your own site 
-as well. Relevant for cards like [[Mephistopheles]], [[Weathered Trunks]], [[Cerberus in Chains]], 
-[[Algor Omphalos]], etc. Added 'fully heal' to clarify that it wins over [[River of Blood]], and 
-really does fully heal. Clarified that when you ((transform)) a card, control of that card doesn't 
-change by default. E.g. if you [[Pollimorph]] my minion, I still control the resulting Frog token. 
-If you [[Desecrate]] my site, I still control the resulting [[Desecrated Ground]]. Added '((Lasts 3 
-of Your Turns))' so that it applies consistently to [[Entangle Terrain]], [[Falling Star]], etc. 
-Clarified that '((allied)) Ward' means 'a Ward on a card you control.' Clarified that '((Forced 
-Movement))' cannot cause a card to change regions. Added 'shoot' and 'throw' (in the context of a 
-projectile) to '((Phrases that are Synonymous)).' Added '((Closest))' for [[Persecutor]] (and 
-[[Crave Golem]]). Added '((Can't Drop))' for cards like [[Blade of Thorns]], [[Tabula Rasa]], etc. 
-Clarified ((End Phase)) to specify when 'after each turn' effects resolve. Just for you, updated 
-[[Torshammar Trinket]]! Updated '((Atop))' to acknowledge the alternate meaning from [[The Base of 
-Babel]]. Updated '((Disabled))' to include disabled sites, e.g. [[Blightstone]]. Added '((Only It 
-Can Cast))' to unify how to handle cards like [[Char Omphalos]], [[Morgana Le Fay]], and [[Archangel 
-Gabriel]]. Added '((Empty Site)).' Added '((Pay Life)).' Updated ((Avatar Characteristics)) to 
-clarify that Avatars can only enter surface locations (instead of preventing them from entering 
-non-surface regions). That is, they can enter other regions as long as those regions are also part 
-of the surface region, e.g. [[The Void]]. Clarified that ((Wounded)) for minions means taking damage 
-this turn. Added '((Break Stealth)).'"
 "Characteristics","Many cards have abilities that can be gained or removed during the game, but there are some 
 characteristics that all cards possess, depending on their card type. Effects that remove or modify 
 abilities will not remove or modify these characteristics, unless specifically mentioned in the 
@@ -466,13 +364,13 @@ storyline, per the normal token rules.",""
 [[Hamlet]]. Cost cannot be negative. Sites have a default cost of zero. When determining the mana 
 cost of a spell with an X value (e.g. [[Assorted Animals]]), X is the actual cost while the spell is 
 on the storyline, and otherwise X is zero. To calculate the total cost of a spell or ability: Start 
-with the mana cost or activation cost. For example, (3) for [[Bury]]. Include any additional costs. 
-For example, discarding a site for [[Craterize]]. Add anything that increases cost. For example, (2) 
-for [[Maddening Bells]]. Subtract anything that reduces cost. For example, (1) less for 
-[[Philosopher's Stone]]. Note that if you cast the spell 'for free' or 'for (0),' you do not pay any 
-additional costs at all! For example, [[Deathspeaker]] on Death's Door near a [[Maddening Bells]] 
-will still pay (0) to use the Deathspeaker's ability. See ((For Free)) in the Codex for more 
-details.",""
+with the mana cost or activation cost. For example, (3) for [[Bury]], or (5) if casting via [[De 
+Vermis Mysteriis]]. Include any additional costs. For example, discarding a site for [[Craterize]]. 
+Add anything that increases cost. For example, (2) for [[Maddening Bells]]. Subtract anything that 
+reduces cost. For example, (1) less for [[Philosopher's Stone]]. Note that if you cast the spell 
+'for free' or 'for (0),' you do not pay any additional costs at all! For example, [[Deathspeaker]] 
+on Death's Door near a [[Maddening Bells]] will still pay (0) to use the Deathspeaker's ability. See 
+((For Free)) in the Codex for more details.",""
 "Damage","Cards take damage from fighting and from the effects of spells and abilities. Damage dealt to 
 minions accumulates until the end phase, at which time it is healed. Whenever a minion accumulates 
 damage equal to or greater than its power, it dies. Damage dealt to your Avatar causes you to lose 
@@ -503,7 +401,7 @@ a second time on the same instance of damage. After applying all the damage modi
 damage prevention."
 "","","Preventing Damage:  Damage prevention uses the words 'prevent' or 'immune,' or the phrase 'takes 
 less damage,' and applies after all other damage modification. Examples include: Takes less damage, 
-e.g. [[Shield Maidens]]. Prevent damage, e.g. [[Goswhit Helm]]. Immune to damage, e.g. [[Lava 
+e.g. [[Shield Maidens]]. Prevent damage, e.g. [[Goswhit Helmet]]. Immune to damage, e.g. [[Lava 
 Salamander]]. After applying all damage modification effects, then apply damage prevention effects 
 in the same way: In the order of their choice, the active player declares and immediately resolves 
 all of their damage prevention effects, including from sources they own and no one controls. Note 
@@ -581,9 +479,11 @@ or sacrifice that card fails. That card still only triggers its Deathrite abilit
 Cards that are sacrificed also count as being destroyed. They are marked for death following the 
 same process outlined above.",""
 "Disabled","While disabled, a minion has no abilities (including basic abilities), cannot strike or deal damage, 
-cannot take steps itself, cannot shoot projectiles, and cannot be tapped to pay for costs.
-A disabled minion may be moved forcefully as long the disabled minion does not take one of its own 
-steps. A disabled minion may still be tapped by effects as long as it isn't tapping to pay for 
+cannot take steps itself, cannot shoot projectiles, and cannot be tapped to pay for costs. They also 
+cannot take any action granted by another card or effect (e.g. [[Raze]], [[Trial by Water]]), though 
+they can be moved by force.
+A disabled minion may be ))moved(( forcefully as long the disabled minion does not take one of its 
+own steps. A disabled minion may still be tapped by effects as long as it isn't tapping to pay for 
 costs.
 Disabled is not an ability itself and is not removed by silenced effects (e.g. [[Silence]]). If a 
 site is disabled, it has no abilities and cannot provide any mana or affinity.",""
@@ -693,7 +593,7 @@ minion. For example, [[Common Village]].",""
 "For Free","When you cast a spell 'for free' it costs (0) mana and requires no additional costs either. 'For 
 free' is synonymous with 'for (0).' You must still meet the threshold requirements to cast the 
 spell. If you cast a spell that costs X 'for free' and you can choose the value of X, e.g. [[Arcane 
-Barrage]], then X must equal 0. But, if spell itself specifies the value of X, e.g. [[Twist of 
+Barrage]], then X must equal zero. But, if spell itself specifies the value of X, e.g. [[Twist of 
 Fate]], then X = whatever is specified by the spell.",""
 "Forced Movement","Forced movement is any movement that does not require the unit to take their own step. For example, 
 [[Windblast]] is forced movement, since the moved unit doesn't step. A unit being carried by another 
@@ -867,6 +767,10 @@ there are 20 locations in the realm, all void. A square with a site has two loca
 of the site and the subsurface of the site. Those are two different locations, even though they're 
 in the same square. If the entire 5x4 realm was filled with sites, then the realm would contain 40 
 locations (the surface and subsurface of each of the 20 sites).",""
+"Look At","When a card instructs you to 'look at' cards in a zone, you do not reveal those cards to other 
+players, only you look at them.  This is similar to, but distinct from, a 'search.' Whenever you 
+return cards that you have looked at to a deck, you may put them back in any order unless the effect 
+specifies otherwise.",""
 "Lose","Some effects will cause artifacts, minions, and sites to lose certain abilities, often keywords. 
 'Lose' really means 'lose, can't gain, and can't have.' These effects take precedence over competing 
 passive abilities. E.g. [[Sky Baron]] wins, even if I give [[Wings of Invention]] to my minion after 
@@ -942,7 +846,7 @@ possible steps to the destination. If there are multiple equally short paths, th
 chooses. If no such path exists, the unit doesn't move at all. See ((Range of Motion)) for how to 
 apply lookahead when determining the path. Note that the basic abilities 'Move and Attack' and 
 'Defend' do not require the player to choose the shortest path to the destination because they are 
-limited by the defending unit's movement (typically just a single step)."
+limited by the unit's movement (typically just a single step)."
 "Move and Attack","Move and Attack is a basic, activated ability with the following text: Tap -> This unit may take one 
 step. Then, it may attack.",""
 "","","Movement:  Normally the unit's movement path is one step between two adjacent surface locations, but 
@@ -1106,16 +1010,16 @@ if I play King of the Realm, then you play King of the Realm, you Mesmerize my K
 Infiltrate my King back... We would note that Mesmerize and Infiltrate are independent of the King's 
 effects, and apply those first. Mesmerize, then Infiltrate. Then we'd apply the King's abilities in 
 order after that. Finally, note that if two effects are both dependent on each other, use timestamp 
-normally. Examples of that are detailed ))above(( in '((Example - Two Kings of the Realm))', 
-'((Example - Two Smokestacks of Gnaak))', and '((Example - Flood vs. Drought)).'"
+normally. Examples of that are detailed ))above(( in '((Example - Two Kings of the Realm)),' 
+'((Example - Two Smokestacks of Gnaak)), and '((Example - Flood vs. Drought)).'"
 "Only It Can Cast","Some effects allow a non-Avatar to become a special spellcaster, draw a spell, and then only it can 
 cast the spell. For example, [[Char Omphalos]], [[Morgana Le Fay]], or [[Archangel Gabriel]]. The 
 card counts as drawn by you, but it ends up in a separate zone, not your hand. Ensure it does not 
 get mixed up with your normal hand. Only the controller of the special spellcaster can look at the 
 spell. If the controller changes, the new controller gets to look at the spell and may cast it 
 normally (e.g. meet threshold, etc.). If the special spellcaster leaves the realm, any remaining 
-spells go to the cemetery. If the special spellcaster may cast the spell, even if they don't 
-normally have spellcaster, e.g. the allied minion blessed by [[Archangel Gabriel]].",""
+spells go to the cemetery. The special spellcaster may cast the spell, even if they don't normally 
+have spellcaster, e.g. the allied minion blessed by [[Archangel Gabriel]].",""
 "Oversized Units","Normally, units occupy only one location while in the realm. However, some oversized units occupy 
 multiple locations simultaneously due to their size, e.g. [[Mountain Giant]]. To represent the 
 minion's locations, place the card at the intersection of the sites. When you cast such a minion, 
@@ -1336,13 +1240,30 @@ site placement rules. In all other ways, Rubble is treated the same as any other
 because it has no water affinity, it is a land site.",""
 "Sacrifice","You can only sacrifice cards you control and that are in the realm. If you are sacrificing as part 
 of paying a cost for an effect, the sacrificed card doesn't go to the cemetery until the effect is 
-resolved. For example, [[Sinkhole]]. If you try to sacrifice a card and it doesn't actually die 
-(e.g. [[Lady Iseult]], [[Gilded Aegis]]) then you didn't actually sacrifice it, and thus you didn't 
-pay whatever cost you were trying to pay.",""
-"Search","Searching a zone (e.g. [[Adept Illusionist]]) allows you to look at the cards in those zones and 
-potentially find something. If you search a public zone, then you must find what you're searching 
-for, if possible. If you search a private zone, then you may choose to fail to find what you're 
-searching for, even if it exists in that zone.",""
+resolved. For example, [[Sinkhole]]. If you sacrifice a card that would normally be prevented from 
+being destroyed (e.g. ((Ward)), [[Lady Iseult]], [[Gilded Aegis]], [[The Doom of Dilmun]], etc.), 
+the prevention fails and the card is actually sacrificed. That is, sacrifice effects supersede all 
+destruction prevention effects, contrary to the typical '((Can vs. Can't))' priority. It's still 
+being killed, deathrites still trigger, kill credit is still awarded, etc.; the sacrificed minion 
+simply won't be saved by any prevention or replacement effects. For example, if I have [[Bluecap 
+Knockers]] on my [[Sinkhole]] and then use the activated ability on my Sinkhole to sacrifice it, I 
+indeed destroy my own Sinkhole even though Bluecap Knockers says it can't be destroyed. As another 
+example, my Apprentice Wizard is nearby Lady Iseult when I sacrifice my Apprentice Wizard to summon 
+a [[Moon Clan Werewolf]]. My Apprentice Wizard is about to die, and normally Lady Iseult would 
+return him to my hand. But because this is a sacrifice effect, the death cannot be prevented. The 
+Moon Clan Werewolf is summoned and the Apprentice Wizard goes to my cemetery. The examples above 
+would be the same if the Sinkhole and Apprentice Wizard were warded; the Ward would not save them 
+from being sacrificed!",""
+"Search","Searching a zone (e.g. [[Adept Illusionist]]) allows you to ))look at(( the cards in those zones and 
+potentially find something.  Only effects which use the word 'search' are considered to be searching 
+a zone. If you search a public zone, then you must find what you're searching for, if possible. If 
+you search a private zone, then you may choose to fail to find what you're searching for, even if it 
+exists in that zone. When returning cards you have searched through to the top or bottom of a deck, 
+specifically, you may choose the order for them. Some search effects say 'shuffle if needed.'  This 
+is usually because the effect gives you the option to search a private zone, and/or public ones.  If 
+you choose to search a private zone, you must shuffle afterward, but if you only search a public 
+zone, you do not shuffle.  For instance, if you use [[Adept Illusionist]]'s ability to summon 
+another copy from your cemetery and do not search your spellbook, you do not shuffle your spellbook.",""
 "Setup","Follow these steps to set up the game: Clearing some space in the middle of the table for the realm. 
 Each player places their Avatar on the square in the middle of their bottom row. Players shuffle and 
 place their atlas and spellbook decks somewhere close by, leaving some space for their cemeteries. 
@@ -1364,9 +1285,15 @@ though some other effects allow you to play sites in other ways, e.g. [[Frontier
 effect instructs you to 'play a site' (e.g. [[Sorcerer]]), by default you must play it adjacent to 
 one of your existing sites, or as close as possible to your avatar if you don't have any sites. If 
 an effect instructs you to play a site with some positional information (e.g. [[Pathfinder]]), then 
-card text takes precedence and you may ignore the 'adjacent to your existing sites' requirement. 
-When cards refer to 'adjacent site' or 'nearby site,' see ((adjacent)) and ((nearby)) for clarity on 
-how to resolve it.",""
+card text takes precedence and you may ignore the 'adjacent to your existing sites' requirement. If 
+a site is played to a void square occupied by minions or artifacts, the site springs into being 
+under them.  Those minion and artifacts end up on the surface of the site, and do not count as 
+having entered the site or location. If a site is played to rubble that is occupied by minions or 
+artifacts, those minions and artifacts will end up in the same relative position they had to the 
+rubble (i.e. occupying the sub-surface or surface). When cards refer to 'adjacent site' or 'nearby 
+site,' see ((adjacent)) and ((nearby)) for clarity on how to resolve it.",""
+"Skeleton Token","A Skeleton is a token minion with 1 power.  A Skeleton is an Ordinary Undead and an ((air)) minion.  
+For example, [[Open Mausoleum]].",""
 "Span of Land","A span of land is a contiguous group of adjacent land sites, regardless of who controls those sites. 
 If a card refers to 'its span of land' or 'this span of land,' it means the span of land occupied by 
 that card. If that card doesn't currently occupy a span of land, then it doesn't have a span of 
@@ -1449,7 +1376,8 @@ include [[Guile Sirens]], which could make a nearby Airborne enemy take a diagon
 and [[Leap Attack]], which could allow a Burrowed minion to unburrow to the surface and strike all 
 the units there. Note that the Moves Freely ability only applies during the 'Move and Attack' and 
 'Defend' basic abilities.",""
-"Stops","After a unit moves, it 'stops' when there is no additional movement for that unit on the storyline. 
+"Stops","After a unit moves, it 'stops' when there is no additional movement for that unit on the storyline 
+(or if it's being carried, no additional movement on the storyline for the unit that's carrying it). 
 A unit must first move to then stop. Projectiles are similar; if they do not enter a new location, 
 the projectile hasn't moved at all and thus cannot stop. For example, a [[Snowball]] that doesn't 
 enter any new locations and doesn't move will not deal any damage. Note that 'stops' is not the same 
@@ -1576,7 +1504,9 @@ continue to resolve even if the source leaves the realm."
 "Strike","Strike simply means to deal damage equal to the unit's power. For example, if a [[Bosk Troll]] 
 strikes, it strikes for 3 damage. In a fight, units strike each other simultaneously. Some abilities 
 allow units to strike first, e.g. Lance. Split power units deal damage equal to their attack power 
-when they strike.",""
+when they strike. Sometimes the striking unit and the unit being struck are at different locations, 
+and some effects (e.g. [[Mask of Mayhem]]) care about the location of the strike. For clarity, the 
+strike occurs at the location of the unit being struck.",""
 "","","Strikes vs. Multiple Units:  At the moment a strike is resolving against multiple units, the 
 controller of the striking unit declares how to split up the damage among the struck units. The 
 damage may be split up however you prefer, including assigning zero damage to some units (see 
@@ -1585,17 +1515,24 @@ damage are still considered struck, and the striking unit makes a total of one s
 multiple units. The damage is inflicted simultaneously on all units."
 "","","Strikes for Zero Damage:  A strike for zero damage, e.g. [[Grandmaster Wizard]], is still a strike, 
 even though it doesn't do damage. See the 'zero' codex entry for more details."
+"","","Multiple Simultaneous Strikes:  Some effects care about a unit's 'next strike' or 'the next time it 
+strikes.'  If the unit is making multiple strikes at the same time (from an effect like [[Whirling 
+Blades]] or [[Leap Attack]]) then all of those strikes are considered the 'next strike.'  This means 
+that a unit with a Lance that is affected by [[Spin Attack]] will deal one extra damage on each of 
+it's strikes. Note that this is different from attacking while there are multiple defenders. In that 
+case, the attacker makes a single strike, and the damage is split among the defenders."
 "Submerge","Keyword Ability. A minion with Submerge can be summoned to underwater locations and survive 
 underwater. By using one step, a minion with Submerge can move between the surface and subsurface of 
-a water site, or between adjacent underwater locations. For example, [[Coral-reef Kelpie]] can be 
-summoned underwater to one of your water sites. Then, after their summoning sickness wore off, they 
-could use their Move and Attack ability to take a step from underwater to the surface of that site 
-(and that would use up their step). If they were on the surface of a water site, they could use 
-their step to move from the surface to underwater of that site. To 'submerge' means to move from the 
-surface to the underwater of a water site. When an effect 'submerges' a card, you forcefully move 
-that card from the surface to underwater, even if it doesn't have the Submerge ability. If an effect 
-tries to forcefully submerge (e.g. [[Drown]]) a card that occupies at least one land site, the 
-effect fails.",""
+a water site, or between adjacent underwater locations. A minion with both the Burrowing and 
+Submerge abilities can move directly from an underground location to an underwater location in an 
+adjacent square, and vice versa, in one step. For example, [[Coral-reef Kelpie]] can be summoned 
+underwater to one of your water sites. Then, after their summoning sickness wore off, they could use 
+their Move and Attack ability to take a step from underwater to the surface of that site (and that 
+would use up their step). If they were on the surface of a water site, they could use their step to 
+move from the surface to underwater of that site. To 'submerge' means to move from the surface to 
+the underwater of a water site. When an effect 'submerges' a card, you forcefully move that card 
+from the surface to underwater, even if it doesn't have the Submerge ability. If an effect tries to 
+forcefully submerge (e.g. [[Drown]]) a card that occupies at least one land site, the effect fails.",""
 "Subsurface","The bottom layer of a site. The subsurface of a water site is underwater. The subsurface of a land 
 site is underground. Void squares do not have a subsurface (or surface).",""
 "Subtypes","Subtypes provide additional theme and flavor for a card. Subtypes are capitalized and shown in the 
@@ -1625,10 +1562,10 @@ which you can see on [[Buried Treasure]], [[Teleport]], or [[Bone Rabble]]. Surf
 'to move up from underwater,' as in 'surface the submerged minion.' You can see examples of this on 
 [[Diluvian Kraken]], [[Iceberg]], and [[Mudflow]]. Void squares do not have a surface (or 
 subsurface).",""
-"Tap","Cards in the realm can be tapped as a cost to activate various abilities. A player may also need to 
-tap a card as a cost related to spells or abilities on other cards. A minion with summoning sickness 
+"Tap","Units in the realm can be tapped as a cost to activate various abilities. A player may also need to 
+tap a unit as a cost related to spells or abilities on other cards. A minion with summoning sickness 
 cannot tap or be tapped to pay costs (but may be tapped directly by other effects, e.g. [[Grievous 
-Insult]]). To tap a card, turn a it 90° to the right, from an upright position. Only untapped cards 
+Insult]]). To tap a card, turn a it 90° to the right, from an upright position. Only untapped units 
 in the realm can be tapped.",""
 "Target","A target is the chosen object of a spell or effect. It uses the word 'target,' and choosing a target 
 is required. For example, [[Arc Lightning]] has a target of a 'nearby unit' and [[Red Desert]] has a 
@@ -1636,8 +1573,8 @@ target of 'nearby site.' The source of the ability, or the caster of the spell, 
 region as everything it targets. When you cast a spell or use an ability that targets, before it 
 even goes on the storyline, you must declare all targets. For example, [[Bury]] is a spell that 
 targets, and [[Vile Imp]] has an ability that targets. You must declare a legal target as the effect 
-goes on the storyline, and the legality of the target is checked again when the effect actually 
-resolves. If you cannot declare a legal target when the spell or ability would enter the storyline, 
+goes on the storyline, and the legality of the target is checked again when the effect starts to 
+resolve. If you cannot declare a legal target when the spell or ability would enter the storyline, 
 the spell isn't actually cast and the ability can't be used. See '((Casting Magics))' for more 
 details.",""
 "Tawny","Tawny is a token minion with 1 power. She is a Unique Beast with 'Airborne, Spellcaster, Can't 
@@ -1740,7 +1677,9 @@ it immediately dies. An avatar may never enter an underwater location. Underwate
 regions in the realm.",""
 "Unit","A unit is a collective term that includes Avatars and minions. Some cards might specify only 
 minions, or only Avatars, but many cards affect units in general.",""
-"Untap","To untap a card, turn it upright. All of your cards in the realm untap during your Start phase.",""
+"Untap","To untap a card, turn it upright.  Even though only units can tap, all of your cards in the realm 
+untap during your Start phase (i.e. if they were previously units and are now no longer units, they 
+still untap).",""
 "Updated Cards","A few cards have updated rules text that does not match the printed text. These cards have the 
 'UPDATED:' label on curiosa.io and players should use the updated text. The majority of updates have 
 been made for rules clarity and design intent, often reflecting the way players have been playing 
@@ -1803,29 +1742,32 @@ Further Notes: Ward is a damage prevention effect. For example, if your [[Dapery
 my warded [[Apprentice Wizard]], the Vampire will try to deal 4 damage, the Ward prevents it and 
 breaks, the Apprentice Wizard survives, and you do not heal from the Vampire's strike. If a warded 
 unit would take damage from multiple sources simultaneously, all simultaneous damage is prevented 
-and the Ward breaks. You can target your own warded units and sites with your own spells and special 
-abilities. Ward protects against any damage (from you or your opponent), any destruction (from you 
-or your opponent), and targeting via special abilities and spells (from your opponent only). For 
-example, if I tried to [[Bury]] your warded minion, I could cast the magic since your minion is a 
-valid target. The Bury goes onto the Storyline. Then, as Bury resolves from the Storyline, the Ward 
-protects the targeted minion and breaks, and minion isn't burrowed. Ward protects the targeted 
-minion or site at the time the effect resolves. You resolve as much of the effect as you can 
-otherwise. For example, I cast [[Grievous Insult]] targeting your warded minion. The spell goes onto 
-the storyline. Then as the Magic is resolving, the Ward protects the targeted minion and breaks, and 
-minion isn't silenced or tapped. Then, I still get to draw a spell. Another example: I cast [[Bury]] 
-targeting your warded minion while carrying a [[Ring of Morrigan]]. The Bury goes onto the 
-Storyline. The Ring of Morgana triggers, dealing 1 damage to warded minion. The Ward protects the 
-minion and breaks, dealing no damage. Then, as Bury resolves from the Storyline, the Ward is already 
-gone so the minion is burrowed. If a Ward protects a target, additional effects that rely on the 
-target do not resolve. For example, I cast [[Geyser]] on your warded site. The Ward protects the 
-site and breaks. No minions gain Airborne, since 'there' references the site, which was the 
-protected target. Similarly, [[Craterize]] would deal no damage at all if it targeted a warded site. 
-Another example: My [[Abaddon Succubus]] tries to lure your warded minion. The Ward protects the 
-minion and breaks. The protected minion does not take a step closer, does not take 2 damage, and I 
-do not heal 2. Note that Move and Attack is a Basic Ability, and thus Ward does not protect a unit 
-from being attacked. For example, if I have a warded Apprentice Wizard, you ))can attack(( it. But, 
-once we get to strikes in the attack sequence, assuming you actually strike for 1 or more damage, 
-the Apprentice Wizard's Ward will break at that point, preventing the damage.",""
+and the Ward breaks. For example, when a minion with a Ward attacks and multiple units defend that 
+attack. You can target your own warded units and sites with your own spells and special abilities. 
+Ward protects against any damage (from you or your opponent), any destruction (from you or your 
+opponent), and targeting via special abilities and spells (from your opponent only). For example, if 
+I tried to [[Bury]] your warded minion, I could cast the magic since your minion is a valid target. 
+The Bury goes onto the Storyline. Then, as Bury resolves from the Storyline, the Ward protects the 
+targeted minion and breaks, and minion isn't burrowed. Ward protects the targeted minion or site at 
+the time the effect resolves. You resolve as much of the effect as you can otherwise. For example, I 
+cast [[Grievous Insult]] targeting your warded minion. The spell goes onto the storyline. Then as 
+the Magic is resolving, the Ward protects the targeted minion and breaks, and minion isn't silenced 
+or tapped. Then, I still get to draw a spell. Another example: I cast [[Bury]] targeting your warded 
+minion while carrying a [[Ring of Morrigan]]. The Bury goes onto the Storyline. The Ring of Morrigan 
+triggers, dealing 1 damage to warded minion. The Ward protects the minion and breaks, dealing no 
+damage. Then, as Bury resolves from the Storyline, the Ward is already gone so the minion is 
+burrowed. A Ward also protects a location at a Warded site from being targeted. At the time the 
+spell or special ability resolves, the Ward will break, and the location will be removed as a 
+target. If a Ward protects a target, additional effects that rely on the target do not resolve. For 
+example, I cast [[Geyser]] on your warded site. The Ward protects the site and breaks. No minions 
+gain Airborne, since 'there' references the site, which was the protected target. Similarly, 
+[[Craterize]] would deal no damage at all if it targeted a warded site. Another example: My 
+[[Abaddon Succubus]] tries to lure your warded minion. The Ward protects the minion and breaks. The 
+protected minion does not take a step closer, does not take 2 damage, and I do not heal 2. Note that 
+Move and Attack is a Basic Ability, and thus Ward does not protect a unit from being attacked. For 
+example, if I have a warded Apprentice Wizard, you ))can attack(( it. But, once we get to strikes in 
+the attack sequence, assuming you actually strike for 1 or more damage, the Apprentice Wizard's Ward 
+will break at that point, preventing the damage.",""
 "Water Site","A water site is a site that provides one or more water affinity. If a site provides water affinity 
 and other types of affinity (e.g. earth), it's still a water site (and not a land site). If a site 
 previously provided water affinity and then stops providing water affinity, then it also stops being 
@@ -1856,13 +1798,13 @@ realm. Units with 0 power (e.g. [[Grandmaster Wizard]]) only die if they take da
 spell cast for zero mana does not require any mana at all to cast, but it still counts as a cast 
 spell.",""
 "Zone","A zone is a general area where a card can exist. Game zones include: The realm (a shared zone) Each 
-player's spellbook, atlas, cemetery, and hand zones (specific to each player) The storyline (a 
-shared zone) Additional zones based on specific cards (e.g. [[Morgana le Fay]] creates a 'Morgana's 
-hand' zone.) Public zones include the realm and cemeteries, and cards in these zones have no hidden 
-information, i.e. they're face-up, and you're allowed to look at the opposite side of any card in 
-those zones, e.g. [[Druid]]. For clarity of game state, it's acceptable to put banished cards 
-face-down in a specific area of the table, but they may be reviewed by either player at any time. 
-The number of cards and type of card (e.g. spell or site) in each zone is public information (e.g. 
-any player can know how many cards remain in any deck, or how many cards of each type you have in 
-your hand). Each player may view the cards in their own hand. Cards in the spellbook and atlas are 
-face-down, and thus not visible to any player.",""
+player's spellbook, atlas, cemetery, collection, and hand zones (specific to each player) The 
+storyline (a shared zone) Additional zones based on specific cards (e.g. [[Morgana le Fay]] creates 
+a 'Morgana's hand' zone.) Public zones include the realm and cemeteries, and cards in these zones 
+have no hidden information, i.e. they're face-up, and you're allowed to look at the opposite side of 
+any card in those zones, e.g. [[Druid]]. For clarity of game state, it's acceptable to put banished 
+cards face-down in a specific area of the table, but they may be reviewed by either player at any 
+time. The number of cards and type of card (e.g. spell or site) in each zone is public information 
+(e.g. any player can know how many cards remain in any deck, or how many cards of each type you have 
+in your hand). Each player may view the cards in their own hand and collection. Cards in the 
+spellbook and atlas are face-down, and thus not visible to any player.",""

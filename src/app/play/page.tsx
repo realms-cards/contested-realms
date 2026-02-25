@@ -251,51 +251,6 @@ export default function PlayPage() {
   // Keyboard shortcuts help overlay
   const [helpOpen, setHelpOpen] = useHelpShortcut();
 
-  // Toast state for warnings (mana/threshold)
-  const [appToast, setAppToast] = useState<
-    | { kind: "text"; message: string }
-    | {
-        kind: "resource-warning";
-        cardName: string;
-        manaCost: number | null;
-        availableMana: number | null;
-        missingThresholds: Record<string, number>;
-      }
-    | null
-  >(null);
-
-  // Listen for toast events
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail as
-        | Record<string, unknown>
-        | undefined;
-      if (!detail) return;
-
-      // Handle resource-warning toast
-      if (detail.type === "resource-warning") {
-        setAppToast({
-          kind: "resource-warning",
-          cardName: String(detail.cardName || ""),
-          manaCost: detail.manaCost as number | null,
-          availableMana: detail.availableMana as number | null,
-          missingThresholds:
-            (detail.missingThresholds as Record<string, number>) || {},
-        });
-        setTimeout(() => setAppToast(null), 3500);
-        return;
-      }
-
-      // Handle regular text toasts
-      if (detail.message) {
-        setAppToast({ kind: "text", message: String(detail.message) });
-        setTimeout(() => setAppToast(null), 3500);
-      }
-    };
-    window.addEventListener("app:toast", handler);
-    return () => window.removeEventListener("app:toast", handler);
-  }, []);
-
   // LocalTransport wiring for offline play
   const transportRef = useRef<LocalTransport | null>(null);
   const transport = useMemo(() => {
@@ -1460,43 +1415,6 @@ export default function PlayPage() {
 
       {/* Mobile hand interaction hint */}
       <MobileHandHint />
-
-      {/* Toast notification for warnings */}
-      {appToast && appToast.kind === "text" && (
-        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[3000] text-xl px-6 py-3 rounded-lg shadow-lg font-medium animate-fade-in bg-black/90 text-white ring-2 ring-white/30">
-          {appToast.message}
-        </div>
-      )}
-      {appToast && appToast.kind === "resource-warning" && (
-        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[3000] px-5 py-3 rounded-lg shadow-lg animate-fade-in bg-black/90 text-white ring-2 ring-white/30 flex items-center gap-3">
-          <span className="font-fantaisie text-lg text-amber-300">
-            {appToast.cardName}
-          </span>
-          <span className="flex items-center gap-2 text-sm">
-            <span className="text-red-400">missing</span>
-            {appToast.manaCost !== null && appToast.availableMana !== null && (
-              <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-gray-700 border border-gray-500 font-fantaisie text-white font-bold">
-                {appToast.manaCost - appToast.availableMana}
-              </span>
-            )}
-            {Object.keys(appToast.missingThresholds).length > 0 &&
-              Object.entries(appToast.missingThresholds).map(
-                ([element, count]) => (
-                  <span key={element} className="flex items-center">
-                    {Array.from({ length: count }).map((_, i) => (
-                      <img
-                        key={i}
-                        src={`/${element}.png`}
-                        alt={element}
-                        className="w-5 h-5 -ml-1 first:ml-0"
-                      />
-                    ))}
-                  </span>
-                ),
-              )}
-          </span>
-        </div>
-      )}
 
       {/* Keyboard shortcuts help overlay */}
       <KeyboardShortcutsHelp

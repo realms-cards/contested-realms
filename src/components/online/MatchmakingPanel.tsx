@@ -1,8 +1,10 @@
 "use client";
 
 import { Loader2, X, Users } from "lucide-react";
+import Link from "next/link";
 import { useMemo } from "react";
 import { useOnline } from "@/app/online/online-context";
+import { isFeatureEnabled } from "@/lib/config/features";
 
 interface MatchmakingPanelProps {
   onCreateMatch?: () => void;
@@ -116,6 +118,17 @@ export default function MatchmakingPanel({
           Constructed • Sealed • Draft
         </div>
       </button>
+
+      {/* Card 4: Tutorial - shown when feature-gated */}
+      {isFeatureEnabled("tutorialMode") && (
+        <Link
+          href="/tutorial"
+          className="rounded-xl bg-gradient-to-br from-amber-950/40 to-slate-900/60 ring-1 ring-amber-500/20 flex flex-col items-center justify-center px-4 py-3 hover:bg-white/5 transition-colors"
+        >
+          <div className="text-sm font-semibold text-white">Learn to Play</div>
+          <div className="text-[10px] text-amber-300/80">Interactive Tutorial</div>
+        </Link>
+      )}
     </div>
   );
 }

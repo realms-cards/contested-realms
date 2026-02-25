@@ -54,6 +54,16 @@ export const createPermanentMovementSlice: StateCreator<
     set((state) => {
       const sel = state.selectedPermanent;
       if (!sel) return state;
+      // Tutorial action gate — block invalid movements
+      const gate = state.tutorialActionGate;
+      if (gate.active && gate.validate) {
+        const permCard = (state.permanents[sel.at] || [])[sel.index];
+        const cardName = permCard?.card?.name ?? "";
+        if (!gate.validate("move", x, y, cardName)) {
+          gate.onReject?.("move", x, y, cardName);
+          return state;
+        }
+      }
       get().pushHistory();
       const fromKey: CellKey = sel.at;
       const toKey: CellKey = toCellKey(x, y);

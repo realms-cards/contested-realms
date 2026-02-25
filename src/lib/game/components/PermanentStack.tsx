@@ -10,7 +10,8 @@ import {
 } from "react";
 import { flushSync } from "react-dom";
 import { Group } from "three";
-import { BodyApi } from "@/lib/game/boardShared";
+import { getGraphicsSettings } from "@/hooks/useGraphicsSettings";
+import { BodyApi, getPermanentOwnerBaseZ } from "@/lib/game/boardShared";
 import { detectSpellcasterSync } from "@/lib/game/cardAbilities";
 import CardOutline from "@/lib/game/components/CardOutline";
 import CardPlane from "@/lib/game/components/CardPlane";
@@ -24,6 +25,7 @@ import {
   PLAYER_COLORS,
   TILE_SIZE,
 } from "@/lib/game/constants";
+import { hasCustomResolver } from "@/lib/game/resolverRegistry";
 import type {
   BoardState,
   CardRef,
@@ -401,7 +403,7 @@ export function PermanentStack({
 
   const {
     spacing: _spacing,
-    marginZ: baseMarginZ,
+    marginZ: _baseMarginZ,
     layerLift,
     baseElevation,
     burrowedElevation,
@@ -409,6 +411,7 @@ export function PermanentStack({
     avatarAvoidZ,
   } = stackConfig;
   void _spacing; // Spacing is part of the config but not used in this component
+  void _baseMarginZ; // Z offset is now computed directly, not from marginZ config
 
   const key = tileKey;
   const boardHalfW = (boardSize.w * TILE_SIZE) / 2;
@@ -481,18 +484,11 @@ export function PermanentStack({
         const isSilencedToken = isToken && tokenName === "silenced";
         // Disabled tokens use the Disabled token texture
         const isDisabledToken = isToken && tokenName === "disabled";
-        const marginZ = baseMarginZ + (avatarOnThisTile ? TILE_SIZE * 0.08 : 0);
-        const avatarShiftZ = avatarOnThisTile
-          ? owner === 1
-            ? -avatarAvoidZ
-            : avatarAvoidZ
-          : 0;
+        const avatarBumpZ = avatarOnThisTile ? avatarAvoidZ : 0;
         // Token site replacements sit at center, regular cards get owner-based z offset
         const zBase = tokenSiteReplace
           ? 0
-          : owner === 1
-            ? -TILE_SIZE * 0.5 + marginZ + avatarShiftZ
-            : TILE_SIZE * 0.5 - marginZ + avatarShiftZ;
+          : getPermanentOwnerBaseZ(owner, avatarBumpZ > 0);
         const rotZ =
           (owner === 1 ? 0 : Math.PI) +
           (tokenSiteReplace || isSiteCard ? -Math.PI / 2 : 0) +
@@ -1184,9 +1180,7 @@ export function PermanentStack({
                   // Rendering uses: position = [offX, y, zBase + offZ]
                   // So to land at wz, we need: offZ = wz - tileWorldZ - zBase
                   const localZBase =
-                    draggedOwner === 1
-                      ? -TILE_SIZE * 0.5 + marginZ
-                      : TILE_SIZE * 0.5 - marginZ;
+                    draggedOwner === 1 ? TILE_SIZE * 0.15 : -(TILE_SIZE * 0.15);
                   const offX = wx - tileWorldX;
                   const offZ = wz - tileWorldZ - localZBase;
                   if (dragging.from === dropKey) {
@@ -1284,6 +1278,33 @@ export function PermanentStack({
                   pulseMax={0.5}
                 />
               )}
+              {/* Purple glow for cards with custom resolvers */}
+              {!roleGlow &&
+                !p.isCopy &&
+                getGraphicsSettings().showResolverGlow &&
+                hasCustomResolver(p.card.name) && (
+                  <CardOutline
+                    width={
+                      tokenDef && tokenDef.size === "small"
+                        ? CARD_SHORT * 0.54
+                        : CARD_SHORT * 1.08
+                    }
+                    height={
+                      tokenDef && tokenDef.size === "small"
+                        ? CARD_LONG * 0.54
+                        : CARD_LONG * 1.08
+                    }
+                    rotationZ={rotZ}
+                    elevation={0.002}
+                    color="#8b5cf6"
+                    renderOrder={1350}
+                    opacity={0.4}
+                    pulse
+                    pulseSpeed={0.6}
+                    pulseMin={0.2}
+                    pulseMax={0.45}
+                  />
+                )}
               <group
                 visible
                 userData={{ cardInstance: permId }}

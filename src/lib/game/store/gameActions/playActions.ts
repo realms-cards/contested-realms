@@ -266,6 +266,14 @@ export const createPlayActionsSlice: StateCreator<
         get().log("No selected card to play");
         return state;
       }
+      // Tutorial action gate — block invalid placements
+      const gate = state.tutorialActionGate;
+      if (gate.active && gate.validate) {
+        if (!gate.validate("play", x, y, sel.card.name)) {
+          gate.onReject?.("play", x, y, sel.card.name);
+          return state;
+        }
+      }
       const { who, index, card } = sel;
       const typeEarly = (card.type || "").toLowerCase();
       const isCurrent = (who === "p1" ? 1 : 2) === state.currentPlayer;
