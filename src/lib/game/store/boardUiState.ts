@@ -2,26 +2,8 @@ import type { StateCreator } from "zustand";
 import type { BoardPingEvent, CellKey, GameState, SiteTile } from "./types";
 import { BOARD_PING_LIFETIME_MS, BOARD_PING_MAX_HISTORY } from "./types";
 
-const PLAYMAT_KEY = "sorcery:showPlaymat";
-const GRID_KEY = "sorcery:showGrid";
-
-function loadShowPlaymat(): boolean {
-  if (typeof window === "undefined") return true;
-  try {
-    const stored = localStorage.getItem(PLAYMAT_KEY);
-    if (stored === "false") return false;
-  } catch {}
-  return true;
-}
-
-function loadShowGrid(): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    const stored = localStorage.getItem(GRID_KEY);
-    if (stored === "true") return true;
-  } catch {}
-  return false;
-}
+const DEFAULT_SHOW_PLAYMAT = true;
+const DEFAULT_SHOW_GRID = false;
 
 /**
  * Load playmat/grid settings from API (for authenticated users).
@@ -80,8 +62,10 @@ type BoardUiDefaults = Pick<
 
 export const createInitialBoardUiState = (): BoardUiDefaults => ({
   showGridOverlay: false,
-  showPlaymat: loadShowPlaymat(),
-  showPlaymatOverlay: loadShowGrid(), // Grid overlay state is persisted
+  // Keep SSR/first-client-render deterministic; persisted preferences are
+  // applied after hydration (API/localStorage sync effects on play pages).
+  showPlaymat: DEFAULT_SHOW_PLAYMAT,
+  showPlaymatOverlay: DEFAULT_SHOW_GRID, // Grid overlay state is persisted
   playmatUrl: null, // null until user's preference is loaded
   playmatUrls: { p1: null, p2: null }, // Per-player custom playmat URLs
   activePlaymatOwner: null, // null = use own playmat, "p1"/"p2" = show that player's playmat

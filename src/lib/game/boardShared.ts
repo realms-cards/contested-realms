@@ -10,12 +10,12 @@ export type BodyApi = {
   setAngvel: (v: { x: number; y: number; z: number }, wake: boolean) => void;
   setTranslation: (
     v: { x: number; y: number; z: number },
-    wake: boolean
+    wake: boolean,
   ) => void;
   setNextKinematicTranslation: (v: { x: number; y: number; z: number }) => void;
   setBodyType: (
     t: "dynamic" | "fixed" | "kinematicPosition" | "kinematicVelocity",
-    wake: boolean
+    wake: boolean,
   ) => void;
 };
 
@@ -33,6 +33,15 @@ export const RUBBLE_ELEVATION = CARD_THICK * 2; // Same as BASE_CARD_ELEVATION t
 export const AVATAR_AVOID_Z = TILE_SIZE * 0.15;
 export const TILE_OFFSET_LIMIT_X = TILE_SIZE * 0.35;
 export const TILE_OFFSET_LIMIT_Z = TILE_SIZE * 0.65; // Increased to allow reaching tile center and beyond
+
+export function getPermanentOwnerBaseZ(
+  owner: 1 | 2,
+  hasAvatarOnTile = false,
+): number {
+  const ownerSign = owner === 1 ? 1 : -1;
+  const avatarBumpZ = hasAvatarOnTile ? AVATAR_AVOID_Z : 0;
+  return ownerSign * (TILE_SIZE * 0.15 + avatarBumpZ);
+}
 
 export function clampOffset(value: number, limit: number): number {
   return Math.max(-limit, Math.min(limit, value));

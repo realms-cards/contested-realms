@@ -58,7 +58,7 @@ const lesson: TutorialLesson = {
     },
     permanents: [
       { owner: "p1", tile: 13, card: { cardId: 101, name: "Amazon Warriors", type: "Minion", cost: 5, attack: 5, defence: 5, thresholds: { earth: 1 }, slug: "bet-amazon_warriors-b-s" } },
-      { owner: "p1", tile: 17, card: { cardId: 107, name: "Royal Bodyguard", type: "Minion", cost: 4, attack: 4, defence: 4, thresholds: { earth: 2 }, slug: "bet-royal_bodyguard-b-s" } },
+      { owner: "p1", tile: 14, card: { cardId: 107, name: "Royal Bodyguard", type: "Minion", cost: 4, attack: 4, defence: 4, thresholds: { earth: 2 }, slug: "bet-royal_bodyguard-b-s" } },
       { owner: "p2", tile: 8, card: { cardId: 302, name: "Ogre Goons", type: "Minion", cost: 3, attack: 3, defence: 3, thresholds: { fire: 1 }, slug: "bet-ogre_goons-b-s" } },
     ],
     phase: "Main",
@@ -82,7 +82,7 @@ const lesson: TutorialLesson = {
       id: "defend-scenario",
       type: "narration",
       title: "The Attack",
-      text: "The opponent's **Ogre Goons** (power 3) are about to attack your **Humble Village**! If undefended, the Ogre Goons will strike the site for 3 damage, causing you to lose 3 life.\n\nBut your **Amazon Warriors** are standing right there at Humble Village — and your **Royal Bodyguard** is one step away at Holy Ground.",
+      text: "The opponent's **Ogre Goons** (power 3) are about to attack your **Humble Village**! If undefended, the Ogre Goons will strike the site for 3 damage, causing you to lose 3 life.\n\nBut your **Amazon Warriors** are standing right there at Humble Village — and your **Royal Bodyguard** is one step away at Vantage Hills.",
     },
     {
       id: "defend-opponent-attacks",
@@ -105,16 +105,17 @@ const lesson: TutorialLesson = {
       id: "defend-choice",
       type: "narration",
       title: "Time to Defend!",
-      text: "The Ogre Goons are attacking your Humble Village. Your **Amazon Warriors** are already at Humble Village (untapped!), so they can defend immediately without needing to move.\n\nThe Amazon Warriors (power 5) vs Ogre Goons (power 3) — your Warriors are stronger and will win this fight!",
+      text: "The Ogre Goons are attacking your Humble Village. Your **Amazon Warriors** are right there — but the smarter play is to send in the **Royal Bodyguard** from Vantage Hills instead!\n\nWhy? The Bodyguard (power 4) can easily handle the Ogre Goons (power 3) and survive. This keeps the Amazon Warriors **untapped** and ready for your next turn. Even better — after defending, both units end up stacked on Humble Village in attack position. With the opponent out of mana, they can't punish you for grouping up!",
     },
     {
       id: "defend-resolve",
       type: "narration",
       title: "Fight Resolution",
-      text: "Your Amazon Warriors defend! Both units fight simultaneously:\n\n- Amazon Warriors strike for **5 damage** → Ogre Goons (power 3) die!\n- Ogre Goons strike for **3 damage** → Amazon Warriors (power 5) survive with 3 damage\n\nThe Ogre Goons are destroyed. Your site is safe! The Amazon Warriors' damage heals at end of turn.",
+      text: "The Royal Bodyguard moves from Vantage Hills to Humble Village and defends! Both units fight simultaneously:\n\n- Royal Bodyguard strikes for **4 damage** → Ogre Goons (power 3) are destroyed!\n- Ogre Goons strike for **3 damage** → Royal Bodyguard (power 4) survives\n\nThe Ogre Goons are destroyed and your site is safe. The Bodyguard's damage heals at end of turn, and the Amazon Warriors remain untapped — ready to attack on your next turn!",
       statePatches: [
         { op: "remove_permanent", tile: 13, cardName: "Ogre Goons" },
-        { op: "tap_permanent", tile: 13, cardName: "Amazon Warriors" },
+        { op: "remove_permanent", tile: 14, cardName: "Royal Bodyguard" },
+        { op: "place_permanent", permanent: { owner: "p1", tile: 13, card: { cardId: 107, name: "Royal Bodyguard", type: "Minion", cost: 4, attack: 4, defence: 4, thresholds: { earth: 2 }, slug: "bet-royal_bodyguard-b-s" }, tapped: true } },
       ],
     },
     {
@@ -127,7 +128,7 @@ const lesson: TutorialLesson = {
       id: "defend-tactics",
       type: "narration",
       title: "Defensive Tactics",
-      text: "Good defense wins games! Remember:\n\n- Keep untapped units near valuable sites\n- A unit that just moved (tapped) can't defend — plan your movements carefully\n- Newly summoned units CAN defend (they just can't tap for their own abilities)\n- Position defenders to cover multiple sites at once",
+      text: "Good defense wins games! Remember:\n\n- Choose **which** unit defends wisely — we used the Bodyguard to keep the stronger Amazon Warriors untapped\n- A unit that defends gets **tapped** — it can't act again until your next turn\n- After defending, both units ended up stacked on Humble Village — a strong position for your next turn's attack\n- Consider your opponent's remaining resources — with them out of mana, stacking units was safe",
     },
     {
       id: "defend-complete",
