@@ -44,17 +44,22 @@ export function CustomSelect({
   const selectedOption = options.find((opt) => opt.value === value);
   const displayLabel = selectedOption?.label ?? placeholder;
 
-  // Compute dropdown position when opening
+  // Compute dropdown position when opening, flip upward if near viewport bottom
   useEffect(() => {
     if (isOpen && containerRef.current) {
       const rect = containerRef.current.getBoundingClientRect();
+      const estimatedHeight = Math.min(options.length * 36, 192); // max-h-48 = 192px
+      const spaceBelow = window.innerHeight - rect.bottom - 4;
+      const openAbove =
+        spaceBelow < estimatedHeight && rect.top > estimatedHeight;
+
       setDropdownPos({
-        top: rect.bottom + 4,
+        top: openAbove ? rect.top - 4 - estimatedHeight : rect.bottom + 4,
         left: rect.left,
-        width: rect.width,
+        width: Math.max(rect.width, 160),
       });
     }
-  }, [isOpen]);
+  }, [isOpen, options.length]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -71,15 +76,21 @@ export function CustomSelect({
       }
     };
 
-    const handleScrollOrResize = () => setIsOpen(false);
+    const handleScroll = (event: Event) => {
+      const target = event.target as Node | null;
+      if (target && listRef.current?.contains(target)) return;
+      setIsOpen(false);
+    };
+
+    const handleResize = () => setIsOpen(false);
 
     document.addEventListener("mousedown", handleClickOutside);
-    window.addEventListener("scroll", handleScrollOrResize, true);
-    window.addEventListener("resize", handleScrollOrResize);
+    window.addEventListener("scroll", handleScroll, true);
+    window.addEventListener("resize", handleResize);
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
-      window.removeEventListener("scroll", handleScrollOrResize, true);
-      window.removeEventListener("resize", handleScrollOrResize);
+      window.removeEventListener("scroll", handleScroll, true);
+      window.removeEventListener("resize", handleResize);
     };
   }, [isOpen]);
 
@@ -110,7 +121,7 @@ export function CustomSelect({
             setHighlightedIndex(0);
           } else {
             setHighlightedIndex((prev) =>
-              prev < options.length - 1 ? prev + 1 : prev
+              prev < options.length - 1 ? prev + 1 : prev,
             );
           }
           break;
@@ -125,7 +136,7 @@ export function CustomSelect({
           break;
       }
     },
-    [disabled, isOpen, highlightedIndex, options, onChange]
+    [disabled, isOpen, highlightedIndex, options, onChange],
   );
 
   // Reset highlighted index when opening
@@ -222,7 +233,7 @@ export function CustomSelect({
               </div>
             ))}
           </div>,
-          document.body
+          document.body,
         )}
     </div>
   );

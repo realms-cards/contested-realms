@@ -58,7 +58,7 @@ const lesson: TutorialLesson = {
         2: { owner: 2, card: { cardId: 402, name: "Arid Desert", type: "Site", thresholds: { fire: 1 }, slug: "bet-arid_desert-b-s" } },
         4: { owner: 2, card: { cardId: 403, name: "Remote Desert", type: "Site", thresholds: { fire: 1 }, slug: "bet-remote_desert-b-s" } },
         7: { owner: 2, card: { cardId: 404, name: "Scorched Earth", type: "Site", thresholds: { fire: 1 }, slug: "bet-red_desert-b-s" } },
-        8: { owner: 2, card: { cardId: 405, name: "Blazing Sands", type: "Site", thresholds: { fire: 1 }, slug: "bet-red_desert-b-s" } },
+        8: { owner: 2, card: { cardId: 405, name: "Red Desert", type: "Site", thresholds: { fire: 1 }, slug: "bet-red_desert-b-s" } },  // second copy of Red Desert
       },
     },
     permanents: [
@@ -87,14 +87,14 @@ const lesson: TutorialLesson = {
       id: "move-battlefield",
       type: "highlight",
       title: "The Battlefield",
-      text: "Your **Amazon Warriors** (power 5) are standing on Humble Village, and the enemy **Rimland Nomads** (power 2) are just one step ahead on the Blazing Sands.\n\nThe Warriors are ready to advance and engage!",
+      text: "Your **Amazon Warriors** (power 5) are standing on Humble Village, and the enemy **Rimland Nomads** (power 2) are just one step ahead on the Red Desert.\n\nThe Warriors are ready to advance and engage!",
       highlightTarget: { type: "tiles", tiles: [13, 8] },
     },
     {
       id: "move-advance",
       type: "narration",
       title: "Amazon Warriors Advance!",
-      text: "Watch as the **Amazon Warriors** move one step forward — from Humble Village to the Blazing Sands to confront the Rimland Nomads.\n\nThis uses their **Move and Attack** ability, which **taps** them (turns them sideways).",
+      text: "Watch as the **Amazon Warriors** move one step forward — from Humble Village to the Red Desert to confront the Rimland Nomads.\n\nThis uses their **Move and Attack** ability, which **taps** them (turns them sideways).",
       highlightTarget: { type: "tile", tile: 8 },
       statePatches: [
         { op: "remove_permanent", tile: 13, cardName: "Amazon Warriors" },
@@ -104,8 +104,8 @@ const lesson: TutorialLesson = {
     {
       id: "move-encounter",
       type: "narration",
-      title: "Battle at the Blazing Sands!",
-      text: "The Amazon Warriors arrive at the Blazing Sands — and the **Rimland Nomads** are here! When you attack an enemy unit at your location, both units **fight simultaneously** — they strike each other at the same time.\n\n- **Amazon Warriors** strike for **5 damage** (their power)\n- **Rimland Nomads** strike for **2 damage** (their power)",
+      title: "Battle at the Red Desert!",
+      text: "The Amazon Warriors arrive at the Red Desert — and the **Rimland Nomads** are here! When you attack an enemy unit at your location, both units **fight simultaneously** — they strike each other at the same time.\n\n- **Amazon Warriors** strike for **5 damage** (their power)\n- **Rimland Nomads** strike for **2 damage** (their power)",
       statePatches: [
         { op: "remove_permanent", tile: 8, cardName: "Rimland Nomads" },
       ],

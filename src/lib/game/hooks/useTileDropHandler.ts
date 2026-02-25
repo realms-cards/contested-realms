@@ -2,7 +2,7 @@ import type { ThreeEvent } from "@react-three/fiber";
 import { useCallback, useEffect, useRef } from "react";
 import {
   clampOffset,
-  STACK_MARGIN_Z,
+  getPermanentOwnerBaseZ,
   STACK_SPACING,
   TILE_OFFSET_LIMIT_X,
   TILE_OFFSET_LIMIT_Z,
@@ -184,6 +184,10 @@ export function useTileDropHandler({
 
       const dropKey = `${tileX},${tileY}`;
       const pos = tileWorldPosition;
+      const hasAvatarOnDropTile = Object.values(avatars).some((avatar) => {
+        const posArr = avatar.pos;
+        return posArr && posArr[0] === tileX && posArr[1] === tileY;
+      });
 
       if (dragAvatar) {
         const wx = e.point.x;
@@ -305,10 +309,7 @@ export function useTileDropHandler({
         // So to land at world.z, we need: offZ = world.z - pos[2] - zBase
         const draggedItem = permanents[dragging.from]?.[dragging.index];
         const owner = draggedItem?.owner ?? 1;
-        const zBase =
-          owner === 1
-            ? -TILE_SIZE * 0.5 + STACK_MARGIN_Z
-            : TILE_SIZE * 0.5 - STACK_MARGIN_Z;
+        const zBase = getPermanentOwnerBaseZ(owner, hasAvatarOnDropTile);
         const offX = clampOffset(world.x - pos[0], TILE_OFFSET_LIMIT_X);
         const offZ = clampOffset(world.z - pos[2] - zBase, TILE_OFFSET_LIMIT_Z);
         const apiAtDrop = draggedBody.current;
@@ -338,10 +339,7 @@ export function useTileDropHandler({
         // So to land at world.z, we need: offZ = world.z - pos[2] - zBase
         const draggedItem = permanents[dragging.from]?.[dragging.index];
         const owner = draggedItem?.owner ?? 1;
-        const zBase =
-          owner === 1
-            ? -TILE_SIZE * 0.5 + STACK_MARGIN_Z
-            : TILE_SIZE * 0.5 - STACK_MARGIN_Z;
+        const zBase = getPermanentOwnerBaseZ(owner, hasAvatarOnDropTile);
         const offX = clampOffset(world.x - pos[0], TILE_OFFSET_LIMIT_X);
         const offZ = clampOffset(world.z - pos[2] - zBase, TILE_OFFSET_LIMIT_Z);
         dragTarget.current = null;
@@ -421,13 +419,20 @@ export function useTileDropHandler({
           const wz = e.point.z;
           const pos = tileWorldPosition;
           const dropOwner: 1 | 2 =
-            selectedCard.who === "p1" ? 1 : selectedCard.who === "p2" ? 2 : currentPlayer;
-          const dropZBase =
-            dropOwner === 1
-              ? -TILE_SIZE * 0.5 + STACK_MARGIN_Z
-              : TILE_SIZE * 0.5 - STACK_MARGIN_Z;
+            selectedCard.who === "p1"
+              ? 1
+              : selectedCard.who === "p2"
+                ? 2
+                : currentPlayer;
+          const dropZBase = getPermanentOwnerBaseZ(
+            dropOwner,
+            hasAvatarOnDropTile,
+          );
           const offX = clampOffset(wx - pos[0], TILE_OFFSET_LIMIT_X);
-          const offZ = clampOffset(wz - pos[2] - dropZBase, TILE_OFFSET_LIMIT_Z);
+          const offZ = clampOffset(
+            wz - pos[2] - dropZBase,
+            TILE_OFFSET_LIMIT_Z,
+          );
           const newIndex = (permanents[dropKey] || []).length;
           setPermanentOffset(dropKey, newIndex, [offX, offZ]);
         }
@@ -459,7 +464,6 @@ export function useTileDropHandler({
           });
           if (isAttachable && (toItems.length > 0 || hasAvatarOnTile)) {
             const spacing = STACK_SPACING;
-            const marginZ = STACK_MARGIN_Z;
             let closestPermanent: {
               at: string;
               index: number;
@@ -497,10 +501,7 @@ export function useTileDropHandler({
               }
               const startX = -((Math.max(toItems.length, 1) - 1) * spacing) / 2;
               const owner = perm.owner;
-              const zBase =
-                owner === 1
-                  ? -TILE_SIZE * 0.5 + marginZ
-                  : TILE_SIZE * 0.5 - marginZ;
+              const zBase = getPermanentOwnerBaseZ(owner, hasAvatarOnTile);
               const xPos = startX + realIdx * spacing;
               const permX = pos[0] + xPos + (perm.offset?.[0] ?? 0);
               const permZ = pos[2] + zBase + (perm.offset?.[1] ?? 0);
@@ -589,10 +590,10 @@ export function useTileDropHandler({
             : actorKey === "p2"
               ? 2
               : currentPlayer;
-        const dropZBase =
-          dropOwner === 1
-            ? -TILE_SIZE * 0.5 + STACK_MARGIN_Z
-            : TILE_SIZE * 0.5 - STACK_MARGIN_Z;
+        const dropZBase = getPermanentOwnerBaseZ(
+          dropOwner,
+          hasAvatarOnDropTile,
+        );
         const offX = clampOffset(wx - pos[0], TILE_OFFSET_LIMIT_X);
         const offZ = clampOffset(wz - pos[2] - dropZBase, TILE_OFFSET_LIMIT_Z);
 

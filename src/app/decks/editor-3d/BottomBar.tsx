@@ -72,6 +72,13 @@ type BottomBarProps = {
   // Card preview callbacks
   onHoverPreview?: (slug: string, name: string, type: string | null) => void;
   onHoverClear?: () => void;
+  // Owned cards filter
+  ownedOnly?: boolean;
+  onOwnedOnlyChange?: (v: boolean) => void;
+  ownedFilterAvailable?: boolean;
+  // Zoom slider for search results
+  searchZoom?: number;
+  onSearchZoomChange?: (v: number) => void;
 };
 
 export default function BottomBar(props: BottomBarProps) {
@@ -129,6 +136,13 @@ export default function BottomBar(props: BottomBarProps) {
     // Card preview callbacks
     onHoverPreview,
     onHoverClear,
+    // Owned cards filter
+    ownedOnly = false,
+    onOwnedOnlyChange,
+    ownedFilterAvailable = false,
+    // Zoom slider
+    searchZoom = 100,
+    onSearchZoomChange,
   } = props;
 
   const standardActive =
@@ -148,18 +162,37 @@ export default function BottomBar(props: BottomBarProps) {
       packLoadProgress.processed < packLoadProgress.total);
   const openAllDisabled = packLoadProgress.inProgress || !allUnopenedReady;
 
+  // Compute grid columns based on zoom level
+  const liveGridCols =
+    searchZoom <= 70
+      ? "grid-cols-6 sm:grid-cols-8 md:grid-cols-10"
+      : searchZoom <= 100
+      ? "grid-cols-4 sm:grid-cols-6 md:grid-cols-8"
+      : searchZoom <= 130
+      ? "grid-cols-3 sm:grid-cols-4 md:grid-cols-6"
+      : "grid-cols-2 sm:grid-cols-3 md:grid-cols-4";
+
+  const serverGridCols =
+    searchZoom <= 70
+      ? "grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8"
+      : searchZoom <= 100
+      ? "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5"
+      : searchZoom <= 130
+      ? "grid-cols-2 sm:grid-cols-3 md:grid-cols-4"
+      : "grid-cols-1 sm:grid-cols-2 md:grid-cols-3";
+
   return (
     <div
       className={`absolute bottom-0 left-0 right-0 ${
         searchExpanded ? "p-4" : "p-2"
       } pointer-events-none`}
     >
-      <div className="max-w-7xl mx-auto">
+      <div className="max-w-7xl">
         <div
           className={`${
             searchExpanded
-              ? "bg-black/80 backdrop-blur-sm p-4"
-              : "bg-transparent backdrop-blur-0 p-0"
+              ? "p-2"
+              : "p-0"
           } rounded-lg`}
         >
           <div
@@ -544,8 +577,8 @@ export default function BottomBar(props: BottomBarProps) {
                 )}
               </div>
             ) : !isDraftMode ? (
-              <div className="w-full flex justify-center">
-                <div className="relative flex flex-col gap-3 p-4 bg-gradient-to-br from-slate-800/90 to-slate-900/90 rounded-lg backdrop-blur-sm border border-blue-500/20 shadow-xl max-w-3xl w-full">
+              <div className="w-full flex justify-start">
+                <div className="relative flex flex-col gap-3 p-3 rounded-lg backdrop-blur-sm border border-white/10 max-w-4xl w-full">
                   {/* Close button in upper right */}
                   <button
                     onClick={() => setSearchExpanded(false)}
@@ -555,7 +588,7 @@ export default function BottomBar(props: BottomBarProps) {
                   >
                     ✕
                   </button>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 pr-10">
                     {isFreeMode && onLiveSearchChange ? (
                       /* Free mode: live search with instant results */
                       <div className="relative flex-1">
@@ -627,6 +660,18 @@ export default function BottomBar(props: BottomBarProps) {
                         autoFocus
                       />
                     )}
+                    {/* Owned cards filter */}
+                    {ownedFilterAvailable && (
+                      <label className="flex items-center gap-1.5 cursor-pointer whitespace-nowrap text-sm text-white/80 hover:text-white transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={ownedOnly}
+                          onChange={(e) => onOwnedOnlyChange?.(e.target.checked)}
+                          className="w-4 h-4 rounded border-white/30 bg-black/40 text-blue-500 focus:ring-blue-400/30 focus:ring-offset-0 cursor-pointer accent-blue-500"
+                        />
+                        Owned
+                      </label>
+                    )}
                     <CustomSelect
                       value={typeFilter}
                       onChange={(v) => setTypeFilter(v as SearchType)}
@@ -648,11 +693,26 @@ export default function BottomBar(props: BottomBarProps) {
                         { value: "Dragonlord", label: "Dragonlord" },
                       ]}
                     />
+                    {/* Zoom slider */}
+                    {onSearchZoomChange && (
+                      <div className="flex items-center gap-1.5 whitespace-nowrap">
+                        <span className="text-xs text-white/50">Size</span>
+                        <input
+                          type="range"
+                          min="60"
+                          max="150"
+                          step="10"
+                          value={searchZoom}
+                          onChange={(e) => onSearchZoomChange(Number(e.target.value))}
+                          className="w-16 h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                        />
+                      </div>
+                    )}
                   </div>
                   {/* Live search results - show inline for free mode */}
                   {isFreeMode && liveSearchResults.length > 0 && (
-                    <div className="max-h-48 overflow-y-auto">
-                      <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2">
+                    <div className={`overflow-y-auto ${searchZoom <= 100 ? "max-h-56" : searchZoom <= 130 ? "max-h-72" : "max-h-96"}`}>
+                      <div className={`grid ${liveGridCols} gap-2`}>
                         {liveSearchResults.map((r, idx) => {
                           const isSite = (r.type || "")
                             .toLowerCase()
@@ -707,7 +767,7 @@ export default function BottomBar(props: BottomBarProps) {
           {/* Search results grid */}
           {searchExpanded && !isDraftMode && (
             <div className="mt-4 pointer-events-auto max-h-[60vh] overflow-y-auto pr-2">
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+              <div className={`grid ${serverGridCols} gap-3`}>
                 {results.map((r) => {
                   const isSite = (r.type || "").toLowerCase().includes("site");
                   return (
