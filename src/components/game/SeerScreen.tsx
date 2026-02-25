@@ -75,7 +75,7 @@ export default function SeerScreen({
       if (isRevealed || isCompleted) return;
       setSeerPile(pile);
     },
-    [isRevealed, isCompleted, setSeerPile]
+    [isRevealed, isCompleted, setSeerPile],
   );
 
   const handleReveal = useCallback(() => {
@@ -97,7 +97,7 @@ export default function SeerScreen({
         playTurnGong();
       } catch {}
     },
-    [isCompleted, playCardSelect, playTurnGong, completeSeer]
+    [isCompleted, playCardSelect, playTurnGong, completeSeer],
   );
 
   // If not the second seat, show waiting screen
@@ -118,7 +118,6 @@ export default function SeerScreen({
       {/* Header */}
       <div className="text-center mb-6">
         <div className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-600/20 rounded-full ring-1 ring-cyan-500/40 mb-4">
-          <span className="text-2xl">👁️</span>
           <span className="text-lg font-bold text-cyan-300">
             Second Player Seer
           </span>
@@ -174,7 +173,7 @@ export default function SeerScreen({
                 alt="Atlas"
                 fill
                 sizes="96px"
-                className="object-cover"
+                className="object-contain rotate-90 scale-[1.333] origin-center"
                 unoptimized
               />
             </div>

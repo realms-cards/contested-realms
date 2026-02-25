@@ -880,6 +880,24 @@ export default function OnlineProvider({
         | undefined;
       if (!detail) return;
 
+      // In hotseat mode, only show toasts for the current player
+      const isHotseat = window.location.pathname === "/play";
+      if (isHotseat) {
+        const currentSeat =
+          useGameStore.getState().currentPlayer === 1 ? "p1" : "p2";
+        // If the toast explicitly identifies a seat, skip if not current player
+        const seat = detail.seat as string | undefined;
+        if (seat && seat !== currentSeat) return;
+        // For text toasts without seat, check player markers in the message
+        if (!seat && detail.message && typeof detail.message === "string") {
+          const msg = detail.message;
+          const refP1 = /\[p1[c:]/.test(msg);
+          const refP2 = /\[p2[c:]/.test(msg);
+          if (refP1 && !refP2 && currentSeat !== "p1") return;
+          if (refP2 && !refP1 && currentSeat !== "p2") return;
+        }
+      }
+
       // Handle resource-warning toast (mana/threshold warnings)
       if (detail.type === "resource-warning") {
         setAppToast({

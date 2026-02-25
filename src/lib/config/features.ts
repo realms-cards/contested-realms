@@ -29,6 +29,12 @@ export interface FeatureFlags {
   cpuBots: {
     enabled: boolean;
   };
+  teachingMode: {
+    enabled: boolean;
+  };
+  tutorialMode: {
+    enabled: boolean;
+  };
 }
 
 /**
@@ -95,6 +101,18 @@ export const FEATURE_FLAGS: FeatureFlags = {
       process.env.NEXT_PUBLIC_CPU_BOTS_ENABLED === "1" ||
       parseBooleanFlag(process.env.NEXT_PUBLIC_CPU_BOTS_ENABLED, false),
   },
+  teachingMode: {
+    enabled: parseBooleanFlag(
+      process.env.NEXT_PUBLIC_FEATURE_TEACHING_MODE,
+      false
+    ),
+  },
+  tutorialMode: {
+    enabled: parseBooleanFlag(
+      process.env.NEXT_PUBLIC_FEATURE_TUTORIAL_MODE,
+      false
+    ),
+  },
 };
 
 /**
@@ -135,3 +153,7 @@ export const FEATURE_AUDIO_ONLY: boolean = FEATURE_FLAGS.audioOnlyRtc.enabled;
 export const FEATURE_UNDO: boolean = FEATURE_FLAGS.undo.enabled;
 export const FEATURE_CARD_SLEEVES: boolean = FEATURE_FLAGS.cardSleeves.enabled;
 export const FEATURE_CPU_BOTS: boolean = FEATURE_FLAGS.cpuBots.enabled;
+export const FEATURE_TEACHING_MODE: boolean =
+  FEATURE_FLAGS.teachingMode.enabled;
+export const FEATURE_TUTORIAL_MODE: boolean =
+  FEATURE_FLAGS.tutorialMode.enabled;

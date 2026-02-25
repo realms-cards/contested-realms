@@ -333,6 +333,13 @@ function AuthenticatedDeckEditor() {
   );
   const [liveSearchLoading, setLiveSearchLoading] = useState(false);
 
+  // Owned cards filter state
+  const [ownedCardIds, setOwnedCardIds] = useState<Set<number> | null>(null);
+  const [ownedOnly, setOwnedOnly] = useState(false);
+
+  // Search zoom state
+  const [searchZoom, setSearchZoom] = useState(100);
+
   // Hidden cards state for draft/sealed modes
   const [hiddenCardIds, setHiddenCardIds] = useState<Set<number>>(new Set());
   const [showHiddenCards, setShowHiddenCards] = useState(false);
@@ -3975,6 +3982,40 @@ function AuthenticatedDeckEditor() {
     };
   }, [isFreeMode, status]);
 
+  // Fetch owned card IDs for collection filter
+  useEffect(() => {
+    if (!isFreeMode || status !== "authenticated") return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/collection/owned-card-ids", {
+          credentials: "include",
+        });
+        if (!res.ok || cancelled) return;
+        const data: { cardIds: number[] } = await res.json();
+        if (!cancelled) {
+          setOwnedCardIds(new Set(data.cardIds));
+        }
+      } catch {
+        // Silently fail - owned filter just won't be available
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isFreeMode, status]);
+
+  // Hydrate search zoom from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem("sorcery:deckEditorSearchZoom");
+    if (saved) setSearchZoom(Number(saved));
+  }, []);
+
+  const handleSearchZoomChange = (newZoom: number) => {
+    setSearchZoom(newZoom);
+    localStorage.setItem("sorcery:deckEditorSearchZoom", String(newZoom));
+  };
+
   // Free mode: Live search handler with debounce
   const handleLiveSearchChange = useCallback(
     (query: string) => {
@@ -3984,10 +4025,10 @@ function AuthenticatedDeckEditor() {
         return;
       }
       setLiveSearchLoading(true);
-      // Use local search for instant results
-      const results = localCardSearch(query, 20);
+      // Use local search for instant results (fetch more when filtering by owned)
+      const results = localCardSearch(query, ownedOnly ? 100 : 20);
       // Convert to SearchResult format
-      const searchResults: SearchResult[] = results.map((r) => ({
+      let searchResults: SearchResult[] = results.map((r) => ({
         cardId: r.cardId,
         variantId: r.variantId,
         cardName: r.cardName,
@@ -3998,11 +4039,24 @@ function AuthenticatedDeckEditor() {
         product: "",
         rarity: "Ordinary",
       }));
-      setLiveSearchResults(searchResults);
+      // Filter by owned cards if enabled
+      if (ownedOnly && ownedCardIds) {
+        searchResults = searchResults.filter((r) =>
+          ownedCardIds.has(r.cardId),
+        );
+      }
+      setLiveSearchResults(searchResults.slice(0, 20));
       setLiveSearchLoading(false);
     },
-    [localCardSearch, localSearchReady],
+    [localCardSearch, localSearchReady, ownedOnly, ownedCardIds],
   );
+
+  // Re-trigger live search when ownedOnly filter changes
+  useEffect(() => {
+    if (liveSearchQuery.length >= 3) {
+      handleLiveSearchChange(liveSearchQuery);
+    }
+  }, [ownedOnly]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Free mode: Remove a card from the editor entirely
   const removeCardFromEditor = useCallback((cardId: number, zone: Zone) => {
@@ -5569,8 +5623,9 @@ function AuthenticatedDeckEditor() {
         {hoverPreview && !contextMenu && (
           <CardPreview
             card={hoverPreview}
-            anchor="bottom-left"
+            anchor={hoverPreviewSourceRef.current?.startsWith("livesearch:") ? "top-left" : "bottom-left"}
             zIndexClass="z-50"
+            className={hoverPreviewSourceRef.current?.startsWith("livesearch:") ? "!top-3" : ""}
           />
         )}
 
@@ -5910,6 +5965,13 @@ function AuthenticatedDeckEditor() {
               beginHoverPreview({ slug, name, type }, `livesearch:${slug}`)
             }
             onHoverClear={() => clearHoverPreviewDebounced()}
+            // Owned cards filter
+            ownedOnly={ownedOnly}
+            onOwnedOnlyChange={setOwnedOnly}
+            ownedFilterAvailable={ownedCardIds !== null && ownedCardIds.size > 0}
+            // Zoom slider
+            searchZoom={searchZoom}
+            onSearchZoomChange={handleSearchZoomChange}
           />
         </Suspense>
         {error && (

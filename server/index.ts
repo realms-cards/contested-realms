@@ -5400,7 +5400,10 @@ io.on("connection", async (socket: SocketClient) => {
     } catch {}
 
     // Lookup pid BEFORE player registry disconnect (which deletes from the shared playerIdBySocket Map)
-    const pid = playerIdBySocket.get(socket.id);
+    // Fallback: resolve by current socketId on player records in case reverse mapping was missed/stale.
+    const pid =
+      playerIdBySocket.get(socket.id) ||
+      Array.from(players.values()).find((p) => p.socketId === socket.id)?.id;
 
     // Use player registry for disconnect handling when enabled
     if (REDIS_STATE_ENABLED) {

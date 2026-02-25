@@ -23,6 +23,8 @@ export interface GraphicsSettings {
   gamepadLifeControls: boolean;
   /** Use raster textures (WebP/PNG) instead of KTX2 - reduces CPU load on older devices */
   preferRaster: boolean;
+  /** Show a subtle purple glow on cards that have a custom resolver (automated behavior) */
+  showResolverGlow: boolean;
 }
 
 const STORAGE_KEY = "sorcery-graphics-settings";
@@ -37,6 +39,7 @@ const DEFAULT_SETTINGS: GraphicsSettings = {
   handSortOrder: "sitesFirst",
   gamepadLifeControls: false,
   preferRaster: false,
+  showResolverGlow: true,
 };
 
 function loadSettings(): GraphicsSettings {
@@ -173,6 +176,10 @@ export function useGraphicsSettings() {
     setSettings({ preferRaster: !settings.preferRaster });
   }, [settings.preferRaster, setSettings]);
 
+  const toggleShowResolverGlow = useCallback(() => {
+    setSettings({ showResolverGlow: !settings.showResolverGlow });
+  }, [settings.showResolverGlow, setSettings]);
+
   return {
     settings,
     isLoaded,
@@ -186,6 +193,7 @@ export function useGraphicsSettings() {
     toggleHandSortOrder,
     toggleGamepadLifeControls,
     togglePreferRaster,
+    toggleShowResolverGlow,
   };
 }
 

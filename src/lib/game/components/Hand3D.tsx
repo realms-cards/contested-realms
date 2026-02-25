@@ -12,6 +12,7 @@ import type { CardPreviewData } from "@/lib/game/card-preview.types";
 import CardBorder from "@/lib/game/components/CardBorder";
 import CardGlow from "@/lib/game/components/CardGlow";
 import CardPlane from "@/lib/game/components/CardPlane";
+import { hasCustomResolver } from "@/lib/game/resolverRegistry";
 import MaterialCardBack from "@/lib/game/components/MaterialCardBack";
 import {
   CARD_LONG,
@@ -1350,6 +1351,18 @@ export default function Hand3D({
                 renderOrder={renderOrder + 10000 - 5}
               />
             ) : null}
+            {/* Purple resolver glow for cards with custom automated behavior */}
+            {!showCardBacks && !remoteHighlightColor && graphicsSettings.showResolverGlow && hasCustomResolver(c.name) && (
+              <CardGlow
+                width={glowWidth}
+                height={glowHeight}
+                rotationZ={cardRotationZ}
+                elevation={-0.01}
+                color="#8b5cf6"
+                renderOrder={renderOrder + 10000 - 6}
+                flat={false}
+              />
+            )}
             {/* Invisible larger interaction box to ensure cards are always clickable */}
             {/* Disable during drag to prevent blocking board placement */}
             {!showCardBacks && !isDraggedCard && !isDragging && (

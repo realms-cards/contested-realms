@@ -2,6 +2,12 @@
 
 ## February 2026
 
+### Feb 25 - Fixes and updates
+
+- **fix some dropdown menus not showing all entries** please make issues if you have them! I depend on your feedback to make the Realms the best it can be!
+- **revamp deck editor search and add** can now filter by owned cards from collection, better experience
+- **remove duplicate toast messages in hotseat**
+
 ### Feb 16 - Meta2 and new resolvers
 
 - **make Meta even better** we are now recording decklists per match which should give us all the possibilities we like to explore, also made Meta section much more useful IMO

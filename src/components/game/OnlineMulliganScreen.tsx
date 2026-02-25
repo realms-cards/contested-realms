@@ -437,7 +437,6 @@ export default function OnlineMulliganScreen({
         <div className="bg-black/30 rounded-xl p-4 ring-1 ring-white/10">
           <div className="text-center mb-4">
             <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-amber-600/20 rounded-full ring-1 ring-amber-500/40 mb-2">
-              <span className="text-lg">👁️</span>
               <span className="text-sm font-bold text-amber-300">
                 Second Player Seer
               </span>
@@ -502,7 +501,7 @@ export default function OnlineMulliganScreen({
                           alt="Atlas"
                           fill
                           sizes="96px"
-                          className="object-cover"
+                          className="object-contain rotate-90 scale-[1.333] origin-center"
                           unoptimized
                         />
                       </div>

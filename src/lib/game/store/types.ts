@@ -1619,6 +1619,13 @@ export type GameState = {
   // Turn overlay active flag – other overlays should defer while this is true
   turnOverlayActive: boolean;
   setTurnOverlayActive: (active: boolean) => void;
+  // Tutorial action gate — when active, only matching actions are allowed
+  tutorialActionGate: {
+    active: boolean;
+    validate: ((actionType: string, x: number, y: number, cardName?: string) => boolean) | null;
+    onReject: ((actionType: string, x: number, y: number, cardName?: string) => void) | null;
+  };
+  setTutorialActionGate: (gate: GameState["tutorialActionGate"]) => void;
   // Card meta cache (subset) used to detect base power and rarity
   metaByCardId: Record<
     number,
