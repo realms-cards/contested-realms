@@ -17,29 +17,45 @@ export async function GET() {
     );
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { discordId: true, discordUsername: true },
-  });
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { discordId: true, discordUsername: true },
+    });
 
-  if (!user) {
-    return NextResponse.json({ error: "User not found" }, { status: 404 });
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    // League queries may fail if migration hasn't been applied yet
+    let leagues: Awaited<ReturnType<typeof getUserLeagues>> = [];
+    if (user.discordId) {
+      try {
+        leagues = await getUserLeagues(session.user.id);
+      } catch (err) {
+        console.error("[users/me/discord] League query error:", err);
+      }
+    }
+
+    return NextResponse.json({
+      discordId: user.discordId,
+      discordUsername: user.discordUsername,
+      leagues: leagues.map((l) => ({
+        id: l.id,
+        slug: l.slug,
+        name: l.name,
+        badgeColor: l.badgeColor,
+        iconUrl: l.iconUrl,
+        joinedAt: l.joinedAt.toISOString(),
+      })),
+    });
+  } catch (err) {
+    console.error("[users/me/discord] Error:", err);
+    return NextResponse.json(
+      { error: "Failed to load Discord status" },
+      { status: 500 },
+    );
   }
-
-  const leagues = user.discordId ? await getUserLeagues(session.user.id) : [];
-
-  return NextResponse.json({
-    discordId: user.discordId,
-    discordUsername: user.discordUsername,
-    leagues: leagues.map((l) => ({
-      id: l.id,
-      slug: l.slug,
-      name: l.name,
-      badgeColor: l.badgeColor,
-      iconUrl: l.iconUrl,
-      joinedAt: l.joinedAt.toISOString(),
-    })),
-  });
 }
 
 export async function DELETE() {

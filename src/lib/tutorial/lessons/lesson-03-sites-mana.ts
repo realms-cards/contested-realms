@@ -121,7 +121,7 @@ const lesson: TutorialLesson = {
       id: "mana-play-site",
       type: "forced_action",
       title: "Play Valley",
-      text: "Let's play your first site! Drag the **Valley** from your hand onto your Avatar's square (center of your bottom row).",
+      text: "Let's play your first site! Drag **Valley** from your hand onto your Avatar's square (center of your bottom row).",
       requiredAction: {
         type: "play_site",
         cardName: "Valley",
@@ -167,7 +167,7 @@ const lesson: TutorialLesson = {
       id: "mana-explain-mana",
       type: "narration",
       title: "Understanding Mana",
-      text: "You now have {mana:1} **mana** available. At the start of each of your turns, ALL your sites provide {mana:1} mana each. Mana is spent to cast spells. Any unspent mana is lost at the end of your turn — so use it wisely!",
+      text: "You now have {mana:1} **mana** available. At the start of each of your turns, ALL your sites provide {mana:1} mana each. Mana is spent to cast spells. Any unspent mana is lost at the end of your turn!",
     },
     {
       id: "mana-cant-afford",
@@ -179,7 +179,7 @@ const lesson: TutorialLesson = {
       id: "mana-adjacency",
       type: "narration",
       title: "Site Placement Rules",
-      text: "Remember: after your first site, new sites must be placed on **Void** (empty squares) **adjacent** to a site you control.\n\nAdjacent means sharing a border — up, down, left, or right. **Not diagonal.**\n\nThis means you expand your domain one square at a time, strategically choosing where to grow.",
+      text: "Remember: after your first site, new sites must be placed on **Void** tiles, **adjacent** to a site you control.\n\nAdjacent means sharing a border — up, down, left, or right. **Not diagonal.**\n\nThis means you expand your domain one square at a time, strategically choosing where to grow. Remember that you can not just play a Site down - you need to use your Avatar to place it.",
     },
     {
       id: "mana-complete",
