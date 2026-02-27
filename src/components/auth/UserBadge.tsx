@@ -94,6 +94,7 @@ export default function UserBadge({
   const [deleteInProgress, setDeleteInProgress] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [soatcLinked, setSoatcLinked] = useState<boolean | null>(null);
+  const [discordLinked, setDiscordLinked] = useState<boolean | null>(null);
 
   const SPINNER_CHARS = ["✦", "❊", "✤", "❀", "❇︎"] as const;
   const [spinnerIndex, setSpinnerIndex] = useState(0);
@@ -286,6 +287,30 @@ export default function UserBadge({
       }
     };
     void loadSoatcStatus();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
+
+  // Load Discord linked status
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    const loadDiscordStatus = async () => {
+      try {
+        const res = await fetch("/api/users/me/discord", {
+          cache: "no-store",
+        });
+        if (!res.ok || cancelled) return;
+        const data = (await res.json()) as { discordId?: string | null };
+        if (!cancelled) {
+          setDiscordLinked(Boolean(data.discordId));
+        }
+      } catch {
+        // Ignore errors
+      }
+    };
+    void loadDiscordStatus();
     return () => {
       cancelled = true;
     };
@@ -1145,8 +1170,13 @@ export default function UserBadge({
                 <NotificationSettingsSection />
               </div>
 
-              {/* SOATC League section */}
+              {/* Leagues section */}
               <div className="mt-2 pt-3 border-t border-slate-700/50">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xs font-medium text-slate-300">
+                    Leagues &amp; Communities
+                  </span>
+                </div>
                 <button
                   type="button"
                   onClick={() => {
@@ -1155,7 +1185,7 @@ export default function UserBadge({
                   }}
                   className="w-full flex items-center justify-between gap-2 h-10 px-4 rounded-lg bg-gradient-to-r from-amber-900/30 to-amber-800/20 ring-1 ring-amber-500/30 text-sm font-medium text-amber-100 hover:from-amber-900/40 hover:to-amber-800/30 transition-all"
                 >
-                  <span>Sorcerers at the Core</span>
+                  <span>🔘 Sorcerers at the Core</span>
                   {soatcLinked ? (
                     <span className="text-[10px] text-emerald-400">
                       Account linked ✓
@@ -1163,6 +1193,25 @@ export default function UserBadge({
                   ) : (
                     <span className="text-[10px] text-amber-300/70">
                       Link your account
+                    </span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleCloseSettings();
+                    router.push("/settings/discord");
+                  }}
+                  className="w-full flex items-center justify-between gap-2 h-10 mt-1 px-4 rounded-lg bg-gradient-to-r from-indigo-900/30 to-indigo-800/20 ring-1 ring-indigo-500/30 text-sm font-medium text-indigo-100 hover:from-indigo-900/40 hover:to-indigo-800/30 transition-all"
+                >
+                  <span>⛰️ Discord &amp; Leagues</span>
+                  {discordLinked ? (
+                    <span className="text-[10px] text-emerald-400">
+                      Discord linked ✓
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-indigo-300/70">
+                      Link Discord account
                     </span>
                   )}
                 </button>
