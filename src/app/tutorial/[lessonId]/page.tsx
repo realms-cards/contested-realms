@@ -109,7 +109,7 @@ function TutorialLessonContent() {
         !!session.currentStep?.showHint));
 
   return (
-    <main className="relative h-screen w-screen overflow-hidden bg-slate-950">
+    <main className="fixed inset-0 z-20 overflow-hidden bg-slate-950">
       {/* 3D game board — always mounted to avoid WebGL context loss */}
       <TutorialBoard3D
         visibleHud={visibleHud}

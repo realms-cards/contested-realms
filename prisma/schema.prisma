@@ -245,6 +245,7 @@ model User {
   soatcUuid               String?
   discordId               String?                  @unique
   discordUsername         String?
+  discordGuildIds         String?
   accounts                Account[]
   cardLists               CardList[]
   collectionCards         CollectionCard[]

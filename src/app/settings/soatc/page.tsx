@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  ArrowLeft,
   ExternalLink,
   Check,
   AlertCircle,
@@ -105,25 +104,14 @@ export default function SoatcSettingsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-stone-900 to-stone-950 text-stone-100 p-6">
-        <div className="max-w-2xl mx-auto">
-          <div className="animate-pulse">Loading SATC settings...</div>
-        </div>
+      <div className="max-w-2xl mx-auto">
+        <div className="animate-pulse">Loading SATC settings...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-stone-900 to-stone-950 text-stone-100 p-6">
-      <div className="max-w-2xl mx-auto">
-        <Link
-          href="/"
-          className="inline-flex items-center gap-2 text-amber-400 hover:text-amber-300 mb-6"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Back to Home
-        </Link>
-
+    <div className="max-w-2xl mx-auto">
         <div className="flex items-center gap-3 mb-6">
           <Trophy className="w-8 h-8 text-amber-400" />
           <h1 className="text-2xl font-bold">Sorcerers at the Core</h1>
@@ -355,7 +343,6 @@ export default function SoatcSettingsPage() {
             </li>
           </ol>
         </div>
-      </div>
     </div>
   );
 }
