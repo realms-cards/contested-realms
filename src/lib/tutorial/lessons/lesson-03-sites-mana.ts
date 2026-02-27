@@ -170,6 +170,18 @@ const lesson: TutorialLesson = {
       text: "You now have {mana:1} **mana** available. At the start of each of your turns, ALL your sites provide {mana:1} mana each. Mana is spent to cast spells. Any unspent mana is lost at the end of your turn!",
     },
     {
+      id: "mana-site-layers",
+      type: "narration",
+      title: "Surface & Subsurface",
+      text: "Each site has two levels:\n\n- **Surface** — the upper level, where your units normally move and fight. When you cast a minion, it enters the surface of a site.\n- **Subsurface** — the lower level. For land sites this is the **Underground**, for water sites it's **Underwater**. Most units die instantly if they end up there — only special abilities like Burrowing (for land sites) or Submerge (for water sites) let a unit survive below. A minion with burrow/submerge can be cast to the respective subsurface.\n\nThere's also the **Void** — all empty squares not occupied by a site. Minions entering the void are banished unless they have Voidwalk and minions who do have Voidwalk can be cast to any void.",
+    },
+    {
+      id: "mana-location-terms",
+      type: "narration",
+      title: "Location Terminology",
+      text: "Card abilities use specific spatial terms. Understanding these is key to reading any card:\n\n- **Here / There** — refers to the location(s) a card occupies. Location: For a minion, that's the square its on. For a site, it means both its surface and subsurface.\n- **Adjacent** — the card's own square plus up to 4 squares sharing a border (orthogonal only, **not** diagonal). Up to 5 squares total.\n- **Nearby** — the card's own square plus **all** surrounding squares, including diagonals. Up to 9 squares total.\n\nImportant: adjacent and nearby only count locations in the **same region** — a surface unit is not adjacent to an underground unit even on the same square!",
+    },
+    {
       id: "mana-cant-afford",
       type: "narration",
       title: "Not Enough Mana",

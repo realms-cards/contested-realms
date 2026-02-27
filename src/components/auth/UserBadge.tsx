@@ -1204,7 +1204,7 @@ export default function UserBadge({
                   }}
                   className="w-full flex items-center justify-between gap-2 h-10 mt-1 px-4 rounded-lg bg-gradient-to-r from-indigo-900/30 to-indigo-800/20 ring-1 ring-indigo-500/30 text-sm font-medium text-indigo-100 hover:from-indigo-900/40 hover:to-indigo-800/30 transition-all"
                 >
-                  <span>⛰️ Discord &amp; Leagues</span>
+                  <span>🎮 Discord &amp; Leagues</span>
                   {discordLinked ? (
                     <span className="text-[10px] text-emerald-400">
                       Discord linked ✓
