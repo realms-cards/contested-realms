@@ -110,7 +110,7 @@ export const FEATURE_FLAGS: FeatureFlags = {
   tutorialMode: {
     enabled: parseBooleanFlag(
       process.env.NEXT_PUBLIC_FEATURE_TUTORIAL_MODE,
-      false
+      true
     ),
   },
 };

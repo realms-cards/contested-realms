@@ -16,9 +16,5 @@ export default function TutorialPage() {
     redirect("/online/lobby");
   }
 
-  return (
-    <main className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950">
-      <TutorialLessonSelect />
-    </main>
-  );
+  return <TutorialLessonSelect />;
 }
