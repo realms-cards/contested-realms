@@ -108,18 +108,7 @@ export default function MatchmakingPanel({
         )}
       </button>
 
-      {/* Card 3: Create Match */}
-      <button
-        onClick={onCreateMatch}
-        className="flex-1 rounded-xl bg-gradient-to-br from-green-600/80 to-green-700/60 ring-1 ring-green-500/40 flex flex-col items-center justify-center p-3 hover:from-green-600 hover:to-green-700 transition-colors"
-      >
-        <div className="text-sm font-semibold text-white">Create Match</div>
-        <div className="text-[10px] text-green-100/80">
-          Constructed • Sealed • Draft
-        </div>
-      </button>
-
-      {/* Card 4: Tutorial - shown when feature-gated */}
+      {/* Card 3: Tutorial - shown when feature-gated */}
       {isFeatureEnabled("tutorialMode") && (
         <Link
           href="/tutorial"
@@ -129,6 +118,17 @@ export default function MatchmakingPanel({
           <div className="text-[10px] text-amber-300/80">Interactive Tutorial</div>
         </Link>
       )}
+
+      {/* Card 4: Create Match */}
+      <button
+        onClick={onCreateMatch}
+        className="flex-1 rounded-xl bg-gradient-to-br from-green-600/80 to-green-700/60 ring-1 ring-green-500/40 flex flex-col items-center justify-center p-3 hover:from-green-600 hover:to-green-700 transition-colors"
+      >
+        <div className="text-sm font-semibold text-white">Create Match</div>
+        <div className="text-[10px] text-green-100/80">
+          Constructed • Sealed • Draft
+        </div>
+      </button>
     </div>
   );
 }
