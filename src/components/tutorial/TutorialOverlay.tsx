@@ -93,10 +93,10 @@ export function TutorialOverlay({
         />
       </div>
 
-      {/* Skip button */}
+      {/* Skip button — positioned below nav bar to avoid UserBadge overlap */}
       <button
         onClick={onSkip}
-        className="fixed top-3 right-3 z-[61] rounded bg-slate-800/80 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
+        className="fixed top-3 right-16 z-[61] rounded bg-slate-800/80 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
       >
         Skip Lesson
       </button>

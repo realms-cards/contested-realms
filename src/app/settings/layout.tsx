@@ -2,7 +2,7 @@
 
 import OnlinePageShell from "@/components/online/OnlinePageShell";
 
-export default function TutorialLayout({
+export default function SettingsLayout({
   children,
 }: {
   children: React.ReactNode;

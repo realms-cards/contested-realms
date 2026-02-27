@@ -12,6 +12,7 @@ interface OnlinePageShellProps {
 const NAV_LINKS = [
   { href: "/", label: "Home" },
   { href: "/online/lobby", label: "Lobby" },
+  { href: "/tutorial", label: "Tutorial" },
   { href: "/decks", label: "Decks" },
   { href: "/cubes", label: "Cubes" },
   { href: "/tournaments", label: "Tournaments" },
@@ -33,6 +34,7 @@ export default function OnlinePageShell({
 
   // Get the current route title based on pathname
   const getRouteTitle = (path: string) => {
+    if (path.startsWith("/settings")) return "Settings";
     for (const link of NAV_LINKS) {
       if (path === link.href || path.startsWith(`${link.href}/`)) {
         return link.label;

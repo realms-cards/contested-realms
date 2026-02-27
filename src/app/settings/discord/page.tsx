@@ -1,14 +1,12 @@
 "use client";
 
 import {
-  ArrowLeft,
   Check,
   AlertCircle,
   Loader2,
   RefreshCw,
   Unlink,
 } from "lucide-react";
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useState, useEffect, useCallback, Suspense } from "react";
 
@@ -29,6 +27,12 @@ interface AvailableLeague {
   iconUrl: string | null;
 }
 
+interface SyncResponse {
+  synced: boolean;
+  leagues: LeagueEntry[];
+  hint?: string;
+}
+
 interface DiscordStatus {
   discordId: string | null;
   discordUsername: string | null;
@@ -47,6 +51,7 @@ function DiscordSettingsContent() {
   const [unlinking, setUnlinking] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncAttempted, setSyncAttempted] = useState(false);
+  const [needsRelink, setNeedsRelink] = useState(false);
   const [availableLeagues, setAvailableLeagues] = useState<AvailableLeague[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -80,16 +85,19 @@ function DiscordSettingsContent() {
     }
   }, []);
 
-  // Sync league memberships via bot token check
+  // Sync league memberships using stored guild IDs from OAuth
   const syncLeagues = useCallback(async () => {
     setSyncing(true);
     try {
       const res = await fetch("/api/users/me/discord/sync", { method: "POST" });
       if (res.ok) {
-        const data = (await res.json()) as { leagues: LeagueEntry[] };
+        const data = (await res.json()) as SyncResponse;
         setStatus((prev) =>
           prev ? { ...prev, leagues: data.leagues } : prev,
         );
+        if (data.hint) {
+          setNeedsRelink(true);
+        }
         return data.leagues;
       }
     } catch {
@@ -120,6 +128,8 @@ function DiscordSettingsContent() {
 
     if (success === "true") {
       setSuccessMessage("Discord linked successfully!");
+      setNeedsRelink(false);
+      setSyncAttempted(false);
       // Re-fetch status to show updated info
       fetchStatus();
       // Clear the URL params
@@ -195,10 +205,8 @@ function DiscordSettingsContent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-stone-900 to-stone-950 text-stone-100 p-6">
-        <div className="max-w-2xl mx-auto">
-          <div className="animate-pulse">Loading Discord settings...</div>
-        </div>
+      <div className="max-w-2xl mx-auto">
+        <div className="animate-pulse">Loading Discord settings...</div>
       </div>
     );
   }
@@ -206,16 +214,7 @@ function DiscordSettingsContent() {
   const isLinked = !!status?.discordId;
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-stone-900 to-stone-950 text-stone-100 p-6">
-      <div className="max-w-2xl mx-auto">
-        <Link
-          href="/"
-          className="inline-flex items-center gap-2 text-violet-400 hover:text-violet-300 mb-6"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Back to Home
-        </Link>
-
+    <div className="max-w-2xl mx-auto">
         <div className="flex items-center gap-3 mb-6">
           <svg
             className="w-8 h-8 text-[#5865F2]"
@@ -270,20 +269,38 @@ function DiscordSettingsContent() {
                   </span>
                 </div>
 
-                <button
-                  onClick={handleUnlink}
-                  disabled={unlinking}
-                  className="flex items-center gap-2 px-4 py-2 text-sm text-red-400 hover:text-red-300
-                             bg-red-900/20 hover:bg-red-900/30 border border-red-800/50
-                             rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {unlinking ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Unlink className="w-4 h-4" />
+                <div className="flex items-center gap-3">
+                  {needsRelink && (
+                    <button
+                      onClick={handleLink}
+                      disabled={linking}
+                      className="flex items-center gap-2 px-4 py-2 text-sm text-violet-300 hover:text-violet-200
+                                 bg-violet-900/20 hover:bg-violet-900/30 border border-violet-800/50
+                                 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {linking ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <RefreshCw className="w-4 h-4" />
+                      )}
+                      Re-link to detect servers
+                    </button>
                   )}
-                  Unlink Discord
-                </button>
+                  <button
+                    onClick={handleUnlink}
+                    disabled={unlinking}
+                    className="flex items-center gap-2 px-4 py-2 text-sm text-red-400 hover:text-red-300
+                               bg-red-900/20 hover:bg-red-900/30 border border-red-800/50
+                               rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {unlinking ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Unlink className="w-4 h-4" />
+                    )}
+                    Unlink Discord
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="space-y-4">
@@ -402,6 +419,15 @@ function DiscordSettingsContent() {
                 </div>
               )}
 
+              {needsRelink && (
+                <div className="mt-4 p-3 bg-amber-900/20 border border-amber-700/40 rounded-lg">
+                  <p className="text-xs text-amber-300">
+                    Your Discord was linked via the bot command. Click &quot;Re-link
+                    to detect servers&quot; above to detect your Discord server
+                    memberships and enable league features.
+                  </p>
+                </div>
+              )}
               <p className="mt-4 text-xs text-stone-500">
                 League memberships are detected based on your Discord server
                 memberships. Matches against other league members are reported
@@ -444,7 +470,6 @@ function DiscordSettingsContent() {
             </li>
           </ol>
         </div>
-      </div>
     </div>
   );
 }
@@ -453,10 +478,8 @@ export default function DiscordSettingsPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-gradient-to-b from-stone-900 to-stone-950 text-stone-100 p-6">
-          <div className="max-w-2xl mx-auto">
-            <div className="animate-pulse">Loading Discord settings...</div>
-          </div>
+        <div className="max-w-2xl mx-auto">
+          <div className="animate-pulse">Loading Discord settings...</div>
         </div>
       }
     >

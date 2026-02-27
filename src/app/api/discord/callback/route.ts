@@ -157,10 +157,14 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Link Discord to user
+    // Link Discord to user and store guild IDs for later sync
     await prisma.user.update({
       where: { id: session.user.id },
-      data: { discordId, discordUsername },
+      data: {
+        discordId,
+        discordUsername,
+        discordGuildIds: guildIds.length > 0 ? JSON.stringify(guildIds) : null,
+      },
     });
 
     // Sync league memberships based on guild list
