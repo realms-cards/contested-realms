@@ -267,6 +267,7 @@ model User {
   tournamentInvitations   TournamentInvitation[]
   tournamentRegistrations TournamentRegistration[]
   tournamentStatistics    TournamentStatistics[]   @relation("TournamentPlayerStats")
+  leagueMemberships       LeagueMembership[]
 }
 
 model CustomPlaymat {
@@ -888,4 +889,57 @@ enum DiscordChallengeStatus {
   accepted
   declined
   expired
+}
+
+model League {
+  id             String             @id @default(cuid())
+  slug           String             @unique
+  name           String
+  discordGuildId String             @unique
+  apiEndpoint    String?
+  apiKeyEnvVar   String?
+  enabled        Boolean            @default(true)
+  iconUrl        String?
+  badgeColor     String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  memberships    LeagueMembership[]
+  matchReports   LeagueMatchReport[]
+
+  @@index([enabled])
+}
+
+model LeagueMembership {
+  id       String   @id @default(cuid())
+  userId   String
+  leagueId String
+  joinedAt DateTime @default(now())
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  league   League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, leagueId])
+  @@index([userId])
+  @@index([leagueId])
+}
+
+model LeagueMatchReport {
+  id            String    @id @default(cuid())
+  matchId       String
+  leagueId      String
+  winnerId      String?
+  loserId       String?
+  isDraw        Boolean   @default(false)
+  reportPayload Json
+  reportStatus  String    @default("pending")
+  responseCode  Int?
+  responseBody  String?
+  errorMessage  String?
+  reportedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  league        League    @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, leagueId])
+  @@index([leagueId])
+  @@index([reportStatus])
+  @@index([createdAt])
 }

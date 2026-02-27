@@ -4,8 +4,8 @@ import { getGraphicsSettings } from "@/hooks/useGraphicsSettings";
 import { BASE_CARD_ELEVATION } from "@/lib/game/boardShared";
 import CardOutline from "@/lib/game/components/CardOutline";
 import CardPlane from "@/lib/game/components/CardPlane";
-import { hasCustomResolver } from "@/lib/game/resolverRegistry";
 import { CARD_LONG, CARD_SHORT, PLAYER_COLORS } from "@/lib/game/constants";
+import { hasCustomResolver } from "@/lib/game/resolverRegistry";
 import type {
   BabelTowerMerge,
   CardRef,

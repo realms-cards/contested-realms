@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { syncLeagueMemberships } from "@/lib/leagues/membership";
 import { prisma } from "@/lib/prisma";
 
 export async function POST(request: NextRequest) {
@@ -103,6 +104,16 @@ export async function POST(request: NextRequest) {
         },
       }),
     ]);
+
+    // Sync league memberships based on the guild the link originated from
+    if (linkToken.guildId) {
+      try {
+        await syncLeagueMemberships(session.user.id, [linkToken.guildId]);
+      } catch (err) {
+        console.error("[discord/link] League sync error:", err);
+        // Non-blocking: league sync failure shouldn't prevent linking
+      }
+    }
 
     return NextResponse.json({
       success: true,

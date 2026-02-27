@@ -61,6 +61,7 @@ import {
   INTERACTION_DECISIONS,
 } from "./modules/interactions";
 import { createLeaderboardService } from "./modules/leaderboard";
+import { createLeagueReporter } from "./modules/league-reporter";
 import { createMatchLeaderService } from "./modules/match-leader";
 import { createMatchRecordingService } from "./modules/match-recording";
 import {
@@ -652,6 +653,8 @@ const leaderboardService = createLeaderboardService({
   matchRecordings,
 });
 const { recordMatchResult: recordLeaderboardMatchResult } = leaderboardService;
+
+const leagueReporter = createLeagueReporter({ prisma });
 
 const matchRecordingService = createMatchRecordingService({
   players,
@@ -1354,6 +1357,35 @@ async function finalizeMatch(
       },
     );
   }
+
+  // League match reporting (fire-and-forget)
+  try {
+    if (isRatedResult && winnerId && loserId) {
+      const leagueFormat =
+        match.matchType === "draft" ||
+        match.matchType === "sealed" ||
+        match.matchType === "constructed"
+          ? match.matchType
+          : "constructed";
+      leagueReporter
+        .reportMatch(match as unknown as Parameters<typeof leagueReporter.reportMatch>[0], {
+          winnerId,
+          loserId,
+          isDraw,
+          format: leagueFormat,
+          winnerSeat:
+            winnerSeat === "p1" || winnerSeat === "p2"
+              ? winnerSeat
+              : undefined,
+        })
+        .catch((err: unknown) => {
+          console.error(
+            `[league-report] Failed for match ${match.id}:`,
+            err instanceof Error ? err.message : err,
+          );
+        });
+    }
+  } catch {}
 
   // If this is a tournament match, persist result into Tournament Match and update round completion
   if (match.tournamentId) {

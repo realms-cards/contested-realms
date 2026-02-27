@@ -4,8 +4,8 @@ import { AreaSelectionOverlay3D } from "@/lib/game/components/AreaSelectionOverl
 import { AtlanteanFateAreaOverlay } from "@/lib/game/components/AtlanteanFateAreaOverlay";
 import { AuraPreviewOverlay } from "@/lib/game/components/AuraPreviewOverlay";
 import { ChaosTwisterLandingOverlay } from "@/lib/game/components/ChaosTwisterLandingOverlay";
-import { MagicTargetOverlay } from "@/lib/game/components/MagicTargetOverlay";
 import { InquisitionSummonTargetOverlay } from "@/lib/game/components/InquisitionSummonTargetOverlay";
+import { MagicTargetOverlay } from "@/lib/game/components/MagicTargetOverlay";
 import { MephistophelesSummonTargetOverlay } from "@/lib/game/components/MephistophelesSummonTargetOverlay";
 import { PathfinderTargetOverlay } from "@/lib/game/components/PathfinderTargetOverlay";
 import {
@@ -169,7 +169,7 @@ export function BoardTile({
   isSpectator,
   actorKey,
   currentPlayer,
-  phase,
+  phase: _phase,
   lastDropAt,
   pendingMagic,
   avatars,

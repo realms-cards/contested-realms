@@ -46,7 +46,6 @@ import HighlandPrincessOverlay from "@/components/game/HighlandPrincessOverlay";
 import InquisitionOverlay from "@/components/game/InquisitionOverlay";
 import InquisitionSummonOverlay from "@/components/game/InquisitionSummonOverlay";
 import { InteractionConsentDialog } from "@/components/game/InteractionConsentDialog";
-import OverlayBackdrop from "@/components/game/OverlayBackdrop";
 import InterrogatorChoiceOverlay from "@/components/game/InterrogatorChoiceOverlay";
 import KelpCavernOverlay from "@/components/game/KelpCavernOverlay";
 import LegionOfGallOverlay from "@/components/game/LegionOfGallOverlay";
@@ -69,6 +68,7 @@ import OnlineLifeCounters from "@/components/game/OnlineLifeCounters";
 import OnlineMulliganScreen from "@/components/game/OnlineMulliganScreen";
 import OnlineSealedDeckLoader from "@/components/game/OnlineSealedDeckLoader";
 import OnlineStatusBar from "@/components/game/OnlineStatusBar";
+import OverlayBackdrop from "@/components/game/OverlayBackdrop";
 import PathfinderPlayOverlay from "@/components/game/PathfinderPlayOverlay";
 import PigsOfTheSounderOverlay from "@/components/game/PigsOfTheSounderOverlay";
 import PileSearchDialog from "@/components/game/PileSearchDialog";
@@ -3401,6 +3401,7 @@ export default function OnlineMatchPage() {
               undefined
             }
             myPlayerId={myPlayerId || undefined}
+            matchId={matchId || undefined}
             soatcLeagueResult={soatcLeagueResult}
             viewerSoatcUuid={
               myPlayerId

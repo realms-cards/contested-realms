@@ -264,7 +264,7 @@ export function useTutorialSession(
         setHint("Follow the tutorial steps before taking actions.");
         return;
       }
-      const msg = hintMsg ?? getDefaultHintForAction(required!);
+      const msg = hintMsg ?? (required ? getDefaultHintForAction(required) : "Follow the tutorial steps.");
       setHint(msg);
     };
 
@@ -285,11 +285,12 @@ export function useTutorialSession(
 
   // Accumulate step-level HUD reveals as the player progresses
   useEffect(() => {
-    if (!currentStep?.revealHud) return;
+    const reveals = currentStep?.revealHud;
+    if (!reveals) return;
     setHudReveals((prev) => {
       const next = new Set(prev);
       let changed = false;
-      for (const el of currentStep.revealHud!) {
+      for (const el of reveals) {
         if (!next.has(el)) {
           next.add(el);
           changed = true;

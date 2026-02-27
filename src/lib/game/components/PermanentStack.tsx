@@ -1435,9 +1435,6 @@ export function PermanentStack({
                   return attachedTokens.map((token, attachIdx) => {
                     const tokenName = (token.card.name || "").toLowerCase();
                     const attachTokenDef = TOKEN_BY_NAME[tokenName];
-                    const isArtifact = (token.card.type || "")
-                      .toLowerCase()
-                      .includes("artifact");
                     const isPithImpStolen =
                       "pithImpStolen" in token.card &&
                       token.card.pithImpStolen === true;

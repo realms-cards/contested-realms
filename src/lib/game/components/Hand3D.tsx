@@ -12,7 +12,6 @@ import type { CardPreviewData } from "@/lib/game/card-preview.types";
 import CardBorder from "@/lib/game/components/CardBorder";
 import CardGlow from "@/lib/game/components/CardGlow";
 import CardPlane from "@/lib/game/components/CardPlane";
-import { hasCustomResolver } from "@/lib/game/resolverRegistry";
 import MaterialCardBack from "@/lib/game/components/MaterialCardBack";
 import {
   CARD_LONG,
@@ -26,6 +25,7 @@ import {
   TILE_SIZE,
 } from "@/lib/game/constants";
 import { DRAG_HOLD_MS } from "@/lib/game/constants";
+import { hasCustomResolver } from "@/lib/game/resolverRegistry";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef, PlayerKey } from "@/lib/game/store";
 import { useTouchDevice } from "@/lib/hooks/useTouchDevice";

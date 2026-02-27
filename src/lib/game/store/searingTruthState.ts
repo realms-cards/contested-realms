@@ -1,5 +1,6 @@
 import type { StateCreator } from "zustand";
 import type { CustomMessage } from "@/lib/net/transport";
+import { findInquisitionInCards } from "./inquisitionSummonState";
 import type {
   CardRef,
   CellKey,
@@ -8,7 +9,6 @@ import type {
   ServerPatchT,
   Zones,
 } from "./types";
-import { findInquisitionInCards } from "./inquisitionSummonState";
 
 function newSearingTruthId() {
   return `st_${Date.now().toString(36)}_${Math.random()
