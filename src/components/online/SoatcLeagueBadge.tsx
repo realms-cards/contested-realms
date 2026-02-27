@@ -1,7 +1,5 @@
 "use client";
 
-import { Trophy } from "lucide-react";
-
 interface SoatcLeagueBadgeProps {
   tournamentName?: string;
   compact?: boolean;
@@ -18,7 +16,7 @@ export function SoatcLeagueBadge({
                    bg-amber-600/20 text-amber-300 rounded border border-amber-500/30"
         title={tournamentName || "SATC League Participant"}
       >
-        <Trophy className="w-3 h-3" />
+        <span className="text-[10px] leading-none">🔘</span>
         SATC
       </span>
     );
@@ -27,10 +25,10 @@ export function SoatcLeagueBadge({
   return (
     <div
       className="inline-flex items-center gap-1.5 px-2 py-1 text-xs font-medium
-                 bg-gradient-to-r from-amber-600/20 to-amber-500/10 
+                 bg-gradient-to-r from-amber-600/20 to-amber-500/10
                  text-amber-200 rounded-lg border border-amber-500/30"
     >
-      <Trophy className="w-3.5 h-3.5 text-amber-400" />
+      <span className="text-sm leading-none">🔘</span>
       <span>SATC League</span>
       {tournamentName && (
         <span className="text-amber-400/70 text-[10px]">
@@ -76,9 +74,7 @@ export function SoatcLeagueCheckbox({
         className="rounded border-amber-500 text-amber-500 focus:ring-amber-500 
                    disabled:opacity-50 disabled:cursor-not-allowed"
       />
-      <Trophy
-        className={`w-4 h-4 ${checked ? "text-amber-400" : "text-slate-400"}`}
-      />
+      <span className="text-base leading-none">🔘</span>
       <div className="flex flex-col">
         <span
           className={`text-sm font-medium ${
