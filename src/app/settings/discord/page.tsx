@@ -46,6 +46,7 @@ function DiscordSettingsContent() {
   const [linking, setLinking] = useState(false);
   const [unlinking, setUnlinking] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [syncAttempted, setSyncAttempted] = useState(false);
   const [availableLeagues, setAvailableLeagues] = useState<AvailableLeague[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -103,12 +104,13 @@ function DiscordSettingsContent() {
     fetchStatus();
   }, [fetchStatus]);
 
-  // Auto-sync leagues when Discord is linked but no leagues found
+  // Auto-sync leagues once when Discord is linked but no leagues found
   useEffect(() => {
-    if (status?.discordId && status.leagues.length === 0 && !syncing) {
+    if (status?.discordId && status.leagues.length === 0 && !syncing && !syncAttempted) {
+      setSyncAttempted(true);
       syncLeagues();
     }
-  }, [status?.discordId, status?.leagues.length, syncing, syncLeagues]);
+  }, [status?.discordId, status?.leagues.length, syncing, syncAttempted, syncLeagues]);
 
   // Handle OAuth callback results from URL params
   useEffect(() => {
