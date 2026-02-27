@@ -988,6 +988,7 @@ function createLobbyFeature(deps) {
     const arr = [];
     const connectedSockets = io.sockets.sockets;
     for (const p of players.values()) {
+      if (isCpuPlayerId && isCpuPlayerId(p.id)) continue;
       if (!p.socketId || p.displayName.startsWith("Replay_")) continue;
       // Validate the socket actually exists — clears ghost entries from missed disconnects
       if (!connectedSockets.has(p.socketId)) {

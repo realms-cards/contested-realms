@@ -1368,16 +1368,19 @@ async function finalizeMatch(
           ? match.matchType
           : "constructed";
       leagueReporter
-        .reportMatch(match as unknown as Parameters<typeof leagueReporter.reportMatch>[0], {
-          winnerId,
-          loserId,
-          isDraw,
-          format: leagueFormat,
-          winnerSeat:
-            winnerSeat === "p1" || winnerSeat === "p2"
-              ? winnerSeat
-              : undefined,
-        })
+        .reportMatch(
+          match as unknown as Parameters<typeof leagueReporter.reportMatch>[0],
+          {
+            winnerId,
+            loserId,
+            isDraw,
+            format: leagueFormat,
+            winnerSeat:
+              winnerSeat === "p1" || winnerSeat === "p2"
+                ? winnerSeat
+                : undefined,
+          },
+        )
         .catch((err: unknown) => {
           console.error(
             `[league-report] Failed for match ${match.id}:`,
@@ -5432,7 +5435,7 @@ io.on("connection", async (socket: SocketClient) => {
     } catch {}
 
     // Lookup pid BEFORE player registry disconnect (which deletes from the shared playerIdBySocket Map)
-    // Fallback: resolve by current socketId on player records in case reverse mapping was missed/stale.
+    // Fallback: resolve by scanning player records by socketId in case reverse mapping is stale.
     const pid =
       playerIdBySocket.get(socket.id) ||
       Array.from(players.values()).find((p) => p.socketId === socket.id)?.id;

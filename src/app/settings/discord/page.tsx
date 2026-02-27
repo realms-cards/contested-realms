@@ -5,6 +5,7 @@ import {
   Check,
   AlertCircle,
   Loader2,
+  RefreshCw,
   Unlink,
 } from "lucide-react";
 import Link from "next/link";
@@ -18,6 +19,14 @@ interface LeagueEntry {
   badgeColor: string | null;
   iconUrl: string | null;
   joinedAt: string;
+}
+
+interface AvailableLeague {
+  id: string;
+  slug: string;
+  name: string;
+  badgeColor: string | null;
+  iconUrl: string | null;
 }
 
 interface DiscordStatus {
@@ -36,8 +45,25 @@ function DiscordSettingsContent() {
   const [loading, setLoading] = useState(true);
   const [linking, setLinking] = useState(false);
   const [unlinking, setUnlinking] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [availableLeagues, setAvailableLeagues] = useState<AvailableLeague[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  // Fetch all available/supported leagues
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/leagues");
+        if (res.ok) {
+          const data = (await res.json()) as { leagues: AvailableLeague[] };
+          setAvailableLeagues(data.leagues);
+        }
+      } catch {
+        // Non-fatal
+      }
+    })();
+  }, []);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -53,9 +79,36 @@ function DiscordSettingsContent() {
     }
   }, []);
 
+  // Sync league memberships via bot token check
+  const syncLeagues = useCallback(async () => {
+    setSyncing(true);
+    try {
+      const res = await fetch("/api/users/me/discord/sync", { method: "POST" });
+      if (res.ok) {
+        const data = (await res.json()) as { leagues: LeagueEntry[] };
+        setStatus((prev) =>
+          prev ? { ...prev, leagues: data.leagues } : prev,
+        );
+        return data.leagues;
+      }
+    } catch {
+      // Non-fatal — silently fail
+    } finally {
+      setSyncing(false);
+    }
+    return [];
+  }, []);
+
   useEffect(() => {
     fetchStatus();
   }, [fetchStatus]);
+
+  // Auto-sync leagues when Discord is linked but no leagues found
+  useEffect(() => {
+    if (status?.discordId && status.leagues.length === 0 && !syncing) {
+      syncLeagues();
+    }
+  }, [status?.discordId, status?.leagues.length, syncing, syncLeagues]);
 
   // Handle OAuth callback results from URL params
   useEffect(() => {
@@ -264,51 +317,93 @@ function DiscordSettingsContent() {
             )}
           </div>
 
-          {/* League Memberships */}
+          {/* Supported Leagues */}
           {isLinked && (
             <div className="bg-stone-800/50 rounded-lg p-6 border border-stone-700">
-              <h2 className="text-lg font-semibold mb-4">Your Leagues</h2>
-              {status.leagues.length > 0 ? (
-                <div className="space-y-3">
-                  {status.leagues.map((league) => (
-                    <div
-                      key={league.id}
-                      className="flex items-center gap-3 p-3 rounded-lg border"
-                      style={{
-                        borderColor: league.badgeColor
-                          ? `${league.badgeColor}40`
-                          : undefined,
-                        backgroundColor: league.badgeColor
-                          ? `${league.badgeColor}10`
-                          : undefined,
-                      }}
-                    >
-                      <span className="text-xl">
-                        {LEAGUE_EMOJIS[league.slug] || "\uD83C\uDFC6"}
-                      </span>
-                      <div className="flex-1">
-                        <p className="font-medium text-stone-100">
-                          {league.name}
-                        </p>
-                        <p className="text-xs text-stone-500">
-                          Joined{" "}
-                          {new Date(league.joinedAt).toLocaleDateString()}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold">Supported Leagues</h2>
+                <button
+                  onClick={syncLeagues}
+                  disabled={syncing}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-stone-300 hover:text-stone-100
+                             bg-stone-700/50 hover:bg-stone-700 border border-stone-600
+                             rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {syncing ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <RefreshCw className="w-3 h-3" />
+                  )}
+                  {syncing ? "Syncing..." : "Refresh"}
+                </button>
+              </div>
+              {syncing && status.leagues.length === 0 && availableLeagues.length === 0 ? (
+                <div className="flex items-center gap-2 text-stone-400 text-sm">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Checking Discord servers...
                 </div>
               ) : (
-                <p className="text-stone-500 text-sm">
-                  No league memberships detected. Join a supported Discord
-                  server and your leagues will appear here automatically.
-                </p>
+                <div className="space-y-3">
+                  {(availableLeagues.length > 0 ? availableLeagues : status.leagues).map((league) => {
+                    const memberLeagueIds = new Set(status.leagues.map((l) => l.id));
+                    const isMember = memberLeagueIds.has(league.id);
+                    const memberEntry = status.leagues.find((l) => l.id === league.id);
+                    const color = league.badgeColor || "#7c3aed";
+
+                    return (
+                      <div
+                        key={league.id}
+                        className={`flex items-center gap-3 p-3 rounded-lg border ${
+                          isMember ? "" : "opacity-60"
+                        }`}
+                        style={{
+                          borderColor: isMember ? `${color}40` : undefined,
+                          backgroundColor: isMember ? `${color}10` : undefined,
+                        }}
+                      >
+                        <span className="text-xl">
+                          {LEAGUE_EMOJIS[league.slug] || "\uD83C\uDFC6"}
+                        </span>
+                        <div className="flex-1">
+                          <p className="font-medium text-stone-100">
+                            {league.name}
+                          </p>
+                          {isMember && memberEntry ? (
+                            <p className="text-xs text-stone-500">
+                              Joined{" "}
+                              {new Date(memberEntry.joinedAt).toLocaleDateString()}
+                            </p>
+                          ) : (
+                            <p className="text-xs text-stone-500">
+                              Join their Discord server to participate
+                            </p>
+                          )}
+                        </div>
+                        {isMember ? (
+                          <span className="px-2.5 py-1 text-xs font-medium bg-green-900/30 text-green-400 rounded-full border border-green-700/50">
+                            Member
+                          </span>
+                        ) : (
+                          <span className="px-2.5 py-1 text-xs font-medium bg-stone-700/50 text-stone-400 rounded-full border border-stone-600/50">
+                            Not joined
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {availableLeagues.length === 0 && status.leagues.length === 0 && (
+                    <p className="text-stone-500 text-sm">
+                      No supported leagues found. Join a supported Discord server
+                      and click Refresh.
+                    </p>
+                  )}
+                </div>
               )}
 
               <p className="mt-4 text-xs text-stone-500">
-                League memberships are detected automatically based on your
-                Discord server memberships. Matches against other league members
-                are reported automatically.
+                League memberships are detected based on your Discord server
+                memberships. Matches against other league members are reported
+                automatically.
               </p>
             </div>
           )}

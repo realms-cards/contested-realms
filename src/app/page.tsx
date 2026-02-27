@@ -197,10 +197,24 @@ export default function Home() {
           </div>
         )}
 
-        {/* Other Realms (wide bottom element) */}
+        {/* Tutorial & Other Realms */}
         {session && (
-          <div className="max-w-4xl mx-auto cursor-pointer">
-            <OtherRealms />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4 max-w-4xl mx-auto">
+            <AsciiPanel className="w-full p-5 md:p-6">
+              <Link
+                href="/tutorial"
+                className="group block hover:scale-[1.02] transition-transform duration-200"
+              >
+                <div className="flex items-center justify-center py-3 md:py-4">
+                  <h4 className="text-lg font-semibold tracking-wide">
+                    Sorcery Tutorial
+                  </h4>
+                </div>
+              </Link>
+            </AsciiPanel>
+            <div className="cursor-pointer">
+              <OtherRealms />
+            </div>
           </div>
         )}
 

@@ -190,3 +190,54 @@ export async function removeAllMemberships(userId: string): Promise<void> {
     where: { userId },
   });
 }
+
+/**
+ * Check which known league guilds a Discord user belongs to using the bot token,
+ * then sync their memberships. This works for users who linked Discord via bot
+ * (without OAuth guild scope).
+ *
+ * Requires DISCORD_BOT_TOKEN env var and the bot to be in the league guilds.
+ */
+export async function syncLeagueMembershipsViaBotCheck(
+  userId: string,
+  discordId: string,
+): Promise<LeagueMembershipInfo[]> {
+  const botToken = process.env.DISCORD_BOT_TOKEN;
+  if (!botToken) {
+    console.warn("[league-membership] DISCORD_BOT_TOKEN not set, skipping bot guild check");
+    return [];
+  }
+
+  // Get all enabled leagues with Discord guild IDs
+  const leagues = await prisma.league.findMany({
+    where: { enabled: true },
+    select: { id: true, discordGuildId: true },
+  });
+
+  if (leagues.length === 0) return [];
+
+  // Check each guild in parallel using the bot token
+  const memberGuildIds: string[] = [];
+  await Promise.all(
+    leagues.map(async (league) => {
+      try {
+        const res = await fetch(
+          `https://discord.com/api/v10/guilds/${league.discordGuildId}/members/${discordId}`,
+          {
+            headers: { Authorization: `Bot ${botToken}` },
+            signal: AbortSignal.timeout(5000),
+          },
+        );
+        if (res.ok) {
+          memberGuildIds.push(league.discordGuildId);
+        }
+        // 404 = not a member, other errors = skip silently
+      } catch {
+        // Network errors are non-fatal
+      }
+    }),
+  );
+
+  // Sync using the found guild IDs
+  return syncLeagueMemberships(userId, memberGuildIds);
+}
