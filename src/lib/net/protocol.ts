@@ -12,6 +12,13 @@ export const PlayerLocationSchema = z.enum([
 export type PlayerLocation = z.infer<typeof PlayerLocationSchema>;
 
 // Basic shared types
+const LeagueInfoSchema = z.object({
+  slug: z.string(),
+  name: z.string(),
+  badgeColor: z.string().optional(),
+});
+export type LeagueInfoProtocol = z.infer<typeof LeagueInfoSchema>;
+
 const PlayerInfoInputSchema = z.object({
   id: z.string(),
   displayName: z.string().optional(),
@@ -23,6 +30,7 @@ const PlayerInfoInputSchema = z.object({
   location: PlayerLocationSchema.optional(),
   inLobby: z.boolean().optional(),
   inMatch: z.boolean().optional(),
+  leagues: z.array(LeagueInfoSchema).optional(),
 });
 
 type PlayerInfoInput = z.infer<typeof PlayerInfoInputSchema>;
@@ -52,6 +60,7 @@ function normalizePlayerInfo(raw: PlayerInfoInput) {
     location: raw.location ?? null,
     inLobby: raw.inLobby ?? false,
     inMatch: raw.inMatch ?? false,
+    leagues: raw.leagues ?? [],
   };
 }
 
@@ -229,6 +238,15 @@ export const MatchInfoSchema = z.object({
       tournamentName: z.string(),
     })
     .nullable()
+    .optional(),
+  // Shared leagues between match players (for badge display and match reporting)
+  sharedLeagues: z
+    .array(
+      z.object({
+        slug: z.string(),
+        name: z.string(),
+      }),
+    )
     .optional(),
   // Match start timestamp
   startedAt: z.number().nullable().optional(),

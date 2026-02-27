@@ -83,11 +83,12 @@ function mapToProtocolTournament(tournament: {
         location: null,
         inLobby: false,
         inMatch: false,
+        leagues: [],
         seatStatus: (player.seatStatus === "vacant" ? "vacant" : "active") as
           | "vacant"
           | "active",
       };
-    }
+    },
   );
 
   return {
@@ -109,8 +110,8 @@ function mapToProtocolTournament(tournament: {
         return mt === "draft"
           ? "draft_phase"
           : mt === "sealed"
-          ? "sealed_phase"
-          : "playing";
+            ? "sealed_phase"
+            : "playing";
       }
       if (tournament.status === "active") return "playing";
       return "completed";
@@ -155,15 +156,15 @@ interface TournamentsAPI {
   leaveTournament: (tournamentId: string) => Promise<void>;
   updateTournamentSettings: (
     tournamentId: string,
-    settings: Record<string, unknown>
+    settings: Record<string, unknown>,
   ) => Promise<void>;
   toggleTournamentRegistrationLock?: (
     tournamentId: string,
-    locked: boolean
+    locked: boolean,
   ) => Promise<void>;
   toggleTournamentReady: (
     tournamentId: string,
-    ready: boolean
+    ready: boolean,
   ) => Promise<void>;
   startTournament: (tournamentId: string) => Promise<void>;
   endTournament: (tournamentId: string) => Promise<void>;
@@ -300,7 +301,7 @@ function LobbyPageContent({
     const started = (tournamentsFromApi || []).find(
       (t) =>
         t.registeredPlayers?.some((p) => p.id === me.id) &&
-        (t.status === "preparing" || t.status === "active")
+        (t.status === "preparing" || t.status === "active"),
     );
     if (!started) return;
     try {
@@ -324,7 +325,7 @@ function LobbyPageContent({
   const outgoingVoiceTargetName = useMemo(() => {
     if (!outgoingVoiceRequest || !lobby) return null;
     const matchPlayer = lobby.players.find(
-      (p) => p.id === outgoingVoiceRequest.targetId
+      (p) => p.id === outgoingVoiceRequest.targetId,
     );
     return matchPlayer?.displayName || null;
   }, [outgoingVoiceRequest, lobby]);
@@ -434,7 +435,7 @@ function LobbyPageContent({
     // Update sealed config with all available sets (only if new sets exist)
     setSealedConfig((prev) => {
       const missingSets = availableSetNames.filter(
-        (name) => !(name in prev.packCounts)
+        (name) => !(name in prev.packCounts),
       );
       if (missingSets.length === 0) return prev; // No change needed
       const newPackCounts = { ...prev.packCounts };
@@ -447,7 +448,7 @@ function LobbyPageContent({
     setDraftConfig((prev) => {
       if (prev.cubeId) return prev; // Don't modify if using a cube
       const missingSets = availableSetNames.filter(
-        (name) => !(name in prev.packCounts)
+        (name) => !(name in prev.packCounts),
       );
       if (missingSets.length === 0) return prev; // No change needed
       const newPackCounts = { ...prev.packCounts };
@@ -503,7 +504,7 @@ function LobbyPageContent({
       setAvailableCubes(normalized);
       if (!normalized.length) {
         setCubeError(
-          "No cubes are available yet. Visit the Cubes page to create one or explore public cubes."
+          "No cubes are available yet. Visit the Cubes page to create one or explore public cubes.",
         );
         setSelectedCubeId(null);
         setDraftConfig((prev) => ({
@@ -570,12 +571,12 @@ function LobbyPageContent({
           buildDefaultPackCounts(draftableSets, DEFAULT_SET, prev.packCount);
         const total = Object.values(restore).reduce(
           (sum, count) => sum + count,
-          0
+          0,
         );
         const fallback = buildDefaultPackCounts(
           draftableSets,
           DEFAULT_SET,
-          prev.packCount
+          prev.packCount,
         );
         return {
           ...prev,
@@ -615,18 +616,18 @@ function LobbyPageContent({
         };
       });
     },
-    [availableCubes, setDraftConfig]
+    [availableCubes, setDraftConfig],
   );
 
   // UI validation helpers
   const sealedTotalPacks = useMemo(
     () => Object.values(sealedConfig.packCounts).reduce((sum, c) => sum + c, 0),
-    [sealedConfig.packCounts]
+    [sealedConfig.packCounts],
   );
   const sealedActiveSets = useMemo(
     () =>
       Object.entries(sealedConfig.packCounts).filter(([, c]) => c > 0).length,
-    [sealedConfig.packCounts]
+    [sealedConfig.packCounts],
   );
   const sealedValid = sealedUseCube
     ? !!sealedConfig.cubeId // Cube mode: just need a cube selected
@@ -634,13 +635,13 @@ function LobbyPageContent({
 
   const draftAssigned = useMemo(
     () => Object.values(draftConfig.packCounts).reduce((sum, c) => sum + c, 0),
-    [draftConfig.packCounts]
+    [draftConfig.packCounts],
   );
   const draftValid = useMemo(
     () =>
       draftAssigned === draftConfig.packCount &&
       (!draftUseCube || !!draftConfig.cubeId),
-    [draftAssigned, draftConfig.packCount, draftUseCube, draftConfig.cubeId]
+    [draftAssigned, draftConfig.packCount, draftUseCube, draftConfig.cubeId],
   );
 
   const prevLobbyIdRef = useRef<string | null>(null);
@@ -768,14 +769,14 @@ function LobbyPageContent({
       if (match.lobbyName && match.lobbyName.trim().length > 0) {
         title = `${baseTitle} - ${match.lobbyName} (${match.status.replaceAll(
           "_",
-          " "
+          " ",
         )})`;
       } else {
         const playerNames =
           match.players?.map((p) => p.displayName).join(" vs ") || "Players";
         title = `${baseTitle} - ${playerNames} (${match.status.replaceAll(
           "_",
-          " "
+          " ",
         )})`;
       }
     }
@@ -886,7 +887,7 @@ function LobbyPageContent({
 
         // Check if user is registered in the tournament
         const response = await fetch(
-          `/api/soatc/tournaments/${inviteTournamentId}/participants`
+          `/api/soatc/tournaments/${inviteTournamentId}/participants`,
         );
         if (!response.ok) {
           setIneligibleReason("tournament-check-failed");
@@ -896,7 +897,7 @@ function LobbyPageContent({
 
         const data = await response.json();
         const isParticipant = data.participants?.some(
-          (p: { id: string }) => p.id === myStatus.soatcUuid
+          (p: { id: string }) => p.id === myStatus.soatcUuid,
         );
 
         if (!isParticipant) {
@@ -907,7 +908,7 @@ function LobbyPageContent({
 
         // Get tournament details to check format
         const tournamentResponse = await fetch(
-          `/api/soatc/tournaments/${inviteTournamentId}`
+          `/api/soatc/tournaments/${inviteTournamentId}`,
         );
         if (tournamentResponse.ok) {
           const tournamentData = await tournamentResponse.json();
@@ -1071,10 +1072,10 @@ function LobbyPageContent({
     // Sealed
     const totalPacks = Object.values(sealedConfig.packCounts).reduce(
       (sum, count) => sum + count,
-      0
+      0,
     );
     const activeSets = Object.entries(sealedConfig.packCounts).filter(
-      ([, count]) => count > 0
+      ([, count]) => count > 0,
     );
     if (activeSets.length === 0) return;
     const setMix = activeSets.map(([set]) => set);
@@ -1119,7 +1120,7 @@ function LobbyPageContent({
         return `Planned: Draft • Cube: ${label} • Packs: ${draftConfig.packCount}`;
       }
       const entries = Object.entries(draftConfig.packCounts || {}).filter(
-        ([, c]) => c > 0
+        ([, c]) => c > 0,
       );
       const mix = entries.length
         ? entries.map(([s, c]) => `${s}×${c}`).join(", ")
@@ -1128,13 +1129,13 @@ function LobbyPageContent({
     }
     const totalPacks = Object.values(sealedConfig.packCounts).reduce(
       (sum, count) => sum + count,
-      0
+      0,
     );
     const activeSets = Object.entries(sealedConfig.packCounts)
       .filter(([, count]) => count > 0)
       .map(([set]) => set);
     return `Planned: Sealed • Packs: ${totalPacks} • Sets: ${activeSets.join(
-      ", "
+      ", ",
     )} • Time: ${sealedConfig.timeLimit}m`;
   }, [isHost, matchType, sealedConfig, draftConfig]);
 
@@ -1213,13 +1214,13 @@ function LobbyPageContent({
                       const inviteUrl = `${
                         window.location.origin
                       }/online/lobby?invite=${encodeURIComponent(
-                        lobby.id
+                        lobby.id,
                       )}&tournament=${encodeURIComponent(
-                        lobby.soatcLeagueMatch.tournamentId
+                        lobby.soatcLeagueMatch.tournamentId,
                       )}`;
                       navigator.clipboard.writeText(inviteUrl);
                       alert(
-                        "Invite link copied! Share with tournament participants."
+                        "Invite link copied! Share with tournament participants.",
                       );
                     }
                   }}
@@ -1264,7 +1265,7 @@ function LobbyPageContent({
                       voice.respondToRequest(
                         incomingVoiceRequest.requestId,
                         incomingVoiceRequest.from.id,
-                        true
+                        true,
                       )
                     }
                   >
@@ -1276,7 +1277,7 @@ function LobbyPageContent({
                       voice.respondToRequest(
                         incomingVoiceRequest.requestId,
                         incomingVoiceRequest.from.id,
-                        false
+                        false,
                       )
                     }
                   >
@@ -1299,7 +1300,7 @@ function LobbyPageContent({
                 </div>
                 {voice &&
                   ["declined", "cancelled"].includes(
-                    outgoingVoiceRequest.status
+                    outgoingVoiceRequest.status,
                   ) && (
                     <button
                       className="self-start rounded bg-slate-700/80 hover:bg-slate-700 px-3 py-1 text-xs text-slate-200"
@@ -1316,14 +1317,14 @@ function LobbyPageContent({
         <LobbiesCentral
           lobbies={lobbies}
           tournaments={(tournamentsEnabled ? tournamentsFromApi : []).map(
-            mapToProtocolTournament
+            mapToProtocolTournament,
           )}
           myId={me?.id ?? null}
           joinedLobbyId={lobby?.id ?? null}
           onJoin={(id) => joinLobby(id)}
           onCreate={async (cfg) => {
             console.log(
-              `Creating lobby: "${cfg.name}" with ${cfg.maxPlayers} max players`
+              `Creating lobby: "${cfg.name}" with ${cfg.maxPlayers} max players`,
             );
             try {
               await createLobby({
@@ -1384,14 +1385,14 @@ function LobbyPageContent({
               ? async (tournamentId: string, settings) => {
                   console.log(
                     `Updating tournament settings: ${tournamentId}`,
-                    settings
+                    settings,
                   );
                   try {
                     await updateTournamentSettings(tournamentId, settings);
                   } catch (error) {
                     console.error(
                       "Failed to update tournament settings:",
-                      error
+                      error,
                     );
                   }
                 }
@@ -1402,17 +1403,17 @@ function LobbyPageContent({
               ? async (tournamentId: string, locked: boolean) => {
                   console.log(
                     `Toggling tournament registration lock: ${tournamentId}`,
-                    locked
+                    locked,
                   );
                   try {
                     await toggleTournamentRegistrationLock?.(
                       tournamentId,
-                      locked
+                      locked,
                     );
                   } catch (error) {
                     console.error(
                       "Failed to toggle tournament registration lock:",
-                      error
+                      error,
                     );
                   }
                 }
@@ -1423,7 +1424,7 @@ function LobbyPageContent({
               ? async (tournamentId: string, ready: boolean) => {
                   console.log(
                     `Toggling tournament ready: ${tournamentId}`,
-                    ready
+                    ready,
                   );
                   try {
                     await toggleTournamentReady(tournamentId, ready);
@@ -1584,7 +1585,7 @@ function LobbyPageContent({
                   // Filter tournaments by selected match type
                   const matchingTournaments =
                     myStatus?.tournaments?.filter(
-                      (t) => t.gameType?.toLowerCase() === matchType
+                      (t) => t.gameType?.toLowerCase() === matchType,
                     ) || [];
 
                   if (matchingTournaments.length === 0) return null;
@@ -1666,9 +1667,9 @@ function LobbyPageContent({
                                 const inviteUrl = `${
                                   window.location.origin
                                 }/online/lobby?invite=${encodeURIComponent(
-                                  lobby.id
+                                  lobby.id,
                                 )}&tournament=${encodeURIComponent(
-                                  selectedTournament.id
+                                  selectedTournament.id,
                                 )}`;
                                 navigator.clipboard.writeText(inviteUrl);
                                 alert("Invite link copied!");
@@ -1814,7 +1815,7 @@ function LobbyPageContent({
                                   <div className="text-xs text-slate-300/90">
                                     Packs will be generated from{" "}
                                     {availableCubes.find(
-                                      (cube) => cube.id === selectedCubeId
+                                      (cube) => cube.id === selectedCubeId,
                                     )?.name ?? "your cube"}
                                     .
                                   </div>
@@ -1874,7 +1875,7 @@ function LobbyPageContent({
                                   availableCubes.find(
                                     (entry) =>
                                       entry.id ===
-                                      (selectedCubeId ?? prev.cubeId ?? "")
+                                      (selectedCubeId ?? prev.cubeId ?? ""),
                                   ) ?? null;
                                 const label =
                                   cube?.name ?? prev.cubeName ?? null;
@@ -1888,7 +1889,7 @@ function LobbyPageContent({
                                 };
                               }
                               const total = Object.values(
-                                prev.packCounts
+                                prev.packCounts,
                               ).reduce((s, c) => s + c, 0);
                               const packs = { ...prev.packCounts };
                               if (total > nextCount) {
@@ -1898,7 +1899,7 @@ function LobbyPageContent({
                                 for (const name of order) {
                                   const take = Math.min(
                                     excess,
-                                    packs[name] || 0
+                                    packs[name] || 0,
                                   );
                                   if (take > 0) {
                                     packs[name] = (packs[name] || 0) - take;
@@ -1943,19 +1944,19 @@ function LobbyPageContent({
                               {draftValid
                                 ? "OK"
                                 : draftAssigned < draftConfig.packCount
-                                ? `Need ${
-                                    draftConfig.packCount - draftAssigned
-                                  }`
-                                : `Remove ${
-                                    draftAssigned - draftConfig.packCount
-                                  }`}
+                                  ? `Need ${
+                                      draftConfig.packCount - draftAssigned
+                                    }`
+                                  : `Remove ${
+                                      draftAssigned - draftConfig.packCount
+                                    }`}
                             </span>
                           </label>
                           <div className="space-y-2">
                             {draftableSets.map((set) => {
                               const count = draftConfig.packCounts[set] || 0;
                               const total = Object.values(
-                                draftConfig.packCounts
+                                draftConfig.packCounts,
                               ).reduce((s, c) => s + c, 0);
                               const canInc = total < draftConfig.packCount;
                               const canDec = count > 0;
@@ -1975,13 +1976,13 @@ function LobbyPageContent({
                                             new Set([
                                               ...(prev.setMix || []),
                                               set,
-                                            ])
+                                            ]),
                                           ),
                                           packCounts: {
                                             ...prev.packCounts,
                                             [set]: Math.max(
                                               0,
-                                              (prev.packCounts[set] || 0) - 1
+                                              (prev.packCounts[set] || 0) - 1,
                                             ),
                                           },
                                         }))
@@ -2002,13 +2003,13 @@ function LobbyPageContent({
                                             new Set([
                                               ...(prev.setMix || []),
                                               set,
-                                            ])
+                                            ]),
                                           ),
                                           packCounts: {
                                             ...prev.packCounts,
                                             [set]: Math.min(
                                               prev.packCount,
-                                              (prev.packCounts[set] || 0) + 1
+                                              (prev.packCounts[set] || 0) + 1,
                                             ),
                                           },
                                         }))
@@ -2089,7 +2090,7 @@ function LobbyPageContent({
                                   packCounts: buildDefaultPackCounts(
                                     draftableSets,
                                     DEFAULT_SET,
-                                    6
+                                    6,
                                   ),
                                   allowDragonlordChampion: false,
                                 }));
@@ -2121,7 +2122,7 @@ function LobbyPageContent({
                                   onChange={(cubeId) => {
                                     const cube =
                                       availableCubes.find(
-                                        (c) => c.id === cubeId
+                                        (c) => c.id === cubeId,
                                       ) ?? null;
                                     setSealedConfig((prev) => ({
                                       ...prev,
@@ -2196,10 +2197,10 @@ function LobbyPageContent({
                                 {sealedValid
                                   ? "OK"
                                   : sealedActiveSets === 0
-                                  ? "No packs set"
-                                  : sealedTotalPacks < 3
-                                  ? `Need ${3 - sealedTotalPacks} more`
-                                  : `Remove ${sealedTotalPacks - 8}`}
+                                    ? "No packs set"
+                                    : sealedTotalPacks < 3
+                                      ? `Need ${3 - sealedTotalPacks} more`
+                                      : `Remove ${sealedTotalPacks - 8}`}
                               </span>
                             </label>
                             <div className="space-y-2">
@@ -2246,7 +2247,7 @@ function LobbyPageContent({
                                       </button>
                                     </div>
                                   </div>
-                                )
+                                ),
                               )}
                             </div>
                           </div>
@@ -2399,21 +2400,21 @@ function LobbyPageContent({
                       if (matchType === "draft") {
                         if (draftUseCube && !draftConfig.cubeId) {
                           alert(
-                            "Select a cube to draft from before starting the draft."
+                            "Select a cube to draft from before starting the draft.",
                           );
                           return;
                         }
                         const total = Object.values(
-                          draftConfig.packCounts
+                          draftConfig.packCounts,
                         ).reduce((s, c) => s + c, 0);
                         if (total !== draftConfig.packCount) {
                           alert(
-                            `Draft pack mix must sum to ${draftConfig.packCount}.`
+                            `Draft pack mix must sum to ${draftConfig.packCount}.`,
                           );
                           return;
                         }
                         const activeSets = Object.entries(
-                          draftConfig.packCounts
+                          draftConfig.packCounts,
                         )
                           .filter(([, c]) => c > 0)
                           .map(([s]) => s);
@@ -2462,14 +2463,14 @@ function LobbyPageContent({
                       }
                       // Regular sealed from boosters
                       const totalPacks = Object.values(
-                        sealedConfig.packCounts
+                        sealedConfig.packCounts,
                       ).reduce((sum, count) => sum + count, 0);
                       const activeSets = Object.entries(
-                        sealedConfig.packCounts
+                        sealedConfig.packCounts,
                       ).filter(([, count]) => count > 0);
                       if (activeSets.length === 0) {
                         alert(
-                          "Please configure at least one set with packs for sealed play."
+                          "Please configure at least one set with packs for sealed play.",
                         );
                         return;
                       }
@@ -2505,8 +2506,8 @@ function LobbyPageContent({
                       (matchType === "draft" && !draftValid)
                         ? "Fix configuration issues before confirming setup"
                         : hasAtLeastTwoPlayers && allReady
-                        ? `Confirm setup and start ${matchType} match`
-                        : "Confirm setup and return to lobby"
+                          ? `Confirm setup and start ${matchType} match`
+                          : "Confirm setup and return to lobby"
                     }
                   >
                     Confirm Setup
@@ -2526,7 +2527,12 @@ function LobbyPageContent({
             href="https://discord.gg/UE2Gfbxjym"
             target="_blank"
             rel="noopener noreferrer"
-            className="underline hover:text-slate-300"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md 
+              bg-gradient-to-r from-fuchsia-500/20 via-purple-400/30 to-violet-500/20 
+              border border-purple-400/50 hover:border-purple-300/80
+              text-purple-200 hover:text-purple-100 font-medium
+              shadow-[0_0_12px_rgba(168,85,247,0.3)] hover:shadow-[0_0_20px_rgba(168,85,247,0.5)]
+              transition-all duration-300"
           >
             Official Discord
           </a>

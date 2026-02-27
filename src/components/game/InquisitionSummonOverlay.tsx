@@ -2,12 +2,12 @@
 
 import Image from "next/image";
 import React, { useCallback, useEffect } from "react";
-import { useGameStore } from "@/lib/game/store";
 import {
   useOverlaySlot,
   useOverlayRegistry,
   overlaySlotClass,
 } from "@/lib/game/overlayRegistry";
+import { useGameStore } from "@/lib/game/store";
 
 export default function InquisitionSummonOverlay() {
   const pending = useGameStore((s) => s.pendingInquisitionSummon);

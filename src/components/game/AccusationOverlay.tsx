@@ -2,8 +2,8 @@
 
 import Image from "next/image";
 import React, { useState, useCallback, useRef } from "react";
-import { useGameStore } from "@/lib/game/store";
 import { useOverlaySlot, overlaySlotClass } from "@/lib/game/overlayRegistry";
+import { useGameStore } from "@/lib/game/store";
 import type { CardRef } from "@/lib/game/store/types";
 
 export default function AccusationOverlay() {

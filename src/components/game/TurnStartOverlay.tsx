@@ -113,7 +113,7 @@ export default function TurnStartOverlay({ gameStarted }: TurnStartOverlayProps 
         clearTimeout(timerRef.current);
       }
     };
-  }, [currentPlayer, turn, phase, actorKey, gameStarted, playTurnGong]);
+  }, [currentPlayer, turn, phase, actorKey, gameStarted, playTurnGong, setTurnOverlayActive]);
 
   // Hide immediately once the player draws their card
   useEffect(() => {

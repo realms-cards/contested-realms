@@ -1,7 +1,7 @@
 import type { StateCreator } from "zustand";
 import type { CustomMessage } from "@/lib/net/transport";
-import type { GameState, PlayerKey } from "./types";
 import { findInquisitionInCards } from "./inquisitionSummonState";
+import type { GameState, PlayerKey } from "./types";
 
 function newLilithRevealId() {
   return `lilith_${Date.now().toString(36)}_${Math.random()

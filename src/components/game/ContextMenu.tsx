@@ -562,7 +562,8 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     const towerMerge = isMergedTower(key, babelTowers);
     header = towerMerge
       ? "The Tower of Babel"
-      : site?.card?.name || `Site #${getCellNumber(t.x, t.y, board.size.w, board.size.h)}`;
+      : site?.card?.name ||
+        `Site #${getCellNumber(t.x, t.y, board.size.w, board.size.h)}`;
     tapped = !!site?.tapped;
     // Sites do not tap in Sorcery: never show a toggle for sites
     hasToggle = false;
@@ -1636,18 +1637,16 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     doSearchPile = () => {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { TOKEN_DEFS, tokenSlug } = require("@/lib/game/tokens");
-      const tokenCards = (TOKEN_DEFS || []).filter(
-        (def: { markerOnly?: boolean }) => !def.markerOnly,
-      ).map(
-        (def: { name: string; key: string; size?: string }) => ({
+      const tokenCards = (TOKEN_DEFS || [])
+        .filter((def: { markerOnly?: boolean }) => !def.markerOnly)
+        .map((def: { name: string; key: string; size?: string }) => ({
           cardId: -1,
           variantId: null,
           name: def.name,
           type: "Token",
           slug: tokenSlug(def),
           thresholds: null,
-        }),
-      ) as CardRef[];
+        })) as CardRef[];
       openSearchDialog("Tokens", tokenCards, (selected) => {
         addTokenToHand(who, selected.name);
       });
@@ -1875,8 +1874,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                   const name = (item.card.name || "").toLowerCase();
                   if (name !== "assimilator snail") return null;
                   const ownerSeat = seatFromOwner(item.owner);
-                  const currentSeat =
-                    currentPlayer === 1 ? "p1" : "p2";
+                  const currentSeat = currentPlayer === 1 ? "p1" : "p2";
                   const isMyTurn = ownerSeat === currentSeat;
                   const hasUsed = assimilatorSnailUsed[ownerSeat];
                   const canActivate = isMyTurn && !hasUsed;
@@ -1900,7 +1898,8 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                           snail: {
                             at: t.at,
                             index: t.index,
-                            instanceId: item.instanceId ?? item.card.instanceId ?? null,
+                            instanceId:
+                              item.instanceId ?? item.card.instanceId ?? null,
                             owner: item.owner,
                             card: item.card,
                           },
@@ -1934,9 +1933,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                       className="w-full text-left rounded bg-purple-600/30 hover:bg-purple-600/50 px-3 py-1"
                       title="Revert this copy back to Assimilator Snail"
                       onClick={() => {
-                        revertAssimilatorSnailTransforms(
-                          transform.ownerSeat,
-                        );
+                        revertAssimilatorSnailTransforms(transform.ownerSeat);
                         onClose();
                       }}
                     >
@@ -1972,7 +1969,10 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                   }
 
                   // Gather eligible avatars on the same tile
-                  const eligibleAvatars: Array<{ name: string; seat: "p1" | "p2" }> = [];
+                  const eligibleAvatars: Array<{
+                    name: string;
+                    seat: "p1" | "p2";
+                  }> = [];
                   for (const seat of ["p1", "p2"] as const) {
                     const avatar = avatars[seat];
                     if (!avatar?.pos) continue;
@@ -1980,27 +1980,44 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                     const avatarKey = toCellKey(ax, ay);
                     if (avatarKey !== t.at) continue;
                     if (avatar.carriedBy) continue;
-                    eligibleAvatars.push({ name: avatar.card?.name || "Avatar", seat });
+                    eligibleAvatars.push({
+                      name: avatar.card?.name || "Avatar",
+                      seat,
+                    });
                   }
 
                   // Gather currently carried units (for drop buttons)
-                  const carried: Array<{ name: string; instanceId: string }> = [];
+                  const carried: Array<{ name: string; instanceId: string }> =
+                    [];
                   for (let i = 0; i < arr.length; i++) {
                     const p = arr[i];
                     if (!p.isCarried) continue;
-                    if (p.attachedTo?.at !== t.at || p.attachedTo?.index !== t.index) continue;
+                    if (
+                      p.attachedTo?.at !== t.at ||
+                      p.attachedTo?.index !== t.index
+                    )
+                      continue;
                     const pId = p.instanceId ?? p.card?.instanceId ?? null;
                     if (!pId) continue;
-                    carried.push({ name: p.card?.name || "Minion", instanceId: pId });
+                    carried.push({
+                      name: p.card?.name || "Minion",
+                      instanceId: pId,
+                    });
                   }
 
                   // Check for carried avatars
-                  const carriedAvatars: Array<{ name: string; seat: "p1" | "p2" }> = [];
+                  const carriedAvatars: Array<{
+                    name: string;
+                    seat: "p1" | "p2";
+                  }> = [];
                   if (carrierInstanceId) {
                     for (const seat of ["p1", "p2"] as const) {
                       const avatar = avatars[seat];
                       if (avatar?.carriedBy?.instanceId === carrierInstanceId) {
-                        carriedAvatars.push({ name: avatar.card?.name || "Avatar", seat });
+                        carriedAvatars.push({
+                          name: avatar.card?.name || "Avatar",
+                          seat,
+                        });
                       }
                     }
                   }
@@ -2020,16 +2037,25 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                           if (isHp) {
                             setTimeout(() => {
                               const state = useGameStore.getState();
-                              const cellPerms = [...(state.permanents[t.at] || [])];
+                              const cellPerms = [
+                                ...(state.permanents[t.at] || []),
+                              ];
                               const carried2 = cellPerms[target.index];
                               if (carried2?.isCarried) {
                                 cellPerms[target.index] = {
                                   ...carried2,
                                   tapped: true,
                                 };
-                                const permsNext = { ...state.permanents, [t.at]: cellPerms };
-                                useGameStore.setState({ permanents: permsNext } as Partial<typeof state> as typeof state);
-                                state.trySendPatch({ permanents: { [t.at]: cellPerms } });
+                                const permsNext = {
+                                  ...state.permanents,
+                                  [t.at]: cellPerms,
+                                };
+                                useGameStore.setState({
+                                  permanents: permsNext,
+                                } as Partial<typeof state> as typeof state);
+                                state.trySendPatch({
+                                  permanents: { [t.at]: cellPerms },
+                                });
                               }
                             }, 0);
                           }
@@ -2072,19 +2098,32 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                           if (isHp) {
                             setTimeout(() => {
                               const state = useGameStore.getState();
-                              const cellPerms = [...(state.permanents[t.at] || [])];
+                              const cellPerms = [
+                                ...(state.permanents[t.at] || []),
+                              ];
                               const droppedIdx = cellPerms.findIndex((p) => {
-                                const pId = p.instanceId ?? p.card?.instanceId ?? null;
+                                const pId =
+                                  p.instanceId ?? p.card?.instanceId ?? null;
                                 return pId === c.instanceId;
                               });
-                              if (droppedIdx !== -1 && cellPerms[droppedIdx].tapped) {
+                              if (
+                                droppedIdx !== -1 &&
+                                cellPerms[droppedIdx].tapped
+                              ) {
                                 cellPerms[droppedIdx] = {
                                   ...cellPerms[droppedIdx],
                                   tapped: false,
                                 };
-                                const permsNext = { ...state.permanents, [t.at]: cellPerms };
-                                useGameStore.setState({ permanents: permsNext } as Partial<typeof state> as typeof state);
-                                state.trySendPatch({ permanents: { [t.at]: cellPerms } });
+                                const permsNext = {
+                                  ...state.permanents,
+                                  [t.at]: cellPerms,
+                                };
+                                useGameStore.setState({
+                                  permanents: permsNext,
+                                } as Partial<typeof state> as typeof state);
+                                state.trySendPatch({
+                                  permanents: { [t.at]: cellPerms },
+                                });
                               }
                             }, 0);
                           }
@@ -2114,7 +2153,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                     );
                   }
 
-                  return buttons.length > 0 ? <>{buttons}</> : null;
+                  return buttons.length > 0 ? buttons : null;
                 })()}
 
               {/* Gem token actions - Copy and Delete */}

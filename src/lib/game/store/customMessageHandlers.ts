@@ -1,8 +1,8 @@
 import type { StateCreator } from "zustand";
 import { extractMagicTargetingHintsSync } from "@/lib/game/cardAbilities";
 import { hasCustomResolver } from "@/lib/game/resolverRegistry";
-import { findInquisitionInCards } from "./inquisitionSummonState";
 import type { CustomMessage } from "@/lib/net/transport";
+import { findInquisitionInCards } from "./inquisitionSummonState";
 import type {
   GameState,
   PlayerKey,

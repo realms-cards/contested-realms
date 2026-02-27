@@ -2,6 +2,7 @@
 
 import { Trophy, Skull, Users } from "lucide-react";
 import { createPortal } from "react-dom";
+import { LeagueReportStatus } from "@/components/game/LeagueReportStatus";
 import { SoatcLeagueResultCard } from "@/components/game/SoatcLeagueResultCard";
 import type { PlayerKey } from "@/lib/game/store";
 import type { LeagueMatchResult } from "@/lib/soatc/types";
@@ -19,6 +20,7 @@ interface MatchEndOverlayProps {
   reason?: string;
   winnerId?: string | null;
   myPlayerId?: string | null;
+  matchId?: string | null;
   rated?: boolean;
   soatcLeagueResult?: LeagueMatchResult | null;
   viewerSoatcUuid?: string;
@@ -37,6 +39,7 @@ export default function MatchEndOverlay({
   reason,
   winnerId,
   myPlayerId,
+  matchId,
   rated,
   soatcLeagueResult,
   viewerSoatcUuid,
@@ -287,6 +290,13 @@ export default function MatchEndOverlay({
               isWinner={didIWin}
               viewerSoatcUuid={viewerSoatcUuid}
             />
+          </div>
+        )}
+
+        {/* League Match Reports */}
+        {matchId && (
+          <div className="mb-6">
+            <LeagueReportStatus matchId={matchId} />
           </div>
         )}
 

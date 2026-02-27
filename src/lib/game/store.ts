@@ -54,8 +54,8 @@ import { createGardenOfEdenSlice } from "./store/gardenOfEdenState";
 import { createGemTokenSlice } from "./store/gemTokenState";
 import { createHeadlessHauntSlice } from "./store/headlessHauntState";
 import { createHighlandPrincessSlice } from "./store/highlandPrincessState";
-import { createHyperparasiteSlice } from "./store/hyperparasiteState";
 import { createHistorySlice } from "./store/historyState";
+import { createHyperparasiteSlice } from "./store/hyperparasiteState";
 import {
   createImposterMaskSlice,
   createInitialImposterMasks,

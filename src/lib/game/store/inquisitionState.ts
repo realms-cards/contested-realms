@@ -1,7 +1,7 @@
 import type { StateCreator } from "zustand";
 import type { CustomMessage } from "@/lib/net/transport";
-import type { GameState, PlayerKey, Zones } from "./types";
 import { findInquisitionInCards } from "./inquisitionSummonState";
+import type { GameState, PlayerKey, Zones } from "./types";
 import { opponentSeat } from "./utils/boardHelpers";
 
 function newInquisitionId() {

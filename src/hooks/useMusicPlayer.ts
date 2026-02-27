@@ -6,7 +6,7 @@
  * (prevents double-play when multiple components call useMusicPlayer).
  */
 
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
 import {
   MUSIC_TRACKS,
   MUSIC_DEFAULTS,

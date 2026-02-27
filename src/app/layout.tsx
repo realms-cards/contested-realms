@@ -28,10 +28,65 @@ const fantaisieArtistique = localFont({
   display: "swap",
 });
 
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "https://realms.cards";
+
 export const metadata: Metadata = {
-  title: "Realms.cards",
-  description: "",
+  metadataBase: new URL(BASE_URL),
+  title: {
+    default: "Realms.cards — Play Sorcery: Contested Realms Online",
+    template: "%s | Realms.cards",
+  },
+  description:
+    "Free community simulator for Sorcery: Contested Realms. Play online, draft, build decks, manage your collection, and compete in tournaments.",
+  keywords: [
+    "Sorcery",
+    "Contested Realms",
+    "TCG",
+    "card game",
+    "online",
+    "simulator",
+    "draft",
+    "deck builder",
+    "tournament",
+  ],
+  authors: [{ name: "Realms.cards Community" }],
+  creator: "Realms.cards",
   manifest: "/manifest.webmanifest",
+  openGraph: {
+    type: "website",
+    locale: "en_US",
+    url: BASE_URL,
+    siteName: "Realms.cards",
+    title: "Realms.cards — Play Sorcery: Contested Realms Online",
+    description:
+      "Free community simulator for Sorcery: Contested Realms. Play online, draft, build decks, and compete in tournaments.",
+    images: [
+      {
+        url: "/screenshots/wide-1280x720.png",
+        width: 1280,
+        height: 720,
+        alt: "Realms.cards — Sorcery: Contested Realms online simulator",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Realms.cards — Play Sorcery: Contested Realms Online",
+    description:
+      "Free community simulator for Sorcery: Contested Realms. Play online, draft, build decks, and compete in tournaments.",
+    images: ["/screenshots/wide-1280x720.png"],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+      "max-video-preview": -1,
+    },
+  },
   appleWebApp: {
     capable: true,
     title: "Realms.cards",
