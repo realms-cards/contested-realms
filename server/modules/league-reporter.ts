@@ -7,7 +7,10 @@
  * share a league membership. Called from finalizeMatch() as fire-and-forget.
  */
 
-import type { Prisma, PrismaClient } from "@prisma/client";
+import type { PrismaClient } from "@prisma/client";
+
+/** JSON-compatible value type (mirrors JsonValue) */
+type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 
 interface LeagueReporterDeps {
   prisma: PrismaClient;
@@ -33,7 +36,7 @@ interface ReportOptions {
 // League adapter interface
 interface LeagueAdapter {
   slug: string;
-  buildPayload(data: MatchReportData): Record<string, Prisma.JsonValue>;
+  buildPayload(data: MatchReportData): Record<string, JsonValue>;
 }
 
 interface MatchReportData {
@@ -53,8 +56,8 @@ interface MatchReportData {
 // Sorcerers Summit adapter
 const sorcerersSummitAdapter: LeagueAdapter = {
   slug: "sorcerers-summit",
-  buildPayload(data: MatchReportData): Record<string, Prisma.JsonValue> {
-    const payload: Record<string, Prisma.JsonValue> = {
+  buildPayload(data: MatchReportData): Record<string, JsonValue> {
+    const payload: Record<string, JsonValue> = {
       winner_id: data.winnerDiscordId,
       loser_id: data.loserDiscordId,
       winner_deck_url: data.winnerDeckUrl || "",
