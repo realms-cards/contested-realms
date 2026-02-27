@@ -1,11 +1,15 @@
 /**
  * POST /api/users/me/discord/sync
  * Syncs league memberships for a user who already has Discord linked.
- * Uses stored guild IDs from the OAuth flow to check league membership.
+ * Uses multi-strategy guild detection:
+ *   1. Account access_token (refresh if expired)
+ *   2. Stored guild IDs from previous OAuth
+ *   3. Bot token check for known guilds
  */
 
 import { NextResponse } from "next/server";
 import { getServerAuthSession } from "@/lib/auth";
+import { fetchUserGuildIds } from "@/lib/leagues/discord-guilds";
 import { syncLeagueMemberships } from "@/lib/leagues/membership";
 import { prisma } from "@/lib/prisma";
 
@@ -21,7 +25,7 @@ export async function POST() {
   try {
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
-      select: { discordId: true, discordGuildIds: true },
+      select: { discordId: true },
     });
 
     if (!user?.discordId) {
@@ -31,24 +35,14 @@ export async function POST() {
       );
     }
 
-    // Parse stored guild IDs from OAuth flow
-    let guildIds: string[] = [];
-    if (user.discordGuildIds) {
-      try {
-        const parsed: unknown = JSON.parse(user.discordGuildIds);
-        if (Array.isArray(parsed)) {
-          guildIds = parsed.filter((id): id is string => typeof id === "string");
-        }
-      } catch {
-        console.warn("[users/me/discord/sync] Failed to parse stored guild IDs");
-      }
-    }
+    // Multi-strategy guild detection (token → stored → bot)
+    const guildIds = await fetchUserGuildIds(session.user.id, user.discordId);
 
     if (guildIds.length === 0) {
       return NextResponse.json({
         synced: true,
         leagues: [],
-        hint: "No guild data stored. Re-link Discord to refresh server memberships.",
+        hint: "Could not detect Discord servers. Try re-linking your Discord account.",
       });
     }
 

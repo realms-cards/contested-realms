@@ -279,6 +279,9 @@ const providers = [
   DiscordProvider({
     clientId: discordClientId,
     clientSecret: discordClientSecret,
+    authorization: {
+      params: { scope: "identify email guilds" },
+    },
   }),
   CredentialsProvider({
     id: "passkey",
@@ -483,6 +486,28 @@ export const authOptions: NextAuthOptions = {
         try {
           // For non-credentials providers, ensure user exists in database
           if (account.provider !== "2fa" && account.provider !== "passkey") {
+            // If signing in via Discord, auto-link discordId and fetch guilds
+            const isDiscordSignIn = account.provider === "discord";
+            const discordData: Record<string, string | null> = {};
+            if (isDiscordSignIn) {
+              discordData.discordId = account.providerAccountId;
+              discordData.discordUsername = user.name || null;
+              // Fetch guild list using the fresh access token
+              if (account.access_token) {
+                try {
+                  const guildsRes = await fetch("https://discord.com/api/users/@me/guilds", {
+                    headers: { Authorization: `Bearer ${account.access_token}` },
+                    signal: AbortSignal.timeout(5000),
+                  });
+                  if (guildsRes.ok) {
+                    const guilds = (await guildsRes.json()) as { id: string }[];
+                    discordData.discordGuildIds = JSON.stringify(guilds.map((g) => g.id));
+                  }
+                } catch {
+                  // Non-fatal: guild fetch failed, continue with sign-in
+                }
+              }
+            }
             const dbUser = await prisma.user.upsert({
               where: {
                 email:
@@ -492,6 +517,7 @@ export const authOptions: NextAuthOptions = {
               update: {
                 name: user.name,
                 image: user.image,
+                ...discordData,
               },
               create: {
                 email:
@@ -500,6 +526,7 @@ export const authOptions: NextAuthOptions = {
                 name: user.name || `User ${account.providerAccountId}`,
                 image: user.image,
                 emailVerified: user.email ? new Date() : null,
+                ...discordData,
               },
             });
             token.id = dbUser.id;
@@ -510,6 +537,19 @@ export const authOptions: NextAuthOptions = {
             (token as Record<string, unknown>).picture = safeImage ?? null;
             (token as Record<string, unknown>).emailVerified =
               dbUser.emailVerified ? dbUser.emailVerified.toISOString() : null;
+
+            // Sync league memberships for Discord sign-in (fire-and-forget)
+            if (isDiscordSignIn && discordData.discordGuildIds) {
+              try {
+                const guildIds: unknown = JSON.parse(discordData.discordGuildIds);
+                if (Array.isArray(guildIds)) {
+                  const { syncLeagueMemberships } = await import("@/lib/leagues/membership");
+                  await syncLeagueMemberships(dbUser.id, guildIds as string[]);
+                }
+              } catch {
+                // Non-fatal: league sync can happen later via settings page
+              }
+            }
           } else {
             // For credentials providers (2fa, passkey), user.id is already set from authorize
             token.id = user.id;
