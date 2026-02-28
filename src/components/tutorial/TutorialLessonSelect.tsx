@@ -84,23 +84,16 @@ export function TutorialLessonSelect() {
       </div>
 
       {/* Footer actions */}
-      <div className="mt-8 flex items-center justify-between">
-        <Link
-          href="/online/lobby"
-          className="text-sm text-slate-400 hover:text-white transition-colors"
-        >
-          Back to Lobby
-        </Link>
-
-        {completedCount > 0 && (
+      {completedCount > 0 && (
+        <div className="mt-8 flex justify-end">
           <button
             onClick={handleReset}
             className="text-xs text-slate-500 hover:text-red-400 transition-colors"
           >
             Reset Progress
           </button>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
