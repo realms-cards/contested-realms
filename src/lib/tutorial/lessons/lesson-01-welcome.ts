@@ -84,7 +84,7 @@ const lesson: TutorialLesson = {
       id: "welcome-zones",
       type: "highlight",
       title: "Game Zones",
-      text: "To the right of the Realm you'll find your card piles:\n\n- **Atlas** (top, landscape) — Your deck of site cards for the Realm\n- **Spellbook** (middle, portrait) — Your deck of spell cards (minions, magics, artifacts, auras)\n- **Cemetery** (bottom, empty) — Your discard pile for destroyed or used cards\n\nAt the start of each turn, you draw one card from your Spellbook and one from your Atlas.",
+      text: "To the right of the Realm you'll find your card piles:\n\n- **Atlas** (top, landscape) — Your deck of site cards for the Realm\n- **Spellbook** (middle, portrait) — Your deck of spell cards (minions, magics, artifacts, auras)\n- **Cemetery** (bottom, empty) — Your discard pile for destroyed or used cards\n\nAt the start of each turn, you draw one card from your Spellbook OR one from your Atlas.",
       highlightTarget: { type: "piles", player: "p1" },
       revealHud: ["piles"],
     },
