@@ -76,21 +76,37 @@ function TutorialLessonContent() {
           </p>
 
           <div className="mt-8 flex flex-col gap-3">
-            {session.nextLessonId && (
-              <Link
-                href={`/tutorial/${session.nextLessonId}`}
-                className="rounded-lg bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 px-6 py-3 text-sm font-semibold text-white transition-all shadow-md"
-              >
-                Next Lesson
-              </Link>
+            {session.nextLessonId ? (
+              <>
+                <Link
+                  href={`/tutorial/${session.nextLessonId}`}
+                  className="rounded-lg bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 px-6 py-3 text-sm font-semibold text-white transition-all shadow-md"
+                >
+                  Next Lesson
+                </Link>
+                <Link
+                  href="/tutorial"
+                  className="rounded-lg bg-slate-800 hover:bg-slate-700 px-6 py-3 text-sm text-slate-300 transition-colors"
+                >
+                  Back to All Lessons
+                </Link>
+              </>
+            ) : (
+              <>
+                <Link
+                  href="/online/lobby"
+                  className="rounded-lg bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 px-6 py-3 text-sm font-semibold text-white transition-all shadow-md"
+                >
+                  Go to Online Lobby
+                </Link>
+                <Link
+                  href="/tutorial"
+                  className="rounded-lg bg-slate-800 hover:bg-slate-700 px-6 py-3 text-sm text-slate-300 transition-colors"
+                >
+                  Back to All Lessons
+                </Link>
+              </>
             )}
-
-            <Link
-              href="/tutorial"
-              className="rounded-lg bg-slate-800 hover:bg-slate-700 px-6 py-3 text-sm text-slate-300 transition-colors"
-            >
-              Back to All Lessons
-            </Link>
           </div>
         </div>
       </main>
