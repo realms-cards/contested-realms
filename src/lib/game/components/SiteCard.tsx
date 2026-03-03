@@ -6,6 +6,7 @@ import CardOutline from "@/lib/game/components/CardOutline";
 import CardPlane from "@/lib/game/components/CardPlane";
 import { CARD_LONG, CARD_SHORT, PLAYER_COLORS } from "@/lib/game/constants";
 import { hasCustomResolver } from "@/lib/game/resolverRegistry";
+import { useGameStore } from "@/lib/game/store";
 import type {
   BabelTowerMerge,
   CardRef,
@@ -361,7 +362,7 @@ export function SiteCard({
         </group>
       )}
       {/* Purple glow for sites with custom resolvers */}
-      {!highlight && getGraphicsSettings().showResolverGlow && hasCustomResolver(site.card?.name) && (
+      {!highlight && !useGameStore.getState().resolversDisabled && getGraphicsSettings().showResolverGlow && hasCustomResolver(site.card?.name) && (
         <group position={[edgeOffset.x, 0, edgeOffset.z]}>
           <CardOutline
             width={CARD_SHORT * 1.08}
@@ -372,7 +373,7 @@ export function SiteCard({
             renderOrder={1100}
             opacity={0.4}
             pulse
-            pulseSpeed={0.6}
+            pulseSpeed={0.15}
             pulseMin={0.2}
             pulseMax={0.45}
           />

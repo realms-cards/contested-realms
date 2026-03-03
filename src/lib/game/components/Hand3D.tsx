@@ -11,6 +11,7 @@ import { cardRefToPreview } from "@/lib/game/card-preview.types";
 import type { CardPreviewData } from "@/lib/game/card-preview.types";
 import CardBorder from "@/lib/game/components/CardBorder";
 import CardGlow from "@/lib/game/components/CardGlow";
+import CardOutline from "@/lib/game/components/CardOutline";
 import CardPlane from "@/lib/game/components/CardPlane";
 import MaterialCardBack from "@/lib/game/components/MaterialCardBack";
 import {
@@ -96,6 +97,7 @@ export default function Hand3D({
   const placementDialog = useGameStore((s) => s.placementDialog);
   const switchSiteSource = useGameStore((s) => s.switchSiteSource);
   const attackTargetChoice = useGameStore((s) => s.attackTargetChoice);
+  const resolversDisabled = useGameStore((s) => s.resolversDisabled);
   const attackChoice = useGameStore((s) => s.attackChoice);
   const attackConfirm = useGameStore((s) => s.attackConfirm);
   const { playCardSelect } = useSound();
@@ -1352,14 +1354,19 @@ export default function Hand3D({
               />
             ) : null}
             {/* Purple resolver glow for cards with custom automated behavior */}
-            {!showCardBacks && !remoteHighlightColor && graphicsSettings.showResolverGlow && hasCustomResolver(c.name) && (
-              <CardGlow
-                width={glowWidth}
-                height={glowHeight}
+            {!showCardBacks && !remoteHighlightColor && !resolversDisabled && graphicsSettings.showResolverGlow && hasCustomResolver(c.name) && (
+              <CardOutline
+                width={CARD_SHORT * 1.08}
+                height={CARD_LONG * 1.08}
                 rotationZ={cardRotationZ}
                 elevation={-0.01}
                 color="#8b5cf6"
                 renderOrder={renderOrder + 10000 - 6}
+                opacity={0.4}
+                pulse
+                pulseSpeed={0.15}
+                pulseMin={0.2}
+                pulseMax={0.45}
                 flat={false}
               />
             )}

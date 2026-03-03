@@ -1258,6 +1258,7 @@ export default function PlayPage() {
             type: previewCard.type,
           })}
           anchor="top-right"
+          zIndexClass="z-[250]"
         />
       )}
 

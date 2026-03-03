@@ -1,15 +1,12 @@
 "use client";
 
 import { Skull, AlertTriangle, Users } from "lucide-react";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { LeagueBadgeList } from "@/components/online/LeagueBadge";
 import { useGraphicsSettings } from "@/hooks/useGraphicsSettings";
 import { useGameStore } from "@/lib/game/store";
 import type { LifeState, PlayerKey } from "@/lib/game/store";
 import { useGamepadControls } from "@/lib/hooks/useGamepadControls";
-import type { LeagueDisplayInfo } from "@/lib/hooks/useLeagueStatus";
-import { useLeaguePlayers } from "@/lib/hooks/useLeagueStatus";
 import {
   useGamepadConnected,
   useSmallScreen,
@@ -63,7 +60,6 @@ interface LifeCounterProps {
   canModify: boolean;
   dragFromHand: boolean;
   isMe: boolean;
-  leagues?: LeagueDisplayInfo[];
 }
 
 function LifeCounter({
@@ -72,7 +68,6 @@ function LifeCounter({
   canModify,
   dragFromHand,
   isMe,
-  leagues,
   showNameAbove,
   showYou,
   spectatorMode,
@@ -137,9 +132,6 @@ function LifeCounter({
                 : showYou && isMe
                   ? " (You)"
                   : ""}
-              {leagues && leagues.length > 0 && (
-                <LeagueBadgeList leagues={leagues} compact />
-              )}
             </span>
           )}
         </div>
@@ -279,9 +271,6 @@ function LifeCounter({
             <span className="inline-flex items-center gap-1">
               {playerName}
               {spectatorMode && isMe ? " (Watching)" : isMe ? " (You)" : ""}
-              {leagues && leagues.length > 0 && (
-                <LeagueBadgeList leagues={leagues} compact />
-              )}
             </span>
           )}
         </div>
@@ -428,21 +417,6 @@ export default function OnlineLifeCounters({
 
   const isMobileScreen = useSmallScreen();
 
-  // Fetch league badges for both players
-  const playerIdsForLeagues = useMemo(() => {
-    const ids: string[] = [];
-    if (myPlayerId) ids.push(myPlayerId);
-    if (opponentPlayerId) ids.push(opponentPlayerId);
-    return ids;
-  }, [myPlayerId, opponentPlayerId]);
-  const playerLeagues = useLeaguePlayers(playerIdsForLeagues);
-
-  // Map player IDs to player keys for league badge display
-  const p1Id = myPlayerKey === "p1" ? myPlayerId : opponentPlayerId;
-  const p2Id = myPlayerKey === "p2" ? myPlayerId : opponentPlayerId;
-  const p1Leagues = p1Id ? playerLeagues[p1Id] || [] : [];
-  const p2Leagues = p2Id ? playerLeagues[p2Id] || [] : [];
-
   // iPhone notch compensation: use safe-area-inset-left plus extra padding
   const leftPosition = isIPhone
     ? isMobileScreen
@@ -466,7 +440,6 @@ export default function OnlineLifeCounters({
         canModify={canModifyLife}
         dragFromHand={dragFromHand}
         isMe={myPlayerKey === "p1"}
-        leagues={p1Leagues}
         showNameAbove={true}
         showYou={showYouLabels}
         spectatorMode={readOnly}
@@ -481,7 +454,6 @@ export default function OnlineLifeCounters({
         canModify={canModifyLife}
         dragFromHand={dragFromHand}
         isMe={myPlayerKey === "p2"}
-        leagues={p2Leagues}
         showNameAbove={false}
         showYou={showYouLabels}
         spectatorMode={readOnly}

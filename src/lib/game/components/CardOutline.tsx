@@ -34,6 +34,9 @@ interface CardOutlineProps {
   pulseSpeed?: number; // cycles per second
   pulseMin?: number; // min opacity when pulsing
   pulseMax?: number; // max opacity when pulsing
+  /** When true (default), the outline lies flat in the XZ plane (for board cards).
+   *  When false, it stays in the XY plane (for upright hand cards). */
+  flat?: boolean;
 }
 
 // Create a rounded rectangle outline shape (hollow ring)
@@ -94,6 +97,7 @@ export default function CardOutline({
   pulseSpeed = 1.25,
   pulseMin = 0.4,
   pulseMax = 0.9,
+  flat = true,
 }: CardOutlineProps) {
   // Card corner radius (proportional to card size)
   const cornerRadius = Math.min(width, height) * 0.06;
@@ -220,9 +224,9 @@ export default function CardOutline({
 
   return (
     <group
-      rotation-x={-Math.PI / 2}
+      rotation-x={flat ? -Math.PI / 2 : 0}
       rotation-z={rotationZ}
-      position={[0, elevation, 0]}
+      position={flat ? [0, elevation, 0] : [0, 0, elevation]}
     >
       {/* Outermost glow layer (faintest) */}
       <mesh
