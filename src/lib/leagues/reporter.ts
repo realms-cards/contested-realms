@@ -6,6 +6,8 @@
  */
 
 import type { Prisma } from "@prisma/client";
+import type { CuriosaCompatDeckList } from "@/lib/decks/curiosa-compat";
+import { buildCuriosaCompatDeckList } from "@/lib/decks/curiosa-compat";
 import { getLeagueAdapter } from "@/lib/leagues/adapters";
 import { prisma } from "@/lib/prisma";
 
@@ -22,6 +24,8 @@ export interface MatchReportData {
   loserName: string;
   winnerDeckUrl: string | null;
   loserDeckUrl: string | null;
+  winnerDeckList: CuriosaCompatDeckList | null;
+  loserDeckList: CuriosaCompatDeckList | null;
   isDraw: boolean;
   format: string;
   durationMinutes: number | null;
@@ -62,6 +66,21 @@ async function resolveDeckUrl(deckId: string | null | undefined): Promise<string
     return `https://realms.cards/decks/${deck.id}`;
   } catch {
     return "";
+  }
+}
+
+/**
+ * Build a Curiosa-compatible deck list for the Sorcerers Summit API.
+ * Returns null if the deck doesn't exist or on error.
+ */
+async function resolveDeckList(
+  deckId: string | null | undefined,
+): Promise<CuriosaCompatDeckList | null> {
+  if (!deckId) return null;
+  try {
+    return await buildCuriosaCompatDeckList(deckId);
+  } catch {
+    return null;
   }
 }
 
@@ -137,11 +156,14 @@ export async function reportMatchToLeagues(
 
     if (leaguesToReport.length === 0) return;
 
-    // Resolve deck URLs
-    const [winnerDeckUrl, loserDeckUrl] = await Promise.all([
-      resolveDeckUrl(winnerDeckId),
-      resolveDeckUrl(loserDeckId),
-    ]);
+    // Resolve deck URLs and deck lists in parallel
+    const [winnerDeckUrl, loserDeckUrl, winnerDeckList, loserDeckList] =
+      await Promise.all([
+        resolveDeckUrl(winnerDeckId),
+        resolveDeckUrl(loserDeckId),
+        resolveDeckList(winnerDeckId),
+        resolveDeckList(loserDeckId),
+      ]);
 
     const reportData: MatchReportData = {
       matchId,
@@ -151,6 +173,8 @@ export async function reportMatchToLeagues(
       loserName: loser.name || "Unknown",
       winnerDeckUrl,
       loserDeckUrl,
+      winnerDeckList,
+      loserDeckList,
       isDraw,
       format,
       durationMinutes,

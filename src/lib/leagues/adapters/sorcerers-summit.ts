@@ -34,6 +34,14 @@ export const sorcerersSummitAdapter: LeagueAdapter = {
       payload.match_time = data.durationMinutes;
     }
 
+    // Inline deck lists (Curiosa-compatible format)
+    if (data.winnerDeckList) {
+      payload.winner_deck_list = data.winnerDeckList as unknown as Prisma.JsonValue;
+    }
+    if (data.loserDeckList) {
+      payload.loser_deck_list = data.loserDeckList as unknown as Prisma.JsonValue;
+    }
+
     return payload;
   },
 };

@@ -2,6 +2,8 @@
 
 import Image from "next/image";
 import React, { useMemo, useState } from "react";
+import CardPreview from "@/components/game/CardPreview";
+import { cardRefToPreview } from "@/lib/game/card-preview.types";
 import { useGameStore } from "@/lib/game/store";
 import { getImageSlug } from "@/lib/utils/cardSlug";
 
@@ -12,13 +14,15 @@ import { getImageSlug } from "@/lib/utils/cardSlug";
  * to an adjacent void or Rubble and move there.
  *
  * Shows a small floating card preview so the board stays unobstructed
- * while the player selects a target tile.
+ * while the player selects a target tile. Hover the card image for a
+ * full-size readable preview.
  */
 export default function PathfinderPlayOverlay() {
   const pending = useGameStore((s) => s.pendingPathfinderPlay);
   const actorKey = useGameStore((s) => s.actorKey);
   const cancel = useGameStore((s) => s.cancelPathfinderPlay);
   const [imageError, setImageError] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
 
   // Compute card image URL
   const cardImageUrl = useMemo(() => {
@@ -27,6 +31,12 @@ export default function PathfinderPlayOverlay() {
     const slug = getImageSlug(site.slug, site.name);
     return `/api/images/${encodeURIComponent(slug)}`;
   }, [pending?.topSite]);
+
+  // Full-size preview data (must be before early returns to satisfy Rules of Hooks)
+  const previewData = useMemo(
+    () => (pending?.topSite ? cardRefToPreview(pending.topSite) : null),
+    [pending?.topSite],
+  );
 
   if (!pending) return null;
   if (pending.phase !== "selectingTarget") return null;
@@ -46,26 +56,35 @@ export default function PathfinderPlayOverlay() {
   const playerBgClass = ownerSeat === "p2" ? "bg-red-900/30" : "bg-blue-900/30";
 
   return (
-    <div className="fixed left-4 bottom-28 z-[201] pointer-events-auto">
+    <>
+      {/* Full-size card preview on hover */}
+      {isHovered && (
+        <CardPreview card={previewData} anchor="top-right" zIndexClass="z-[200]" />
+      )}
+
+      <div className="fixed left-4 bottom-28 z-[201] pointer-events-auto">
       <div
         className={`rounded-xl bg-black/85 backdrop-blur-sm ring-1 ${accentColor} shadow-2xl overflow-hidden`}
-        style={{ width: 180 }}
+        style={{ width: 207 }}
       >
-        {/* Card image — large preview */}
-        <div className="relative w-full">
+        {/* Card image — landscape preview (sites are stored portrait, rotated 90°) */}
+        <div
+          className="relative w-full aspect-[4/3]"
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => setIsHovered(false)}
+        >
           {cardImageUrl && !imageError ? (
             <Image
               src={cardImageUrl}
               alt={topSite?.name || "Site"}
-              width={180}
-              height={130}
-              className="w-full h-auto object-cover"
+              fill
+              className="object-contain rotate-90 scale-[1.333] origin-center"
               onError={() => setImageError(true)}
               unoptimized
             />
           ) : (
             <div
-              className={`w-full aspect-[7/5] ${playerBgClass} flex items-center justify-center`}
+              className={`w-full h-full ${playerBgClass} flex items-center justify-center`}
             >
               <span className="text-amber-400 font-medium text-sm text-center px-3">
                 {topSite?.name || "Unknown"}
@@ -95,5 +114,6 @@ export default function PathfinderPlayOverlay() {
         </div>
       </div>
     </div>
+    </>
   );
 }

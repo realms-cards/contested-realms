@@ -26,6 +26,7 @@ import {
   TILE_SIZE,
 } from "@/lib/game/constants";
 import { hasCustomResolver } from "@/lib/game/resolverRegistry";
+import { useGameStore } from "@/lib/game/store";
 import type {
   BoardState,
   CardRef,
@@ -1281,6 +1282,7 @@ export function PermanentStack({
               {/* Purple glow for cards with custom resolvers */}
               {!roleGlow &&
                 !p.isCopy &&
+                !useGameStore.getState().resolversDisabled &&
                 getGraphicsSettings().showResolverGlow &&
                 hasCustomResolver(p.card.name) && (
                   <CardOutline
@@ -1300,7 +1302,7 @@ export function PermanentStack({
                     renderOrder={1350}
                     opacity={0.4}
                     pulse
-                    pulseSpeed={0.6}
+                    pulseSpeed={0.15}
                     pulseMin={0.2}
                     pulseMax={0.45}
                   />
