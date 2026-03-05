@@ -331,6 +331,18 @@ export function handleCustomMessage(
         pendingMagic: { ...s.pendingMagic, status: "confirm" },
       } as Partial<GameState> as GameState;
     });
+
+    // In CPU matches the bot has no client to click "Resolve",
+    // so auto-resolve after a brief delay to simulate opponent acknowledgment.
+    const oppId = get().opponentPlayerId;
+    if (typeof oppId === "string" && oppId.startsWith("cpu_")) {
+      setTimeout(() => {
+        const state = get();
+        if (state.pendingMagic && state.pendingMagic.id === id && state.pendingMagic.status === "confirm") {
+          state.resolveMagic();
+        }
+      }, 800);
+    }
     return;
   }
   if (t === "magicResolve") {
@@ -667,11 +679,23 @@ export function handleCustomMessage(
 
       console.log("[combatAutoApply] Parsed kills:", parsedKills);
 
+      // In CPU matches, there is no second client to handle the opponent's kills,
+      // so this client must process all kills (both own and CPU's).
+      const oppId = get().opponentPlayerId;
+      const isCpuGame = typeof oppId === "string" && oppId.startsWith("cpu_");
+
       const myKills = parsedKills
         .filter((k) => {
           if (!k.at || !Number.isFinite(k.index)) {
             console.log("[combatAutoApply] Skipping invalid kill:", k);
             return false;
+          }
+          // In CPU matches, process ALL kills (no second client for the bot)
+          if (isCpuGame) {
+            console.log(
+              `[combatAutoApply] CPU match - processing kill owner=${k.owner}`,
+            );
+            return true;
           }
           // If mySeat is set, use it for filtering
           if (mySeat) {

@@ -225,7 +225,7 @@ export default function Board({
   const setDraggingSite = useScopedStore((s) => s.setDraggingSite);
   const updateDraggingSitePos = useScopedStore((s) => s.updateDraggingSitePos);
   const dropDraggingSite = useScopedStore((s) => s.dropDraggingSite);
-  const { playCardPlay, playTurnGong, playCardFlip } = useSound();
+  const { playCardPlay, playCardFlip } = useSound();
   const dragFromHand = useScopedStore((s) => s.dragFromHand);
   const castPlacementMode = useScopedStore((s) => s.castPlacementMode);
   const previewCard = useScopedStore((s) => s.previewCard);
@@ -493,7 +493,6 @@ export default function Board({
 
   const boardDragControls = useBoardDragControls({
     currentPlayer,
-    playTurnGong,
     dragFromHand: Boolean(dragFromHand),
     dragFromPile,
     selectedCard: selected,
