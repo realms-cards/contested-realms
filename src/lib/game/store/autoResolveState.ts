@@ -103,8 +103,15 @@ export const createAutoResolveSlice: StateCreator<
         // Mark this Omphalos as drawn so re-trigger skips it
         markOmphalosDrawnThisCycle(omphalosId);
         // Chain: re-trigger for remaining Omphalos after a short delay
+        // Then chain to Lilith if no more Omphalos auto-resolves are pending
         setTimeout(() => {
           get().triggerOmphalosEndOfTurn(ownerSeat);
+          // If all Omphalos are processed, chain to Lilith end-of-turn trigger
+          if (!get().pendingAutoResolve) {
+            try {
+              get().triggerLilithEndOfTurn(ownerSeat);
+            } catch { /* Lilith trigger error is non-fatal */ }
+          }
         }, 100);
         break;
       }
@@ -173,7 +180,7 @@ export const createAutoResolveSlice: StateCreator<
     const pending = get().pendingAutoResolve;
     if (!pending) return;
 
-    const { kind, ownerSeat, sourceName, id } = pending;
+    const { kind, ownerSeat, sourceName, id, callbackData } = pending;
 
     get().log(
       `[${ownerSeat.toUpperCase()}] ${sourceName}: Effect declined (manual resolution)`,
@@ -195,6 +202,22 @@ export const createAutoResolveSlice: StateCreator<
           ts: Date.now(),
         } as unknown as CustomMessage);
       } catch {}
+    }
+
+    // Chain remaining end-of-turn triggers when Omphalos is cancelled
+    if (kind === "omphalos_draw") {
+      const omphalosId = callbackData?.omphalosId as string | undefined;
+      if (omphalosId) markOmphalosDrawnThisCycle(omphalosId);
+      setTimeout(() => {
+        // Re-trigger for remaining Omphalos
+        get().triggerOmphalosEndOfTurn(ownerSeat);
+        // If no more Omphalos pending, chain to Lilith
+        if (!get().pendingAutoResolve) {
+          try {
+            get().triggerLilithEndOfTurn(ownerSeat);
+          } catch { /* Lilith trigger error is non-fatal */ }
+        }
+      }, 100);
     }
   },
 

@@ -19,6 +19,7 @@ import type {
   PlayerKey,
   CardRef,
 } from "@/lib/game/store/types";
+import { moveAvatarAttachedArtifacts } from "@/lib/game/store/utils/permanentHelpers";
 
 export type PathfinderPhase = "selectingTarget" | "complete";
 
@@ -312,28 +313,71 @@ export const createPathfinderSlice: StateCreator<
     // Mark ability as used
     const updatedUsed = { ...state.pathfinderUsed, [who]: true };
 
+    // Move attached artifacts (Wards, Toolbox, etc.) with the avatar
+    const oldPos = avatar.pos;
+    const oldKey = oldPos ? (`${oldPos[0]},${oldPos[1]}` as CellKey) : null;
+    const isCrossTileMove = oldKey && oldKey !== targetCell;
+
+    let permanents = state.permanents;
+    let movedArtifactIds: string[] = [];
+    if (isCrossTileMove) {
+      const result = moveAvatarAttachedArtifacts(
+        state.permanents,
+        oldKey as CellKey,
+        targetCell,
+        ownerNum,
+      );
+      permanents = result.permanents;
+      movedArtifactIds = result.movedArtifacts
+        .map((a) => a.instanceId || a.card?.instanceId)
+        .filter(
+          (id): id is string => typeof id === "string" && id.length > 0,
+        );
+      if (result.movedArtifacts.length > 0) {
+        get().log(
+          `[PATHFINDER] Moved ${result.movedArtifacts.length} attached artifact(s) with avatar`,
+        );
+      }
+    }
+
     console.log("[PATHFINDER] selectPathfinderTarget:", {
       who,
       targetCell,
       newAvatarPos: [targetX, targetY],
       pathfinderUsedBefore: state.pathfinderUsed,
       pathfinderUsedAfter: updatedUsed,
+      movedArtifacts: movedArtifactIds.length,
     });
 
     set({
       zones: updatedZones,
       board: { ...board, sites: newSites },
       avatars: newAvatars,
+      permanents,
       pathfinderUsed: updatedUsed,
       pendingPathfinderPlay: null,
     } as Partial<GameState> as GameState);
 
-    get().trySendPatch({
+    const patch: Record<string, unknown> = {
       zones: { [who]: updatedZones[who] } as GameState["zones"],
       board: { ...board, sites: newSites },
       avatars: newAvatars,
       pathfinderUsed: updatedUsed,
-    });
+    };
+    if (isCrossTileMove) {
+      const oldTilePatch = [
+        ...(permanents[oldKey as CellKey] || []),
+        ...movedArtifactIds.map((instanceId) => ({
+          instanceId,
+          __remove: true,
+        })),
+      ];
+      patch.permanents = {
+        [oldKey as CellKey]: oldTilePatch,
+        [targetCell]: permanents[targetCell] || [],
+      };
+    }
+    get().trySendPatch(patch);
 
     const actionDesc = isReplacingRubble
       ? `replaces Rubble with ${topSite.name}`
