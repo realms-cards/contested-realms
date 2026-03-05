@@ -26,7 +26,6 @@ type PendingSnap = { x: number; z: number; attempts: number; delay: number };
 
 type UseBoardDragControlsOptions = {
   currentPlayer: 1 | 2;
-  playTurnGong: () => void;
   dragFromHand: boolean;
   dragFromPile: GameState["dragFromPile"];
   selectedCard: GameState["selectedCard"];
@@ -67,7 +66,6 @@ export type BoardDragControls = {
 
 export function useBoardDragControls({
   currentPlayer,
-  playTurnGong,
   dragFromHand,
   dragFromPile,
   selectedCard,
@@ -118,18 +116,8 @@ export function useBoardDragControls({
   }, [dragging, dragAvatar, setBoardDragActive]);
 
   useEffect(() => {
-    const seat = currentPlayer;
-    if (lastTurnPlayerRef.current == null) {
-      lastTurnPlayerRef.current = seat;
-      return;
-    }
-    if (lastTurnPlayerRef.current !== seat) {
-      try {
-        playTurnGong();
-      } catch {}
-      lastTurnPlayerRef.current = seat;
-    }
-  }, [currentPlayer, playTurnGong]);
+    lastTurnPlayerRef.current = currentPlayer;
+  }, [currentPlayer]);
 
   const moveDraggedBody = useCallback((x: number, z: number, lift = true) => {
     dragTarget.current = { x, z, lift };

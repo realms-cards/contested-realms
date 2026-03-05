@@ -1,5 +1,16 @@
 # Changelog
 
+## March 2026
+
+### Mar 5 - Sorcerers Summit, CPU, resolver highlight
+
+- **Sorcerers Summit: add Discord linking and support submitting matches**
+- **cards with custom resolvers have purple glow now** in hand and on the board
+- **fix overlays being drawn over card previews**
+- **fix Pathfinder site preview**
+- **fixex for Solo VS CPU** CPU minions now go to cemetery on defeat, CPU will move along magic casts and not get stuck anymore
+- **fix start turn bell sounding more than once**
+
 ## February 2026
 
 ### Feb 25 - Fixes and updates
