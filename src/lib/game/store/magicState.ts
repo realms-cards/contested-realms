@@ -204,6 +204,22 @@ export const createMagicSlice: StateCreator<GameState, [], [], MagicSlice> = (
         } as unknown as CustomMessage);
       }
     } catch {}
+
+    // In CPU matches the bot has no client to click "Resolve",
+    // so auto-resolve after a brief delay when the human casts a spell.
+    try {
+      const oppId = get().opponentPlayerId;
+      if (typeof oppId === "string" && oppId.startsWith("cpu_")) {
+        const pendingId = get().pendingMagic?.id;
+        setTimeout(() => {
+          const s = get();
+          if (s.pendingMagic && s.pendingMagic.id === pendingId && s.pendingMagic.status === "confirm") {
+            s.resolveMagic();
+          }
+        }, 1200);
+      }
+    } catch {}
+
     // Proactively fetch rules (or use cache) and emit a summary so both players can review before resolution
     try {
       const pending = get().pendingMagic;
