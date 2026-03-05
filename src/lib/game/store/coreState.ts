@@ -596,9 +596,14 @@ export const createCoreSlice: StateCreator<
     } catch {}
 
     // Trigger Lilith end-of-turn reveals for the ending player
-    try {
-      get().triggerLilithEndOfTurn(endingPlayerSeat);
-    } catch {}
+    // ONLY if Omphalos didn't queue an auto-resolve confirmation.
+    // If Omphalos is pending, Lilith will be chained after it completes
+    // (see confirmAutoResolve / cancelAutoResolve in autoResolveState.ts)
+    if (!get().pendingAutoResolve) {
+      try {
+        get().triggerLilithEndOfTurn(endingPlayerSeat);
+      } catch {}
+    }
 
     // Trigger Torshammar Trinket return to hand for the ending player
     try {

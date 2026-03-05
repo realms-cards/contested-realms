@@ -149,19 +149,9 @@ export const createArtifactCastSlice: StateCreator<
     const collection = state.zones[casterSeat]?.collection || [];
     const targetRarity = ARTIFACT_RARITY_FILTER[artifactType];
 
-    // Filter to spells (magic cards) of the correct rarity
+    // Filter collection to matching rarity only — no card type filtering.
+    // The player decides what to cast from eligible cards.
     const eligibleSpells = collection.filter((card) => {
-      const cardType = (card.type || "").toLowerCase();
-      const isSpell =
-        cardType.includes("magic") ||
-        cardType.includes("spell") ||
-        (!cardType.includes("site") &&
-          !cardType.includes("avatar") &&
-          !cardType.includes("minion") &&
-          !cardType.includes("artifact") &&
-          !cardType.includes("aura"));
-      if (!isSpell) return false;
-
       const cardRarity = (card.rarity || "").toLowerCase();
       return cardRarity === targetRarity;
     });
