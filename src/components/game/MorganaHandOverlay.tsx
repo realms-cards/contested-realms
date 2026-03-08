@@ -113,7 +113,7 @@ function MorganaHandCard({
             : "bg-black/80 text-white/90 hover:bg-black/90 ring-1 ring-purple-500/50"
         }`}
       >
-        <span className="text-purple-300">🔮</span>
+        <span className="text-purple-300">&#x2726;</span>
         <span className="font-medium">Morgana&apos;s Hand</span>
         <span
           className={`px-2 py-0.5 rounded-full text-sm ${

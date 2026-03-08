@@ -13,21 +13,28 @@ export const createRevealOverlaySlice: StateCreator<
   [],
   [],
   RevealOverlaySlice
-> = (set) => ({
+> = (set, get) => ({
   revealOverlay: {
     isOpen: false,
     title: "",
     cards: [],
     revealedBy: undefined,
+    minimizeToSelector: undefined,
   },
 
-  openRevealOverlay: (title: string, cards: CardRef[], revealedBy?: PlayerKey) => {
+  openRevealOverlay: (
+    title: string,
+    cards: CardRef[],
+    revealedBy?: PlayerKey,
+    minimizeToSelector?: string,
+  ) => {
     set({
       revealOverlay: {
         isOpen: true,
         title,
         cards,
         revealedBy,
+        minimizeToSelector,
       },
     } as Partial<GameState> as GameState);
   },
@@ -39,7 +46,15 @@ export const createRevealOverlaySlice: StateCreator<
         title: "",
         cards: [],
         revealedBy: undefined,
+        minimizeToSelector: undefined,
       },
     } as Partial<GameState> as GameState);
+
+    // If the turn effect queue is active and waiting, advance it.
+    // This is used by Omphalos draw to block the queue until the player
+    // dismisses the card reveal overlay.
+    if (get().turnEffectQueueActive) {
+      get().resolveCurrentTurnEffect();
+    }
   },
 });

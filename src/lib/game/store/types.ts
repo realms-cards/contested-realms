@@ -1355,6 +1355,28 @@ export type PendingAutoResolve = {
   createdAt: number;
 };
 
+// --- Turn Effect Queue ------------------------------------------------
+// Manages ordered processing of end-of-turn and start-of-turn effects.
+// Each card instance gets its own queue entry; effects process one at a time.
+
+export type TurnEffectKind =
+  | "omphalos_draw" // EOT: draw spell to Omphalos hand
+  | "lilith_reveal" // EOT: reveal opponent's top spell
+  | "turn_transition" // Boundary: actual turn handoff between EOT and SOT
+  | "mother_nature_reveal" // SOT: reveal own top spell
+  | "headless_haunt_move" // SOT: random/chosen movement
+  | "goldfish_shuffle"; // SOT: hotseat shuffle
+
+export type TurnEffectEntry = {
+  id: string;
+  kind: TurnEffectKind;
+  ownerSeat: PlayerKey;
+  priority: number; // Lower = processed first
+  status: "pending" | "active" | "complete" | "skipped";
+  sourceName: string; // Card name for logging
+  data: Record<string, unknown>; // Kind-specific payload
+};
+
 // --- Doomsday Cult State ----------------------------------------------
 // Continuous effect: reveal top spellbook, allow Evil casting from spellbook
 export type DoomsdayCultInfo = {
@@ -2920,11 +2942,13 @@ export type GameState = {
     title: string;
     cards: CardRef[];
     revealedBy?: PlayerKey;
+    minimizeToSelector?: string;
   };
   openRevealOverlay: (
     title: string,
     cards: CardRef[],
     revealedBy?: PlayerKey,
+    minimizeToSelector?: string,
   ) => void;
   closeRevealOverlay: () => void;
   // Gem Token State (generic draggable tokens on board)
@@ -2973,6 +2997,16 @@ export type GameState = {
   ) => void;
   // Clear turn-based bonuses (called at end of turn)
   clearTurnBonuses: () => void;
+  // --- Turn Effect Queue (ordered EOT/SOT processing) ---
+  turnEffectQueue: TurnEffectEntry[];
+  turnEffectQueueActive: boolean;
+  buildTurnEffectQueue: (
+    endingSeat: PlayerKey,
+    startingSeat: PlayerKey,
+  ) => void;
+  processNextTurnEffect: () => void;
+  resolveCurrentTurnEffect: () => void;
+  _executeTurnTransition: () => void;
   // Remove site choice when site is removed from board
   removeSiteChoice: (cellKey: CellKey) => void;
   // Register Mismanaged Mortuary (swaps cemeteries while on board)

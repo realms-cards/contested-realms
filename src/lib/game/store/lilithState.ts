@@ -244,6 +244,7 @@ export const createLilithSlice: StateCreator<GameState, [], [], LilithSlice> = (
     const { revealedCard, isMinion, lilithLocation, lilithOwner, id } = pending;
     if (!revealedCard) {
       set({ pendingLilithReveal: null } as Partial<GameState> as GameState);
+      if (get().turnEffectQueueActive) get().resolveCurrentTurnEffect();
       return;
     }
 
@@ -328,6 +329,7 @@ export const createLilithSlice: StateCreator<GameState, [], [], LilithSlice> = (
           }
           return state;
         });
+        if (get().turnEffectQueueActive) get().resolveCurrentTurnEffect();
       }, 500);
       return;
     }
@@ -408,10 +410,12 @@ export const createLilithSlice: StateCreator<GameState, [], [], LilithSlice> = (
         }
         return state;
       });
+      if (get().turnEffectQueueActive) get().resolveCurrentTurnEffect();
     }, 500);
   },
 
   cancelLilithReveal: () => {
     set({ pendingLilithReveal: null } as Partial<GameState> as GameState);
+    if (get().turnEffectQueueActive) get().resolveCurrentTurnEffect();
   },
 });

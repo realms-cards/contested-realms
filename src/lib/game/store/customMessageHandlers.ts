@@ -2209,10 +2209,10 @@ export function handleCustomMessage(
         pendingAccusation: null,
       } as Partial<GameState> as GameState);
 
-      // CRITICAL: Persist zone changes to server - we're updating OUR OWN seat so this is allowed
+      // Send only the changed zones (hand, banished)
       try {
         get().trySendPatch({
-          zones: { [victimSeat]: zonesNext[victimSeat] } as Record<
+          zones: { [victimSeat]: { hand, banished } } as unknown as Record<
             PlayerKey,
             Zones
           >,
@@ -2402,10 +2402,10 @@ export function handleCustomMessage(
         pendingInquisition: null,
       } as Partial<GameState> as GameState);
 
-      // Persist zone changes to server
+      // Send only the changed zones (hand, banished)
       try {
         get().trySendPatch({
-          zones: { [victimSeat]: zonesNext[victimSeat] } as Record<
+          zones: { [victimSeat]: { hand, banished } } as unknown as Record<
             PlayerKey,
             Zones
           >,
@@ -4241,10 +4241,10 @@ export function handleCustomMessage(
         pendingLegionOfGall: null,
       } as Partial<GameState> as GameState);
 
-      // CRITICAL: Persist zone changes to server - we're updating OUR OWN seat so this is allowed
+      // Send only the changed zones (collection, banished)
       try {
         get().trySendPatch({
-          zones: { [targetSeat]: zonesNext[targetSeat] } as Record<
+          zones: { [targetSeat]: { collection, banished } } as unknown as Record<
             PlayerKey,
             Zones
           >,
@@ -4781,11 +4781,12 @@ export function handleCustomMessage(
           pendingLilithReveal: { ...pending, phase: "complete" },
         } as Partial<GameState> as GameState);
 
-        // Send patch - send full zones for seat to prevent partial patch issues
+        // Send only the changed zone (spellbook) — zone-property-level merge
+        // preserves the receiver's atlas/hand/graveyard from being overwritten.
         console.log("[Lilith] Sending zones patch");
         get().trySendPatch({
           zones: {
-            [actorKey]: zonesNext[actorKey],
+            [actorKey]: { spellbook: ourSpellbook },
           },
         } as unknown as ServerPatchT);
       } else {

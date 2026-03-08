@@ -104,7 +104,7 @@ export default function DemonicContractOverlay() {
                 }`}
               >
                 <div className="text-lg font-bold text-purple-300">
-                  🔮 Sacrifice Token
+                  Sacrifice Token
                 </div>
                 <div className="text-sm text-gray-400">
                   {hasSacrificeOptions

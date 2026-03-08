@@ -111,6 +111,7 @@ import {
   getEmptySpecialSiteState,
 } from "./store/specialSiteState";
 import { createTorshammarSlice } from "./store/torshammarState";
+import { createTurnEffectQueueSlice } from "./store/turnEffectQueueState";
 import {
   createTransportSlice,
   setTransportStateAccessor,
@@ -250,6 +251,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   ...createShapeshiftSlice(set, get, storeApi),
   ...createAssimilatorSnailSlice(set, get, storeApi),
   ...createHyperparasiteSlice(set, get, storeApi),
+  ...createTurnEffectQueueSlice(set, get, storeApi),
   cardScale: 1,
   // Harbinger portal discount (Gothic expansion) - once per turn mana reduction
   harbingerPortalDiscountUsed: { p1: false, p2: false },
@@ -409,6 +411,8 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         pendingAssimilatorSnail: null,
         assimilatorSnailUsed: createInitialAssimilatorSnailUsed(),
         assimilatorSnailTransforms: [],
+        turnEffectQueue: [],
+        turnEffectQueueActive: false,
 };
       return reset as GameState;
     }),

@@ -1,6 +1,5 @@
 import type { StateCreator } from "zustand";
 import { soundManager } from "@/lib/audio/soundManager";
-import { clearOmphalosDrawnCycle } from "./omphalosState";
 import type {
   CellKey,
   GameState,
@@ -66,6 +65,7 @@ type CoreStateSlice = Pick<
   | "addLife"
   | "nextPhase"
   | "endTurn"
+  | "_executeTurnTransition"
 >;
 
 export const createCoreSlice: StateCreator<
@@ -583,72 +583,59 @@ export const createCoreSlice: StateCreator<
     const cur = state.currentPlayer;
     const nextPlayer = cur === 1 ? 2 : 1;
     const curPlayerNum = cur === 1 ? "1" : "2";
-    const nextPlayerNum = nextPlayer === 1 ? "1" : "2";
 
-    // Log both messages before updating state so they use the current turn number
     get().log(`[p${curPlayerNum}:PLAYER] ends the turn`);
 
-    // Trigger Omphalos end-of-turn draws for the ending player
     const endingPlayerSeat = (cur === 1 ? "p1" : "p2") as PlayerKey;
-    try {
-      clearOmphalosDrawnCycle();
-      get().triggerOmphalosEndOfTurn(endingPlayerSeat);
-    } catch {}
 
-    // Trigger Lilith end-of-turn reveals for the ending player
-    // ONLY if Omphalos didn't queue an auto-resolve confirmation.
-    // If Omphalos is pending, Lilith will be chained after it completes
-    // (see confirmAutoResolve / cancelAutoResolve in autoResolveState.ts)
-    if (!get().pendingAutoResolve) {
-      try {
-        get().triggerLilithEndOfTurn(endingPlayerSeat);
-      } catch {}
-    }
-
-    // Trigger Torshammar Trinket return to hand for the ending player
+    // Sync EOT triggers (must modify permanents before the turn transition patch)
     try {
       get().triggerTorshammarEndOfTurn(endingPlayerSeat);
     } catch {}
-
-    // Clear turn-based bonuses (bloom sites, genesis mana, etc.)
     try {
       get().clearTurnBonuses();
     } catch {}
 
+    const nextKey = (nextPlayer === 1 ? "p1" : "p2") as PlayerKey;
+
+    // Build and start the turn effect queue.
+    // EOT effects (Omphalos, Lilith) resolve first, then the actual turn transition
+    // fires via the turn_transition queue entry, then SOT effects run.
+    get().buildTurnEffectQueue(endingPlayerSeat, nextKey);
+    get().processNextTurnEffect();
+    // Snapshot creation is handled by GameToolbox.tsx useEffect
+  },
+
+  _executeTurnTransition: () => {
+    const state = get();
+    const cur = state.currentPlayer;
+    const nextPlayer = cur === 1 ? 2 : 1;
+    const nextKey = (nextPlayer === 1 ? "p1" : "p2") as PlayerKey;
+    const nextPlayerNum = nextPlayer === 1 ? "1" : "2";
+
     get().log(`Turn passes to [p${nextPlayerNum}:PLAYER]`);
 
-    // IMPORTANT: Re-read permanents AFTER end-of-turn triggers have run
-    // Torshammar, Lilith, Omphalos may have modified the permanents state
+    // Re-read permanents AFTER end-of-turn triggers have run
+    // Omphalos, Lilith may have modified the permanents state
     const permanents: Permanents = { ...get().permanents };
-    const updates: PermanentDeltaUpdate[] = [];
 
+    // Untap next player's permanents
     for (const cellKey of Object.keys(permanents)) {
       const cellPermanents = permanents[cellKey] || [];
       const arr = [...cellPermanents];
       let changed = false;
       for (let i = 0; i < arr.length; i++) {
-        const cur = arr[i];
-        if (!cur) continue;
-        if (cur.owner !== nextPlayer) continue;
-        if (cur.tapped) {
-          const next = bumpPermanentVersion({ ...cur, tapped: false });
-          arr[i] = next;
-          updates.push({
-            at: cellKey as CellKey,
-            entry: {
-              instanceId: next.instanceId ?? undefined,
-              tapped: false,
-              tapVersion: next.tapVersion,
-              version: next.version,
-            },
-          });
+        const perm = arr[i];
+        if (!perm) continue;
+        if (perm.owner !== nextPlayer) continue;
+        if (perm.tapped) {
+          arr[i] = bumpPermanentVersion({ ...perm, tapped: false });
           changed = true;
         }
       }
       if (changed) permanents[cellKey] = arr;
     }
 
-    const nextKey = (nextPlayer === 1 ? "p1" : "p2") as PlayerKey;
     const avatarsNext = {
       ...state.avatars,
       [nextKey]: { ...state.avatars[nextKey], tapped: false },
@@ -660,32 +647,25 @@ export const createCoreSlice: StateCreator<
       [nextKey]: { ...state.players[nextKey], mana: 0 },
     };
 
-    // Reset necromancer skeleton usage for the next player's turn
+    // Reset per-turn usage flags for the next player
     const necromancerSkeletonUsedNext = {
       ...state.necromancerSkeletonUsed,
-      [nextKey]: false, // Reset for the player whose turn is starting
+      [nextKey]: false,
     };
-
-    // Reset mephistopheles summon usage for the next player's turn
     const mephistophelesSummonUsedNext = {
       ...state.mephistophelesSummonUsed,
-      [nextKey]: false, // Reset for the player whose turn is starting
+      [nextKey]: false,
     };
-
-    // Reset harbinger portal discount usage for the next player's turn
     const harbingerPortalDiscountUsedNext = {
       ...state.harbingerPortalDiscountUsed,
-      [nextKey]: false, // Reset for the player whose turn is starting
+      [nextKey]: false,
     };
-
-    // Reset assimilator snail usage for the next player's turn
     const assimilatorSnailUsedNext = {
       ...state.assimilatorSnailUsed,
-      [nextKey]: false, // Reset for the player whose turn is starting
+      [nextKey]: false,
     };
 
     // Revert Assimilator Snail transformations for the player whose turn is starting
-    // (the card text says "until your next turn")
     const snailTransformsToRevert = state.assimilatorSnailTransforms.filter(
       (t) => t.ownerSeat === nextKey,
     );
@@ -716,49 +696,34 @@ export const createCoreSlice: StateCreator<
     const assimilatorSnailTransformsNext =
       state.assimilatorSnailTransforms.filter((t) => t.ownerSeat !== nextKey);
 
-    // Reset pathfinder usage for both players on turn change
     const pathfinderUsedNext = { p1: false, p2: false };
 
-    // Track which Ether Cores are currently in the void at turn start
-    // Ether Core only provides 3 mana if it was cast this turn OR started the turn in the void
+    // Track Ether Cores in void and carried cores at turn start
     const etherCoresInVoidAtTurnStartNext: string[] = [];
-    // Track which core artifacts are currently carried (attached) at turn start
-    // Cores only provide mana if summoned this turn OR were carried at turn start
     const coresCarriedAtTurnStartNext: string[] = [];
     for (const [cellKey, cellPerms] of Object.entries(permanents)) {
       const isVoidCell = !state.board?.sites?.[cellKey];
       for (const perm of cellPerms || []) {
         const cardName = String(perm.card?.name || "").toLowerCase();
         if (!perm.instanceId) continue;
-        // Ether Core void tracking
         if (isVoidCell && cardName === "ether core") {
           etherCoresInVoidAtTurnStartNext.push(perm.instanceId);
         }
-        // Core carried tracking - cores that are attached to a unit at turn start
         const cardType = String(perm.card?.type || "").toLowerCase();
         if (cardType.includes("artifact") && perm.attachedTo) {
-          const isCoreArtifact = cardName.includes("core");
-          if (isCoreArtifact) {
+          if (cardName.includes("core")) {
             coresCarriedAtTurnStartNext.push(perm.instanceId);
           }
         }
       }
     }
 
-    // Build combined patch with all end-of-turn changes
-    // NOTE: We do NOT include zones here - zone changes (like Torshammar's hand update)
-    // are already applied locally, and sending partial zones can wipe the other player's
-    // zone data on the server (server does full replacement, not merge, for zones).
-    // Zone state is private to each player anyway (opponent can't see hand contents).
-
-    // Don't send turn in patch - server increments turn when currentPlayer changes
-    // Include full permanents with __replaceKeys to ensure all trigger changes are synced
-    // Include avatars to ensure correct position is broadcast (e.g., after Pathfinder move)
+    // Build and send combined patch
     const base: ServerPatchT = {
       phase: "Start",
       currentPlayer: nextPlayer,
-      hasDrawnThisTurn: false, // Reset draw tracking for new turn
-      cardsDrawnThisTurn: { p1: 0, p2: 0 }, // Reset Garden of Eden draw counters
+      hasDrawnThisTurn: false,
+      cardsDrawnThisTurn: { p1: 0, p2: 0 },
       players: { [nextKey]: playersNext[nextKey] } as GameState["players"],
       necromancerSkeletonUsed: necromancerSkeletonUsedNext,
       mephistophelesSummonUsed: mephistophelesSummonUsedNext,
@@ -768,24 +733,17 @@ export const createCoreSlice: StateCreator<
       pathfinderUsed: pathfinderUsedNext,
       etherCoresInVoidAtTurnStart: etherCoresInVoidAtTurnStartNext,
       coresCarriedAtTurnStart: coresCarriedAtTurnStartNext,
-      // Include full permanents after all end-of-turn triggers
       permanents,
-      // Include avatars to ensure correct positions are synced
       avatars: avatarsNext,
       __replaceKeys: ["permanents"],
     };
-    // NOTE: We do NOT include deltaPatch when using __replaceKeys: ["permanents"]
-    // The full permanents object already contains untapping changes.
-    // Spreading deltaPatch would OVERWRITE permanents with incomplete delta data,
-    // causing all permanents except the updated one to be lost!
-    // The deltaPatch is only useful when NOT doing a full replacement.
     get().trySendPatch(base);
 
     set({
       phase: "Start",
       currentPlayer: nextPlayer,
-      hasDrawnThisTurn: false, // Reset draw tracking for new turn
-      cardsDrawnThisTurn: { p1: 0, p2: 0 }, // Reset Garden of Eden draw counters
+      hasDrawnThisTurn: false,
+      cardsDrawnThisTurn: { p1: 0, p2: 0 },
       permanents,
       avatars: avatarsNext,
       players: playersNext,
@@ -804,24 +762,5 @@ export const createCoreSlice: StateCreator<
     try {
       get().clearAllDamageForSeat(nextKey);
     } catch {}
-
-    // Trigger Mother Nature start-of-turn reveals for the starting player
-    try {
-      get().triggerMotherNatureStartOfTurn(nextKey);
-    } catch {}
-
-    // Trigger Headless Haunt start-of-turn movement for the starting player
-    try {
-      get().triggerHeadlessHauntStartOfTurn(nextKey);
-    } catch {}
-
-    // Goldfish mode: shuffle hand back to piles and draw fresh hand (hotseat only)
-    // In hotseat, actorKey is null; in online play, actorKey is set
-    if (state.goldfishMode && !state.actorKey) {
-      try {
-        get().triggerGoldfishShuffle(nextKey);
-      } catch {}
-    }
-    // Snapshot creation is handled by GameToolbox.tsx useEffect
   },
 });

@@ -16,23 +16,7 @@ export default function AutoResolveConfirmOverlay() {
   // Only show overlay to the owner
   if (actorKey !== null && ownerSeat !== actorKey) return null;
 
-  // Get icon based on kind
-  const getIcon = () => {
-    switch (kind) {
-      case "omphalos_draw":
-        return "🔮";
-      case "morgana_genesis":
-        return "🧙‍♀️";
-      case "headless_haunt_move":
-        return "👻";
-      case "pith_imp_steal":
-        return "😈";
-      case "lilith_reveal":
-        return "🌙";
-      default:
-        return "⚡";
-    }
-  };
+  // Icons removed for visual consistency — rely on color theming instead
 
   // Get color based on kind
   const getColor = () => {
@@ -62,7 +46,7 @@ export default function AutoResolveConfirmOverlay() {
         <h2
           className={`text-2xl font-fantaisie text-${color}-400 mb-4 text-center`}
         >
-          {getIcon()} {sourceName}
+          {sourceName}
         </h2>
         <p className="text-gray-300 text-center mb-4">{effectDescription}</p>
 

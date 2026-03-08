@@ -155,6 +155,7 @@ function OmphalosHandCard({
     <div className="mb-2">
       {/* Collapsed view - just a button showing card count */}
       <button
+        data-omphalos-hand={omphalos.id}
         onClick={onToggleExpand}
         className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all ${
           expanded
@@ -162,7 +163,7 @@ function OmphalosHandCard({
             : `bg-black/80 text-white/90 hover:bg-black/90 ring-1 ${colors.ring}/50`
         }`}
       >
-        <span className={colors.text}>🔮</span>
+        <span className={colors.text}>&#x2726;</span>
         <span className="font-medium text-sm">{artifactName}</span>
         <span
           className={`px-2 py-0.5 rounded-full text-xs ${

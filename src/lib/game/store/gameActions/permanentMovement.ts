@@ -866,14 +866,85 @@ export const createPermanentMovementSlice: StateCreator<
       }
       if (Object.keys(patch).length > 0) get().trySendPatch(patch);
 
-      // Pith Imp: transfer stolen card ownership when Pith Imp's control changes
+      // Transfer resolver registries when card ownership changes
       const cardNameLower = (item.card?.name || "").toLowerCase();
+      const itemInstanceId = item.instanceId ?? null;
+
+      // Pith Imp: transfer stolen card ownership when Pith Imp's control changes
       if (cardNameLower.includes("pith imp")) {
-        const pithImpInstanceId = item.instanceId ?? null;
-        // Use setTimeout to ensure state is committed before updating pithImpHands
         setTimeout(() => {
           try {
-            get().transferPithImpOwnership(pithImpInstanceId, at, newOwnerSeat);
+            get().transferPithImpOwnership(itemInstanceId, at, newOwnerSeat);
+          } catch {}
+        }, 0);
+      }
+
+      // Omphalos: transfer private hand registry when Omphalos control changes
+      if (cardNameLower.includes("omphalos")) {
+        setTimeout(() => {
+          try {
+            const hands = get().omphalosHands;
+            const updated = hands.map((o) =>
+              (itemInstanceId && o.artifact.instanceId === itemInstanceId) ||
+              o.artifact.at === at
+                ? { ...o, ownerSeat: newOwnerSeat, artifact: { ...o.artifact, owner: newOwner } }
+                : o,
+            );
+            if (updated !== hands) {
+              set({ omphalosHands: updated } as Partial<GameState> as GameState);
+              get().trySendPatch({ omphalosHands: updated });
+            }
+          } catch {}
+        }, 0);
+      }
+
+      // Lilith: transfer minion registry when Lilith control changes
+      if (cardNameLower === "lilith") {
+        setTimeout(() => {
+          try {
+            const minions = get().lilithMinions;
+            const updated = minions.map((m) =>
+              m.instanceId === itemInstanceId
+                ? { ...m, ownerSeat: newOwnerSeat }
+                : m,
+            );
+            if (updated !== minions) {
+              set({ lilithMinions: updated } as Partial<GameState> as GameState);
+            }
+          } catch {}
+        }, 0);
+      }
+
+      // Mother Nature: transfer minion registry when Mother Nature control changes
+      if (cardNameLower === "mother nature") {
+        setTimeout(() => {
+          try {
+            const minions = get().motherNatureMinions;
+            const updated = minions.map((m) =>
+              m.instanceId === itemInstanceId
+                ? { ...m, ownerSeat: newOwnerSeat }
+                : m,
+            );
+            if (updated !== minions) {
+              set({ motherNatureMinions: updated } as Partial<GameState> as GameState);
+            }
+          } catch {}
+        }, 0);
+      }
+
+      // Headless Haunt: transfer registry when Headless Haunt control changes
+      if (cardNameLower.includes("headless haunt")) {
+        setTimeout(() => {
+          try {
+            const haunts = get().headlessHaunts;
+            const updated = haunts.map((h) =>
+              h.instanceId === itemInstanceId
+                ? { ...h, ownerSeat: newOwnerSeat }
+                : h,
+            );
+            if (updated !== haunts) {
+              set({ headlessHaunts: updated } as Partial<GameState> as GameState);
+            }
           } catch {}
         }, 0);
       }

@@ -1,6 +1,5 @@
 import type { StateCreator } from "zustand";
 import type { CustomMessage } from "@/lib/net/transport";
-import { markOmphalosDrawnThisCycle } from "./omphalosState";
 import type {
   CardRef,
   CellKey,
@@ -97,22 +96,9 @@ export const createAutoResolveSlice: StateCreator<
     // Execute the effect based on kind
     switch (kind) {
       case "omphalos_draw": {
-        // Execute Omphalos draw effect
+        // Execute Omphalos draw effect (queue handles per-instance sequencing)
         const omphalosId = callbackData.omphalosId as string;
         get()._executeOmphalosDrawEffect(omphalosId, ownerSeat);
-        // Mark this Omphalos as drawn so re-trigger skips it
-        markOmphalosDrawnThisCycle(omphalosId);
-        // Chain: re-trigger for remaining Omphalos after a short delay
-        // Then chain to Lilith if no more Omphalos auto-resolves are pending
-        setTimeout(() => {
-          get().triggerOmphalosEndOfTurn(ownerSeat);
-          // If all Omphalos are processed, chain to Lilith end-of-turn trigger
-          if (!get().pendingAutoResolve) {
-            try {
-              get().triggerLilithEndOfTurn(ownerSeat);
-            } catch { /* Lilith trigger error is non-fatal */ }
-          }
-        }, 100);
         break;
       }
       case "morgana_genesis": {
@@ -174,13 +160,17 @@ export const createAutoResolveSlice: StateCreator<
         } as unknown as CustomMessage);
       } catch {}
     }
+
+    // Signal turn effect queue for effects fully done after confirmation.
+    // - omphalos_draw: signals from closeRevealOverlay (after card reveal is dismissed)
+    // - lilith_reveal, headless_haunt_move: signal from their own resolution handlers
   },
 
   cancelAutoResolve: () => {
     const pending = get().pendingAutoResolve;
     if (!pending) return;
 
-    const { kind, ownerSeat, sourceName, id, callbackData } = pending;
+    const { kind, ownerSeat, sourceName, id } = pending;
 
     get().log(
       `[${ownerSeat.toUpperCase()}] ${sourceName}: Effect declined (manual resolution)`,
@@ -204,20 +194,9 @@ export const createAutoResolveSlice: StateCreator<
       } catch {}
     }
 
-    // Chain remaining end-of-turn triggers when Omphalos is cancelled
-    if (kind === "omphalos_draw") {
-      const omphalosId = callbackData?.omphalosId as string | undefined;
-      if (omphalosId) markOmphalosDrawnThisCycle(omphalosId);
-      setTimeout(() => {
-        // Re-trigger for remaining Omphalos
-        get().triggerOmphalosEndOfTurn(ownerSeat);
-        // If no more Omphalos pending, chain to Lilith
-        if (!get().pendingAutoResolve) {
-          try {
-            get().triggerLilithEndOfTurn(ownerSeat);
-          } catch { /* Lilith trigger error is non-fatal */ }
-        }
-      }, 100);
+    // Signal turn effect queue: cancellation always completes the current entry
+    if (get().turnEffectQueueActive) {
+      get().resolveCurrentTurnEffect();
     }
   },
 
@@ -300,22 +279,36 @@ export const createAutoResolveSlice: StateCreator<
       omphalosHands: updatedOmphalosHands,
     } as Partial<GameState> as GameState);
 
-    // Send patch
+    // Only send the spellbook change for this seat — zone-property-level
+    // merge in applyServerPatch preserves atlas/hand/graveyard from state.
     const zonePatch: ServerPatchT = {
       zones: {
-        [ownerSeat]: zonesNext[ownerSeat],
-      } as Record<PlayerKey, Zones>,
+        [ownerSeat]: { spellbook },
+      } as unknown as Record<PlayerKey, Zones>,
       omphalosHands: updatedOmphalosHands,
     };
     get().trySendPatch(zonePatch);
 
     const newHandSize =
       updatedOmphalosHands.find((o) => o.id === omphalosId)?.hand.length || 1;
+
+    // Public log (both players see this — don't reveal the card name)
     get().log(
       `[${ownerSeat.toUpperCase()}] ${
         omphalos.artifact.card.name
       } draws a spell (now has ${newHandSize})`,
     );
+
+    // Show the drawn card in a reveal overlay — only to the owning player
+    const actorKey = get().actorKey;
+    if (!actorKey || actorKey === ownerSeat) {
+      get().openRevealOverlay(
+        `${omphalos.artifact.card.name} draws`,
+        [drawnCard],
+        ownerSeat,
+        `[data-omphalos-hand="${omphalosId}"]`,
+      );
+    }
   },
 
   _executeMorganaGenesisEffect: (

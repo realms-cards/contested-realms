@@ -65,8 +65,8 @@ export default function MotherNatureOverlay() {
                 }`}
               >
                 {isMinion
-                  ? "🎯 It's a minion! You may summon it."
-                  : "📚 Not a minion. Stays on top of spellbook."}
+                  ? "It's a minion! You may summon it."
+                  : "Not a minion. Stays on top of spellbook."}
               </p>
             </div>
 
