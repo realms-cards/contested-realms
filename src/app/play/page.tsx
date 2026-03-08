@@ -1440,7 +1440,8 @@ function RevealOverlayWrapper() {
       cards={revealOverlay.cards}
       revealedBy={revealOverlay.revealedBy}
       onClose={closeRevealOverlay}
-      autoCloseDelay={8000} // Auto close after 8 seconds
+      autoCloseDelay={8000}
+      minimizeToSelector={revealOverlay.minimizeToSelector}
     />
   );
 }

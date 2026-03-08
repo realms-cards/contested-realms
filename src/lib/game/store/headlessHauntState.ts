@@ -211,14 +211,7 @@ export const createHeadlessHauntSlice: StateCreator<
     // In online play, only the haunt owner triggers the move
     if (actorKey && actorKey !== startingPlayerSeat) return;
 
-    // Wait for any pending Mother Nature reveals to complete first
-    const pendingMotherNature = get().pendingMotherNatureReveal;
-    if (pendingMotherNature) {
-      setTimeout(() => {
-        get().triggerHeadlessHauntStartOfTurn(startingPlayerSeat);
-      }, 500);
-      return;
-    }
+    // Queue handles ordering — no need to poll for Mother Nature completion
 
     // Check if player has Kythera Mechanism attached to avatar
     const avatar = get().avatars[startingPlayerSeat];
@@ -349,6 +342,7 @@ export const createHeadlessHauntSlice: StateCreator<
           }
           return state;
         });
+        if (get().turnEffectQueueActive) get().resolveCurrentTurnEffect();
       }, 500);
     } else {
       // Move to next haunt
@@ -502,6 +496,7 @@ export const createHeadlessHauntSlice: StateCreator<
             }
             return state;
           });
+          if (get().turnEffectQueueActive) get().resolveCurrentTurnEffect();
         }, 1000);
       } else {
         // Apply state changes and move to next haunt
@@ -699,6 +694,7 @@ export const createHeadlessHauntSlice: StateCreator<
           }
           return state;
         });
+        if (get().turnEffectQueueActive) get().resolveCurrentTurnEffect();
       }, 1500);
     }
   },

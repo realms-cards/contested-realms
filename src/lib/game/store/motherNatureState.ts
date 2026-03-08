@@ -68,15 +68,7 @@ export const createMotherNatureSlice: StateCreator<
     // The opponent will receive the broadcast message
     if (actorKey && actorKey !== startingPlayerSeat) return;
 
-    // Wait for any pending Lilith reveals to complete first
-    // Lilith is an end-of-turn effect that must resolve before start-of-turn effects
-    const pendingLilith = get().pendingLilithReveal;
-    if (pendingLilith) {
-      setTimeout(() => {
-        get().triggerMotherNatureStartOfTurn(startingPlayerSeat);
-      }, 500);
-      return;
-    }
+    // Queue handles ordering — no need to poll for Lilith completion
 
     const zones = get().zones;
     const spellbook = zones[startingPlayerSeat]?.spellbook || [];
@@ -158,6 +150,7 @@ export const createMotherNatureSlice: StateCreator<
             }
             return state;
           });
+          if (get().turnEffectQueueActive) get().resolveCurrentTurnEffect();
         }, 1500);
       }, 2000);
     }
@@ -257,6 +250,7 @@ export const createMotherNatureSlice: StateCreator<
         }
         return state;
       });
+      if (get().turnEffectQueueActive) get().resolveCurrentTurnEffect();
     }, 1000);
   },
 
@@ -296,6 +290,7 @@ export const createMotherNatureSlice: StateCreator<
         }
         return state;
       });
+      if (get().turnEffectQueueActive) get().resolveCurrentTurnEffect();
     }, 1000);
   },
 });

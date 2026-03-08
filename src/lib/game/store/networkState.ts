@@ -390,11 +390,16 @@ export const createNetworkSlice: StateCreator<
             PlayerKey,
             GameState["zones"][PlayerKey]
           >;
-          // For each seat in the patch, replace the entire seat zones object
-          // rather than deep-merging (which could leave stale zone arrays)
+          // Zone-property-level merge: replace individual zone arrays
+          // (spellbook, atlas, hand, graveyard) when present in the patch,
+          // but preserve zone arrays not included. This prevents a patch that
+          // only updates spellbook from wiping atlas/hand with stale data.
           for (const seat of ["p1", "p2"] as PlayerKey[]) {
             if (patchZones[seat] && typeof patchZones[seat] === "object") {
-              merged[seat] = patchZones[seat] as GameState["zones"][PlayerKey];
+              merged[seat] = {
+                ...merged[seat],
+                ...patchZones[seat],
+              } as GameState["zones"][PlayerKey];
             }
           }
           zonesCandidate = merged;
@@ -699,9 +704,17 @@ export const createNetworkSlice: StateCreator<
                 candidateCount === 0 &&
                 Array.isArray(candidateArr)
               ) {
-                console.error(
-                  `[FILTER_CATASTROPHE] ${seat}.${zoneName}: filtering wiped ${stateCount} cards to 0! Restoring.`,
-                );
+                // Expected for authoritative snapshots where server hides
+                // opponent zone data — log at debug level, not error.
+                if (replaceKeys.size > 0) {
+                  console.debug(
+                    `[ZONE_RESTORE] ${seat}.${zoneName}: server snapshot had empty zone (${stateCount} cards preserved)`,
+                  );
+                } else {
+                  console.warn(
+                    `[FILTER_CATASTROPHE] ${seat}.${zoneName}: filtering wiped ${stateCount} cards to 0! Restoring.`,
+                  );
+                }
                 if (candidateZones && candidateSeatZones) {
                   (candidateSeatZones as Record<string, CardRef[]>)[zoneName] =
                     stateArr ?? [];

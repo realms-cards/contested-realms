@@ -140,7 +140,7 @@ export function StolenCardIndicator({
       <div className="relative">
         {/* Stacked card backs indicator */}
         <div className="w-6 h-8 rounded bg-gradient-to-br from-purple-700 to-purple-900 border border-purple-400 shadow-lg flex items-center justify-center">
-          <span className="text-xs">🔮</span>
+          <span className="text-xs text-purple-300">*</span>
         </div>
         {/* Count badge */}
         {totalCards > 1 && (

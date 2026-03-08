@@ -14,15 +14,6 @@ function newOmphalosId() {
     .slice(2, 6)}`;
 }
 
-// Module-level tracking: which Omphalos IDs have already drawn this end-of-turn cycle
-const _drawnThisCycle = new Set<string>();
-export function markOmphalosDrawnThisCycle(id: string) {
-  _drawnThisCycle.add(id);
-}
-export function clearOmphalosDrawnCycle() {
-  _drawnThisCycle.clear();
-}
-
 // Omphalos private hand entry - similar to Morgana but for artifacts
 export type OmphalosHandEntry = {
   id: string;
@@ -175,53 +166,26 @@ export const createOmphalosSlice: StateCreator<
     );
   },
 
-  // Trigger end of turn - shows confirmation before drawing for each Omphalos
+  // Trigger end of turn - shows confirmation before drawing for each Omphalos.
+  // NOTE: The TurnEffectQueue now dispatches omphalos_draw entries directly,
+  // bypassing this function. Kept for backward compatibility / manual invocation.
   triggerOmphalosEndOfTurn: (endingPlayerSeat: PlayerKey) => {
     const omphalosHands = get().omphalosHands;
     const zones = get().zones;
     const actorKey = get().actorKey;
 
-    // Find all Omphalos owned by the ending player
     const playerOmphalos = omphalosHands.filter(
       (o) => o.ownerSeat === endingPlayerSeat,
     );
 
     if (playerOmphalos.length === 0) return;
-
-    // In online play, only the owner triggers
     if (actorKey && actorKey !== endingPlayerSeat) return;
 
-    console.log(
-      `[Omphalos] End of turn trigger for ${endingPlayerSeat}, found ${playerOmphalos.length} Omphalos`,
-    );
-
-    // Filter out Omphalos that already drew this end-of-turn cycle
-    const unprocessed = playerOmphalos.filter(
-      (o) => !_drawnThisCycle.has(o.id),
-    );
-
-    if (unprocessed.length === 0) {
-      // All Omphalos have drawn this cycle - clear tracking
-      _drawnThisCycle.clear();
-      return;
-    }
-
-    // Process each unprocessed Omphalos with confirmation
-    for (const omphalos of unprocessed) {
+    // Find first Omphalos that can draw
+    for (const omphalos of playerOmphalos) {
       const spellbook = zones[endingPlayerSeat]?.spellbook || [];
+      if (spellbook.length === 0) continue;
 
-      if (spellbook.length === 0) {
-        get().log(
-          `[${endingPlayerSeat.toUpperCase()}] ${
-            omphalos.artifact.card.name
-          }: No spells in spellbook to draw`,
-        );
-        // Mark as drawn so we skip it on re-trigger
-        _drawnThisCycle.add(omphalos.id);
-        continue;
-      }
-
-      // Show confirmation dialog before auto-resolving
       get().beginAutoResolve({
         kind: "omphalos_draw",
         ownerSeat: endingPlayerSeat,
@@ -229,12 +193,8 @@ export const createOmphalosSlice: StateCreator<
         sourceLocation: omphalos.artifact.at,
         sourceInstanceId: omphalos.artifact.instanceId,
         effectDescription: `Draw a spell from your spellbook into ${omphalos.artifact.card.name}'s hand`,
-        callbackData: {
-          omphalosId: omphalos.id,
-        },
+        callbackData: { omphalosId: omphalos.id },
       });
-
-      // Only process one Omphalos at a time (user must confirm each)
       break;
     }
   },

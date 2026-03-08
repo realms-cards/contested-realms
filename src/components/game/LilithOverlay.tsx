@@ -37,7 +37,7 @@ export default function LilithOverlay({ playerNames }: LilithOverlayProps) {
       {/* Top bar with status */}
       <div className="fixed inset-x-0 top-6 z-[201] pointer-events-none flex justify-center">
         <div className="pointer-events-auto px-5 py-3 rounded-full bg-black/90 text-white ring-1 ring-purple-500/50 shadow-lg text-lg md:text-xl flex items-center gap-3 select-none">
-          <span className="text-purple-400 font-fantaisie">😈 Lilith</span>
+          <span className="text-purple-400 font-fantaisie">Lilith</span>
           <span className="opacity-80">
             {phase === "revealing" && "Revealing opponent's top spell..."}
             {phase === "resolving" && "Resolving..."}
@@ -110,8 +110,8 @@ export default function LilithOverlay({ playerNames }: LilithOverlayProps) {
                     }`}
                   >
                     {isMinion
-                      ? "🎯 It's a minion! Lilith will summon it."
-                      : "📚 Not a minion. Goes to bottom of spellbook."}
+                      ? "It's a minion! Lilith will summon it."
+                      : "Not a minion. Goes to bottom of spellbook."}
                   </p>
 
                   {/* Action button - only Lilith owner can resolve */}
