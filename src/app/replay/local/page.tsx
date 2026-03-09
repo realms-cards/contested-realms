@@ -206,7 +206,7 @@ function LocalReplayContent() {
       : 0;
 
   return (
-    <div className="fixed inset-0 w-screen h-screen bg-slate-900">
+    <div className="fixed inset-0 w-screen h-[100dvh] bg-slate-900">
       {/* Local replay indicator */}
       <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 px-3 py-1 bg-amber-600/80 rounded-full text-xs font-semibold text-white">
         Local Replay

@@ -639,7 +639,7 @@ export default function OnlineDraftScreen({
 
   // Main draft interface
   return (
-    <div className="fixed inset-0 w-screen h-screen bg-slate-900">
+    <div className="fixed inset-0 w-screen h-[100dvh] bg-slate-900">
       {/* Draft UI Header */}
       <div className="absolute top-0 left-0 right-0 z-20 bg-slate-800/90 backdrop-blur-sm border-b border-slate-600">
         <div className="flex items-center justify-between p-4">

@@ -1687,7 +1687,7 @@ export default function TournamentDraft3DScreen({
 
   // Main 3D draft UI (similar to EnhancedOnlineDraft3DScreen but adapted)
   return (
-    <div className="fixed inset-0 w-screen h-screen">
+    <div className="fixed inset-0 w-screen h-[100dvh]">
       <FloatingChat tournamentId={tournamentId} mode="bubble" />
       <div className="absolute inset-0 w-full h-full">
         <Canvas

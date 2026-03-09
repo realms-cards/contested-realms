@@ -236,41 +236,10 @@ export const createSearingTruthSlice: StateCreator<
     const targetSeat = pending.targetSeat;
     const damageAmount = pending.damageAmount;
 
-    // Apply damage to target player
+    // Apply damage using addLife which handles state transitions, events,
+    // network patches, and checkMatchEnd (fixes Death's Door not triggering death)
     if (damageAmount > 0) {
-      const players = get().players;
-      const targetPlayer = players[targetSeat];
-      if (!targetPlayer) return;
-      const newLife = targetPlayer.life - damageAmount;
-
-      // Determine life state
-      let newLifeState = targetPlayer.lifeState;
-      if (newLife <= 0) {
-        if (targetPlayer.lifeState === "alive") {
-          newLifeState = "dd"; // Death's Door
-        } else if (targetPlayer.lifeState === "dd") {
-          newLifeState = "dead";
-        }
-      }
-
-      const playersNext = {
-        ...players,
-        [targetSeat]: {
-          ...targetPlayer,
-          life: Math.max(0, newLife),
-          lifeState: newLifeState,
-        },
-      };
-
-      set({ players: playersNext } as Partial<GameState> as GameState);
-
-      // Send only affected player's data to avoid overwriting opponent's state
-      const playersPatch: ServerPatchT = {
-        players: {
-          [targetSeat]: playersNext[targetSeat],
-        } as GameState["players"],
-      };
-      get().trySendPatch(playersPatch);
+      get().addLife(targetSeat, -damageAmount);
     }
 
     set({ pendingSearingTruth: null } as Partial<GameState> as GameState);

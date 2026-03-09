@@ -1199,7 +1199,7 @@ export default function OnlineDraft3DScreen({
   }
 
   return (
-    <div className="fixed inset-0 w-screen h-screen">
+    <div className="fixed inset-0 w-screen h-[100dvh]">
       {/* 3D Stage */}
       <div className="absolute inset-0 w-full h-full">
         <Canvas

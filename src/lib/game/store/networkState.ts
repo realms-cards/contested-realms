@@ -392,13 +392,30 @@ export const createNetworkSlice: StateCreator<
           >;
           // Zone-property-level merge: replace individual zone arrays
           // (spellbook, atlas, hand, graveyard) when present in the patch,
-          // but preserve zone arrays not included. This prevents a patch that
-          // only updates spellbook from wiping atlas/hand with stale data.
+          // but preserve zone arrays not included. Also skip merging empty
+          // arrays when state has data — this prevents server/opponent patches
+          // from wiping hidden zone data (opponent's hand, atlas, etc.).
           for (const seat of ["p1", "p2"] as PlayerKey[]) {
             if (patchZones[seat] && typeof patchZones[seat] === "object") {
+              const patchSeat = patchZones[seat] as Record<string, unknown>;
+              const stateSeat = merged[seat] as Record<string, unknown> | undefined;
+              const safePatch: Record<string, unknown> = {};
+              for (const [key, val] of Object.entries(patchSeat)) {
+                // Skip empty arrays when state has data — the sender likely
+                // doesn't have access to this zone (hidden opponent data)
+                if (
+                  Array.isArray(val) &&
+                  val.length === 0 &&
+                  Array.isArray(stateSeat?.[key]) &&
+                  (stateSeat[key] as unknown[]).length > 0
+                ) {
+                  continue;
+                }
+                safePatch[key] = val;
+              }
               merged[seat] = {
                 ...merged[seat],
-                ...patchZones[seat],
+                ...safePatch,
               } as GameState["zones"][PlayerKey];
             }
           }

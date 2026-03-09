@@ -232,7 +232,7 @@ export default function ReplayViewerPage() {
       : 0;
 
   return (
-    <div className="fixed inset-0 w-screen h-screen bg-slate-900">
+    <div className="fixed inset-0 w-screen h-[100dvh] bg-slate-900">
       {/* 3D Game View */}
       <div className="absolute inset-0 w-full h-full">
         <ClientCanvas

@@ -2,7 +2,6 @@
 
 import Image from "next/image";
 import { useGameStore } from "@/lib/game/store";
-import { getCellNumber } from "@/lib/game/store/utils/boardHelpers";
 
 /**
  * Overlay that displays when the player is in targeting mode
@@ -14,8 +13,6 @@ export default function PrivateHandTargetingOverlay() {
   const setPendingPrivateHandCast = useGameStore(
     (s) => s.setPendingPrivateHandCast,
   );
-  const boardWidth = useGameStore((s) => s.board.size.w);
-  const boardHeight = useGameStore((s) => s.board.size.h);
 
   if (!pendingPrivateHandCast) return null;
 
@@ -26,9 +23,7 @@ export default function PrivateHandTargetingOverlay() {
   // Build instruction text
   let instruction = "Click a tile to cast this card";
   if (mustCastAtLocation) {
-    const [x, y] = mustCastAtLocation.split(",").map(Number);
-    const tileNo = getCellNumber(x, y, boardWidth, boardHeight);
-    instruction = `Click tile #${tileNo} to summon this minion`;
+    instruction = "Click the Omphalos tile to summon this minion";
   }
 
   return (
