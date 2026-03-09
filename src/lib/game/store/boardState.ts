@@ -8,6 +8,7 @@ import { isMergedTower } from "./babelTowerState";
 import type {
   CellKey,
   GameState,
+  PermanentItem,
   PlayerKey,
   ServerPatchT,
   Zones,
@@ -1100,6 +1101,19 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
         });
       }
 
+      // Update Omphalos hand entries when their artifact location changes
+      const omphalosHandsNext = state.omphalosHands.map((o) => {
+        if (o.artifact.at === sourceKey) {
+          return { ...o, artifact: { ...o.artifact, at: targetKey } };
+        }
+        if (targetSite && o.artifact.at === targetKey) {
+          return { ...o, artifact: { ...o.artifact, at: sourceKey } };
+        }
+        return o;
+      });
+      const omphalosChanged = omphalosHandsNext !== state.omphalosHands &&
+        omphalosHandsNext.some((o, i) => o !== state.omphalosHands[i]);
+
       // Check actor permissions in online mode (bypassed for Earthquake swaps)
       if (state.transport && state.actorKey && !opts?.bypassOwnerCheck) {
         const ownerSeat = seatFromOwner(sourceSite.owner);
@@ -1123,15 +1137,34 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
         sites[targetKey] = sourceSite;
       }
 
-      // Build new permanents map - swap all permanents between cells
+      // Build new permanents map - swap permanents between cells
+      // Auras and rubble tokens stay at their board position (they're tile-bound)
       // IMPORTANT: Deep copy the arrays to avoid reference issues
       const permanents = { ...state.permanents };
-      const sourcePerms = [...(state.permanents[sourceKey] || [])];
-      const targetPerms = [...(state.permanents[targetKey] || [])];
+      const sourcePermsAll = [...(state.permanents[sourceKey] || [])];
+      const targetPermsAll = [...(state.permanents[targetKey] || [])];
+
+      // Identify permanents that should NOT move (auras and rubble tokens)
+      const shouldStayInPlace = (p: PermanentItem): boolean => {
+        const cardType = (p.card?.type || "").toLowerCase();
+        const cardSubTypes = (p.card?.subTypes || "").toLowerCase();
+        const cardName = (p.card?.name || "").toLowerCase();
+        // Auras stay at their board position
+        if (cardType.includes("aura") || cardSubTypes.includes("aura")) return true;
+        // Rubble tokens stay at their board position
+        if (cardName === "rubble" && cardType.includes("token")) return true;
+        return false;
+      };
+
+      // Split permanents into mobile (swap with site) and stationary (stay in place)
+      const sourceMoving = sourcePermsAll.filter((p) => !shouldStayInPlace(p));
+      const sourceStationary = sourcePermsAll.filter((p) => shouldStayInPlace(p));
+      const targetMoving = targetPermsAll.filter((p) => !shouldStayInPlace(p));
+      const targetStationary = targetPermsAll.filter((p) => shouldStayInPlace(p));
 
       // Update attachedTo.at references so relics/attachments follow their host
       const updateAttachedToRefs = (
-        perms: typeof sourcePerms,
+        perms: typeof sourcePermsAll,
         oldKey: CellKey,
         newKey: CellKey,
       ) =>
@@ -1143,38 +1176,50 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
         });
 
       if (isSwap) {
-        // Swap: source gets target's permanents, target gets source's permanents
-        // Update attachedTo.at: perms moving from target→source, source→target
-        const updatedTargetPerms = updateAttachedToRefs(
-          targetPerms,
+        // Swap: mobile permanents cross over, stationary ones stay
+        const updatedTargetMoving = updateAttachedToRefs(
+          targetMoving,
           targetKey,
           sourceKey,
         );
-        const updatedSourcePerms = updateAttachedToRefs(
-          sourcePerms,
+        const updatedSourceMoving = updateAttachedToRefs(
+          sourceMoving,
           sourceKey,
           targetKey,
         );
-        if (updatedTargetPerms.length > 0) {
-          permanents[sourceKey] = updatedTargetPerms;
+        // Source cell gets: target's mobile perms + source's stationary perms
+        const sourceResult = [...updatedTargetMoving, ...sourceStationary];
+        // Target cell gets: source's mobile perms + target's stationary perms
+        const targetResult = [...updatedSourceMoving, ...targetStationary];
+        if (sourceResult.length > 0) {
+          permanents[sourceKey] = sourceResult;
         } else {
           delete permanents[sourceKey];
         }
-        if (updatedSourcePerms.length > 0) {
-          permanents[targetKey] = updatedSourcePerms;
+        if (targetResult.length > 0) {
+          permanents[targetKey] = targetResult;
         } else {
           delete permanents[targetKey];
         }
       } else {
-        // Move to void: target gets source's permanents, source becomes empty
-        const updatedSourcePerms = updateAttachedToRefs(
-          sourcePerms,
+        // Move to void: mobile source perms go to target, stationary perms stay
+        const updatedSourceMoving = updateAttachedToRefs(
+          sourceMoving,
           sourceKey,
           targetKey,
         );
-        delete permanents[sourceKey];
-        if (updatedSourcePerms.length > 0) {
-          permanents[targetKey] = updatedSourcePerms;
+        // Source cell keeps only stationary permanents
+        if (sourceStationary.length > 0) {
+          permanents[sourceKey] = sourceStationary;
+        } else {
+          delete permanents[sourceKey];
+        }
+        // Target cell gets source's mobile perms + target's existing stationary perms
+        const targetResult = [...updatedSourceMoving, ...targetStationary];
+        if (targetResult.length > 0) {
+          permanents[targetKey] = targetResult;
+        } else {
+          delete permanents[targetKey];
         }
       }
 
@@ -1235,6 +1280,7 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
           permanents: permanents as ServerPatchT["permanents"],
           avatars,
           babelTowers: babelTowersNext,
+          ...(omphalosChanged ? { omphalosHands: omphalosHandsNext } : {}),
         };
         get().trySendPatch(patch);
       }
@@ -1244,6 +1290,7 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
         permanents,
         avatars,
         babelTowers: babelTowersNext,
+        ...(omphalosChanged ? { omphalosHands: omphalosHandsNext } : {}),
       } as Partial<GameState> as GameState;
     }),
 

@@ -859,7 +859,7 @@ export default function Draft3DPage() {
   }
 
   return (
-    <div className="fixed inset-0 w-screen h-screen">
+    <div className="fixed inset-0 w-screen h-[100dvh]">
       {/* 3D Game View as the stage */}
       <div className="absolute inset-0 w-full h-full">
         <ClientCanvas

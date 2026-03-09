@@ -2918,7 +2918,7 @@ export default function OnlineMatchPage() {
   }
 
   return (
-    <div className="fixed inset-0 w-screen h-screen select-none">
+    <div className="fixed inset-0 w-screen h-[100dvh] select-none">
       {/* Camera controls - left: reset icon + 2D/3D buttons (hidden when uiHidden) */}
       {!uiHidden && (
         <div

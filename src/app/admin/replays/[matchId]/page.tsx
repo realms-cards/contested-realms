@@ -214,7 +214,7 @@ export default function AdminBotReplayViewerPage() {
       : 0;
 
   return (
-    <div className="fixed inset-0 w-screen h-screen bg-slate-900">
+    <div className="fixed inset-0 w-screen h-[100dvh] bg-slate-900">
       {/* Admin Badge */}
       <div className="absolute top-4 left-4 z-50 bg-amber-500/20 border border-amber-500/50 px-3 py-1 rounded-lg">
         <span className="text-amber-200 text-xs font-semibold uppercase tracking-wide">

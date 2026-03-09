@@ -5098,7 +5098,7 @@ function AuthenticatedDeckEditor() {
   }, []);
 
   return (
-    <div className="fixed inset-0 w-screen h-screen">
+    <div className="fixed inset-0 w-screen h-[100dvh]">
       {(() => {
         const tournamentId = searchParams?.get("tournament") || null;
         if (!tournamentId) return null;

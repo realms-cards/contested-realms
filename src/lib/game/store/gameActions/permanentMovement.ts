@@ -1,5 +1,5 @@
 import type { StateCreator } from "zustand";
-import { isMonumentByName, isAutomatonByName } from "../omphalosState";
+import { isMonumentByName, isAutomatonByName, isOmphalos } from "../omphalosState";
 import type {
   CellKey,
   GameState,
@@ -213,6 +213,27 @@ export const createPermanentMovementSlice: StateCreator<
           }
         }, 0);
       }
+      // Update Omphalos hand registry when an Omphalos artifact moves
+      if (fromKey !== toKey && isOmphalos(exists.card?.name || "")) {
+        setTimeout(() => {
+          const s = get();
+          const updated = s.omphalosHands.map((o) => {
+            if (
+              o.artifact.at === fromKey &&
+              (existsInstanceId
+                ? o.artifact.instanceId === existsInstanceId
+                : true)
+            ) {
+              return { ...o, artifact: { ...o.artifact, at: toKey } };
+            }
+            return o;
+          });
+          if (updated.some((o, i) => o !== s.omphalosHands[i])) {
+            set({ omphalosHands: updated } as Partial<GameState> as GameState);
+            s.trySendPatch({ omphalosHands: updated });
+          }
+        }, 0);
+      }
       return {
         permanents: finalPer,
         selectedPermanent: null,
@@ -299,6 +320,26 @@ export const createPermanentMovementSlice: StateCreator<
           };
         }
         get().trySendPatch(patch);
+      }
+      // Update Omphalos hand registry when an Omphalos artifact moves
+      if (fromKey !== toKey && isOmphalos(exists.card?.name || "")) {
+        const existsIid = exists.instanceId ?? exists.card?.instanceId ?? null;
+        setTimeout(() => {
+          const s = get();
+          const updatedOmph = s.omphalosHands.map((o) => {
+            if (
+              o.artifact.at === fromKey &&
+              (existsIid ? o.artifact.instanceId === existsIid : true)
+            ) {
+              return { ...o, artifact: { ...o.artifact, at: toKey } };
+            }
+            return o;
+          });
+          if (updatedOmph.some((o, i) => o !== s.omphalosHands[i])) {
+            set({ omphalosHands: updatedOmph } as Partial<GameState> as GameState);
+            s.trySendPatch({ omphalosHands: updatedOmph });
+          }
+        }, 0);
       }
       return {
         permanents: finalPer,

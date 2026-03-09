@@ -1716,7 +1716,7 @@ export default function EnhancedOnlineDraft3DScreen({
   }
 
   return (
-    <div className="fixed inset-0 w-screen h-screen">
+    <div className="fixed inset-0 w-screen h-[100dvh]">
       {/* Enhanced 3D Stage */}
       <div className="absolute inset-0 w-full h-full">
         <Canvas
