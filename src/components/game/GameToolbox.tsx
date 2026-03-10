@@ -1549,7 +1549,7 @@ export default function GameToolbox({
                   onChange={() => setGraphicsSettings({ showResolverGlow: !graphicsSettings.showResolverGlow })}
                   className="w-4 h-4 rounded bg-white/10 border-white/20 text-violet-500 focus:ring-violet-500/50"
                 />
-                <span className="text-xs">Show resolver glow on cards</span>
+                <span className="text-xs">Show purple outline on auto-resolver cards</span>
               </label>
               {/* Goldfish Mode (hotseat only) */}
               {!isOnline && (

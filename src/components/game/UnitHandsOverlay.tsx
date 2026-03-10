@@ -175,6 +175,7 @@ function UnitHandButton({
     <div className="flex flex-col items-end">
       {/* Compact button with card image */}
       <button
+        data-omphalos-hand={unitHand.kind === "omphalos" ? unitHand.entry.id : undefined}
         onClick={onToggleExpand}
         className={`flex items-center gap-1.5 p-1 pr-2 rounded-lg transition-all ${
           expanded
@@ -212,7 +213,7 @@ function UnitHandButton({
           <p className={`${colors.text} text-xs mb-2 text-center`}>
             {isOwner
               ? handCount > 0
-                ? "Click a card to select, then cast"
+                ? "Select a card, then cast it"
                 : unitHand.kind === "omphalos"
                 ? "Will draw at end of turn"
                 : "No spells remaining"

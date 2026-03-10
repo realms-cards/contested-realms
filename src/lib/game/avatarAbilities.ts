@@ -24,6 +24,7 @@ export type AvatarAbility =
   | "mephistopheles"
   | "pathfinder"
   | "savior"
+  | "geomancer"
   | null;
 
 /**
@@ -150,6 +151,17 @@ export function isPathfinder(avatarName: string | null | undefined): boolean {
 }
 
 /**
+ * Check if an avatar name indicates Geomancer
+ * Uses case-insensitive matching
+ * Geomancer: Tap → Play or draw a site. If you played an earth site, fill a void adjacent to you with Rubble.
+ * Tap → Replace an adjacent Rubble with the topmost site of your atlas.
+ */
+export function isGeomancer(avatarName: string | null | undefined): boolean {
+  if (!avatarName) return false;
+  return avatarName.toLowerCase().includes("geomancer");
+}
+
+/**
  * Check if an avatar name indicates Savior (Gothic expansion)
  * Uses case-insensitive matching
  * Savior: Pay (1) to ward a minion that entered the realm this turn.
@@ -199,6 +211,7 @@ export function getAvatarAbility(
   if (name.includes("interrogator")) return "interrogator";
   if (name.includes("mephistopheles")) return "mephistopheles";
   if (name.includes("pathfinder")) return "pathfinder";
+  if (name.includes("geomancer")) return "geomancer";
   if (name.includes("savior")) return "savior";
 
   return null;

@@ -1,5 +1,5 @@
 import type { StateCreator } from "zustand";
-import { isAnimist, isHarbinger } from "@/lib/game/avatarAbilities";
+import { isAnimist, isGeomancer, isHarbinger } from "@/lib/game/avatarAbilities";
 import {
   BEACON_GENESIS_SITES,
   ELEMENT_CHOICE_SITES,
@@ -684,6 +684,16 @@ export const createPlayActionsSlice: StateCreator<
               casterSeat: who,
             });
           }, 0);
+        }
+
+        // Geomancer ability 1: "If you played an earth site, fill a void adjacent to you with Rubble."
+        if (isGeomancer(get().avatars[who]?.card?.name)) {
+          const earthThreshold = Number(card.thresholds?.earth ?? 0);
+          if (earthThreshold > 0) {
+            setTimeout(() => {
+              get().beginGeomancerFill(who);
+            }, 100); // Slight delay to let site placement state settle
+          }
         }
 
         const nextInteractionLog = expireInteractionGrant(

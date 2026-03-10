@@ -34,7 +34,7 @@ export default function CardGlow({
   flat = true,
 }: CardGlowProps) {
   const aspect = width / height;
-  
+
   const uniforms = useMemo(
     () => ({
       u_color: { value: new Color(color) },
@@ -99,7 +99,7 @@ export default function CardGlow({
         `}
         transparent
         depthWrite={false}
-        depthTest={false}
+        depthTest
         polygonOffset
         polygonOffsetFactor={1}
         polygonOffsetUnits={1}

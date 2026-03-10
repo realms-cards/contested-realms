@@ -40,6 +40,7 @@ import { EndTurnConfirmDialog } from "@/components/game/EndTurnConfirmDialog";
 import EnhancedOnlineDraft3DScreen from "@/components/game/EnhancedOnlineDraft3DScreen";
 import FrontierSettlersOverlay from "@/components/game/FrontierSettlersOverlay";
 import GameToolbox from "@/components/game/GameToolbox";
+import GeomancerOverlay from "@/components/game/GeomancerOverlay";
 import HarbingerPortalScreen from "@/components/game/HarbingerPortalScreen";
 import HeadlessHauntOverlay from "@/components/game/HeadlessHauntOverlay";
 import HighlandPrincessOverlay from "@/components/game/HighlandPrincessOverlay";
@@ -70,6 +71,7 @@ import OnlineSealedDeckLoader from "@/components/game/OnlineSealedDeckLoader";
 import OnlineStatusBar from "@/components/game/OnlineStatusBar";
 import OverlayBackdrop from "@/components/game/OverlayBackdrop";
 import PathfinderPlayOverlay from "@/components/game/PathfinderPlayOverlay";
+import KettletopLeprechaunOverlay from "@/components/game/KettletopLeprechaunOverlay";
 import PigsOfTheSounderOverlay from "@/components/game/PigsOfTheSounderOverlay";
 import PileSearchDialog from "@/components/game/PileSearchDialog";
 import PithImpOverlay from "@/components/game/PithImpOverlay";
@@ -599,6 +601,11 @@ export default function OnlineMatchPage() {
     "waiting" | "deck_construction" | "in_progress" | "ended" | null
   >(null);
   const joinAttemptedForRef = useRef<string | null>(null);
+  // Stable refs for functions from useOnline() that change identity every render
+  const joinMatchRef = useRef(joinMatch);
+  joinMatchRef.current = joinMatch;
+  const leaveMatchRef = useRef(leaveMatch);
+  leaveMatchRef.current = leaveMatch;
   const sealedSubmissionSentForRef = useRef<string | null>(null);
   const draftSubmissionSentForRef = useRef<string | null>(null);
   const tournamentDeckSubmittedRef = useRef<string | null>(null);
@@ -709,7 +716,7 @@ export default function OnlineMatchPage() {
         joinAttemptedForRef.current = matchId;
         void (isSpectatorView && transport?.watchMatch
           ? transport.watchMatch(matchId)
-          : joinMatch(matchId));
+          : joinMatchRef.current(matchId));
       }
       return;
     }
@@ -725,13 +732,11 @@ export default function OnlineMatchPage() {
     joinAttemptedForRef.current = matchId;
     void (isSpectatorView && transport?.watchMatch
       ? transport.watchMatch(matchId)
-      : joinMatch(matchId));
+      : joinMatchRef.current(matchId));
   }, [
     connected,
     match?.id,
     matchId,
-    joinMatch,
-    leaveMatch,
     transport,
     isSpectatorView,
   ]);
@@ -3505,8 +3510,12 @@ export default function OnlineMatchPage() {
               <AssortedAnimalsOverlay />
               {/* Frontier Settlers Overlay (tap: place site) */}
               <FrontierSettlersOverlay />
+              {/* Geomancer Overlay (tap: replace adjacent Rubble) */}
+              <GeomancerOverlay />
               {/* Pigs of the Sounder Overlay (Deathrite) */}
               <PigsOfTheSounderOverlay />
+              {/* Kettletop Leprechaun Overlay (Deathrite: draw site) */}
+              <KettletopLeprechaunOverlay />
               {/* Demonic Contract Overlay */}
               <DemonicContractOverlay />
               {/* Raise Dead Overlay (summon random dead minion) */}

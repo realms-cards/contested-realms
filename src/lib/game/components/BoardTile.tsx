@@ -7,6 +7,7 @@ import { ChaosTwisterLandingOverlay } from "@/lib/game/components/ChaosTwisterLa
 import { InquisitionSummonTargetOverlay } from "@/lib/game/components/InquisitionSummonTargetOverlay";
 import { MagicTargetOverlay } from "@/lib/game/components/MagicTargetOverlay";
 import { MephistophelesSummonTargetOverlay } from "@/lib/game/components/MephistophelesSummonTargetOverlay";
+import { GeomancerTargetOverlay } from "@/lib/game/components/GeomancerTargetOverlay";
 import { PathfinderTargetOverlay } from "@/lib/game/components/PathfinderTargetOverlay";
 import {
   PermanentStack,
@@ -75,6 +76,12 @@ type BoardTileProps = {
   pathfinderContext: {
     pendingPathfinderPlay: GameState["pendingPathfinderPlay"];
     selectPathfinderTarget: GameState["selectPathfinderTarget"];
+  };
+  geomancerContext: {
+    pendingGeomancerPlay: GameState["pendingGeomancerPlay"];
+    selectGeomancerTarget: GameState["selectGeomancerTarget"];
+    pendingGeomancerFill: GameState["pendingGeomancerFill"];
+    selectGeomancerFillTarget: GameState["selectGeomancerFillTarget"];
   };
   inquisitionSummonContext: {
     pendingInquisitionSummon: GameState["pendingInquisitionSummon"];
@@ -158,6 +165,7 @@ export function BoardTile({
   atlanteanFateContext,
   mephistophelesSummonContext,
   pathfinderContext,
+  geomancerContext,
   inquisitionSummonContext,
   counterHandlers,
   movementHandlers,
@@ -241,6 +249,10 @@ export function BoardTile({
         }
         pendingPathfinderPlay={pathfinderContext.pendingPathfinderPlay}
         selectPathfinderTarget={pathfinderContext.selectPathfinderTarget}
+        pendingGeomancerPlay={geomancerContext.pendingGeomancerPlay}
+        selectGeomancerTarget={geomancerContext.selectGeomancerTarget}
+        pendingGeomancerFill={geomancerContext.pendingGeomancerFill}
+        selectGeomancerFillTarget={geomancerContext.selectGeomancerFillTarget}
         pendingInquisitionSummon={
           inquisitionSummonContext.pendingInquisitionSummon
         }
@@ -342,6 +354,14 @@ export function BoardTile({
         tileX={tileX}
         tileY={tileY}
         pendingPathfinderPlay={pathfinderContext.pendingPathfinderPlay}
+      />
+
+      {/* Geomancer target overlay - rendered under cards */}
+      <GeomancerTargetOverlay
+        tileX={tileX}
+        tileY={tileY}
+        pendingGeomancerPlay={geomancerContext.pendingGeomancerPlay}
+        pendingGeomancerFill={geomancerContext.pendingGeomancerFill}
       />
 
       {/* Inquisition summon target overlay - rendered under cards */}

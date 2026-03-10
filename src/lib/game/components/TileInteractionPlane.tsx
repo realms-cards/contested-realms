@@ -46,6 +46,11 @@ export type TileInteractionPlaneProps = {
   // Pathfinder target selection support
   pendingPathfinderPlay?: GameState["pendingPathfinderPlay"];
   selectPathfinderTarget?: GameState["selectPathfinderTarget"];
+  // Geomancer target selection support (both abilities)
+  pendingGeomancerPlay?: GameState["pendingGeomancerPlay"];
+  selectGeomancerTarget?: GameState["selectGeomancerTarget"];
+  pendingGeomancerFill?: GameState["pendingGeomancerFill"];
+  selectGeomancerFillTarget?: GameState["selectGeomancerFillTarget"];
   // Inquisition summon cell selection support
   pendingInquisitionSummon?: GameState["pendingInquisitionSummon"];
   placeInquisitionSummon?: GameState["placeInquisitionSummon"];
@@ -87,6 +92,10 @@ export function TileInteractionPlane({
   selectMephistophelesSummonTarget,
   pendingPathfinderPlay,
   selectPathfinderTarget,
+  pendingGeomancerPlay,
+  selectGeomancerTarget,
+  pendingGeomancerFill,
+  selectGeomancerFillTarget,
   pendingInquisitionSummon,
   placeInquisitionSummon,
   pendingCorpseExplosion,
@@ -240,6 +249,33 @@ export function TileInteractionPlane({
           if (pendingPathfinderPlay.validTargets.includes(cellKey)) {
             e.stopPropagation();
             selectPathfinderTarget(cellKey);
+            return;
+          }
+        }
+        // Geomancer ability 2: Replace Rubble with atlas site
+        if (
+          pendingGeomancerPlay &&
+          pendingGeomancerPlay.phase === "selectingTarget" &&
+          (pendingGeomancerPlay.ownerSeat === actorKey || !actorKey) &&
+          selectGeomancerTarget
+        ) {
+          const cellKey = `${tileX},${tileY}`;
+          if (pendingGeomancerPlay.validTargets.includes(cellKey)) {
+            e.stopPropagation();
+            selectGeomancerTarget(cellKey);
+            return;
+          }
+        }
+        // Geomancer ability 1: Fill void with Rubble
+        if (
+          pendingGeomancerFill &&
+          (pendingGeomancerFill.ownerSeat === actorKey || !actorKey) &&
+          selectGeomancerFillTarget
+        ) {
+          const cellKey = `${tileX},${tileY}`;
+          if (pendingGeomancerFill.validTargets.includes(cellKey)) {
+            e.stopPropagation();
+            selectGeomancerFillTarget(cellKey);
             return;
           }
         }

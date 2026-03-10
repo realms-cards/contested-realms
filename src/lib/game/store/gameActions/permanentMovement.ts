@@ -780,6 +780,21 @@ export const createPermanentMovementSlice: StateCreator<
         }, 100);
       }
 
+      // Kettletop Leprechaun Deathrite: draw a site from atlas
+      if (
+        cardNameLower === "kettletop leprechaun" &&
+        finalTarget === "graveyard"
+      ) {
+        setTimeout(() => {
+          try {
+            get().triggerKettletopDeathrite({
+              ownerSeat: owner,
+              deathLocation: at,
+            });
+          } catch {}
+        }, 100);
+      }
+
       return {
         permanents: per,
         zones: zonesNext,

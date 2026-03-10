@@ -188,7 +188,7 @@ export default function CardOutline({
       color,
       transparent: true,
       depthWrite: false,
-      depthTest: false,
+      depthTest: true,
       toneMapped: false,
       side: DoubleSide,
     };

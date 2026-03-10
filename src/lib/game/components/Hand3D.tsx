@@ -14,6 +14,7 @@ import CardGlow from "@/lib/game/components/CardGlow";
 import CardOutline from "@/lib/game/components/CardOutline";
 import CardPlane from "@/lib/game/components/CardPlane";
 import MaterialCardBack from "@/lib/game/components/MaterialCardBack";
+import ResolverOutline from "@/lib/game/components/ResolverOutline";
 import {
   CARD_LONG,
   CARD_SHORT,
@@ -1353,20 +1354,15 @@ export default function Hand3D({
                 renderOrder={renderOrder + 10000 - 5}
               />
             ) : null}
-            {/* Purple resolver glow for cards with custom automated behavior */}
+            {/* Purple resolver outline for cards with custom automated behavior */}
             {!showCardBacks && !remoteHighlightColor && !resolversDisabled && graphicsSettings.showResolverGlow && hasCustomResolver(c.name) && (
-              <CardOutline
-                width={CARD_SHORT * 1.08}
-                height={CARD_LONG * 1.08}
+              <ResolverOutline
+                width={CARD_SHORT}
+                height={CARD_LONG}
                 rotationZ={cardRotationZ}
                 elevation={-0.01}
-                color="#8b5cf6"
                 renderOrder={renderOrder + 10000 - 6}
-                opacity={0.4}
                 pulse
-                pulseSpeed={0.15}
-                pulseMin={0.2}
-                pulseMax={0.45}
                 flat={false}
               />
             )}

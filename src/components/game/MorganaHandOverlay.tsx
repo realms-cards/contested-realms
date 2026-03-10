@@ -129,7 +129,7 @@ function MorganaHandCard({
         <div className="mt-2 p-3 bg-black/95 rounded-lg ring-1 ring-purple-500/50 max-w-md">
           <p className="text-purple-300 text-xs mb-2 text-center">
             {isOwner
-              ? "Click a spell to select, then cast it"
+              ? "Drag a card to the board, or select then cast"
               : "Opponent's Morgana hand (hidden)"}
           </p>
 
@@ -141,6 +141,7 @@ function MorganaHandCard({
                     key={index}
                     card={card}
                     onClick={() => onSelectCard(index)}
+                    onDragOut={() => onCast(index)}
                     selected={selectedCardIndex === index}
                     interactive={true}
                   />
@@ -179,20 +180,25 @@ function MorganaHandCard({
   );
 }
 
-// Card display component with hover preview
+const DRAG_THRESHOLD_PX = 10;
+
+// Card display component with hover preview and drag-to-cast
 function CardDisplay({
   card,
   onClick,
+  onDragOut,
   selected,
   interactive,
 }: {
   card: CardRef;
   onClick?: () => void;
+  onDragOut?: () => void;
   selected: boolean;
   interactive: boolean;
 }) {
   const setPreviewCard = useGameStore((s) => s.setPreviewCard);
   const hoverTimerRef = useRef<number | null>(null);
+  const dragStartRef = useRef<{ x: number; y: number } | null>(null);
 
   const handleMouseEnter = useCallback(() => {
     if (hoverTimerRef.current) window.clearTimeout(hoverTimerRef.current);
@@ -209,14 +215,44 @@ function CardDisplay({
     setPreviewCard(null);
   }, [setPreviewCard]);
 
+  const handlePointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      if (!interactive || !onDragOut) return;
+      dragStartRef.current = { x: e.clientX, y: e.clientY };
+      (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    },
+    [interactive, onDragOut],
+  );
+
+  const handlePointerMove = useCallback(
+    (e: React.PointerEvent) => {
+      if (!dragStartRef.current || !onDragOut) return;
+      const dx = e.clientX - dragStartRef.current.x;
+      const dy = e.clientY - dragStartRef.current.y;
+      if (Math.sqrt(dx * dx + dy * dy) >= DRAG_THRESHOLD_PX) {
+        dragStartRef.current = null;
+        setPreviewCard(null);
+        onDragOut();
+      }
+    },
+    [onDragOut, setPreviewCard],
+  );
+
+  const handlePointerUp = useCallback(() => {
+    dragStartRef.current = null;
+  }, []);
+
   return (
     <div
       onClick={interactive ? onClick : undefined}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
-      className={`relative aspect-[2.5/3.5] rounded-lg overflow-hidden transition-all ${
+      className={`relative aspect-[2.5/3.5] rounded-lg overflow-hidden transition-all select-none ${
         interactive
-          ? "cursor-pointer hover:scale-105 hover:ring-2 hover:ring-purple-400"
+          ? "cursor-grab hover:scale-105 hover:ring-2 hover:ring-purple-400"
           : ""
       } ${selected ? "ring-2 ring-purple-500 scale-105" : ""}`}
     >
@@ -224,7 +260,7 @@ function CardDisplay({
         src={`/api/images/${card.slug || card.cardId}`}
         alt={card.name || "Card"}
         fill
-        className="object-cover"
+        className="object-cover pointer-events-none"
         unoptimized
       />
       {/* Card name overlay */}
