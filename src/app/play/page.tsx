@@ -36,6 +36,7 @@ import { ElementChoiceOverlay } from "@/components/game/ElementChoiceOverlay";
 import { EndTurnConfirmDialog } from "@/components/game/EndTurnConfirmDialog";
 import FrontierSettlersOverlay from "@/components/game/FrontierSettlersOverlay";
 import GameToolbox from "@/components/game/GameToolbox";
+import GeomancerOverlay from "@/components/game/GeomancerOverlay";
 import HarbingerPortalScreen from "@/components/game/HarbingerPortalScreen";
 import HeadlessHauntOverlay from "@/components/game/HeadlessHauntOverlay";
 import HighlandPrincessOverlay from "@/components/game/HighlandPrincessOverlay";
@@ -57,6 +58,7 @@ import OfflineMulliganScreen from "@/components/game/OfflineMulliganScreen";
 import OnlineLifeCounters from "@/components/game/OnlineLifeCounters";
 import OverlayBackdrop from "@/components/game/OverlayBackdrop";
 import PathfinderPlayOverlay from "@/components/game/PathfinderPlayOverlay";
+import KettletopLeprechaunOverlay from "@/components/game/KettletopLeprechaunOverlay";
 import PigsOfTheSounderOverlay from "@/components/game/PigsOfTheSounderOverlay";
 import PileSearchDialog from "@/components/game/PileSearchDialog";
 import PithImpOverlay from "@/components/game/PithImpOverlay";
@@ -1092,9 +1094,14 @@ export default function PlayPage() {
 
           {/* Frontier Settlers Overlay (tap: place site) */}
           <FrontierSettlersOverlay />
+          {/* Geomancer Overlay (tap: replace adjacent Rubble) */}
+          <GeomancerOverlay />
 
           {/* Pigs of the Sounder Overlay (Deathrite) */}
           <PigsOfTheSounderOverlay />
+
+          {/* Kettletop Leprechaun Overlay (Deathrite: draw site) */}
+          <KettletopLeprechaunOverlay />
 
           {/* Demonic Contract Overlay */}
           <DemonicContractOverlay />

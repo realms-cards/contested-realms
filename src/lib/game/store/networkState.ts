@@ -380,44 +380,46 @@ export const createNetworkSlice: StateCreator<
         let zonesCandidate: Partial<
           Record<PlayerKey, GameState["zones"][PlayerKey]>
         >;
-        if (replaceKeys.has("zones")) {
-          zonesCandidate = p.zones as GameState["zones"];
-        } else {
+        {
+          // Both full replacement (__replaceKeys includes "zones") and
+          // incremental patches go through the same safe merge: we never
+          // overwrite a populated zone array with an empty one, because
+          // the server/opponent does not have access to hidden zones
+          // (opponent's hand, atlas, spellbook, etc.).
           const patchZones = p.zones as Partial<
             Record<PlayerKey, GameState["zones"][PlayerKey]>
           >;
-          const merged = { ...state.zones } as Record<
-            PlayerKey,
-            GameState["zones"][PlayerKey]
-          >;
-          // Zone-property-level merge: replace individual zone arrays
-          // (spellbook, atlas, hand, graveyard) when present in the patch,
-          // but preserve zone arrays not included. Also skip merging empty
-          // arrays when state has data — this prevents server/opponent patches
-          // from wiping hidden zone data (opponent's hand, atlas, etc.).
+          const merged = (
+            replaceKeys.has("zones")
+              ? { ...(p.zones as GameState["zones"]) }
+              : { ...state.zones }
+          ) as Record<PlayerKey, GameState["zones"][PlayerKey]>;
+
           for (const seat of ["p1", "p2"] as PlayerKey[]) {
-            if (patchZones[seat] && typeof patchZones[seat] === "object") {
-              const patchSeat = patchZones[seat] as Record<string, unknown>;
-              const stateSeat = merged[seat] as Record<string, unknown> | undefined;
-              const safePatch: Record<string, unknown> = {};
-              for (const [key, val] of Object.entries(patchSeat)) {
-                // Skip empty arrays when state has data — the sender likely
-                // doesn't have access to this zone (hidden opponent data)
-                if (
-                  Array.isArray(val) &&
-                  val.length === 0 &&
-                  Array.isArray(stateSeat?.[key]) &&
-                  (stateSeat[key] as unknown[]).length > 0
-                ) {
-                  continue;
-                }
-                safePatch[key] = val;
+            const patchSeat = patchZones[seat] as Record<string, unknown> | undefined;
+            if (!patchSeat || typeof patchSeat !== "object") continue;
+
+            const stateSeat = state.zones[seat] as Record<string, unknown> | undefined;
+            if (!stateSeat) continue; // No local data to protect
+
+            const safePatch: Record<string, unknown> = {};
+            for (const [key, val] of Object.entries(patchSeat)) {
+              // Skip empty arrays when state has data — the sender likely
+              // doesn't have access to this zone (hidden opponent data)
+              if (
+                Array.isArray(val) &&
+                val.length === 0 &&
+                Array.isArray(stateSeat[key]) &&
+                (stateSeat[key] as unknown[]).length > 0
+              ) {
+                continue;
               }
-              merged[seat] = {
-                ...merged[seat],
-                ...safePatch,
-              } as GameState["zones"][PlayerKey];
+              safePatch[key] = val;
             }
+            merged[seat] = {
+              ...merged[seat],
+              ...safePatch,
+            } as GameState["zones"][PlayerKey];
           }
           zonesCandidate = merged;
         }
@@ -1166,6 +1168,19 @@ export const createNetworkSlice: StateCreator<
           );
       } else if (replaceKeys.has("pathfinderUsed")) {
         next.pathfinderUsed = { p1: false, p2: false };
+      }
+      // Geomancer rubble used (replace on turn change, merge otherwise)
+      if (p.geomancerRubbleUsed !== undefined) {
+        if (replaceKeys.has("geomancerRubbleUsed")) {
+          next.geomancerRubbleUsed = { p1: false, p2: false };
+        } else {
+          next.geomancerRubbleUsed = {
+            ...state.geomancerRubbleUsed,
+            ...p.geomancerRubbleUsed,
+          };
+        }
+      } else if (replaceKeys.has("geomancerRubbleUsed")) {
+        next.geomancerRubbleUsed = { p1: false, p2: false };
       }
       // Special site state (Valley of Delight, Mismanaged Mortuary, etc.)
       // Always replace, don't merge (arrays inside)

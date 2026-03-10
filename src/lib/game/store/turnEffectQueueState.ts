@@ -259,55 +259,60 @@ export const createTurnEffectQueueSlice: StateCreator<
   },
 
   processNextTurnEffect: () => {
-    const queue = get().turnEffectQueue;
     if (!get().turnEffectQueueActive) return;
 
-    // Find next pending entry
-    const nextIdx = queue.findIndex((e) => e.status === "pending");
-    if (nextIdx === -1) {
-      // All entries processed — deactivate queue
-      set({
-        turnEffectQueueActive: false,
-      } as Partial<GameState> as GameState);
-      return;
-    }
-
-    const entry = queue[nextIdx];
-
-    // In online play, skip effects not owned by us (but never skip turn_transition)
+    // Process synchronous effects in a tight loop to minimize set() calls.
+    // Only pause (and write state) when an effect needs async user interaction.
+    const mutableQueue = get().turnEffectQueue.map((e) => ({ ...e }));
     const actorKey = get().actorKey;
-    if (actorKey && actorKey !== entry.ownerSeat && entry.kind !== "turn_transition") {
-      const updated = queue.map((e, i) =>
-        i === nextIdx ? { ...e, status: "skipped" as const } : e,
-      );
-      set({ turnEffectQueue: updated } as Partial<GameState> as GameState);
-      // Continue to next entry
-      get().processNextTurnEffect();
-      return;
-    }
 
-    // Mark as active
-    const updated = queue.map((e, i) =>
-      i === nextIdx ? { ...e, status: "active" as const } : e,
-    );
-    set({ turnEffectQueue: updated } as Partial<GameState> as GameState);
-
-    // Dispatch the effect
-    try {
-      const completedSynchronously = dispatchEffect(entry, get);
-      if (completedSynchronously) {
-        // Effect had nothing to do or completed inline — advance immediately
-        get().resolveCurrentTurnEffect();
+    while (true) {
+      const nextIdx = mutableQueue.findIndex((e) => e.status === "pending");
+      if (nextIdx === -1) {
+        // All entries processed — single set() to finalize
+        set({
+          turnEffectQueue: mutableQueue,
+          turnEffectQueueActive: false,
+        } as Partial<GameState> as GameState);
+        return;
       }
-      // Otherwise, the effect is waiting for user interaction.
-      // The effect's completion handler will call resolveCurrentTurnEffect().
-    } catch (err) {
-      console.error(
-        `[TurnEffectQueue] Error dispatching ${entry.kind}:`,
-        err,
-      );
-      // Mark as complete on error to avoid blocking the queue
-      get().resolveCurrentTurnEffect();
+
+      const entry = mutableQueue[nextIdx];
+
+      // In online play, skip effects not owned by us (but never skip turn_transition)
+      if (actorKey && actorKey !== entry.ownerSeat && entry.kind !== "turn_transition") {
+        mutableQueue[nextIdx] = { ...entry, status: "skipped" };
+        continue; // No set() — keep looping
+      }
+
+      // Mark as active
+      mutableQueue[nextIdx] = { ...entry, status: "active" };
+
+      // Dispatch the effect
+      let completedSynchronously: boolean;
+      try {
+        // Write queue state before dispatch so the effect can read its "active" status
+        set({ turnEffectQueue: mutableQueue } as Partial<GameState> as GameState);
+        completedSynchronously = dispatchEffect(entry, get);
+      } catch (err) {
+        console.error(
+          `[TurnEffectQueue] Error dispatching ${entry.kind}:`,
+          err,
+        );
+        completedSynchronously = true;
+      }
+
+      if (completedSynchronously) {
+        // Mark complete and continue the loop (no extra set())
+        mutableQueue[nextIdx] = { ...mutableQueue[nextIdx], status: "complete" };
+        continue;
+      }
+
+      // Effect is async — waiting for user interaction.
+      // Write current queue state and return. The effect's completion handler
+      // will call resolveCurrentTurnEffect() when done.
+      set({ turnEffectQueue: mutableQueue } as Partial<GameState> as GameState);
+      return;
     }
   },
 
@@ -321,8 +326,7 @@ export const createTurnEffectQueueSlice: StateCreator<
     );
     set({ turnEffectQueue: updated } as Partial<GameState> as GameState);
 
-    // Process next entry after a small delay to avoid deep call stacks
-    // and allow React to render intermediate states
+    // Process next entry after a small delay to allow React to render
     setTimeout(() => {
       get().processNextTurnEffect();
     }, 50);

@@ -525,8 +525,9 @@ export const createCoreSlice: StateCreator<
         [nextKey]: { ...state.avatars[nextKey], tapped: false },
       } as GameState["avatars"];
 
-      // Reset pathfinder usage for both players on turn change
+      // Reset pathfinder and geomancer usage for both players on turn change
       const pathfinderUsedNext = { p1: false, p2: false };
+      const geomancerRubbleUsedNext = { p1: false, p2: false };
 
       // Don't send turn in patch - server increments turn when currentPlayer changes
       // Include avatars to ensure correct position is broadcast (e.g., after Pathfinder move)
@@ -535,6 +536,7 @@ export const createCoreSlice: StateCreator<
         currentPlayer: nextPlayer,
         hasDrawnThisTurn: false, // Reset draw tracking for new turn
         pathfinderUsed: pathfinderUsedNext,
+        geomancerRubbleUsed: geomancerRubbleUsedNext,
         avatars: avatarsNext,
       };
       const deltaPatch =
@@ -552,6 +554,7 @@ export const createCoreSlice: StateCreator<
         permanents,
         avatars: avatarsNext,
         pathfinderUsed: pathfinderUsedNext,
+        geomancerRubbleUsed: geomancerRubbleUsedNext,
         selectedCard: null,
       });
       try {
@@ -697,6 +700,7 @@ export const createCoreSlice: StateCreator<
       state.assimilatorSnailTransforms.filter((t) => t.ownerSeat !== nextKey);
 
     const pathfinderUsedNext = { p1: false, p2: false };
+    const geomancerRubbleUsedNext = { p1: false, p2: false };
 
     // Track Ether Cores in void and carried cores at turn start
     const etherCoresInVoidAtTurnStartNext: string[] = [];
@@ -731,6 +735,7 @@ export const createCoreSlice: StateCreator<
       assimilatorSnailUsed: assimilatorSnailUsedNext,
       assimilatorSnailTransforms: assimilatorSnailTransformsNext,
       pathfinderUsed: pathfinderUsedNext,
+      geomancerRubbleUsed: geomancerRubbleUsedNext,
       etherCoresInVoidAtTurnStart: etherCoresInVoidAtTurnStartNext,
       coresCarriedAtTurnStart: coresCarriedAtTurnStartNext,
       permanents,
@@ -753,6 +758,7 @@ export const createCoreSlice: StateCreator<
       assimilatorSnailUsed: assimilatorSnailUsedNext,
       assimilatorSnailTransforms: assimilatorSnailTransformsNext,
       pathfinderUsed: pathfinderUsedNext,
+      geomancerRubbleUsed: geomancerRubbleUsedNext,
       etherCoresInVoidAtTurnStart: etherCoresInVoidAtTurnStartNext,
       coresCarriedAtTurnStart: coresCarriedAtTurnStartNext,
       selectedCard: null,

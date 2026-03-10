@@ -1124,6 +1124,27 @@ export default function Board({
     }),
     [pendingPathfinderPlay, selectPathfinderTarget],
   );
+  // Geomancer target selection (both abilities)
+  const pendingGeomancerPlay = useScopedStore((s) => s.pendingGeomancerPlay);
+  const selectGeomancerTarget = useScopedStore((s) => s.selectGeomancerTarget);
+  const pendingGeomancerFill = useScopedStore((s) => s.pendingGeomancerFill);
+  const selectGeomancerFillTarget = useScopedStore(
+    (s) => s.selectGeomancerFillTarget,
+  );
+  const geomancerContext = useMemo(
+    () => ({
+      pendingGeomancerPlay,
+      selectGeomancerTarget,
+      pendingGeomancerFill,
+      selectGeomancerFillTarget,
+    }),
+    [
+      pendingGeomancerPlay,
+      selectGeomancerTarget,
+      pendingGeomancerFill,
+      selectGeomancerFillTarget,
+    ],
+  );
   // Inquisition summon cell selection
   const pendingInquisitionSummon = useScopedStore(
     (s) => s.pendingInquisitionSummon,
@@ -1382,6 +1403,7 @@ export default function Board({
               atlanteanFateContext={atlanteanFateContext}
               mephistophelesSummonContext={mephistophelesSummonContext}
               pathfinderContext={pathfinderContext}
+              geomancerContext={geomancerContext}
               inquisitionSummonContext={inquisitionSummonContext}
               counterHandlers={counterHandlers}
               movementHandlers={movementHandlers}

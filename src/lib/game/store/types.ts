@@ -1171,6 +1171,27 @@ export type PendingFrontierSettlers = {
   createdAt: number;
 };
 
+// --- Geomancer State ----------------------------------------------------------
+// Tap → Replace an adjacent Rubble with the topmost site of your atlas.
+export type GeomancerPhase = "selectingTarget" | "complete";
+
+export type PendingGeomancerPlay = {
+  id: string;
+  ownerSeat: PlayerKey;
+  phase: GeomancerPhase;
+  topSite: CardRef | null;
+  validTargets: CellKey[];
+  createdAt: number;
+};
+
+// If you played an earth site, fill a void adjacent to you with Rubble.
+export type PendingGeomancerFill = {
+  id: string;
+  ownerSeat: PlayerKey;
+  validTargets: CellKey[];
+  createdAt: number;
+};
+
 // --- Pigs of the Sounder / Squeakers State ------------------------------------
 // Deathrite abilities that reveal 5 spells and summon matching cards:
 // - "Pigs of the Sounder" → summons "Grand Old Boars"
@@ -1187,6 +1208,19 @@ export type PendingPigsOfTheSounder = {
   revealedCards: CardRef[];
   pigsToSummon: CardRef[]; // Cards matching targetCardName
   cardsToBottom: CardRef[];
+  createdAt: number;
+};
+
+// --- Kettletop Leprechaun State ---------------------------------------------
+// Deathrite → Draw a site from atlas
+export type KettletopLeprechaunPhase = "confirming" | "complete";
+
+export type PendingKettletopLeprechaun = {
+  id: string;
+  ownerSeat: PlayerKey;
+  deathLocation: CellKey;
+  phase: KettletopLeprechaunPhase;
+  drawnCard: CardRef | null;
   createdAt: number;
 };
 
@@ -2250,6 +2284,17 @@ export type GameState = {
   resolveFrontierSettlers: () => void;
   cancelFrontierSettlers: () => void;
   hasFrontierSettlersAbility: (instanceId: string) => boolean;
+  // Geomancer (tap: replace adjacent Rubble with topmost atlas site)
+  pendingGeomancerPlay: PendingGeomancerPlay | null;
+  geomancerRubbleUsed: Record<PlayerKey, boolean>;
+  beginGeomancerRubble: (who: PlayerKey) => void;
+  selectGeomancerTarget: (targetCell: CellKey) => void;
+  cancelGeomancerPlay: () => void;
+  // Geomancer fill (earth site trigger: fill adjacent void with Rubble)
+  pendingGeomancerFill: PendingGeomancerFill | null;
+  beginGeomancerFill: (who: PlayerKey) => void;
+  selectGeomancerFillTarget: (targetCell: CellKey) => void;
+  cancelGeomancerFill: () => void;
   // Pigs of the Sounder / Squeakers (Deathrite: reveal 5, summon matching cards)
   pendingPigsOfTheSounder: PendingPigsOfTheSounder | null;
   triggerPigsDeathrite: (input: {
@@ -2259,6 +2304,14 @@ export type GameState = {
   }) => void;
   resolvePigsOfTheSounder: () => void;
   cancelPigsOfTheSounder: () => void;
+  // Kettletop Leprechaun (Deathrite: draw a site from atlas)
+  pendingKettletopLeprechaun: PendingKettletopLeprechaun | null;
+  triggerKettletopDeathrite: (input: {
+    ownerSeat: PlayerKey;
+    deathLocation: CellKey;
+  }) => void;
+  resolveKettletopLeprechaun: () => void;
+  cancelKettletopLeprechaun: () => void;
   // Demonic Contract (search with Demon rarity limit, pay life or sacrifice)
   pendingDemonicContract: PendingDemonicContract | null;
   beginDemonicContract: (input: {
@@ -3269,6 +3322,8 @@ export type ServerPatchT = Partial<{
   pendingMephistophelesSummon: GameState["pendingMephistophelesSummon"];
   pathfinderUsed: GameState["pathfinderUsed"];
   pendingPathfinderPlay: GameState["pendingPathfinderPlay"];
+  geomancerRubbleUsed: GameState["geomancerRubbleUsed"];
+  pendingGeomancerPlay: GameState["pendingGeomancerPlay"];
   babelTowers: GameState["babelTowers"];
   pendingBabelPlacement: GameState["pendingBabelPlacement"];
   resolversDisabled: GameState["resolversDisabled"];

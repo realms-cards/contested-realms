@@ -4958,6 +4958,112 @@ export function handleCustomMessage(
     return;
   }
 
+  // --- Kettletop Leprechaun Deathrite message handlers ---
+  if (t === "kettletopBegin") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const ownerSeat = (msg as { ownerSeat?: unknown }).ownerSeat as
+      | PlayerKey
+      | undefined;
+    const deathLocation = (msg as { deathLocation?: unknown }).deathLocation as
+      | CellKey
+      | undefined;
+
+    if (!id || !ownerSeat) return;
+
+    // Skip if we're the owner - already handled locally
+    const actorKey = get().actorKey;
+    if (actorKey === ownerSeat) {
+      console.log(
+        "[Kettletop] kettletopBegin: Skipping - we are the owner, already handled locally",
+      );
+      return;
+    }
+
+    set({
+      pendingKettletopLeprechaun: {
+        id,
+        ownerSeat,
+        deathLocation: deathLocation || ("0,0" as CellKey),
+        phase: "confirming",
+        drawnCard: null,
+        createdAt: Date.now(),
+      },
+    } as Partial<GameState> as GameState);
+
+    try {
+      get().log(
+        `[${ownerSeat.toUpperCase()}] Kettletop Leprechaun Deathrite triggered`,
+      );
+    } catch {}
+    return;
+  }
+
+  if (t === "kettletopResolve") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const ownerSeat = (msg as { ownerSeat?: unknown }).ownerSeat as
+      | PlayerKey
+      | undefined;
+
+    if (!id) return;
+
+    // Skip if we're the owner - already handled locally
+    const actorKey = get().actorKey;
+    if (actorKey === ownerSeat) {
+      console.log(
+        "[Kettletop] kettletopResolve: Skipping - we are the owner, already handled locally",
+      );
+      return;
+    }
+
+    const pending = get().pendingKettletopLeprechaun;
+    if (pending?.id === id) {
+      set({
+        pendingKettletopLeprechaun: { ...pending, phase: "complete" },
+      } as Partial<GameState> as GameState);
+
+      try {
+        get().log(
+          `[${ownerSeat?.toUpperCase() || "??"}] Kettletop Leprechaun draws a site`,
+        );
+      } catch {}
+
+      // Clear pending after delay
+      setTimeout(() => {
+        set((state) => {
+          if (state.pendingKettletopLeprechaun?.id === id) {
+            return {
+              ...state,
+              pendingKettletopLeprechaun: null,
+            } as GameState;
+          }
+          return state as GameState;
+        });
+      }, 1500);
+    }
+    return;
+  }
+
+  if (t === "kettletopCancel") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+
+    set((s) => {
+      if (
+        !s.pendingKettletopLeprechaun ||
+        (id && s.pendingKettletopLeprechaun.id !== id)
+      )
+        return s as GameState;
+      return {
+        ...s,
+        pendingKettletopLeprechaun: null,
+      } as GameState;
+    });
+
+    try {
+      get().log("Kettletop Leprechaun Deathrite declined");
+    } catch {}
+    return;
+  }
+
   // --- Headless Haunt message handlers ---
   // Broadcast when Headless Haunt start-of-turn movement begins
   if (t === "headlessHauntBegin") {
@@ -5739,6 +5845,225 @@ export function handleCustomMessage(
     try {
       get().log(
         `[${pending.ownerSeat.toUpperCase()}] Pathfinder play cancelled`,
+      );
+    } catch {}
+    return;
+  }
+
+  // --- Geomancer message handlers ---
+  if (t === "geomancerBegin") {
+    const pending = (msg as { pending?: unknown }).pending as
+      | {
+          id: string;
+          ownerSeat: PlayerKey;
+          phase: "selectingTarget";
+          topSite: CardRef | null;
+          validTargets: CellKey[];
+          createdAt: number;
+        }
+      | undefined;
+
+    if (!pending) return;
+
+    // Skip if we're the owner - we already have the state
+    const actorKey = get().actorKey;
+    if (actorKey === pending.ownerSeat) return;
+
+    set({ pendingGeomancerPlay: pending } as Partial<GameState> as GameState);
+
+    try {
+      get().log(
+        `[${pending.ownerSeat.toUpperCase()}] Geomancer selecting Rubble to replace with ${
+          pending.topSite?.name
+        }`,
+      );
+    } catch {}
+    return;
+  }
+
+  if (t === "geomancerResolve") {
+    const targetCell = (msg as { targetCell?: unknown }).targetCell as
+      | CellKey
+      | undefined;
+    const topSite = (msg as { topSite?: unknown }).topSite as
+      | CardRef
+      | undefined;
+    const ownerSeat = (msg as { ownerSeat?: unknown }).ownerSeat as
+      | PlayerKey
+      | undefined;
+    const atlasCount = (msg as { atlasCount?: unknown }).atlasCount as
+      | number
+      | undefined;
+
+    if (!targetCell || !topSite || !ownerSeat) return;
+
+    // Skip if we're the owner - we already applied the state
+    const actorKey = get().actorKey;
+    if (actorKey === ownerSeat) return;
+
+    const who = ownerSeat;
+    const state = get();
+    const board = state.board;
+    const zones = state.zones;
+    const ownerNum: 1 | 2 = who === "p1" ? 1 : 2;
+
+    // Rubble is a permanent token — banish it (tokens don't go to graveyard)
+    const cellPerms = [...(state.permanents[targetCell] || [])];
+    const rubbleIdx = cellPerms.findIndex(
+      (p) => (p.card?.name || "").toLowerCase() === "rubble",
+    );
+    if (rubbleIdx >= 0) {
+      cellPerms.splice(rubbleIdx, 1);
+    }
+    const permanentsNext = {
+      ...state.permanents,
+      [targetCell]: cellPerms,
+    };
+
+    // Place new site at target
+    const newSites = {
+      ...board.sites,
+      [targetCell]: {
+        owner: ownerNum,
+        card: {
+          ...topSite,
+          instanceId:
+            topSite.instanceId ||
+            `geomancer_${Date.now()}_${Math.random()
+              .toString(36)
+              .slice(2, 6)}`,
+        },
+        tapped: false,
+      },
+    };
+
+    // Update atlas count (remove top site used for placement)
+    const atlas = zones[who]?.atlas || [];
+    const newAtlas =
+      typeof atlasCount === "number"
+        ? atlas.slice(0, atlasCount)
+        : atlas.slice(1);
+
+    const updatedZones = {
+      ...zones,
+      [who]: {
+        ...zones[who],
+        atlas: newAtlas,
+      },
+    };
+
+    // Tap avatar
+    const avatar = state.avatars[who];
+    const newAvatars = avatar
+      ? {
+          ...state.avatars,
+          [who]: {
+            ...avatar,
+            tapped: true,
+          },
+        }
+      : state.avatars;
+
+    // Mark ability as used
+    const updatedUsed = { ...state.geomancerRubbleUsed, [who]: true };
+
+    set({
+      board: { ...board, sites: newSites },
+      zones: updatedZones,
+      avatars: newAvatars,
+      permanents: permanentsNext,
+      geomancerRubbleUsed: updatedUsed,
+      pendingGeomancerPlay: null,
+    } as Partial<GameState> as GameState);
+
+    try {
+      get().log(
+        `[${who.toUpperCase()}] Geomancer replaces Rubble with ${topSite.name}`,
+      );
+    } catch {}
+    return;
+  }
+
+  if (t === "geomancerCancel") {
+    const pending = get().pendingGeomancerPlay;
+    if (!pending) return;
+
+    const actorKey = get().actorKey;
+    if (actorKey === pending.ownerSeat) return;
+
+    set({ pendingGeomancerPlay: null } as Partial<GameState> as GameState);
+
+    try {
+      get().log(
+        `[${pending.ownerSeat.toUpperCase()}] Geomancer rubble play cancelled`,
+      );
+    } catch {}
+    return;
+  }
+
+  // --- Geomancer Fill (earth site trigger) message handlers ---
+  if (t === "geomancerFillBegin") {
+    const fillPending = (msg as { pending?: unknown }).pending as
+      | {
+          id: string;
+          ownerSeat: PlayerKey;
+          validTargets: CellKey[];
+          createdAt: number;
+        }
+      | undefined;
+    if (!fillPending) return;
+
+    const actorKey = get().actorKey;
+    if (actorKey === fillPending.ownerSeat) return;
+
+    set({
+      pendingGeomancerFill: fillPending,
+    } as Partial<GameState> as GameState);
+
+    try {
+      get().log(
+        `[${fillPending.ownerSeat.toUpperCase()}] Geomancer filling a void with Rubble`,
+      );
+    } catch {}
+    return;
+  }
+
+  if (t === "geomancerFillResolve") {
+    const targetCell = (msg as { targetCell?: unknown }).targetCell as
+      | CellKey
+      | undefined;
+    const ownerSeat = (msg as { ownerSeat?: unknown }).ownerSeat as
+      | PlayerKey
+      | undefined;
+    if (!targetCell || !ownerSeat) return;
+
+    const actorKey = get().actorKey;
+    if (actorKey === ownerSeat) return;
+
+    // The rubble placement was already applied via state patch
+    // Just clear the pending fill state
+    set({ pendingGeomancerFill: null } as Partial<GameState> as GameState);
+
+    try {
+      get().log(
+        `[${ownerSeat.toUpperCase()}] Geomancer filled void at ${targetCell} with Rubble`,
+      );
+    } catch {}
+    return;
+  }
+
+  if (t === "geomancerFillCancel") {
+    const fillPending = get().pendingGeomancerFill;
+    if (!fillPending) return;
+
+    const actorKey = get().actorKey;
+    if (actorKey === fillPending.ownerSeat) return;
+
+    set({ pendingGeomancerFill: null } as Partial<GameState> as GameState);
+
+    try {
+      get().log(
+        `[${fillPending.ownerSeat.toUpperCase()}] Geomancer fill cancelled`,
       );
     } catch {}
     return;

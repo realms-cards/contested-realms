@@ -4,6 +4,7 @@ import { getGraphicsSettings } from "@/hooks/useGraphicsSettings";
 import { BASE_CARD_ELEVATION } from "@/lib/game/boardShared";
 import CardOutline from "@/lib/game/components/CardOutline";
 import CardPlane from "@/lib/game/components/CardPlane";
+import ResolverOutline from "@/lib/game/components/ResolverOutline";
 import { CARD_LONG, CARD_SHORT, PLAYER_COLORS } from "@/lib/game/constants";
 import { hasCustomResolver } from "@/lib/game/resolverRegistry";
 import { useGameStore } from "@/lib/game/store";
@@ -361,21 +362,16 @@ export function SiteCard({
           />
         </group>
       )}
-      {/* Purple glow for sites with custom resolvers */}
+      {/* Purple outline for sites with custom resolvers */}
       {!highlight && !useGameStore.getState().resolversDisabled && getGraphicsSettings().showResolverGlow && hasCustomResolver(site.card?.name) && (
         <group position={[edgeOffset.x, 0, edgeOffset.z]}>
-          <CardOutline
-            width={CARD_SHORT * 1.08}
-            height={CARD_LONG * 1.08}
+          <ResolverOutline
+            width={CARD_SHORT}
+            height={CARD_LONG}
             rotationZ={rotZ}
             elevation={0.0001}
-            color="#8b5cf6"
             renderOrder={1100}
-            opacity={0.4}
             pulse
-            pulseSpeed={0.15}
-            pulseMin={0.2}
-            pulseMax={0.45}
           />
         </group>
       )}

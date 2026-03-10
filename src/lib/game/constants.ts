@@ -11,8 +11,9 @@ export const MAT_PIXEL_H = 1663;
 export const MAT_RATIO = MAT_PIXEL_W / MAT_PIXEL_H; // ~1.5385
 
 // Standard card size (keep long edge consistent across spells and sites)
-export const CARD_LONG = TILE_SIZE * 0.55; // long edge
-export const CARD_SHORT = CARD_LONG * 0.75; // 3:4 ratio
+// Real Sorcery cards are 63mm x 88mm (same as standard TCG size)
+export const CARD_LONG = TILE_SIZE * 0.55; // long edge (88mm)
+export const CARD_SHORT = CARD_LONG * (63 / 88); // short edge (63mm) — 63:88 ratio
 
 // Physics constants
 // Real card: ~0.3mm thick, ~88mm long = 0.34% ratio

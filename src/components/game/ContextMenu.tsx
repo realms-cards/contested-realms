@@ -9,6 +9,7 @@ import {
   hasTapToDrawSite,
   isMephistopheles,
   isPathfinder,
+  isGeomancer,
   isSavior,
   isImposter,
 } from "@/lib/game/avatarAbilities";
@@ -139,6 +140,8 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   );
   const pathfinderUsed = useGameStore((s) => s.pathfinderUsed);
   const beginPathfinderPlay = useGameStore((s) => s.beginPathfinderPlay);
+  const geomancerRubbleUsed = useGameStore((s) => s.geomancerRubbleUsed);
+  const beginGeomancerRubble = useGameStore((s) => s.beginGeomancerRubble);
   const druidFlipped = useGameStore((s) => s.druidFlipped);
   const flipDruid = useGameStore((s) => s.flipDruid);
   const getAvailableMana = useGameStore((s) => s.getAvailableMana);
@@ -1395,6 +1398,36 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         isEnabled: canPlay,
         targetPermanentId: "",
         description: pathDescription,
+      });
+    }
+
+    // Geomancer rubble replacement (tap → replace adjacent Rubble with top atlas site)
+    const geomancerHasAlreadyUsed = geomancerRubbleUsed[t.who];
+    if (isMine && isGeomancer(effectiveAvatarName)) {
+      const isNotTapped = !a?.tapped;
+      const atlasCount = zones[t.who]?.atlas?.length ?? 0;
+      const canReplace =
+        isMyTurn &&
+        !geomancerHasAlreadyUsed &&
+        isNotTapped &&
+        hasPosition &&
+        atlasCount > 0;
+      let geoDescription =
+        "Tap to replace an adjacent Rubble with the topmost site of your atlas";
+      if (!isMyTurn) geoDescription = "Can only use on your turn";
+      else if (geomancerHasAlreadyUsed)
+        geoDescription = "Already used Geomancer ability this turn";
+      else if (!isNotTapped) geoDescription = "Geomancer is already tapped";
+      else if (!hasPosition) geoDescription = "Avatar must be on the board";
+      else if (atlasCount === 0)
+        geoDescription = "No sites remaining in atlas";
+
+      extraActions.push({
+        actionId: "__geomancer_rubble__",
+        displayText: `Replace Rubble${geomancerHasAlreadyUsed ? " ✓" : ""}`,
+        isEnabled: canReplace,
+        targetPermanentId: "",
+        description: geoDescription,
       });
     }
 
@@ -3700,6 +3733,29 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                           onClick={() => {
                             if (t.kind === "avatar" && action.isEnabled) {
                               beginPathfinderPlay(t.who);
+                            }
+                            onClose();
+                          }}
+                        >
+                          {action.displayText}
+                        </button>
+                      );
+                    }
+                    // Geomancer replace rubble action
+                    if (action.actionId === "__geomancer_rubble__") {
+                      return (
+                        <button
+                          key={action.actionId}
+                          className={`w-full text-left rounded px-3 py-1 ${
+                            action.isEnabled
+                              ? "bg-amber-600/20 hover:bg-amber-600/30 text-amber-200"
+                              : "bg-gray-600/20 text-gray-400 cursor-not-allowed"
+                          }`}
+                          title={action.description}
+                          disabled={!action.isEnabled}
+                          onClick={() => {
+                            if (t.kind === "avatar" && action.isEnabled) {
+                              beginGeomancerRubble(t.who);
                             }
                             onClose();
                           }}

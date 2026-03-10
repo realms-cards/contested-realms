@@ -4399,7 +4399,10 @@ io.on("connection", async (socket: SocketClient) => {
       type === "interrogatorTrigger" ||
       type === "interrogatorResolve" ||
       type === "gardenOfEdenRegister" ||
-      type === "gardenOfEdenUnregister"
+      type === "gardenOfEdenUnregister" ||
+      type === "kettletopBegin" ||
+      type === "kettletopResolve" ||
+      type === "kettletopCancel"
     ) {
       // Resolver messages - broadcast to match room
       try {

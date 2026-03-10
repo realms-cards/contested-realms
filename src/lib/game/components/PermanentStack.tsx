@@ -15,6 +15,7 @@ import { BodyApi, getPermanentOwnerBaseZ } from "@/lib/game/boardShared";
 import { detectSpellcasterSync } from "@/lib/game/cardAbilities";
 import CardOutline from "@/lib/game/components/CardOutline";
 import CardPlane from "@/lib/game/components/CardPlane";
+import ResolverOutline from "@/lib/game/components/ResolverOutline";
 import {
   CARD_LONG,
   CARD_SHORT,
@@ -1279,32 +1280,27 @@ export function PermanentStack({
                   pulseMax={0.5}
                 />
               )}
-              {/* Purple glow for cards with custom resolvers */}
+              {/* Purple outline for cards with custom resolvers */}
               {!roleGlow &&
                 !p.isCopy &&
                 !useGameStore.getState().resolversDisabled &&
                 getGraphicsSettings().showResolverGlow &&
                 hasCustomResolver(p.card.name) && (
-                  <CardOutline
+                  <ResolverOutline
                     width={
                       tokenDef && tokenDef.size === "small"
-                        ? CARD_SHORT * 0.54
-                        : CARD_SHORT * 1.08
+                        ? CARD_SHORT * 0.5
+                        : CARD_SHORT
                     }
                     height={
                       tokenDef && tokenDef.size === "small"
-                        ? CARD_LONG * 0.54
-                        : CARD_LONG * 1.08
+                        ? CARD_LONG * 0.5
+                        : CARD_LONG
                     }
                     rotationZ={rotZ}
                     elevation={0.002}
-                    color="#8b5cf6"
                     renderOrder={1350}
-                    opacity={0.4}
                     pulse
-                    pulseSpeed={0.15}
-                    pulseMin={0.2}
-                    pulseMax={0.45}
                   />
                 )}
               <group

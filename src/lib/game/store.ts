@@ -50,6 +50,10 @@ import { createEarthquakeSlice } from "./store/earthquakeState";
 import { createEventSlice } from "./store/eventState";
 import { createFrontierSettlersSlice } from "./store/frontierSettlersState";
 import { createGameActionsSlice } from "./store/gameActions";
+import {
+  createGeomancerSlice,
+  createInitialGeomancerRubbleUsed,
+} from "./store/geomancerState";
 import { createGardenOfEdenSlice } from "./store/gardenOfEdenState";
 import { createGemTokenSlice } from "./store/gemTokenState";
 import { createHeadlessHauntSlice } from "./store/headlessHauntState";
@@ -65,6 +69,7 @@ import { createInquisitionSummonSlice } from "./store/inquisitionSummonState";
 import { createInteractionSlice } from "./store/interactionState";
 import { createInterrogatorSlice } from "./store/interrogatorState";
 import { createKelpCavernSlice } from "./store/kelpCavernState";
+import { createKettletopLeprechaunSlice } from "./store/kettletopLeprechaunState";
 import { createLegionOfGallSlice } from "./store/legionOfGallState";
 import { createLilithSlice } from "./store/lilithState";
 import { createMagicSlice } from "./store/magicState";
@@ -208,7 +213,9 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   ...createHighlandPrincessSlice(set, get, storeApi),
   ...createAssortedAnimalsSlice(set, get, storeApi),
   ...createFrontierSettlersSlice(set, get, storeApi),
+  ...createGeomancerSlice(set, get, storeApi),
   ...createPigsOfTheSounderSlice(set, get, storeApi),
+  ...createKettletopLeprechaunSlice(set, get, storeApi),
   ...createDemonicContractSlice(set, get, storeApi),
   ...createRaiseDeadSlice(set, get, storeApi),
   ...createLegionOfGallSlice(set, get, storeApi),
@@ -386,6 +393,9 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         pendingMephistophelesSummon: null,
         pathfinderUsed: createInitialPathfinderUsed(),
         pendingPathfinderPlay: null,
+        geomancerRubbleUsed: createInitialGeomancerRubbleUsed(),
+        pendingGeomancerPlay: null,
+        pendingGeomancerFill: null,
         babelTowers: createInitialBabelTowers(),
         pendingBabelPlacement: null,
         portalState: null,
@@ -413,6 +423,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         assimilatorSnailTransforms: [],
         turnEffectQueue: [],
         turnEffectQueueActive: false,
+        pendingKettletopLeprechaun: null,
 };
       return reset as GameState;
     }),
