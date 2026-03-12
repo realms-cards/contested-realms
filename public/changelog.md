@@ -2,10 +2,14 @@
 
 ## March 2026
 
+### Mar 12 - Mobile optimizations
+
+- **optimizations for mobile views**
+- **add custom resolver for Feast for Crows**
+
 ### Mar 10 - User requested fixes and implementations
 
--**add custom resolver for Kettletop Leprechaun, Geomancer**
-
+- **add custom resolver for Kettletop Leprechaun, Geomancer**
 - **purple outline indicates custom resolver cards** can be deactivated in settings
 - **fixes for Omphalos** and better card preview
 

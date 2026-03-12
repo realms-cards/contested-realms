@@ -123,6 +123,8 @@ type BoardTileProps = {
   onCompleteSwitchSite?: (targetX: number, targetY: number) => void;
   // Ownership overlay
   showOwnershipOverlay: boolean;
+  // Tap controls mode
+  tapControlsMode: boolean;
   // Card scale (for crowded tiles)
   cardScale: number;
   // Stolen cards for Pith Imp indicator
@@ -201,6 +203,7 @@ export function BoardTile({
   switchSiteSource,
   onCompleteSwitchSite,
   showOwnershipOverlay,
+  tapControlsMode,
   cardScale,
   stolenCards,
   metaByCardId,
@@ -471,6 +474,7 @@ export function BoardTile({
         playCardFlip={playCardFlip}
         isPrimaryCardHit={isPrimaryCardHit}
         showOwnershipOverlay={showOwnershipOverlay}
+        tapControlsMode={tapControlsMode}
         cardScale={cardScale}
         stolenCards={stolenCards}
         hasSite={Boolean(site)}

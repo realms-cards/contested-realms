@@ -202,6 +202,7 @@ export default function Board({
     });
   }, [playmatUrl, playmatUrls, activePlaymatOwner]);
   const allowSiteDrag = useScopedStore((s) => s.allowSiteDrag);
+  const tapControlsMode = useScopedStore((s) => s.tapControlsMode);
   const showOwnershipOverlay = useScopedStore((s) => s.showOwnershipOverlay);
   const cardScale = useScopedStore((s) => s.cardScale);
   const playSelectedTo = useScopedStore((s) => s.playSelectedTo);
@@ -311,6 +312,7 @@ export default function Board({
   const hoverPreviewClearTimerRef = useRef<number | null>(null);
   const touchPreviewTimerRef = useRef<number | null>(null);
   const touchContextTimerRef = useRef<number | null>(null);
+  const lastTapTimeRef = useRef<number>(0);
 
   const beginHoverPreview = useCallback(
     (card?: CardRef | null, sourceKey?: string | null) => {
@@ -1024,6 +1026,7 @@ export default function Board({
       clearTouchTimers,
       touchPreviewTimerRef,
       touchContextTimerRef,
+      lastTapTimeRef,
     }),
     [clearTouchTimers],
   );
@@ -1439,6 +1442,7 @@ export default function Board({
               switchSiteSource={switchSiteSource}
               onCompleteSwitchSite={onCompleteSwitchSite}
               showOwnershipOverlay={showOwnershipOverlay}
+              tapControlsMode={tapControlsMode}
               cardScale={cardScale}
               stolenCards={stolenCards}
               metaByCardId={metaByCardId}
@@ -1508,6 +1512,8 @@ export default function Board({
               clearTouchTimers,
               touchPreviewTimerRef,
               touchContextTimerRef,
+              lastTapTimeRef,
+              tapControlsMode,
             }}
             selectionContext={{
               selectedAvatar,

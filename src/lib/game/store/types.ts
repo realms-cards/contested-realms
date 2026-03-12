@@ -1707,6 +1707,9 @@ export type GameState = {
   cardPreviewsEnabled: boolean;
   setCardPreviewsEnabled: (on: boolean) => void;
   toggleCardPreviews: () => void;
+  // Tap controls mode: use single-tap to select+preview, double-tap for context menu
+  tapControlsMode: boolean;
+  toggleTapControlsMode: () => void;
   // UI hidden toggle (hide/show most UI elements for clean screenshots/viewing)
   uiHidden: boolean;
   setUiHidden: (hidden: boolean) => void;

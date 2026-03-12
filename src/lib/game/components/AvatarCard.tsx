@@ -43,6 +43,8 @@ type HoverContext = {
   clearTouchTimers: () => void;
   touchPreviewTimerRef: MutableRefObject<number | null>;
   touchContextTimerRef: MutableRefObject<number | null>;
+  lastTapTimeRef: MutableRefObject<number>;
+  tapControlsMode: boolean;
 };
 
 type SelectionContext = {
@@ -253,9 +255,12 @@ export function AvatarCard({
     clearHoverPreviewDebounced,
     clearTouchTimers,
     touchPreviewTimerRef: _touchPreviewTimerRef,
-    touchContextTimerRef,
+    touchContextTimerRef: _touchContextTimerRef,
+    lastTapTimeRef,
+    tapControlsMode,
   } = hoverContext;
   void _touchPreviewTimerRef;
+  void _touchContextTimerRef;
   const {
     selectedAvatar,
     selectAvatar,
@@ -441,21 +446,31 @@ export function AvatarCard({
     }
 
     const pe = e.nativeEvent as PointerEvent | undefined;
-    // Long-press for touch AND coarse-pointer devices (AVP gaze+pinch
-    // reports pointerType "mouse" but has no right-click)
-    const needsLongPress =
+    const isTapDevice =
       pe &&
       (pe.pointerType === "touch" ||
         !window.matchMedia("(pointer: fine)").matches);
-    if (needsLongPress) {
+    const useTapControls = isTapDevice || tapControlsMode;
+    if (useTapControls) {
       clearTouchTimers();
       const cx = e.clientX;
       const cy = e.clientY;
-      touchContextTimerRef.current = window.setTimeout(() => {
+      const now = Date.now();
+      const timeSinceLastTap = now - lastTapTimeRef.current;
+      const isDoubleTap =
+        lastTouchedId === avatarId && timeSinceLastTap < 350;
+      if (isDoubleTap) {
+        // Double tap: open context menu and show card preview
+        lastTapTimeRef.current = 0;
         selectAvatar(seat);
         setLastTouchedId(avatarId);
+        beginHoverPreview(lastAvatarCardsRef.current[seat], avatarId);
         openContextMenu({ kind: "avatar", who: seat }, { x: cx, y: cy });
-      }, 500) as unknown as number;
+        return;
+      }
+      // Single tap: select and show card preview
+      lastTapTimeRef.current = now;
+      beginHoverPreview(lastAvatarCardsRef.current[seat], avatarId);
     }
 
     avatarDragStartRef.current = {

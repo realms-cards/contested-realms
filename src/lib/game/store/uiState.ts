@@ -4,6 +4,7 @@ import type { CardRef, GameState, PlayerKey } from "./types";
 const CAMERA_MODE_KEY = "sorcery:cameraMode";
 const CARD_PREVIEWS_KEY = "sorcery:cardPreviewsEnabled";
 const UI_HIDDEN_KEY = "sorcery:uiHidden";
+const TAP_CONTROLS_KEY = "sorcery:tapControlsMode";
 
 /**
  * Load persisted camera mode preference from localStorage.
@@ -90,6 +91,22 @@ function saveUiHidden(hidden: boolean): void {
   } catch {}
 }
 
+function loadTapControlsMode(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const stored = localStorage.getItem(TAP_CONTROLS_KEY);
+    if (stored === "true") return true;
+  } catch {}
+  return false;
+}
+
+function saveTapControlsMode(enabled: boolean): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(TAP_CONTROLS_KEY, String(enabled));
+  } catch {}
+}
+
 /** Persist camera mode preference to localStorage and API */
 function saveCameraMode(mode: GameState["cameraMode"]): void {
   if (typeof window === "undefined") return;
@@ -126,6 +143,8 @@ export type UiSlice = Pick<
   | "cardPreviewsEnabled"
   | "setCardPreviewsEnabled"
   | "toggleCardPreviews"
+  | "tapControlsMode"
+  | "toggleTapControlsMode"
   | "uiHidden"
   | "setUiHidden"
   | "toggleUiHidden"
@@ -179,6 +198,7 @@ type UiStateDefaults = Pick<
   | "hoverCell"
   | "previewCard"
   | "cardPreviewsEnabled"
+  | "tapControlsMode"
   | "uiHidden"
   | "turnOverlayActive"
   | "switchSiteSource"
@@ -204,6 +224,7 @@ export const createInitialUiState = (): UiStateDefaults => ({
   hoverCell: null,
   previewCard: null,
   cardPreviewsEnabled: loadCardPreviewsEnabled(),
+  tapControlsMode: loadTapControlsMode(),
   uiHidden: loadUiHidden(),
   turnOverlayActive: false,
   switchSiteSource: null,
@@ -313,6 +334,13 @@ export const createUiSlice: StateCreator<GameState, [], [], UiSlice> = (
       const newEnabled = !state.cardPreviewsEnabled;
       saveCardPreviewsEnabled(newEnabled);
       return { cardPreviewsEnabled: newEnabled };
+    }),
+
+  toggleTapControlsMode: () =>
+    set((state) => {
+      const newEnabled = !state.tapControlsMode;
+      saveTapControlsMode(newEnabled);
+      return { tapControlsMode: newEnabled };
     }),
 
   setUiHidden: (hidden: boolean) => {
