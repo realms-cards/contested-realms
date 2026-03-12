@@ -741,6 +741,45 @@ export type PendingAccusation = {
   createdAt: number;
 };
 
+// --- Feast for Crows Spell State -------------------------------------------
+// "Name a spell. Search an opponent's hand, spellbook and cemetery for cards
+//  with that name, and banish them. They shuffle."
+export type FeastForCrowsPhase =
+  | "naming" // Caster is naming a spell via card search
+  | "revealing" // Showing the opponent's hand, spellbook, cemetery
+  | "resolving"
+  | "complete";
+
+export type FeastForCrowsMatch = {
+  zone: "hand" | "spellbook" | "graveyard";
+  index: number;
+  card: CardRef;
+};
+
+export type PendingFeastForCrows = {
+  id: string;
+  spell: {
+    at: CellKey;
+    index: number;
+    instanceId?: string | null;
+    owner: 1 | 2;
+    card: CardRef;
+  };
+  casterSeat: PlayerKey;
+  phase: FeastForCrowsPhase;
+  victimSeat: PlayerKey;
+  // The named card (set after naming phase)
+  namedCardName: string | null;
+  namedCardSlug: string | null;
+  // Opponent's zones visible to caster during reveal
+  revealedHand: CardRef[];
+  revealedSpellbook: CardRef[];
+  revealedGraveyard: CardRef[];
+  // Matched cards to banish
+  matches: FeastForCrowsMatch[];
+  createdAt: number;
+};
+
 // --- Earthquake Spell State ------------------------------------------------
 // "You may rearrange sites within a two-by-two area, carrying along everything of normal size.
 //  Then burrow all minions and artifacts on those sites."
@@ -1994,6 +2033,21 @@ export type GameState = {
   selectAccusationCard: (cardIndex: number) => void;
   resolveAccusation: () => void;
   cancelAccusation: () => void;
+  // Feast for Crows spell flow
+  pendingFeastForCrows: PendingFeastForCrows | null;
+  beginFeastForCrows: (input: {
+    spell: {
+      at: CellKey;
+      index: number;
+      instanceId?: string | null;
+      owner: 1 | 2;
+      card: CardRef;
+    };
+    casterSeat: PlayerKey;
+  }) => void;
+  nameFeastForCrows: (cardName: string, cardSlug: string) => void;
+  resolveFeastForCrows: () => void;
+  cancelFeastForCrows: () => void;
   // Earthquake spell flow
   pendingEarthquake: PendingEarthquake | null;
   beginEarthquake: (input: {

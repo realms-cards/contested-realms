@@ -325,7 +325,7 @@ export function PermanentStack({
   shapeshiftContext,
   counterHandlers,
   movementHandlers,
-  emitBoardPing,
+  emitBoardPing: _emitBoardPing,
   handlePointerMove,
   highlightColors,
   stackConfig,
@@ -368,8 +368,13 @@ export function PermanentStack({
     clearHoverPreviewDebounced,
     openContextMenu,
   } = hoverContext;
-  const { clearTouchTimers, touchPreviewTimerRef, touchContextTimerRef } =
-    touchContext;
+  void _emitBoardPing;
+  const {
+    clearTouchTimers,
+    touchPreviewTimerRef: _touchPreviewTimerRef,
+    touchContextTimerRef,
+  } = touchContext;
+  void _touchPreviewTimerRef;
   const {
     selectPermanent,
     selectedPermanent,
@@ -898,14 +903,6 @@ export function PermanentStack({
                   clearTouchTimers();
                   const cx = e.clientX;
                   const cy = e.clientY;
-                  // Don't show preview to opponents for face-down cards
-                  const isOwner = actorKey === ownerSeat;
-                  const canShowPreview = !p.faceDown || isOwner || isSpectator;
-                  if (canShowPreview) {
-                    touchPreviewTimerRef.current = window.setTimeout(() => {
-                      beginHoverPreview(p.card, hoverKey);
-                    }, 180) as unknown as number;
-                  }
                   touchContextTimerRef.current = window.setTimeout(() => {
                     selectPermanent(key, idx);
                     setLastTouchedId(permId);
@@ -973,17 +970,6 @@ export function PermanentStack({
                 }
                 clearTouchTimers();
               }}
-              onDoubleClick={(e) => {
-                if (dragFromHand || dragFromPile) return;
-                if (tokenSiteReplace) return;
-                if (isSpectator) return;
-                if (!isPrimaryCardHit(e)) {
-                  return;
-                }
-                e.stopPropagation();
-                setLastTouchedId(permId);
-                emitBoardPing({ x: e.point.x, z: e.point.z });
-              }}
               onPointerMove={(e) => {
                 if (dragFromHand || dragFromPile) return;
                 if (tokenSiteReplace) return;
@@ -1013,6 +999,7 @@ export function PermanentStack({
                   const dist = Math.hypot(dx, dz);
                   const heldFor = Date.now() - dragStartRef.current.time;
                   if (heldFor >= DRAG_HOLD_MS && dist > DRAG_THRESHOLD) {
+                    clearTouchTimers();
                     flushSync(() => {
                       setDragging({ from: key, index: idx });
                     });

@@ -569,7 +569,11 @@ export default function Hand3D({
       targetShown = inReturnZone ? 1 : 0;
     }
     // Hide hand completely during any other board drag (desktop/mobile only)
-    if (!isXRPresenting && !showCardBacks && (boardDragActive || draggingSite)) {
+    if (
+      !isXRPresenting &&
+      !showCardBacks &&
+      (boardDragActive || draggingSite)
+    ) {
       targetShown = 0;
     }
 
@@ -1291,7 +1295,8 @@ export default function Hand3D({
         const isDragging = isHandDrag; // Only block interactions for actual hand drags
         const isSite = (c.type || "").toLowerCase().includes("site");
 
-        const baseScale = HAND_CARD_SCALE * (graphicsSettings.handCardScale ?? 1);
+        const baseScale =
+          HAND_CARD_SCALE * (graphicsSettings.handCardScale ?? 1);
         const scale = baseScale * layoutScale;
         // Spells should render on top of sites: sites get lower render order, spells get higher
         // When spells first (sites on right), invert site order so leftmost site overlaps rightmost
@@ -1355,17 +1360,21 @@ export default function Hand3D({
               />
             ) : null}
             {/* Purple resolver outline for cards with custom automated behavior */}
-            {!showCardBacks && !remoteHighlightColor && !resolversDisabled && graphicsSettings.showResolverGlow && hasCustomResolver(c.name) && (
-              <ResolverOutline
-                width={CARD_SHORT}
-                height={CARD_LONG}
-                rotationZ={cardRotationZ}
-                elevation={-0.01}
-                renderOrder={renderOrder + 10000 - 6}
-                pulse
-                flat={false}
-              />
-            )}
+            {!showCardBacks &&
+              !remoteHighlightColor &&
+              !resolversDisabled &&
+              graphicsSettings.showResolverGlow &&
+              hasCustomResolver(c.name) && (
+                <ResolverOutline
+                  width={CARD_SHORT}
+                  height={CARD_LONG}
+                  rotationZ={cardRotationZ}
+                  elevation={-0.01}
+                  renderOrder={renderOrder + 10000 - 6}
+                  pulse
+                  flat={false}
+                />
+              )}
             {/* Invisible larger interaction box to ensure cards are always clickable */}
             {/* Disable during drag to prevent blocking board placement */}
             {!showCardBacks && !isDraggedCard && !isDragging && (
@@ -1542,31 +1551,14 @@ export default function Hand3D({
                   // Check if this was a tap (not a drag)
                   if (dist < TAP_THRESHOLD_PX && duration < TAP_THRESHOLD_MS) {
                     e.stopPropagation();
-
-                    // Devices without a precise pointer (AVP gaze+pinch, phones):
-                    // single tap = select + ready to play. No double-tap needed.
-                    const hasFinePointer = window.matchMedia(
-                      "(pointer: fine)",
-                    ).matches;
-
-                    if (touchSelectedIndex === originalIndex || !hasFinePointer) {
-                      // Select card and enter play mode immediately
-                      selectHandCard(owner, originalIndex);
-                      try {
-                        playCardSelect();
-                      } catch {}
-                      setDragFromHand(true);
-                      setTouchSelectedIndex(null);
-                    } else {
-                      // Fine pointer + touch (e.g. tablet with stylus): first tap = preview
-                      setTouchSelectedIndex(originalIndex);
-                      setHoveredCard(originalIndex);
-                      focusTargetRef.current = i; // Focus on this card in fan
-                      beginHoverPreview(c);
-                      try {
-                        playCardSelect();
-                      } catch {}
-                    }
+                    selectHandCard(owner, originalIndex);
+                    setTouchSelectedIndex(originalIndex);
+                    setHoveredCard(originalIndex);
+                    focusTargetRef.current = i;
+                    beginHoverPreview(c);
+                    try {
+                      playCardSelect();
+                    } catch {}
                   }
                 }}
               >

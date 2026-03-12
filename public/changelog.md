@@ -2,6 +2,13 @@
 
 ## March 2026
 
+### Mar 10 - User requested fixes and implementations
+
+-**add custom resolver for Kettletop Leprechaun, Geomancer**
+
+- **purple outline indicates custom resolver cards** can be deactivated in settings
+- **fixes for Omphalos** and better card preview
+
 ### Mar 5 - Sorcerers Summit, CPU, resolver highlight
 
 - **Sorcerers Summit: add Discord linking and support submitting matches**

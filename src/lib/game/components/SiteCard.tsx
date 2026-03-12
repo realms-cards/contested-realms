@@ -108,12 +108,12 @@ export function SiteCard({
   beginHoverPreview,
   clearHoverPreviewDebounced,
   clearTouchTimers,
-  emitBoardPing,
+  emitBoardPing: _emitBoardPing,
   isSpectator,
   actorKey,
   currentPlayer,
   setMagicTargetChoice,
-  touchPreviewTimerRef,
+  touchPreviewTimerRef: _touchPreviewTimerRef,
   touchContextTimerRef,
   computeProjectileFirstHits,
   switchSiteSource,
@@ -125,6 +125,8 @@ export function SiteCard({
   void magicGuidesActive;
   void computeProjectileFirstHits;
   void avatars;
+  void _touchPreviewTimerRef;
+  void _emitBoardPing;
   if (!maybeSite) return null;
   const site = maybeSite;
 
@@ -245,11 +247,6 @@ export function SiteCard({
         !window.matchMedia("(pointer: fine)").matches);
     if (needsLongPress) {
       clearTouchTimers();
-      if (site.card) {
-        touchPreviewTimerRef.current = window.setTimeout(() => {
-          beginHoverPreview(site.card, tileKey);
-        }, 180) as unknown as number;
-      }
       touchContextTimerRef.current = window.setTimeout(() => {
         openContextMenu(
           { kind: "site", x: tileX, y: tileY },
@@ -363,18 +360,21 @@ export function SiteCard({
         </group>
       )}
       {/* Purple outline for sites with custom resolvers */}
-      {!highlight && !useGameStore.getState().resolversDisabled && getGraphicsSettings().showResolverGlow && hasCustomResolver(site.card?.name) && (
-        <group position={[edgeOffset.x, 0, edgeOffset.z]}>
-          <ResolverOutline
-            width={CARD_SHORT}
-            height={CARD_LONG}
-            rotationZ={rotZ}
-            elevation={0.0001}
-            renderOrder={1100}
-            pulse
-          />
-        </group>
-      )}
+      {!highlight &&
+        !useGameStore.getState().resolversDisabled &&
+        getGraphicsSettings().showResolverGlow &&
+        hasCustomResolver(site.card?.name) && (
+          <group position={[edgeOffset.x, 0, edgeOffset.z]}>
+            <ResolverOutline
+              width={CARD_SHORT}
+              height={CARD_LONG}
+              rotationZ={rotZ}
+              elevation={0.0001}
+              renderOrder={1100}
+              pulse
+            />
+          </group>
+        )}
       {/* Tower of Babel: render both Base (bottom) and Apex (top) cards stacked */}
       {/* Base is offset slightly so both cards are visible when stacked */}
       {towerMerge && towerMerge.baseCard && towerMerge.apexCard ? (
@@ -429,7 +429,7 @@ export function SiteCard({
           </group>
           {/* Apex of Babel (top card) */}
           <CardPlane
-            slug={towerMerge.apexCard.slug || ""}
+            slug={towerMerge.apexCard?.slug || ""}
             width={CARD_SHORT}
             height={CARD_LONG}
             depthWrite
@@ -457,11 +457,6 @@ export function SiteCard({
               e.stopPropagation();
               clearTouchTimers();
               clearHoverPreviewDebounced(tileKey);
-            }}
-            onDoubleClick={(e) => {
-              if (!canInteract) return;
-              e.stopPropagation();
-              emitBoardPing({ x: e.point.x, z: e.point.z });
             }}
             onContextMenu={(e) => {
               if (isSpectator) return;
@@ -505,11 +500,6 @@ export function SiteCard({
               e.stopPropagation();
               clearTouchTimers();
               clearHoverPreviewDebounced(tileKey);
-            }}
-            onDoubleClick={(e) => {
-              if (!canInteract) return;
-              e.stopPropagation();
-              emitBoardPing({ x: e.point.x, z: e.point.z });
             }}
             onContextMenu={(e) => {
               if (isSpectator) return;

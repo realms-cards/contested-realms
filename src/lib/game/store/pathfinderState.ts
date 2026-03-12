@@ -330,9 +330,7 @@ export const createPathfinderSlice: StateCreator<
       permanents = result.permanents;
       movedArtifactIds = result.movedArtifacts
         .map((a) => a.instanceId || a.card?.instanceId)
-        .filter(
-          (id): id is string => typeof id === "string" && id.length > 0,
-        );
+        .filter((id): id is string => typeof id === "string" && id.length > 0);
       if (result.movedArtifacts.length > 0) {
         get().log(
           `[PATHFINDER] Moved ${result.movedArtifacts.length} attached artifact(s) with avatar`,
@@ -358,9 +356,12 @@ export const createPathfinderSlice: StateCreator<
       pendingPathfinderPlay: null,
     } as Partial<GameState> as GameState);
 
+    const sitesPatch: Record<string, unknown> = {
+      [targetCell]: newSites[targetCell] ?? null,
+    };
     const patch: Record<string, unknown> = {
       zones: { [who]: updatedZones[who] } as GameState["zones"],
-      board: { ...board, sites: newSites },
+      board: { ...board, sites: sitesPatch },
       avatars: newAvatars,
       pathfinderUsed: updatedUsed,
     };

@@ -1,5 +1,9 @@
 import type { StateCreator } from "zustand";
-import { isAnimist, isGeomancer, isHarbinger } from "@/lib/game/avatarAbilities";
+import {
+  isAnimist,
+  isGeomancer,
+  isHarbinger,
+} from "@/lib/game/avatarAbilities";
 import {
   BEACON_GENESIS_SITES,
   ELEMENT_CHOICE_SITES,
@@ -445,7 +449,12 @@ export const createPlayActionsSlice: StateCreator<
       const hand = [...state.zones[who].hand];
       hand.splice(index, 1);
       const key: CellKey = toCellKey(x, y);
-      const cellNo = getCellNumber(x, y, state.board.size.w, state.board.size.h);
+      const cellNo = getCellNumber(
+        x,
+        y,
+        state.board.size.w,
+        state.board.size.h,
+      );
       if (type.includes("site")) {
         // Check for Apex of Babel special placement
         if (isApexOfBabel(card.name)) {
@@ -653,11 +662,17 @@ export const createPlayActionsSlice: StateCreator<
               } as ServerPatchT["permanents"];
             }
           }
+          const sitesPatch: Record<string, unknown> = {
+            [key]: sites[key] ?? null,
+          };
           const patch: ServerPatchT = {
             ...(combinedZonePatch?.zones
               ? { zones: combinedZonePatch.zones }
               : {}),
-            board: { ...state.board, sites } as GameState["board"],
+            board: {
+              ...state.board,
+              sites: sitesPatch as GameState["board"]["sites"],
+            } as GameState["board"],
             ...(permanentsPatch ? { permanents: permanentsPatch } : {}),
           };
           get().trySendPatch(patch);
@@ -938,6 +953,7 @@ export const createPlayActionsSlice: StateCreator<
       const isShapeshift = cardNameLower === "shapeshift";
       const isTorshammarTrinket = cardNameLower === "torshammar trinket";
       const isTheInquisition = cardNameLower === "the inquisition";
+      const isFeastForCrows = cardNameLower === "feast for crows";
 
       // If this is Torshammar Trinket, show a toast that it will return to hand automatically
       if (isTorshammarTrinket && newest && type.includes("artifact")) {
@@ -1141,6 +1157,21 @@ export const createPlayActionsSlice: StateCreator<
       else if (isAccusation && newest) {
         try {
           get().beginAccusation({
+            spell: {
+              at: key,
+              index: arr.length - 1,
+              instanceId: newest.instanceId ?? null,
+              owner: newest.owner,
+              card: newest.card as CardRef,
+            },
+            casterSeat: who,
+          });
+        } catch {}
+      }
+      // If this is Feast for Crows, begin the naming/search flow
+      else if (isFeastForCrows && newest) {
+        try {
+          get().beginFeastForCrows({
             spell: {
               at: key,
               index: arr.length - 1,
@@ -1631,7 +1662,12 @@ export const createPlayActionsSlice: StateCreator<
         }
       }
       const key: CellKey = toCellKey(x, y);
-      const cellNo = getCellNumber(x, y, state.board.size.w, state.board.size.h);
+      const cellNo = getCellNumber(
+        x,
+        y,
+        state.board.size.w,
+        state.board.size.h,
+      );
       const isRubble =
         type.includes("token") &&
         TOKEN_BY_NAME[(card.name || "").toLowerCase()]?.siteReplacement;
@@ -1707,9 +1743,15 @@ export const createPlayActionsSlice: StateCreator<
         const tr = get().transport;
         if (tr) {
           const zonePatch = createZonesPatchFor(zonesNext, who);
+          const sitesPatch: Record<string, unknown> = {
+            [key]: sites[key] ?? null,
+          };
           const patch: ServerPatchT = {
             ...(zonePatch?.zones ? { zones: zonePatch.zones } : {}),
-            board: { ...state.board, sites } as GameState["board"],
+            board: {
+              ...state.board,
+              sites: sitesPatch as GameState["board"]["sites"],
+            } as GameState["board"],
           };
           get().trySendPatch(patch);
         }

@@ -76,9 +76,7 @@ export type GeomancerSlice = Pick<
 /** Show a toast only on the local client (not broadcast to opponent) */
 function localToast(message: string) {
   if (typeof window !== "undefined") {
-    window.dispatchEvent(
-      new CustomEvent("app:toast", { detail: { message } }),
-    );
+    window.dispatchEvent(new CustomEvent("app:toast", { detail: { message } }));
   }
 }
 
@@ -275,9 +273,7 @@ export const createGeomancerSlice: StateCreator<
           ...topSite,
           instanceId:
             topSite.instanceId ||
-            `geomancer_${Date.now()}_${Math.random()
-              .toString(36)
-              .slice(2, 6)}`,
+            `geomancer_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
         },
         tapped: false,
       },
@@ -306,8 +302,11 @@ export const createGeomancerSlice: StateCreator<
     // "Cannot tap or untap opponent avatar" server rejection
     const patchAvatars = { [who]: tappedAvatar } as GameState["avatars"];
 
+    const sitesPatch: Record<string, unknown> = {
+      [targetCell]: newSites[targetCell] ?? null,
+    };
     const patches: ServerPatchT = {
-      board: { sites: newSites } as unknown as ServerPatchT["board"],
+      board: { sites: sitesPatch } as unknown as ServerPatchT["board"],
       zones: {
         [who]: updatedZones[who],
       } as unknown as ServerPatchT["zones"],
@@ -447,9 +446,7 @@ export const createGeomancerSlice: StateCreator<
 
     set({ pendingGeomancerFill: null });
 
-    get().log(
-      `[${pending.ownerSeat.toUpperCase()}] Geomancer fill cancelled`,
-    );
+    get().log(`[${pending.ownerSeat.toUpperCase()}] Geomancer fill cancelled`);
 
     const transport = get().transport;
     if (transport?.sendMessage) {
@@ -469,9 +466,7 @@ function placeRubbleAt(
   who: PlayerKey,
   get: () => GameState,
   set: (
-    partial:
-      | Partial<GameState>
-      | ((state: GameState) => Partial<GameState>),
+    partial: Partial<GameState> | ((state: GameState) => Partial<GameState>),
   ) => void,
 ) {
   const state = get();

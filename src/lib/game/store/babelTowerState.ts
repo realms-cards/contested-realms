@@ -482,8 +482,11 @@ export const createBabelTowerSlice: StateCreator<
     // Send patches
     const transport = get().transport;
     if (transport) {
+      const sitesPatch: Record<string, unknown> = {
+        [targetCell]: sitesNext[targetCell] ?? null,
+      };
       const patch: ServerPatchT = {
-        board: { ...board, sites: sitesNext } as GameState["board"],
+        board: { ...board, sites: sitesPatch } as GameState["board"],
         zones: { [casterSeat]: zonesNext[casterSeat] } as GameState["zones"],
         avatars: avatarsNext,
       };

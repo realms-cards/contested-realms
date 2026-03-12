@@ -2255,6 +2255,255 @@ export function handleCustomMessage(
     return;
   }
 
+  // --- Feast for Crows message handlers ---
+  if (t === "feastForCrowsBegin") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const spellAny = (msg as { spell?: unknown }).spell as unknown;
+    const casterSeat = (msg as { casterSeat?: unknown }).casterSeat as
+      | PlayerKey
+      | undefined;
+    const victimSeat = (msg as { victimSeat?: unknown }).victimSeat as
+      | PlayerKey
+      | undefined;
+    if (!id || !casterSeat || !victimSeat) return;
+    const actorKey = get().actorKey;
+    if (actorKey === casterSeat) return; // Caster already handled locally
+
+    const spell = spellAny as {
+      at: CellKey;
+      index: number;
+      instanceId?: string | null;
+      owner: 1 | 2;
+      card: CardRef;
+    };
+
+    set({
+      pendingFeastForCrows: {
+        id,
+        spell,
+        casterSeat,
+        phase: "naming",
+        victimSeat,
+        namedCardName: null,
+        namedCardSlug: null,
+        revealedHand: [],
+        revealedSpellbook: [],
+        revealedGraveyard: [],
+        matches: [],
+        createdAt: Date.now(),
+      },
+    } as Partial<GameState> as GameState);
+    try {
+      get().log(
+        `[${casterSeat.toUpperCase()}] casts Feast for Crows — naming a spell...`,
+      );
+    } catch {}
+    return;
+  }
+  if (t === "feastForCrowsName") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const casterSeat = (msg as { casterSeat?: unknown }).casterSeat as
+      | PlayerKey
+      | undefined;
+    const victimSeat = (msg as { victimSeat?: unknown }).victimSeat as
+      | PlayerKey
+      | undefined;
+    const namedCardName = (msg as { namedCardName?: unknown })
+      .namedCardName as string | undefined;
+    const namedCardSlug = (msg as { namedCardSlug?: unknown })
+      .namedCardSlug as string | undefined;
+    const matchCount = (msg as { matchCount?: unknown }).matchCount as
+      | number
+      | undefined;
+    const matchesRaw = (msg as { matches?: unknown }).matches as
+      | { zone: string; index: number; card: CardRef }[]
+      | undefined;
+
+    if (!id || !casterSeat || !victimSeat || !namedCardName) return;
+    const actorKey = get().actorKey;
+    if (actorKey === casterSeat) return; // Caster already handled locally
+
+    const pending = get().pendingFeastForCrows;
+    if (!pending || pending.id !== id) return;
+
+    // Victim can see their own zones being searched
+    const zones = get().zones;
+    const revealedHand = [...(zones[victimSeat]?.hand || [])];
+    const revealedSpellbook = [...(zones[victimSeat]?.spellbook || [])];
+    const revealedGraveyard = [...(zones[victimSeat]?.graveyard || [])];
+
+    const typedMatches = (matchesRaw || []).map((m) => ({
+      zone: m.zone as "hand" | "spellbook" | "graveyard",
+      index: m.index,
+      card: m.card,
+    }));
+
+    set({
+      pendingFeastForCrows: {
+        ...pending,
+        phase: "revealing",
+        namedCardName,
+        namedCardSlug: namedCardSlug || null,
+        revealedHand,
+        revealedSpellbook,
+        revealedGraveyard,
+        matches: typedMatches,
+      },
+    } as Partial<GameState> as GameState);
+
+    try {
+      get().log(
+        `[${casterSeat.toUpperCase()}] Feast for Crows — names "${namedCardName}" (${matchCount ?? 0} found)`,
+      );
+    } catch {}
+    return;
+  }
+  if (t === "feastForCrowsResolve") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const casterSeat = (msg as { casterSeat?: unknown }).casterSeat as
+      | PlayerKey
+      | undefined;
+    const victimSeat = (msg as { victimSeat?: unknown }).victimSeat as
+      | PlayerKey
+      | undefined;
+    const namedCardName = (msg as { namedCardName?: unknown })
+      .namedCardName as string | undefined;
+    const matchesRaw = (msg as { matches?: unknown }).matches as
+      | { zone: string; index: number; card: CardRef }[]
+      | undefined;
+    const banishedCount = (msg as { banishedCount?: unknown })
+      .banishedCount as number | undefined;
+
+    if (!id || !casterSeat || !victimSeat) return;
+    const actorKey = get().actorKey;
+
+    // Caster already handled it locally
+    if (actorKey === casterSeat) {
+      set({ pendingFeastForCrows: null } as Partial<GameState> as GameState);
+      return;
+    }
+
+    // Victim needs to update their own zones
+    if (actorKey === victimSeat && matchesRaw) {
+      const zones = get().zones;
+      const hand = [...(zones[victimSeat]?.hand || [])];
+      const spellbook = [...(zones[victimSeat]?.spellbook || [])];
+      const graveyard = [...(zones[victimSeat]?.graveyard || [])];
+      const banished = [...(zones[victimSeat]?.banished || [])];
+
+      // Collect indices to remove per zone
+      const handIndices: number[] = [];
+      const spellbookIndices: number[] = [];
+      const graveyardIndices: number[] = [];
+
+      for (const match of matchesRaw) {
+        const card = match.card;
+        if (match.zone === "hand") {
+          const idx = hand.findIndex(
+            (c) =>
+              c.cardId === card.cardId &&
+              c.slug === card.slug &&
+              c.name === card.name,
+          );
+          if (idx !== -1 && !handIndices.includes(idx)) handIndices.push(idx);
+        } else if (match.zone === "spellbook") {
+          const idx = spellbook.findIndex(
+            (c) =>
+              c.cardId === card.cardId &&
+              c.slug === card.slug &&
+              c.name === card.name,
+          );
+          if (idx !== -1 && !spellbookIndices.includes(idx))
+            spellbookIndices.push(idx);
+        } else if (match.zone === "graveyard") {
+          const idx = graveyard.findIndex(
+            (c) =>
+              c.cardId === card.cardId &&
+              c.slug === card.slug &&
+              c.name === card.name,
+          );
+          if (idx !== -1 && !graveyardIndices.includes(idx))
+            graveyardIndices.push(idx);
+        }
+      }
+
+      // Remove from end to start
+      handIndices
+        .sort((a, b) => b - a)
+        .forEach((idx) => {
+          banished.push(hand[idx]);
+          hand.splice(idx, 1);
+        });
+      spellbookIndices
+        .sort((a, b) => b - a)
+        .forEach((idx) => {
+          banished.push(spellbook[idx]);
+          spellbook.splice(idx, 1);
+        });
+      graveyardIndices
+        .sort((a, b) => b - a)
+        .forEach((idx) => {
+          banished.push(graveyard[idx]);
+          graveyard.splice(idx, 1);
+        });
+
+      // Shuffle spellbook
+      for (let i = spellbook.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [spellbook[i], spellbook[j]] = [spellbook[j], spellbook[i]];
+      }
+
+      const zonesNext = {
+        ...zones,
+        [victimSeat]: {
+          ...zones[victimSeat],
+          hand,
+          spellbook,
+          graveyard,
+          banished,
+        },
+      };
+
+      set({
+        zones: zonesNext,
+        pendingFeastForCrows: null,
+      } as Partial<GameState> as GameState);
+
+      // Victim sends their own patch
+      try {
+        get().trySendPatch({
+          zones: {
+            [victimSeat]: zonesNext[victimSeat],
+          } as Record<PlayerKey, Zones>,
+        });
+      } catch {}
+    } else {
+      // Spectator
+      set({ pendingFeastForCrows: null } as Partial<GameState> as GameState);
+    }
+
+    try {
+      get().log(
+        `Feast for Crows resolved: ${banishedCount ?? 0} cop${(banishedCount ?? 0) === 1 ? "y" : "ies"} of "${namedCardName ?? "card"}" banished, spellbook shuffled`,
+      );
+    } catch {}
+    return;
+  }
+  if (t === "feastForCrowsCancel") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    set((s) => {
+      if (!s.pendingFeastForCrows || (id && s.pendingFeastForCrows.id !== id))
+        return s as GameState;
+      return {
+        pendingFeastForCrows: null,
+      } as Partial<GameState> as GameState;
+    });
+    try {
+      get().log("Feast for Crows cancelled");
+    } catch {}
+    return;
+  }
+
   // --- The Inquisition minion Genesis message handlers ---
   if (t === "inquisitionBegin") {
     const id = (msg as { id?: unknown }).id as string | undefined;

@@ -1,6 +1,4 @@
 "use client";
-
-import Image from "next/image";
 import { useLayoutEffect, useRef, useState, useEffect } from "react";
 import { useSound } from "@/lib/contexts/SoundContext";
 import {
@@ -1419,8 +1417,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         geoDescription = "Already used Geomancer ability this turn";
       else if (!isNotTapped) geoDescription = "Geomancer is already tapped";
       else if (!hasPosition) geoDescription = "Avatar must be on the board";
-      else if (atlasCount === 0)
-        geoDescription = "No sites remaining in atlas";
+      else if (atlasCount === 0) geoDescription = "No sites remaining in atlas";
 
       extraActions.push({
         actionId: "__geomancer_rubble__",
@@ -1696,24 +1693,6 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     header = t.card.name || "Hand Card";
   }
 
-  // Resolve card slug for mobile inline preview
-  let previewSlug: string | null = null;
-  let previewIsSite = false;
-  if (t.kind === "site") {
-    const sKey = toCellKey(t.x, t.y);
-    const siteCard = board.sites[sKey]?.card;
-    previewSlug = siteCard?.slug ?? null;
-    previewIsSite = true;
-  } else if (t.kind === "permanent") {
-    const pCard = (permanents[t.at] || [])[t.index]?.card;
-    previewSlug = pCard?.slug ?? null;
-    previewIsSite = (pCard?.type || "").toLowerCase().includes("site");
-  } else if (t.kind === "avatar") {
-    previewSlug = avatars[t.who]?.card?.slug ?? null;
-  } else if (t.kind === "handCard") {
-    previewSlug = t.card.slug ?? null;
-  }
-
   const label = tapped ? "Untap" : "Tap";
 
   // Handle attachment target selection
@@ -1821,29 +1800,6 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
           onClick={(e) => e.stopPropagation()}
         >
           <div>
-            {/* Mobile: readable card preview at top of bottom sheet */}
-            {isMobileScreen && previewSlug && (
-              <div className="flex flex-col items-center mb-3">
-                <div
-                  className={`relative rounded-lg overflow-hidden bg-black/30 ring-1 ring-white/10 ${previewIsSite ? "w-44 aspect-[4/3]" : "w-28 aspect-[3/4]"}`}
-                >
-                  <Image
-                    src={`/api/images/${previewSlug}`}
-                    alt={header}
-                    fill
-                    className={`${previewIsSite ? "object-contain rotate-90 scale-[1.333] origin-center" : "object-contain"} object-center`}
-                    sizes="180px"
-                    unoptimized
-                  />
-                </div>
-                <div
-                  className="text-xs font-semibold mt-1.5 truncate max-w-full text-center"
-                  title={header}
-                >
-                  {header}
-                </div>
-              </div>
-            )}
             {/* Desktop: text-only header */}
             {!isMobileScreen && (
               <div

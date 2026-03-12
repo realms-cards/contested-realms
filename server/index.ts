@@ -4402,7 +4402,11 @@ io.on("connection", async (socket: SocketClient) => {
       type === "gardenOfEdenUnregister" ||
       type === "kettletopBegin" ||
       type === "kettletopResolve" ||
-      type === "kettletopCancel"
+      type === "kettletopCancel" ||
+      type === "feastForCrowsBegin" ||
+      type === "feastForCrowsName" ||
+      type === "feastForCrowsResolve" ||
+      type === "feastForCrowsCancel"
     ) {
       // Resolver messages - broadcast to match room
       try {

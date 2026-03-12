@@ -35,6 +35,7 @@ import DemonicContractOverlay from "@/components/game/DemonicContractOverlay";
 import DholChantsOverlay from "@/components/game/DholChantsOverlay";
 import DoomsdayCultOverlay from "@/components/game/DoomsdayCultOverlay";
 import EarthquakeOverlay from "@/components/game/EarthquakeOverlay";
+import FeastForCrowsOverlay from "@/components/game/FeastForCrowsOverlay";
 import { ElementChoiceOverlay } from "@/components/game/ElementChoiceOverlay";
 import { EndTurnConfirmDialog } from "@/components/game/EndTurnConfirmDialog";
 import EnhancedOnlineDraft3DScreen from "@/components/game/EnhancedOnlineDraft3DScreen";
@@ -3480,6 +3481,8 @@ export default function OnlineMatchPage() {
               <SearingTruthOverlay playerNames={playerNames} />
               {/* Accusation Overlay (reveal opponent hand, banish) */}
               <AccusationOverlay />
+              {/* Feast for Crows Overlay (name spell, search opponent, banish) */}
+              <FeastForCrowsOverlay />
               {/* The Inquisition Overlay (Genesis: reveal opponent hand, may banish) */}
               <InquisitionOverlay />
               {/* The Inquisition Passive Summon Overlay (revealed by opponent, may summon) */}

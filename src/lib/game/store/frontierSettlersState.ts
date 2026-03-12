@@ -84,7 +84,7 @@ export const createFrontierSettlersSlice: StateCreator<
       get().frontierSettlersUsed.has(minion.instanceId)
     ) {
       get().log(
-        `[${ownerSeat.toUpperCase()}] Frontier Settlers has already used its ability`
+        `[${ownerSeat.toUpperCase()}] Frontier Settlers has already used its ability`,
       );
       return;
     }
@@ -95,7 +95,7 @@ export const createFrontierSettlersSlice: StateCreator<
     // Find topmost site in atlas
     if (atlas.length === 0) {
       get().log(
-        `[${ownerSeat.toUpperCase()}] Frontier Settlers: No sites in atlas to reveal`
+        `[${ownerSeat.toUpperCase()}] Frontier Settlers: No sites in atlas to reveal`,
       );
       return;
     }
@@ -107,7 +107,7 @@ export const createFrontierSettlersSlice: StateCreator<
     const adjacentCells = getAdjacentCells(
       minion.at,
       board.size.w,
-      board.size.h
+      board.size.h,
     );
 
     const validTargets: CellKey[] = [];
@@ -124,7 +124,7 @@ export const createFrontierSettlersSlice: StateCreator<
 
     if (validTargets.length === 0) {
       get().log(
-        `[${ownerSeat.toUpperCase()}] Frontier Settlers: No adjacent void or Rubble to place site`
+        `[${ownerSeat.toUpperCase()}] Frontier Settlers: No adjacent void or Rubble to place site`,
       );
       return;
     }
@@ -146,7 +146,7 @@ export const createFrontierSettlersSlice: StateCreator<
     get().log(
       `[${ownerSeat.toUpperCase()}] Frontier Settlers reveals ${
         topSite.name || "a site"
-      } from atlas`
+      } from atlas`,
     );
 
     // Move to selecting phase after brief reveal
@@ -299,8 +299,11 @@ export const createFrontierSettlersSlice: StateCreator<
     } as Partial<GameState> as GameState);
 
     // Send patches - send full zones for seat to prevent partial patch issues
+    const sitesPatch: Record<string, unknown> = {
+      [selectedTarget]: sitesNext[selectedTarget] ?? null,
+    };
     const patches: ServerPatchT = {
-      board: { sites: sitesNext } as unknown as ServerPatchT["board"],
+      board: { sites: sitesPatch } as unknown as ServerPatchT["board"],
       zones: {
         [ownerSeat]: zonesNext[ownerSeat],
       } as unknown as ServerPatchT["zones"],
@@ -311,7 +314,7 @@ export const createFrontierSettlersSlice: StateCreator<
     get().log(
       `[${ownerSeat.toUpperCase()}] Frontier Settlers plays ${
         revealedSite.name || "site"
-      } and moves there`
+      } and moves there`,
     );
 
     // Broadcast resolution
@@ -346,7 +349,7 @@ export const createFrontierSettlersSlice: StateCreator<
     set({ pendingFrontierSettlers: null } as Partial<GameState> as GameState);
 
     get().log(
-      `[${pending.ownerSeat.toUpperCase()}] cancels Frontier Settlers ability`
+      `[${pending.ownerSeat.toUpperCase()}] cancels Frontier Settlers ability`,
     );
 
     // Broadcast cancellation

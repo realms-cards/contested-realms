@@ -240,7 +240,7 @@ const lesson: TutorialLesson = {
       id: "cast-sickness",
       type: "narration",
       title: "Summoning Sickness",
-      text: "The Belmotte Longbowmen are in play! But notice — they have **Summoning Sickness** this turn. Any minion that enters the realm this turn, whether from being cast or from another effect:\n\n- **Cannot tap** or be tapped for ability costs (including Move and Attack)\n- **CAN** still defend on your opponent's turn\n- Summoning sickness ends when they untap at the start of your next turn",
+      text: "The Belmotte Longbowmen are in play! But notice — they have **Summoning Sickness** this turn. Any minion that enters the realm this turn, whether from being cast or from another effect:\n\n- **Cannot tap** or be tapped for ability costs (including Move and Attack)\n- **CAN** still defend or intercept on your opponent's turn\n- Summoning sickness ends when they untap at the start of your next turn",
     },
     {
       id: "cast-multiple",
