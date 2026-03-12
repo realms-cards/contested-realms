@@ -252,9 +252,10 @@ export function AvatarCard({
     beginHoverPreview,
     clearHoverPreviewDebounced,
     clearTouchTimers,
-    touchPreviewTimerRef,
+    touchPreviewTimerRef: _touchPreviewTimerRef,
     touchContextTimerRef,
   } = hoverContext;
+  void _touchPreviewTimerRef;
   const {
     selectedAvatar,
     selectAvatar,
@@ -450,11 +451,6 @@ export function AvatarCard({
       clearTouchTimers();
       const cx = e.clientX;
       const cy = e.clientY;
-      if (avatar.card) {
-        touchPreviewTimerRef.current = window.setTimeout(() => {
-          beginHoverPreview(avatar.card, seat);
-        }, 180) as unknown as number;
-      }
       touchContextTimerRef.current = window.setTimeout(() => {
         selectAvatar(seat);
         setLastTouchedId(avatarId);
@@ -499,6 +495,7 @@ export function AvatarCard({
       const dist = Math.hypot(dx, dz);
       const heldFor = Date.now() - avatarDragStartRef.current.time;
       if (heldFor >= DRAG_HOLD_MS && dist > DRAG_THRESHOLD) {
+        clearTouchTimers();
         flushSync(() => setDragAvatar(seat));
         setGhost(null);
         if (useGhostOnlyBoardDrag) {

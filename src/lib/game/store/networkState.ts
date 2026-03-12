@@ -878,7 +878,21 @@ export const createNetworkSlice: StateCreator<
             (a, v) => a + (Array.isArray(v) ? v.length : 0),
             0,
           );
-          if (prevPermCount > 0 && nextPermCount === 0) {
+          // Delta removals (__remove: true) are targeted extractions, not board wipes.
+          // Bypass hardening so a spell that is the only permanent can be legally removed.
+          const patchHasDeltaRemovals = Object.values(
+            p.permanents as Record<string, unknown>,
+          ).some(
+            (arr) =>
+              Array.isArray(arr) &&
+              arr.some(
+                (item) =>
+                  item &&
+                  typeof item === "object" &&
+                  (item as Record<string, unknown>).__remove === true,
+              ),
+          );
+          if (prevPermCount > 0 && nextPermCount === 0 && !patchHasDeltaRemovals) {
             console.warn(
               `[PERMANENTS_HARDENING] Prevented board wipe: patch would clear all ${prevPermCount} permanents`,
               {
@@ -1478,7 +1492,20 @@ export const createNetworkSlice: StateCreator<
             (a, v) => a + (Array.isArray(v) ? v.length : 0),
             0,
           );
-          if (prevPermCount > 0 && nextPermCount === 0) {
+          // Delta removals (__remove: true) are targeted — bypass hardening.
+          const applyPatchHasDeltaRemovals = Object.values(
+            p.permanents as Record<string, unknown>,
+          ).some(
+            (arr) =>
+              Array.isArray(arr) &&
+              arr.some(
+                (item) =>
+                  item &&
+                  typeof item === "object" &&
+                  (item as Record<string, unknown>).__remove === true,
+              ),
+          );
+          if (prevPermCount > 0 && nextPermCount === 0 && !applyPatchHasDeltaRemovals) {
             console.warn(
               `[PERMANENTS_HARDENING] applyPatch: Prevented board wipe: patch would clear all ${prevPermCount} permanents`,
             );

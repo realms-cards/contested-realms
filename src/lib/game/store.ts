@@ -47,6 +47,7 @@ import {
   createInitialDruidFlipped,
 } from "./store/druidState";
 import { createEarthquakeSlice } from "./store/earthquakeState";
+import { createFeastForCrowsSlice } from "./store/feastForCrowsState";
 import { createEventSlice } from "./store/eventState";
 import { createFrontierSettlersSlice } from "./store/frontierSettlersState";
 import { createGameActionsSlice } from "./store/gameActions";
@@ -204,6 +205,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   ...createCommonSenseSlice(set, get, storeApi),
   ...createCorpseExplosionSlice(set, get, storeApi),
   ...createEarthquakeSlice(set, get, storeApi),
+  ...createFeastForCrowsSlice(set, get, storeApi),
   ...createPithImpSlice(set, get, storeApi),
   ...createMorganaSlice(set, get, storeApi),
   ...createOmphalosSlice(set, get, storeApi),
@@ -375,6 +377,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         pendingCommonSense: null,
         pendingCorpseExplosion: null,
         pendingEarthquake: null,
+        pendingFeastForCrows: null,
         stolenCards: [],
         pithImpHands: [],
         processedPithImpReturns: new Set<string>(),

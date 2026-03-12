@@ -92,7 +92,7 @@ const lesson: TutorialLesson = {
       id: "welcome-sites",
       type: "narration",
       title: "Sites",
-      text: "**Sites** are terrain cards drawn from your Atlas. They fill the empty Void squares of the Realm. Each site provides two things:\n\n- {mana:1} **Mana** — the resource you spend to cast spells\n- **Element Treshold** — that determine which spells you can cast\n\nFor example, **Valley** is an Ordinary {earth} Earth site. When placed, it gives you {mana:1} mana and 1 {earth} Earth affinity. Your first site must always be placed under your Avatar. Be careful with Site placement, attacking a site successfully will reduce the owners life.",
+      text: "**Sites** are terrain cards drawn from your Atlas. They fill the empty Void squares of the Realm. Each site provides two things:\n\n- {mana:1} **Mana** — the resource you spend to cast spells\n- **Element Threshold** — that determine which spells you can cast\n\nFor example, **Valley** is an Ordinary {earth} Earth site. When placed, it gives you {mana:1} mana and 1 {earth} Earth affinity. Your first site must always be placed under your Avatar. Be careful with Site placement, attacking a site successfully will reduce the owners life.",
       showCard: { name: "Valley", slug: "got-valley-pd-s", type: "Site" },
     },
     {
@@ -105,7 +105,7 @@ const lesson: TutorialLesson = {
       id: "welcome-example-minion",
       type: "narration",
       title: "Example: Amazon Warriors",
-      text: "The **Amazon Warriors** are a Minion spell:\n\n- **Mana Cost**: {mana:5} — you need {mana:5} mana to summon them\n- **Threshold**: 1 {earth} Earth — you need at least 1 {earth} Earth treshold from your sites\n- **Power**: 5/5 — they strike for 5 damage, and it takes 5 damage to kill them\n\nMinions stay on the board until destroyed. They all have basic abilities: Tap to move, attack, or defend.",
+      text: "The **Amazon Warriors** are a Minion spell:\n\n- **Mana Cost**: {mana:5} — you need {mana:5} mana to summon them\n- **Threshold**: 1 {earth} Earth — you need at least 1 {earth} Earth threshold from your sites\n- **Power**: 5/5 — they strike for 5 damage, and it takes 5 damage to kill them\n\nMinions stay on the board until destroyed. They all have basic abilities: Tap to move, attack, defend or intercept.",
       showCard: {
         name: "Amazon Warriors",
         slug: "bet-amazon_warriors-b-s",

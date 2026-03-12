@@ -123,6 +123,14 @@ export const RESOLVER_REGISTRY: ResolverEntry[] = [
     stateFile: "doomsdayCultState.ts",
     description: "Sacrifice permanents for power",
   },
+  {
+    id: "feastForCrows",
+    cardName: "Feast for Crows",
+    category: "spell",
+    stateFile: "feastForCrowsState.ts",
+    description:
+      "Name a spell, search opponent's hand/spellbook/cemetery for copies, banish them, shuffle",
+  },
 
   // ─── MINION RESOLVERS ──────────────────────────────────────────────
   {

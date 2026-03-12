@@ -1,4 +1,5 @@
 import type { ThreeEvent } from "@react-three/fiber";
+import { useRef } from "react";
 import type { MutableRefObject } from "react";
 import { TILE_SIZE } from "@/lib/game/constants";
 import type { BoardDragControls } from "@/lib/game/hooks/useBoardDragControls";
@@ -104,6 +105,30 @@ export function TileInteractionPlane({
 }: TileInteractionPlaneProps) {
   const { dragAvatar, dragging, setGhost, draggedBody, moveDraggedBody } =
     dragContext;
+  const tapHistoryRef = useRef<number[]>([]);
+
+  function registerTapForPing(e: ThreeEvent<PointerEvent>) {
+    const pe = e.nativeEvent as PointerEvent | undefined;
+    const isTouchLike =
+      !!pe &&
+      (pe.pointerType === "touch" ||
+        (typeof window !== "undefined" &&
+          !window.matchMedia("(pointer: fine)").matches));
+    if (!isTouchLike) return false;
+    if (dragFromHand || dragFromPile || dragging || dragAvatar) return false;
+
+    const now = Date.now();
+    const recent = tapHistoryRef.current.filter((ts) => now - ts <= 650);
+    recent.push(now);
+    tapHistoryRef.current = recent;
+    if (recent.length >= 3) {
+      tapHistoryRef.current = [];
+      e.stopPropagation();
+      emitBoardPing({ x: e.point.x, z: e.point.z });
+      return true;
+    }
+    return false;
+  }
 
   return (
     <mesh
@@ -134,12 +159,6 @@ export function TileInteractionPlane({
         if ((dragging || dragAvatar) && draggedBody.current) {
           moveDraggedBody(world.x, world.z, true);
         }
-      }}
-      onDoubleClick={(e: ThreeEvent<MouseEvent>) => {
-        if (isSpectator) return;
-        if (dragFromHand || dragFromPile || dragging || dragAvatar) return;
-        e.stopPropagation();
-        emitBoardPing({ x: e.point.x, z: e.point.z });
       }}
       onPointerUp={(e: ThreeEvent<PointerEvent>) => {
         // Complete switch site if a source is selected - check this first before other handlers
@@ -330,6 +349,12 @@ export function TileInteractionPlane({
       onClick={(e) => {
         e.stopPropagation();
         if (Date.now() - lastDropAt.current < 200) return;
+        if (
+          !isSpectator &&
+          registerTapForPing(e as unknown as ThreeEvent<PointerEvent>)
+        ) {
+          return;
+        }
         // Cast placement from context menu - handle click-to-place
         if (castPlacementMode && selectedCard && !dragFromHand) {
           handleTilePointerUp({
