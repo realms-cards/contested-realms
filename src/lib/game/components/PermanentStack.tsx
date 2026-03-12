@@ -96,6 +96,7 @@ type TouchContext = {
   clearTouchTimers: () => void;
   touchPreviewTimerRef: MutableRefObject<number | null>;
   touchContextTimerRef: MutableRefObject<number | null>;
+  lastTapTimeRef: MutableRefObject<number>;
 };
 
 type SelectionContext = {
@@ -192,6 +193,7 @@ export type PermanentStackProps = {
   playCardFlip: () => void;
   isPrimaryCardHit: (e: ThreeEvent<PointerEvent | MouseEvent>) => boolean;
   showOwnershipOverlay: boolean;
+  tapControlsMode: boolean;
   cardScale: number;
   stolenCards: GameState["stolenCards"];
   hasSite?: boolean;
@@ -332,6 +334,7 @@ export function PermanentStack({
   playCardFlip,
   isPrimaryCardHit,
   showOwnershipOverlay,
+  tapControlsMode,
   cardScale,
   stolenCards: _stolenCards,
   hasSite = false,
@@ -372,9 +375,11 @@ export function PermanentStack({
   const {
     clearTouchTimers,
     touchPreviewTimerRef: _touchPreviewTimerRef,
-    touchContextTimerRef,
+    touchContextTimerRef: _touchContextTimerRef,
+    lastTapTimeRef,
   } = touchContext;
   void _touchPreviewTimerRef;
+  void _touchContextTimerRef;
   const {
     selectPermanent,
     selectedPermanent,
@@ -559,7 +564,7 @@ export function PermanentStack({
         const permanentGlowColor =
           remotePermanentColor ?? PLAYER_COLORS[ownerSeat];
         const renderPermanentGlow =
-          !isHandVisible && (isSel || !!remotePermanentColor);
+          !isHandVisible && !isSiteCard && (isSel || !!remotePermanentColor);
         const isLocalDragGhost =
           useGhostOnlyBoardDrag &&
           dragging &&
@@ -893,24 +898,42 @@ export function PermanentStack({
                   return;
                 }
                 const pe = e.nativeEvent as PointerEvent | undefined;
-                // Start long-press timer for touch AND coarse-pointer devices (AVP gaze+pinch
-                // reports pointerType "mouse" but has no right-click for context menu)
-                const needsLongPress =
+                // Use tap controls for touch/coarse-pointer devices OR when tapControlsMode is enabled
+                const isTapDevice =
                   pe &&
                   (pe.pointerType === "touch" ||
                     !window.matchMedia("(pointer: fine)").matches);
-                if (needsLongPress) {
+                const useTapControls = isTapDevice || tapControlsMode;
+                if (useTapControls) {
                   clearTouchTimers();
                   const cx = e.clientX;
                   const cy = e.clientY;
-                  touchContextTimerRef.current = window.setTimeout(() => {
+                  const now = Date.now();
+                  const timeSinceLastTap = now - lastTapTimeRef.current;
+                  const isDoubleTap =
+                    lastTouchedId === permId && timeSinceLastTap < 350;
+                  if (isDoubleTap) {
+                    // Double tap: open context menu and show card preview
+                    lastTapTimeRef.current = 0;
+                    e.stopPropagation();
                     selectPermanent(key, idx);
                     setLastTouchedId(permId);
+                    const isOwner = actorKey === ownerSeat;
+                    if (!p.faceDown || isOwner || isSpectator) {
+                      beginHoverPreview(p.card, hoverKey);
+                    }
                     openContextMenu(
                       { kind: "permanent", at: key, index: idx },
                       { x: cx, y: cy },
                     );
-                  }, 500) as unknown as number;
+                    return;
+                  }
+                  // Single tap: select and show card preview
+                  lastTapTimeRef.current = now;
+                  const isOwner = actorKey === ownerSeat;
+                  if (!p.faceDown || isOwner || isSpectator) {
+                    beginHoverPreview(p.card, hoverKey);
+                  }
                 }
                 if (e.button === 0) {
                   e.stopPropagation();

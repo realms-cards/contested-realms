@@ -153,6 +153,10 @@ export default function GameToolbox({
   const allowSiteDrag = useGameStore((s) => s.allowSiteDrag);
   const toggleAllowSiteDrag = useGameStore((s) => s.toggleAllowSiteDrag);
 
+  // Tap controls mode toggle
+  const tapControlsMode = useGameStore((s) => s.tapControlsMode);
+  const toggleTapControlsMode = useGameStore((s) => s.toggleTapControlsMode);
+
   // Ownership overlay toggle
   const showOwnershipOverlay = useGameStore((s) => s.showOwnershipOverlay);
   const toggleOwnershipOverlay = useGameStore((s) => s.toggleOwnershipOverlay);
@@ -1515,6 +1519,15 @@ export default function GameToolbox({
 
             {/* Board Toggles */}
             <div className="rounded-lg bg-white/5 ring-1 ring-white/10 p-2 space-y-2">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={tapControlsMode}
+                  onChange={toggleTapControlsMode}
+                  className="w-4 h-4 rounded bg-white/10 border-white/20 text-orange-500 focus:ring-orange-500/50"
+                />
+                <span className="text-xs">Tap controls (single tap: select+preview, double tap: menu)</span>
+              </label>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
