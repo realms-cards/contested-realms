@@ -234,6 +234,7 @@ export function AvatarCard({
   magicContext,
   avatarActions,
 }: AvatarCardProps) {
+  const avatarTouchDragTimerRef = useRef<number | null>(null);
   if (!avatar.pos) return null;
   const {
     dragAvatar,
@@ -290,7 +291,6 @@ export function AvatarCard({
   const offZ = avatar.offset?.[1] ?? 0;
   const worldX = baseX + offX;
   const worldZ = baseZ + offZ;
-  const avatarTouchDragTimerRef = useRef<number | null>(null);
   const hideAvatar = dragAvatar === seat && useGhostOnlyBoardDrag;
   const avatarBodyType = useGhostOnlyBoardDrag ? "fixed" : "dynamic";
   const avatarGravityScale = useGhostOnlyBoardDrag ? 0 : 1;

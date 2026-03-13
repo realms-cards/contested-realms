@@ -342,6 +342,9 @@ export function PermanentStack({
   isBabelTower = false,
 }: PermanentStackProps) {
   const { gl } = useThree();
+  // Timer for delayed touch drag initiation (prevents tap from entering drag mode)
+  const touchDragTimerRef = useRef<number | null>(null);
+
   if (items.length === 0) {
     return null;
   }
@@ -381,8 +384,6 @@ export function PermanentStack({
   } = touchContext;
   void _touchPreviewTimerRef;
   void _touchContextTimerRef;
-  // Timer for delayed touch drag initiation (prevents tap from entering drag mode)
-  const touchDragTimerRef = useRef<number | null>(null);
   const {
     selectPermanent,
     selectedPermanent,
