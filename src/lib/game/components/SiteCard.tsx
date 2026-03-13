@@ -70,6 +70,10 @@ export type SiteCardProps = {
   setMagicTargetChoice: GameState["setMagicTargetChoice"];
   touchPreviewTimerRef: MutableRefObject<number | null>;
   touchContextTimerRef: MutableRefObject<number | null>;
+  lastTapTimeRef: MutableRefObject<number>;
+  lastTouchedId: string | null;
+  setLastTouchedId: (id: string | null) => void;
+  tapControlsMode: boolean;
   computeProjectileFirstHits: ComputeProjectileHits;
   // Switch site position selection
   switchSiteSource: GameState["switchSiteSource"];
@@ -114,7 +118,11 @@ export function SiteCard({
   currentPlayer,
   setMagicTargetChoice,
   touchPreviewTimerRef: _touchPreviewTimerRef,
-  touchContextTimerRef,
+  touchContextTimerRef: _touchContextTimerRef,
+  lastTapTimeRef,
+  lastTouchedId,
+  setLastTouchedId,
+  tapControlsMode,
   computeProjectileFirstHits,
   switchSiteSource,
   onCompleteSwitchSite,
@@ -126,6 +134,7 @@ export function SiteCard({
   void computeProjectileFirstHits;
   void avatars;
   void _touchPreviewTimerRef;
+  void _touchContextTimerRef;
   void _emitBoardPing;
   if (!maybeSite) return null;
   const site = maybeSite;
@@ -239,20 +248,28 @@ export function SiteCard({
 
   function handleTouchPreview(e: ThreeEvent<PointerEvent>) {
     const pe = e.nativeEvent as PointerEvent | undefined;
-    // Long-press for touch AND coarse-pointer devices (AVP gaze+pinch
-    // reports pointerType "mouse" but has no right-click)
-    const needsLongPress =
+    const isTapDevice =
       pe &&
       (pe.pointerType === "touch" ||
         !window.matchMedia("(pointer: fine)").matches);
-    if (needsLongPress) {
+    const useTapControls = isTapDevice || tapControlsMode;
+    if (useTapControls) {
       clearTouchTimers();
-      touchContextTimerRef.current = window.setTimeout(() => {
+      const siteId = `site:${tileX}:${tileY}`;
+      const now = Date.now();
+      const timeSinceLastTap = now - lastTapTimeRef.current;
+      const isDoubleTap = lastTouchedId === siteId && timeSinceLastTap < 350;
+      if (isDoubleTap) {
+        lastTapTimeRef.current = 0;
+        setLastTouchedId(siteId);
         openContextMenu(
           { kind: "site", x: tileX, y: tileY },
           { x: e.clientX, y: e.clientY },
         );
-      }, 500) as unknown as number;
+        return;
+      }
+      lastTapTimeRef.current = now;
+      setLastTouchedId(siteId);
     }
   }
 

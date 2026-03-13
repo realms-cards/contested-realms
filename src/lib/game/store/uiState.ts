@@ -5,6 +5,7 @@ const CAMERA_MODE_KEY = "sorcery:cameraMode";
 const CARD_PREVIEWS_KEY = "sorcery:cardPreviewsEnabled";
 const UI_HIDDEN_KEY = "sorcery:uiHidden";
 const TAP_CONTROLS_KEY = "sorcery:tapControlsMode";
+const CONTEXT_MENU_ICONS_KEY = "sorcery:contextMenuIcons";
 
 /**
  * Load persisted camera mode preference from localStorage.
@@ -107,6 +108,22 @@ function saveTapControlsMode(enabled: boolean): void {
   } catch {}
 }
 
+function loadContextMenuIcons(): boolean {
+  if (typeof window === "undefined") return true;
+  try {
+    const stored = localStorage.getItem(CONTEXT_MENU_ICONS_KEY);
+    if (stored === "false") return false;
+  } catch {}
+  return true;
+}
+
+function saveContextMenuIcons(enabled: boolean): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(CONTEXT_MENU_ICONS_KEY, String(enabled));
+  } catch {}
+}
+
 /** Persist camera mode preference to localStorage and API */
 function saveCameraMode(mode: GameState["cameraMode"]): void {
   if (typeof window === "undefined") return;
@@ -145,6 +162,8 @@ export type UiSlice = Pick<
   | "toggleCardPreviews"
   | "tapControlsMode"
   | "toggleTapControlsMode"
+  | "contextMenuIcons"
+  | "toggleContextMenuIcons"
   | "uiHidden"
   | "setUiHidden"
   | "toggleUiHidden"
@@ -199,6 +218,7 @@ type UiStateDefaults = Pick<
   | "previewCard"
   | "cardPreviewsEnabled"
   | "tapControlsMode"
+  | "contextMenuIcons"
   | "uiHidden"
   | "turnOverlayActive"
   | "switchSiteSource"
@@ -225,6 +245,7 @@ export const createInitialUiState = (): UiStateDefaults => ({
   previewCard: null,
   cardPreviewsEnabled: loadCardPreviewsEnabled(),
   tapControlsMode: loadTapControlsMode(),
+  contextMenuIcons: loadContextMenuIcons(),
   uiHidden: loadUiHidden(),
   turnOverlayActive: false,
   switchSiteSource: null,
@@ -341,6 +362,13 @@ export const createUiSlice: StateCreator<GameState, [], [], UiSlice> = (
       const newEnabled = !state.tapControlsMode;
       saveTapControlsMode(newEnabled);
       return { tapControlsMode: newEnabled };
+    }),
+
+  toggleContextMenuIcons: () =>
+    set((state) => {
+      const newEnabled = !state.contextMenuIcons;
+      saveContextMenuIcons(newEnabled);
+      return { contextMenuIcons: newEnabled };
     }),
 
   setUiHidden: (hidden: boolean) => {

@@ -1341,6 +1341,10 @@ export function PermanentStack({
                   e.nativeEvent.preventDefault();
                   selectPermanent(key, idx);
                   setLastTouchedId(permId);
+                  const isOwner = actorKey === ownerSeat;
+                  if (!p.faceDown || isOwner || isSpectator) {
+                    beginHoverPreview(p.card, hoverKey);
+                  }
                   openContextMenu(
                     { kind: "permanent", at: key, index: idx },
                     { x: e.clientX, y: e.clientY },
