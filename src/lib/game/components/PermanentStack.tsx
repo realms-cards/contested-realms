@@ -988,7 +988,7 @@ export function PermanentStack({
                 }
               }}
               onPointerOver={(e) => {
-                if (dragFromHand || dragFromPile) return;
+                if (dragFromHand || dragFromPile || dragAvatar) return;
                 if (!isPrimaryCardHit(e)) {
                   clearHoverPreviewDebounced(hoverKey);
                   return;
@@ -1002,7 +1002,7 @@ export function PermanentStack({
                 beginHoverPreview(p.card, hoverKey);
               }}
               onPointerOut={(e) => {
-                if (dragFromHand || dragFromPile) return;
+                if (dragFromHand || dragFromPile || dragAvatar) return;
                 e.stopPropagation();
                 clearHoverPreviewDebounced(hoverKey);
                 if (
@@ -1019,7 +1019,7 @@ export function PermanentStack({
                 clearTouchTimers();
               }}
               onPointerMove={(e) => {
-                if (dragFromHand || dragFromPile) return;
+                if (dragFromHand || dragFromPile || dragAvatar) return;
                 if (tokenSiteReplace) return;
                 if (!isPrimaryCardHit(e)) {
                   clearHoverPreviewDebounced(hoverKey);
@@ -1366,6 +1366,16 @@ export function PermanentStack({
                     dragging &&
                     dragging.from === key &&
                     dragging.index === idx
+                  )
+                    return;
+                  // If context menu was just opened by double-tap pointerDown,
+                  // skip re-selecting (which would clear previewCard)
+                  const cm = useGameStore.getState().contextMenu;
+                  if (
+                    cm &&
+                    cm.target.kind === "permanent" &&
+                    cm.target.at === key &&
+                    cm.target.index === idx
                   )
                     return;
                   selectPermanent(key, idx);
