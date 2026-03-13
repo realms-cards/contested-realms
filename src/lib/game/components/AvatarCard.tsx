@@ -663,11 +663,30 @@ export function AvatarCard({
             if (dragAvatar === seat) return;
             selectAvatar(seat);
             setLastTouchedId(avatarId);
+            // After selectAvatar (which clears previewCard),
+            // re-show preview for tap/touch devices
+            const pe = e.nativeEvent as PointerEvent | undefined;
+            const isTouchClick =
+              pe &&
+              (pe.pointerType === "touch" ||
+                !window.matchMedia("(pointer: fine)").matches);
+            if (isTouchClick || tapControlsMode) {
+              const cards = lastAvatarCardsRef.current;
+              if (cards[seat]) {
+                beginHoverPreview(cards[seat], avatarId);
+              }
+            }
           }}
           onContextMenu={(e: ThreeEvent<PointerEvent>) => {
             if (isSpectator) return;
             e.stopPropagation();
             e.nativeEvent.preventDefault();
+            // On touch, suppress native long-press; menu via double-tap
+            const pe = e.nativeEvent;
+            const isTouchEvent =
+              pe.pointerType === "touch" ||
+              !window.matchMedia("(pointer: fine)").matches;
+            if (isTouchEvent || tapControlsMode) return;
             selectAvatar(seat);
             setLastTouchedId(avatarId);
             openContextMenu(

@@ -96,7 +96,9 @@ function loadTapControlsMode(): boolean {
   if (typeof window === "undefined") return false;
   try {
     const stored = localStorage.getItem(TAP_CONTROLS_KEY);
-    if (stored === "true") return true;
+    if (stored !== null) return stored === "true";
+    // Auto-detect: default on for touch devices
+    if (!window.matchMedia("(pointer: fine)").matches) return true;
   } catch {}
   return false;
 }
