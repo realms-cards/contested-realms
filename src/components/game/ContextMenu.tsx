@@ -253,6 +253,9 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   const iconMode = useGameStore((s) => s.contextMenuIcons);
 
   const menuRef = useRef<HTMLDivElement | null>(null);
+  // Track when the context menu was mounted to prevent immediate dismiss on
+  // mobile double-tap (the click event from the second tap hits the backdrop)
+  const openedAtRef = useRef<number>(Date.now());
   const [menuPos, setMenuPos] = useState<{ left: number; top: number } | null>(
     null,
   );
@@ -330,6 +333,8 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
       setSiteSpawnableTokens([]);
       return;
     }
+    // Record when context menu opened so backdrop can ignore taps in a grace period
+    openedAtRef.current = Date.now();
 
     // Detect ward ability and token-spawning keywords for sites
     const t = contextMenu.target;
@@ -1843,7 +1848,13 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
       )}
       <div
         className="fixed inset-0 z-30"
-        onClick={onClose}
+        onClick={() => {
+          // Ignore clicks within 400ms of opening to prevent double-tap dismiss on mobile.
+          // The second tap's click event fires after pointerDown opens the menu,
+          // hitting the newly-rendered backdrop immediately.
+          if (Date.now() - openedAtRef.current < 400) return;
+          onClose();
+        }}
         onContextMenu={(e) => {
           e.preventDefault();
           onClose();

@@ -462,6 +462,7 @@ export function AvatarCard({
         lastTouchedId === avatarId && timeSinceLastTap < 350;
       if (isDoubleTap) {
         // Double tap: open context menu and show card preview
+        e.stopPropagation();
         lastTapTimeRef.current = 0;
         selectAvatar(seat);
         setLastTouchedId(avatarId);
@@ -694,6 +695,9 @@ export function AvatarCard({
             e.stopPropagation();
             if (isSpectator) return;
             if (dragAvatar === seat) return;
+            // If context menu was just opened by double-tap pointerDown,
+            // skip re-selecting (which would clear previewCard)
+            if (contextMenu && contextMenu.target.kind === "avatar" && contextMenu.target.who === seat) return;
             selectAvatar(seat);
             setLastTouchedId(avatarId);
             // After selectAvatar (which clears previewCard),

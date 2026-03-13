@@ -260,6 +260,7 @@ export function SiteCard({
       const timeSinceLastTap = now - lastTapTimeRef.current;
       const isDoubleTap = lastTouchedId === siteId && timeSinceLastTap < 350;
       if (isDoubleTap) {
+        e.stopPropagation();
         lastTapTimeRef.current = 0;
         setLastTouchedId(siteId);
         openContextMenu(
