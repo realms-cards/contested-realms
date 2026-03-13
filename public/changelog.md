@@ -7,6 +7,7 @@
 - **use nice themed icons for right click menu** the old text view can still be activated in user settings
 - **optimizations for mobile views**
 - **add custom resolver for Feast for Crows**
+- **rename Solo vs CPU to Goldfish with CPU**
 
 ### Mar 10 - User requested fixes and implementations
 

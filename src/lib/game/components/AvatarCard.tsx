@@ -1,7 +1,7 @@
 import { Text } from "@react-three/drei";
 import type { ThreeEvent } from "@react-three/fiber";
 import { CuboidCollider, RigidBody } from "@react-three/rapier";
-import { useState, type MutableRefObject } from "react";
+import { useRef, useState, type MutableRefObject } from "react";
 import { flushSync } from "react-dom";
 import {
   BASE_CARD_ELEVATION,
@@ -290,6 +290,7 @@ export function AvatarCard({
   const offZ = avatar.offset?.[1] ?? 0;
   const worldX = baseX + offX;
   const worldZ = baseZ + offZ;
+  const avatarTouchDragTimerRef = useRef<number | null>(null);
   const hideAvatar = dragAvatar === seat && useGhostOnlyBoardDrag;
   const avatarBodyType = useGhostOnlyBoardDrag ? "fixed" : "dynamic";
   const avatarGravityScale = useGhostOnlyBoardDrag ? 0 : 1;
@@ -473,11 +474,29 @@ export function AvatarCard({
       beginHoverPreview(lastAvatarCardsRef.current[seat], avatarId);
     }
 
-    avatarDragStartRef.current = {
-      who: seat,
-      start: [e.point.x, e.point.z],
-      time: Date.now(),
-    };
+    // On touch, delay drag tracking to prevent tap from entering drag mode
+    // and avoid conflicts with two-finger pan/zoom gestures
+    if (useTapControls) {
+      const px = e.point.x;
+      const pz = e.point.z;
+      if (avatarTouchDragTimerRef.current) {
+        window.clearTimeout(avatarTouchDragTimerRef.current);
+      }
+      avatarTouchDragTimerRef.current = window.setTimeout(() => {
+        avatarTouchDragTimerRef.current = null;
+        avatarDragStartRef.current = {
+          who: seat,
+          start: [px, pz],
+          time: Date.now(),
+        };
+      }, 200) as unknown as number;
+    } else {
+      avatarDragStartRef.current = {
+        who: seat,
+        start: [e.point.x, e.point.z],
+        time: Date.now(),
+      };
+    }
     selectAvatar(seat);
     setLastTouchedId(avatarId);
   }
@@ -492,6 +511,15 @@ export function AvatarCard({
         !window.matchMedia("(pointer: fine)").matches)
     ) {
       clearTouchTimers();
+      // Cancel drag if multi-finger gesture (e.g. pinch-zoom)
+      if (!pe.isPrimary) {
+        if (avatarTouchDragTimerRef.current) {
+          window.clearTimeout(avatarTouchDragTimerRef.current);
+          avatarTouchDragTimerRef.current = null;
+        }
+        avatarDragStartRef.current = null;
+        return;
+      }
     }
     handlePointerMove(e.point.x, e.point.z);
     if (isSpectator) return;
@@ -657,6 +685,11 @@ export function AvatarCard({
             emitBoardPing({ x: e.point.x, z: e.point.z });
           }}
           onClick={(e) => {
+            // Cancel pending touch drag — this was a tap
+            if (avatarTouchDragTimerRef.current) {
+              window.clearTimeout(avatarTouchDragTimerRef.current);
+              avatarTouchDragTimerRef.current = null;
+            }
             if (dragFromHand || dragFromPile) return;
             e.stopPropagation();
             if (isSpectator) return;

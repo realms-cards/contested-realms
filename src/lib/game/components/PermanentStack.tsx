@@ -3,6 +3,7 @@ import { useThree } from "@react-three/fiber";
 import type { ThreeEvent } from "@react-three/fiber";
 import { CuboidCollider, RigidBody } from "@react-three/rapier";
 import {
+  useRef,
   useState,
   type Dispatch,
   type MutableRefObject,
@@ -380,6 +381,8 @@ export function PermanentStack({
   } = touchContext;
   void _touchPreviewTimerRef;
   void _touchContextTimerRef;
+  // Timer for delayed touch drag initiation (prevents tap from entering drag mode)
+  const touchDragTimerRef = useRef<number | null>(null);
   const {
     selectPermanent,
     selectedPermanent,
@@ -957,13 +960,30 @@ export function PermanentStack({
                     // turn" move abilities. Playing cards from hand is still
                     // gated by the draw requirement in playActions.
                   }
-                  dragStartRef.current = {
-                    at: key,
-                    index: idx,
-                    start: [e.point.x, e.point.z],
-                    time: Date.now(),
-                  };
-                  clearHoverPreview(hoverKey);
+                  // On touch, delay drag tracking to distinguish tap from drag.
+                  // This prevents single-tap from entering drag mode and avoids
+                  // conflicts with two-finger pan/zoom gestures.
+                  if (useTapControls) {
+                    const px = e.point.x;
+                    const pz = e.point.z;
+                    touchDragTimerRef.current = window.setTimeout(() => {
+                      touchDragTimerRef.current = null;
+                      dragStartRef.current = {
+                        at: key,
+                        index: idx,
+                        start: [px, pz],
+                        time: Date.now(),
+                      };
+                    }, 200) as unknown as number;
+                  } else {
+                    dragStartRef.current = {
+                      at: key,
+                      index: idx,
+                      start: [e.point.x, e.point.z],
+                      time: Date.now(),
+                    };
+                    clearHoverPreview(hoverKey);
+                  }
                 }
               }}
               onPointerOver={(e) => {
@@ -991,6 +1011,10 @@ export function PermanentStack({
                 ) {
                   dragStartRef.current = null;
                 }
+                if (touchDragTimerRef.current) {
+                  window.clearTimeout(touchDragTimerRef.current);
+                  touchDragTimerRef.current = null;
+                }
                 clearTouchTimers();
               }}
               onPointerMove={(e) => {
@@ -1004,6 +1028,15 @@ export function PermanentStack({
                 const pe = e.nativeEvent as PointerEvent | undefined;
                 if (pe && pe.pointerType === "touch") {
                   clearTouchTimers();
+                  // Cancel drag if this isn't the primary touch (multi-finger gesture)
+                  if (!pe.isPrimary) {
+                    if (touchDragTimerRef.current) {
+                      window.clearTimeout(touchDragTimerRef.current);
+                      touchDragTimerRef.current = null;
+                    }
+                    dragStartRef.current = null;
+                    return;
+                  }
                 }
                 handlePointerMove(e.point.x, e.point.z);
                 if (isSpectator) return;
@@ -1317,6 +1350,11 @@ export function PermanentStack({
                 visible
                 userData={{ cardInstance: permId }}
                 onClick={(e) => {
+                  // Cancel pending touch drag — this was a tap, not a hold-drag
+                  if (touchDragTimerRef.current) {
+                    window.clearTimeout(touchDragTimerRef.current);
+                    touchDragTimerRef.current = null;
+                  }
                   if (dragFromHand || dragFromPile) return;
                   if (!isPrimaryCardHit(e)) {
                     return;

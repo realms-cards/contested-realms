@@ -164,7 +164,7 @@ export default function Home() {
                       Experimental
                     </span>
                     <h4 className="text-lg font-semibold tracking-wide">
-                      Solo vs CPU
+                      Goldfish with CPU
                     </h4>
                   </div>
                 </Link>
