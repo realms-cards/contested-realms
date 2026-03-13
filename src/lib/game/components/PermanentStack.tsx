@@ -1331,6 +1331,19 @@ export function PermanentStack({
                     return;
                   selectPermanent(key, idx);
                   setLastTouchedId(permId);
+                  // After selectPermanent (which clears previewCard),
+                  // re-show preview for tap/touch devices
+                  const pe = e.nativeEvent as PointerEvent | undefined;
+                  const isTouchClick =
+                    pe &&
+                    (pe.pointerType === "touch" ||
+                      !window.matchMedia("(pointer: fine)").matches);
+                  if ((isTouchClick || tapControlsMode) && p.card) {
+                    const isOwner = actorKey === ownerSeat;
+                    if (!p.faceDown || isOwner || isSpectator) {
+                      beginHoverPreview(p.card, hoverKey);
+                    }
+                  }
                 }}
                 onContextMenu={(e: ThreeEvent<PointerEvent>) => {
                   if (isSpectator) return;
@@ -1339,6 +1352,13 @@ export function PermanentStack({
                   }
                   e.stopPropagation();
                   e.nativeEvent.preventDefault();
+                  // On touch devices, suppress native long-press menu;
+                  // context menu is handled by double-tap in onPointerDown
+                  const pe = e.nativeEvent;
+                  const isTouchEvent =
+                    pe.pointerType === "touch" ||
+                    !window.matchMedia("(pointer: fine)").matches;
+                  if (isTouchEvent || tapControlsMode) return;
                   selectPermanent(key, idx);
                   setLastTouchedId(permId);
                   const isOwner = actorKey === ownerSeat;

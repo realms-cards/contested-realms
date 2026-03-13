@@ -270,6 +270,8 @@ export function SiteCard({
       }
       lastTapTimeRef.current = now;
       setLastTouchedId(siteId);
+      // Single tap: show card preview
+      if (site?.card) beginHoverPreview(site.card, tileKey);
     }
   }
 
@@ -437,6 +439,12 @@ export function SiteCard({
                 if (isSpectator) return;
                 e.stopPropagation();
                 e.nativeEvent.preventDefault();
+                // On touch, suppress native long-press; menu via double-tap
+                const pe = e.nativeEvent as PointerEvent;
+                const isTouchEvent =
+                  pe.pointerType === "touch" ||
+                  !window.matchMedia("(pointer: fine)").matches;
+                if (isTouchEvent || tapControlsMode) return;
                 openContextMenu(
                   { kind: "site", x: tileX, y: tileY },
                   { x: e.clientX, y: e.clientY },
