@@ -348,6 +348,14 @@ export default function Board({
 
   const clearHoverPreviewDebounced = useCallback(
     (sourceKey?: string | null, delay = 60) => {
+      // On touch/mobile, don't auto-clear preview on pointerout —
+      // preview is cleared when tapping another card or empty space
+      if (
+        tapControlsMode ||
+        !window.matchMedia("(pointer: fine)").matches
+      ) {
+        return;
+      }
       if (hoverPreviewClearTimerRef.current) {
         window.clearTimeout(hoverPreviewClearTimerRef.current);
         hoverPreviewClearTimerRef.current = null;
@@ -360,7 +368,7 @@ export default function Board({
         Math.max(0, delay),
       ) as unknown as number;
     },
-    [clearHoverPreview],
+    [clearHoverPreview, tapControlsMode],
   );
 
   const clearTouchTimers = useCallback(() => {
