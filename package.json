@@ -88,6 +88,8 @@
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.10.0",
+    "@iconify-json/game-icons": "^1.2.3",
+    "@iconify/react": "^6.0.2",
     "@prisma/client": "^6.14.0",
     "@react-spring/three": "^10.0.2",
     "@react-three/drei": "^10.7.3",

@@ -1,5 +1,7 @@
 "use client";
+import { Icon } from "@iconify/react";
 import { useLayoutEffect, useRef, useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useSound } from "@/lib/contexts/SoundContext";
 import {
   isNecromancer,
@@ -60,7 +62,69 @@ import {
   isMinionToken,
 } from "@/lib/game/tokens";
 import type { ContextMenuAction } from "@/lib/game/types";
-import { useSmallScreen } from "@/lib/hooks/useTouchDevice";
+
+interface MenuBtnProps {
+  icon?: string;
+  label: string;
+  onClick: () => void;
+  className?: string;
+  disabled?: boolean;
+  title?: string;
+}
+
+function MenuBtn({
+  icon,
+  label,
+  onClick,
+  className = "bg-white/10 hover:bg-white/20",
+  disabled,
+  title,
+}: MenuBtnProps) {
+  const iconMode = useGameStore((s) => s.contextMenuIcons);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const [tipPos, setTipPos] = useState<{ x: number; y: number } | null>(null);
+
+  if (iconMode && icon) {
+    const tooltipText = title ?? label;
+    return (
+      <>
+        <button
+          ref={btnRef}
+          disabled={disabled}
+          onClick={onClick}
+          onMouseEnter={() => {
+            const r = btnRef.current?.getBoundingClientRect();
+            if (r) setTipPos({ x: r.left + r.width / 2, y: r.top });
+          }}
+          onMouseLeave={() => setTipPos(null)}
+          className={`rounded ${className} p-2 flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed`}
+        >
+          <Icon icon={icon} width={20} height={20} />
+        </button>
+        {tipPos &&
+          createPortal(
+            <div
+              className="pointer-events-none fixed z-[9999] px-2 py-0.5 rounded bg-black/90 text-white text-xs whitespace-nowrap -translate-x-1/2 -translate-y-full -mt-1"
+              style={{ left: tipPos.x, top: tipPos.y - 4 }}
+            >
+              {tooltipText}
+            </div>,
+            document.body,
+          )}
+      </>
+    );
+  }
+  return (
+    <button
+      title={title}
+      disabled={disabled}
+      onClick={onClick}
+      className={`w-full text-left rounded ${className} px-3 py-1 text-sm disabled:opacity-40 disabled:cursor-not-allowed`}
+    >
+      {label}
+    </button>
+  );
+}
 
 interface ContextMenuProps {
   onClose: () => void;
@@ -186,12 +250,12 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   const getAvailableActions = useGameStore((s) => s.getAvailableActions);
   const updatePermanentState = useGameStore((s) => s.updatePermanentState);
   const setPermanentAbility = useGameStore((s) => s.setPermanentAbility);
+  const iconMode = useGameStore((s) => s.contextMenuIcons);
 
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [menuPos, setMenuPos] = useState<{ left: number; top: number } | null>(
     null,
   );
-  const isMobileScreen = useSmallScreen();
   const [positionActions, setPositionActions] = useState<ContextMenuAction[]>(
     [],
   );
@@ -246,7 +310,12 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     compute();
     const onResize = () => compute();
     window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
+    const ro = new ResizeObserver(() => compute());
+    if (menuRef.current) ro.observe(menuRef.current);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      ro.disconnect();
+    };
   }, [contextMenu]);
 
   // Handle permanent ability setup and position actions
@@ -650,8 +719,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         displayText: "Switch Position",
         isEnabled: true,
         targetPermanentId: "",
-        description:
-          "Click another tile to move this site there (swap or move to void). All minions and avatars move with the site.",
+        description: "Swap with another site or move to void tile.",
       });
     }
 
@@ -663,7 +731,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         isEnabled: true,
         targetPermanentId: "",
         description:
-          "Place a Flooded token on this site (adds water threshold).",
+          "Add Flooded token (water threshold).",
       });
     }
 
@@ -675,7 +743,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         isEnabled: true,
         targetPermanentId: "",
         description:
-          "Place a Disabled token on this site (removes mana and threshold).",
+          "Add Disabled token (no mana/threshold).",
       });
     }
 
@@ -687,7 +755,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         isEnabled: true,
         targetPermanentId: "",
         description:
-          "Place a Silenced token on this site (removes textbox abilities only, still provides mana).",
+          "Add Silenced token (no abilities, keeps mana).",
       });
     }
 
@@ -703,7 +771,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         displayText: "Unsilence",
         isEnabled: true,
         targetPermanentId: "",
-        description: "Remove the Silenced token from this site (banish it).",
+        description: "Remove Silenced token.",
       });
     }
 
@@ -718,7 +786,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         displayText: "Undisable",
         isEnabled: true,
         targetPermanentId: "",
-        description: "Remove the Disabled token from this site (banish it).",
+        description: "Remove Disabled token.",
       });
     }
 
@@ -1111,7 +1179,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
           isEnabled: true,
           targetPermanentId: "",
           description:
-            "Place a Silenced token on this permanent (removes abilities).",
+            "Add Silenced token (no abilities).",
         });
       }
     }
@@ -1130,8 +1198,8 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         isEnabled: true,
         targetPermanentId: "",
         description: isCaptainBaldassare
-          ? "Discard opponent's topmost 3 spells. You may cast each this turn, ignoring threshold."
-          : "Discard opponent's topmost spell. You may cast it this turn, ignoring threshold.",
+          ? "Discard top 3 opponent spells, cast free."
+          : "Discard top opponent spell, cast free.",
       });
     }
 
@@ -1274,7 +1342,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         isEnabled: true,
         targetPermanentId: "",
         description:
-          "Remove mask and reveal original Imposter avatar. The mask is banished.",
+          "Reveal original avatar, banish mask.",
       });
     }
 
@@ -1293,7 +1361,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     if (isMine && isImposterAvatar && hasAvatarsInCollection) {
       const currentMana = getAvailableMana(t.who);
       const hasEnoughManaForMask = currentMana >= IMPOSTER_MASK_COST;
-      let maskDescription = `Open collection to choose an avatar to mask as (costs ${IMPOSTER_MASK_COST} mana)`;
+      let maskDescription = `Choose avatar to mask as (${IMPOSTER_MASK_COST} mana).`;
       if (!hasEnoughManaForMask) {
         maskDescription = `Warning: not enough mana (need ${IMPOSTER_MASK_COST}, have ${currentMana})`;
       }
@@ -1321,7 +1389,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
 
     if (isMine && isNecromancer(effectiveAvatarName)) {
       const canSummon = isMyTurn && !hasAlreadyUsed && hasPosition;
-      let description = `Summon a Skeleton token at your avatar's location (costs ${NECROMANCER_SKELETON_COST} mana, once per turn)`;
+      let description = `Summon Skeleton here (${NECROMANCER_SKELETON_COST} mana, 1/turn).`;
       if (!isMyTurn) description = "Can only summon skeleton on your turn";
       else if (hasAlreadyUsed)
         description = "Already summoned a skeleton this turn";
@@ -1345,7 +1413,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     if (isMine && isMephistopheles(effectiveAvatarName)) {
       const canSummon = isMyTurn && !mephHasAlreadyUsed && hasPosition;
       let mephDescription =
-        "Summon an Evil minion from your hand to an adjacent site (once per turn)";
+        "Summon Evil minion to adjacent site (1/turn).";
       if (!isMyTurn) mephDescription = "Can only summon on your turn";
       else if (mephHasAlreadyUsed)
         mephDescription = "Already summoned an Evil minion this turn";
@@ -1381,7 +1449,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         hasPosition &&
         atlasCount > 0;
       let pathDescription =
-        "Tap to play top site from atlas to adjacent void/Rubble and move there";
+        "Tap: play top atlas site to adjacent void/Rubble, move there.";
       if (!isMyTurn) pathDescription = "Can only use on your turn";
       else if (pathfinderHasAlreadyUsed)
         pathDescription = "Already used Pathfinder ability this turn";
@@ -1411,7 +1479,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         hasPosition &&
         atlasCount > 0;
       let geoDescription =
-        "Tap to replace an adjacent Rubble with the topmost site of your atlas";
+        "Tap: replace adjacent Rubble with top atlas site.";
       if (!isMyTurn) geoDescription = "Can only use on your turn";
       else if (geomancerHasAlreadyUsed)
         geoDescription = "Already used Geomancer ability this turn";
@@ -1434,7 +1502,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
       const isNotTapped = !a?.tapped;
       const canFlip = !hasAlreadyFlipped && isNotTapped && hasPosition;
       let flipDescription =
-        "Tap and flip your Druid to summon Bruin here. Cannot flip back.";
+        "Tap: flip Druid, summon Bruin (permanent).";
       if (hasAlreadyFlipped) flipDescription = "Druid has already been flipped";
       else if (!isNotTapped)
         flipDescription = "Avatar must be untapped to flip";
@@ -1774,7 +1842,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         </div>
       )}
       <div
-        className={`${isMobileScreen ? "fixed inset-0 z-30 bg-black/40" : "absolute inset-0 z-30"}`}
+        className="fixed inset-0 z-30"
         onClick={onClose}
         onContextMenu={(e) => {
           e.preventDefault();
@@ -1784,63 +1852,51 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
       >
         <div
           ref={menuRef}
-          className={
-            isMobileScreen
-              ? "fixed bottom-0 left-0 right-0 z-40 bg-zinc-900/95 backdrop-blur rounded-t-2xl ring-1 ring-white/10 shadow-lg p-4 pb-8 text-white pointer-events-auto max-h-[60vh] overflow-y-auto"
-              : "absolute bg-zinc-900/90 backdrop-blur rounded-xl ring-1 ring-white/10 shadow-lg p-3 w-56 text-white pointer-events-auto"
-          }
-          style={
-            isMobileScreen
-              ? undefined
-              : {
-                  left: (menuPos?.left ?? contextMenu?.screen?.x ?? 16) + "px",
-                  top: (menuPos?.top ?? contextMenu?.screen?.y ?? 16) + "px",
-                }
-          }
+          className="fixed bg-zinc-900/90 backdrop-blur rounded-xl ring-1 ring-white/10 shadow-lg p-3 w-56 text-white pointer-events-auto max-h-[80vh] overflow-y-auto"
+          style={{
+            left: (menuPos?.left ?? contextMenu?.screen?.x ?? 16) + "px",
+            top: (menuPos?.top ?? contextMenu?.screen?.y ?? 16) + "px",
+          }}
           onClick={(e) => e.stopPropagation()}
         >
           <div>
-            {/* Desktop: text-only header */}
-            {!isMobileScreen && (
-              <div
-                className="text-sm font-semibold mb-2 truncate"
-                title={header}
-              >
-                {header}
-              </div>
-            )}
-            <div className="space-y-2">
+            <div
+              className="text-sm font-semibold mb-2 truncate"
+              title={header}
+            >
+              {header}
+            </div>
+            <div className={iconMode ? "flex flex-wrap gap-1" : "space-y-2"}>
               {hasToggle && doToggle && (
-                <button
-                  className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
+                <MenuBtn
+                  icon="game-icons:clockwise-rotation"
+                  label={label}
                   onClick={doToggle}
-                >
-                  {label}
-                </button>
+                />
               )}
 
               {doFlip && (
-                <button
-                  className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
+                <MenuBtn
+                  icon={isFaceDown ? "game-icons:all-seeing-eye" : "game-icons:semi-closed-eye"}
+                  label={isFaceDown ? "Flip face-up" : "Flip face-down"}
                   onClick={doFlip}
-                >
-                  {isFaceDown ? "Flip face-up" : "Flip face-down"}
-                </button>
+                />
               )}
 
               {doTransfer && (
-                <button
-                  className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
+                <MenuBtn
+                  icon="game-icons:swap-bag"
+                  label={`Transfer control${transferTo ? ` to P${transferTo}` : ""}`}
                   onClick={doTransfer}
-                >
-                  {`Transfer control${transferTo ? ` to P${transferTo}` : ""}`}
-                </button>
+                />
               )}
 
               {/* Copy permanent - creates a token copy that goes to banished when leaving */}
               {t.kind === "permanent" && isMine && (
-                <button
-                  className="w-full text-left rounded bg-cyan-900/30 hover:bg-cyan-900/50 px-3 py-1"
+                <MenuBtn
+                  icon="game-icons:two-shadows"
+                  label="Copy (token)"
+                  className="bg-cyan-900/30 hover:bg-cyan-900/50"
                   onClick={() => {
                     copyPermanent(t.at, t.index);
                     try {
@@ -1848,9 +1904,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                     } catch {}
                     onClose();
                   }}
-                >
-                  Copy (token)
-                </button>
+                />
               )}
 
               {/* Assimilator Snail - activated ability: banish dead minion, become copy */}
@@ -1871,7 +1925,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                     ? "Already used this turn"
                     : !isMyTurn
                       ? "Can only activate on your turn"
-                      : "Banish a dead minion from your graveyard. Become a copy until next turn.";
+                      : "Banish dead minion, become copy until next turn.";
                   return (
                     <button
                       className={`w-full text-left rounded px-3 py-1 ${
@@ -2148,24 +2202,24 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
               {/* Gem token actions - Copy and Delete */}
               {t.kind === "gemToken" && (
                 <>
-                  <button
-                    className="w-full text-left rounded bg-cyan-900/30 hover:bg-cyan-900/50 px-3 py-1"
+                  <MenuBtn
+                    icon="game-icons:big-diamond-ring"
+                    label="Copy"
+                    className="bg-cyan-900/30 hover:bg-cyan-900/50"
                     onClick={() => {
                       duplicateGemToken(t.tokenId);
                       onClose();
                     }}
-                  >
-                    Copy
-                  </button>
-                  <button
-                    className="w-full text-left rounded bg-red-900/30 hover:bg-red-900/50 px-3 py-1"
+                  />
+                  <MenuBtn
+                    icon="game-icons:cancel"
+                    label="Delete"
+                    className="bg-red-900/30 hover:bg-red-900/50"
                     onClick={() => {
                       destroyGemToken(t.tokenId);
                       onClose();
                     }}
-                  >
-                    Delete
-                  </button>
+                  />
                 </>
               )}
 
@@ -2173,36 +2227,35 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
               {t.kind === "handCard" &&
                 (t.card.type || "").toLowerCase().includes("site") && (
                   <>
-                    <button
-                      className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
+                    <MenuBtn
+                      icon="game-icons:treasure-map"
+                      label="Play Site"
                       onClick={() => {
                         selectHandCard(t.who, t.index);
                         useGameStore.setState({ castPlacementMode: "surface" });
                         closeContextMenu();
                       }}
-                    >
-                      Play Site
-                    </button>
-                    <button
-                      className="w-full text-left rounded bg-purple-900/30 hover:bg-purple-900/50 px-3 py-1"
+                    />
+                    <MenuBtn
+                      icon="game-icons:archive-register"
+                      label="Move to Collection"
+                      className="bg-purple-900/30 hover:bg-purple-900/50"
                       onClick={() => {
                         selectHandCard(t.who, t.index);
                         moveCardFromHandToPile(t.who, "collection", "top");
                         closeContextMenu();
                       }}
-                    >
-                      Move to Collection
-                    </button>
-                    <button
-                      className="w-full text-left rounded bg-red-900/30 hover:bg-red-900/50 px-3 py-1"
+                    />
+                    <MenuBtn
+                      icon="game-icons:broken-skull"
+                      label="Discard"
+                      className="bg-red-900/30 hover:bg-red-900/50"
                       onClick={() => {
                         selectHandCard(t.who, t.index);
                         moveCardFromHandToPile(t.who, "graveyard", "top");
                         closeContextMenu();
                       }}
-                    >
-                      Discard
-                    </button>
+                    />
                   </>
                 )}
 
@@ -2210,18 +2263,19 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
               {t.kind === "handCard" &&
                 !(t.card.type || "").toLowerCase().includes("site") && (
                   <>
-                    <button
-                      className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
+                    <MenuBtn
+                      icon="game-icons:sparkles"
+                      label="Cast"
                       onClick={() => {
                         selectHandCard(t.who, t.index);
                         useGameStore.setState({ castPlacementMode: "surface" });
                         closeContextMenu();
                       }}
-                    >
-                      Cast
-                    </button>
-                    <button
-                      className="w-full text-left rounded bg-amber-900/30 hover:bg-amber-900/50 px-3 py-1"
+                    />
+                    <MenuBtn
+                      icon="game-icons:layered-armor"
+                      label="Cast Subsurface"
+                      className="bg-amber-900/30 hover:bg-amber-900/50"
                       onClick={() => {
                         selectHandCard(t.who, t.index);
                         setCastSubsurface(true);
@@ -2230,36 +2284,36 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                         });
                         closeContextMenu();
                       }}
-                    >
-                      Cast Subsurface
-                    </button>
-                    <button
-                      className="w-full text-left rounded bg-purple-900/30 hover:bg-purple-900/50 px-3 py-1"
+                    />
+                    <MenuBtn
+                      icon="game-icons:archive-register"
+                      label="Move to Collection"
+                      className="bg-purple-900/30 hover:bg-purple-900/50"
                       onClick={() => {
                         selectHandCard(t.who, t.index);
                         moveCardFromHandToPile(t.who, "collection", "top");
                         closeContextMenu();
                       }}
-                    >
-                      Move to Collection
-                    </button>
-                    <button
-                      className="w-full text-left rounded bg-red-900/30 hover:bg-red-900/50 px-3 py-1"
+                    />
+                    <MenuBtn
+                      icon="game-icons:broken-skull"
+                      label="Discard"
+                      className="bg-red-900/30 hover:bg-red-900/50"
                       onClick={() => {
                         selectHandCard(t.who, t.index);
                         moveCardFromHandToPile(t.who, "graveyard", "top");
                         closeContextMenu();
                       }}
-                    >
-                      Discard
-                    </button>
+                    />
                   </>
                 )}
 
               {/* Ward - for sites with ward keyword */}
               {t.kind === "site" && siteHasWardAbility && (
-                <button
-                  className="w-full text-left rounded bg-cyan-900/30 hover:bg-cyan-900/50 px-3 py-1"
+                <MenuBtn
+                  icon="game-icons:shield"
+                  label="Ward"
+                  className="bg-cyan-900/30 hover:bg-cyan-900/50"
                   onClick={() => {
                     // Spawn ward token and attach to this site
                     const wardDef = TOKEN_BY_NAME["ward"];
@@ -2332,9 +2386,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                     } catch {}
                     onClose();
                   }}
-                >
-                  Ward
-                </button>
+                />
               )}
 
               {/* Spawn minion tokens for sites with keywords (frog, foot soldier, skeleton, lance) */}
@@ -2347,9 +2399,11 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                     tokenDef.name.charAt(0).toUpperCase() +
                     tokenDef.name.slice(1);
                   return (
-                    <button
+                    <MenuBtn
                       key={`spawn-${tokenName}`}
-                      className="w-full text-left rounded bg-emerald-900/30 hover:bg-emerald-900/50 px-3 py-1"
+                      icon="game-icons:token"
+                      label={`Spawn ${label}`}
+                      className="bg-emerald-900/30 hover:bg-emerald-900/50"
                       onClick={() => {
                         const key = toCellKey(t.x, t.y);
                         const site = board.sites[key];
@@ -2409,9 +2463,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                         } catch {}
                         onClose();
                       }}
-                    >
-                      Spawn {label}
-                    </button>
+                    />
                   );
                 })}
 
@@ -2426,8 +2478,10 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                   );
                   return !alreadyHasStealth;
                 })() && (
-                  <button
-                    className="w-full text-left rounded bg-violet-900/30 hover:bg-violet-900/50 px-3 py-1"
+                  <MenuBtn
+                    icon="game-icons:ghost"
+                    label="Gain Stealth"
+                    className="bg-violet-900/30 hover:bg-violet-900/50"
                     onClick={() => {
                       // Spawn stealth token and attach to this permanent
                       const stealthDef = TOKEN_BY_NAME["stealth"];
@@ -2499,9 +2553,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                       } catch {}
                       onClose();
                     }}
-                  >
-                    Gain Stealth
-                  </button>
+                  />
                 )}
 
               {/* Ward - for permanents with ward keyword */}
@@ -2515,8 +2567,10 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                   );
                   return !alreadyHasWard;
                 })() && (
-                  <button
-                    className="w-full text-left rounded bg-cyan-900/30 hover:bg-cyan-900/50 px-3 py-1"
+                  <MenuBtn
+                    icon="game-icons:shield"
+                    label="Ward"
+                    className="bg-cyan-900/30 hover:bg-cyan-900/50"
                     onClick={() => {
                       // Spawn ward token and attach to this permanent
                       const wardDef = TOKEN_BY_NAME["ward"];
@@ -2586,9 +2640,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                       } catch {}
                       onClose();
                     }}
-                  >
-                    Ward
-                  </button>
+                  />
                 )}
 
               {/* Savior Ward - for minions that entered this turn when player has Savior avatar */}
@@ -2781,8 +2833,10 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                   );
                   return !alreadyHasLance;
                 })() && (
-                  <button
-                    className="w-full text-left rounded bg-amber-900/30 hover:bg-amber-900/50 px-3 py-1"
+                  <MenuBtn
+                    icon="game-icons:lightning-arc"
+                    label="Lance"
+                    className="bg-amber-900/30 hover:bg-amber-900/50"
                     onClick={() => {
                       // Spawn lance token and attach to this permanent
                       const lanceDef = TOKEN_BY_NAME["lance"];
@@ -2852,30 +2906,24 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                       } catch {}
                       onClose();
                     }}
-                  >
-                    Lance
-                  </button>
+                  />
                 )}
 
               {(doAttachToken || doDetachToken) && (
-                <div className="space-y-2">
+                <div className={iconMode ? "flex flex-wrap gap-1" : "space-y-2"}>
                   {doAttachToken && (
-                    <button
-                      className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
+                    <MenuBtn
+                      icon="game-icons:andromeda-chain"
+                      label="Attach to unit"
                       onClick={doAttachToken}
-                    >
-                      {t.kind === "permanent" && isCarryableArtifact
-                        ? "Attach to unit"
-                        : "Attach to unit"}
-                    </button>
+                    />
                   )}
                   {doDetachToken && (
-                    <button
-                      className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
+                    <MenuBtn
+                      icon="game-icons:broken-shield"
+                      label="Detach token"
                       onClick={doDetachToken}
-                    >
-                      Detach token
-                    </button>
+                    />
                   )}
                 </div>
               )}
@@ -3206,29 +3254,30 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
 
               {/* Counter toggle */}
               {doToggleCounter && (
-                <button
-                  className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
+                <MenuBtn
+                  icon={hasCounter ? "game-icons:heart-minus" : "game-icons:heart-plus"}
+                  label={hasCounter ? "Remove counter" : "Add counter"}
                   onClick={doToggleCounter}
-                >
-                  {hasCounter ? "Remove counter" : "Add counter"}
-                </button>
+                />
               )}
 
               {/* Burrow/Submerge Actions */}
               {(positionActions.length > 0 ||
                 (Array.isArray(extraActions) && extraActions.length > 0)) && (
-                <div className="space-y-2">
+                <div className={iconMode ? "flex flex-wrap gap-1" : "space-y-2"}>
                   {positionActions.concat(extraActions).map((action) => {
                     const isAttackHere = action.actionId === "__attack_here__";
                     const isAttackAdj =
                       action.actionId.startsWith("__attack_adj_");
                     if (isAttackHere) {
                       return (
-                        <button
+                        <MenuBtn
                           key={action.actionId}
-                          className="w-full text-left rounded bg-emerald-600/20 hover:bg-emerald-600/30 px-3 py-1"
+                          icon="game-icons:crossed-swords"
+                          label={action.displayText}
+                          title={action.description}
+                          className="bg-emerald-600/20 hover:bg-emerald-600/30"
                           onClick={() => {
-                            // Reconstruct context to call attack here
                             if (t.kind === "permanent") {
                               const [sx, sy] = t.at.split(",");
                               const at = t.at as string;
@@ -3251,16 +3300,17 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                             }
                             onClose();
                           }}
-                        >
-                          {action.displayText}
-                        </button>
+                        />
                       );
                     }
                     if (isAttackAdj) {
                       return (
-                        <button
+                        <MenuBtn
                           key={action.actionId}
-                          className="w-full text-left rounded bg-emerald-600/20 hover:bg-emerald-600/30 px-3 py-1"
+                          icon="game-icons:crosshair"
+                          label={action.displayText}
+                          title={action.description}
+                          className="bg-emerald-600/20 hover:bg-emerald-600/30"
                           onClick={() => {
                             const prefix = "__attack_adj_";
                             const rest = action.actionId.startsWith(prefix)
@@ -3295,17 +3345,18 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                             }
                             onClose();
                           }}
-                        >
-                          {action.displayText}
-                        </button>
+                        />
                       );
                     }
                     // Avatar attack here action
                     if (action.actionId === "__avatar_attack_here__") {
                       return (
-                        <button
+                        <MenuBtn
                           key={action.actionId}
-                          className="w-full text-left rounded bg-emerald-600/20 hover:bg-emerald-600/30 px-3 py-1"
+                          icon="game-icons:crossed-swords"
+                          label={action.displayText}
+                          title={action.description}
+                          className="bg-emerald-600/20 hover:bg-emerald-600/30"
                           onClick={() => {
                             if (t.kind === "avatar") {
                               const avatar = avatars[t.who];
@@ -3333,39 +3384,37 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                             }
                             onClose();
                           }}
-                        >
-                          {action.displayText}
-                        </button>
+                        />
                       );
                     }
                     // Switch Site Position action
                     if (action.actionId === "__switch_site_position__") {
                       return (
-                        <button
+                        <MenuBtn
                           key={action.actionId}
-                          className="w-full text-left rounded bg-amber-600/20 hover:bg-amber-600/30 px-3 py-1"
+                          icon="game-icons:swap-bag"
+                          label={action.displayText}
                           title={action.description}
+                          className="bg-amber-600/20 hover:bg-amber-600/30"
                           onClick={() => {
                             if (t.kind === "site") {
                               setSwitchSiteSource({ x: t.x, y: t.y });
-                              log(
-                                "Site selected for switch. Click another tile to complete the move.",
-                              );
+                              log("Click target tile to swap/move site.");
                             }
                             onClose();
                           }}
-                        >
-                          {action.displayText}
-                        </button>
+                        />
                       );
                     }
                     // Flood site action - place Flooded token on site
                     if (action.actionId === "__flood_site__") {
                       return (
-                        <button
+                        <MenuBtn
                           key={action.actionId}
-                          className="w-full text-left rounded bg-cyan-600/20 hover:bg-cyan-600/30 px-3 py-1"
+                          icon="game-icons:water-drop"
+                          label={action.displayText}
                           title={action.description}
+                          className="bg-cyan-600/20 hover:bg-cyan-600/30"
                           onClick={() => {
                             if (t.kind === "site") {
                               floodSite(t.x, t.y);
@@ -3375,18 +3424,18 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                             }
                             onClose();
                           }}
-                        >
-                          {action.displayText}
-                        </button>
+                        />
                       );
                     }
                     // Disable site action - place Disabled token on site
                     if (action.actionId === "__disable_site__") {
                       return (
-                        <button
+                        <MenuBtn
                           key={action.actionId}
-                          className="w-full text-left rounded bg-violet-600/20 hover:bg-violet-600/30 px-3 py-1"
+                          icon="game-icons:power-button"
+                          label={action.displayText}
                           title={action.description}
+                          className="bg-violet-600/20 hover:bg-violet-600/30"
                           onClick={() => {
                             if (t.kind === "site") {
                               disableSite(t.x, t.y);
@@ -3396,18 +3445,18 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                             }
                             onClose();
                           }}
-                        >
-                          {action.displayText}
-                        </button>
+                        />
                       );
                     }
                     // Silence site action - place Silenced token on site (textbox only)
                     if (action.actionId === "__silence_site__") {
                       return (
-                        <button
+                        <MenuBtn
                           key={action.actionId}
-                          className="w-full text-left rounded bg-purple-600/20 hover:bg-purple-600/30 px-3 py-1"
+                          icon="game-icons:mute"
+                          label={action.displayText}
                           title={action.description}
+                          className="bg-purple-600/20 hover:bg-purple-600/30"
                           onClick={() => {
                             if (t.kind === "site") {
                               silenceSite(t.x, t.y);
@@ -3417,23 +3466,22 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                             }
                             onClose();
                           }}
-                        >
-                          {action.displayText}
-                        </button>
+                        />
                       );
                     }
                     // Unsilence site action - remove Silenced token from site
                     if (action.actionId === "__unsilence_site__") {
                       return (
-                        <button
+                        <MenuBtn
                           key={action.actionId}
-                          className="w-full text-left rounded bg-purple-600/20 hover:bg-purple-600/30 px-3 py-1"
+                          icon="game-icons:mute"
+                          label={action.displayText}
                           title={action.description}
+                          className="bg-purple-600/20 hover:bg-purple-600/30"
                           onClick={() => {
                             if (t.kind === "site") {
                               const key = toCellKey(t.x, t.y);
                               const perms = permanents[key] || [];
-                              // Find the silenced token index
                               const tokenIdx = perms.findIndex(
                                 (p) =>
                                   (p.card?.name || "").toLowerCase() ===
@@ -3448,23 +3496,22 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                             }
                             onClose();
                           }}
-                        >
-                          {action.displayText}
-                        </button>
+                        />
                       );
                     }
                     // Undisable site action - remove Disabled token from site
                     if (action.actionId === "__undisable_site__") {
                       return (
-                        <button
+                        <MenuBtn
                           key={action.actionId}
-                          className="w-full text-left rounded bg-violet-600/20 hover:bg-violet-600/30 px-3 py-1"
+                          icon="game-icons:power-button"
+                          label={action.displayText}
                           title={action.description}
+                          className="bg-violet-600/20 hover:bg-violet-600/30"
                           onClick={() => {
                             if (t.kind === "site") {
                               const key = toCellKey(t.x, t.y);
                               const perms = permanents[key] || [];
-                              // Find the disabled token index
                               const tokenIdx = perms.findIndex(
                                 (p) =>
                                   (p.card?.name || "").toLowerCase() ===
@@ -3479,18 +3526,18 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                             }
                             onClose();
                           }}
-                        >
-                          {action.displayText}
-                        </button>
+                        />
                       );
                     }
                     // Annual Fair activated ability - pay 1 mana, choose element threshold
                     if (action.actionId === "__annual_fair_activate__") {
                       return (
-                        <button
+                        <MenuBtn
                           key={action.actionId}
-                          className="w-full text-left rounded bg-amber-600/20 hover:bg-amber-600/30 px-3 py-1"
+                          icon="game-icons:calendar"
+                          label={action.displayText}
                           title={action.description}
+                          className="bg-amber-600/20 hover:bg-amber-600/30"
                           onClick={() => {
                             if (t.kind === "site") {
                               const key = toCellKey(t.x, t.y);
@@ -3502,18 +3549,18 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                             }
                             onClose();
                           }}
-                        >
-                          {action.displayText}
-                        </button>
+                        />
                       );
                     }
                     // Transform site into minion (Island Leviathan, Horns of Behemoth)
                     if (action.actionId === "__transform_site__") {
                       return (
-                        <button
+                        <MenuBtn
                           key={action.actionId}
-                          className="w-full text-left rounded bg-red-600/20 hover:bg-red-600/30 px-3 py-1"
+                          icon="game-icons:magic-broom"
+                          label={action.displayText}
                           title={action.description}
+                          className="bg-red-600/20 hover:bg-red-600/30"
                           onClick={() => {
                             if (t.kind === "site") {
                               transformSite(t.x, t.y);
@@ -3523,18 +3570,18 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                             }
                             onClose();
                           }}
-                        >
-                          {action.displayText}
-                        </button>
+                        />
                       );
                     }
                     // Silence permanent action - place Silenced token on aura/minion/artifact
                     if (action.actionId === "__silence_permanent__") {
                       return (
-                        <button
+                        <MenuBtn
                           key={action.actionId}
-                          className="w-full text-left rounded bg-violet-600/20 hover:bg-violet-600/30 px-3 py-1"
+                          icon="game-icons:mute"
+                          label={action.displayText}
                           title={action.description}
+                          className="bg-violet-600/20 hover:bg-violet-600/30"
                           onClick={() => {
                             if (t.kind === "permanent") {
                               silencePermanent(t.at, t.index);
@@ -3544,18 +3591,18 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                             }
                             onClose();
                           }}
-                        >
-                          {action.displayText}
-                        </button>
+                        />
                       );
                     }
                     // Piracy action (Captain Baldassare / Sea Raider)
                     if (action.actionId === "__piracy_trigger__") {
                       return (
-                        <button
+                        <MenuBtn
                           key={action.actionId}
-                          className="w-full text-left rounded bg-cyan-600/20 hover:bg-cyan-600/30 px-3 py-1"
+                          icon="game-icons:anchor"
+                          label={action.displayText}
                           title={action.description}
+                          className="bg-cyan-600/20 hover:bg-cyan-600/30"
                           onClick={() => {
                             if (t.kind === "permanent") {
                               const itm = (permanents[t.at] || [])[t.index];
@@ -3581,40 +3628,38 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                             }
                             onClose();
                           }}
-                        >
-                          {action.displayText}
-                        </button>
+                        />
                       );
                     }
                     // Imposter unmask action
                     if (action.actionId === "__unmask__") {
                       return (
-                        <button
+                        <MenuBtn
                           key={action.actionId}
-                          className="w-full text-left rounded bg-purple-600/20 hover:bg-purple-600/30 px-3 py-1"
+                          icon="game-icons:sunglasses"
+                          label={action.displayText}
                           title={action.description}
+                          className="bg-purple-600/20 hover:bg-purple-600/30"
                           onClick={() => {
                             if (t.kind === "avatar") {
                               unmask(t.who);
                             }
                             onClose();
                           }}
-                        >
-                          {action.displayText}
-                        </button>
+                        />
                       );
                     }
                     // Imposter mask action - opens collection search for avatar selection
                     if (action.actionId === "__imposter_mask__") {
                       return (
-                        <button
+                        <MenuBtn
                           key={action.actionId}
-                          className="w-full text-left rounded bg-purple-600/20 hover:bg-purple-600/30 px-3 py-1"
+                          icon="game-icons:sunglasses"
+                          label={action.displayText}
                           title={action.description}
+                          className="bg-purple-600/20 hover:bg-purple-600/30"
                           onClick={() => {
                             if (t.kind === "avatar") {
-                              // Open the collection search dialog - the CollectionButton handles masking
-                              // We trigger a custom event that CollectionButton listens for
                               window.dispatchEvent(
                                 new CustomEvent("imposter:openMaskDialog", {
                                   detail: { seat: t.who },
@@ -3623,143 +3668,141 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                             }
                             onClose();
                           }}
-                        >
-                          {action.displayText}
-                        </button>
+                        />
                       );
                     }
                     // Necromancer summon skeleton action
                     if (action.actionId === "__summon_skeleton__") {
                       return (
-                        <button
+                        <MenuBtn
                           key={action.actionId}
-                          className={`w-full text-left rounded px-3 py-1 ${
-                            action.isEnabled
-                              ? "bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-200"
-                              : "bg-gray-600/20 text-gray-400 cursor-not-allowed"
-                          }`}
+                          icon="game-icons:bone-gnawer"
+                          label={action.displayText}
                           title={action.description}
                           disabled={!action.isEnabled}
+                          className={
+                            action.isEnabled
+                              ? "bg-emerald-600/20 hover:bg-emerald-600/30"
+                              : "bg-gray-600/20"
+                          }
                           onClick={() => {
                             if (t.kind === "avatar" && action.isEnabled) {
                               summonSkeletonHere(t.who);
                             }
                             onClose();
                           }}
-                        >
-                          {action.displayText}
-                        </button>
+                        />
                       );
                     }
                     // Mephistopheles summon Evil minion action
                     if (action.actionId === "__mephistopheles_summon__") {
                       return (
-                        <button
+                        <MenuBtn
                           key={action.actionId}
-                          className={`w-full text-left rounded px-3 py-1 ${
-                            action.isEnabled
-                              ? "bg-red-600/20 hover:bg-red-600/30 text-red-200"
-                              : "bg-gray-600/20 text-gray-400 cursor-not-allowed"
-                          }`}
+                          icon="game-icons:ghost"
+                          label={action.displayText}
                           title={action.description}
                           disabled={!action.isEnabled}
+                          className={
+                            action.isEnabled
+                              ? "bg-red-600/20 hover:bg-red-600/30"
+                              : "bg-gray-600/20"
+                          }
                           onClick={() => {
                             if (t.kind === "avatar" && action.isEnabled) {
                               beginMephistophelesSummon(t.who);
                             }
                             onClose();
                           }}
-                        >
-                          {action.displayText}
-                        </button>
+                        />
                       );
                     }
                     // Pathfinder play site action
                     if (action.actionId === "__pathfinder_play__") {
                       return (
-                        <button
+                        <MenuBtn
                           key={action.actionId}
-                          className={`w-full text-left rounded px-3 py-1 ${
-                            action.isEnabled
-                              ? "bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-200"
-                              : "bg-gray-600/20 text-gray-400 cursor-not-allowed"
-                          }`}
+                          icon="game-icons:compass"
+                          label={action.displayText}
                           title={action.description}
                           disabled={!action.isEnabled}
+                          className={
+                            action.isEnabled
+                              ? "bg-emerald-600/20 hover:bg-emerald-600/30"
+                              : "bg-gray-600/20"
+                          }
                           onClick={() => {
                             if (t.kind === "avatar" && action.isEnabled) {
                               beginPathfinderPlay(t.who);
                             }
                             onClose();
                           }}
-                        >
-                          {action.displayText}
-                        </button>
+                        />
                       );
                     }
                     // Geomancer replace rubble action
                     if (action.actionId === "__geomancer_rubble__") {
                       return (
-                        <button
+                        <MenuBtn
                           key={action.actionId}
-                          className={`w-full text-left rounded px-3 py-1 ${
-                            action.isEnabled
-                              ? "bg-amber-600/20 hover:bg-amber-600/30 text-amber-200"
-                              : "bg-gray-600/20 text-gray-400 cursor-not-allowed"
-                          }`}
+                          icon="game-icons:mountains"
+                          label={action.displayText}
                           title={action.description}
                           disabled={!action.isEnabled}
+                          className={
+                            action.isEnabled
+                              ? "bg-amber-600/20 hover:bg-amber-600/30"
+                              : "bg-gray-600/20"
+                          }
                           onClick={() => {
                             if (t.kind === "avatar" && action.isEnabled) {
                               beginGeomancerRubble(t.who);
                             }
                             onClose();
                           }}
-                        >
-                          {action.displayText}
-                        </button>
+                        />
                       );
                     }
                     // Druid flip action
                     if (action.actionId === "__flip_druid__") {
                       return (
-                        <button
+                        <MenuBtn
                           key={action.actionId}
-                          className={`w-full text-left rounded px-3 py-1 ${
-                            action.isEnabled
-                              ? "bg-amber-600/20 hover:bg-amber-600/30 text-amber-200"
-                              : "bg-gray-600/20 text-gray-400 cursor-not-allowed"
-                          }`}
+                          icon="game-icons:cycle"
+                          label={action.displayText}
                           title={action.description}
                           disabled={!action.isEnabled}
+                          className={
+                            action.isEnabled
+                              ? "bg-amber-600/20 hover:bg-amber-600/30"
+                              : "bg-gray-600/20"
+                          }
                           onClick={() => {
                             if (t.kind === "avatar" && action.isEnabled) {
                               flipDruid(t.who);
                             }
                             onClose();
                           }}
-                        >
-                          {action.displayText}
-                        </button>
+                        />
                       );
                     }
                     // Tap to draw site action (standard avatar ability)
                     if (action.actionId === "__tap_draw_site__") {
                       return (
-                        <button
+                        <MenuBtn
                           key={action.actionId}
-                          className={`w-full text-left rounded px-3 py-1 ${
-                            action.isEnabled
-                              ? "bg-teal-600/20 hover:bg-teal-600/30 text-teal-200"
-                              : "bg-gray-600/20 text-gray-400 cursor-not-allowed"
-                          }`}
+                          icon="game-icons:treasure-map"
+                          label={action.displayText}
                           title={action.description}
                           disabled={!action.isEnabled}
+                          className={
+                            action.isEnabled
+                              ? "bg-teal-600/20 hover:bg-teal-600/30"
+                              : "bg-gray-600/20"
+                          }
                           onClick={() => {
                             if (t.kind === "avatar" && action.isEnabled) {
-                              // Tap the avatar first (this is the avatar's tap ability)
                               toggleTapAvatar(t.who);
-                              // Then draw from atlas to hand
                               const atlas = zones[t.who]?.atlas;
                               if (atlas && atlas.length > 0) {
                                 const topCard = atlas[0];
@@ -3776,23 +3819,23 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                             }
                             onClose();
                           }}
-                        >
-                          {action.displayText}
-                        </button>
+                        />
                       );
                     }
                     // Frontier Settlers tap ability
                     if (action.actionId === "__frontier_settlers_ability__") {
                       return (
-                        <button
+                        <MenuBtn
                           key={action.actionId}
-                          className={`w-full text-left rounded px-3 py-1 ${
-                            action.isEnabled
-                              ? "bg-green-600/20 hover:bg-green-600/30 text-green-200"
-                              : "bg-gray-600/20 text-gray-400 cursor-not-allowed"
-                          }`}
+                          icon="game-icons:house"
+                          label={action.displayText}
                           title={action.description}
                           disabled={!action.isEnabled}
+                          className={
+                            action.isEnabled
+                              ? "bg-green-600/20 hover:bg-green-600/30"
+                              : "bg-gray-600/20"
+                          }
                           onClick={() => {
                             if (t.kind === "permanent" && action.isEnabled) {
                               const at = t.at;
@@ -3814,20 +3857,28 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                             }
                             onClose();
                           }}
-                        >
-                          {action.displayText}
-                        </button>
+                        />
                       );
                     }
+                    // Default: position state actions (burrow/submerge)
                     return (
-                      <button
+                      <MenuBtn
                         key={action.actionId}
-                        className={`w-full text-left rounded px-3 py-1 flex items-center space-x-2 ${
-                          action.isEnabled
-                            ? "bg-blue-600/20 hover:bg-blue-600/30 text-blue-200"
-                            : "bg-gray-600/20 text-gray-400 cursor-not-allowed"
-                        }`}
+                        icon={
+                          action.icon === "arrow-down"
+                            ? "game-icons:falling"
+                            : action.icon === "arrow-up"
+                              ? "game-icons:uprising"
+                              : "game-icons:water-splash"
+                        }
+                        label={action.displayText}
+                        title={action.description}
                         disabled={!action.isEnabled}
+                        className={
+                          action.isEnabled
+                            ? "bg-blue-600/20 hover:bg-blue-600/30"
+                            : "bg-gray-600/20"
+                        }
                         onClick={() => {
                           if (action.isEnabled && action.newPositionState) {
                             updatePermanentState(
@@ -3835,70 +3886,53 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                               action.newPositionState,
                             );
                             log(
-                              `${header} ${action.displayText.toLowerCase()}${
-                                action.newPositionState === "surface"
-                                  ? "ed"
-                                  : "ed"
-                              }`,
+                              `${header} ${action.displayText.toLowerCase()}ed`,
                             );
                             onClose();
                           }
                         }}
-                        title={action.description}
-                      >
-                        <span className="text-xs">
-                          {action.icon === "arrow-down" && "↓"}
-                          {action.icon === "arrow-up" && "↑"}
-                          {action.icon === "waves" && "〜"}
-                        </span>
-                        <span>{action.displayText}</span>
-                      </button>
+                      />
                     );
                   })}
                 </div>
               )}
 
               {(doToHand || doToGY || doToSpellbook || doBanish) && (
-                <div className="space-y-2">
+                <div className={iconMode ? "flex flex-wrap gap-1" : "space-y-2"}>
                   {doToHand && (
-                    <button
-                      className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
+                    <MenuBtn
+                      icon="game-icons:hand"
+                      label="Move to Hand"
                       onClick={doToHand}
-                    >
-                      Move to Hand
-                    </button>
+                    />
                   )}
                   {doToGY && (
-                    <button
-                      className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
+                    <MenuBtn
+                      icon="game-icons:broken-skull"
+                      label="Move to Cemetery"
                       onClick={doToGY}
-                    >
-                      Move to Cemetery
-                    </button>
+                    />
                   )}
                   {doToSpellbook && (
-                    <button
-                      className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
+                    <MenuBtn
+                      icon="game-icons:spell-book"
+                      label="Move to Spellbook"
                       onClick={doToSpellbook}
-                    >
-                      Move to Spellbook
-                    </button>
+                    />
                   )}
                   {doAddToAtlas && (
-                    <button
-                      className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
+                    <MenuBtn
+                      icon="game-icons:treasure-map"
+                      label="Move to Atlas"
                       onClick={doAddToAtlas}
-                    >
-                      Move to Atlas
-                    </button>
+                    />
                   )}
                   {doBanish && (
-                    <button
-                      className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
+                    <MenuBtn
+                      icon="game-icons:fire-zone"
+                      label="Banish Card"
                       onClick={doBanish}
-                    >
-                      Banish Card
-                    </button>
+                    />
                   )}
                 </div>
               )}
@@ -3907,38 +3941,34 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                 doDrawFromPileBottom ||
                 doShufflePile ||
                 doSearchPile) && (
-                <div className="space-y-2">
+                <div className={iconMode ? "flex flex-wrap gap-1" : "space-y-2"}>
                   {doDrawFromPile && (
-                    <button
-                      className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
+                    <MenuBtn
+                      icon="game-icons:uprising"
+                      label="Draw top"
                       onClick={doDrawFromPile}
-                    >
-                      Draw top
-                    </button>
+                    />
                   )}
                   {doDrawFromPileBottom && (
-                    <button
-                      className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
+                    <MenuBtn
+                      icon="game-icons:falling"
+                      label="Draw from bottom"
                       onClick={doDrawFromPileBottom}
-                    >
-                      Draw from bottom
-                    </button>
+                    />
                   )}
                   {doSearchPile && (
-                    <button
-                      className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
+                    <MenuBtn
+                      icon="game-icons:magnifying-glass"
+                      label="Search pile"
                       onClick={doSearchPile}
-                    >
-                      Search pile
-                    </button>
+                    />
                   )}
                   {doShufflePile && (
-                    <button
-                      className="w-full text-left rounded bg-white/10 hover:bg-white/20 px-3 py-1"
+                    <MenuBtn
+                      icon="game-icons:card-random"
+                      label="Shuffle"
                       onClick={doShufflePile}
-                    >
-                      Shuffle
-                    </button>
+                    />
                   )}
                 </div>
               )}

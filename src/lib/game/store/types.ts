@@ -1710,6 +1710,9 @@ export type GameState = {
   // Tap controls mode: use single-tap to select+preview, double-tap for context menu
   tapControlsMode: boolean;
   toggleTapControlsMode: () => void;
+  // Context menu icons mode: show icon buttons instead of text labels
+  contextMenuIcons: boolean;
+  toggleContextMenuIcons: () => void;
   // UI hidden toggle (hide/show most UI elements for clean screenshots/viewing)
   uiHidden: boolean;
   setUiHidden: (hidden: boolean) => void;

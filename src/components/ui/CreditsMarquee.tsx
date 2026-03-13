@@ -27,6 +27,10 @@ const CREDITS: Credit[] = [
     label: "Mahogany Table by myndman",
     url: "https://skfb.ly/6xPWF",
   },
+  {
+    label: "Icons by game-icons.net (CC BY 3.0)",
+    url: "https://game-icons.net",
+  },
 ];
 
 interface CreditsMarqueeProps {

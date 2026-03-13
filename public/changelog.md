@@ -2,8 +2,9 @@
 
 ## March 2026
 
-### Mar 12 - Mobile optimizations
+### Mar 12 - Mobile optimizations & right-click menu change
 
+- **use nice themed icons for right click menu** the old text view can still be activated in user settings
 - **optimizations for mobile views**
 - **add custom resolver for Feast for Crows**
 

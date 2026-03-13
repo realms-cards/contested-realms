@@ -20,6 +20,7 @@ import { useGraphicsSettings } from "@/hooks/useGraphicsSettings";
 import { FEATURE_CARD_SLEEVES } from "@/lib/config/features";
 import { useColorBlind } from "@/lib/contexts/ColorBlindContext";
 import { useLoadingContext } from "@/lib/contexts/LoadingContext";
+import { useGameStore } from "@/lib/game/store";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
 
@@ -88,6 +89,8 @@ export default function UserBadge({
     toggleGamepadLifeControls,
     togglePreferRaster,
   } = useGraphicsSettings();
+  const contextMenuIcons = useGameStore((s) => s.contextMenuIcons);
+  const toggleContextMenuIcons = useGameStore((s) => s.toggleContextMenuIcons);
   const [showOpponentPlaymat, setShowOpponentPlaymat] = useState(true);
   const [playmatPrefLoading, setPlaymatPrefLoading] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -1087,6 +1090,31 @@ export default function UserBadge({
                       graphicsSettings.preferRaster
                         ? "bg-orange-300"
                         : "bg-slate-500"
+                    }`}
+                  />
+                </button>
+
+                {/* Icon-based context menu */}
+                <button
+                  type="button"
+                  onClick={toggleContextMenuIcons}
+                  className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg ring-1 transition-colors text-left ${
+                    contextMenuIcons
+                      ? "bg-indigo-500/20 ring-indigo-500/40"
+                      : "bg-slate-800 ring-slate-600"
+                  }`}
+                >
+                  <div className="min-w-0">
+                    <div className="text-xs text-slate-200 font-medium">
+                      Icon Menu
+                    </div>
+                    <div className="text-[10px] text-slate-400 truncate">
+                      Compact context menu
+                    </div>
+                  </div>
+                  <span
+                    className={`shrink-0 w-2.5 h-2.5 rounded-full ${
+                      contextMenuIcons ? "bg-indigo-300" : "bg-slate-500"
                     }`}
                   />
                 </button>

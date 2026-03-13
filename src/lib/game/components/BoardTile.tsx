@@ -434,6 +434,10 @@ export function BoardTile({
         setMagicTargetChoice={magicContext.setMagicTargetChoice}
         touchPreviewTimerRef={touchContext.touchPreviewTimerRef}
         touchContextTimerRef={touchContext.touchContextTimerRef}
+        lastTapTimeRef={touchContext.lastTapTimeRef}
+        lastTouchedId={selectionContext.lastTouchedId}
+        setLastTouchedId={selectionContext.setLastTouchedId}
+        tapControlsMode={tapControlsMode}
         computeProjectileFirstHits={magicContext.computeProjectileFirstHits}
         switchSiteSource={switchSiteSource}
         onCompleteSwitchSite={onCompleteSwitchSite}
