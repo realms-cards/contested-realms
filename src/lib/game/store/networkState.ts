@@ -377,6 +377,16 @@ export const createNetworkSlice: StateCreator<
         // createZonesPatchFor always sends ALL zone arrays for a seat, so
         // seat-level replacement is safe and prevents stale data from surviving
         // (e.g., a card remaining in the graveyard after being drawn to hand).
+        // In CPU matches the server is fully authoritative over the
+        // CPU player's zones — there is no second client hiding data.
+        // Determine which seat (if any) belongs to the CPU so we can
+        // skip the empty-array filter for that seat.
+        const oppId = state.opponentPlayerId;
+        const isCpuMatch = typeof oppId === "string" && oppId.startsWith("cpu_");
+        const cpuSeat: PlayerKey | null = isCpuMatch
+          ? (state.actorKey === "p1" ? "p2" : "p1")
+          : null;
+
         let zonesCandidate: Partial<
           Record<PlayerKey, GameState["zones"][PlayerKey]>
         >;
@@ -405,8 +415,11 @@ export const createNetworkSlice: StateCreator<
             const safePatch: Record<string, unknown> = {};
             for (const [key, val] of Object.entries(patchSeat)) {
               // Skip empty arrays when state has data — the sender likely
-              // doesn't have access to this zone (hidden opponent data)
+              // doesn't have access to this zone (hidden opponent data).
+              // Exception: in CPU matches the server controls the CPU's
+              // zones, so empty arrays are intentional clearances.
               if (
+                seat !== cpuSeat &&
                 Array.isArray(val) &&
                 val.length === 0 &&
                 Array.isArray(stateSeat[key]) &&
@@ -755,6 +768,10 @@ export const createNetworkSlice: StateCreator<
             Record<string, unknown[]>
           > | null;
           for (const seat of ["p1", "p2"] as PlayerKey[]) {
+            // In CPU matches the server fully controls the CPU's zones,
+            // so wipe-protection does not apply to the CPU seat.
+            if (seat === cpuSeat) continue;
+
             const stateZones = state.zones?.[seat];
             const patchSeatZones = patchZones?.[seat] as Record<
               string,
