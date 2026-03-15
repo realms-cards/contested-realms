@@ -363,6 +363,10 @@ export const createPermanentMovementSlice: StateCreator<
           setTimeout(() => {
             get().forceDropHyperparasiteCarried(dropInstanceId, "destroy");
           }, 0);
+          // Unregister Merlin if this was a Merlin minion
+          setTimeout(() => {
+            get().unregisterMerlin(dropInstanceId);
+          }, 0);
         }
       }
       const per: Permanents = { ...state.permanents };

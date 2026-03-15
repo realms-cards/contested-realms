@@ -57,6 +57,7 @@ import MatchEndOverlay from "@/components/game/MatchEndOverlay";
 import MatchInfoPopup from "@/components/game/MatchInfoPopup";
 import MephistophelesOverlay from "@/components/game/MephistophelesOverlay";
 import MephistophelesSummonOverlay from "@/components/game/MephistophelesSummonOverlay";
+import MerlinOverlay from "@/components/game/MerlinOverlay";
 import MirrorRealmOverlay from "@/components/game/MirrorRealmOverlay";
 import MobileHandHint from "@/components/game/MobileHandHint";
 import MotherNatureOverlay from "@/components/game/MotherNatureOverlay";
@@ -3491,6 +3492,8 @@ export default function OnlineMatchPage() {
               <LilithOverlay playerNames={playerNames} />
               {/* Mother Nature Overlay (start of turn reveal) */}
               <MotherNatureOverlay />
+              {/* Merlin Overlay (Spellcaster: persistent peek at top spell) */}
+              <MerlinOverlay />
               {/* Headless Haunt Overlay (start of turn movement - Kythera Mechanism) */}
               <HeadlessHauntOverlay />
               {/* Interrogator Choice Overlay (pay life or allow spell draw) */}

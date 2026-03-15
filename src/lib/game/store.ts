@@ -74,6 +74,7 @@ import { createKettletopLeprechaunSlice } from "./store/kettletopLeprechaunState
 import { createLegionOfGallSlice } from "./store/legionOfGallState";
 import { createLilithSlice } from "./store/lilithState";
 import { createMagicSlice } from "./store/magicState";
+import { createMerlinSlice } from "./store/merlinState";
 import {
   createMephistophelesSlice,
   createInitialMephistophelesSummonUsed,
@@ -211,6 +212,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   ...createOmphalosSlice(set, get, storeApi),
   ...createLilithSlice(set, get, storeApi),
   ...createMotherNatureSlice(set, get, storeApi),
+  ...createMerlinSlice(set, get, storeApi),
   ...createBlackMassSlice(set, get, storeApi),
   ...createHighlandPrincessSlice(set, get, storeApi),
   ...createAssortedAnimalsSlice(set, get, storeApi),
@@ -411,6 +413,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         druidFlipped: createInitialDruidFlipped(),
         specialSiteState: getEmptySpecialSiteState(),
         headlessHaunts: [],
+        merlinInstances: [],
         pendingHeadlessHauntMove: null,
         gemTokens: [],
         gardenOfEdenLocations: {},

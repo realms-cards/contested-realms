@@ -936,6 +936,9 @@ export const createNetworkSlice: StateCreator<
         const registeredMotherNatures = new Set(
           (state.motherNatureMinions || []).map((m) => m.instanceId),
         );
+        const registeredMerlins = new Set(
+          (state.merlinInstances || []).map((m) => m.instanceId),
+        );
 
         const prevInstanceIds = new Set<string>();
         if (!isFullReplace) {
@@ -948,7 +951,7 @@ export const createNetworkSlice: StateCreator<
 
         // Schedule registration after state update
         const newMinionsToRegister: Array<{
-          type: "lilith" | "motherNature";
+          type: "lilith" | "motherNature" | "merlin";
           instanceId: string;
           location: string;
           ownerSeat: PlayerKey;
@@ -989,6 +992,19 @@ export const createNetworkSlice: StateCreator<
                   cardName: perm.card?.name || "Mother Nature",
                 });
               }
+            } else if (
+              cardName === "merlin" &&
+              cardType.includes("minion")
+            ) {
+              if (!registeredMerlins.has(perm.instanceId)) {
+                newMinionsToRegister.push({
+                  type: "merlin",
+                  instanceId: perm.instanceId,
+                  location: cellKey,
+                  ownerSeat,
+                  cardName: perm.card?.name || "Merlin",
+                });
+              }
             }
           }
         }
@@ -1016,6 +1032,18 @@ export const createNetworkSlice: StateCreator<
                       minion,
                     );
                   get().registerMotherNature({
+                    instanceId: minion.instanceId,
+                    location: minion.location,
+                    ownerSeat: minion.ownerSeat,
+                    cardName: minion.cardName,
+                  });
+                } else if (minion.type === "merlin") {
+                  if (process.env.NODE_ENV !== "production")
+                    console.log(
+                      "[networkState] Registering Merlin from patch:",
+                      minion,
+                    );
+                  get().registerMerlin({
                     instanceId: minion.instanceId,
                     location: minion.location,
                     ownerSeat: minion.ownerSeat,

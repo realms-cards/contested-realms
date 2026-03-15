@@ -985,6 +985,16 @@ export type MotherNatureEntry = {
   cardName: string;
 };
 
+// --- Merlin State ------------------------------------------------
+// "Any time during your turn, Merlin may look at your next spell and may cast it if it's a magic spell."
+export type MerlinEntry = {
+  id: string;
+  instanceId: string;
+  location: string;
+  ownerSeat: PlayerKey;
+  cardName: string;
+};
+
 // --- Black Mass State ------------------------------------------------
 // "Search your top seven spells. You may reveal and draw three different Evil minions from among them. Put the rest at the bottom of your spellbook."
 export type BlackMassPhase = "loading" | "selecting" | "resolving" | "complete";
@@ -2213,6 +2223,11 @@ export type GameState = {
   triggerMotherNatureStartOfTurn: (startingPlayerSeat: PlayerKey) => void;
   acceptMotherNatureSummon: () => void;
   declineMotherNatureSummon: () => void;
+  // Merlin (Spellcaster: peek top spell, cast if magic)
+  merlinInstances: MerlinEntry[];
+  registerMerlin: (entry: Omit<MerlinEntry, "id">) => void;
+  unregisterMerlin: (instanceId: string) => void;
+  castFromMerlin: (ownerSeat: PlayerKey) => void;
   // Black Mass spell (search top 7, draw up to 3 Evil minions)
   pendingBlackMass: PendingBlackMass | null;
   beginBlackMass: (input: {

@@ -941,6 +941,7 @@ export const createPlayActionsSlice: StateCreator<
       const isPithImp = cardNameLower.includes("pith imp");
       const isOmphalos = cardNameLower.includes("omphalos");
       const isLilith = cardNameLower === "lilith";
+      const isMerlin = cardNameLower === "merlin";
       const isMotherNature = cardNameLower === "mother nature";
       const isBlackMass = cardNameLower === "black mass";
       const isHighlandPrincess = cardNameLower === "highland princess";
@@ -994,6 +995,7 @@ export const createPlayActionsSlice: StateCreator<
         isPithImp,
         isOmphalos,
         isLilith,
+        isMerlin,
         isMotherNature,
         isMephistopheles,
         isAtlanteanFate,
@@ -1325,6 +1327,19 @@ export const createPlayActionsSlice: StateCreator<
           });
         } catch (e) {
           console.error("[playActions] Error registering Lilith:", e);
+        }
+      }
+      // If this is Merlin minion, register for Spellcaster passive ability
+      if (isMerlin && newest && type.includes("minion")) {
+        try {
+          get().registerMerlin({
+            instanceId: newest.instanceId ?? `merlin_${Date.now()}`,
+            location: key,
+            ownerSeat: who,
+            cardName: card.name || "Merlin",
+          });
+        } catch (e) {
+          console.error("[playActions] Error registering Merlin:", e);
         }
       }
       // If this is Mother Nature minion, register for start-of-turn reveals

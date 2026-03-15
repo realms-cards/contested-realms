@@ -7,7 +7,7 @@ Video tutorials:
 
 This manual documents keyboard shortcuts and core interaction flows for the Realms.cards simulator. All shortcuts are ignored while typing in inputs (chat/search/etc.) and when blocking overlays are open.
 
-- _Spectator note: gameplay‑changing shortcuts (T, Enter, Space) are disabled for spectators._
+- _Spectator note: gameplay‑changing shortcuts (T, Enter) are disabled for spectators._
 
 ## Keyboard Shortcuts
 
@@ -21,19 +21,23 @@ This manual documents keyboard shortcuts and core interaction flows for the Real
   - Press `T` to tap/untap the currently selected permanent or your avatar.
   - Plays a flip sound and closes any open context menu.
 
+- **Toggle Hand**
+
+  - Press `Space` to show or hide your hand (spread / collapse).
+
 - **Board Ping**
 
-  - Press `Space` to ping the board at your current pointer position.
-  - Also by double‑clicking on the board, a site, a permanent, or your avatar.
+  - Double‑click on the board, a site, a permanent, or your avatar to ping that location.
 
 - **Camera Reset (Online Play)**
 
   - Press `Tab` to reset the camera to the current mode’s baseline.
 
-- **Camera Pan / Tilt (2D & 3D)**
+- **Camera Pan / Rotate (2D & 3D)**
 
   - `W`/`A`/`S`/`D` pans the camera. In the editor we can also use the arrow keys.
-  - `Q` / `E` tilts the camera up/down.
+  - `Y` / `C` rotates the camera left/right.
+  - `+` / `-` to zoom in/out.
 
 - **Hand Browsing**
 
@@ -73,7 +77,7 @@ This manual documents keyboard shortcuts and core interaction flows for the Real
   - Long‑press on touch to open the same menu.
 
 - **Board Ping**
-  - Double‑click the board, a site, a permanent, or your avatar to ping that location.
+  - Double‑click on the board, a site, a permanent, or your avatar to ping that location.
 
 ## Views and Camera
 
@@ -85,10 +89,10 @@ This manual documents keyboard shortcuts and core interaction flows for the Real
 - **Orbit Controls**
 
   - Mouse: left‑drag to orbit (3D), middle‑drag to pan, scroll to zoom.
-  - Keyboard: `W/A/S/D` to pan, `Q/E` to tilt. `Tab` resets (online play).
+  - Keyboard: `W/A/S/D` to pan, `Y/C` to rotate. `Tab` resets (online play).
 
 - **Spectating**
-  - Spectator utilities are in the top‑right overlay. Pings (`Space`) are disabled.
+  - Spectator utilities are in the top‑right overlay. Arrow keys rotate the spectator view.
 
 ## Combat Flow (HUD‑Driven)
 
@@ -204,7 +208,7 @@ A hint overlay appears on first use explaining the tap‑to‑select pattern.
 
 - **Spectator Mode**
 
-  - `T`, `Enter`, and `Space` shortcuts are disabled.
+  - `T` and `Enter` shortcuts are disabled.
 
 - **Double‑Click vs Drag**
   - Quick double‑click pings; click‑hold then move initiates drags.
@@ -213,9 +217,11 @@ A hint overlay appears on first use explaining the tap‑to‑select pattern.
 
 - **End Turn**: `Enter`
 - **Tap/Untap Selected**: `T`
-- **Ping at Pointer**: `Space`
+- **Toggle Hand**: `Space`
+- **Board Ping**: Double‑click
 - **Reset Camera (Online)**: `Tab`
 - **Camera Pan**: `W`/`A`/`S`/`D`
-- **Camera Tilt**: `Q` / `E`
-- **Hand Focus Next/Prev**: `→` or `D` / `←` or `A`
+- **Camera Rotate**: `Y` / `C`
+- **Zoom**: `+` / `-`
+- **Show Help**: `H` or `?`
 - **Close/Cancel**: `Escape`

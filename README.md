@@ -1,223 +1,166 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Sorcery Client
 
-## Getting Started
+A web-based game client for playing [Sorcery: Contested Realm](https://www.sorcerytcg.com/) online. Features a 3D game board, real-time multiplayer, draft/sealed modes, deck building, tournaments, and CPU bot opponents.
 
-First, run the development server:
+Play now at [realms.cards](https://realms.cards).
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## Features
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+- **3D Game Board** - Interactive board rendered with React Three Fiber / Three.js
+- **Online Multiplayer** - Real-time matches via Socket.IO with chat and board pings
+- **Draft & Sealed** - Open boosters, draft with up to 8 players, build limited decks
+- **Cube Draft** - Create and draft custom cubes
+- **Deck Editor** - Build constructed decks with card search, import/export (Curiosa-compatible)
+- **Tournaments** - Swiss-pairing tournament system with standings and statistics
+- **CPU Bots** - Play against AI opponents with configurable difficulty
+- **Collection Tracker** - Track your physical card collection
+- **Tutorial** - Interactive lessons teaching Sorcery game mechanics
+- **Mobile Support** - Touch-optimized interface with responsive layout
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Tech Stack
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- **Frontend**: Next.js 15, React 19, TypeScript 5, Tailwind CSS
+- **3D Engine**: React Three Fiber, Three.js, drei
+- **Backend**: Node.js Socket.IO server (standalone)
+- **Database**: PostgreSQL via Prisma ORM
+- **Cache/Pubsub**: Redis (optional, required for horizontal scaling)
+- **Auth**: NextAuth.js (Discord OAuth, email magic links, passkeys)
+- **Testing**: Vitest, React Testing Library
 
-## Learn More
+## Quick Start
 
-To learn more about Next.js, take a look at the following resources:
+### Prerequisites
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- Node.js 20+
+- PostgreSQL (local via Docker or managed)
+- Redis (optional, for multi-instance setups)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
-
----
-
-## Development: Rules Engine and Simulation
-
-### Environment variables
-
-Set these in `.env.local` (or export for your shell). See `example.env` for defaults and comments.
-
-- `PORT`: Socket.IO server port (default `3010`).
-- `CPU_BOTS_ENABLED`: Enable server-managed headless CPU players (`1`/`true` to enable).
-- `RULES_ENFORCE_MODE`:
-  - `off` – Helpers only (no strict gating for anyone)
-  - `bot_only` – Strictly enforce for CPU bots; humans get helpers and warning events
-  - `all` – Strictly enforce for everyone
-- `RULES_HELPERS_ENABLED`:
-  - `true` – Apply helpers like turn-start untap, per-turn spend accounting, cost auto-apply
-  - `false` – Disable helper auto-adjustments
-
-### Rules helpers vs enforcement
-
-- Helpers (always-on when `RULES_HELPERS_ENABLED=true`):
-  - Turn start untap for acting player
-  - Per-turn spend accounting (`resources[p1|p2].spentThisTurn`)
-  - Cost auto-application (increments `spentThisTurn`)
-- Enforcement (gating):
-  - Site overwrite/adjacency/ownership
-  - Permanents timing (Main phase, acting player)
-  - Threshold checks
-  - When enforcement is off for an actor, violations emit `events: [{ type: 'warning', ... }]` instead of blocking.
-
-### Dev scripts
-
-- Spawn CPU bots into a private lobby and start a match:
-
-  ```bash
-  CPU_BOTS_ENABLED=1 npm run server
-  npm run bots:spawn -- --bots 2 --match constructed
-  # Flags: --server http://localhost:3010 --name "Bot Scrimmage" --match constructed|sealed|draft
-  ```
-
-- Simulate multiple hosts vs CPU opponents and print a summary report:
-
-  ```bash
-  npm run sim:tournament -- --hosts 3 --rounds 2
-  ```
-
-- Run targeted rules tests only (faster):
-
-  ```bash
-  npm run test:rules
-  ```
-
-## Database: PostgreSQL (Dev & Prod)
-
-We now use PostgreSQL via Prisma for both development and production.
-
-- Local dev uses Docker (Postgres 16). See `docker-compose.yml`.
-- Production is designed for a managed Postgres (DigitalOcean or Supabase). Use a pooled connection for `DATABASE_URL` and a direct primary for `DIRECT_URL`.
-
-### 1) Start local Postgres
+### 1. Clone and install
 
 ```bash
-npm run db:up
+git clone https://github.com/your-org/sorcery-client.git
+cd sorcery-client
+npm install
 ```
 
-This exposes Postgres on `localhost:5432` with database/user/password `sorcery`.
+### 2. Configure environment
 
-### 2) Configure `.env.local`
+```bash
+cp .env.example .env.local
+```
 
-Copy `example.env` to `.env.local` and set:
+Edit `.env.local` and set at minimum:
 
 ```bash
 DATABASE_URL="postgresql://sorcery:sorcery@localhost:5432/sorcery?schema=public"
 DIRECT_URL="postgresql://sorcery:sorcery@localhost:5432/sorcery?schema=public"
-```
-
-### 3) Generate client and run migrations
-
-```bash
-npm run prisma:generate
-npm run prisma:migrate:dev
-```
-
-This will create/update the schema in your local Postgres. If switching from SQLite, Prisma will create a new migration history for Postgres.
-
-### 4) Seed core data
-
-```bash
-npm run db:seed
-```
-
-This ingests Sorcery cards/sets/variants from the public API and seeds pack configs for booster generation.
-
-### 5) Production
-
-Set `DATABASE_URL` to a pooled endpoint and `DIRECT_URL` to the primary endpoint of your managed Postgres.
-
-- DigitalOcean Managed Postgres: use the Connection Pooler for `DATABASE_URL` and the primary for `DIRECT_URL` (both with `sslmode=require`).
-- Supabase: use port `6543` (pooled) for `DATABASE_URL` and `5432` (direct) for `DIRECT_URL`.
-
-Deploy migrations in CI/CD with:
-
-```bash
-npm run prisma:migrate:deploy
-npm run db:seed   # optional, if you want to refresh/ingest data
-```
-
-Note: The standalone Socket.IO server (`server/index.ts`) loads `.env` via `dotenv`. Use `npm run server:dev` during development or `npm run server:start` after running `npm run server:build` to execute the compiled output.
-
-## Realtime Server & Scaling (Socket.IO)
-
-### Client WebSocket configuration
-
-Configure the web app to talk to the Socket.IO server explicitly in development.
-
-Add these to `.env.local` (see `example.env` for comments):
-
-```bash
-# Point the Next.js client at the Socket.IO server
+NEXTAUTH_SECRET="<generate with: openssl rand -base64 32>"
 NEXT_PUBLIC_WS_URL="http://localhost:3010"
-# Optional: custom Socket.IO path if you change from the default '/socket.io'
-# NEXT_PUBLIC_WS_PATH=
-# Recommended behind proxies/load balancers: force websocket transport
-NEXT_PUBLIC_WS_TRANSPORTS=websocket
-
-# HTTP origin for REST-like endpoints served by the Socket.IO server (e.g., /players/available)
-# If omitted, the client may derive it from NEXT_PUBLIC_WS_URL (ws/wss → http/https).
-# Set explicitly if your WS domain differs from the HTTP origin.
-NEXT_PUBLIC_WS_HTTP_ORIGIN="http://localhost:3010"
 ```
 
-On the server side (when running `npm run server` locally), allow your web origin:
+See [.env.example](.env.example) for all available variables with documentation.
+
+### 3. Start the database
 
 ```bash
-SOCKET_CORS_ORIGIN="http://localhost:3000"
+npm run db:up              # Start Postgres via Docker
+npm run prisma:generate    # Generate Prisma client
+npm run prisma:migrate:dev # Run migrations
+npm run db:seed            # Ingest cards and seed pack configs
 ```
 
-If you access the app via a LAN IP (e.g., `http://192.168.x.x:3000`), include it:
+### 4. Start development
 
 ```bash
-SOCKET_CORS_ORIGIN="http://localhost:3000,http://192.168.x.x:3000"
+# Terminal 1: Next.js dev server
+npm run dev
+
+# Terminal 2: Socket.IO game server
+npm run server:dev
 ```
 
-Restart the server and the Next.js dev server after changing env variables.
+Open [http://localhost:3000](http://localhost:3000).
 
-### Troubleshooting common WebSocket errors
+### Docker (full stack)
 
-- __Client cannot connect / 400 on polling__: set `NEXT_PUBLIC_WS_TRANSPORTS=websocket`.
-- __CORS error on handshake__: set `SOCKET_CORS_ORIGIN` on the server to include your web origin(s).
-- __Wrong host/port__: ensure `NEXT_PUBLIC_WS_URL` points to `http://localhost:3010` (or your Caddy endpoint).
-- __Health check__: `curl -s http://localhost:3010/healthz` should return JSON with `db`, `redis`, and `matches`.
-
-### Dockerized scaling (2 instances + Caddy load balancer)
-
-We provide a ready-to-run stack in `docker-compose.yml`:
-
-- `postgres` – database
-- `redis` – Socket.IO adapter (sessions/rooms across instances)
-- `migrate` – applies Prisma migrations
-- `server1`, `server2` – two Socket.IO instances (built from `Dockerfile.server`)
-- `caddy` – reverse proxy / load balancer on `http://localhost:3010`
-
-Commands:
+Run everything with Docker Compose:
 
 ```bash
-# Build server images and caddy
-npm run server:docker:build
-
-# Start two servers behind Caddy
-npm run server:docker:up
-
-# Tail server and caddy logs
-npm run server:docker:logs
-
-# Bring up the full stack (Postgres, Redis, migrate, servers, Caddy)
-npm run stack:up
-
-# Tear down the stack
-npm run stack:down
-
-# Manage individual services
-npm run db:up
-npm run redis:up
+npm run stack:up           # Postgres + Redis + Socket.IO servers + Caddy LB
+npm run dev                # Next.js dev server (connects to stack)
 ```
 
-By default, the client should connect to Caddy at `http://localhost:3010`.
+## Development
+
+### Commands
+
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Start Next.js dev server |
+| `npm run server:dev` | Start Socket.IO server (dev) |
+| `npm run build` | Production build |
+| `npm run test` | Run tests |
+| `npm run test:watch` | Run tests in watch mode |
+| `npm run lint` | Run ESLint |
+| `npm run db:up` / `db:down` | Start/stop local Postgres |
+| `npm run redis:up` / `redis:down` | Start/stop local Redis |
+| `npm run stack:up` / `stack:down` | Start/stop full Docker stack |
+| `npm run db:seed` | Seed cards and pack configs |
+| `npm run prisma:migrate:dev` | Create/apply DB migrations |
+| `npm run prisma:generate` | Regenerate Prisma client |
+
+### Project Structure
+
+```
+src/
+  app/              # Next.js App Router pages and API routes
+  components/       # React components (game/, ui/, tutorial/, etc.)
+  lib/              # Core logic (game store, tournament, tutorial engine)
+  hooks/            # Custom React hooks
+server/             # Standalone Socket.IO game server
+  modules/          # Server modules (tournament, draft, standings)
+  rules/            # Game rule enforcement
+prisma/             # Database schema and migrations
+bots/               # CPU bot engine and card evaluations
+data/               # Card data, deck precons, bot params
+public/             # Static assets, manual, changelog
+```
+
+### Rules Engine
+
+The game server includes a rules engine with configurable enforcement:
+
+- `RULES_ENFORCE_MODE=off` - Helpers only (default, free-form play)
+- `RULES_ENFORCE_MODE=bot_only` - Strict for CPU bots, helpers for humans
+- `RULES_ENFORCE_MODE=all` - Strict enforcement for everyone
+
+Helpers (when enabled) handle turn-start untap, mana accounting, and cost auto-application.
+
+### CPU Bots
+
+```bash
+# Spawn bots into a private lobby
+CPU_BOTS_ENABLED=1 npm run server
+npm run bots:spawn -- --bots 2 --match constructed
+```
+
+See [bots/engine/README.md](bots/engine/README.md) for bot architecture and configuration.
+
+## Deployment
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for production deployment with Docker.
+
+See [SELF_HOSTED_FRONTEND.md](SELF_HOSTED_FRONTEND.md) for self-hosting the full stack (replacing Vercel).
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on how to contribute.
+
+## Attribution
+
+- Mahogany Table model by [mindman](https://sketchfab.com/3d-models/mahogany-table-e9ef3eadee9d4491b7c59fdbb19c30cd)
+- Lava Table model by [A.Camplin Studios](https://sketchfab.com/3d-models/marble-coffee-table-20421b2e850c4787a4d0989defe84d69)
+
+## License
+
+This project is open source. See [LICENSE](LICENSE) for details.

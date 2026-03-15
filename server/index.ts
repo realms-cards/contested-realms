@@ -4406,7 +4406,10 @@ io.on("connection", async (socket: SocketClient) => {
       type === "feastForCrowsBegin" ||
       type === "feastForCrowsName" ||
       type === "feastForCrowsResolve" ||
-      type === "feastForCrowsCancel"
+      type === "feastForCrowsCancel" ||
+      type === "merlinRegister" ||
+      type === "merlinUnregister" ||
+      type === "merlinCast"
     ) {
       // Resolver messages - broadcast to match room
       try {
