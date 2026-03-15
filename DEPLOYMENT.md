@@ -255,5 +255,4 @@ docker exec sorcery-postgres pg_dump -U sorcery sorcery > backup-$(date +%Y%m%d)
 
 For issues:
 - Check server logs: `docker-compose -f docker-compose.prod.yml logs`
-- GitHub Issues: https://github.com/realms-cards/issues/issues
-- Email: kingofthe@realms.cards
+- Open an issue on GitHub

@@ -1,87 +1,224 @@
-<!-- OPENSPEC:START -->
+# AI Agent Guide - Sorcery Client
 
-# OpenSpec Instructions
+This guide helps AI coding assistants (Claude, Copilot, Cursor, etc.) understand the architecture and conventions of this project. Read this before making changes.
 
-These instructions are for AI assistants working in this project.
+## Project Overview
 
-Always open `@/openspec/AGENTS.md` when the request:
+A web-based client for playing [Sorcery: Contested Realm](https://www.sorcerytcg.com/) online. 3D game board, real-time multiplayer, draft/sealed modes, tournaments, CPU bots, deck building, and collection tracking.
 
-- Mentions planning or proposals (words like proposal, spec, change, plan)
-- Introduces new capabilities, breaking changes, architecture shifts, or big performance/security work
-- Sounds ambiguous and you need the authoritative spec before coding
+**Stack**: Next.js 15 + React 19 + TypeScript 5 + React Three Fiber + Socket.IO + PostgreSQL (Prisma) + Redis
 
-Use `@/openspec/AGENTS.md` to learn:
+## Architecture
 
-- How to create and apply change proposals
-- Spec format and conventions
-- Project structure and guidelines
+### Client-Server Model
 
-Keep this managed block so 'openspec update' can refresh the instructions.
+```
+Browser (Next.js)          Socket.IO Server           PostgreSQL
+┌──────────────────┐       ┌──────────────┐          ┌──────────┐
+│ Zustand Store    │◄─────►│ Event Handler│◄────────►│ Prisma   │
+│ (game state)     │patches│ + Rules      │          │ 46 models│
+│                  │       │ + Redis cache│          │          │
+│ React Three Fiber│       └──────────────┘          └──────────┘
+│ (3D board)       │
+└──────────────────┘
+```
 
-<!-- OPENSPEC:END -->
+- **Server is authoritative** for online matches. Client sends actions, server validates and broadcasts state patches.
+- **Zustand store** manages all client game state with 80+ slices (core, cards, UI, network).
+- **Patches flow one-way**: server → all clients in a match room via `statePatch` events.
 
-# Repository Guidelines
+### Key Directories
 
-## Project Structure & Module Organization
+```
+src/
+  app/                  # Next.js App Router (27 route groups)
+    api/                # API routes (REST)
+    online/play/[id]/   # Multiplayer game page
+    play/               # Local hotseat play
+    draft-3d/           # 3D draft mode
+    tournaments/        # Tournament pages
+    tutorial/           # Tutorial pages
+  components/
+    game/               # Board, cards, HUD, overlays, combat
+    ui/                 # Shared UI (dialogs, help, overlays)
+    tutorial/           # Tutorial components
+  lib/
+    game/store/         # Zustand store (THE core of client state)
+      types.ts          # GameState, CardRef, CellKey, Phase, etc.
+      baseTypes.ts      # Phase, PlayerKey, Thresholds
+      coreState.ts      # Turn management, phase control
+      gameActions/      # Play actions, movement, combat
+      customMessageHandlers.ts  # Card-specific resolvers
+    tutorial/           # Tutorial engine, lessons, state adapter
+    tournament/         # Pairing algorithm, standings
+  hooks/                # Custom React hooks
 
-- Source: `src/` (Next.js App Router in `src/app`, UI in `src/components`, utilities in `src/lib`, types in `src/types`).
-- Server: `server/` (Node + Socket.IO game/lobby server; run separately from Next.js).
-- Data & Assets: `data*/` for card assets and KTX2 outputs, `public/` for static files, `reference/` for rulebook and codex. Snapshot of all cards: `data/cards_raw.json`.
-- Database: `prisma/` (SQLite dev DB `prisma/dev.db`, schema in `schema.prisma`).
-- Scripts: `scripts/` for ingestion, seeding, and asset compression.
-- Path aliases: import app code via `@/*` (see `tsconfig.json`).
+server/
+  index.ts              # Main Socket.IO server (~6k lines)
+  modules/
+    tournament/         # Tournament broadcast, standings
+    draft/              # Draft config loading
+  rules/                # Game rule validation
 
-## Build, Test, and Development Commands
+bots/engine/            # CPU bot AI (see bots/engine/README.md)
+prisma/                 # Schema + migrations
+data/                   # Card data, precons, bot params
+public/                 # Static assets, manual.md, changelog.md
+```
 
-- `npm run dev`: Start Next.js dev server at `http://localhost:3000`.
-- `npm run server`: Start Socket.IO server (defaults to port `3001`).
-- `npm run build` / `npm run start`: Build and serve production build.
-- `npm run prisma:generate`: Regenerate Prisma Client after schema changes.
-- `npm run prisma:migrate`: Create a dev migration (SQLite) named `init`.
-- `npm run prisma:push`: Push schema to the local dev DB without a migration.
-- Data/Assets: `npm run ingest:cards`, `npm run ingest:codex`, `npm run seed:packs`, `npm run assets:compress[:out|:etc1s]`.
+### Game State (Zustand Store)
 
-Example (two terminals):
+The store is at `src/lib/game/store.ts`. Key state shape:
 
-- Terminal A: `npm run dev`
-- Terminal B: `npm run server`
+```typescript
+// Core identifiers
+matchId, actorKey, localPlayerId, currentPlayer, phase, turn
 
-## Coding Style & Naming Conventions
+// Board (5x4 grid)
+board: Record<CellKey, SiteTile>        // "x,y" -> site card
+permanents: Record<CellKey, CardRef[]>  // units/artifacts on tiles
+avatars: { p1: AvatarState, p2: AvatarState }
 
-- Language: TypeScript (strict). React 19, Next.js 15 App Router.
-- Linting: ESLint extends `next/core-web-vitals` and `next/typescript` (see `eslint.config.mjs`). `scripts/`, `server/`, and local `debug-*.js` / `test-*.js` are ignored by lint.
-- Components: PascalCase in `src/components`. Routes: lowercase segment folders under `src/app`.
-- Imports: Prefer `@/...` alias; group external before internal.
-- Styling: Tailwind v4; compose with `clsx`/`cva` where applicable.
+// Zones (per player)
+zones: { p1: PlayerZones, p2: PlayerZones }
+// Each has: hand, spellbook, atlas, graveyard, banished, collection
 
-## Testing Guidelines
+// Network
+transport: Transport  // Socket.IO connection
+lastServerTs          // Server timestamp for ordering
+```
 
-- Unit tests: Vitest is configured in `vitest.config.ts`; tests live under `tests/`.
-  - Run: `npm install` then `npm test` (or `npm run test:watch`).
-  - Examples included for protocol schemas and booster generation (with Prisma mocked).
-- Node scripts: you can still run `node test-*.js` / `debug-*.js` for ad-hoc checks.
-- Coverage/e2e can be added later; keep tests deterministic and avoid network/real DB.
+**CellKey format**: `"${x},${y}"` — e.g., `"2,0"` is column 2, row 0.
+**Board**: 5 columns (0-4) x 4 rows (0-3). Row 0 = P2 home, row 3 = P1 home.
+**Phases**: Setup -> Start -> Draw -> Main -> End (repeat).
 
-## Rules & Reference Data
+### Socket.IO Events
 
-- Rulebook: `reference/SorceryRulebook.pdf` is the authoritative gameplay rules. Use it to validate mechanics, timing, and corner cases.
-- Codex: `reference/codex-*.csv` contains official errata and rules clarifications for cards/keywords. Run `npm run ingest:codex` to populate the `CodexEntry` table. The collection UI has a toggle to display codex info for cards.
-- Card data: `reference/codex.csv` (legacy) lists canonical card data. Prefer API ingestion (`npm run ingest:cards`) and use it to cross-check names, rarities, and set slugs.
-- Cards snapshot: `data/cards_raw.json` contains all cards across sets (written by `npm run ingest:cards`). Treat as read-only; regenerate instead of editing by hand.
-- Suggested workflow: after ingestion, spot-check a few cards against the codex; for rules UX or tooltips, source text from the API/DB and confirm semantics with the PDF.
-- Validation: run `npm run validate:cards` to compare the DB against `data/cards_raw.json` and `reference/codex.csv` (names, rarities, and variant slugs). Prints concise diffs and samples.
+**Client -> Server**: `hello`, `action`, `mulliganDone`, `joinMatch`, `leaveMatch`, `resyncRequest`, `interaction:request`, `interaction:response`, `message`, `ping`, draft events (`draft:session:join`, `chooseDraftPack`, `makeDraftPick`, `submitDeck`, `startDraft`)
 
-## Commit & Pull Request Guidelines
+**Server -> Client**: `welcome`, `statePatch`, `matchStarted`, `joinedLobby`, `draftUpdate`, `resyncResponse`, `interaction:request`, `interaction:response`, tournament broadcasts (`PHASE_CHANGED`, `ROUND_STARTED`, `DRAFT_READY`, `MATCH_ASSIGNED`, etc.)
 
-- History is informal; adopt concise, imperative messages moving forward. Prefer Conventional Commits when feasible.
-  - Examples: `feat(lobby): add ready state`, `fix(auth): restore Discord callback`.
-- PRs should include:
-  - Clear description, linked issues (e.g., `Closes #123`).
-  - Screenshots/GIFs for UI changes.
-  - DB changes: update `schema.prisma`, run `npm run prisma:generate`, and note migration/seed steps.
-  - Local testing notes (commands used).
+### Database (Prisma)
 
-## Security & Configuration Tips
+46 models. Key groups:
 
-- Secrets live in `.env` (NextAuth/Discord, etc.); do not commit. SQLite dev DB is local (`file:./dev.db`).
-- CORS for the Socket server allows `http://localhost:3000` by default; adjust before deploying.
+- **Cards**: `Card`, `CardSetMetadata`, `Variant`, `Set`, `PackConfig`
+- **Users**: `User`, `Account`, `Session`, `PasskeyCredential`, `Friendship`
+- **Decks/Cubes**: `Deck`, `DeckCard`, `Cube`, `CubeCard`, `CollectionCard`
+- **Matches**: `OnlineMatchSession`, `OnlineMatchAction`, `MatchResult`
+- **Tournaments**: `Tournament`, `TournamentRound`, `Match`, `PlayerStanding`, `TournamentRegistration`
+- **Drafts**: `DraftSession`, `DraftParticipant`
+
+Schema at `prisma/schema.prisma`. Generate client with `npm run prisma:generate`.
+
+## Conventions
+
+### TypeScript
+
+- **Strict mode** — all strict options enabled
+- **No `any` types** — use interfaces, generics, or `unknown` with type guards
+- **No `as any` casts** — find the proper type or use a type guard
+- **Import order** — external libs first, then `@/` sorted alphabetically, no blank lines between groups
+- **`prefer-const`** and **`object-shorthand`** enforced by ESLint
+
+### File Organization
+
+- Components go in `src/components/{category}/`
+- Game state slices go in `src/lib/game/store/`
+- API routes use Next.js App Router convention: `src/app/api/{route}/route.ts`
+- Tests go adjacent to source: `foo.test.ts` next to `foo.ts`
+- Path alias: `@/*` maps to `src/*` (see `tsconfig.json`)
+
+### 3D Rendering
+
+- Each screen/page has its own `<Canvas>` (no shared global canvas)
+- Card textures use KTX2 compression with TTL-based caching
+- drei library for common 3D helpers
+- Target 60fps on desktop, functional on mobile
+
+### State Mutation
+
+- Client: mutate Zustand store via actions in store slices
+- Online: send `action` event to server, server validates and broadcasts `statePatch`
+- Never mutate state directly in components — always go through store actions
+
+## Commands
+
+```bash
+npm run dev              # Next.js dev server (port 3000)
+npm run server:dev       # Socket.IO server (port 3010)
+npm run build            # Production build
+npm run test             # Run tests (Vitest)
+npm run lint             # ESLint check
+npm run prisma:generate  # Regenerate Prisma client
+npm run prisma:migrate:dev  # Create/apply migrations
+npm run db:up / db:down  # Start/stop local Postgres (Docker)
+npm run db:seed          # Seed cards and packs
+npm run stack:up         # Full Docker stack (Postgres + Redis + servers)
+```
+
+## Common Tasks
+
+### Adding a new game action
+
+1. Define the action type in `src/lib/game/store/types.ts`
+2. Add the handler in the appropriate file under `src/lib/game/store/gameActions/`
+3. Add server-side validation in `server/rules/` if needed
+4. Flow: client store action -> `transport.send('action', ...)` -> server validates -> server broadcasts `statePatch` -> all clients apply patch
+
+### Adding a card-specific resolver
+
+Custom resolvers handle cards with unique abilities. Add to `src/lib/game/store/customMessageHandlers.ts`. Cards with resolvers get a purple glow indicator in the UI.
+
+### Adding an API route
+
+Create `src/app/api/{your-route}/route.ts` with exported HTTP method handlers (`GET`, `POST`, etc.). Use Prisma for DB access, NextAuth `getServerSession()` for auth.
+
+### Database changes
+
+1. Edit `prisma/schema.prisma`
+2. `npm run prisma:migrate:dev -- --name your_change`
+3. `npm run prisma:generate`
+
+### Adding a tutorial lesson
+
+1. Create `src/lib/tutorial/lessons/lesson-XX-topic.ts`
+2. Register in `src/lib/tutorial/lessons/index.ts`
+3. Step types: `narration`, `highlight`, `forced_action`, `scripted_action`, `checkpoint`
+4. State patches are applied when _leaving_ a step (on `advance()`)
+
+## Card Data
+
+- Full card DB: `data/cards_raw.json` (2.27MB, all cards across sets)
+- Bot card lookup: `data/bots/card-lookup.json` (rather use the official db as this lookup table holds an interpretation of rules which might deviate from the actual rules)
+- 204 Site cards, 34 Avatar cards — always verify names against these files
+- Rulebook: `reference/SorceryRulebook.txt` is authoritative for gameplay rules and should be used whenever keywords or game actions/concepts are referenced
+- Codex: `reference/codex-*.csv` for errata and rules clarifications
+- Validation: `npm run validate:cards` to check DB against card data files
+
+## Environment
+
+See `.env.example` for all configuration. Key variables for development:
+
+- `DATABASE_URL` / `DIRECT_URL` — PostgreSQL connection
+- `NEXT_PUBLIC_WS_URL` — Socket.IO server URL
+- `NEXTAUTH_SECRET` — Auth token signing
+- Feature flags: `NEXT_PUBLIC_CPU_BOTS_ENABLED`, `NEXT_PUBLIC_FEATURE_TOURNAMENTS`, etc.
+
+## What Not to Do
+
+- Don't add `any` types or `as any` casts
+- Don't create new documentation files unless explicitly asked
+- Don't add speculative features beyond what's requested
+- Don't skip TypeScript strict checks
+- Don't use `io.emit()` for game events (use room-scoped `io.to(room).emit()`)
+- Don't write directly to the database from client components (use API routes)
+- Don't commit `.env` files or secrets
+
+## Styleguide
+
+- Modern, sleek style preferred but if we can work in some whimsy that is appreciated
+- Official Sorcery font is "Font Fantaisie Artistique", we should use it with Titles and Card names for example
+- Never use emoji, but feel free to use fantasy themed icons from @iconify-json/game-icons where needed
+- When referencing Mana cost, we should use our mana cost component @/components/game/manacost
+- When referencing elements, element treshold, or affinity we should use the png assets for them

@@ -4730,6 +4730,81 @@ export function handleCustomMessage(
     return;
   }
 
+  // --- Merlin message handlers ---
+  if (t === "merlinRegister") {
+    const instanceId = (msg as { instanceId?: unknown }).instanceId as
+      | string
+      | undefined;
+    const location = (msg as { location?: unknown }).location as
+      | string
+      | undefined;
+    const ownerSeat = (msg as { ownerSeat?: unknown }).ownerSeat as
+      | PlayerKey
+      | undefined;
+    const cardName = (msg as { cardName?: unknown }).cardName as
+      | string
+      | undefined;
+
+    if (!instanceId || !ownerSeat) return;
+
+    // Skip if we are the owner — already registered locally
+    const actorKey = get().actorKey;
+    if (actorKey === ownerSeat) return;
+
+    // Register on opponent's client
+    const id = `merlin_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+    set((state) => {
+      const existing = state.merlinInstances.find(
+        (m) => m.instanceId === instanceId,
+      );
+      if (existing) return state;
+      return {
+        ...state,
+        merlinInstances: [
+          ...state.merlinInstances,
+          { id, instanceId, location: location ?? "", ownerSeat, cardName: cardName ?? "Merlin" },
+        ],
+      } as GameState;
+    });
+    return;
+  }
+
+  if (t === "merlinUnregister") {
+    const instanceId = (msg as { instanceId?: unknown }).instanceId as
+      | string
+      | undefined;
+    if (!instanceId) return;
+
+    set((state) => ({
+      ...state,
+      merlinInstances: state.merlinInstances.filter(
+        (m) => m.instanceId !== instanceId,
+      ),
+    }));
+    return;
+  }
+
+  if (t === "merlinCast") {
+    const ownerSeat = (msg as { ownerSeat?: unknown }).ownerSeat as
+      | PlayerKey
+      | undefined;
+    const cardName = (msg as { cardName?: unknown }).cardName as
+      | string
+      | undefined;
+    if (!ownerSeat) return;
+
+    // Skip if we are the caster — already handled locally
+    const actorKey = get().actorKey;
+    if (actorKey === ownerSeat) return;
+
+    try {
+      get().log(
+        `[${ownerSeat.toUpperCase()}] Merlin casts ${cardName ?? "a spell"} from spellbook`,
+      );
+    } catch {}
+    return;
+  }
+
   // --- Lilith message handlers ---
   // Handle request from Lilith owner asking for our top card
   if (t === "lilithRevealRequest") {
