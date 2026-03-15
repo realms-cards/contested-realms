@@ -112,7 +112,7 @@ export function SiteCard({
   beginHoverPreview,
   clearHoverPreviewDebounced,
   clearTouchTimers,
-  emitBoardPing: _emitBoardPing,
+  emitBoardPing,
   isSpectator,
   actorKey,
   currentPlayer,
@@ -135,7 +135,6 @@ export function SiteCard({
   void avatars;
   void _touchPreviewTimerRef;
   void _touchContextTimerRef;
-  void _emitBoardPing;
   if (!maybeSite) return null;
   const site = maybeSite;
 
@@ -256,12 +255,36 @@ export function SiteCard({
     if (useTapControls) {
       clearTouchTimers();
       const siteId = `site:${tileX}:${tileY}`;
+      // Close any context menu open for a different element
+      const cmNow = useGameStore.getState().contextMenu;
+      const isThisSiteMenuOpen =
+        cmNow &&
+        cmNow.target.kind === "site" &&
+        cmNow.target.x === tileX &&
+        cmNow.target.y === tileY;
+      if (cmNow && !isThisSiteMenuOpen) {
+        useGameStore.getState().closeContextMenu();
+      }
       const now = Date.now();
       const timeSinceLastTap = now - lastTapTimeRef.current;
       const isDoubleTap = lastTouchedId === siteId && timeSinceLastTap < 350;
       if (isDoubleTap) {
         e.stopPropagation();
-        lastTapTimeRef.current = 0;
+        // If context menu is already open for this site, third+ tap → board ping
+        const cmState = useGameStore.getState().contextMenu;
+        if (
+          cmState &&
+          cmState.target.kind === "site" &&
+          cmState.target.x === tileX &&
+          cmState.target.y === tileY
+        ) {
+          lastTapTimeRef.current = 0;
+          useGameStore.getState().closeContextMenu();
+          emitBoardPing({ x: e.point.x, z: e.point.z });
+          return;
+        }
+        // Keep lastTapTimeRef = now so a rapid 3rd tap is detected for ping
+        lastTapTimeRef.current = now;
         setLastTouchedId(siteId);
         openContextMenu(
           { kind: "site", x: tileX, y: tileY },
@@ -346,6 +369,22 @@ export function SiteCard({
     switchSiteSource.x === tileX &&
     switchSiteSource.y === tileY;
   const shouldPulse = !isInEarthquakeArea || isEarthquakeSource;
+
+  // Desktop double-click → board ping (mobile uses triple-tap in handleTouchPreview)
+  function handleSiteDoubleClick(e: ThreeEvent<PointerEvent>) {
+    if (isSpectator) return;
+    if (dragFromHand || dragFromPile) return;
+    const pe = e.nativeEvent as PointerEvent | undefined;
+    if (
+      pe &&
+      (pe.pointerType === "touch" ||
+        !window.matchMedia("(pointer: fine)").matches)
+    )
+      return;
+    if (tapControlsMode) return;
+    e.stopPropagation();
+    emitBoardPing({ x: e.point.x, z: e.point.z });
+  }
 
   // Check if this is a merged Tower of Babel (Base + Apex stacked)
   // Match by cellKey - Tower of Babel is a concept, not a separate card
@@ -451,6 +490,7 @@ export function SiteCard({
                   { x: e.clientX, y: e.clientY },
                 );
               }}
+              onDoubleClick={handleSiteDoubleClick}
             />
           </group>
           {/* Apex of Babel (top card) */}
@@ -493,6 +533,7 @@ export function SiteCard({
                 { x: e.clientX, y: e.clientY },
               );
             }}
+            onDoubleClick={handleSiteDoubleClick}
           />
         </group>
       ) : site.card ? (
@@ -536,6 +577,7 @@ export function SiteCard({
                 { x: e.clientX, y: e.clientY },
               );
             }}
+            onDoubleClick={handleSiteDoubleClick}
           />
         </group>
       ) : (

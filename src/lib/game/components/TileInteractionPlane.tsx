@@ -368,6 +368,20 @@ export function TileInteractionPlane({
         // Switch site is now handled in onPointerUp
         clearBoardSelection();
       }}
+      onDoubleClick={(e) => {
+        if (isSpectator) return;
+        if (dragFromHand || dragFromPile || dragging || dragAvatar) return;
+        // Desktop only — mobile uses triple-tap via registerTapForPing
+        const pe = e.nativeEvent as PointerEvent | undefined;
+        if (
+          pe &&
+          (pe.pointerType === "touch" ||
+            !window.matchMedia("(pointer: fine)").matches)
+        )
+          return;
+        e.stopPropagation();
+        emitBoardPing({ x: e.point.x, z: e.point.z });
+      }}
     >
       <planeGeometry args={[TILE_SIZE, TILE_SIZE]} />
       <meshStandardMaterial

@@ -328,7 +328,7 @@ export function PermanentStack({
   shapeshiftContext,
   counterHandlers,
   movementHandlers,
-  emitBoardPing: _emitBoardPing,
+  emitBoardPing,
   handlePointerMove,
   highlightColors,
   stackConfig,
@@ -375,7 +375,6 @@ export function PermanentStack({
     clearHoverPreviewDebounced,
     openContextMenu,
   } = hoverContext;
-  void _emitBoardPing;
   const {
     clearTouchTimers,
     touchPreviewTimerRef: _touchPreviewTimerRef,
@@ -910,6 +909,16 @@ export function PermanentStack({
                 const useTapControls = isTapDevice || tapControlsMode;
                 if (useTapControls) {
                   clearTouchTimers();
+                  // Close any context menu open for a different element
+                  const cmNow = useGameStore.getState().contextMenu;
+                  const isThisMenuOpen =
+                    cmNow &&
+                    cmNow.target.kind === "permanent" &&
+                    cmNow.target.at === key &&
+                    cmNow.target.index === idx;
+                  if (cmNow && !isThisMenuOpen) {
+                    useGameStore.getState().closeContextMenu();
+                  }
                   const cx = e.clientX;
                   const cy = e.clientY;
                   const now = Date.now();
@@ -917,9 +926,23 @@ export function PermanentStack({
                   const isDoubleTap =
                     lastTouchedId === permId && timeSinceLastTap < 350;
                   if (isDoubleTap) {
-                    // Double tap: open context menu and show card preview
-                    lastTapTimeRef.current = 0;
                     e.stopPropagation();
+                    // If context menu is already open for this permanent, third+ tap → board ping
+                    const cmState = useGameStore.getState().contextMenu;
+                    if (
+                      cmState &&
+                      cmState.target.kind === "permanent" &&
+                      cmState.target.at === key &&
+                      cmState.target.index === idx
+                    ) {
+                      lastTapTimeRef.current = 0;
+                      useGameStore.getState().closeContextMenu();
+                      emitBoardPing({ x: e.point.x, z: e.point.z });
+                      return;
+                    }
+                    // Double tap: open context menu and show card preview
+                    // Keep lastTapTimeRef = now so a rapid 3rd tap is detected for ping
+                    lastTapTimeRef.current = now;
                     selectPermanent(key, idx);
                     setLastTouchedId(permId);
                     const isOwner = actorKey === ownerSeat;
@@ -1418,6 +1441,23 @@ export function PermanentStack({
                     { kind: "permanent", at: key, index: idx },
                     { x: e.clientX, y: e.clientY },
                   );
+                }}
+                onDoubleClick={(e: ThreeEvent<PointerEvent>) => {
+                  if (isSpectator) return;
+                  if (dragging || dragAvatar || dragFromHand || dragFromPile)
+                    return;
+                  if (!isPrimaryCardHit(e)) return;
+                  // Desktop only — mobile uses triple-tap in onPointerDown
+                  const pe = e.nativeEvent as PointerEvent | undefined;
+                  if (
+                    pe &&
+                    (pe.pointerType === "touch" ||
+                      !window.matchMedia("(pointer: fine)").matches)
+                  )
+                    return;
+                  if (tapControlsMode) return;
+                  e.stopPropagation();
+                  emitBoardPing({ x: e.point.x, z: e.point.z });
                 }}
               >
                 {isSilencedToken ? (
