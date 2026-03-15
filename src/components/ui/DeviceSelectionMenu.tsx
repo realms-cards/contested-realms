@@ -6,7 +6,7 @@
 import React, { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { getDeviceDisplayName } from "@/lib/utils/webrtc-devices";
-import type { DeviceSelectionMenuProps } from "../../../specs/006-live-video-and/contracts/ui-components";
+import type { DeviceSelectionMenuProps } from "@/lib/rtc/types";
 
 export const DeviceSelectionMenu: React.FC<DeviceSelectionMenuProps> = ({
   audioDevices,

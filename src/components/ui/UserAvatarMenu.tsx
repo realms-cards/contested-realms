@@ -5,7 +5,7 @@
 
 import Image from 'next/image';
 import React, { useState, useRef, useEffect } from 'react';
-import type { UserAvatarMenuProps } from '../../../specs/006-live-video-and/contracts/ui-components';
+import type { UserAvatarMenuProps } from '@/lib/rtc/types';
 
 export const UserAvatarMenu: React.FC<UserAvatarMenuProps> = ({
   userId,
