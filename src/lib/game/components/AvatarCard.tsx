@@ -21,6 +21,7 @@ import {
   TILE_SIZE,
 } from "@/lib/game/constants";
 import type { BoardDragControls } from "@/lib/game/hooks/useBoardDragControls";
+import { useGameStore } from "@/lib/game/store";
 import type {
   AvatarState,
   BoardState,
@@ -454,6 +455,10 @@ export function AvatarCard({
     const useTapControls = isTapDevice || tapControlsMode;
     if (useTapControls) {
       clearTouchTimers();
+      // Close any context menu open for a different element
+      if (contextMenu && !isContextSelected) {
+        useGameStore.getState().closeContextMenu();
+      }
       const cx = e.clientX;
       const cy = e.clientY;
       const now = Date.now();
@@ -461,9 +466,17 @@ export function AvatarCard({
       const isDoubleTap =
         lastTouchedId === avatarId && timeSinceLastTap < 350;
       if (isDoubleTap) {
-        // Double tap: open context menu and show card preview
         e.stopPropagation();
-        lastTapTimeRef.current = 0;
+        // If context menu is already open for this avatar, this is a third+ tap → board ping
+        if (isContextSelected) {
+          lastTapTimeRef.current = 0;
+          useGameStore.getState().closeContextMenu();
+          emitBoardPing({ x: e.point.x, z: e.point.z });
+          return;
+        }
+        // Double tap: open context menu and show card preview
+        // Keep lastTapTimeRef = now so a rapid 3rd tap is detected for ping
+        lastTapTimeRef.current = now;
         selectAvatar(seat);
         setLastTouchedId(avatarId);
         beginHoverPreview(lastAvatarCardsRef.current[seat], avatarId);
@@ -681,6 +694,16 @@ export function AvatarCard({
             if (dragFromHand || dragFromPile) return;
             if (dragAvatar) return;
             if (isSpectator) return;
+            // Only desktop double-click triggers board ping;
+            // mobile uses double-tap for context menu, triple-tap for ping
+            const pe = e.nativeEvent as PointerEvent | undefined;
+            if (
+              pe &&
+              (pe.pointerType === "touch" ||
+                !window.matchMedia("(pointer: fine)").matches)
+            )
+              return;
+            if (tapControlsMode) return;
             e.stopPropagation();
             setLastTouchedId(avatarId);
             emitBoardPing({ x: e.point.x, z: e.point.z });

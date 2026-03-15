@@ -1859,7 +1859,18 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
           e.preventDefault();
           onClose();
         }}
-        style={{ display: attachmentDialog || rubbleDialog ? "none" : "block" }}
+        style={{
+          display: attachmentDialog || rubbleDialog ? "none" : "block",
+          // On touch devices, let taps pass through to the 3D canvas so
+          // triple-tap ping and single-tap-elsewhere-to-close work naturally.
+          // The menu itself keeps pointer-events: auto. Desktop keeps the
+          // backdrop clickable for mouse dismiss.
+          pointerEvents:
+            typeof window !== "undefined" &&
+            !window.matchMedia("(pointer: fine)").matches
+              ? "none"
+              : "auto",
+        }}
       >
         <div
           ref={menuRef}
