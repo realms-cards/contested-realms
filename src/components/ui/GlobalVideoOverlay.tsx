@@ -21,7 +21,7 @@ import { useVideoOverlay } from '@/lib/contexts/VideoOverlayContext';
 import { FEATURE_AUDIO_ONLY } from '@/lib/flags';
 import { ConnectionStatusIndicator } from './ConnectionStatusIndicator';
 import { VideoStreamOverlay } from './VideoStreamOverlay';
-import type { GlobalVideoOverlayProps } from '../../../specs/006-live-video-and/contracts/ui-components';
+import type { GlobalVideoOverlayProps } from '@/lib/rtc/types';
 
 /**
  * Global Video Overlay Component

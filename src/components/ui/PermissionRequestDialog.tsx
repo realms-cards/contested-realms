@@ -5,7 +5,7 @@
 
 import React, { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import type { PermissionRequestDialogProps } from "../../../specs/006-live-video-and/contracts/ui-components";
+import type { PermissionRequestDialogProps } from "@/lib/rtc/types";
 
 export const PermissionRequestDialog: React.FC<
   PermissionRequestDialogProps

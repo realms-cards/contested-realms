@@ -48,13 +48,13 @@
 
 import React, { createContext, useContext, useMemo, useState } from 'react';
 import type { Vector3 } from 'three';
-import type { 
-  ScreenType, 
-  VideoOverlayConfig, 
-  SeatVideoPlacement, 
+import type {
+  ScreenType,
+  VideoOverlayConfig,
+  SeatVideoPlacement,
   VideoOverlayContextValue,
   VideoOverlayProviderProps
-} from '../../../specs/006-live-video-and/contracts/video-overlay';
+} from '@/lib/rtc/types';
 
 // Screen-specific overlay configurations
 const SCREEN_OVERLAY_CONFIGS: Record<ScreenType, Omit<VideoOverlayConfig, 'screenType' | 'seatPosition'>> = {

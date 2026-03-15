@@ -4,7 +4,7 @@
  */
 
 import React, { useRef, useEffect, useState } from 'react';
-import type { VideoStreamOverlayProps } from '../../../specs/006-live-video-and/contracts/ui-components';
+import type { VideoStreamOverlayProps } from '@/lib/rtc/types';
 
 export const VideoStreamOverlay: React.FC<VideoStreamOverlayProps> = ({ 
   stream, 

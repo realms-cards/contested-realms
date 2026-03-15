@@ -7,7 +7,7 @@ import React, { useState } from 'react';
 import { FEATURE_AUDIO_ONLY } from '@/lib/flags';
 import { DeviceSelectionMenu } from './DeviceSelectionMenu';
 import { PermissionRequestDialog } from './PermissionRequestDialog';
-import type { MediaControlsPanelProps } from '../../../specs/006-live-video-and/contracts/ui-components';
+import type { MediaControlsPanelProps } from '@/lib/rtc/types';
 
 export const MediaControlsPanel: React.FC<MediaControlsPanelProps> = ({
   rtcState,

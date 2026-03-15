@@ -4,12 +4,12 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import type { 
-  WebRTCHookOptions, 
-  WebRTCHookReturn, 
-  RtcState, 
-  PermissionState 
-} from '../../../specs/006-live-video-and/contracts/webrtc-hooks';
+import type {
+  WebRTCHookOptions,
+  WebRTCHookReturn,
+  RtcState,
+  PermissionState
+} from '@/lib/rtc/types';
 
 const DEFAULT_ICE_SERVERS: RTCIceServer[] = [
   { urls: 'stun:stun.l.google.com:19302' },

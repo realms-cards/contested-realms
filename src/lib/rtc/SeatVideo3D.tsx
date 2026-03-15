@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { TILE_SIZE } from '@/lib/game/constants';
 import { useGameStore } from '@/lib/game/store';
-import type { SeatVideo3DProps } from '../../../specs/006-live-video-and/contracts/ui-components';
+import type { SeatVideo3DProps } from '@/lib/rtc/types';
 
 /**
  * 3D Video Seat Component
