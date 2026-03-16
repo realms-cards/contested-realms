@@ -543,11 +543,14 @@ export const authOptions: NextAuthOptions = {
               try {
                 const guildIds: unknown = JSON.parse(discordData.discordGuildIds);
                 if (Array.isArray(guildIds)) {
-                  const { syncLeagueMemberships } = await import("@/lib/leagues/membership");
-                  await syncLeagueMemberships(dbUser.id, guildIds as string[]);
+                  import("@/lib/leagues/membership").then(({ syncLeagueMemberships }) =>
+                    syncLeagueMemberships(dbUser.id, guildIds as string[]).catch(() => {
+                      // Non-fatal: league sync can happen later via settings page
+                    }),
+                  );
                 }
               } catch {
-                // Non-fatal: league sync can happen later via settings page
+                // Non-fatal: guild ID parsing failed
               }
             }
           } else {
