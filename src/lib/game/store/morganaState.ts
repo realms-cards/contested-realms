@@ -8,6 +8,7 @@ import type {
   ServerPatchT,
   Zones,
 } from "./types";
+import { triggerCardResolvers } from "./utils/resolverTriggers";
 
 function newMorganaId() {
   return `mor_${Date.now().toString(36)}_${Math.random()
@@ -245,29 +246,16 @@ export const createMorganaSlice: StateCreator<
       `Morgana le Fay casts ${card.name} at tile ${targetTile.x},${targetTile.y}`,
     );
 
-    // Trigger magic cast flow if it's a magic spell
-    const type = (card.type || "").toLowerCase();
-    if (type.includes("magic")) {
-      try {
-        get().beginMagicCast({
-          tile: targetTile,
-          spell: {
-            at: key,
-            index: arr.length - 1,
-            instanceId: newPermanent.instanceId,
-            owner: morganaEntry.minion.owner,
-            card: card as CardRef,
-          },
-          // Preset Morgana as the caster
-          presetCaster: {
-            kind: "permanent",
-            at: morganaEntry.minion.at,
-            index: morganaEntry.minion.index,
-            owner: morganaEntry.minion.owner,
-          },
-        });
-      } catch {}
-    }
+    // Trigger custom card resolvers (spell abilities, minion genesis, etc.)
+    triggerCardResolvers({
+      card: card as CardRef,
+      key,
+      permanentIndex: arr.length - 1,
+      instanceId: newPermanent.instanceId,
+      owner: morganaEntry.minion.owner,
+      ownerSeat: morganaEntry.ownerSeat,
+      get,
+    });
   },
 
   removeMorganaHand: (minionInstanceId: string | null, minionAt: CellKey) => {

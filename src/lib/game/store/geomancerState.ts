@@ -305,13 +305,27 @@ export const createGeomancerSlice: StateCreator<
     const sitesPatch: Record<string, unknown> = {
       [targetCell]: newSites[targetCell] ?? null,
     };
+
+    // Build permanents patch with __remove marker for rubble so
+    // mergePermanentsMap on the opponent's side actually removes it
+    // (without __remove, the merge keeps base items not in the patch)
+    const rubblePerms = state.permanents[targetCell] || [];
+    const rubblePerm = rubblePerms.find(isRubblePermanent);
+    const patchCellPerms = rubblePerm
+      ? [...cellPerms, { ...rubblePerm, __remove: true }]
+      : cellPerms;
+    const permanentsPatch = {
+      ...state.permanents,
+      [targetCell]: patchCellPerms,
+    };
+
     const patches: ServerPatchT = {
       board: { sites: sitesPatch } as unknown as ServerPatchT["board"],
       zones: {
         [who]: updatedZones[who],
       } as unknown as ServerPatchT["zones"],
       avatars: patchAvatars,
-      permanents: permanentsNext,
+      permanents: permanentsPatch,
       geomancerRubbleUsed: updatedUsed,
     };
 

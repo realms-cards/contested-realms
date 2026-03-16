@@ -9,6 +9,7 @@ import type {
   ServerPatchT,
   Zones,
 } from "./types";
+import { triggerCardResolvers } from "./utils/resolverTriggers";
 
 function newPithImpId() {
   return `pi_${Date.now().toString(36)}_${Math.random()
@@ -380,7 +381,6 @@ export const createPithImpSlice: StateCreator<
 
     // Add the card as a permanent on the board
     // IMPORTANT: Use the Pith Imp controller's owner number - card ownership transfers
-    // Mark as pithImpStolen to prevent custom resolvers from triggering
     const controllerOwnerNum: 1 | 2 = pithImpEntry.ownerSeat === "p1" ? 1 : 2;
     const permanents = get().permanents;
     const cellPerms = [...(permanents[key] || [])];
@@ -388,7 +388,6 @@ export const createPithImpSlice: StateCreator<
       card: {
         ...card,
         originalOwnerSeat: pithImpEntry.victimSeat,
-        pithImpStolen: true, // Prevents custom resolvers from triggering
       } as CardRef,
       owner: controllerOwnerNum, // Ownership transferred to Pith Imp controller
       instanceId: `dropped_${Date.now().toString(36)}`,
@@ -437,6 +436,17 @@ export const createPithImpSlice: StateCreator<
         } as unknown as CustomMessage);
       } catch {}
     }
+
+    // Trigger custom card resolvers (spell abilities, minion genesis, etc.)
+    triggerCardResolvers({
+      card: card as CardRef,
+      key,
+      permanentIndex: cellPerms.length - 1,
+      instanceId: newPermanent.instanceId,
+      owner: controllerOwnerNum,
+      ownerSeat: pithImpEntry.ownerSeat,
+      get,
+    });
   },
 
   // Transfer Pith Imp ownership when control is transferred to another player

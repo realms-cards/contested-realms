@@ -182,6 +182,17 @@ export default function Piles3D({
     }
   }
 
+  // Long-press timer for opening context menu on mobile/touch devices
+  const longPressTimerRef = useRef<number | null>(null);
+  const longPressPosRef = useRef<{ x: number; y: number } | null>(null);
+  function clearLongPress() {
+    if (longPressTimerRef.current) {
+      window.clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    longPressPosRef.current = null;
+  }
+
   const pileDragStartRef = useRef<{
     who: PlayerKey;
     key: PileKey;
@@ -288,6 +299,7 @@ export default function Piles3D({
                       if (isCemetery) beginHoverPreview(cards[0]);
                     }}
                     onPointerOut={() => {
+                      clearLongPress();
                       const isDragging = !!dragFromHand || !!dragFromPile;
                       if (isDragging) return;
                       // Don't stop propagation - allow orbit controls
@@ -353,6 +365,34 @@ export default function Piles3D({
                       if (e.button !== 0) return; // left button only
                       const isDragging = !!dragFromHand || !!dragFromPile;
                       if (isDragging) return;
+                      // Long-press on touch → open context menu (piles have no double-tap)
+                      const pe = e.nativeEvent as PointerEvent | undefined;
+                      const isTouchEvent =
+                        pe &&
+                        (pe.pointerType === "touch" ||
+                          !window.matchMedia("(pointer: fine)").matches);
+                      if (isTouchEvent) {
+                        clearLongPress();
+                        const cx = e.clientX;
+                        const cy = e.clientY;
+                        longPressPosRef.current = { x: cx, y: cy };
+                        const pileType =
+                          key === "atlas"
+                            ? "atlas"
+                            : key === "graveyard"
+                              ? "graveyard"
+                              : key === "collection"
+                                ? "collection"
+                                : "spellbook";
+                        longPressTimerRef.current = window.setTimeout(() => {
+                          longPressTimerRef.current = null;
+                          pileDragStartRef.current = null;
+                          openContextMenu(
+                            { kind: "pile", who: owner, from: pileType },
+                            { x: cx, y: cy },
+                          );
+                        }, 500) as unknown as number;
+                      }
                       if (isCemetery) return;
                       // Start tracking for potential drag from atlas or spellbook
                       if (
@@ -373,6 +413,7 @@ export default function Piles3D({
                     }}
                     onClick={(_e: ThreeEvent<PointerEvent>) => {
                       void _e;
+                      clearLongPress();
                       const isDragging = !!dragFromHand || !!dragFromPile;
                       if (isDragging) return;
                       if (isCemetery) return;
@@ -394,6 +435,12 @@ export default function Piles3D({
                       } catch {}
                     }}
                     onPointerMove={(e: ThreeEvent<PointerEvent>) => {
+                      // Cancel long-press if finger moves too far
+                      if (longPressPosRef.current) {
+                        const dx = e.clientX - longPressPosRef.current.x;
+                        const dy = e.clientY - longPressPosRef.current.y;
+                        if (Math.hypot(dx, dy) > 10) clearLongPress();
+                      }
                       // Check if we should initiate a drag from atlas or spellbook
                       const dragStart = pileDragStartRef.current;
                       if (
@@ -578,6 +625,36 @@ export default function Piles3D({
                   );
                   clearHoverPreview();
                 }}
+                onPointerDown={(e: ThreeEvent<PointerEvent>) => {
+                  if (isCemetery) return;
+                  if (e.button !== 0) return;
+                  const pe = e.nativeEvent as PointerEvent | undefined;
+                  const isTouchEvent =
+                    pe &&
+                    (pe.pointerType === "touch" ||
+                      !window.matchMedia("(pointer: fine)").matches);
+                  if (isTouchEvent) {
+                    clearLongPress();
+                    const cx = e.clientX;
+                    const cy = e.clientY;
+                    longPressPosRef.current = { x: cx, y: cy };
+                    const pileType =
+                      key === "atlas"
+                        ? "atlas"
+                        : key === "collection"
+                          ? "collection"
+                          : "spellbook";
+                    longPressTimerRef.current = window.setTimeout(() => {
+                      longPressTimerRef.current = null;
+                      openContextMenu(
+                        { kind: "pile", who: owner, from: pileType },
+                        { x: cx, y: cy },
+                      );
+                    }, 500) as unknown as number;
+                  }
+                }}
+                onClick={() => clearLongPress()}
+                onPointerOut={() => clearLongPress()}
                 onPointerUp={(e: ThreeEvent<PointerEvent>) => {
                   if (e.button !== 0) return; // left button release only
                   const isDragging = !!dragFromHand || !!dragFromPile;

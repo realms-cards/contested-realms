@@ -12,6 +12,7 @@ export type DialogSlice = Pick<
   | "searchDialog"
   | "openSearchDialog"
   | "closeSearchDialog"
+  | "removeCardFromSearchDialog"
   | "peekDialog"
   | "openPeekDialog"
   | "closePeekDialog"
@@ -57,6 +58,19 @@ export const createDialogSlice: StateCreator<GameState, [], [], DialogSlice> = (
     get().log(`Viewing ${pileName} (${cards.length} cards)`);
   },
   closeSearchDialog: () => set({ searchDialog: null }),
+  removeCardFromSearchDialog: (card) => {
+    const dialog = get().searchDialog;
+    if (!dialog) return;
+    const idx = dialog.cards.findIndex(
+      (c) =>
+        c.cardId === card.cardId &&
+        (c.instanceId ?? null) === (card.instanceId ?? null),
+    );
+    if (idx === -1) return;
+    const updated = [...dialog.cards];
+    updated.splice(idx, 1);
+    set({ searchDialog: { ...dialog, cards: updated } });
+  },
 
   peekDialog: null,
   openPeekDialog: (title, cards, source) =>

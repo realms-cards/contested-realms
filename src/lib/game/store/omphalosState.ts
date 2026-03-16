@@ -7,6 +7,7 @@ import type {
   PlayerKey,
   ServerPatchT,
 } from "./types";
+import { triggerCardResolvers } from "./utils/resolverTriggers";
 
 function newOmphalosId() {
   return `omph_${Date.now().toString(36)}_${Math.random()
@@ -305,6 +306,17 @@ export const createOmphalosSlice: StateCreator<
         isMinion ? " (summoned at its location)" : ""
       }`,
     );
+
+    // Trigger custom card resolvers (spell abilities, minion genesis, etc.)
+    triggerCardResolvers({
+      card: card as CardRef,
+      key,
+      permanentIndex: arr.length - 1,
+      instanceId: newPermanent.instanceId,
+      owner: omphalosEntry.artifact.owner,
+      ownerSeat: omphalosEntry.ownerSeat,
+      get,
+    });
   },
 
   removeOmphalosHand: (

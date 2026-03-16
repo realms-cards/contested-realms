@@ -87,10 +87,44 @@ export default function TokenPile3D({
     t: number;
   } | null>(null);
 
+  // Long-press for context menu on mobile/touch
+  const tokenLongPressRef = useRef<number | null>(null);
+  function clearTokenLongPress() {
+    if (tokenLongPressRef.current) {
+      window.clearTimeout(tokenLongPressRef.current);
+      tokenLongPressRef.current = null;
+    }
+  }
+
   return (
     <group position={[x, 0.002, z]}>
       {/* Base pile */}
       <group
+        onPointerDown={
+          noRaycast
+            ? undefined
+            : (e: ThreeEvent<PointerEvent>) => {
+                if (e.button !== 0) return;
+                const pe = e.nativeEvent as PointerEvent | undefined;
+                const isTouchEvent =
+                  pe &&
+                  (pe.pointerType === "touch" ||
+                    !window.matchMedia("(pointer: fine)").matches);
+                if (!isTouchEvent) return;
+                if (transport && !isMine) return;
+                clearTokenLongPress();
+                const cx = e.clientX;
+                const cy = e.clientY;
+                tokenLongPressRef.current = window.setTimeout(() => {
+                  tokenLongPressRef.current = null;
+                  openContextMenu(
+                    { kind: "tokenpile", who: owner },
+                    { x: cx, y: cy },
+                  );
+                }, 500) as unknown as number;
+              }
+        }
+        onPointerOut={noRaycast ? undefined : () => clearTokenLongPress()}
         onContextMenu={
           noRaycast
             ? undefined
@@ -108,6 +142,7 @@ export default function TokenPile3D({
           noRaycast
             ? undefined
             : (e: ThreeEvent<MouseEvent>) => {
+                clearTokenLongPress();
                 e.stopPropagation();
                 if (transport && !isMine) return;
                 setExpanded((v) => !v);

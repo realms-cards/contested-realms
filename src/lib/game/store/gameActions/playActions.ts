@@ -704,6 +704,12 @@ export const createPlayActionsSlice: StateCreator<
         // Geomancer ability 1: "If you played an earth site, fill a void adjacent to you with Rubble."
         if (isGeomancer(get().avatars[who]?.card?.name)) {
           const earthThreshold = Number(card.thresholds?.earth ?? 0);
+          console.log("[GEOMANCER] Earth site check:", {
+            cardName: card.name,
+            thresholds: card.thresholds,
+            earthThreshold,
+            who,
+          });
           if (earthThreshold > 0) {
             setTimeout(() => {
               get().beginGeomancerFill(who);
@@ -1005,13 +1011,8 @@ export const createPlayActionsSlice: StateCreator<
 
       // Check if resolvers are disabled - if so, skip all custom card logic
       const resolversDisabled = get().resolversDisabled;
-      // Also skip resolvers for Pith Imp stolen cards - they're not "played", just placed
-      const isPithImpStolen =
-        (card as { pithImpStolen?: boolean })?.pithImpStolen === true;
-      if (resolversDisabled || isPithImpStolen) {
-        console.log(
-          `[playActions] Resolvers skipped - ${resolversDisabled ? "disabled" : "pithImpStolen card"}`,
-        );
+      if (resolversDisabled) {
+        console.log("[playActions] Resolvers skipped - disabled");
         // Still trigger generic magic cast for Magic cards so they can be resolved manually
         if (type.includes("magic") && newest) {
           try {
