@@ -214,8 +214,13 @@ export function normalizePermanentItem(
   }
 
   // Skip items with undefined/null cards (malformed data from server)
+  // ALWAYS log this warning (not just dev) so we can diagnose site disappearance
   if (!item.card) {
-    console.warn("[normalizePermanentItem] Skipping item with undefined card", item);
+    console.warn(
+      "[normalizePermanentItem] Skipping item with undefined card — " +
+        "this may cause permanents/sites to disappear",
+      { instanceId: item.instanceId, keys: Object.keys(item) },
+    );
     return null;
   }
   const card = ensureCardInstanceId(item.card);

@@ -292,6 +292,15 @@ export function mergePermanentsMap(
     const nextArr = Array.isArray(value) ? (value as unknown[]) : [];
     // If the patch explicitly sets an empty array for a cell, clear that cell
     if (nextArr.length === 0) {
+      const prevArr = Array.isArray(result[cell as keyof Permanents])
+        ? (result[cell as keyof Permanents] as unknown[])
+        : [];
+      if (prevArr.length > 0) {
+        console.warn(
+          `[mergePermanentsMap] Clearing cell "${cell}" which had ${prevArr.length} permanents`,
+          { clearedNames: prevArr.map((p: unknown) => (p as Record<string, unknown>)?.card && ((p as Record<string, unknown>).card as Record<string, unknown>)?.name).filter(Boolean) },
+        );
+      }
       (result as Record<string, PermanentItem[]>)[cell] = [];
       continue;
     }
@@ -320,13 +329,23 @@ export function createPermanentsPatch(
   const payload: Partial<Permanents> = {};
   for (const cell of uniqueCellList(cells)) {
     const items = per[cell];
-    payload[cell] = Array.isArray(items)
-      ? (items.map((item) =>
-          item && typeof item === "object"
-            ? ({ ...item } as PermanentItem)
-            : item
-        ) as PermanentItem[])
-      : ([] as PermanentItem[]);
+    if (Array.isArray(items)) {
+      payload[cell] = items.map((item) =>
+        item && typeof item === "object"
+          ? ({ ...item } as PermanentItem)
+          : item
+      ) as PermanentItem[];
+    } else {
+      // Only include empty array if the cell explicitly exists in the
+      // permanents map (e.g. was cleared intentionally).  Do NOT generate
+      // an empty array for cells that simply don't exist – that would
+      // cause mergePermanentsMap to wipe all permanents at that cell on
+      // the remote client.
+      if (Object.prototype.hasOwnProperty.call(per, cell)) {
+        payload[cell] = [] as PermanentItem[];
+      }
+      // else: omit the cell entirely so the remote keeps its data
+    }
   }
   return {
     permanents: payload as GameState["permanents"],
