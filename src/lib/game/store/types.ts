@@ -3242,6 +3242,7 @@ export type GameState = {
     },
   ) => void;
   closeSearchDialog: () => void;
+  removeCardFromSearchDialog: (card: CardRef) => void;
   // Peek-only dialog used for reveals (with optional card actions)
   peekDialog: {
     title?: string;

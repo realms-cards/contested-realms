@@ -2265,6 +2265,9 @@ export default function OnlineMatchPage() {
   const closePlacementDialog = useGameStore((s) => s.closePlacementDialog);
   const searchDialog = useGameStore((s) => s.searchDialog);
   const closeSearchDialog = useGameStore((s) => s.closeSearchDialog);
+  const removeCardFromSearchDialog = useGameStore(
+    (s) => s.removeCardFromSearchDialog,
+  );
   const selectedPermanent = useGameStore((s) => s.selectedPermanent);
   const selectedAvatar = useGameStore((s) => s.selectedAvatar);
   const boardSize = useGameStore((s) => s.board.size);
@@ -3348,14 +3351,14 @@ export default function OnlineMatchPage() {
               cards={searchDialog.cards}
               onSelectCard={(card) => {
                 searchDialog.onSelectCard(card);
-                closeSearchDialog();
+                removeCardFromSearchDialog(card);
               }}
               onClose={() => closeSearchDialog()}
               onBanishCard={
                 searchDialog.onBanishCard
                   ? (card) => {
                       searchDialog.onBanishCard?.(card);
-                      closeSearchDialog();
+                      removeCardFromSearchDialog(card);
                     }
                   : undefined
               }

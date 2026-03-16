@@ -3,6 +3,7 @@ import { useRef } from "react";
 import type { MutableRefObject } from "react";
 import { TILE_SIZE } from "@/lib/game/constants";
 import type { BoardDragControls } from "@/lib/game/hooks/useBoardDragControls";
+import { useGameStore } from "@/lib/game/store";
 import type { GameState } from "@/lib/game/store/types";
 
 export type TileInteractionPlaneProps = {
@@ -366,6 +367,9 @@ export function TileInteractionPlane({
           return;
         }
         // Switch site is now handled in onPointerUp
+        // Clear card preview on tap (especially important on mobile where
+        // previews persist until dismissed)
+        useGameStore.getState().setPreviewCard(null);
         clearBoardSelection();
       }}
       onDoubleClick={(e) => {
