@@ -1,538 +1,70 @@
 # Sorcery Client - Development Context
 
-See also: `AGENTS.md` for architecture overview, conventions, and common tasks.
+See `AGENTS.md` for architecture overview, conventions, commands, and common tasks.
 
-## Current Status: TypeScript Build Configuration Complete ✅
-
-**All TypeScript compilation errors resolved!** The build now completes successfully with enhanced type safety. From 122+ errors down to zero TypeScript errors, with only ESLint warnings remaining (which is expected and acceptable).
-
-## Type Safety & Build Configuration
-
-### Enhanced TypeScript Configuration
-The project now uses strict TypeScript settings to prevent common errors:
-- `strict: true` - Enables all strict type checking options
-- `noImplicitReturns: true` - Requires explicit return statements in all code paths
-- `noImplicitThis: true` - Prevents implicit 'any' for 'this' expressions  
-- `noFallthroughCasesInSwitch: true` - Prevents fallthrough in switch statements
-- `useUnknownInCatchVariables: true` - Catch variables default to 'unknown'
-
-### ESLint Rules for Regression Prevention
-Enhanced ESLint configuration includes:
-- `@typescript-eslint/no-explicit-any: "error"` - Prevents 'any' usage
-- `prefer-const: "error"` - Enforces const for immutable variables
-- `import/order: "warn"` - Maintains consistent import ordering
-- `object-shorthand: "error"` - Enforces ES6 object shorthand
-
-### Validation & Regression Prevention
-- **Validation Script**: `scripts/validate-type-safety.sh` verifies configuration integrity
-- **Pre-commit Hooks**: Husky integration prevents regression commits
-- **Build Validation**: Enhanced CI/CD checks ensure type safety compliance
-
-## Technical Context
-**Language/Version**: TypeScript 5.x, React 19.1.0, Next.js 15.5.0  
-**Primary Dependencies**: ESLint 9.x, React Three Fiber 9.3.0, Three.js 0.179.1, Vitest 2.0.5  
-**Testing**: Vitest for unit/integration tests, React Testing Library for components  
-**Storage**: Prisma ORM with database, local files for assets  
-**Project Type**: Next.js web application with integrated API routes and 3D components
-
-## Commands
-```bash
-npm run dev              # Start development server
-npm run build            # Build for production (now succeeds!)
-npm run test             # Run tests  
-npm run lint             # Run linter (warnings only, no errors)
-npm run typecheck        # TypeScript compilation check
-scripts/validate-type-safety.sh  # Validate type safety configuration
-```
-
-## Server Module Architecture ✅
-
-**Modular Socket.IO Server**: The monolithic `server/index.js` (6,329 lines) has been refactored into focused, testable modules:
-
-### Extracted Modules
-
-**`server/modules/tournament/broadcast.js`** - Event Broadcasting Layer
-- **Purpose**: Room-scoped Socket.IO event emission for tournaments
-- **Key Features**:
-  - Event deduplication (5-second window to prevent duplicate broadcasts)
-  - Audit logging to `TournamentBroadcastEvent` table
-  - All events broadcast to tournament rooms only (no global broadcasts)
-- **Exports**: `emitPhaseChanged`, `emitTournamentUpdate`, `emitRoundStarted`, `emitMatchesReady`, `emitDraftReady`, `emitPlayerJoined`, `emitPlayerLeft`, `emitPreparationUpdate`, `emitStatisticsUpdate`, `setPrismaClient`
-- **Usage**: `tournamentBroadcast.emitPhaseChanged(io, tournamentId, newPhase, additionalData)`
-
-**`server/modules/draft/config.js`** - Draft Configuration Service
-- **Purpose**: Unified draft configuration loading for matches
-- **Key Features**:
-  - Hydrates tournament drafts from `DraftSession` table
-  - Prevents cube draft failures by ensuring `cubeId` loaded before pack generation
-  - Falls back to match config for casual drafts
-- **Exports**: `getDraftConfig`, `loadCubeConfiguration`, `ensureConfigLoaded`
-- **Usage**: `await draftConfig.ensureConfigLoaded(prisma, matchId, match, hydrateMatchFromDatabase)`
-
-**`server/modules/tournament/standings.js`** - Standings Management
-- **Purpose**: Atomic standings updates with transaction guarantees
-- **Key Features**:
-  - Wraps winner/loser updates in `prisma.$transaction([])`
-  - Automatic retry with 100ms backoff on transaction conflicts
-  - Calculates game win percentage (GWP) and opponent win percentage (OWP) tiebreakers
-  - Validates standings integrity (matchPoints = wins * 3 + draws)
-- **Exports**: `recordMatchResult`, `getStandings`, `recalculateTiebreakers`, `validateStandings`
-- **Usage**: `await standingsService.recordMatchResult(prisma, tournamentId, winnerId, loserId, isDraw)`
-
-### Database Monitoring Tables
-
-**`TournamentBroadcastEvent`** - Audit log for all tournament broadcasts
-- Tracks: `tournamentId`, `eventType`, `payload`, `timestamp`, `emittedBy`, `roomTarget`
-- Indexed by: `(tournamentId, timestamp DESC)`, `eventType`
-
-**`SocketBroadcastHealth`** - Health monitoring for broadcast requests
-- Tracks: `eventType`, `success`, `latencyMs`, `statusCode`, `errorMessage`, `retryCount`
-- Indexed by: `timestamp DESC`, `success`, `eventType`
-- Enables observability of socket server connectivity issues
-
-**`PlayerStanding`** - Enhanced with check constraint
-- Constraint: `CHECK (matchPoints = (wins * 3) + draws)`
-- Prevents invalid standings from being saved to database
-
-### Client-Side Improvements
-
-**Event Deduplication** (`src/hooks/useTournamentSocket.ts`)
-- Tracks last 100 event IDs with LRU-style eviction
-- Prevents duplicate `PHASE_CHANGED`, `ROUND_STARTED`, `DRAFT_READY` events
-- Reduces unnecessary re-renders and API calls
-
-**Exponential Backoff Retry** (`src/components/game/TournamentDraft3DScreen.tsx`)
-- Replaced 500ms polling with exponential backoff (100ms → 200ms → 400ms → 800ms → 1600ms)
-- Max 5 retry attempts for draft join
-- Eliminates request loops that caused production issues
-
-**Health Monitoring** (`src/lib/services/tournament-broadcast.ts`)
-- Logs all broadcast successes/failures to `SocketBroadcastHealth` table
-- Automatic retry with exponential backoff (100ms, 200ms)
-- 5-second timeout for all broadcast requests
-
-### Critical Bug Fixes (Spec 009-audit-transport-and) ✅
-
-**Production Issue Resolution**: Fixed 4 critical bugs causing tournament flow issues:
-
-1. **Global Broadcast Antipattern** (T014)
-   - **Issue**: All tournament events broadcast globally causing request loops
-   - **Fix**: Removed 5 `io.emit()` calls, kept only `io.to(room)` broadcasts
-   - **Impact**: Eliminated phase transition reload loops
-
-2. **Standings Race Conditions** (T015)
-   - **Issue**: Concurrent match completions caused data loss
-   - **Fix**: Wrapped both player updates in `prisma.$transaction([])`
-   - **Impact**: Atomic updates prevent standings corruption
-
-3. **Cube Draft Production Failure** (T016)
-   - **Issue**: Cube drafts worked locally but failed in production
-   - **Fix**: Force hydration from `DraftSession` before pack generation
-   - **Impact**: Cube drafts now work consistently in all environments
-
-4. **Manual Reload Required for Drafts**
-   - **Root Cause**: Global broadcasts + lack of config hydration + race conditions
-   - **Fix**: Combination of fixes T014-T016
-   - **Impact**: Drafts start automatically without page reload
-
-## Recent Changes - Tournament MVP Implementation Complete ✅
-
-### Phase 3.10 & 3.11 Complete: Tournament System MVP ✅
-**Branch**: `polish` - Comprehensive tournament system implementation with testing
-- **Tournament Core Features**: Complete tournament pages, pairing system, statistics tracking
-- **Format Support**: Swiss pairing for Sealed, Draft, and Constructed tournaments  
-- **Real-time Features**: Live statistics, tournament overlay UI/UX, player standings
-- **Performance**: Optimized for 32-player tournaments with sub-millisecond response times
-- **Type Safety**: Strict TypeScript throughout, comprehensive testing coverage
-- **Testing**: Unit tests, performance tests, mobile responsiveness tests (50+ tests passing)
-
-### Tournament Implementation Details
-
-**Core API Routes**:
-- `/api/tournaments/[id]/statistics` - Tournament overview and round statistics  
-- `/api/tournaments/[id]/standings` - Player standings with tiebreakers
-- `/api/tournaments/[id]/matches` - Match management and filtering
-- `/api/tournaments/[id]/players/[playerId]/statistics` - Individual player stats
-
-**Pairing System** (`src/lib/tournament/pairing.ts`):
-- **Swiss Pairing Algorithm**: Optimal pairing based on match points and tiebreakers
-- **Format Support**: Constructed, Sealed, Draft tournaments
-- **Match Creation**: Automated database record creation with player assignments
-- **Standings Updates**: Real-time calculation of wins/losses/draws and match points
-- **Bye Handling**: Automatic bye assignment for odd player counts
-
-**Statistics & Analytics** (`src/hooks/useTournamentStatistics.ts`):
-- **Real-time Updates**: 30-second polling for live tournament data
-- **Performance Metrics**: Win rates, game win percentages, performance by round
-- **Match History**: Complete match tracking with opponent records
-- **Export Functionality**: JSON/CSV export for tournament data
-- **Player Analytics**: Individual player performance tracking
-
-**Performance Benchmarks**:
-- **32-Player Tournament**: 0.21ms pairing generation (99.8% faster than 100ms target)
-- **Match Creation**: 0.29ms for 16 matches (99.9% faster than 500ms target)
-- **Statistics Calculation**: 0.08ms (99.8% faster than 50ms target)
-- **Memory Efficiency**: Only 0.02MB memory increase during operations
-- **Mobile Performance**: <100ms rendering on mobile devices
-
-**Mobile Responsiveness**:
-- **Viewport Support**: 375px mobile, 768px tablet, 1024px+ desktop
-- **Touch Interaction**: Optimized touch targets and gesture handling
-- **Adaptive Layout**: Tournament overlay adjusts to screen size
-- **Performance**: Maintains 60fps on mobile devices
-- **Accessibility**: Proper contrast, readable text sizes, accessible buttons
-
-**Testing Coverage**:
-- **Unit Tests**: 15 tests for pairing algorithm (100% passing)
-- **Statistics Tests**: 13 tests for statistics calculation (100% passing) 
-- **Performance Tests**: 10 tests for 32-player tournament scenarios (100% passing)
-- **Mobile Tests**: 17 tests for responsive design and touch interaction (100% passing)
-- **Total**: 55+ comprehensive tests covering all tournament functionality
-
-### Previous Phases Complete
-- **T030** ✅ Removed unused imports across all files (reduced ESLint warnings from 39 to 26)
-- **T031** ✅ Added proper TypeScript interfaces for complex objects (PlaymatProps, BoardProps, etc.)
-- **T032** ✅ Enhanced build configuration to prevent future regressions
-- **T033** ✅ Updated documentation with type safety improvements
-
-### Previous Phases Complete
-- 002-we-have-a: TypeScript build error fixes - eliminated `any` types, fixed unused variables, React Hook deps
-- 001-fix-card-preview: Fixed card preview hover issues by enabling raycasting in DraggableCard3D
-- Phase 3.5: Polish & cleanup with enhanced type safety and regression prevention
-
-## Current Development: Live Video and Audio Integration ✅ COMPLETE
-
-**Phase 3.7 Complete**: Error Handling & Polish - WebRTC video/audio integration with comprehensive error recovery, testing, and documentation.
-
-### Integration Summary
-**Core Features Implemented**:
-- **WebRTC Video Overlay System**: Screen-aware video display with context-sensitive behavior
-- **3D Video Positioning**: Video streams rendered at player seat positions in 3D game scenes  
-- **Device Management**: Advanced camera/microphone selection with constraint validation
-- **Permission Handling**: Comprehensive permission flow with graceful error recovery
-- **Error Recovery**: Automatic retry logic with exponential backoff for connection failures
-
-**Technical Architecture**:
-- **Screen Context Management**: VideoOverlayContext manages behavior per screen type (draft=audio-only, game=3D video)
-- **3D Integration**: SeatVideo3D component renders MediaStream as Three.js VideoTexture at world positions
-- **Error Resilience**: Multi-layered error recovery with logging, retry strategies, and fallback actions
-- **Device Abstraction**: MediaDeviceManager handles enumeration, selection, and constraint building
-- **Performance Optimized**: 60fps maintained with video textures, cached device enumeration, efficient stream management
-
-**Files Created/Modified**:
-- **Core Components**: `GlobalVideoOverlay.tsx`, `VideoOverlayContext.tsx`, `SeatVideo3D.tsx` 
-- **Utilities**: `webrtc-permissions.ts`, `webrtc-devices.ts`, `webrtc-logging.ts`, `webrtc-recovery.ts`, `connection-retry.ts`
-- **Testing**: 7 comprehensive test suites covering unit tests and performance benchmarks
-- **Examples**: Complete integration examples in `webrtc-video-integration.example.tsx`
-- **Documentation**: Enhanced JSDoc across all components with usage examples
-
-**Integration Status**: ✅ **READY FOR PRODUCTION**
-- TypeScript compilation: ✅ Clean (0 errors)
-- Build process: ✅ Successful (ESLint warnings only, no blocking errors)  
-- Error recovery: ✅ Comprehensive strategies implemented
-- Performance: ✅ 60fps targets maintained, memory-efficient
-- Documentation: ✅ Complete JSDoc and usage examples
-- Testing: ✅ Unit tests and performance benchmarks (Note: Tests require browser environment for WebRTC APIs)
-
-**Usage Pattern**:
-```tsx
-// Wrap app with video context
-<VideoOverlayProvider initialScreenType="lobby">
-  <YourApp />
-  <GlobalVideoOverlay position="top-right" />
-</VideoOverlayProvider>
-
-// 3D game scenes automatically get video at seat positions
-// Draft screens automatically switch to audio-only mode
-// All handled through screen type context
-```
-
-**Performance Impact**: Build times remain stable at ~22 seconds with no memory regressions. Enhanced type checking adds <1 second to compilation time while significantly improving code quality.
-
-**Tournament System Status**: ✅ **PRODUCTION READY**
-- Full tournament lifecycle management (registration → preparation → matches)
-- Optimized for tournaments up to 32+ players
-- Comprehensive testing coverage (55+ tests passing)
-- Mobile-responsive design with touch optimization
-- Real-time statistics and live tournament updates
-- Sub-millisecond performance for all core operations
-
-**Last updated**: 2025-10-15 (Bot AI Refinement Phase 1 Complete)
-
----
-
-## Bot AI System - Phase 1 Complete ✅
-
-**Phase 1.0 Complete**: Core game understanding, rule enforcement, and strategic evaluation system implemented for Sorcery bot AI.
-
-### Implementation Summary
-**Branch**: `feat/parameterized-rules-bot` - Comprehensive bot engine refinement with rule enforcement, strategic primitives, and quality assurance infrastructure.
-
-- **Core Rule Enforcement**: Mana cost validation, threshold checking, placement rules, unit requirements
-- **Strategic Evaluation**: Board development, mana efficiency, threat deployment, life pressure
-- **Phase-Based Strategy**: Dynamic action prioritization (establish mana base → deploy threats → apply pressure)
-- **Quality Infrastructure**: Regression detection, smoke tests, champion gating, validation suites
-- **Documentation**: Comprehensive README, rulebook mapping, tutorial integration examples
-
-### Key Accomplishments
-
-**Rule Enforcement (T001-T003)**:
-- **Cost Validation**: Cannot play cards costing more mana than available (`bots/engine/index.js:638-665`)
-- **Threshold Requirements**: Elemental requirements must be met (`canAffordCard()`)
-- **Placement Rules**: First site at Avatar, subsequent sites adjacent (`playSitePatch()`)
-- **Unit Requirements**: Cannot play units with 0 sites on board
-- **Win Condition Detection**: Death's door + death blow recognition
-
-**Enhanced Evaluation (T004-T009)**:
-- **Board Development** (w_board_development: 0.8): Rewards deploying permanents
-- **Mana Efficiency** (w_mana_efficiency: 0.7): Rewards spending available mana
-- **Threat Deployment** (w_threat_deployment: 0.6): Rewards ATK presence on board
-- **Life Pressure** (w_life_pressure: 1.2): Rewards positioning for damage
-- **Anti-Patterns**: Penalizes site spam (-2.0) and wasted resources (-1.5)
-
-**Strategic Primitives (T010-T011)**:
-- **Phase Modifiers**: Adapts strategy based on game state
-  - Early game (turns 1-3): Sites prioritized 2.0x
-  - Mid game (sites >= 3): Units prioritized 1.5x
-  - Late game (opp life < 15): Attacks prioritized 1.2x
-  - Defensive: Blockers prioritized when threatened (2.0x)
-
-**Telemetry & Diagnostics (T015)**:
-- **Enhanced JSONL Logging**: Per-turn decision telemetry with evaluation breakdowns
-- **Candidate Details**: All considered actions with scores and legality
-- **Filtered Candidates**: Stats on illegal moves pruned by rules
-- **Example Output**:
-  ```json
-  {
-    "evaluationBreakdown": {
-      "board_development": 1.6,
-      "mana_efficiency": 2.1,
-      "threat_deployment": 3.6,
-      "life_pressure": 3.6
-    },
-    "candidateDetails": [
-      {"action": "play_unit:Knight", "score": 7.2, "isLegal": true},
-      {"action": "attack:Knight->Avatar", "score": 8.5, "isLegal": true}
-    ],
-    "filteredCandidates": {
-      "totalUnitsInHand": 3,
-      "filteredUnaffordable": 2,
-      "playableUnits": 1
-    }
-  }
-  ```
-
-**Quality Assurance Infrastructure (T016-T021)**:
-- **Regression Detection** (`scripts/training/analyze-logs.js`):
-  - Zero-variance detection (rootEval variance < 0.1)
-  - Site-spam pathology (>80% site plays when mana >= 3)
-  - Infinite stalemate detection (games > 50 turns)
-  - Integrated into selfplay.js - halts training on critical issues
-
-- **Smoke Testing** (`scripts/training/smoke-test.js`):
-  - Validates functional play before training
-  - Criteria: ≥70% meaningful actions, <30 turn games, ≥1.0 eval variance
-  - Run with: `node scripts/training/selfplay.js --smoke-test --rounds 10`
-
-- **Champion Gating** (`scripts/training/champion-gating.js`):
-  - Quality threshold for accepting new champion candidates
-  - Criteria: ≥55% win rate, ≥60% meaningful actions, ≤4.0 mana waste, <30 turns
-  - Rejects candidates failing quality bar
-
-- **Rules Validation** (`tests/bot/bot-rules-validation.js`):
-  - Tests bot behavior against `reference/BotRules.csv`
-  - 100% coverage (11/11 tests passing)
-  - Validates: Placement, Cost, Timing, Movement, Combat rules
-
-**Documentation (T022-T023)**:
-- **Bot Engine README** (`bots/engine/README.md`):
-  - Complete architecture overview
-  - Feature documentation with weights
-  - Configuration guide with difficulty presets
-  - Troubleshooting guide for common issues
-  - Known limitations (Phase 2 scope)
-
-- **Rulebook Mapping** (`reference/bot-rulebook-mapping.md`):
-  - Maps all game rules to implementation
-  - Documents coverage gaps for Phase 2
-  - Links to specific code locations with line numbers
-
-- **Tutorial Integration** (`examples/tutorial-bot-integration.md`):
-  - Example UI components for bot spawning
-  - Difficulty configuration (easy/medium/hard)
-  - Bot thinking indicators and hint system
-
-**Champion Theta** (`data/bots/params/champion.json`):
-- Version: `refined/v3`
-- Description: "Hand-tuned weights with mana/threshold enforcement + phase-based strategy"
-- Includes all refined weights and strategic modifiers
-- Expected metrics: 70-85% meaningful actions, 15-25 turn games, >2.0 eval variance
-
-### Usage
-
-**Start bot match**:
-```bash
-# Self-play with champion theta
-node scripts/training/selfplay.js \
-  --thetaA data/bots/params/champion.json \
-  --thetaB data/bots/params/champion.json
-
-# With smoke test validation
-node scripts/training/selfplay.js --smoke-test --rounds 10
-```
-
-**Analyze bot performance**:
-```bash
-# Regression detection
-node scripts/training/analyze-logs.js --detect-regressions logs/training/20251015/*.jsonl
-
-# Smoke test
-node scripts/training/smoke-test.js logs/training/20251015/*.jsonl
-
-# Champion gating
-node scripts/training/champion-gating.js logs/training/candidate/*.jsonl
-```
-
-**Run validation tests**:
-```bash
-# Rules validation
-node tests/bot/bot-rules-validation.js
-
-# Regression detection tests
-node scripts/training/test-regression-detection.js
-```
-
-### Bot Performance Metrics
-
-**Expected Quality Metrics** (refined/v3):
-- Meaningful actions: 70-85% of turns with mana >= 3
-- Average game length: 15-25 turns
-- Eval variance: > 2.0 (decision diversity)
-- Mana waste (turns 5+): < 3.0 average
-
-**Rule Enforcement**:
-- 100% of placement rules validated
-- 100% of cost/threshold rules enforced
-- 100% of timing rules respected
-- 100% of movement/combat rules implemented
-
-### Known Limitations (Phase 1)
-
-The following features are **NOT implemented** and deferred to Phase 2:
-- ❌ Regions: Bot ignores regional effects
-- ❌ Instants: Bot only plays during Main phase
-- ❌ Triggered Abilities: Bot doesn't model ETB/trigger effects
-- ❌ Activated Abilities: Bot cannot use tap abilities
-- ❌ Keywords (partial): Some keywords recognized, not all evaluated
-- ❌ Stack Mechanics: Bot assumes immediate resolution
-- ❌ Graveyard Interactions: Bot doesn't track graveyard state
-- ❌ Deck Construction: Bot plays random precons
-
-### Files Modified/Created
-
-**Core Engine**:
-- `bots/engine/index.js` - Enhanced with rule enforcement and strategic evaluation
-
-**Training Infrastructure**:
-- `scripts/training/analyze-logs.js` - Log analysis and regression detection
-- `scripts/training/smoke-test.js` - Functional play validation
-- `scripts/training/champion-gating.js` - Champion quality gating
-- `scripts/training/test-regression-detection.js` - Validation tests
-- `scripts/training/selfplay.js` - Enhanced with smoke test and regression detection
-
-**Testing**:
-- `tests/bot/bot-rules-validation.js` - Rules compliance validation
-- `tests/bot/analyze-logs.test.js` - Unit tests for log analysis
-
-**Documentation**:
-- `bots/engine/README.md` - Comprehensive bot engine documentation
-- `reference/bot-rulebook-mapping.md` - Rulebook to implementation mapping
-- `examples/tutorial-bot-integration.md` - Tutorial mode integration example
-
-**Data**:
-- `data/bots/params/champion.json` - Champion theta configuration
-
-### Next Steps: Phase 2
-
-Phase 2 will implement advanced card understanding using LLM-based evaluation:
-- Card-specific evaluation functions generated from rulesText
-- Synergy detection (combat tricks, mana fixing, etc.)
-- Regional effects and keyword understanding
-- Instant-speed interaction
-- Triggered and activated abilities
-
-**Status**: Phase 1 Complete, Phase 2 planned
-
----
-
-## WebGL Context Management - Architectural Decision
-
-### The Problem
-The application creates multiple Canvas instances across screens. Browsers limit WebGL contexts to 8-16 per origin. We initially feared hitting this limit during navigation.
-
-### What We Tried: Global Canvas with View.Port
-**Approach**: Single Canvas with React Three Fiber's View API for multi-viewport rendering.
-
-**Why It Failed**:
-- drei's View.Port was designed for **simultaneous multi-view rendering** (split-screen games), not dynamic page-to-page navigation
-- View components MUST be in the **same React Three Fiber context tree** as View.Port
-- Registering Views dynamically from separate pages is **architecturally incompatible** with how drei works
-- Fighting the framework led to complexity without benefits
-
-### The Solution: Individual Canvas with Smart Lifecycle
-**Why This Works**:
-- ✅ Each screen/page has its own Canvas (clean, simple, works immediately)
-- ✅ Next.js automatically unmounts components on navigation (proper cleanup)
-- ✅ React Three Fiber properly disposes WebGL contexts on unmount
-- ✅ Users typically have 1-2 screens open simultaneously (well below 8-16 context limit)
-- ✅ In practice, we NEVER hit the context limit in normal usage
-
-**Key Insight**: The context limit is only a problem if contexts exist simultaneously WITHOUT cleanup. Next.js + R3F handle cleanup automatically.
-
-### Recommendation
-**Use individual Canvas per screen** - it's simple, works perfectly, and aligns with React Three Fiber's intended usage pattern. Don't fight the framework.
-
----
-
-## Previous Development: Draft-3D Online Integration (Branch: 004-i-want-to)
-
-**Feature**: Integrate improved UI, stack mechanics, and card preview system from single-player draft-3d into online multiplayer draft-3d, maintaining real-time synchronization via Socket.io.
-
-**Technical Approach**:
-- Socket.io event batching with 16ms (60fps) updates for 3D synchronization
-- Hybrid state architecture: Zustand for critical state, useFrame for visual mutations
-- Debounced card preview broadcasting (100ms) with priority system
-- Operational transform for stack interaction conflict resolution
-- Server authority with optimistic UI updates
-
-**Performance Targets**:
-- 8 concurrent players per session with ~1000 3D cards rendered
-- <100ms UI response time, <200ms network round-trip
-- 60fps maintained during all interactions
-
----
-
-# Constitutional Requirements (v2.2.0)
+## Constitutional Requirements
 
 **NEVER use `any` types - this is constitutionally forbidden:**
-- Using `any` type annotations: `function foo(data: any)` ❌
-- Casting to `any`: `value as any` ❌ 
-- Always use proper interfaces, generics, or `unknown` with type guards ✅
+
+- Using `any` type annotations: `function foo(data: any)` - NO
+- Casting to `any`: `value as any` - NO
+- Always use proper interfaces, generics, or `unknown` with type guards
 
 **Follow strict TypeScript and ESLint rules:**
+
 - All TypeScript strict mode options must remain enabled
-- Import order must follow ESLint rules (builtin → external → internal → relative)
+- Import order must follow ESLint rules (builtin -> external -> internal -> relative)
 - Use `const` for immutable values, object shorthand syntax
 - Build must pass with 0 TypeScript errors, 0 ESLint errors
 
 **Type Error Recovery Pattern:**
+
 1. Investigate: Understand the root type mismatch
-2. Define: Create proper interfaces/types  
+2. Define: Create proper interfaces/types
 3. Transform: Use mapping functions, not `any` casts
 4. Validate: Ensure type safety is maintained
 
 **Development Guidelines:**
+
 - Do what has been asked; nothing more, nothing less
 - NEVER create files unless absolutely necessary for achieving your goal
-- ALWAYS prefer editing an existing file to creating a new one
+- ALWAYS prefer editing an existing file to creating a new one, except if the old file becomes too huge to be handled by AI context in which case we want to properly refactor the large file
 - NEVER proactively create documentation files unless explicitly requested
+- ALWAYS look up existing variables, types, and interfaces before creating new ones. When dealing with the database, always reference the schema at `prisma/schema.prisma` to ensure correct model names, field types, and relations
+
+## Architectural Decisions
+
+### WebGL Context Management
+
+Each screen/page has its own `<Canvas>` - no shared global canvas. We tried drei's `View.Port` for a single shared canvas but it's designed for simultaneous multi-view rendering (split-screen), not page-to-page navigation. Next.js + R3F handle WebGL context cleanup automatically on unmount, so we never hit the browser's 8-16 context limit in practice.
+
+### Bot AI (Phase 1 Complete)
+
+CPU bot engine at `bots/engine/` with rule enforcement (mana cost, thresholds, placement), strategic evaluation (board development, mana efficiency, threat deployment, life pressure), and phase-based strategy. See `bots/engine/README.md` for full details.
+
+**Known bot limitations** (deferred to Phase 2): regions, instants, triggered/activated abilities, full keyword evaluation, stack mechanics, graveyard interactions, deck construction.
+
+**Training/QA tools:**
+
+```bash
+node scripts/training/selfplay.js --smoke-test --rounds 10  # Smoke test
+node scripts/training/analyze-logs.js --detect-regressions <logs>  # Regression detection
+node scripts/training/champion-gating.js <logs>  # Champion quality gating
+node tests/bot/bot-rules-validation.js  # Rules compliance
+```
+
+### Server Modules
+
+The Socket.IO server (`server/index.ts`, ~6k lines) has extracted modules:
+
+- `server/modules/tournament/broadcast.js` - Room-scoped event emission with deduplication
+- `server/modules/draft/config.js` - Draft config hydration from DraftSession
+- `server/modules/tournament/standings.js` - Atomic standings updates with transactions
+
+### Tournament System
+
+Swiss pairing for Sealed, Draft, and Constructed formats. API routes under `/api/tournaments/[id]/`. Pairing algorithm at `src/lib/tournament/pairing.ts`. Real-time updates via Socket.IO room broadcasts.
+
+### Tutorial System
+
+8 lessons in `src/lib/tutorial/lessons/`. Engine at `src/lib/tutorial/TutorialEngine.ts`. Step types: narration, highlight, forced_action, scripted_action, checkpoint. State patches applied when leaving a step. Progress stored in localStorage.
