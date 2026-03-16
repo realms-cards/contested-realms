@@ -2,6 +2,12 @@
 
 ## March 2026
 
+### Mar 16 - Start open source development
+
+- **clean up repository to prepare contributor onboarding**
+- **development contributions are now open** I still keep the repository Private for management reasons, but DM me and you are in!
+- **add custom resolver for Merlin**
+
 ### Mar 12 - Mobile optimizations & right-click menu change
 
 - **use nice themed icons for right click menu** the old text view can still be activated in user settings
