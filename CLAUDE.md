@@ -32,6 +32,16 @@ See `AGENTS.md` for architecture overview, conventions, commands, and common tas
 - NEVER proactively create documentation files unless explicitly requested
 - ALWAYS look up existing variables, types, and interfaces before creating new ones. When dealing with the database, always reference the schema at `prisma/schema.prisma` to ensure correct model names, field types, and relations
 
+### Server Patch & Custom Message Rules
+
+When building `trySendPatch()` calls or custom message handlers for avatar abilities, follow these rules to avoid server rejection, data loss, and race conditions. See `.windsurf/workflows/custom-resolver.md` § "Server Patch Safety Rules" for detailed examples.
+
+1. **Only send actor's own avatar** — never spread both avatars (`{ ...state.avatars, [who]: ... }`). The server rejects patches containing `tapped` on the opponent's avatar key.
+2. **Only send affected permanents cells** — use `{ [cellKey]: arr }`, never `{ ...state.permanents, ... }`. Sending the full map overwrites concurrent changes on other tiles.
+3. **Use `__remove: true` to delete permanents** — the merge function preserves base items not in the patch. Include `{ ...perm, __remove: true }` to actually remove a permanent.
+4. **Send only delta `board.sites`** — use `board: { sites: { [cellKey]: siteData } }`, not `board: { ...board, sites: ... }`.
+5. **Never depend on `pending` state in resolve handlers** — server patch and custom message can arrive in either order. Always include `ownerSeat` in resolve messages.
+
 ## Architectural Decisions
 
 ### WebGL Context Management

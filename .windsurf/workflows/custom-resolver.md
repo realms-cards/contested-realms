@@ -149,6 +149,7 @@ export const create<CardName>Slice: StateCreator<GameState, [], [], <CardName>Sl
 - **Hotseat vs Online**: In hotseat mode (`actorKey === null`), both players share the screen. The caster always controls the UI.
 - **State Sync**: Always send patches via `trySendPatch()` for zone/permanent changes.
 - **Broadcast**: Send custom messages for opponent awareness and UI updates.
+- **Always include `casterSeat`/`ownerSeat` in resolve messages** — never rely on `pending` state in resolve handlers (see Server Patch Safety Rules below).
 
 ---
 
@@ -345,29 +346,21 @@ if (t === "<cardName>Resolve") {
   const id = (msg as { id?: unknown }).id as string | undefined;
   const casterSeat = (msg as { casterSeat?: unknown }).casterSeat as PlayerKey | undefined;
 
-  if (!id) return;
+  // IMPORTANT: Always read casterSeat from the message, not from pending state.
+  // The server patch and custom message can arrive in either order. If the server
+  // patch arrives first, it may clear pendingXxx before this handler runs.
+  if (!id || !casterSeat) return;
 
   // Skip if we're the caster
   const actorKey = get().actorKey;
   if (actorKey === casterSeat) return;
 
-  // Update/clear pending state
-  const pending = get().pending<CardName>;
-  if (pending?.id === id) {
-    set({
-      pending<CardName>: { ...pending, phase: "complete" },
-    } as Partial<GameState> as GameState);
+  // Apply state changes using casterSeat from message (not pending)
+  // ... card-specific state updates ...
 
-    // Clear after delay
-    setTimeout(() => {
-      set((state) => {
-        if (state.pending<CardName>?.id === id) {
-          return { ...state, pending<CardName>: null } as GameState;
-        }
-        return state as GameState;
-      });
-    }, 500);
-  }
+  // Clear pending state
+  set({ pending<CardName>: null } as Partial<GameState> as GameState);
+
   return;
 }
 ```
@@ -620,6 +613,80 @@ const targetZones = {
 const zonesNext = { ...zones, [casterSeat]: targetZones };
 set({ zones: zonesNext } as Partial<GameState> as GameState);
 get().trySendPatch({ zones: { [casterSeat]: targetZones } } as ServerPatchT);
+```
+
+---
+
+## Server Patch Safety Rules
+
+These rules prevent server rejection, data loss, and race conditions. Violating them causes bugs that are hard to diagnose (silent server rejection, opponent seeing stale state, intermittent sync failures).
+
+### Rule 1: Never spread both avatars in a patch
+
+The server's `rules-validation.ts` rejects any patch containing `tapped` on the opponent's avatar key. Always send only the actor's own avatar.
+
+```typescript
+// ❌ WRONG — server rejects because opponent's `tapped` is included
+const patch = { avatars: { ...state.avatars, [who]: updatedAvatar } };
+
+// ✅ CORRECT — only send actor's avatar
+const patch = { avatars: { [who]: updatedAvatar } as GameState["avatars"] };
+```
+
+### Rule 2: Only send affected permanents cells
+
+Sending the full `state.permanents` map floods the patch with stale data for every cell, which can overwrite concurrent changes on other tiles.
+
+```typescript
+// ❌ WRONG — sends ALL cells
+get().trySendPatch({ permanents: { ...state.permanents, [cell]: arr } });
+
+// ✅ CORRECT — only the changed cell
+get().trySendPatch({ permanents: { [cell]: arr } as GameState["permanents"] });
+```
+
+### Rule 3: Use `__remove: true` to delete permanents
+
+The `mergeArrayByInstanceId` function preserves base items that don't appear in the patch. To remove a permanent, include it with `__remove: true`.
+
+```typescript
+// ❌ WRONG — opponent's merge keeps the item because it's still in their base
+const arr = cellPerms.filter(p => p !== itemToRemove);
+get().trySendPatch({ permanents: { [cell]: arr } });
+
+// ✅ CORRECT — merge function sees __remove and drops the item
+const arr = [...cellPerms.filter(p => p !== itemToRemove), { ...itemToRemove, __remove: true }];
+get().trySendPatch({ permanents: { [cell]: arr } });
+```
+
+### Rule 4: Send only delta `board.sites`
+
+```typescript
+// ❌ WRONG — spreads entire board including all existing sites
+const patch = { board: { ...board, sites: { [cell]: siteData } } };
+
+// ✅ CORRECT — only the site delta
+const patch = { board: { sites: { [cell]: siteData } } };
+```
+
+### Rule 5: Never depend on `pending` state in resolve handlers
+
+Server patch and custom message can arrive in either order. If the server patch clears `pending` first, the resolve handler bails. Always include `casterSeat`/`ownerSeat` in resolve messages.
+
+```typescript
+// ❌ WRONG — pending may be null if server patch arrived first
+if (t === "myResolve") {
+  const pending = get().pendingMyAction;
+  if (!pending) return; // <-- bails if server patch already cleared it
+  const who = pending.ownerSeat;
+}
+
+// ✅ CORRECT — read ownerSeat from the message
+if (t === "myResolve") {
+  const ownerSeat = (msg as { ownerSeat?: unknown }).ownerSeat as PlayerKey | undefined;
+  if (!ownerSeat) return;
+  // Use ownerSeat directly, don't depend on pending
+}
 ```
 
 ---
@@ -905,7 +972,8 @@ arr.push({
 });
 const permanentsNext = { ...permanents, [location]: arr };
 set({ permanents: permanentsNext });
-get().trySendPatch({ permanents: permanentsNext });
+// Only send the affected cell, NOT the full permanents map
+get().trySendPatch({ permanents: { [location]: arr } as GameState["permanents"] });
 ```
 
 ### Moving Spell to Graveyard
