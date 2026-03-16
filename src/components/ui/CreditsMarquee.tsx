@@ -28,7 +28,7 @@ const CREDITS: Credit[] = [
     url: "https://skfb.ly/6xPWF",
   },
   {
-    label: "Icons by game-icons.net (CC BY 3.0)",
+    label: "Icons by game-icons.net",
     url: "https://game-icons.net",
   },
 ];
@@ -65,8 +65,9 @@ export default function CreditsMarquee({ onHoverChange }: CreditsMarqueeProps) {
     if (i > 0) {
       creditElements.push(
         <span key={`sep-${i}`} className="text-slate-500">
-          {" "}·{" "}
-        </span>
+          {" "}
+          ·{" "}
+        </span>,
       );
     }
     creditElements.push(
@@ -81,7 +82,7 @@ export default function CreditsMarquee({ onHoverChange }: CreditsMarqueeProps) {
         onMouseLeave={() => handleHoverChange(false)}
       >
         {credit.label}
-      </a>
+      </a>,
     );
   });
 
@@ -95,10 +96,7 @@ export default function CreditsMarquee({ onHoverChange }: CreditsMarqueeProps) {
           key="credits-label"
           className="h-7 flex items-center justify-center animate-credits-fade-in"
         >
-          <span
-            className="text-sm font-medium text-white"
-            style={CREDITS_GLOW}
-          >
+          <span className="text-sm font-medium text-white" style={CREDITS_GLOW}>
             credits
           </span>
         </div>
