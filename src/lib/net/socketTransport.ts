@@ -570,6 +570,7 @@ export class SocketTransport implements GameTransport {
 
       // Send hello on every connect (initial and reconnects)
       socket.on("connect", () => {
+        this.connectionState = "connected";
         this.reconnectionAttempts = 0;
         this.reconnectionDelay = 1000;
         sendHello();
