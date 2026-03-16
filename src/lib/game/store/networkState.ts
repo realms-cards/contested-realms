@@ -920,6 +920,33 @@ export const createNetworkSlice: StateCreator<
             // Restore original permanents
             next.permanents = state.permanents;
           }
+          // Detect suspicious gradual loss: >50% permanents lost in one
+          // non-snapshot patch without explicit __remove deltas.
+          // This catches bugs like empty-array cell clearing.
+          if (
+            prevPermCount > 2 &&
+            nextPermCount > 0 &&
+            nextPermCount < prevPermCount * 0.5 &&
+            !patchHasDeltaRemovals
+          ) {
+            console.warn(
+              `[PERMANENTS_HARDENING] Suspicious gradual loss: ${prevPermCount} -> ${nextPermCount} permanents (no __remove deltas)`,
+              {
+                patchCells: Object.keys(p.permanents || {}),
+                lostFromCells: Object.keys(state.permanents || {}).filter(
+                  (cell) => {
+                    const prev = (state.permanents as Record<string, unknown[]>)[cell];
+                    const nx = ((next.permanents ?? {}) as Record<string, unknown[]>)[cell];
+                    return (
+                      Array.isArray(prev) &&
+                      prev.length > 0 &&
+                      (!Array.isArray(nx) || nx.length === 0)
+                    );
+                  },
+                ),
+              },
+            );
+          }
         }
 
         // Detect Lilith/Mother Nature minions in permanents
@@ -1354,13 +1381,33 @@ export const createNetworkSlice: StateCreator<
                 (next.zones ?? state.zones)?.p2?.graveyard?.length ?? 0,
             },
           };
+          const mergedBoard = (next.board ?? state.board) as GameState["board"] | undefined;
+          const mergedSiteCount = mergedBoard?.sites
+            ? Object.keys(mergedBoard.sites).length
+            : 0;
+          const prevSiteCount = state.board?.sites
+            ? Object.keys(state.board.sites).length
+            : 0;
           console.debug("[net] snapshot(next)", {
             permanentsCount: mergedPerCount,
+            sitesCount: mergedSiteCount,
             zones: mergedSummary,
             hasPermanentPositions: !!(
               next.permanentPositions ?? state.permanentPositions
             ),
           });
+          // Warn when sites are lost
+          if (mergedSiteCount < prevSiteCount && p.board !== undefined) {
+            console.warn(
+              `[net] SITE_LOSS: sites went from ${prevSiteCount} to ${mergedSiteCount}`,
+              {
+                patchBoardKeys: p.board ? Object.keys(p.board as Record<string, unknown>) : [],
+                patchSiteKeys: (p.board as Record<string, unknown>)?.sites
+                  ? Object.keys((p.board as Record<string, unknown>).sites as Record<string, unknown>)
+                  : [],
+              },
+            );
+          }
         } catch {}
       }
 

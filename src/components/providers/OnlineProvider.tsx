@@ -1144,9 +1144,13 @@ export default function OnlineProvider({
         const permanentsSummary = permanentsData
           ? Object.entries(permanentsData)
               .map(([key, arr]) => {
+                if (!Array.isArray(arr) || arr.length === 0) return `${key}:[]`;
                 const names = arr.map((p: unknown) => {
-                  const card = (p as { card?: { name?: string } })?.card;
-                  return card?.name || "?";
+                  const rec = p as Record<string, unknown> | null;
+                  const card = rec?.card as { name?: string } | undefined;
+                  const name = card?.name || "?";
+                  const remove = rec?.__remove === true ? "×" : "";
+                  return `${remove}${name}`;
                 });
                 return `${key}:[${names.join(", ")}]`;
               })
