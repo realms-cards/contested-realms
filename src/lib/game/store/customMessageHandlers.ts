@@ -6058,22 +6058,21 @@ export function handleCustomMessage(
     const topSite = (msg as { topSite?: unknown }).topSite as
       | CardRef
       | undefined;
+    const ownerSeat = (msg as { ownerSeat?: unknown }).ownerSeat as
+      | PlayerKey
+      | undefined;
     const atlasCount = (msg as { atlasCount?: unknown }).atlasCount as
       | number
       | undefined;
 
-    if (!targetCell || !topSite) return;
-
-    // Clear the pending state for opponent
-    const pending = get().pendingPathfinderPlay;
-    if (!pending) return;
+    if (!targetCell || !topSite || !ownerSeat) return;
 
     // Skip if we're the owner - we already have the state
     const actorKey = get().actorKey;
-    if (actorKey === pending.ownerSeat) return;
+    if (actorKey === ownerSeat) return;
 
     const state = get();
-    const who = pending.ownerSeat;
+    const who = ownerSeat;
     const ownerNum: 1 | 2 = who === "p1" ? 1 : 2;
 
     // Parse target cell to get avatar position
@@ -6148,7 +6147,7 @@ export function handleCustomMessage(
 
     try {
       get().log(
-        `[${pending.ownerSeat.toUpperCase()}] Pathfinder plays ${
+        `[${ownerSeat.toUpperCase()}] Pathfinder plays ${
           topSite.name
         } and moves there`,
       );

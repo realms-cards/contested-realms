@@ -359,10 +359,17 @@ export const createPathfinderSlice: StateCreator<
     const sitesPatch: Record<string, unknown> = {
       [targetCell]: newSites[targetCell] ?? null,
     };
+    // Only send actor's own avatar in the patch to avoid
+    // "Cannot tap or untap opponent avatar" server rejection.
+    // Spreading both avatars includes opponent's `tapped` field which
+    // triggers the server validation check.
+    const patchAvatars = {
+      [who]: newAvatars[who],
+    } as GameState["avatars"];
     const patch: Record<string, unknown> = {
       zones: { [who]: updatedZones[who] } as GameState["zones"],
-      board: { ...board, sites: sitesPatch },
-      avatars: newAvatars,
+      board: { sites: sitesPatch },
+      avatars: patchAvatars,
       pathfinderUsed: updatedUsed,
     };
     if (isCrossTileMove) {
@@ -397,11 +404,12 @@ export const createPathfinderSlice: StateCreator<
           seat: who,
           cellKey: targetCell,
         } as never);
-        // Broadcast resolution - include atlas count so opponent knows cards were removed
+        // Broadcast resolution - include ownerSeat so handler doesn't depend on pending
         transport.sendMessage({
           type: "pathfinderResolve",
           targetCell,
           topSite,
+          ownerSeat: who,
           atlasCount: newAtlas.length,
         } as never);
       } catch {}
