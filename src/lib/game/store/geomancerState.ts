@@ -309,13 +309,13 @@ export const createGeomancerSlice: StateCreator<
     // Build permanents patch with __remove marker for rubble so
     // mergePermanentsMap on the opponent's side actually removes it
     // (without __remove, the merge keeps base items not in the patch)
+    // Only send the affected cell, not the entire permanents map
     const rubblePerms = state.permanents[targetCell] || [];
     const rubblePerm = rubblePerms.find(isRubblePermanent);
     const patchCellPerms = rubblePerm
       ? [...cellPerms, { ...rubblePerm, __remove: true }]
       : cellPerms;
     const permanentsPatch = {
-      ...state.permanents,
       [targetCell]: patchCellPerms,
     };
 
@@ -532,9 +532,9 @@ function placeRubbleAt(
     pendingGeomancerFill: null,
   } as Partial<GameState> as GameState);
 
-  // Send patch
+  // Send patch — only the affected cell, not the entire permanents map
   const patches: ServerPatchT = {
-    permanents: permanentsNext,
+    permanents: { [targetCell]: arr } as GameState["permanents"],
   };
   get().trySendPatch(patches);
 
