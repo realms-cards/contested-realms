@@ -7,6 +7,7 @@ import type {
   PlayerKey,
   ServerPatchT,
 } from "./types";
+import { triggerCardResolvers } from "./utils/resolverTriggers";
 // Board helper imports available if needed for future expansion
 // import { seatFromOwner, toCellKey } from "./utils/boardHelpers";
 
@@ -337,6 +338,18 @@ export const createArtifactCastSlice: StateCreator<
         } as never);
       } catch {}
     }
+
+    // Trigger custom card resolvers (spell abilities, minion genesis, etc.)
+    const ownerNum: 1 | 2 = casterSeat === "p1" ? 1 : 2;
+    triggerCardResolvers({
+      card: removedSpell,
+      key: bearerTile,
+      permanentIndex: tileStack.length - 1,
+      instanceId: spellPermanent.instanceId,
+      owner: ownerNum,
+      ownerSeat: casterSeat,
+      get,
+    });
 
     // Clear pending after short delay
     setTimeout(() => {
