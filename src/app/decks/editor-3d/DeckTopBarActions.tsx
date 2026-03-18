@@ -35,28 +35,20 @@ export default function DeckTopBarActions(props: DeckTopBarActionsProps) {
     status,
     decks,
     deckId,
-    deckName,
     deckIsPublic,
     deckIsOwner,
-    deckCreatorName,
     loadingDecks,
     saving,
     validation,
     onLoadDeck,
     onClearEditor,
-    onSetDeckName,
     onTogglePublic,
     onMakeCopy,
-    onSaveDeck,
     onSubmitSealed,
     onSubmitDraft,
   } = props;
 
   const [chooserOpen, setChooserOpen] = React.useState(false);
-  const [editingName, setEditingName] = React.useState(false);
-  const [tempName, setTempName] = React.useState(deckName);
-
-  React.useEffect(() => setTempName(deckName), [deckName]);
 
   return (
     <div className="flex items-center gap-3 relative">
@@ -116,61 +108,6 @@ export default function DeckTopBarActions(props: DeckTopBarActionsProps) {
                   ))
                 )}
               </div>
-            )}
-          </div>
-
-          {/* Deck name display + edit or read-only indicator */}
-          <div className="flex items-center gap-2">
-            {!deckIsOwner ? (
-              <div
-                className="px-3 py-2 rounded bg-blue-500/15 text-blue-200 border border-blue-500/30 max-w-[28ch] truncate"
-                title={`${deckName} by ${deckCreatorName}`}
-              >
-                {deckName} {deckCreatorName && `(by ${deckCreatorName})`}
-              </div>
-            ) : editingName ? (
-              <input
-                value={tempName}
-                onChange={(e) => setTempName(e.target.value)}
-                onBlur={() => {
-                  onSetDeckName(tempName);
-                  setEditingName(false);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    onSetDeckName(tempName);
-                    setEditingName(false);
-                  }
-                }}
-                className="border rounded px-3 py-2 bg-black/70 text-white border-white/30 max-w-[28ch]"
-                placeholder="Deck name"
-                autoFocus
-              />
-            ) : (
-              <div
-                className="px-3 py-2 rounded bg-white/5 text-white/90 max-w-[28ch] truncate"
-                title={deckName}
-              >
-                {deckName || "New Deck"}
-              </div>
-            )}
-            {deckIsOwner && (
-              <button
-                onClick={() => setEditingName((v) => !v)}
-                className="h-9 w-9 grid place-items-center rounded bg-white/10 hover:bg-white/20 text-white/80 hover:text-white"
-                title={editingName ? "Stop editing name" : "Edit name"}
-                aria-label="Edit name"
-              >
-                {/* Pen icon */}
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                  className="w-5 h-5"
-                >
-                  <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1.003 1.003 0 0 0 0-1.42l-2.34-2.34a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.84-1.82z" />
-                </svg>
-              </button>
             )}
           </div>
         </>
@@ -266,31 +203,7 @@ export default function DeckTopBarActions(props: DeckTopBarActionsProps) {
                   {saving ? "Submitting..." : "Submit Draft Deck"}
                 </button>
               </div>
-            ) : (
-              <button
-                onClick={onSaveDeck}
-                disabled={saving || status !== "authenticated"}
-                className="h-9 w-9 grid place-items-center rounded bg-green-600/80 hover:bg-green-600 text-white disabled:opacity-50"
-                title={
-                  status !== "authenticated"
-                    ? "Sign in to save"
-                    : deckId
-                    ? "Update deck"
-                    : "Save new deck"
-                }
-                aria-label="Save deck"
-              >
-                {/* Disk icon */}
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                  className="w-5 h-5"
-                >
-                  <path d="M17 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7l-4-4zM12 19a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm3-10H5V5h10v4z" />
-                </svg>
-              </button>
-            )}
+            ) : null}
           </>
         )}
       </div>

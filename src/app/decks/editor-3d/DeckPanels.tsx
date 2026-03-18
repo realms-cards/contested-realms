@@ -4,11 +4,12 @@ import {
   ArrowLeft,
   Grid3X3,
   HelpCircle,
+  Pencil,
   Shuffle,
   SlidersHorizontal,
 } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import DeckTopBarActions from "@/app/decks/editor-3d/DeckTopBarActions";
 import UserBadge from "@/components/auth/UserBadge";
 import { DeckValidation } from "@/components/deck-editor";
@@ -65,6 +66,95 @@ type DeckPanelsProps = {
   showPlaymat?: boolean;
   onTogglePlaymat?: () => void;
 };
+
+function DeckTitle({
+  deckName,
+  deckIsOwner,
+  isDraftMode,
+  isFreeMode,
+  isSealed,
+  onSetDeckName,
+}: {
+  deckName: string;
+  deckIsOwner: boolean;
+  isDraftMode: boolean;
+  isFreeMode: boolean;
+  isSealed: boolean;
+  onSetDeckName: (name: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [tempName, setTempName] = useState(deckName);
+
+  React.useEffect(() => setTempName(deckName), [deckName]);
+
+  const modeLabel = isDraftMode
+    ? "(Draft)"
+    : isSealed
+    ? "(Sealed)"
+    : isFreeMode
+    ? "(Free Mode)"
+    : null;
+
+  const displayName = deckName || "New Deck";
+
+  return (
+    <div className="flex items-center gap-2">
+      {deckIsOwner && editing ? (
+        <input
+          value={tempName}
+          onChange={(e) => setTempName(e.target.value)}
+          onBlur={() => {
+            onSetDeckName(tempName);
+            setEditing(false);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              onSetDeckName(tempName);
+              setEditing(false);
+            }
+            if (e.key === "Escape") {
+              setTempName(deckName);
+              setEditing(false);
+            }
+          }}
+          className="text-2xl font-fantaisie border-b-2 border-white/40 bg-transparent text-white outline-none max-w-[20ch] px-1"
+          placeholder="Deck name"
+          autoFocus
+        />
+      ) : (
+        <div
+          className="text-3xl font-fantaisie text-white max-w-[20ch] truncate"
+          title={displayName}
+        >
+          {displayName}
+        </div>
+      )}
+      {deckIsOwner && !editing && (
+        <button
+          onClick={() => setEditing(true)}
+          className="h-7 w-7 grid place-items-center rounded-full bg-white/10 hover:bg-white/20 text-white/60 hover:text-white transition-colors"
+          title="Rename deck"
+          aria-label="Rename deck"
+        >
+          <Pencil className="h-3.5 w-3.5" />
+        </button>
+      )}
+      {modeLabel && (
+        <span
+          className={`text-lg ml-1 ${
+            isDraftMode
+              ? "text-orange-400"
+              : isSealed
+              ? "text-amber-400"
+              : "text-blue-400"
+          }`}
+        >
+          {modeLabel}
+        </span>
+      )}
+    </div>
+  );
+}
 
 export default function DeckPanels(props: DeckPanelsProps) {
   const [helpOpen, setHelpOpen] = useState(false);
@@ -164,17 +254,14 @@ export default function DeckPanels(props: DeckPanelsProps) {
               <Grid3X3 className="h-5 w-5" strokeWidth={2.5} />
             </button>
           )}
-          <div className="text-3xl font-fantaisie text-white">
-            Deck Editor
-            {isDraftMode && (
-              <span className="text-lg text-orange-400 ml-2">
-                (Draft Completion Mode)
-              </span>
-            )}
-            {isFreeMode && (
-              <span className="text-lg text-blue-400 ml-2">(Free Mode)</span>
-            )}
-          </div>
+          <DeckTitle
+            deckName={deckName}
+            deckIsOwner={deckIsOwner}
+            isDraftMode={isDraftMode}
+            isFreeMode={isFreeMode}
+            isSealed={isSealed}
+            onSetDeckName={onSetDeckName}
+          />
           {/* Validation mode toggle for free mode */}
           {isFreeMode && onFreeValidationModeChange && (
             <div className="flex items-center gap-1 bg-black/40 rounded-lg p-1 border border-white/10">
@@ -276,22 +363,49 @@ export default function DeckPanels(props: DeckPanelsProps) {
                 </span>
               </button>
             )}
-          {/* Prominent save button for free mode */}
-          {isFreeMode && status === "authenticated" && !saving && (
+          {/* Save button + auto-save toggle for free mode */}
+          {isFreeMode && status === "authenticated" && (
             <div className="flex items-center gap-2 ml-2">
               <button
                 onClick={onSaveDeck}
-                className="h-9 px-4 rounded-full bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 text-white font-semibold text-sm shadow-lg transition-all flex items-center gap-2"
-                title={deckId ? "Update deck" : "Save new deck"}
+                disabled={saving}
+                className={`h-9 min-w-[5.5rem] px-4 rounded-full font-semibold text-sm shadow-lg transition-all flex items-center justify-center gap-2 ${
+                  saving
+                    ? "bg-gray-600 text-white cursor-wait"
+                    : "bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 text-white"
+                }`}
+                title={
+                  saving
+                    ? "Saving…"
+                    : deckId
+                    ? "Update deck"
+                    : "Save new deck"
+                }
               >
-                <svg
-                  className="h-4 w-4"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                >
-                  <path d="M17 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7l-4-4zM12 19a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm3-10H5V5h10v4z" />
-                </svg>
-                {deckId ? "Save" : "Save Deck"}
+                {saving ? (
+                  <svg
+                    className="h-4 w-4 animate-spin"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M4 12a8 8 0 018-8"
+                    />
+                  </svg>
+                ) : (
+                  <svg
+                    className="h-4 w-4"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                  >
+                    <path d="M17 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7l-4-4zM12 19a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm3-10H5V5h10v4z" />
+                  </svg>
+                )}
+                {saving ? "Saving…" : deckId ? "Save" : "Save Deck"}
               </button>
               {/* Auto-save toggle */}
               {deckId && onToggleAutoSave && (
@@ -322,24 +436,6 @@ export default function DeckPanels(props: DeckPanelsProps) {
                   <span>Auto</span>
                 </button>
               )}
-            </div>
-          )}
-          {isFreeMode && saving && (
-            <div className="ml-2 h-9 px-4 rounded-full bg-gray-600 text-white font-semibold text-sm flex items-center gap-2">
-              <svg
-                className="h-4 w-4 animate-spin"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M4 12a8 8 0 018-8"
-                />
-              </svg>
-              Saving...
             </div>
           )}
           <div className="relative">
