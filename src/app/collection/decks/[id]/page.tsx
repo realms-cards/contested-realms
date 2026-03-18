@@ -40,7 +40,7 @@ interface DeckData {
   requirements?: {
     minSpellbook: number;
     minAtlas: number;
-    maxCollection: number;
+    maxCollection: number | null;
     avatarCount: number;
   };
 }

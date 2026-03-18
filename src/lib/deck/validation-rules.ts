@@ -25,7 +25,7 @@ export interface DeckRequirements {
   minAtlas: number;
   maxAtlas: number | null;
   minCollection: number;
-  maxCollection: number;
+  maxCollection: number | null;
   avatarCount: number;
   sideboardAllowed: boolean;
 }
@@ -38,14 +38,14 @@ export interface DeckRequirements {
 // - Exactly 1 avatar
 // - At least 24 cards in spellbook
 // - At least 12 sites in atlas
-// - 0–10 cards allowed in collection (optional)
+// - All unused cards go to collection (no cap per official rules)
 export const LIMITED_REQUIREMENTS: DeckRequirements = {
   minSpellbook: 24,
   maxSpellbook: null, // No max
   minAtlas: 12,
   maxAtlas: null, // No max
   minCollection: 0,
-  maxCollection: 10,
+  maxCollection: null, // No cap in limited — all unused cards are collection
   avatarCount: 1,
   sideboardAllowed: true,
 };
@@ -156,7 +156,7 @@ export function validateDeck(
   }
 
   // Collection validation
-  if (stats.collectionCount > reqs.maxCollection) {
+  if (reqs.maxCollection !== null && stats.collectionCount > reqs.maxCollection) {
     errors.push({
       code: "COLLECTION_MAX",
       message: `Collection cannot exceed ${reqs.maxCollection} cards (has ${stats.collectionCount})`,
@@ -192,7 +192,7 @@ export function getRequirementsDescription(format: DeckFormat): string {
   parts.push(`${reqs.minSpellbook}+ Spellbook`);
   parts.push(`${reqs.minAtlas}+ Atlas (Sites)`);
 
-  if (reqs.maxCollection > 0) {
+  if (reqs.maxCollection !== null && reqs.maxCollection > 0) {
     parts.push(`Up to ${reqs.maxCollection} Collection`);
   }
 

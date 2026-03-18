@@ -511,6 +511,12 @@ export default function TournamentsPage() {
           >
             My Tournaments
           </button>
+          <Link
+            href="/open-tournaments"
+            className={`px-3 py-1.5 rounded-md text-sm border bg-slate-800 text-slate-200 border-slate-600 hover:bg-slate-700`}
+          >
+            Open Events
+          </Link>
           {viewFilter !== "active" && (
             <span className="text-xs text-slate-400 ml-2">
               Showing {viewFilter} tournaments

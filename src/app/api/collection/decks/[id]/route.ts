@@ -165,8 +165,8 @@ export async function GET(
       });
     }
 
-    // Collection validation
-    if (collectionCount > reqs.maxCollection) {
+    // Collection validation (null = unlimited, e.g. limited format)
+    if (reqs.maxCollection !== null && collectionCount > reqs.maxCollection) {
       errors.push({
         code: "COLLECTION_MAX",
         message: `Collection cannot exceed ${reqs.maxCollection} cards (has ${collectionCount})`,
