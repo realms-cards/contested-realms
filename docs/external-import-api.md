@@ -25,27 +25,46 @@ https://realms.cards/decks/import/external?list=<base64url>&name=<deckName>&sour
 
 ## Card List Format
 
-Plain text, one card per line: `<count> <card name>`
+Plain text, one card per line: `<count> <card name>`, with optional **section headers** to separate the main deck from the collection (sideboard).
+
+### Section Headers
+
+Use `Deck` and `Collection` as standalone lines to separate zones:
+
+```
+Deck
+1 Druid
+2 Baptize
+1 Barrow Wight
+1 Bone Spear
+3 Aqueduct
+2 Autumn River
+3 Blessed Well
+Collection
+1 Ghostfire
+1 Gift of the Frog
+1 Gift of the Raven
+```
+
+- **`Deck`** — Cards below are auto-assigned zones by type: Avatar and Spells go to Spellbook, Sites go to Atlas
+- **`Collection`** — Cards below go to the Collection zone (sideboard), regardless of card type
+
+Section headers are **case-insensitive** and must appear on their own line (no card count prefix).
+
+### Without Section Headers
+
+If no section headers are present, all cards are treated as part of the main deck (auto-assigned by type). This is still supported for backwards compatibility:
 
 ```
 1 Druid
 2 Baptize
 1 Barrow Wight
-1 Bone Spear
-1 Bound Spirit
-1 Drowned
-1 Forsaken
-1 Ghostfire
-1 Gift of the Frog
-1 Gift of the Raven
-1 Ignited
-1 Leadworks
 3 Aqueduct
 2 Autumn River
-3 Blessed Well
 ```
 
-- **No section headers needed** — realms.cards auto-detects card types (Avatar, Site, Spell) from its database and assigns them to the correct zones
+### Card Name Matching
+
 - Card names are matched case-insensitively with fuzzy matching (handles minor typos, curly quotes, etc.)
 - Unresolved cards are reported as warnings but don't block the import — the user can fix them in the editor
 
@@ -57,8 +76,15 @@ Use [base64url](https://datatracker.ietf.org/doc/html/rfc4648#section-5) encodin
 ## Integration Code
 
 ```javascript
-function exportToRealmsCards(deckName, cardList) {
-  // cardList: "1 Druid\n2 Baptize\n3 Aqueduct\n..."
+function exportToRealmsCards(deckName, deckCards, collectionCards) {
+  // deckCards: ["1 Druid", "2 Baptize", "3 Aqueduct", ...]
+  // collectionCards: ["1 Ghostfire", "1 Gift of the Frog", ...] (optional)
+
+  let cardList = 'Deck\n' + deckCards.join('\n');
+  if (collectionCards && collectionCards.length > 0) {
+    cardList += '\nCollection\n' + collectionCards.join('\n');
+  }
+
   const encoded = btoa(cardList)
     .replace(/\+/g, '-')
     .replace(/\//g, '_')
@@ -73,10 +99,19 @@ function exportToRealmsCards(deckName, cardList) {
 }
 ```
 
+## Zone Assignment
+
+| Section Header | Card Type | Assigned Zone |
+|---------------|-----------|---------------|
+| `Deck` (or none) | Avatar | Spellbook |
+| `Deck` (or none) | Site | Atlas |
+| `Deck` (or none) | Any other | Spellbook |
+| `Collection` | Any type | Collection |
+
 ## What Happens on the Realms.cards Side
 
 1. **Not signed in** — User sees the card list preview + a sign-in prompt. After signing in, the import proceeds automatically (URL params are preserved).
-2. **Signed in** — Import starts immediately. Cards are resolved against the database, zones are auto-assigned, and the deck is created.
+2. **Signed in** — Import starts immediately. Cards are resolved against the database, zones are assigned per the table above, and the deck is created.
 3. **After import** — User is redirected to the 3D deck editor where they can:
    - Move cards between zones (Spellbook, Atlas, Collection)
    - Add/remove cards
@@ -86,7 +121,7 @@ function exportToRealmsCards(deckName, cardList) {
 ## Format Detection
 
 The deck format is auto-detected based on total card count:
-- **≤ 55 cards** → Sealed (limited) format
+- **<= 55 cards** → Sealed (limited) format
 - **> 55 cards** → Constructed format
 
 ## Response Behavior
@@ -102,27 +137,26 @@ The deck format is auto-detected based on total card count:
 ## Size Limits
 
 - Max decoded card list: **10 KB** (~300+ cards, well beyond any deck size)
-- URL length: a typical 91-card constructed deck encodes to ~1.5–2 KB, well within browser limits
+- URL length: a typical 91-card constructed deck encodes to ~1.5-2 KB, well within browser limits
 
 ## Example
 
-A sealed pool with 12 cards (abbreviated):
+A sealed deck with 9 main-deck cards and 3 collection cards:
 ```
+Deck
 1 Druid
 2 Baptize
 1 Barrow Wight
 1 Bone Spear
-1 Bound Spirit
-1 Drowned
-1 Forsaken
+3 Aqueduct
+2 Autumn River
+Collection
 1 Ghostfire
 1 Gift of the Frog
-1 Gift of the Raven
-1 Ignited
 1 Leadworks
 ```
 
 Encoded URL:
 ```
-https://realms.cards/decks/import/external?list=MSBEcnVpZAoyIEJhcHRpemUKMSBCYXJyb3cgV2lnaHQKMSBCb25lIFNwZWFyCjEgQm91bmQgU3Bpcml0CjEgRHJvd25lZAoxIEZvcnNha2VuCjEgR2hvc3RmaXJlCjEgR2lmdCBvZiB0aGUgRnJvZwoxIEdpZnQgb2YgdGhlIFJhdmVuCjEgSWduaXRlZAoxIExlYWR3b3Jrcw&name=My%20Sealed%20Pool&source=realmdraft
+https://realms.cards/decks/import/external?list=RGVjawoxIERydWlkCjIgQmFwdGl6ZQoxIEJhcnJvdyBXaWdodAoxIEJvbmUgU3BlYXIKMyBBcXVlZHVjdAoyIEF1dHVtbiBSaXZlcgpDb2xsZWN0aW9uCjEgR2hvc3RmaXJlCjEgR2lmdCBvZiB0aGUgRnJvZwoxIExlYWR3b3Jrcw&name=My%20Sealed%20Pool&source=realmdraft
 ```

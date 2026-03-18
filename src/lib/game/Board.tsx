@@ -19,6 +19,7 @@ import {
 } from "@/lib/game/boardShared";
 import { AvatarCard } from "@/lib/game/components/AvatarCard";
 import BoardCursorLayer from "@/lib/game/components/BoardCursorLayer";
+import { MarqueeSelectLayer } from "@/lib/game/components/MarqueeSelectLayer";
 import { BoardDragGhost } from "@/lib/game/components/BoardDragGhost";
 import { BoardEnvironment } from "@/lib/game/components/BoardEnvironment";
 import BoardPingLayer from "@/lib/game/components/BoardPingLayer";
@@ -33,6 +34,7 @@ import { useAttachmentDialog } from "@/lib/game/hooks/useAttachmentDialog";
 import { useBoardDragControls } from "@/lib/game/hooks/useBoardDragControls";
 import { useBoardDropManager } from "@/lib/game/hooks/useBoardDropManager";
 import { useBoardHotkeys } from "@/lib/game/hooks/useBoardHotkeys";
+import { useTTSHotkeys } from "@/lib/game/hooks/useTTSHotkeys";
 import { useRemoteCursorSystem } from "@/lib/game/hooks/useRemoteCursorSystem";
 import { useTileDropHandler } from "@/lib/game/hooks/useTileDropHandler";
 import type { CellKey } from "@/lib/game/store";
@@ -163,6 +165,10 @@ interface BoardProps {
   enableBoardPings?: boolean;
   interactionMode?: "normal" | "spectator";
   storeApi?: UseBoundStore<StoreApi<GameState>>;
+  /** Callback for TTS marquee selection overlay updates */
+  onMarqueeUpdate?: (
+    rect: { x1: number; y1: number; x2: number; y2: number } | null,
+  ) => void;
 }
 
 export default function Board({
@@ -170,6 +176,7 @@ export default function Board({
   enableBoardPings = false,
   interactionMode = "normal",
   storeApi,
+  onMarqueeUpdate,
 }: BoardProps = {}) {
   const resolvedStoreApi = (storeApi ?? useGameStore) as UseBoundStore<
     StoreApi<GameState>
@@ -178,6 +185,7 @@ export default function Board({
     resolvedStoreApi(selector);
   const { settings: graphicsSettings } = useGraphicsSettings();
   const isSpectator = interactionMode === "spectator";
+  const controlScheme = useScopedStore((s) => s.controlScheme);
   const boardState = useScopedStore((s) => s.board);
   const fallbackBoard = useMemo(() => createInitialBoard(), []);
   const board = boardState ?? fallbackBoard;
@@ -542,6 +550,13 @@ export default function Board({
   });
 
   useBoardHotkeys({
+    store: resolvedStoreApi,
+    isSpectator,
+    overlayBlocking,
+    playCardFlip,
+  });
+
+  useTTSHotkeys({
     store: resolvedStoreApi,
     isSpectator,
     overlayBlocking,
@@ -1466,6 +1481,17 @@ export default function Board({
 
       {/* Remote cursors */}
       <BoardCursorLayer />
+
+      {/* TTS mode: marquee selection layer (disabled — triggers on trackpad clicks)
+      {controlScheme === "tts" && onMarqueeUpdate && (
+        <MarqueeSelectLayer
+          onMarqueeUpdate={onMarqueeUpdate}
+          isSpectator={isSpectator}
+          boardSize={board.size}
+          boardOffset={{ x: offsetX, y: offsetY }}
+        />
+      )}
+      */}
 
       {/* Magic spell connection lines */}
       {pendingMagic && magicGuidesActive && !pendingMagic.guidesSuppressed && (

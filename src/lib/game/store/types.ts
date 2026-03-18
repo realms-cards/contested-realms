@@ -1723,6 +1723,16 @@ export type GameState = {
   // Context menu icons mode: show icon buttons instead of text labels
   contextMenuIcons: boolean;
   toggleContextMenuIcons: () => void;
+  // TTS (Tabletop Simulator) control scheme
+  controlScheme: "default" | "tts";
+  setControlScheme: (scheme: "default" | "tts") => void;
+  toggleControlScheme: () => void;
+  // Marquee multi-selection (TTS mode)
+  marqueeSelection: Array<{ at: CellKey; index: number }>;
+  marqueeSelectPermanents: (
+    entries: Array<{ at: CellKey; index: number }>,
+  ) => void;
+  clearMarqueeSelection: () => void;
   // UI hidden toggle (hide/show most UI elements for clean screenshots/viewing)
   uiHidden: boolean;
   setUiHidden: (hidden: boolean) => void;

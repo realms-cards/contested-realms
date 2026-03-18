@@ -104,6 +104,11 @@ import KeyboardShortcutsHelp, {
 } from "@/components/ui/KeyboardShortcutsHelp";
 import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
 import TrackpadOrbitAdapter from "@/lib/controls/TrackpadOrbitAdapter";
+import { MarqueeActionBar } from "@/lib/game/components/MarqueeActionBar";
+import {
+  MarqueeOverlayWithRef,
+  useMarqueeOverlayRef,
+} from "@/lib/game/components/MarqueeOverlay";
 import {
   detectHarbingerSeats,
   hasAnyHarbinger,
@@ -2326,6 +2331,10 @@ export default function OnlineMatchPage() {
   const controlsRef = useRef<any>(null);
   const cameraMode = useGameStore((s) => s.cameraMode);
   const setCameraMode = useGameStore((s) => s.setCameraMode);
+  const controlScheme = useGameStore((s) => s.controlScheme);
+  const isTTS = controlScheme === "tts";
+  const { rectRef: marqueeRectRef, updateRect: updateMarqueeRect } =
+    useMarqueeOverlayRef();
 
   // Restore camera mode and playmat settings from API (authenticated users) or localStorage after hydration
   const settingsRestoredRef = useRef(false);
@@ -3332,6 +3341,15 @@ export default function OnlineMatchPage() {
             />
           )}
 
+          {/* TTS mode: marquee selection (disabled for now — triggers on trackpad clicks)
+          {isTTS && (
+            <>
+              <MarqueeOverlayWithRef rectRef={marqueeRectRef} />
+              <MarqueeActionBar />
+            </>
+          )}
+          */}
+
           {/* Global dialogs */}
           {placementDialog && (
             <PlacementDialog
@@ -3608,6 +3626,7 @@ export default function OnlineMatchPage() {
                   <Board
                     interactionMode={boardInteractionMode}
                     enableBoardPings
+                    onMarqueeUpdate={isTTS ? updateMarqueeRect : undefined}
                   />
                 </Physics>
 
@@ -3709,15 +3728,20 @@ export default function OnlineMatchPage() {
                           MIDDLE: THREE.MOUSE.DOLLY,
                           RIGHT: THREE.MOUSE.PAN,
                         }
-                      : {
-                          MIDDLE: THREE.MOUSE.DOLLY,
-                          RIGHT: THREE.MOUSE.PAN,
-                        }
+                      : isTTS
+                        ? {
+                            MIDDLE: THREE.MOUSE.ROTATE,
+                            RIGHT: THREE.MOUSE.PAN,
+                          }
+                        : {
+                            MIDDLE: THREE.MOUSE.DOLLY,
+                            RIGHT: THREE.MOUSE.PAN,
+                          }
                   }
                   touches={{ TWO: THREE.TOUCH.PAN }}
                   enabled={canPanCamera}
                   enablePan={canPanCamera}
-                  enableRotate={isSpectatorView ? true : false}
+                  enableRotate={isSpectatorView || isTTS}
                   enableZoom={!resyncing && !dragFromHand && !dragFromPile}
                   enableDamping={isSpectatorView}
                   dampingFactor={isSpectatorView ? 0.08 : 0}
@@ -3764,6 +3788,7 @@ export default function OnlineMatchPage() {
                 <KeyboardPanControls
                   enabled={canPanCamera}
                   viewPlayerNumber={(viewPlayerNumber ?? 1) as 1 | 2}
+                  controlScheme={controlScheme}
                 />
                 <TrackpadOrbitAdapter />
 
@@ -3885,15 +3910,22 @@ function KeyboardPanControls({
   enabled = true,
   step = 0.8,
   viewPlayerNumber = 1,
+  controlScheme = "default",
 }: {
   enabled?: boolean;
   step?: number;
   viewPlayerNumber?: 1 | 2;
+  controlScheme?: "default" | "tts";
 }) {
   const { controls } = useThree((state) => ({
     controls: state.controls as OrbitControlsImpl | undefined,
   }));
-  useOrbitKeyboardPan(controls, { enabled, panStep: step, viewPlayerNumber });
+  useOrbitKeyboardPan(controls, {
+    enabled,
+    panStep: step,
+    viewPlayerNumber,
+    controlScheme,
+  });
   useZoomKeyboardShortcuts(controls, { enabled });
   return null;
 }

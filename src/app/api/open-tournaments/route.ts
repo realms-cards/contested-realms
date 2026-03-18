@@ -87,6 +87,7 @@ export async function POST(req: NextRequest) {
   // Build settings
   const settings: OpenTournamentSettings = {
     ...DEFAULT_OPEN_TOURNAMENT_SETTINGS,
+    gameFormat: input.gameFormat ?? "constructed",
     playNetworkUrl: input.playNetworkUrl,
     matchResolution: {
       ...DEFAULT_OPEN_TOURNAMENT_SETTINGS.matchResolution,

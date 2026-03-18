@@ -7,6 +7,8 @@ type Options = {
   panStep?: number;
   /** Player seat (1 or 2) - affects fallback direction in top-down mode */
   viewPlayerNumber?: 1 | 2;
+  /** Control scheme - TTS mode repurposes Q/E for card rotation */
+  controlScheme?: "default" | "tts";
 };
 
 const PAN_KEYS = new Set([
@@ -41,7 +43,12 @@ export function useOrbitKeyboardPan(
   controls: OrbitControls | null | undefined,
   options: Options = {}
 ): void {
-  const { enabled = true, panStep = 20, viewPlayerNumber = 1 } = options;
+  const {
+    enabled = true,
+    panStep = 20,
+    viewPlayerNumber = 1,
+    controlScheme = "default",
+  } = options;
 
   useEffect(() => {
     if (!controls || !enabled) return;
@@ -98,8 +105,9 @@ export function useOrbitKeyboardPan(
         }
       }
 
-      const tiltUp = pressed.has("KeyQ");
-      const tiltDown = pressed.has("KeyE");
+      // In TTS mode, Q/E are repurposed for card rotation — skip camera tilt
+      const tiltUp = controlScheme !== "tts" && pressed.has("KeyQ");
+      const tiltDown = controlScheme !== "tts" && pressed.has("KeyE");
       if (tiltUp || tiltDown) {
         const t = controls.target as Vector3;
         const cam = controlsAny.object;
@@ -182,5 +190,5 @@ export function useOrbitKeyboardPan(
         window.cancelAnimationFrame(frame);
       }
     };
-  }, [controls, enabled, panStep, viewPlayerNumber]);
+  }, [controls, enabled, panStep, viewPlayerNumber, controlScheme]);
 }

@@ -9,8 +9,10 @@ export const dynamic = "force-dynamic";
 // POST /api/decks/import/external
 // Body: { text: string, name?: string, source?: string }
 //
-// Accepts a flat card list (one "count name" per line, no section headers).
-// Auto-detects zones from DB card types (Avatar → Spellbook, Site → Atlas, else → Spellbook).
+// Accepts a card list with optional section headers "Deck" and "Collection".
+// Cards under "Deck" (or no header) are auto-assigned zones by type:
+//   Avatar → Spellbook, Site → Atlas, everything else → Spellbook.
+// Cards under "Collection" are placed in the Collection zone regardless of type.
 // Creates the deck with minimal validation so the user can refine in the editor.
 export async function POST(req: NextRequest) {
   const session = await getServerAuthSession();
@@ -55,20 +57,32 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 1) Parse flat card list: "count name" per line
+    // 1) Parse card list with optional "Deck" / "Collection" section headers
     const lines = rawText
       .split(/\r?\n/)
       .map((l) => l.trim())
       .filter((l) => l.length > 0);
 
-    const entries: { name: string; count: number }[] = [];
+    type Section = "deck" | "collection";
+    const sectionHeaderRe = /^(deck|collection)\s*$/i;
+
+    const entries: { name: string; count: number; section: Section }[] = [];
+    let currentSection: Section = "deck";
+
     for (const line of lines) {
+      // Check for section header
+      const headerMatch = line.match(sectionHeaderRe);
+      if (headerMatch) {
+        currentSection = headerMatch[1].toLowerCase() as Section;
+        continue;
+      }
+
       const match = line.match(/^(\d+)\s+(.+)$/);
       if (!match) continue; // skip unparseable lines
       const count = parseInt(match[1], 10);
       const name = match[2].trim();
       if (count > 0 && name) {
-        entries.push({ name, count });
+        entries.push({ name, count, section: currentSection });
       }
     }
 
@@ -115,15 +129,20 @@ export async function POST(req: NextRequest) {
         });
       }
 
-      // Auto-detect zone from card type
-      const t = (card.type || card.typeText || "").toLowerCase();
+      // Determine zone: Collection section overrides auto-detect
       let zone: string;
-      if (t.includes("avatar")) {
-        zone = "Spellbook";
-      } else if (t.includes("site")) {
-        zone = "Atlas";
+      if (entry.section === "collection") {
+        zone = "Collection";
       } else {
-        zone = "Spellbook";
+        // Auto-detect zone from card type
+        const t = (card.type || card.typeText || "").toLowerCase();
+        if (t.includes("avatar")) {
+          zone = "Spellbook";
+        } else if (t.includes("site")) {
+          zone = "Atlas";
+        } else {
+          zone = "Spellbook";
+        }
       }
 
       zoneItems.push({

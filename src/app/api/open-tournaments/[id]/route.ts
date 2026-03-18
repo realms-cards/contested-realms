@@ -80,6 +80,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
 
   const updatedSettings: OpenTournamentSettings = {
     mode: "open",
+    gameFormat: (currentSettings.gameFormat as OpenTournamentSettings["gameFormat"]) ?? "constructed",
     playNetworkUrl: input.playNetworkUrl !== undefined
       ? (input.playNetworkUrl ?? undefined)
       : (currentSettings.playNetworkUrl as string | undefined),
@@ -107,6 +108,48 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
   });
 
   return Response.json({ tournament: updated });
+}
+
+/** PUT /api/open-tournaments/[id] — Complete/end tournament */
+export async function PUT(_req: NextRequest, { params }: RouteParams) {
+  const session = await getServerAuthSession();
+  if (!session?.user) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { id } = await params;
+
+  const tournament = await prisma.tournament.findUnique({
+    where: { id, format: "open" },
+  });
+
+  if (!tournament) {
+    return Response.json({ error: "Tournament not found" }, { status: 404 });
+  }
+  if (tournament.creatorId !== session.user.id) {
+    return Response.json({ error: "Only the host can end the event" }, { status: 403 });
+  }
+  if (tournament.status === "completed" || tournament.status === "cancelled") {
+    return Response.json({ error: "Tournament is already finished" }, { status: 400 });
+  }
+
+  // Complete all active rounds and matches
+  await prisma.$transaction([
+    prisma.match.updateMany({
+      where: { tournamentId: id, status: { in: ["pending", "active"] } },
+      data: { status: "cancelled" },
+    }),
+    prisma.tournamentRound.updateMany({
+      where: { tournamentId: id, status: { in: ["pending", "active"] } },
+      data: { status: "completed" },
+    }),
+    prisma.tournament.update({
+      where: { id },
+      data: { status: "completed", completedAt: new Date() },
+    }),
+  ]);
+
+  return Response.json({ success: true });
 }
 
 /** DELETE /api/open-tournaments/[id] — Cancel tournament */

@@ -21,6 +21,8 @@ export const CreateOpenTournamentSchema = z.object({
     .max(OPEN_TOURNAMENT_LIMITS.MAX_PLAYERS)
     .default(OPEN_TOURNAMENT_LIMITS.DEFAULT_MAX_PLAYERS),
   isPrivate: z.boolean().default(false),
+  /** The game format players will use (for display/organization, not enforced) */
+  gameFormat: z.enum(["constructed", "sealed", "draft"]).default("constructed"),
   playNetworkUrl: z.string().url().optional(),
   matchResolution: z
     .object({
