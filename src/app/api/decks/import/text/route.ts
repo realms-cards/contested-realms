@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { getServerAuthSession } from "@/lib/auth";
+import { resolveCardNames } from "@/lib/decks/card-resolver";
 import {
   parseSorceryDeckText,
   toZones,
@@ -100,25 +101,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 2) Map names to variants/cards - BATCH LOOKUP for better performance
-    const preferredSets = ["Alpha", "Beta", "Arthurian Legends"]; // preference order
-
-    type Mapped = {
-      cardId: number;
-      variantId: number | null;
-      setId: number | null;
-      typeText: string | null;
-      count: number;
-      name: string;
-      zone: string; // "Spellbook" | "Atlas"
-      matchedName: string;
-      wasFuzzy: boolean;
-    };
-
-    const mapped: Mapped[] = [];
-    const unresolved: { name: string; count: number }[] = [];
-
-    // Batch lookup all unique card names at once
+    // 2) Map names to variants/cards using shared resolver
     const uniqueNames = Array.from(new Set(zoneEntries.map((e) => e.name)));
     // Build a map of name -> preferred set (from CardNexus format)
     const nameToPreferredSet = new Map<string, string>();
@@ -127,18 +110,27 @@ export async function POST(req: NextRequest) {
         nameToPreferredSet.set(e.name, e.set);
       }
     }
-    const nameToVariant = await batchFindVariants(
+    const { resolved, unresolved: unresolvedNames } = await resolveCardNames(
       uniqueNames,
-      preferredSets,
-      nameToPreferredSet
+      { nameToPreferredSet }
     );
 
     // Track fuzzy matches for warnings
     const fuzzyMatches: { original: string; matched: string; count: number }[] =
       [];
 
+    type Mapped = {
+      cardId: number;
+      variantId: number | null;
+      setId: number | null;
+      count: number;
+      zone: string;
+    };
+    const mapped: Mapped[] = [];
+    const unresolved: { name: string; count: number }[] = [];
+
     for (const e of zoneEntries) {
-      const found = nameToVariant.get(e.name);
+      const found = resolved.get(e.name);
       if (!found) {
         unresolved.push({ name: e.name, count: e.count });
         continue;
@@ -155,13 +147,17 @@ export async function POST(req: NextRequest) {
         cardId: found.cardId,
         variantId: found.variantId,
         setId: found.setId,
-        typeText: found.typeText,
         count: e.count,
-        name: e.name,
         zone: e.zone,
-        matchedName: found.matchedName,
-        wasFuzzy: found.wasFuzzy,
       });
+    }
+
+    // Also add any names the resolver couldn't find
+    for (const name of unresolvedNames) {
+      const entry = zoneEntries.find((e) => e.name === name);
+      if (entry && !unresolved.some((u) => u.name === name)) {
+        unresolved.push({ name, count: entry.count });
+      }
     }
 
     if (unresolved.length) {
@@ -258,172 +254,4 @@ export async function POST(req: NextRequest) {
         : "Unknown error";
     return new Response(JSON.stringify({ error: message }), { status: 500 });
   }
-}
-
-// Batch version for much better performance
-// nameToPreferredSet: optional map of card name -> specific set to prefer (from CardNexus format)
-async function batchFindVariants(
-  names: string[],
-  setPreference: string[],
-  nameToPreferredSet?: Map<string, string>
-) {
-  const result = new Map<
-    string,
-    {
-      cardId: number;
-      variantId: number | null;
-      setId: number | null;
-      typeText: string | null;
-      matchedName: string; // The actual card name in DB
-      wasFuzzy: boolean; // True if fuzzy match was used
-    }
-  >();
-
-  if (!names.length) return result;
-
-  // Single query to get all candidates for all names
-  const candidates = await prisma.card.findMany({
-    where: {
-      name: {
-        in: names.flatMap((name) => {
-          const canon = canonicalize(name);
-          // Include both exact matches and partial matches
-          return [name, canon];
-        }),
-      },
-    },
-    select: {
-      id: true,
-      name: true,
-      variants: {
-        select: {
-          id: true,
-          setId: true,
-          typeText: true,
-          set: { select: { name: true } },
-        },
-      },
-    },
-  });
-
-  // Group candidates by canonicalized name
-  const candidatesByName = new Map<string, typeof candidates>();
-  for (const name of names) {
-    const canon = canonicalize(name);
-    const matches = candidates.filter(
-      (c) => canonicalize(c.name) === canon || c.name === name
-    );
-    candidatesByName.set(name, matches);
-  }
-
-  // Process each name
-  for (const [originalName, cardCandidates] of candidatesByName) {
-    if (!cardCandidates.length) continue;
-
-    const canon = canonicalize(originalName);
-    const exact = cardCandidates.filter((c) => canonicalize(c.name) === canon);
-    const pool = exact.length ? exact : cardCandidates;
-
-    // Flatten variants, score by set preference
-    type Flat = {
-      cardId: number;
-      variantId: number | null;
-      setId: number | null;
-      typeText: string | null;
-      setName: string | null;
-    };
-    const flats: Flat[] = [];
-    for (const c of pool) {
-      if (!c.variants.length) {
-        flats.push({
-          cardId: c.id,
-          variantId: null,
-          setId: null,
-          typeText: null,
-          setName: null,
-        });
-        continue;
-      }
-      for (const v of c.variants) {
-        flats.push({
-          cardId: c.id,
-          variantId: v.id,
-          setId: v.setId,
-          typeText: v.typeText,
-          setName: v.set?.name ?? null,
-        });
-      }
-    }
-
-    if (!flats.length) continue;
-
-    // Check if this card has a specific set preference from CardNexus format
-    const specificSet = nameToPreferredSet?.get(originalName);
-
-    const score = (setName: string | null) => {
-      if (!setName) return -1;
-      // If a specific set was requested, give it highest priority
-      if (specificSet && setName.toLowerCase() === specificSet.toLowerCase()) {
-        return 1000; // Very high score for exact match
-      }
-      const idx = setPreference.indexOf(setName);
-      return idx < 0 ? 0 : setPreference.length - idx; // higher is better
-    };
-
-    flats.sort((a, b) => score(b.setName) - score(a.setName));
-    const top = flats[0];
-
-    // Check if this was a fuzzy match
-    const exactNameMatch = pool.some((c) => c.name === originalName);
-    const matchedCard = pool.find((c) => c.id === top.cardId);
-    result.set(originalName, {
-      cardId: top.cardId,
-      variantId: top.variantId,
-      setId: top.setId,
-      typeText: top.typeText,
-      matchedName: matchedCard?.name ?? originalName,
-      wasFuzzy: !exactNameMatch,
-    });
-  }
-
-  // Batch metadata lookup for cards missing typeText
-  const needsMetadata = Array.from(result.entries())
-    .filter(([, variant]) => !variant.typeText && variant.setId)
-    .map(([, variant]) => ({
-      cardId: variant.cardId,
-      setId: variant.setId as number,
-    }));
-
-  if (needsMetadata.length > 0) {
-    const metaMap = new Map<string, string>();
-    const metas = await prisma.cardSetMetadata.findMany({
-      where: { OR: needsMetadata },
-      select: { cardId: true, setId: true, type: true },
-    });
-    for (const m of metas) metaMap.set(`${m.cardId}:${m.setId}`, m.type);
-
-    // Update variants with metadata
-    for (const [name, variant] of result.entries()) {
-      if (!variant.typeText && variant.setId) {
-        const type = metaMap.get(`${variant.cardId}:${variant.setId}`);
-        if (type) {
-          result.set(name, {
-            ...variant,
-            typeText: type,
-          });
-        }
-      }
-    }
-  }
-
-  return result;
-}
-
-function canonicalize(s: string): string {
-  return s
-    .toLowerCase()
-    .replace(/[\s\-–—_,:;.!?()/]+/g, " ")
-    .replace(/\s+/g, " ")
-    .replace(/[\u2018\u2019]/g, "'")
-    .trim();
 }

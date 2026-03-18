@@ -97,6 +97,7 @@ export async function GET(req: NextRequest) {
       async () => {
         // Build where clause - filter out private tournaments unless user is creator or has invitation
         const where = {
+          format: { not: "open" as TournamentFormat },
           ...(statuses ? { status: { in: statuses } } : {}),
           ...(q ? { name: { contains: q, mode: "insensitive" as const } } : {}),
           // Show public tournaments + private tournaments where user is creator or invited

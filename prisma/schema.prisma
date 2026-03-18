@@ -774,6 +774,7 @@ enum TournamentFormat {
   sealed
   draft
   constructed
+  open
 }
 
 enum TournamentStatus {
@@ -812,6 +813,7 @@ enum GameFormat {
   constructed
   sealed
   draft
+  open
 }
 
 enum TimeFrame {

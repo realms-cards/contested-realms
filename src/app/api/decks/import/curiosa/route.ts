@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { getServerAuthSession } from "@/lib/auth";
 import { invalidateCache, CacheKeys } from "@/lib/cache/redis-cache";
+import { resolveCardNames } from "@/lib/decks/card-resolver";
 import { prisma } from "@/lib/prisma";
 import {
   fetchCuriosatrpc,
@@ -209,9 +210,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 4) Map names to variants/cards
-    const preferredSets = ["Alpha", "Beta", "Arthurian Legends"]; // preference order
-
+    // 4) Map names to variants/cards using shared resolver
     type Mapped = {
       cardId: number;
       variantId: number | null;
@@ -227,10 +226,7 @@ export async function POST(req: NextRequest) {
 
     // Batch lookup: fetch all cards and variants in one query
     const uniqueNames = [...new Set(entries.map((e) => e.name))];
-    const resolvedByName = await findBestVariantsForNames(
-      uniqueNames,
-      preferredSets
-    );
+    const { resolved: resolvedByName } = await resolveCardNames(uniqueNames);
 
     for (const { name, count } of entries) {
       const found = resolvedByName.get(name);
@@ -538,172 +534,6 @@ function normalizeName(s: string): string {
     .replace(/[\u201C\u201D]/g, '"') // curly quotes -> straight
     .replace(/\s+/g, " ")
     .trim();
-}
-
-function canonicalize(s: string): string {
-  return s
-    .toLowerCase()
-    .replace(/[\s\-–—_,:;.!?()/]+/g, " ")
-    .replace(/\s+/g, " ")
-    .replace(/[\u2018\u2019]/g, "'")
-    .trim();
-}
-
-// Batched version: find best variants for multiple names in minimal queries
-async function findBestVariantsForNames(
-  names: string[],
-  setPreference: string[]
-): Promise<
-  Map<
-    string,
-    {
-      cardId: number;
-      variantId: number | null;
-      setId: number | null;
-      typeText: string | null;
-      type: string | null;
-    }
-  >
-> {
-  const result = new Map<
-    string,
-    {
-      cardId: number;
-      variantId: number | null;
-      setId: number | null;
-      typeText: string | null;
-      type: string | null;
-    }
-  >();
-
-  if (names.length === 0) return result;
-
-  // Fetch all cards that might match any of the names (case-insensitive)
-  const cards = await prisma.card.findMany({
-    where: { name: { in: names, mode: "insensitive" } },
-    select: {
-      id: true,
-      name: true,
-      variants: {
-        select: {
-          id: true,
-          setId: true,
-          typeText: true,
-          set: { select: { name: true } },
-        },
-      },
-    },
-  });
-
-  // Build a map from canonicalized name to card
-  const cardByCanon = new Map<
-    string,
-    {
-      id: number;
-      name: string;
-      variants: {
-        id: number;
-        setId: number | null;
-        typeText: string | null;
-        set: { name: string } | null;
-      }[];
-    }
-  >();
-  for (const c of cards) {
-    cardByCanon.set(canonicalize(c.name), c);
-  }
-
-  // Score function for set preference
-  const score = (setName: string | null) => {
-    if (!setName) return -1;
-    const idx = setPreference.indexOf(setName);
-    return idx < 0 ? 0 : setPreference.length - idx;
-  };
-
-  // Collect cards that need metadata fallback
-  const needsMetadata: { name: string; cardId: number; setId: number }[] = [];
-
-  // Process each name
-  for (const name of names) {
-    const canon = canonicalize(name);
-    const card = cardByCanon.get(canon);
-
-    if (!card) continue;
-
-    // Flatten variants and score by set preference
-    type Flat = {
-      variantId: number | null;
-      setId: number | null;
-      typeText: string | null;
-      setName: string | null;
-    };
-    const flats: Flat[] = [];
-
-    if (!card.variants.length) {
-      flats.push({
-        variantId: null,
-        setId: null,
-        typeText: null,
-        setName: null,
-      });
-    } else {
-      for (const v of card.variants) {
-        flats.push({
-          variantId: v.id,
-          setId: v.setId,
-          typeText: v.typeText,
-          setName: v.set?.name ?? null,
-        });
-      }
-    }
-
-    if (!flats.length) continue;
-
-    flats.sort((a, b) => score(b.setName) - score(a.setName));
-    const top = flats[0];
-
-    result.set(name, {
-      cardId: card.id,
-      variantId: top.variantId,
-      setId: top.setId,
-      typeText: top.typeText,
-      type: null, // Will be populated from CardSetMetadata
-    });
-
-    // Track all cards that have a setId for metadata lookup
-    if (top.setId != null) {
-      needsMetadata.push({ name, cardId: card.id, setId: top.setId });
-    }
-  }
-
-  // Batch fetch metadata to get proper card type (not flavor typeText)
-  if (needsMetadata.length > 0) {
-    const metaConditions = needsMetadata.map((m) => ({
-      cardId: m.cardId,
-      setId: m.setId,
-    }));
-
-    const metadata = await prisma.cardSetMetadata.findMany({
-      where: { OR: metaConditions },
-      select: { cardId: true, setId: true, type: true },
-    });
-
-    const metaByKey = new Map(
-      metadata.map((m) => [`${m.cardId}:${m.setId}`, m.type])
-    );
-
-    for (const { name, cardId, setId } of needsMetadata) {
-      const type = metaByKey.get(`${cardId}:${setId}`);
-      if (type) {
-        const existing = result.get(name);
-        if (existing) {
-          result.set(name, { ...existing, type });
-        }
-      }
-    }
-  }
-
-  return result;
 }
 
 // Import directly from Curiosa tRPC response
