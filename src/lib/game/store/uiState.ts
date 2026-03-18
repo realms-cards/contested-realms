@@ -1,11 +1,12 @@
 import type { StateCreator } from "zustand";
-import type { CardRef, GameState, PlayerKey } from "./types";
+import type { CardRef, CellKey, GameState, PlayerKey } from "./types";
 
 const CAMERA_MODE_KEY = "sorcery:cameraMode";
 const CARD_PREVIEWS_KEY = "sorcery:cardPreviewsEnabled";
 const UI_HIDDEN_KEY = "sorcery:uiHidden";
 const TAP_CONTROLS_KEY = "sorcery:tapControlsMode";
 const CONTEXT_MENU_ICONS_KEY = "sorcery:contextMenuIcons";
+const CONTROL_SCHEME_KEY = "sorcery:controlScheme";
 
 /**
  * Load persisted camera mode preference from localStorage.
@@ -126,6 +127,27 @@ function saveContextMenuIcons(enabled: boolean): void {
   } catch {}
 }
 
+/**
+ * Load control scheme preference from localStorage.
+ * Defaults to "default" during SSR and when no preference is stored.
+ */
+function loadControlScheme(): GameState["controlScheme"] {
+  if (typeof window === "undefined") return "default";
+  try {
+    const stored = localStorage.getItem(CONTROL_SCHEME_KEY);
+    if (stored === "tts") return "tts";
+  } catch {}
+  return "default";
+}
+
+/** Persist control scheme preference to localStorage */
+function saveControlScheme(scheme: GameState["controlScheme"]): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(CONTROL_SCHEME_KEY, scheme);
+  } catch {}
+}
+
 /** Persist camera mode preference to localStorage and API */
 function saveCameraMode(mode: GameState["cameraMode"]): void {
   if (typeof window === "undefined") return;
@@ -166,6 +188,12 @@ export type UiSlice = Pick<
   | "toggleTapControlsMode"
   | "contextMenuIcons"
   | "toggleContextMenuIcons"
+  | "controlScheme"
+  | "setControlScheme"
+  | "toggleControlScheme"
+  | "marqueeSelection"
+  | "marqueeSelectPermanents"
+  | "clearMarqueeSelection"
   | "uiHidden"
   | "setUiHidden"
   | "toggleUiHidden"
@@ -221,6 +249,8 @@ type UiStateDefaults = Pick<
   | "cardPreviewsEnabled"
   | "tapControlsMode"
   | "contextMenuIcons"
+  | "controlScheme"
+  | "marqueeSelection"
   | "uiHidden"
   | "turnOverlayActive"
   | "switchSiteSource"
@@ -248,6 +278,8 @@ export const createInitialUiState = (): UiStateDefaults => ({
   cardPreviewsEnabled: loadCardPreviewsEnabled(),
   tapControlsMode: loadTapControlsMode(),
   contextMenuIcons: loadContextMenuIcons(),
+  controlScheme: loadControlScheme(),
+  marqueeSelection: [],
   uiHidden: loadUiHidden(),
   turnOverlayActive: false,
   switchSiteSource: null,
@@ -372,6 +404,21 @@ export const createUiSlice: StateCreator<GameState, [], [], UiSlice> = (
       saveContextMenuIcons(newEnabled);
       return { contextMenuIcons: newEnabled };
     }),
+
+  setControlScheme: (scheme: GameState["controlScheme"]) => {
+    saveControlScheme(scheme);
+    set({ controlScheme: scheme, marqueeSelection: [] });
+  },
+  toggleControlScheme: () =>
+    set((state) => {
+      const newScheme = state.controlScheme === "tts" ? "default" : "tts";
+      saveControlScheme(newScheme);
+      return { controlScheme: newScheme, marqueeSelection: [] };
+    }),
+  marqueeSelectPermanents: (
+    entries: Array<{ at: CellKey; index: number }>,
+  ) => set({ marqueeSelection: entries }),
+  clearMarqueeSelection: () => set({ marqueeSelection: [] }),
 
   setUiHidden: (hidden: boolean) => {
     saveUiHidden(hidden);

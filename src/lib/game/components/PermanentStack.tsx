@@ -429,6 +429,7 @@ export function PermanentStack({
   void _baseMarginZ; // Z offset is now computed directly, not from marginZ config
 
   const key = tileKey;
+  const marqueeSelection = useGameStore((s) => s.marqueeSelection);
   const boardHalfW = (boardSize.w * TILE_SIZE) / 2;
   const boardHalfH = (boardSize.h * TILE_SIZE) / 2;
 
@@ -488,6 +489,9 @@ export function PermanentStack({
           selectedPermanent &&
           selectedPermanent.at === key &&
           selectedPermanent.index === idx;
+        const isMarqueeSelected = marqueeSelection.some(
+          (s) => s.at === key && s.index === idx,
+        );
         const cardType = (p.card.type || "").toLowerCase();
         const isToken = cardType.includes("token");
         const tokenName = (p.card.name || "").toLowerCase();
@@ -564,10 +568,14 @@ export function PermanentStack({
         const remotePermanentColor = getRemoteHighlightColor(p.card ?? null, {
           instanceKey: permId,
         });
-        const permanentGlowColor =
-          remotePermanentColor ?? PLAYER_COLORS[ownerSeat];
+        const MARQUEE_HIGHLIGHT = "#22d3ee"; // cyan-400
+        const permanentGlowColor = isMarqueeSelected
+          ? MARQUEE_HIGHLIGHT
+          : (remotePermanentColor ?? PLAYER_COLORS[ownerSeat]);
         const renderPermanentGlow =
-          !isHandVisible && !isSiteCard && (isSel || !!remotePermanentColor);
+          !isHandVisible &&
+          !isSiteCard &&
+          (isSel || isMarqueeSelected || !!remotePermanentColor);
         const isLocalDragGhost =
           useGhostOnlyBoardDrag &&
           dragging &&

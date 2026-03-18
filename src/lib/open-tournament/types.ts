@@ -4,8 +4,13 @@
  */
 
 /** Settings stored in Tournament.settings JSON for open format tournaments */
+/** Game format for display/organization (not enforced by the system) */
+export type OpenGameFormat = "constructed" | "sealed" | "draft";
+
 export interface OpenTournamentSettings {
   mode: "open";
+  /** The game format players will use */
+  gameFormat: OpenGameFormat;
   /** Play Network event page URL (link only, no API) */
   playNetworkUrl?: string;
   matchResolution: {
@@ -63,6 +68,7 @@ export interface OpenTournamentPlayer {
 /** Default settings for new open tournaments */
 export const DEFAULT_OPEN_TOURNAMENT_SETTINGS: OpenTournamentSettings = {
   mode: "open",
+  gameFormat: "constructed",
   matchResolution: {
     allowRealms: true,
     allowManualReport: true,

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useOnline, type AvailablePlayer } from "@/app/online/online-context";
 
 interface Registration {
   playerId: string;
@@ -20,6 +21,7 @@ interface Standing {
 
 interface Props {
   tournamentId: string;
+  tournamentName: string;
   registrations: Registration[];
   standings: Standing[];
   isHost: boolean;
@@ -29,42 +31,43 @@ interface Props {
 
 export function OpenTournamentPlayerManager({
   tournamentId,
+  tournamentName,
   registrations,
   standings,
   isHost,
   isActive,
   onRefresh,
 }: Props) {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<Array<{ id: string; name: string | null }>>([]);
-  const [searching, setSearching] = useState(false);
-  const [adding, setAdding] = useState(false);
+  const {
+    transport,
+    availablePlayers,
+    availablePlayersLoading,
+    requestPlayers,
+  } = useOnline();
+  const [adding, setAdding] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showOnlinePlayers, setShowOnlinePlayers] = useState(false);
 
   const standingsMap = new Map(standings.map((s) => [s.playerId, s]));
   const activePlayers = registrations.filter((r) => r.seatStatus === "active");
   const eliminatedPlayers = registrations.filter((r) => r.seatStatus === "vacant");
+  const registeredIds = new Set(registrations.map((r) => r.playerId));
 
-  const handleSearch = async () => {
-    if (!searchQuery.trim()) return;
-    setSearching(true);
-    setError(null);
-    try {
-      const res = await fetch(
-        `/api/users/search?q=${encodeURIComponent(searchQuery.trim())}&limit=10`,
-      );
-      if (!res.ok) throw new Error("Search failed");
-      const data = await res.json();
-      setSearchResults(data.users ?? data ?? []);
-    } catch {
-      setError("Failed to search users");
-    } finally {
-      setSearching(false);
+  // Load online players when the panel is opened
+  const handleShowOnline = useCallback(() => {
+    setShowOnlinePlayers(true);
+    requestPlayers({ reset: true, sort: "alphabetical" });
+  }, [requestPlayers]);
+
+  // Auto-load online players on mount for host
+  useEffect(() => {
+    if (isHost && isActive) {
+      requestPlayers({ reset: true, sort: "alphabetical" });
     }
-  };
+  }, [isHost, isActive, requestPlayers]);
 
   const handleAddPlayer = async (userId: string) => {
-    setAdding(true);
+    setAdding(userId);
     setError(null);
     try {
       const res = await fetch(`/api/open-tournaments/${tournamentId}/players`, {
@@ -74,14 +77,26 @@ export function OpenTournamentPlayerManager({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to add player");
-      setSearchResults([]);
-      setSearchQuery("");
       onRefresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to add player");
     } finally {
-      setAdding(false);
+      setAdding(null);
     }
+  };
+
+  const handleInvitePlayer = (player: AvailablePlayer) => {
+    // Send socket invite notification
+    const socket = transport?.getSocket();
+    if (socket) {
+      socket.emit("sendTournamentInvite", {
+        targetPlayerId: player.userId,
+        tournamentId,
+        tournamentName,
+      });
+    }
+    // Also add them to the tournament directly
+    handleAddPlayer(player.userId);
   };
 
   const handleRemovePlayer = async (userId: string) => {
@@ -101,13 +116,21 @@ export function OpenTournamentPlayerManager({
     }
   };
 
-  const registeredIds = new Set(registrations.map((r) => r.playerId));
-
   return (
     <div className="bg-slate-800 border border-slate-700 rounded-lg p-4">
-      <h3 className="text-sm font-medium text-slate-300 mb-3">
-        Players ({activePlayers.length})
-      </h3>
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-medium text-slate-300">
+          Players ({activePlayers.length})
+        </h3>
+        {isHost && isActive && (
+          <button
+            onClick={handleShowOnline}
+            className="text-xs text-blue-400 hover:text-blue-300"
+          >
+            {showOnlinePlayers ? "Refresh" : "Show Online Players"}
+          </button>
+        )}
+      </div>
 
       {error && (
         <div className="bg-red-900/50 border border-red-700 text-red-300 px-3 py-2 rounded text-xs mb-3">
@@ -115,50 +138,64 @@ export function OpenTournamentPlayerManager({
         </div>
       )}
 
-      {/* Add Player (host only) */}
-      {isHost && isActive && (
+      {/* Online Players List (host only) */}
+      {isHost && isActive && showOnlinePlayers && (
         <div className="mb-4">
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-              placeholder="Search users to add..."
-              className="flex-1 bg-slate-700 border border-slate-600 rounded px-3 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="text-xs font-medium text-slate-400">
+              Online Players
+              {availablePlayersLoading && (
+                <span className="ml-1 text-slate-500">(loading...)</span>
+              )}
+            </h4>
             <button
-              onClick={handleSearch}
-              disabled={searching || !searchQuery.trim()}
-              className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-3 py-1.5 rounded text-sm"
+              onClick={() => requestPlayers({ reset: true, sort: "alphabetical" })}
+              disabled={availablePlayersLoading}
+              className="text-xs text-slate-500 hover:text-slate-300 disabled:opacity-50"
             >
-              {searching ? "..." : "Search"}
+              Refresh
             </button>
           </div>
-
-          {searchResults.length > 0 && (
-            <div className="mt-2 bg-slate-700 border border-slate-600 rounded max-h-40 overflow-y-auto">
-              {searchResults.map((user) => (
-                <div
-                  key={user.id}
-                  className="flex items-center justify-between px-3 py-2 hover:bg-slate-600 border-b border-slate-600 last:border-b-0"
-                >
-                  <span className="text-sm text-white">{user.name ?? "Unknown"}</span>
-                  {registeredIds.has(user.id) ? (
-                    <span className="text-xs text-slate-400">Already added</span>
-                  ) : (
-                    <button
-                      onClick={() => handleAddPlayer(user.id)}
-                      disabled={adding}
-                      className="text-xs bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white px-2 py-1 rounded"
-                    >
-                      Add
-                    </button>
+          <div className="bg-slate-700 border border-slate-600 rounded max-h-48 overflow-y-auto">
+            {availablePlayers.length === 0 && !availablePlayersLoading && (
+              <div className="px-3 py-2 text-xs text-slate-500">
+                No online players found
+              </div>
+            )}
+            {availablePlayers.map((player) => (
+              <div
+                key={player.userId}
+                className="flex items-center justify-between px-3 py-2 hover:bg-slate-600 border-b border-slate-600 last:border-b-0"
+              >
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`w-2 h-2 rounded-full ${
+                      player.presence.inMatch
+                        ? "bg-amber-400"
+                        : "bg-green-400"
+                    }`}
+                  />
+                  <span className="text-sm text-white">
+                    {player.displayName}
+                  </span>
+                  {player.presence.inMatch && (
+                    <span className="text-xs text-amber-400">in match</span>
                   )}
                 </div>
-              ))}
-            </div>
-          )}
+                {registeredIds.has(player.userId) ? (
+                  <span className="text-xs text-slate-400">Joined</span>
+                ) : (
+                  <button
+                    onClick={() => handleInvitePlayer(player)}
+                    disabled={adding === player.userId}
+                    className="text-xs bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-2 py-1 rounded"
+                  >
+                    {adding === player.userId ? "..." : "Invite"}
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -213,9 +250,10 @@ export function OpenTournamentPlayerManager({
         </div>
       )}
 
-      {activePlayers.length === 0 && (
+      {activePlayers.length === 0 && !showOnlinePlayers && (
         <div className="text-center py-4 text-slate-500 text-sm">
-          No players yet. {isHost ? "Search and add players above." : ""}
+          No players yet.{" "}
+          {isHost ? "Click \"Show Online Players\" to invite players." : ""}
         </div>
       )}
     </div>

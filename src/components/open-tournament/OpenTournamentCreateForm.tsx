@@ -9,6 +9,7 @@ interface Props {
 
 export function OpenTournamentCreateForm({ onCreated }: Props) {
   const [name, setName] = useState(() => generateTournamentName());
+  const [gameFormat, setGameFormat] = useState<"constructed" | "sealed" | "draft">("constructed");
   const [maxPlayers, setMaxPlayers] = useState(16);
   const [isPrivate, setIsPrivate] = useState(false);
   const [playNetworkUrl, setPlayNetworkUrl] = useState("");
@@ -27,6 +28,7 @@ export function OpenTournamentCreateForm({ onCreated }: Props) {
     try {
       const body = {
         name: name.trim(),
+        gameFormat,
         maxPlayers,
         isPrivate,
         ...(playNetworkUrl.trim() ? { playNetworkUrl: playNetworkUrl.trim() } : {}),
@@ -77,6 +79,32 @@ export function OpenTournamentCreateForm({ onCreated }: Props) {
           minLength={3}
           maxLength={100}
         />
+      </div>
+
+      {/* Game Format */}
+      <div>
+        <label className="block text-sm font-medium text-slate-300 mb-1">
+          Game Format
+        </label>
+        <div className="flex gap-2">
+          {(["constructed", "sealed", "draft"] as const).map((f) => (
+            <button
+              key={f}
+              type="button"
+              className={`flex-1 px-3 py-2 rounded text-sm capitalize ${
+                gameFormat === f
+                  ? "bg-blue-600 text-white"
+                  : "bg-slate-700 text-slate-300 hover:bg-slate-600"
+              }`}
+              onClick={() => setGameFormat(f)}
+            >
+              {f === "constructed" ? "Constructed" : f === "sealed" ? "Sealed" : "Draft"}
+            </button>
+          ))}
+        </div>
+        <p className="text-xs text-slate-500 mt-1">
+          Players are expected to use this format — deck prep is handled externally
+        </p>
       </div>
 
       {/* Max Players */}

@@ -126,6 +126,18 @@ export default function OpenTournamentDashboardPage() {
     (r) => r.seatStatus === "active",
   ).length;
 
+  const handleEndEvent = async () => {
+    if (!confirm("End this event? This cannot be undone.")) return;
+    try {
+      const res = await fetch(`/api/open-tournaments/${id}`, { method: "PUT" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to end event");
+      fetchTournament();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to end event");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-900 text-white">
       <div className="container mx-auto px-4 py-8">
@@ -154,6 +166,11 @@ export default function OpenTournamentDashboardPage() {
               >
                 {tournament.status}
               </span>
+              {settings.gameFormat && (
+                <span className="px-2 py-0.5 rounded-full text-xs font-medium border capitalize bg-slate-700 text-slate-300 border-slate-600">
+                  {settings.gameFormat}
+                </span>
+              )}
               <span className="text-slate-400 text-sm">
                 {activePlayerCount} players
               </span>
@@ -166,17 +183,29 @@ export default function OpenTournamentDashboardPage() {
             </div>
           </div>
 
-          {/* Play Network Link */}
-          {settings.playNetworkUrl && (
-            <a
-              href={settings.playNetworkUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-            >
-              Play Network Event
-            </a>
-          )}
+          <div className="flex items-center gap-3">
+            {/* Play Network Link */}
+            {settings.playNetworkUrl && (
+              <a
+                href={settings.playNetworkUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+              >
+                Play Network Event
+              </a>
+            )}
+
+            {/* End Event Button (host only) */}
+            {isHost && tournament.status === "active" && (
+              <button
+                onClick={handleEndEvent}
+                className="bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+              >
+                End Event
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Tabs */}
@@ -203,6 +232,7 @@ export default function OpenTournamentDashboardPage() {
             <div className="lg:col-span-2">
               <OpenTournamentPlayerManager
                 tournamentId={tournament.id}
+                tournamentName={tournament.name}
                 registrations={tournament.registrations}
                 standings={tournament.standings}
                 isHost={isHost}
