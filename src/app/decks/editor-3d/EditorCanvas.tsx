@@ -1,45 +1,23 @@
 "use client";
 
 import { OrbitControls } from "@react-three/drei";
-import type { ThreeEvent } from "@react-three/fiber";
 import { useThree } from "@react-three/fiber";
-import React, { useCallback, useEffect } from "react";
+import React, { useEffect, useMemo } from "react";
 import { MOUSE, TOUCH } from "three";
 import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { ClientCanvas } from "@/components/game/ClientCanvas";
+import { DynamicBoard as Board } from "@/components/game/dynamic-3d";
 import TrackpadOrbitAdapter from "@/lib/controls/TrackpadOrbitAdapter";
-import { BoardEnvironment } from "@/lib/game/components/BoardEnvironment";
-import { BASE_TILE_SIZE, MAT_RATIO } from "@/lib/game/constants";
 import { Physics } from "@/lib/game/physics";
+import { createGameStore } from "@/lib/game/store";
 import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
 import { useZoomKeyboardShortcuts } from "@/lib/hooks/useZoomKeyboardShortcuts";
-
-// Default board dimensions (5x4 grid)
-const BOARD_W = 5;
-const BOARD_H = 4;
-const baseGridW = BOARD_W * BASE_TILE_SIZE;
-const baseGridH = BOARD_H * BASE_TILE_SIZE;
-const matH = Math.max(baseGridH, baseGridW / MAT_RATIO);
-const matW = matH === baseGridH ? baseGridH * MAT_RATIO : baseGridW;
-
-// Marquee selection plane size — slightly larger than mat
-const PLANE_W = matW + 4;
-const PLANE_H = matH + 4;
 
 interface EditorCanvasProps {
   children?: React.ReactNode;
   orbitLocked?: boolean;
-  /** Marquee pointer callbacks from useMarqueeSelection */
-  onMarqueePointerDown?: (
-    screenX: number,
-    screenY: number,
-    worldX: number,
-    worldZ: number,
-  ) => void;
-  onMarqueePointerMove?: (screenX: number, screenY: number) => void;
-  onMarqueePointerUp?: (worldX: number, worldZ: number, shiftKey: boolean) => void;
-  onMarqueeCancel?: () => void;
+  onStoreReady?: (storeApi: ReturnType<typeof createGameStore>) => void;
 }
 
 interface PanBoundsProps {
@@ -52,11 +30,23 @@ interface PanBoundsProps {
 export default function EditorCanvas({
   children,
   orbitLocked = false,
-  onMarqueePointerDown,
-  onMarqueePointerMove,
-  onMarqueePointerUp,
-  onMarqueeCancel,
+  onStoreReady,
 }: EditorCanvasProps) {
+  const storeApi = useMemo<ReturnType<typeof createGameStore>>(
+    () => createGameStore(),
+    []
+  );
+
+  useEffect(() => {
+    storeApi.getState().resetGameState();
+    storeApi.getState().clearSnapshotsForNewMatch();
+  }, [storeApi]);
+
+  // Notify parent of store availability
+  useEffect(() => {
+    onStoreReady?.(storeApi);
+  }, [storeApi, onStoreReady]);
+
   return (
     <div className="absolute inset-0 w-full h-full">
       <ClientCanvas
@@ -93,21 +83,7 @@ export default function EditorCanvas({
           color="#b4c5e4"
         />
         <Physics gravity={[0, -9.81, 0]}>
-          {/* Table + environment lighting (no game grid) */}
-          <BoardEnvironment
-            matW={matW}
-            matH={matH}
-            showPlaymat={false}
-            showOverlay={false}
-            showTable
-          />
-          {/* Marquee selection plane — invisible, catches left-click on empty surface */}
-          <MarqueeSelectionPlane
-            onMarqueePointerDown={onMarqueePointerDown}
-            onMarqueePointerMove={onMarqueePointerMove}
-            onMarqueePointerUp={onMarqueePointerUp}
-            onMarqueeCancel={onMarqueeCancel}
-          />
+          <Board noRaycast interactionMode="spectator" storeApi={storeApi} />
           {children}
         </Physics>
         <OrbitControls
@@ -141,68 +117,6 @@ export default function EditorCanvas({
         <TrackpadOrbitAdapter />
       </ClientCanvas>
     </div>
-  );
-}
-
-/**
- * Invisible plane at board level that detects left-click drag on empty surface
- * for marquee (rubber-band) selection in the editor.
- */
-function MarqueeSelectionPlane({
-  onMarqueePointerDown,
-  onMarqueePointerMove,
-  onMarqueePointerUp,
-  onMarqueeCancel,
-}: {
-  onMarqueePointerDown?: (
-    screenX: number,
-    screenY: number,
-    worldX: number,
-    worldZ: number,
-  ) => void;
-  onMarqueePointerMove?: (screenX: number, screenY: number) => void;
-  onMarqueePointerUp?: (worldX: number, worldZ: number, shiftKey: boolean) => void;
-  onMarqueeCancel?: () => void;
-}) {
-  const handlePointerDown = useCallback(
-    (e: ThreeEvent<PointerEvent>) => {
-      if (e.nativeEvent.button !== 0) return;
-      onMarqueePointerDown?.(
-        e.nativeEvent.clientX,
-        e.nativeEvent.clientY,
-        e.point.x,
-        e.point.z,
-      );
-    },
-    [onMarqueePointerDown],
-  );
-
-  const handlePointerMove = useCallback(
-    (e: ThreeEvent<PointerEvent>) => {
-      onMarqueePointerMove?.(e.nativeEvent.clientX, e.nativeEvent.clientY);
-    },
-    [onMarqueePointerMove],
-  );
-
-  const handlePointerUp = useCallback(
-    (e: ThreeEvent<PointerEvent>) => {
-      onMarqueePointerUp?.(e.point.x, e.point.z, e.nativeEvent.shiftKey);
-    },
-    [onMarqueePointerUp],
-  );
-
-  return (
-    <mesh
-      position={[0, -0.01, 0]}
-      rotation-x={-Math.PI / 2}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onPointerCancel={() => onMarqueeCancel?.()}
-    >
-      <planeGeometry args={[PLANE_W, PLANE_H]} />
-      <meshBasicMaterial visible={false} />
-    </mesh>
   );
 }
 

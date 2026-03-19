@@ -15,9 +15,7 @@ import {
 } from "react";
 import DeckPanels from "@/app/decks/editor-3d/DeckPanels";
 import DraggableCard3D from "@/app/decks/editor-3d/DraggableCard3D";
-import { EditorMarqueeActionBar } from "@/app/decks/editor-3d/EditorMarqueeActionBar";
 import useCardMeta from "@/app/decks/editor-3d/hooks/useCardMeta";
-import { useMarqueeSelection } from "@/app/decks/editor-3d/hooks/useMarqueeSelection";
 import useSealedTimer from "@/app/decks/editor-3d/hooks/useSealedTimer";
 import { useOnline } from "@/app/online/online-context";
 import FloatingChat from "@/components/chat/FloatingChat";
@@ -38,11 +36,9 @@ import {
   computeStackPositions,
   categorizeCard,
 } from "@/lib/game/cardSorting";
-import {
-  MarqueeOverlayWithRef,
-  useMarqueeOverlayRef,
-} from "@/lib/game/components/MarqueeOverlay";
 import TextureCache from "@/lib/game/components/TextureCache";
+import { CARD_LONG, CARD_SHORT, TILE_SIZE } from "@/lib/game/constants";
+import { createInitialBoard } from "@/lib/game/store";
 
 const RightPanel = dynamic(() => import("@/app/decks/editor-3d/RightPanel"), {
   ssr: false,
@@ -63,10 +59,6 @@ const EditorCanvas = dynamic(
     // Keep simple to avoid heavy loaders on first paint
     loading: () => null,
   },
-);
-const Editor2DView = dynamic(
-  () => import("@/app/decks/editor-3d/Editor2DView"),
-  { ssr: false },
 );
 
 // Stable constant for standard site names (tournament legal)
@@ -126,6 +118,15 @@ type PickItem = {
 // Using shared card types from '@/lib/game/cardSorting' (Pick3D, CardMeta)
 
 // DraggableCard3D moved to its own module for clarity and bundle-splitting
+
+// Board-based anchor for the Collection fan layout (bottom-left of the playmat)
+const INITIAL_BOARD = createInitialBoard();
+const GRID_HALF_W = (INITIAL_BOARD.size.w * TILE_SIZE) / 2;
+const GRID_HALF_H = (INITIAL_BOARD.size.h * TILE_SIZE) / 2;
+// Place the collection fan inside the board, at the lower-left corner region.
+// We keep a small margin from the true edge so cards remain fully on the mat.
+const COLLECTION_ANCHOR_X = -GRID_HALF_W + CARD_SHORT * 0.6;
+const COLLECTION_ANCHOR_Z = GRID_HALF_H - CARD_LONG * 0.6;
 
 function AuthenticatedDeckEditor() {
   const { status } = useSession();
@@ -198,68 +199,26 @@ function AuthenticatedDeckEditor() {
   >("waiting");
   const [orbitLocked, setOrbitLocked] = useState(false);
 
-  // Sorting toggle — default ON (auto-stacking). Draft mode with existing positions will override.
-  const [isSortingEnabled, setIsSortingEnabled] = useState(true);
-
-  // 2D/3D view mode
-  const [viewMode, setViewMode] = useState<"3d" | "2d">("3d");
-
-  // Marquee selection
-  const marquee = useMarqueeSelection();
-  const { rectRef: marqueeRectRef, updateRect: updateMarqueeRect } =
-    useMarqueeOverlayRef();
-
-  // Update visual overlay when marquee rect changes
-  useEffect(() => {
-    updateMarqueeRect(marquee.marqueeRect);
-  }, [marquee.marqueeRect, updateMarqueeRect]);
-
-  // Bridge marquee pointer events to the hook, passing current pick3D for hit-testing
-  const pick3DRef = useRef<Pick3D[]>([]);
-
-  const {
-    onMarqueePointerDown: mqPointerDown,
-    onMarqueePointerMove: mqPointerMove,
-    onMarqueePointerUp: mqPointerUp,
-    clearSelection: mqClearSelection,
-    selectedIds: mqSelectedIds,
-    isMarqueeDragging: mqIsDragging,
-    commitIfActive: mqCommitIfActive,
-  } = marquee;
-
-  const handleMarqueePointerDown = useCallback(
-    (screenX: number, screenY: number, worldX: number, worldZ: number) => {
-      if (isSortingEnabled) return; // Marquee only in unsorted mode
-      mqPointerDown(screenX, screenY, worldX, worldZ);
+  // Editor canvas store (for playmat toggle)
+  const [editorShowPlaymat, setEditorShowPlaymat] = useState(true);
+  const editorStoreRef = useRef<ReturnType<
+    typeof import("@/lib/game/store").createGameStore
+  > | null>(null);
+  const handleEditorStoreReady = useCallback(
+    (
+      storeApi: ReturnType<typeof import("@/lib/game/store").createGameStore>,
+    ) => {
+      editorStoreRef.current = storeApi;
     },
-    [mqPointerDown, isSortingEnabled],
+    [],
   );
-  const handleMarqueePointerMove = useCallback(
-    (screenX: number, screenY: number) => {
-      if (isSortingEnabled) return;
-      mqPointerMove(screenX, screenY);
-    },
-    [mqPointerMove, isSortingEnabled],
-  );
-  const handleMarqueePointerUp = useCallback(
-    (worldX: number, worldZ: number, shiftKey: boolean) => {
-      if (isSortingEnabled) return;
-      mqPointerUp(worldX, worldZ, pick3DRef.current, shiftKey);
-    },
-    [mqPointerUp, isSortingEnabled],
-  );
-
-  // Escape clears marquee selection
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      if (mqSelectedIds.size === 0) return;
-      e.preventDefault();
-      mqClearSelection();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [mqSelectedIds.size, mqClearSelection]);
+  const handleTogglePlaymat = useCallback(() => {
+    if (editorStoreRef.current) {
+      editorStoreRef.current.getState().togglePlaymat();
+      editorStoreRef.current.getState().togglePlaymatOverlay();
+      setEditorShowPlaymat((v) => !v);
+    }
+  }, []);
 
   // Clear transient errors when auth status changes to authenticated
   // Intentionally running once per pick3D change; server batching relies on prior state
@@ -288,9 +247,10 @@ function AuthenticatedDeckEditor() {
   // (prefetch moved below after isDraftMode / isSealed declarations)
 
   // Exact same 3D state as draft-3d
-  // (isSortingEnabled declared earlier, before marquee handlers)
-  // (Stats overlay removed — mana curve & thresholds are now in the top bar)
-  // (picksOpen state removed — RightPanel now manages its own section visibility)
+  const [isSortingEnabled, setIsSortingEnabled] = useState(true);
+  const [statsCollapsed, setStatsCollapsed] = useState(true);
+  const [infoBoxVisible] = useState(true);
+  const [picksOpen, setPicksOpen] = useState(true);
   // Draft-completion mode flag (off by default)
   const [isDraftMode, setIsDraftMode] = useState(false);
   // Ensure we only initialize draft mode once per load
@@ -2135,7 +2095,10 @@ function AuthenticatedDeckEditor() {
 
   // (moved) Load deck from URL parameter after loadDeck is declared
 
-  // (cardsTab state removed — RightPanel now manages its own section visibility)
+  // Tab state for cards view - default to "Your Deck"
+  const [cardsTab, setCardsTab] = useState<
+    "deck" | "sideboard" | "collection" | "all"
+  >("deck");
 
   // Feedback message system
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
@@ -2188,51 +2151,7 @@ function AuthenticatedDeckEditor() {
 
   // Convert picks to Pick3D format (exact same structure as draft-3d)
   const [pick3D, setPick3D] = useState<Pick3D[]>([]);
-  pick3DRef.current = pick3D;
   const [, setNextPickId] = useState(1);
-
-  /**
-   * Sync `picks` (the zone-count source of truth) after batch zone moves on pick3D.
-   * For each card moved, decrements the old zone key and increments the new zone key.
-   */
-  const syncPicksZone = useCallback(
-    (movedCards: Pick3D[], newZone: Zone) => {
-      setPicks((prev) => {
-        const next = { ...prev } as Record<PickKey, PickItem>;
-        for (const p of movedCards) {
-          if (p.zone === newZone) continue;
-          const variantId = p.card.variantId ?? undefined;
-          const decKey = `${p.card.cardId}:${p.zone}:${
-            variantId ?? "x"
-          }` as PickKey;
-          const incKey = `${p.card.cardId}:${newZone}:${
-            variantId ?? "x"
-          }` as PickKey;
-          const dec = next[decKey];
-          if (dec) {
-            if (dec.count > 1)
-              next[decKey] = { ...dec, count: dec.count - 1 };
-            else delete next[decKey];
-          }
-          const inc = next[incKey];
-          next[incKey] = inc
-            ? { ...inc, count: inc.count + 1 }
-            : ({
-                cardId: p.card.cardId,
-                variantId: variantId ?? null,
-                name: p.card.cardName,
-                type: p.card.type,
-                slug: p.card.slug || "",
-                zone: newZone,
-                count: 1,
-                set: p.card.setName || "",
-              } as PickItem);
-        }
-        return next;
-      });
-    },
-    [],
-  );
 
   // Open move context menu for a given card at screen coords
   const openContextMenuForCard = useCallback(
@@ -2480,12 +2399,11 @@ function AuthenticatedDeckEditor() {
   }, [pick3D, metaByCardId]);
 
   const thresholdSummary = useMemo(() => {
-    // Track max threshold per element (highest single-card requirement)
-    const maxPerElement: Record<string, number> = {};
+    const summary: Record<string, number> = {};
     const elements = new Set<string>();
     const validElements = ["air", "water", "earth", "fire"];
     for (const p of pick3D) {
-      if (p.zone !== "Deck") continue;
+      if (p.zone !== "Deck") continue; // deck zone only
       const th = metaByCardId[p.card.cardId]?.thresholds as
         | Record<string, number>
         | undefined
@@ -2497,11 +2415,11 @@ function AuthenticatedDeckEditor() {
         const val = th[k] || 0;
         if (val > 0) {
           elements.add(key);
-          maxPerElement[key] = Math.max(maxPerElement[key] || 0, val);
+          summary[key] = (summary[key] || 0) + val;
         }
       }
     }
-    return { elements: Array.from(elements), summary: maxPerElement };
+    return { elements: Array.from(elements), summary };
   }, [pick3D, metaByCardId]);
 
   const moveOneFromDeckToCollection = useCallback(
@@ -4123,7 +4041,9 @@ function AuthenticatedDeckEditor() {
       }));
       // Filter by owned cards if enabled
       if (ownedOnly && ownedCardIds) {
-        searchResults = searchResults.filter((r) => ownedCardIds.has(r.cardId));
+        searchResults = searchResults.filter((r) =>
+          ownedCardIds.has(r.cardId),
+        );
       }
       setLiveSearchResults(searchResults.slice(0, 20));
       setLiveSearchLoading(false);
@@ -4269,42 +4189,14 @@ function AuthenticatedDeckEditor() {
     if (isSortingEnabled) {
       nextRenderOrder.current = 1500; // Reset base render order
     } else {
-      // Entering unsorted mode: lay out Deck cards in a 20-column grid
+      // Reset layer order when entering unstacked mode
       nextLayerIndex.current = 0;
       setCardLayerOrder(new Map());
-      const colSpacing = 0.55;
-      const rowSpacing = 0.8;
-      const maxCols = 20;
-      const startX = -((maxCols - 1) * colSpacing) / 2;
-      const startZ = -3;
-      setPick3D((prev) => {
-        const deckCards = prev.filter((p) => p.zone === "Deck");
-        const others = prev.filter((p) => p.zone !== "Deck");
-        const updated = deckCards.map((card, i) => {
-          const col = i % maxCols;
-          const row = Math.floor(i / maxCols);
-          return {
-            ...card,
-            x: startX + col * colSpacing,
-            z: startZ + row * rowSpacing,
-            pileId: undefined,
-          };
-        });
-        return [...updated, ...others];
-      });
     }
   }, [isSortingEnabled]); // Only reset when sorting is toggled, not when cards change
 
-  // Clear marquee selection when switching to sorted mode
-  useEffect(() => {
-    if (isSortingEnabled) mqClearSelection();
-  }, [isSortingEnabled, mqClearSelection]);
-
   // Click dedupe guard: avoid multiple toggles when overlapping instances receive the same click
   const cardClickGuardRef = useRef<Map<number, number>>(new Map());
-
-  // Store original positions of selected cards at group drag start
-  const groupDragOrigins = useRef<Map<number, { x: number; z: number }> | null>(null);
 
   // Create sorted stack positions using the shared utility
   const stackPositions = useMemo(() => {
@@ -4332,6 +4224,36 @@ function AuthenticatedDeckEditor() {
 
     return sizeMap;
   }, [stackPositions]);
+
+  // Precomputed layout for cards in the Collection zone: bottom-left horizontal stack
+  const collectionLayout = useMemo(() => {
+    const layout = new Map<
+      number,
+      { x: number; z: number; rotationZ: number }
+    >();
+
+    const collectionCards = pick3D.filter((p) => p.zone === "Collection");
+    const n = collectionCards.length;
+    if (n === 0) return layout;
+
+    // Horizontal spacing smaller than card width to create overlap
+    const spacing = CARD_SHORT * 0.35;
+
+    for (let i = 0; i < n; i++) {
+      const p = collectionCards[i];
+
+      const x = COLLECTION_ANCHOR_X + i * spacing;
+      const z = COLLECTION_ANCHOR_Z;
+
+      layout.set(p.id, {
+        x,
+        z,
+        rotationZ: 0,
+      });
+    }
+
+    return layout;
+  }, [pick3D]);
 
   // Convert deck picks to Pick3D format - preserve existing positions when possible
   const positionsRef = useRef<Map<string, { z: number; x: number }>>(new Map());
@@ -5041,202 +4963,139 @@ function AuthenticatedDeckEditor() {
   // Helper function to move specific card by its unique ID
   const moveSpecificCardToSideboard = useCallback(
     (pickId: number) => {
-      // Find the card first, then update both states separately
-      // (nesting setPicks inside setPick3D causes double-fire in StrictMode)
-      const card = pick3D.find((p) => p.id === pickId);
-      if (!card) return;
+      setPick3D((prev) => {
+        const updated = [...prev];
+        const cardIndex = updated.findIndex((p) => p.id === pickId);
 
-      const variantId = card.card.variantId ?? undefined;
+        if (cardIndex === -1) return prev;
 
-      // Special behavior for standard sites: remove them instead of moving to sideboard
-      if (isStandardSite(card.card.cardName)) {
-        setPick3D((prev) => prev.filter((p) => p.id !== pickId));
+        const card = updated[cardIndex];
+        // Special behavior for standard sites: remove them instead of moving to sideboard
+        if (isStandardSite(card.card.cardName)) {
+          // Remove the card entirely
+          updated.splice(cardIndex, 1);
+          // Also decrement picks for this card from Deck zone
+          const variantId = card.card.variantId ?? undefined; // preserve 0
+          setPicks((prevPicks) => {
+            const next = { ...prevPicks } as Record<PickKey, PickItem>;
+            const deckKey = `${card.card.cardId}:Deck:${
+              variantId ?? "x"
+            }` as PickKey;
+            const deckItem = next[deckKey];
+            if (deckItem) {
+              if (deckItem.count > 1)
+                next[deckKey] = { ...deckItem, count: deckItem.count - 1 };
+              else delete next[deckKey];
+            }
+            return next;
+          });
+          return updated;
+        }
+
+        // Normal behavior: move to sideboard
+        const newZ = 1.5 + Math.random() * 0.5;
+        const newX = 0.5 + Math.random() * 3;
+
+        updated[cardIndex] = {
+          ...updated[cardIndex],
+          x: newX,
+          z: newZ,
+          y: undefined,
+          zone: "Sideboard",
+        };
+
+        // Sync picks: move one copy from Deck to Sideboard
+        const variantId = card.card.variantId ?? undefined; // preserve 0
         setPicks((prevPicks) => {
           const next = { ...prevPicks } as Record<PickKey, PickItem>;
-          const deckKey = `${card.card.cardId}:Deck:${variantId ?? "x"}` as PickKey;
+          const deckKey = `${card.card.cardId}:Deck:${
+            variantId ?? "x"
+          }` as PickKey;
+          const sideboardKey = `${card.card.cardId}:Sideboard:${
+            variantId ?? "x"
+          }` as PickKey;
           const deckItem = next[deckKey];
           if (deckItem) {
             if (deckItem.count > 1)
               next[deckKey] = { ...deckItem, count: deckItem.count - 1 };
             else delete next[deckKey];
+            const sbItem = next[sideboardKey];
+            next[sideboardKey] = sbItem
+              ? { ...sbItem, count: sbItem.count + 1 }
+              : {
+                  cardId: card.card.cardId,
+                  variantId: variantId ?? null,
+                  name: card.card.cardName,
+                  type: card.card.type,
+                  slug: card.card.slug || "",
+                  zone: "Sideboard" as Zone,
+                  count: 1,
+                  set: card.card.setName || "",
+                };
           }
           return next;
         });
-        return;
-      }
 
-      // Normal behavior: move to sideboard
-      setPick3D((prev) =>
-        prev.map((p) =>
-          p.id === pickId
-            ? { ...p, zone: "Sideboard" as const, pileId: undefined }
-            : p,
-        ),
-      );
+        return updated;
+      });
+    },
+    [isStandardSite],
+  );
 
+  const moveSpecificCardToDeck = useCallback((pickId: number) => {
+    setPick3D((prev) => {
+      const updated = [...prev];
+      const cardIndex = updated.findIndex((p) => p.id === pickId);
+
+      if (cardIndex === -1) return prev;
+
+      const newZ = -1.5 - Math.random() * 0.5;
+      const newX = -2 + Math.random() * 4;
+
+      updated[cardIndex] = {
+        ...updated[cardIndex],
+        x: newX,
+        z: newZ,
+        y: undefined,
+        zone: "Deck",
+      };
+
+      // Sync picks: move one copy from Sideboard to Deck
+      const card = updated[cardIndex];
+      const variantId = card.card.variantId ?? undefined; // preserve 0
       setPicks((prevPicks) => {
         const next = { ...prevPicks } as Record<PickKey, PickItem>;
-        const deckKey = `${card.card.cardId}:Deck:${variantId ?? "x"}` as PickKey;
-        const sideboardKey = `${card.card.cardId}:Sideboard:${variantId ?? "x"}` as PickKey;
-        const deckItem = next[deckKey];
-        if (deckItem) {
-          if (deckItem.count > 1)
-            next[deckKey] = { ...deckItem, count: deckItem.count - 1 };
-          else delete next[deckKey];
-          const sbItem = next[sideboardKey];
-          next[sideboardKey] = sbItem
-            ? { ...sbItem, count: sbItem.count + 1 }
+        const deckKey = `${card.card.cardId}:Deck:${
+          variantId ?? "x"
+        }` as PickKey;
+        const sideboardKey = `${card.card.cardId}:Sideboard:${
+          variantId ?? "x"
+        }` as PickKey;
+        const sbItem = next[sideboardKey];
+        if (sbItem) {
+          if (sbItem.count > 1)
+            next[sideboardKey] = { ...sbItem, count: sbItem.count - 1 };
+          else delete next[sideboardKey];
+          const dItem = next[deckKey];
+          next[deckKey] = dItem
+            ? { ...dItem, count: dItem.count + 1 }
             : {
                 cardId: card.card.cardId,
                 variantId: variantId ?? null,
                 name: card.card.cardName,
                 type: card.card.type,
                 slug: card.card.slug || "",
-                zone: "Sideboard" as Zone,
+                zone: "Deck" as Zone,
                 count: 1,
                 set: card.card.setName || "",
               };
         }
         return next;
       });
-    },
-    [pick3D, isStandardSite],
-  );
 
-  const moveSpecificCardToDeck = useCallback((pickId: number) => {
-    // Find card first, then update both states separately
-    const card = pick3D.find((p) => p.id === pickId);
-    if (!card) return;
-
-    const variantId = card.card.variantId ?? undefined;
-
-    setPick3D((prev) =>
-      prev.map((p) =>
-        p.id === pickId
-          ? { ...p, zone: "Deck" as const, pileId: undefined }
-          : p,
-      ),
-    );
-
-    setPicks((prevPicks) => {
-      const next = { ...prevPicks } as Record<PickKey, PickItem>;
-      const oldZone = card.zone;
-      const oldKey = `${card.card.cardId}:${oldZone}:${variantId ?? "x"}` as PickKey;
-      const deckKey = `${card.card.cardId}:Deck:${variantId ?? "x"}` as PickKey;
-      const oldItem = next[oldKey];
-      if (oldItem) {
-        if (oldItem.count > 1)
-          next[oldKey] = { ...oldItem, count: oldItem.count - 1 };
-        else delete next[oldKey];
-        const dItem = next[deckKey];
-        next[deckKey] = dItem
-          ? { ...dItem, count: dItem.count + 1 }
-          : {
-              cardId: card.card.cardId,
-              variantId: variantId ?? null,
-              name: card.card.cardName,
-              type: card.card.type,
-              slug: card.card.slug || "",
-              zone: "Deck" as Zone,
-              count: 1,
-              set: card.card.setName || "",
-            };
-      }
-      return next;
+      return updated;
     });
-  }, [pick3D]);
-
-  /** Generic zone transfer by pick ID — used by the 2D drag-and-drop view */
-  const movePickToZone = useCallback(
-    (pickId: number, toZone: Zone) => {
-      // Find the card first, then update both states separately
-      // (nesting setPicks inside setPick3D causes double-fire in StrictMode)
-      const card = pick3D.find((p) => p.id === pickId);
-      if (!card || card.zone === toZone) return;
-
-      const oldZone = card.zone;
-      const variantId = card.card.variantId ?? undefined;
-
-      setPick3D((prev) =>
-        prev.map((p) =>
-          p.id === pickId ? { ...p, zone: toZone, pileId: undefined } : p,
-        ),
-      );
-
-      setPicks((prevPicks) => {
-        const next = { ...prevPicks } as Record<PickKey, PickItem>;
-        const decKey = `${card.card.cardId}:${oldZone}:${
-          variantId ?? "x"
-        }` as PickKey;
-        const incKey = `${card.card.cardId}:${toZone}:${
-          variantId ?? "x"
-        }` as PickKey;
-        const dec = next[decKey];
-        if (dec) {
-          if (dec.count > 1)
-            next[decKey] = { ...dec, count: dec.count - 1 };
-          else delete next[decKey];
-        }
-        const inc = next[incKey];
-        next[incKey] = inc
-          ? { ...inc, count: inc.count + 1 }
-          : ({
-              cardId: card.card.cardId,
-              variantId: variantId ?? null,
-              name: card.card.cardName,
-              type: card.card.type,
-              slug: card.card.slug || "",
-              zone: toZone,
-              count: 1,
-              set: card.card.setName || "",
-            } as PickItem);
-        return next;
-      });
-    },
-    [pick3D],
-  );
-
-  /** Batch move multiple picks to a zone — used by 2D view action bar */
-  const movePicksToZone = useCallback(
-    (pickIds: number[], toZone: Zone) => {
-      const idSet = new Set(pickIds);
-      const moved = pick3D.filter((p) => idSet.has(p.id) && p.zone !== toZone);
-      if (moved.length > 0) {
-        syncPicksZone(moved, toZone);
-        setPick3D((prev) =>
-          prev.map((card) => {
-            if (!idSet.has(card.id) || card.zone === toZone) return card;
-            return { ...card, zone: toZone, pileId: undefined };
-          }),
-        );
-      }
-    },
-    [pick3D, syncPicksZone],
-  );
-
-  /** Batch remove picks — used by 2D view action bar */
-  const removePicks = useCallback(
-    (pickIds: number[]) => {
-      const idSet = new Set(pickIds);
-      const removed = pick3D.filter((p) => idSet.has(p.id));
-      // Decrement picks for each removed card
-      setPicks((prev) => {
-        const next = { ...prev } as Record<PickKey, PickItem>;
-        for (const p of removed) {
-          const variantId = p.card.variantId ?? undefined;
-          const key = `${p.card.cardId}:${p.zone}:${variantId ?? "x"}` as PickKey;
-          const item = next[key];
-          if (item) {
-            if (item.count > 1) next[key] = { ...item, count: item.count - 1 };
-            else delete next[key];
-          }
-        }
-        return next;
-      });
-      setPick3D((prev) => prev.filter((card) => !idSet.has(card.id)));
-    },
-    [pick3D],
-  );
+  }, []);
 
   return (
     <div className="fixed inset-0 w-screen h-[100dvh]">
@@ -5274,33 +5133,11 @@ function AuthenticatedDeckEditor() {
         </div>
       )}
 
-      {/* 2D HTML view */}
-      {viewMode === "2d" && (
-        <Editor2DView
-          pick3D={pick3D}
-          metaByCardId={metaByCardId}
-          pickInfoById={pickInfoById}
-          onHoverPreview={(slug, name, type) =>
-            beginHoverPreview({ slug, name, type }, `2d:${slug}`)
-          }
-          onHoverClear={() => clearHoverPreviewDebounced()}
-          onMoveCard={movePickToZone}
-          onMoveCards={movePicksToZone}
-          onRemoveCards={removePicks}
-          openContextMenu={openContextMenuForCard}
-          showCollection={!isDraftMode && !isSealed}
-          isSortingEnabled={isSortingEnabled}
-        />
-      )}
-
       {/* 3D Game View as the stage - EXACT same as draft-3d (minus draft hand) */}
-      {viewMode === "3d" && <div className="absolute inset-0 w-full h-full">
+      <div className="absolute inset-0 w-full h-full">
         <EditorCanvas
           orbitLocked={orbitLocked}
-          onMarqueePointerDown={handleMarqueePointerDown}
-          onMarqueePointerMove={handleMarqueePointerMove}
-          onMarqueePointerUp={handleMarqueePointerUp}
-          onMarqueeCancel={marquee.onMarqueeCancel}
+          onStoreReady={handleEditorStoreReady}
         >
           {/* 3D Cards with proper stacking order */}
           <group>
@@ -5313,33 +5150,9 @@ function AuthenticatedDeckEditor() {
               });
 
               // Filter out hidden cards unless showHiddenCards is true
-              // Also hide Collection/Sideboard cards — they only appear in the side panels
-              const visibleCards = (
-                showHiddenCards
-                  ? sortedCards
-                  : sortedCards.filter((p) => !hiddenCardIds.has(p.card.cardId))
-              ).filter(
-                (p) => p.zone !== "Collection" && p.zone !== "Sideboard",
-              );
-
-              // Precompute pile groups for unsorted mode: cards sharing a pileId stack together
-              const pileGroups = new Map<string, Pick3D[]>();
-              if (!isSortingEnabled) {
-                for (const p of visibleCards) {
-                  if (p.pileId) {
-                    const arr = pileGroups.get(p.pileId) ?? [];
-                    arr.push(p);
-                    pileGroups.set(p.pileId, arr);
-                  }
-                }
-              }
-              // Map card id → pile stack index
-              const pileIndexMap = new Map<number, { index: number; total: number }>();
-              for (const [, cards] of pileGroups) {
-                cards.forEach((c, i) => {
-                  pileIndexMap.set(c.id, { index: i, total: cards.length });
-                });
-              }
+              const visibleCards = showHiddenCards
+                ? sortedCards
+                : sortedCards.filter((p) => !hiddenCardIds.has(p.card.cardId));
 
               return visibleCards.map((p, cardIndex) => {
                 const isSite = (p.card.type || "")
@@ -5348,47 +5161,48 @@ function AuthenticatedDeckEditor() {
 
                 // Use sorted position if sorting is enabled, otherwise use card's position
                 const stackPos = stackPositions?.get(p.id);
-                const pileInfo = pileIndexMap.get(p.id);
-
                 // Add X offset for each card in stack for better targeting (fan effect)
                 let x = stackPos
                   ? stackPos.x + stackPos.stackIndex * 0.03
                   : p.x;
-                const z = stackPos ? stackPos.z : p.z;
-                const rotationZ = 0;
+                let z = stackPos ? stackPos.z : p.z;
 
-                // Pile cards: add small X fan offset for targeting
-                if (!isSortingEnabled && pileInfo) {
-                  x = p.x + pileInfo.index * 0.03;
+                // Collection zone: override position with bottom-left fan layout
+                let rotationZ = 0;
+                if (p.zone === "Collection") {
+                  const layout = collectionLayout.get(p.id);
+                  if (layout) {
+                    x = layout.x;
+                    z = layout.z;
+                    rotationZ = layout.rotationZ;
+                  }
                 }
 
-                // Calculate base render order
-                const layerIndex = cardLayerOrder.get(p.id) ?? cardIndex;
-                let baseRenderOrder: number;
-                let y: number;
-                let totalInStack: number;
-                let stackIndex: number;
+                // Calculate base render order like draft-3d
+                // Higher stack index = higher render order = rendered on top
+                // In unstacked mode, use interaction-based layering (most recently interacted cards on top)
+                const layerIndex = !stackPos
+                  ? (cardLayerOrder.get(p.id) ?? cardIndex)
+                  : 0;
+                const baseRenderOrder = stackPos
+                  ? 1600 + stackPos.stackIndex * 10
+                  : 1500 + layerIndex;
 
-                if (stackPos) {
-                  // Auto-sorted mode
-                  baseRenderOrder = 1600 + stackPos.stackIndex * 10;
-                  y = 0.002 + stackPos.stackIndex * 0.003;
-                  const stackKey = `${stackPos.x.toFixed(3)},${stackPos.z.toFixed(3)}`;
-                  totalInStack = stackSizes.get(stackKey) || 1;
-                  stackIndex = stackPos.stackIndex;
-                } else if (pileInfo) {
-                  // Manual pile
-                  baseRenderOrder = 1600 + pileInfo.index * 10;
-                  y = 0.002 + pileInfo.index * 0.003;
-                  totalInStack = pileInfo.total;
-                  stackIndex = pileInfo.index;
-                } else {
-                  // Loose card in unsorted mode
-                  baseRenderOrder = 1500 + layerIndex;
-                  y = 0.002 + layerIndex * 0.001;
-                  totalInStack = 1;
-                  stackIndex = 0;
-                }
+                // Calculate Y position with very small stack height so cards "lie" on the mat
+                // rather than floating in tall vertical stacks. We keep a tiny offset per
+                // stackIndex/layerIndex to avoid z-fighting but visually this should look flat.
+                const y = stackPos
+                  ? 0.002 + stackPos.stackIndex * 0.003
+                  : 0.002 + layerIndex * 0.001;
+
+                // Calculate stack information for proper hitbox sizing
+                const stackKey = stackPos
+                  ? `${stackPos.x.toFixed(3)},${stackPos.z.toFixed(3)}`
+                  : null;
+                const totalInStack = stackKey
+                  ? stackSizes.get(stackKey) || 1
+                  : 1;
+                const stackIndex = stackPos ? stackPos.stackIndex : 0;
 
                 return (
                   <DraggableCard3D
@@ -5408,55 +5222,6 @@ function AuthenticatedDeckEditor() {
                     rotationZ={rotationZ}
                     onHoverStart={stableOnHoverStart}
                     onHoverEnd={stableOnHoverEnd}
-                    onDoubleClick={
-                      !isSortingEnabled && p.pileId
-                        ? () => {
-                            // Expand the pile this card belongs to
-                            const pid = p.pileId;
-                            if (!pid) return;
-                            const pileCards = pick3D.filter(
-                              (c) => c.pileId === pid,
-                            );
-                            const n = pileCards.length;
-                            const spacing = 0.55;
-                            const rowSpacing = 0.8;
-                            const maxCols = 20;
-                            const cols = Math.min(n, maxCols);
-                            const startX =
-                              p.x - ((cols - 1) * spacing) / 2;
-                            const baseZ = p.z;
-                            const offsets = new Map<
-                              number,
-                              { x: number; z: number }
-                            >();
-                            pileCards.forEach((c, i) => {
-                              const col = i % maxCols;
-                              const row = Math.floor(i / maxCols);
-                              offsets.set(c.id, {
-                                x: startX + col * spacing,
-                                z: baseZ + row * rowSpacing,
-                              });
-                            });
-                            setPick3D((prev) =>
-                              prev.map((card) => {
-                                const off = offsets.get(card.id);
-                                if (!off) return card;
-                                return {
-                                  ...card,
-                                  x: off.x,
-                                  z: off.z,
-                                  pileId: undefined,
-                                };
-                              }),
-                            );
-                            setFeedbackMessage("Expanded pile");
-                            setTimeout(
-                              () => setFeedbackMessage(null),
-                              2000,
-                            );
-                          }
-                        : undefined
-                    }
                     onContextMenu={(cx, cy) =>
                       openContextMenuForCard(
                         p.card.cardId,
@@ -5465,31 +5230,10 @@ function AuthenticatedDeckEditor() {
                         cy,
                       )
                     }
-                    onDrop={(wx, wz, screenX, screenY) => {
-                      // Check if dropped on a panel drop zone
-                      const dropEl = document.elementFromPoint(screenX, screenY);
-                      const dropZoneEl = dropEl?.closest("[data-drop-zone]");
-                      const dropZone = dropZoneEl?.getAttribute("data-drop-zone") as Zone | null;
-                      if (dropZone && dropZone !== p.zone) {
-                        // Move card to the panel zone
-                        syncPicksZone([p], dropZone);
-                        setPick3D((prev) =>
-                          prev.map((card) =>
-                            card.id === p.id
-                              ? { ...card, zone: dropZone, pileId: undefined }
-                              : card,
-                          ),
-                        );
-                        setFeedbackMessage(
-                          `Moved "${p.card.cardName}" to ${dropZone}`,
-                        );
-                        setTimeout(() => setFeedbackMessage(null), 2000);
-                        return;
-                      }
-
-                      // Move card to drop position
-                      const newZone: Pick3D["zone"] = "Deck";
-                      const oldZone = p.zone;
+                    onDrop={(wx, wz) => {
+                      // Move card to drop position - only sort if sorting is enabled and this is a manual drag
+                      const newZone = wz < 0 ? "Deck" : "Sideboard";
+                      const oldZone = p.zone; // Use explicit zone field
                       const zoneChanged = oldZone !== newZone;
 
                       setPick3D((prev) => {
@@ -5499,45 +5243,16 @@ function AuthenticatedDeckEditor() {
                         );
                         if (cardIndex === -1) return prev;
 
-                        // Check if dropped near an existing pile (within 0.4 units)
-                        const PILE_SNAP_DIST = 0.4;
-                        let targetPileId: string | undefined;
-                        for (const other of updated) {
-                          if (other.id === p.id) continue;
-                          if (!other.pileId) continue;
-                          const dx = other.x - wx;
-                          const dz = other.z - wz;
-                          if (Math.sqrt(dx * dx + dz * dz) < PILE_SNAP_DIST) {
-                            targetPileId = other.pileId;
-                            break;
-                          }
-                        }
+                        // Move the card to the drop position and update zone
+                        updated[cardIndex] = {
+                          ...updated[cardIndex],
+                          x: wx,
+                          z: wz,
+                          y: undefined,
+                          zone: newZone,
+                        };
 
-                        if (targetPileId) {
-                          // Snap to pile position (use first card in pile as anchor)
-                          const anchor = updated.find(
-                            (c) => c.pileId === targetPileId && c.id !== p.id,
-                          );
-                          updated[cardIndex] = {
-                            ...updated[cardIndex],
-                            x: anchor?.x ?? wx,
-                            z: anchor?.z ?? wz,
-                            y: undefined,
-                            zone: newZone,
-                            pileId: targetPileId,
-                          };
-                        } else {
-                          // Dragged away from any pile — remove from pile if it was in one
-                          updated[cardIndex] = {
-                            ...updated[cardIndex],
-                            x: wx,
-                            z: wz,
-                            y: undefined,
-                            zone: newZone,
-                            pileId: undefined,
-                          };
-                        }
-
+                        // Don't auto-apply sorting on manual drags - let user control positioning
                         return updated;
                       });
 
@@ -5584,66 +5299,8 @@ function AuthenticatedDeckEditor() {
                         setTimeout(() => setFeedbackMessage(null), 2000);
                       }
                     }}
-                    isSelected={
-                      !isSortingEnabled ? marquee.isSelected(p.id) : false
-                    }
-                    onClick={
-                      !isSortingEnabled
-                        ? () => {
-                            // If a marquee drag just committed, don't toggle
-                            if (mqIsDragging()) return;
-                            marquee.toggleSelect(p.id);
-                          }
-                        : undefined
-                    }
-                    onGroupDragMove={(deltaX, deltaZ) => {
-                      // Capture original positions on first move
-                      if (!groupDragOrigins.current) {
-                        const origins = new Map<number, { x: number; z: number }>();
-                        for (const c of pick3D) {
-                          if (marquee.selectedIds.has(c.id) && c.id !== p.id) {
-                            origins.set(c.id, { x: c.x, z: c.z });
-                          }
-                        }
-                        groupDragOrigins.current = origins;
-                      }
-                      // Apply absolute delta from originals (not incremental)
-                      const origins = groupDragOrigins.current;
-                      setPick3D((prev) =>
-                        prev.map((card) => {
-                          if (card.id === p.id) return card;
-                          const orig = origins.get(card.id);
-                          if (!orig) return card;
-                          return {
-                            ...card,
-                            x: orig.x + deltaX,
-                            z: orig.z + deltaZ,
-                          };
-                        }),
-                      );
-                    }}
-                    onGroupDragEnd={(deltaX, deltaZ) => {
-                      // Finalize positions using originals + final delta
-                      const origins = groupDragOrigins.current;
-                      setPick3D((prev) =>
-                        prev.map((card) => {
-                          if (!marquee.selectedIds.has(card.id)) return card;
-                          // Dragged card already has its final position from setPos
-                          if (card.id === p.id) return card;
-                          const orig = origins?.get(card.id);
-                          if (!orig) return card;
-                          return {
-                            ...card,
-                            x: orig.x + deltaX,
-                            z: orig.z + deltaZ,
-                          };
-                        }),
-                      );
-                      groupDragOrigins.current = null;
-                    }}
                     getTopRenderOrder={getTopRenderOrder}
                     lockUpright={false}
-                    noDrag={isSortingEnabled}
                     disabled={
                       isSortingEnabled && stackPos ? !stackPos.isVisible : false
                     } // Disable dragging for hidden stacked cards
@@ -5651,43 +5308,30 @@ function AuthenticatedDeckEditor() {
                       setOrbitLocked(dragging);
                     }}
                     onRelease={(wx, wz, wasDragging) => {
-                      // If a marquee drag was in progress and released over this card,
-                      // commit the marquee selection instead of handling as a card interaction
-                      if (
-                        !isSortingEnabled &&
-                        mqCommitIfActive(
-                          wx,
-                          wz,
-                          pick3DRef.current,
-                          false,
-                        )
-                      ) {
-                        return;
-                      }
-
                       // Bring card to front on any interaction (click or drag)
                       bringCardToFront(p.id);
 
-                      // Zone transfer on click: only in sorted (auto-stacked) mode
-                      // In unsorted mode, single-click is used for marquee selection instead
-                      if (!wasDragging && isSortingEnabled) {
-                        const currentZone = p.zone;
+                      // Click to move between deck/sideboard using the same functions as sidebar
+                      if (!wasDragging) {
+                        const currentZone = p.zone; // Use explicit zone field
 
-                        // Dedupe: if we recently toggled this specific pick via click, ignore repeats briefly
+                        // Dedupe: if we recently toggled this cardId via click, ignore repeats briefly
                         const now = Date.now();
                         const last =
-                          cardClickGuardRef.current.get(p.id) || 0;
+                          cardClickGuardRef.current.get(p.card.cardId) || 0;
                         if (now - last < 150) {
                           return;
                         }
-                        cardClickGuardRef.current.set(p.id, now);
+                        cardClickGuardRef.current.set(p.card.cardId, now);
 
                         if (currentZone === "Deck") {
+                          // Move from deck to sideboard
                           moveSpecificCardToSideboard(p.id);
                           setFeedbackMessage(
                             `Moved "${p.card.cardName}" to Sideboard`,
                           );
                         } else {
+                          // Move from sideboard to deck
                           moveSpecificCardToDeck(p.id);
                           setFeedbackMessage(
                             `Moved "${p.card.cardName}" to Deck`,
@@ -5704,139 +5348,7 @@ function AuthenticatedDeckEditor() {
           </group>
           <TextureCache />
         </EditorCanvas>
-      </div>}
-
-      {/* Marquee selection overlay (visual rectangle) — 3D mode only */}
-      {viewMode === "3d" && <MarqueeOverlayWithRef rectRef={marqueeRectRef} />}
-
-      {/* Marquee action bar — 3D mode only */}
-      {viewMode === "3d" && <EditorMarqueeActionBar
-        count={marquee.selectedIds.size}
-        hasStackable={marquee.selectedIds.size >= 2}
-        hasExpandable={pick3D.some(
-          (p) => marquee.selectedIds.has(p.id) && p.pileId,
-        )}
-        onMoveToSideboard={() => {
-          const moved = pick3D.filter(
-            (p) => marquee.selectedIds.has(p.id) && p.zone !== "Sideboard",
-          );
-          syncPicksZone(moved, "Sideboard");
-          setPick3D((prev) =>
-            prev.map((card) => {
-              if (!marquee.selectedIds.has(card.id)) return card;
-              if (card.zone === "Sideboard") return card;
-              return { ...card, zone: "Sideboard" as const };
-            }),
-          );
-          marquee.clearSelection();
-          setFeedbackMessage(
-            `Moved ${marquee.selectedIds.size} cards to Sideboard`,
-          );
-          setTimeout(() => setFeedbackMessage(null), 2000);
-        }}
-        onMoveToCollection={() => {
-          const moved = pick3D.filter(
-            (p) => marquee.selectedIds.has(p.id) && p.zone !== "Collection",
-          );
-          syncPicksZone(moved, "Collection");
-          setPick3D((prev) =>
-            prev.map((card) => {
-              if (!marquee.selectedIds.has(card.id)) return card;
-              if (card.zone === "Collection") return card;
-              return { ...card, zone: "Collection" as const };
-            }),
-          );
-          marquee.clearSelection();
-          setFeedbackMessage(
-            `Moved ${marquee.selectedIds.size} cards to Collection`,
-          );
-          setTimeout(() => setFeedbackMessage(null), 2000);
-        }}
-        onStack={() => {
-          // Stack selected cards into a pile at the centroid of their positions
-          const selected = pick3D.filter((p) =>
-            marquee.selectedIds.has(p.id),
-          );
-          if (selected.length < 2) return;
-          const cx =
-            selected.reduce((s, p) => s + p.x, 0) / selected.length;
-          const cz =
-            selected.reduce((s, p) => s + p.z, 0) / selected.length;
-          const newPileId = `pile-${Date.now()}`;
-          setPick3D((prev) =>
-            prev.map((card) => {
-              if (!marquee.selectedIds.has(card.id)) return card;
-              return { ...card, x: cx, z: cz, pileId: newPileId };
-            }),
-          );
-          marquee.clearSelection();
-          setFeedbackMessage(`Stacked ${selected.length} cards`);
-          setTimeout(() => setFeedbackMessage(null), 2000);
-        }}
-        onExpand={() => {
-          // Expand all piles that have at least one selected card
-          const pileIds = new Set<string>();
-          for (const p of pick3D) {
-            if (marquee.selectedIds.has(p.id) && p.pileId) {
-              pileIds.add(p.pileId);
-            }
-          }
-          if (pileIds.size === 0) return;
-          // Group cards by pile to compute spread positions
-          const pileCards = new Map<string, Pick3D[]>();
-          for (const p of pick3D) {
-            if (p.pileId && pileIds.has(p.pileId)) {
-              const arr = pileCards.get(p.pileId) ?? [];
-              arr.push(p);
-              pileCards.set(p.pileId, arr);
-            }
-          }
-          // Compute spread: grid layout wrapping at max 20 columns to fit the table
-          const spreadOffsets = new Map<number, { x: number; z: number }>();
-          const spacing = 0.55;
-          const rowSpacing = 0.8;
-          const maxCols = 20;
-          for (const [, cards] of pileCards) {
-            const n = cards.length;
-            const cols = Math.min(n, maxCols);
-            const startX = cards[0].x - ((cols - 1) * spacing) / 2;
-            const baseZ = cards[0].z;
-            cards.forEach((c, i) => {
-              const col = i % maxCols;
-              const row = Math.floor(i / maxCols);
-              spreadOffsets.set(c.id, {
-                x: startX + col * spacing,
-                z: baseZ + row * rowSpacing,
-              });
-            });
-          }
-          setPick3D((prev) =>
-            prev.map((card) => {
-              const offset = spreadOffsets.get(card.id);
-              if (!offset) return card;
-              return {
-                ...card,
-                x: offset.x,
-                z: offset.z,
-                pileId: undefined,
-              };
-            }),
-          );
-          marquee.clearSelection();
-          setFeedbackMessage("Expanded pile");
-          setTimeout(() => setFeedbackMessage(null), 2000);
-        }}
-        onRemove={() => {
-          const count = marquee.selectedIds.size;
-          setPick3D((prev) =>
-            prev.filter((card) => !marquee.selectedIds.has(card.id)),
-          );
-          marquee.clearSelection();
-          setFeedbackMessage(`Removed ${count} cards`);
-          setTimeout(() => setFeedbackMessage(null), 2000);
-        }}
-        onClear={() => marquee.clearSelection()}
-      />}
+      </div>
 
       {/* HUD Overlay - EXACT same structure as draft-3d */}
       <div className="absolute inset-0 z-20 pointer-events-none select-none">
@@ -5903,16 +5415,17 @@ function AuthenticatedDeckEditor() {
           }}
           // Tournament context for "Back to Tournament" link
           tournamentId={searchParams?.get("tournament") || null}
-          // 2D/3D view mode
-          viewMode={viewMode}
-          onToggleViewMode={() => setViewMode((v) => v === "3d" ? "2d" : "3d")}
-          // Mana curve & thresholds
-          manaCurve={manaCurve}
-          thresholdSummary={thresholdSummary}
+          // Playmat toggle
+          showPlaymat={editorShowPlaymat}
+          onTogglePlaymat={handleTogglePlaymat}
         />
         {/* (Removed background usage text in favor of Help overlay) */}
-        {viewMode === "3d" && <Suspense fallback={null}>
+        <Suspense fallback={null}>
           <RightPanel
+            cardsTab={cardsTab}
+            setCardsTab={setCardsTab}
+            picksOpen={picksOpen}
+            setPicksOpen={setPicksOpen}
             picksByType={picksByType}
             yourCounts={yourCounts}
             pick3D={pick3D}
@@ -5936,33 +5449,183 @@ function AuthenticatedDeckEditor() {
             collectionCountsByCardId={collectionCountsByCardId}
             moveOneFromSideboardToCollection={moveOneFromSideboardToCollection}
             moveOneFromCollectionToSideboard={moveOneFromCollectionToSideboard}
-            isDraftMode={isDraftMode}
-            isSealed={isSealed}
-            isCardDragging={orbitLocked}
           />
-        </Suspense>}
+        </Suspense>
 
-        {/* Stats overlay removed — mana curve & thresholds are in the top bar */}
+        {/* Deck Statistics (collapsible, minimal) */}
+        {infoBoxVisible && pick3D.length > 0 && (
+          <div className="top-24 left-6 absolute select-none">
+            <div
+              className={
+                `relative rounded bg-black/80 shadow-lg w-72 max-w-[90vw] p-2 pointer-events-none ` +
+                (statsCollapsed ? "" : "ring-1 ring-white/30")
+              }
+            >
+              <button
+                onClick={() => setStatsCollapsed((v) => !v)}
+                className="absolute top-1 right-1 h-7 w-7 grid place-items-center rounded bg-white/10 hover:bg-white/20 text-white/60 hover:text-white opacity-40 hover:opacity-80 pointer-events-auto"
+                title={statsCollapsed ? "Show details" : "Hide details"}
+                aria-label={statsCollapsed ? "Show details" : "Hide details"}
+              >
+                {statsCollapsed ? (
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    className="w-5 h-5"
+                  >
+                    <path d="M12 5C7 5 2.73 8.11 1 12c1.73 3.89 6 7 11 7s9.27-3.11 11-7c-1.73-3.89-6-7-11-7zm0 12a5 5 0 1 1 0-10 5 5 0 0 1 0 10zm0-2a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" />
+                  </svg>
+                ) : (
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    className="w-5 h-5"
+                  >
+                    <path d="M12 5c-2.5 0-4.78.73-6.68 1.95L3.7 5.34 2.29 6.75l16.97 16.97 1.41-1.41-3.03-3.03C20.04 16.83 22 12 22 12S18.27 5 12 5z" />
+                  </svg>
+                )}
+              </button>
+
+              {statsCollapsed ? (
+                <div className="text-sm text-white/90 space-y-2">
+                  <div className="flex items-end gap-1 h-14 bg-black/40 rounded p-1">
+                    {Array.from({ length: 8 }, (_, cost) => {
+                      const count = manaCurve[cost] || 0;
+                      const maxCount = Math.max(...Object.values(manaCurve), 1);
+                      const height = (count / maxCount) * 100;
+                      const label = cost === 7 ? "7+" : String(cost);
+                      return (
+                        <div
+                          key={cost}
+                          className="flex flex-col items-center justify-end gap-0.5 flex-1 h-full"
+                        >
+                          <div
+                            className="bg-blue-400 rounded-t min-h-[2px] w-full"
+                            style={{
+                              height: `${Math.max(height, count > 0 ? 8 : 0)}%`,
+                            }}
+                            title={`${label} mana: ${count} cards`}
+                          />
+                          <span className="text-[10px] opacity-60">
+                            {label}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {thresholdSummary.elements.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {thresholdSummary.elements.map((element) => (
+                        <div
+                          key={element}
+                          className="flex items-center gap-1 bg-white/10 px-1 py-0.5 rounded"
+                        >
+                          <Image
+                            src={`/api/assets/${element}.png`}
+                            alt={element}
+                            width={12}
+                            height={12}
+                            unoptimized
+                          />
+                          <span className="text-[10px]">
+                            {
+                              thresholdSummary.summary[
+                                element as keyof typeof thresholdSummary.summary
+                              ]
+                            }
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-sm text-white/90 space-y-2">
+                  <div className="grid grid-cols-2 gap-1">
+                    <div>Deck: {picksByType.deck}</div>
+                    <div>Sideboard: {picksByType.sideboard}</div>
+                    <div>Creatures: {picksByType.creatures}</div>
+                    <div>Spells: {picksByType.spells}</div>
+                    <div>Sites: {picksByType.sites}</div>
+                    <div>Avatars: {picksByType.avatars}</div>
+                  </div>
+                  <div>
+                    <div className="flex items-end gap-1 h-20 bg-black/40 rounded p-1">
+                      {Array.from({ length: 8 }, (_, cost) => {
+                        const count = manaCurve[cost] || 0;
+                        const maxCount = Math.max(
+                          ...Object.values(manaCurve),
+                          1,
+                        );
+                        const height = (count / maxCount) * 100;
+                        const label = cost === 7 ? "7+" : String(cost);
+                        return (
+                          <div
+                            key={cost}
+                            className="flex flex-col items-center justify-end gap-1 flex-1 h-full"
+                          >
+                            <div
+                              className="bg-blue-400 rounded-t min-h-[2px] w-full relative"
+                              style={{
+                                height: `${Math.max(
+                                  height,
+                                  count > 0 ? 8 : 0,
+                                )}%`,
+                              }}
+                              title={`${label} mana: ${count} cards`}
+                            >
+                              {count > 0 && (
+                                <span className="absolute -top-4 left-1/2 -translate-x-1/2 text-xs text-white opacity-75">
+                                  {count}
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-xs opacity-75">{label}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  {thresholdSummary.elements.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {thresholdSummary.elements.map((element) => (
+                        <div
+                          key={element}
+                          className="flex items-center gap-1 bg-white/10 px-1 py-0.5 rounded"
+                        >
+                          <Image
+                            src={`/api/assets/${element}.png`}
+                            alt={element}
+                            width={14}
+                            height={14}
+                            unoptimized
+                          />
+                          <span className="text-xs">
+                            {
+                              thresholdSummary.summary[
+                                element as keyof typeof thresholdSummary.summary
+                              ]
+                            }
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Card preview - match match play behavior; hide when context menu is open */}
         {hoverPreview && !contextMenu && (
           <CardPreview
             card={hoverPreview}
-            anchor={
-              hoverPreviewSourceRef.current?.startsWith("livesearch:")
-                ? "top-left"
-                : viewMode === "2d"
-                ? "bottom-right"
-                : "bottom-left"
-            }
+            anchor={hoverPreviewSourceRef.current?.startsWith("livesearch:") ? "top-left" : "bottom-left"}
             zIndexClass="z-50"
-            className={
-              hoverPreviewSourceRef.current?.startsWith("livesearch:")
-                ? "!top-3"
-                : viewMode === "2d"
-                ? "scale-[0.67] origin-bottom-right"
-                : ""
-            }
+            className={hoverPreviewSourceRef.current?.startsWith("livesearch:") ? "!top-3" : ""}
           />
         )}
 
@@ -6305,9 +5968,7 @@ function AuthenticatedDeckEditor() {
             // Owned cards filter
             ownedOnly={ownedOnly}
             onOwnedOnlyChange={setOwnedOnly}
-            ownedFilterAvailable={
-              ownedCardIds !== null && ownedCardIds.size > 0
-            }
+            ownedFilterAvailable={ownedCardIds !== null && ownedCardIds.size > 0}
             // Zoom slider
             searchZoom={searchZoom}
             onSearchZoomChange={handleSearchZoomChange}
