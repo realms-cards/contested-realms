@@ -47,16 +47,16 @@ import {
   createInitialDruidFlipped,
 } from "./store/druidState";
 import { createEarthquakeSlice } from "./store/earthquakeState";
-import { createFeastForCrowsSlice } from "./store/feastForCrowsState";
 import { createEventSlice } from "./store/eventState";
+import { createFeastForCrowsSlice } from "./store/feastForCrowsState";
 import { createFrontierSettlersSlice } from "./store/frontierSettlersState";
 import { createGameActionsSlice } from "./store/gameActions";
+import { createGardenOfEdenSlice } from "./store/gardenOfEdenState";
+import { createGemTokenSlice } from "./store/gemTokenState";
 import {
   createGeomancerSlice,
   createInitialGeomancerRubbleUsed,
 } from "./store/geomancerState";
-import { createGardenOfEdenSlice } from "./store/gardenOfEdenState";
-import { createGemTokenSlice } from "./store/gemTokenState";
 import { createHeadlessHauntSlice } from "./store/headlessHauntState";
 import { createHighlandPrincessSlice } from "./store/highlandPrincessState";
 import { createHistorySlice } from "./store/historyState";
@@ -74,11 +74,11 @@ import { createKettletopLeprechaunSlice } from "./store/kettletopLeprechaunState
 import { createLegionOfGallSlice } from "./store/legionOfGallState";
 import { createLilithSlice } from "./store/lilithState";
 import { createMagicSlice } from "./store/magicState";
-import { createMerlinSlice } from "./store/merlinState";
 import {
   createMephistophelesSlice,
   createInitialMephistophelesSummonUsed,
 } from "./store/mephistophelesState";
+import { createMerlinSlice } from "./store/merlinState";
 import { createMirrorRealmSlice } from "./store/mirrorRealmState";
 import { createMorganaSlice } from "./store/morganaState";
 import { createMotherNatureSlice } from "./store/motherNatureState";
@@ -118,11 +118,11 @@ import {
   getEmptySpecialSiteState,
 } from "./store/specialSiteState";
 import { createTorshammarSlice } from "./store/torshammarState";
-import { createTurnEffectQueueSlice } from "./store/turnEffectQueueState";
 import {
   createTransportSlice,
   setTransportStateAccessor,
 } from "./store/transportState";
+import { createTurnEffectQueueSlice } from "./store/turnEffectQueueState";
 import type { GameState } from "./store/types";
 import { createUiSlice, createInitialUiState } from "./store/uiState";
 import { createDefaultAvatars } from "./store/utils/avatarHelpers";
@@ -430,7 +430,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         turnEffectQueue: [],
         turnEffectQueueActive: false,
         pendingKettletopLeprechaun: null,
-};
+      };
       return reset as GameState;
     }),
 });

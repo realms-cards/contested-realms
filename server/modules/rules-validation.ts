@@ -343,7 +343,7 @@ export function validateAction(
         ? ((context as AnyRecord).match as AnyRecord | null | undefined)
         : null;
     const playerIds = Array.isArray(match?.playerIds)
-      ? (match!.playerIds as string[])
+      ? (match.playerIds as string[])
       : [];
     const idx = playerIds.indexOf(playerId);
     const meKey: SeatKey | null = idx === 0 ? "p1" : idx === 1 ? "p2" : null;

@@ -1,5 +1,4 @@
 import { useMemo } from "react";
-
 import type { GameState } from "@/lib/game/store";
 
 type ControlSchemeInfo = {

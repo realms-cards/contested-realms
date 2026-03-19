@@ -1,12 +1,12 @@
 "use strict";
 
+import type { RedisStateManager } from "../core/redis-state";
 import type {
   AnyRecord,
   MatchPatch,
   PlayerState,
   ServerMatchState,
 } from "../types";
-import type { RedisStateManager } from "../core/redis-state";
 
 export interface MatchRecordingEntry {
   matchId: string;
@@ -113,7 +113,7 @@ export function createMatchRecordingService({
         .catch((err) => {
           console.error(
             `[Recording] Failed to persist recording start to Redis for match ${match.id}:`,
-            err
+            err,
           );
         });
     }
@@ -122,7 +122,7 @@ export function createMatchRecordingService({
       console.log(
         `[Recording] Started recording match ${
           match.id
-        } with players: ${playerNames.join(", ")}`
+        } with players: ${playerNames.join(", ")}`,
       );
     } catch {}
   }
@@ -130,7 +130,7 @@ export function createMatchRecordingService({
   function recordMatchAction(
     matchId: string,
     patch: MatchPatch | null,
-    playerId: string
+    playerId: string,
   ): void {
     const recording = matchRecordings.get(matchId);
     if (!recording) {
@@ -247,7 +247,7 @@ export function createMatchRecordingService({
                       it && typeof it === "object"
                         ? ((it as Record<string, unknown>)
                             .instanceId as unknown)
-                        : null
+                        : null,
                     )
                     .map((v) => (typeof v === "string" ? v : null))
                     .filter((v): v is string => !!v)
@@ -269,7 +269,7 @@ export function createMatchRecordingService({
                     ] as unknown[])
                   : [];
               const nextArr = Array.isArray(
-                (nextSeatZones as Record<string, unknown>)[pile]
+                (nextSeatZones as Record<string, unknown>)[pile],
               )
                 ? ((nextSeatZones as Record<string, unknown>)[
                     pile
@@ -297,11 +297,11 @@ export function createMatchRecordingService({
             const originPiles = ["hand", "atlas", "spellbook"] as const;
             for (const origin of originPiles) {
               const removed = Array.from(prevByPile[origin].ids).filter(
-                (id) => !nextByPile[origin].ids.has(id)
+                (id) => !nextByPile[origin].ids.has(id),
               );
               for (const instId of removed) {
                 const stillInOriginPiles = originPiles.some((pile) =>
-                  nextByPile[pile].ids.has(instId)
+                  nextByPile[pile].ids.has(instId),
                 );
                 if (stillInOriginPiles) continue;
                 const playedToGraveOrBanished =
@@ -374,7 +374,7 @@ export function createMatchRecordingService({
     } catch {}
     try {
       console.log(
-        `[Recording] Recorded action ${recording.actions.length} for match ${matchId} by player ${playerId}`
+        `[Recording] Recorded action ${recording.actions.length} for match ${matchId} by player ${playerId}`,
       );
     } catch {}
   }
@@ -394,7 +394,7 @@ export function createMatchRecordingService({
 
     try {
       console.log(
-        `[Recording] Finished recording match ${matchId}, total actions: ${recording.actions.length}`
+        `[Recording] Finished recording match ${matchId}, total actions: ${recording.actions.length}`,
       );
     } catch {}
   }
@@ -406,13 +406,13 @@ export function createMatchRecordingService({
    */
   function truncateRecordingAfter(
     matchId: string,
-    afterTimestamp: number
+    afterTimestamp: number,
   ): number {
     const recording = matchRecordings.get(matchId);
     if (!recording) {
       try {
         console.log(
-          `[Recording] No recording found for match ${matchId} to truncate`
+          `[Recording] No recording found for match ${matchId} to truncate`,
         );
       } catch {}
       return 0;
@@ -421,14 +421,14 @@ export function createMatchRecordingService({
     const originalLength = recording.actions.length;
     // Keep only actions with timestamp <= afterTimestamp
     recording.actions = recording.actions.filter(
-      (action) => action.timestamp <= afterTimestamp
+      (action) => action.timestamp <= afterTimestamp,
     );
     const removedCount = originalLength - recording.actions.length;
 
     if (removedCount > 0) {
       try {
         console.log(
-          `[Recording] Truncated ${removedCount} actions after timestamp ${afterTimestamp} for match ${matchId}, remaining: ${recording.actions.length}`
+          `[Recording] Truncated ${removedCount} actions after timestamp ${afterTimestamp} for match ${matchId}, remaining: ${recording.actions.length}`,
         );
       } catch {}
     }

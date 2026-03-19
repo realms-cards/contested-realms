@@ -1,12 +1,6 @@
 import type { StateCreator } from "zustand";
 import type { CustomMessage } from "@/lib/net/transport";
-import type {
-  CardRef,
-  CellKey,
-  GameState,
-  PlayerKey,
-  ServerPatchT,
-} from "./types";
+import type { CardRef, CellKey, GameState, PlayerKey } from "./types";
 import { createZonesPatchFor } from "./utils/zoneHelpers";
 
 function newKettletopId() {
@@ -111,7 +105,13 @@ export const createKettletopLeprechaunSlice: StateCreator<
     }
 
     // Draw top site from atlas
-    const drawnCard = atlas.shift()!;
+    const drawnCard = atlas.shift();
+    if (!drawnCard) {
+      set({
+        pendingKettletopLeprechaun: null,
+      } as Partial<GameState> as GameState);
+      return;
+    }
     hand.push(drawnCard);
 
     // Build FULL zone object for ownerSeat

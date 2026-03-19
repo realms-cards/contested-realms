@@ -2091,8 +2091,9 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
     try {
       const doneCount = match.mulliganDone.size;
       const total = Array.isArray(match.playerIds) ? match.playerIds.length : 0;
+      const mulliganDone = match.mulliganDone;
       const waitingFor = Array.isArray(match.playerIds)
-        ? match.playerIds.filter((pid) => !match.mulliganDone!.has(pid))
+        ? match.playerIds.filter((pid) => !mulliganDone.has(pid))
         : [];
       const names = waitingFor.map(
         (pid) => players.get(pid)?.displayName ?? pid,
@@ -2419,8 +2420,16 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
 
       let grantOpts: Record<string, unknown> | null = null;
       if (rawDecision === "approved") {
+        const requesterSeat = getSeatForPlayer(match, request.from);
         const grantSeat =
-          actorSeat ?? getOpponentSeat(getSeatForPlayer(match, request.from)!);
+          actorSeat ?? (requesterSeat ? getOpponentSeat(requesterSeat) : null);
+        if (!grantSeat) {
+          return {
+            ok: false,
+            error: "Unable to determine seat for granted interaction",
+            code: "interaction_invalid",
+          };
+        }
         grantOpts = sanitizeGrantOptions(
           payload?.grant ?? rawPayload?.grant ?? rawPayload?.proposedGrant,
           grantSeat,

@@ -4,6 +4,7 @@ import type { ThreeEvent } from "@react-three/fiber";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Group, Object3D } from "three";
 import { createCardMeshUserData } from "@/lib/game/card-preview.types";
+import CardOutline from "@/lib/game/components/CardOutline";
 import CardPlane from "@/lib/game/components/CardPlane";
 import { CARD_LONG, CARD_SHORT } from "@/lib/game/constants";
 
@@ -85,13 +86,18 @@ function DraggableCard3DInner({
   cardType,
   interactive = true,
   preferRaster = false,
+  isSelected = false,
+  onClick,
+  onGroupDragMove,
+  onGroupDragEnd,
+  noDrag = false,
 }: {
   slug: string;
   isSite: boolean;
   x: number;
   z: number;
   y?: number;
-  onDrop?: (wx: number, wz: number) => void;
+  onDrop?: (wx: number, wz: number, screenX: number, screenY: number) => void;
   disabled?: boolean;
   onDragChange?: (dragging: boolean) => void;
   rotationZ?: number;
@@ -116,6 +122,16 @@ function DraggableCard3DInner({
   cardType?: string | null;
   interactive?: boolean;
   preferRaster?: boolean;
+  /** Highlight this card as part of a marquee selection */
+  isSelected?: boolean;
+  /** Click handler for Shift+click additive selection */
+  onClick?: () => void;
+  /** Group drag: move all selected cards by absolute delta from drag start */
+  onGroupDragMove?: (deltaX: number, deltaZ: number) => void;
+  /** Group drag end: finalize positions of all selected cards */
+  onGroupDragEnd?: (deltaX: number, deltaZ: number) => void;
+  /** Block drag initiation while still allowing clicks and hover */
+  noDrag?: boolean;
 }) {
   const ref = useRef<Group | null>(null);
   const dragStart = useRef<{
@@ -126,6 +142,8 @@ function DraggableCard3DInner({
     screenY: number;
   } | null>(null);
   const dragging = useRef(false);
+  // Track last delta sent to avoid redundant group drag calls
+  const lastGroupDelta = useRef<{ x: number; z: number }>({ x: 0, z: 0 });
   const upCleanupRef = useRef<(() => void) | null>(null);
   const roRef = useRef<number>(baseRenderOrder);
   const [isDragging, setIsDragging] = useState(false);
@@ -204,6 +222,7 @@ function DraggableCard3DInner({
             screenX: e.clientX,
             screenY: e.clientY,
           };
+          lastGroupDelta.current = { x: 0, z: 0 };
           // bring to front
           if (getTopRenderOrder) {
             const next = getTopRenderOrder();
@@ -250,7 +269,7 @@ function DraggableCard3DInner({
               type: cardType ?? null,
             });
           }
-          if (disabled) return;
+          if (disabled || noDrag) return;
           const s = dragStart.current;
           if (!s) return;
           // Check threshold to start dragging
@@ -287,6 +306,13 @@ function DraggableCard3DInner({
             const wz = e.point.z;
             setPos(wx, wz, true);
             onDragMove?.(wx, wz);
+            // Group drag: send absolute delta from drag start (not incremental)
+            if (isSelected && onGroupDragMove && s) {
+              const newDx = wx - s.x;
+              const newDz = wz - s.z;
+              onGroupDragMove(newDx, newDz);
+              lastGroupDelta.current = { x: newDx, z: newDz };
+            }
           }
         }}
         onPointerUp={(e: ThreeEvent<PointerEvent>) => {
@@ -296,6 +322,8 @@ function DraggableCard3DInner({
           const wasDragging = dragging.current;
           const wx = e.point.x;
           const wz = e.point.z;
+          // Capture drag start before clearing
+          const ds = dragStart.current;
 
           // Detect double-click
           const now = Date.now();
@@ -316,8 +344,15 @@ function DraggableCard3DInner({
 
           if (isDoubleClick) {
             onDoubleClick?.();
-          } else if (onDrop && wasDragging) {
-            onDrop(wx, wz);
+          } else if (wasDragging) {
+            // Group drag end: finalize all selected card positions
+            if (isSelected && onGroupDragEnd && ds) {
+              onGroupDragEnd(wx - ds.x, wz - ds.z);
+            }
+            onDrop?.(wx, wz, e.clientX, e.clientY);
+          } else if (onClick) {
+            // Single click (no drag) — for additive selection
+            onClick();
           }
 
           onRelease?.(wx, wz, wasDragging);
@@ -338,6 +373,22 @@ function DraggableCard3DInner({
         />
         {/* Allow raycasting to pass through to cards below by setting raycast layers */}
       </mesh>
+
+      {/* Selection outline using the same CardOutline as match selection */}
+      {isSelected && (
+        <CardOutline
+          width={isSite ? CARD_LONG : CARD_SHORT}
+          height={isSite ? CARD_SHORT : CARD_LONG}
+          color="#22d3ee"
+          elevation={0.003}
+          renderOrder={roRef.current + 10000}
+          opacity={0.8}
+          pulse
+          pulseSpeed={1.5}
+          pulseMin={0.5}
+          pulseMax={0.9}
+        />
+      )}
 
       {/* Visual card */}
       <group>

@@ -3,13 +3,13 @@ import { Client, GatewayIntentBits, Events } from "discord.js";
 import { registerCommands } from "./commands/index.js";
 import { handleInteraction } from "./events/interactionCreate.js";
 import { handleVoiceStateUpdate } from "./events/voiceStateUpdate.js";
-import { RealmsApiClient } from "./services/realms-api.js";
-import { VoiceChannelManager } from "./services/voice-manager.js";
-import { VoiceCoordinator } from "./services/voice-coordinator.js";
 import { ChallengeManager } from "./services/challenge-manager.js";
-import { QueueManager } from "./services/queue-manager.js";
 import { setContext } from "./services/context.js";
 import { acquireBotLock, releaseBotLock } from "./services/leader-lock.js";
+import { QueueManager } from "./services/queue-manager.js";
+import { RealmsApiClient } from "./services/realms-api.js";
+import { VoiceCoordinator } from "./services/voice-coordinator.js";
+import { VoiceChannelManager } from "./services/voice-manager.js";
 
 const REQUIRED_ENV = [
   "DISCORD_BOT_TOKEN",
@@ -42,10 +42,12 @@ client.once(Events.ClientReady, async (readyClient) => {
   console.log(`[bot] Logged in as ${readyClient.user.tag}`);
 
   // Initialize services
-  const realmsApi = new RealmsApiClient(
-    process.env.REALMS_API_URL!,
-    process.env.REALMS_BOT_SECRET!
-  );
+  const realmsApiUrl = process.env.REALMS_API_URL;
+  const realmsBotSecret = process.env.REALMS_BOT_SECRET;
+  if (!realmsApiUrl || !realmsBotSecret) {
+    throw new Error("Missing Realms API environment variables");
+  }
+  const realmsApi = new RealmsApiClient(realmsApiUrl, realmsBotSecret);
   voiceManager = new VoiceChannelManager(readyClient);
   voiceCoordinator = new VoiceCoordinator(realmsApi, voiceManager);
   const challengeManager = new ChallengeManager(realmsApi);
@@ -53,7 +55,7 @@ client.once(Events.ClientReady, async (readyClient) => {
     readyClient,
     realmsApi,
     challengeManager,
-    voiceCoordinator
+    voiceCoordinator,
   );
 
   // Set context for command handlers

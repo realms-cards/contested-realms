@@ -7,6 +7,8 @@ export type KeyboardShortcutsHelpProps = {
   open: boolean;
   onClose: () => void;
   context?: "game" | "draft" | "editor";
+  /** When true, show TTS-specific shortcuts alongside game shortcuts */
+  isTTS?: boolean;
 };
 
 type ShortcutItem = {
@@ -31,6 +33,14 @@ const GAME_SHORTCUTS: ShortcutItem[] = [
   { keys: ["T"], description: "Tap/untap selected card" },
   { keys: ["Enter"], description: "End turn" },
   { keys: ["Space"], description: "Toggle hand: hide ↔ show (spread)" },
+  { keys: ["G"], description: "Spawn gem token at cursor" },
+  { keys: ["Del", "Backspace"], description: "Banish selected token" },
+];
+
+const TTS_SHORTCUTS: ShortcutItem[] = [
+  { keys: ["F"], description: "Tap/untap selected card(s)" },
+  { keys: ["H"], description: "Toggle hand visibility" },
+  { keys: ["Esc"], description: "Clear marquee selection" },
 ];
 
 const DRAFT_SHORTCUTS: ShortcutItem[] = [
@@ -39,6 +49,9 @@ const DRAFT_SHORTCUTS: ShortcutItem[] = [
 
 const EDITOR_SHORTCUTS: ShortcutItem[] = [
   { keys: ["Space"], description: "Open card search" },
+  { keys: ["Esc"], description: "Clear marquee selection" },
+  { keys: ["Shift+Click"], description: "Add/remove card from selection" },
+  { keys: ["Left-drag"], description: "Marquee select cards" },
 ];
 
 function ShortcutRow({ keys, description }: ShortcutItem) {
@@ -63,6 +76,7 @@ export default function KeyboardShortcutsHelp({
   open,
   onClose,
   context = "game",
+  isTTS = false,
 }: KeyboardShortcutsHelpProps) {
   // Close on Escape
   useEffect(() => {
@@ -147,6 +161,20 @@ export default function KeyboardShortcutsHelp({
             </div>
           </div>
 
+          {/* TTS-specific shortcuts (game context only) */}
+          {isTTS && context === "game" && (
+            <div>
+              <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-2">
+                TTS Control Scheme
+              </h3>
+              <div className="space-y-0">
+                {TTS_SHORTCUTS.map((s) => (
+                  <ShortcutRow key={s.description} {...s} />
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Common shortcuts */}
           <div>
             <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-2">
@@ -174,6 +202,12 @@ export default function KeyboardShortcutsHelp({
                 keys={["Left-click"]}
                 description="Select / Interact"
               />
+              {(context === "editor" || context === "draft") && (
+                <ShortcutRow
+                  keys={["Left-drag (empty)"]}
+                  description="Marquee select cards"
+                />
+              )}
             </div>
           </div>
         </div>

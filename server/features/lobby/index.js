@@ -51,7 +51,7 @@ function createLobbyFeature(deps) {
   const prisma = deps.prisma || null;
   const PORT = deps.port;
   const isCpuPlayerId = deps.isCpuPlayerId;
-  const rtcMigration = deps.rtcMigration || null;
+  const _rtcMigration = deps.rtcMigration || null;
   const botInternalSecret = deps.botInternalSecret || null;
 
   console.log(

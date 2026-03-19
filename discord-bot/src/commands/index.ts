@@ -30,14 +30,19 @@ export const commands = new Map<string, CommandModule>([
  * Register slash commands with Discord.
  */
 export async function registerCommands(): Promise<void> {
-  const clientId = process.env.DISCORD_CLIENT_ID!;
+  const clientId = process.env.DISCORD_CLIENT_ID;
   const guildId = process.env.DISCORD_GUILD_ID;
-  const token = process.env.DISCORD_BOT_TOKEN!;
+  const token = process.env.DISCORD_BOT_TOKEN;
+  if (!clientId || !token) {
+    throw new Error(
+      "Missing Discord command registration environment variables",
+    );
+  }
 
   const rest = new REST({ version: "10" }).setToken(token);
 
   const commandsJson = Array.from(commands.values()).map((cmd) =>
-    cmd.data.toJSON()
+    cmd.data.toJSON(),
   );
 
   try {

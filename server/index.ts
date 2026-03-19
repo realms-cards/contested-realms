@@ -1,28 +1,8 @@
 // Simple Socket.IO server for Sorcery online MVP
 // Run with: npm run server:dev (development) or npm run server:start (production)
 
+import { resolve } from "path";
 import jwt from "jsonwebtoken";
-import type {
-  AnyRecord,
-  DraftPresenceEntry,
-  MatchPatch,
-  PendingVoiceRequest,
-  PlayerState,
-  Seat,
-  ServerMatchState,
-  VoiceParticipant,
-  LobbyState,
-} from "./types";
-
-// T019: Import extracted modules
-import {
-  getRateLimitsForSocket,
-  tryConsume,
-  cleanupRateLimits,
-  checkUserConnectionLimit,
-  cleanupUserConnectionLimits,
-} from "./rateLimiter";
-
 // JS modules (CommonJS) - use default import pattern
 import boosterModule from "./booster";
 import botManagerModule from "./botManager";
@@ -37,21 +17,6 @@ import { startMaintenanceTimers } from "./maintenance/timers";
 import matchInfoModule from "./matchInfo";
 import { incrementMetric, incrementRateLimitHit, debugLog } from "./metrics";
 import modulesIndex from "./modules";
-import triggersModule from "./rules/triggers";
-import chatHandlersModule from "./socket/chat-handlers";
-
-const {
-  createRngFromString,
-  generateBoosterDeterministic,
-  generateCubeBoosterDeterministic,
-} = boosterModule;
-const { BotManager } = botManagerModule;
-const { buildMatchInfo: _buildMatchInfo } = matchInfoModule;
-const modules = modulesIndex;
-const { applyGenesis, applyKeywordAnnotations } = triggersModule;
-const { registerChatHandlers, getGlobalChatHistory } = chatHandlersModule;
-
-// TypeScript modules
 import { enrichPatchWithCosts } from "./modules/card-costs";
 import { normalizeDeckPayload, validateDeckCards } from "./modules/deck-utils";
 import {
@@ -85,8 +50,39 @@ import {
   sanitizeGameForSpectator,
   broadcastSpectatorsUpdated,
 } from "./modules/spectator";
+import {
+  getRateLimitsForSocket,
+  tryConsume,
+  cleanupRateLimits,
+  checkUserConnectionLimit,
+  cleanupUserConnectionLimits,
+} from "./rateLimiter";
+import triggersModule from "./rules/triggers";
+import chatHandlersModule from "./socket/chat-handlers";
 import { registerPubSubListeners } from "./socket/pubsub-listeners";
 import { registerRtcHandlers } from "./socket/rtc-handlers";
+import type {
+  AnyRecord,
+  DraftPresenceEntry,
+  LobbyState,
+  MatchPatch,
+  PendingVoiceRequest,
+  PlayerState,
+  Seat,
+  ServerMatchState,
+  VoiceParticipant,
+} from "./types";
+
+const {
+  createRngFromString,
+  generateBoosterDeterministic,
+  generateCubeBoosterDeterministic,
+} = boosterModule;
+const { BotManager } = botManagerModule;
+const { buildMatchInfo: _buildMatchInfo } = matchInfoModule;
+const modules = modulesIndex;
+const { applyGenesis, applyKeywordAnnotations } = triggersModule;
+const { registerChatHandlers, getGlobalChatHistory } = chatHandlersModule;
 
 const _seatFromOwner = (owner: 1 | 2): "p1" | "p2" =>
   owner === 1 ? "p1" : "p2";
@@ -827,11 +823,7 @@ let _botModule: {
 function _loadBotModule() {
   if (_botModule) return _botModule;
   try {
-    const botPath = require("path").resolve(
-      process.cwd(),
-      "bots",
-      "headless-bot-client",
-    );
+    const botPath = resolve(process.cwd(), "bots", "headless-bot-client");
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     _botModule = require(botPath);
     return _botModule;
@@ -1197,7 +1189,6 @@ async function finalizeMatch(
   // - "disconnect": player disconnected and didn't return - apply early game protection
   const reason = typeof options?.reason === "string" ? options.reason : null;
   const isDisconnectReason = reason === "disconnect";
-  const isForfeitReason = reason === "forfeit" || isDisconnectReason;
 
   // Early disconnect protection: don't count matches where opponent disconnected before turn 5
   // This prevents penalizing players for opponent connection issues
@@ -3492,14 +3483,14 @@ io.on("connection", async (socket: SocketClient) => {
           .map((d) =>
             d && typeof d === "object" ? (d as Record<string, unknown>) : null,
           )
-          .filter(Boolean)
+          .filter((d): d is Record<string, unknown> => d !== null)
           .map((d) => {
-            const at = typeof d!.at === "string" ? (d!.at as string) : null;
-            const indexVal = Number(d!.index);
-            const ownerVal = Number(d!.owner);
+            const at = typeof d.at === "string" ? (d.at as string) : null;
+            const indexVal = Number(d.index);
+            const ownerVal = Number(d.owner);
             const instanceId =
-              typeof d!.instanceId === "string"
-                ? (d!.instanceId as string)
+              typeof d.instanceId === "string"
+                ? (d.instanceId as string)
                 : null;
             if (!at || !Number.isFinite(indexVal) || !Number.isFinite(ownerVal))
               return null;
@@ -3587,10 +3578,10 @@ io.on("connection", async (socket: SocketClient) => {
           .map((d) =>
             d && typeof d === "object" ? (d as Record<string, unknown>) : null,
           )
-          .filter(Boolean)
+          .filter((d): d is Record<string, unknown> => d !== null)
           .map((d) => {
-            const dat = typeof d!.at === "string" ? (d!.at as string) : null;
-            const didx = Number(d!.index);
+            const dat = typeof d.at === "string" ? (d.at as string) : null;
+            const didx = Number(d.index);
             if (!dat || !Number.isFinite(didx)) return null;
             return { at: dat, index: Number(didx) };
           })
@@ -3642,14 +3633,14 @@ io.on("connection", async (socket: SocketClient) => {
           .map((d) =>
             d && typeof d === "object" ? (d as Record<string, unknown>) : null,
           )
-          .filter(Boolean)
+          .filter((d): d is Record<string, unknown> => d !== null)
           .map((d) => {
-            const at = typeof d!.at === "string" ? (d!.at as string) : null;
-            const indexVal = Number(d!.index);
-            const ownerVal = Number(d!.owner);
+            const at = typeof d.at === "string" ? (d.at as string) : null;
+            const indexVal = Number(d.index);
+            const ownerVal = Number(d.owner);
             const instanceId =
-              typeof d!.instanceId === "string"
-                ? (d!.instanceId as string)
+              typeof d.instanceId === "string"
+                ? (d.instanceId as string)
                 : null;
             if (!at || !Number.isFinite(indexVal) || !Number.isFinite(ownerVal))
               return null;
@@ -3676,9 +3667,9 @@ io.on("connection", async (socket: SocketClient) => {
           | undefined;
         try {
           const rec = msg.target as Record<string, unknown> | null | undefined;
-          const k = typeof rec?.kind === "string" ? (rec!.kind as string) : "";
-          const a = typeof rec?.at === "string" ? (rec!.at as string) : "";
-          const idx = (rec?.index == null ? null : Number(rec!.index)) as
+          const k = typeof rec?.kind === "string" ? (rec.kind as string) : "";
+          const a = typeof rec?.at === "string" ? (rec.at as string) : "";
+          const idx = (rec?.index == null ? null : Number(rec.index)) as
             | number
             | null;
           if (
@@ -3882,7 +3873,7 @@ io.on("connection", async (socket: SocketClient) => {
       // Broadcast hand peek actions (top/bottom of spellbook, graveyard, banish, steal)
       // to other players in the match for online synchronization
       try {
-        const match = await getOrLoadMatch(matchId);
+        await getOrLoadMatch(matchId);
         const room = `match:${matchId}`;
         const msg = payload as {
           who?: unknown;
@@ -4319,17 +4310,17 @@ io.on("connection", async (socket: SocketClient) => {
           .map((d) =>
             d && typeof d === "object" ? (d as Record<string, unknown>) : null,
           )
-          .filter(Boolean)
+          .filter((d): d is Record<string, unknown> => d !== null)
           .map((d) => {
             const kind =
-              d!.kind === "permanent" || d!.kind === "avatar"
-                ? (d!.kind as "permanent" | "avatar")
+              d.kind === "permanent" || d.kind === "avatar"
+                ? (d.kind as "permanent" | "avatar")
                 : null;
-            const amount = Number(d!.amount);
+            const amount = Number(d.amount);
             if (!Number.isFinite(amount)) return null;
             if (kind === "permanent") {
-              const at = typeof d!.at === "string" ? (d!.at as string) : null;
-              const indexVal = Number(d!.index);
+              const at = typeof d.at === "string" ? (d.at as string) : null;
+              const indexVal = Number(d.index);
               if (!at || !Number.isFinite(indexVal)) return null;
               return {
                 kind: "permanent" as const,
@@ -4339,8 +4330,8 @@ io.on("connection", async (socket: SocketClient) => {
               };
             } else if (kind === "avatar") {
               const seat =
-                d!.seat === "p1" || d!.seat === "p2"
-                  ? (d!.seat as "p1" | "p2")
+                d.seat === "p1" || d.seat === "p2"
+                  ? (d.seat as "p1" | "p2")
                   : null;
               if (!seat) return null;
               return {

@@ -51,7 +51,15 @@ This manual documents keyboard shortcuts and core interaction flows for the Real
 - **Editor (Free Mode)**
   - Press `Space` to bring up the search overlay, start typing to search the card db - the first hit will be auto-highlighted
   - Press `Enter` to add a highlighted card to the deck
-  - Press `Escape` to close the search overlay
+  - Press `Escape` to close the search overlay or clear marquee selection
+
+- **Marquee Selection (Editor & Draft)**
+  - Left-click and drag on empty surface to draw a selection rectangle around cards.
+  - Release to select all cards within the rectangle (highlighted in cyan).
+  - `Shift`+click individual cards to add/remove them from the selection.
+  - An action bar appears with mass actions: Move to Deck, Move to Sideboard, Remove, Clear.
+  - Press `Escape` to clear the selection.
+  - Drag any selected card to move the entire group.
 
 ## Mouse & Touch Basics
 
@@ -78,6 +86,18 @@ This manual documents keyboard shortcuts and core interaction flows for the Real
 
 - **Board Ping**
   - Double‑click on the board, a site, a permanent, or your avatar to ping that location.
+
+## TTS Control Scheme (Alternative)
+
+An alternative control scheme inspired by Tabletop Simulator (TTS) is available in User Settings (desktop only). When enabled:
+
+- **Camera**: Middle-mouse to orbit, right-click to pan (left-click is free for card interaction).
+- **Tap/Untap**: Press `F` to tap/untap the selected card or all marquee-selected cards.
+- **Toggle Hand**: Press `H` to show/hide your hand.
+- **Context Menus**: Right-click still opens context menus on cards/piles.
+- `Q`/`E` camera tilt is disabled in TTS mode.
+
+All other controls (WASD pan, zoom, Enter to end turn, etc.) work the same as the default scheme.
 
 ## Views and Camera
 
@@ -216,8 +236,8 @@ A hint overlay appears on first use explaining the tap‑to‑select pattern.
 ## Quick Reference
 
 - **End Turn**: `Enter`
-- **Tap/Untap Selected**: `T`
-- **Toggle Hand**: `Space`
+- **Tap/Untap Selected**: `T` (default) / `F` (TTS mode)
+- **Toggle Hand**: `Space` (default) / `H` (TTS mode)
 - **Board Ping**: Double‑click
 - **Reset Camera (Online)**: `Tab`
 - **Camera Pan**: `W`/`A`/`S`/`D`
@@ -225,3 +245,7 @@ A hint overlay appears on first use explaining the tap‑to‑select pattern.
 - **Zoom**: `+` / `-`
 - **Show Help**: `H` or `?`
 - **Close/Cancel**: `Escape`
+- **Spawn Gem Token**: `G`
+- **Banish Token**: `Delete` / `Backspace`
+- **Marquee Select (Editor/Draft)**: Left‑drag on empty surface
+- **Add to Selection**: `Shift`+click

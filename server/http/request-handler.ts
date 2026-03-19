@@ -3,8 +3,8 @@
 import type { IncomingMessage, ServerResponse } from "http";
 import type { PrismaClient } from "@prisma/client";
 import jwt from "jsonwebtoken";
-import type { AnyRecord, PlayerState } from "../types";
 import type { RedisStateManager } from "../core/redis-state";
+import type { AnyRecord, PlayerState } from "../types";
 
 export interface RequestHandlerDeps {
   io: import("socket.io").Server;

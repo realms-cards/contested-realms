@@ -40,11 +40,7 @@ function getCardBySlug(slug: string | null): CardLike | null {
       for (const s of sets) {
         const vs = (s as CardLike)?.variants as unknown[];
         if (!Array.isArray(vs)) continue;
-        if (
-          vs.find(
-            (v) => String((v as CardLike).slug) === String(slug)
-          )
-        ) {
+        if (vs.find((v) => String((v as CardLike).slug) === String(slug))) {
           return c;
         }
       }
@@ -76,23 +72,17 @@ function getCostForCard(card: AnyRecord | null | undefined): number {
       const v = Number(card.cost);
       return Number.isFinite(v) ? v : 0;
     }
-    const slug =
-      card && card.slug ? String(card.slug) : null;
+    const slug = card && card.slug ? String(card.slug) : null;
     const nm = card && card.name ? String(card.name) : null;
-    const found = slug
-      ? getCardBySlug(slug)
-      : nm
-      ? getCardByName(nm)
-      : null;
+    const found = slug ? getCardBySlug(slug) : nm ? getCardByName(nm) : null;
     if (found) {
       const meta =
         ((found.guardian as CardLike | undefined) ||
-          ((Array.isArray(found.sets) &&
-            found.sets[0] &&
-            (found.sets[0] as CardLike).metadata
-            ? ((found.sets[0] as CardLike)
-                .metadata as CardLike)
-            : null))) ??
+          (Array.isArray(found.sets) &&
+          found.sets[0] &&
+          (found.sets[0] as CardLike).metadata
+            ? ((found.sets[0] as CardLike).metadata as CardLike)
+            : null)) ??
         null;
       if (meta && typeof meta.cost === "number") {
         const v = Number(meta.cost);
@@ -144,10 +134,7 @@ function siteProvidesMana(card: AnyRecord | null | undefined): boolean {
   return true;
 }
 
-function countOwnedManaSites(
-  game: AnyRecord,
-  playerNum: number
-): number {
+function countOwnedManaSites(game: AnyRecord, playerNum: number): number {
   let n = 0;
   const board = (game.board || {}) as AnyRecord;
   const sites = (board.sites || {}) as Record<string, AnyRecord>;
@@ -166,11 +153,10 @@ function countOwnedManaSites(
 
 function countManaProvidersFromPermanents(
   game: AnyRecord,
-  playerNum: number
+  playerNum: number,
 ): number {
   let n = 0;
-  const per =
-    (game.permanents as Record<string, unknown[]>) || {};
+  const per = (game.permanents as Record<string, unknown[]>) || {};
   for (const cellKey of Object.keys(per)) {
     const arrRaw = per[cellKey];
     const arr = Array.isArray(arrRaw) ? arrRaw : [];
@@ -178,9 +164,10 @@ function countManaProvidersFromPermanents(
       try {
         const perm = (p || {}) as AnyRecord;
         if (!perm || Number(perm.owner) !== playerNum) continue;
-        const nm = (perm.card && (perm.card as AnyRecord).name
-          ? String((perm.card as AnyRecord).name)
-          : ""
+        const nm = (
+          perm.card && (perm.card as AnyRecord).name
+            ? String((perm.card as AnyRecord).name)
+            : ""
         ).toLowerCase();
         if (MANA_PROVIDER_BY_NAME.has(nm)) n++;
       } catch {
@@ -195,7 +182,7 @@ export function ensureCosts(
   game: AnyRecord,
   action: MatchPatch,
   playerId: string,
-  context?: AnyRecord
+  context?: AnyRecord,
 ): EnsureCostsResult {
   try {
     const match =
@@ -203,12 +190,11 @@ export function ensureCosts(
         ? ((context as AnyRecord).match as AnyRecord | null | undefined)
         : null;
     const playerIds = Array.isArray(match?.playerIds)
-      ? (match!.playerIds as string[])
+      ? (match.playerIds as string[])
       : [];
     const idx = playerIds.indexOf(playerId);
     const meNum: number | null = idx >= 0 ? idx + 1 : null;
-    const meKey: SeatKey | null =
-      idx === 0 ? "p1" : idx === 1 ? "p2" : null;
+    const meKey: SeatKey | null = idx === 0 ? "p1" : idx === 1 ? "p2" : null;
     if (!meNum || !meKey) return { ok: true };
 
     let totalCost = 0;
@@ -221,11 +207,7 @@ export function ensureCosts(
       (action as AnyRecord).permanents &&
       typeof (action as AnyRecord).permanents === "object"
     ) {
-      const info = markAndCountNewPlacements(
-        game,
-        action,
-        meNum
-      );
+      const info = markAndCountNewPlacements(game, action, meNum);
       newPermanentsInfo.newItems = info.newItems;
       newPermanentsInfo.isNew = info.isNew;
       for (const p of info.newItems) {
@@ -269,20 +251,12 @@ export function ensureCosts(
 
     if (totalCost > 0) {
       const ownedSiteCount = countOwnedManaSites(game, meNum);
-      const manaProviders = countManaProvidersFromPermanents(
-        game,
-        meNum
-      );
-      const resourcesPrev = (game.resources ||
-        {}) as AnyRecord;
-      const meResPrev = (resourcesPrev[meKey] ||
-        {}) as AnyRecord;
+      const manaProviders = countManaProvidersFromPermanents(game, meNum);
+      const resourcesPrev = (game.resources || {}) as AnyRecord;
+      const meResPrev = (resourcesPrev[meKey] || {}) as AnyRecord;
       const spentPrevRaw = meResPrev.spentThisTurn;
       const spentPrev = Number(spentPrevRaw) || 0;
-      const available = Math.max(
-        0,
-        ownedSiteCount + manaProviders - spentPrev
-      );
+      const available = Math.max(0, ownedSiteCount + manaProviders - spentPrev);
       if (totalCost > available) {
         return {
           ok: false,
@@ -295,16 +269,15 @@ export function ensureCosts(
     }
 
     if (placingNewSite) {
-      const avatarsPrev = (game.avatars ||
-        {}) as Record<string, AnyRecord>;
+      const avatarsPrev = (game.avatars || {}) as Record<string, AnyRecord>;
       const avPrev = (avatarsPrev[meKey] || {}) as AnyRecord;
       const tappedPrev = !!avPrev.tapped;
-      const avatarsPatch = (action as AnyRecord)
-        .avatars as Record<string, AnyRecord> | undefined;
+      const avatarsPatch = (action as AnyRecord).avatars as
+        | Record<string, AnyRecord>
+        | undefined;
       const avPatch = avatarsPatch ? avatarsPatch[meKey] : undefined;
       const tappedNext =
-        avPatch &&
-        Object.prototype.hasOwnProperty.call(avPatch, "tapped")
+        avPatch && Object.prototype.hasOwnProperty.call(avPatch, "tapped")
           ? !!avPatch.tapped
           : tappedPrev;
       if (tappedPrev) {
