@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import React, { useState } from "react";
+import { useState } from "react";
 import { NumberBadge } from "@/components/game/manacost";
 import type { Digit } from "@/components/game/manacost";
 import type { Pick3D, CardMeta } from "@/lib/game/cardSorting";
@@ -32,12 +32,9 @@ export type YourDeckListProps = {
   collectionCountsByCardId: Record<number, number>;
   moveOneFromSideboardToCollection: (cardId: number) => void;
   moveOneFromCollectionToSideboard: (cardId: number) => void;
-  /** When true, sideboard tab includes both Sideboard and Collection zones (draft/sealed) */
-  mergeCollectionIntoSideboard?: boolean;
 };
 
 type SortMode = "name" | "cost" | "type" | "element" | "none";
-type ViewMode = "list" | "card";
 
 export default function YourDeckList(props: YourDeckListProps) {
   const {
@@ -57,25 +54,14 @@ export default function YourDeckList(props: YourDeckListProps) {
     collectionCountsByCardId,
     moveOneFromSideboardToCollection,
     moveOneFromCollectionToSideboard,
-    mergeCollectionIntoSideboard = false,
   } = props;
 
   const [columns, setColumns] = useState<2 | 3 | 4 | 5>(2);
   const [sortMode, setSortMode] = useState<SortMode>("none");
-  const [viewMode, setViewMode] = useState<ViewMode>("list");
 
   const handleColumnsChange = (newColumns: 2 | 3 | 4 | 5) => {
     setColumns(newColumns);
     onColumnsChange?.(newColumns);
-  };
-
-  const handleViewModeChange = (mode: ViewMode) => {
-    setViewMode(mode);
-    if (mode === "list") {
-      // Keep panel narrow in list view
-      setColumns(2);
-      onColumnsChange?.(2);
-    }
   };
 
   const order = ["air", "water", "earth", "fire"] as const;
@@ -84,24 +70,19 @@ export default function YourDeckList(props: YourDeckListProps) {
   const filtered = yourCounts.filter((it) => {
     if (cardsTab === "all") return true;
     if (cardsTab === "deck") {
+      // Only cards in the Deck zone
       return pick3D.some(
         (p) => p.card.cardId === it.cardId && p.zone === "Deck"
       );
     }
     if (cardsTab === "sideboard") {
-      if (mergeCollectionIntoSideboard) {
-        // Draft/sealed: include both Sideboard and Collection zones
-        return pick3D.some(
-          (p) =>
-            p.card.cardId === it.cardId &&
-            (p.zone === "Sideboard" || p.zone === "Collection")
-        );
-      }
+      // Cards in Sideboard zone only
       return pick3D.some(
         (p) => p.card.cardId === it.cardId && p.zone === "Sideboard"
       );
     }
     if (cardsTab === "collection") {
+      // Cards in Collection zone only
       return (
         pick3D.some(
           (p) => p.card.cardId === it.cardId && p.zone === "Collection"
@@ -135,7 +116,7 @@ export default function YourDeckList(props: YourDeckListProps) {
       const getPrimaryElementIndex = (
         thresholds: Record<string, number>
       ): number => {
-        let bestIndex: number = order.length;
+        let bestIndex: number = order.length; // colorless / no thresholds last
         let bestValue = 0;
         order.forEach((el, idx) => {
           const v = thresholds[el] || 0;
@@ -161,6 +142,7 @@ export default function YourDeckList(props: YourDeckListProps) {
       if (typeA !== typeB) return typeA.localeCompare(typeB);
       return a.name.localeCompare(b.name);
     }
+    // "none" mode: no sorting, preserve original order
     return 0;
   });
 
@@ -177,6 +159,7 @@ export default function YourDeckList(props: YourDeckListProps) {
           { key: "atlas", items: [] },
         ];
 
+  // Only group by type if not in "none" mode
   if (sortMode !== "none") {
     for (const it of sortedFiltered) {
       const pickInfo = pickInfoById[it.cardId];
@@ -187,8 +170,7 @@ export default function YourDeckList(props: YourDeckListProps) {
     }
   }
 
-  // Shared data extraction for both view modes
-  const getCardData = (it: { cardId: number; count: number; name: string }) => {
+  const renderItem = (it: { cardId: number; count: number; name: string }) => {
     const meta = metaByCardId[it.cardId];
     const raw = (meta?.thresholds as Record<string, number> | undefined) || {};
     const thresholds: Record<string, number> = {};
@@ -205,134 +187,55 @@ export default function YourDeckList(props: YourDeckListProps) {
     const cardInDeck = pick3D.filter(
       (p) => p.card.cardId === it.cardId && p.zone === "Deck"
     ).length;
+    // Cards in Sideboard zone (for draft picks pool)
     const cardInSideboard = pick3D.filter(
       (p) => p.card.cardId === it.cardId && p.zone === "Sideboard"
     ).length;
+    // Cards in Collection zone (for constructed 10-card collection)
     const cardInCollection = pick3D.filter(
       (p) => p.card.cardId === it.cardId && p.zone === "Collection"
     ).length;
 
-    return { meta, thresholds, pickInfo, slug, isSite, cardInDeck, cardInSideboard, cardInCollection };
-  };
-
-  const handleCardClick = (it: { cardId: number; name: string }, cardInDeck: number, cardInSideboard: number) => {
-    const total = cardInDeck + cardInSideboard;
-    if (total === 1 || cardInDeck === 0 || cardInSideboard === 0) {
-      if (cardInDeck > 0) {
-        moveOneToSideboard(it.cardId);
-        const remaining = cardInDeck - 1;
-        setFeedback(
-          remaining > 0
-            ? `Moved "${it.name}" to Sideboard (${remaining} left in deck)`
-            : `Moved "${it.name}" to Sideboard (no copies remain in deck)`
-        );
-      } else if (cardInSideboard > 0) {
-        moveOneFromSideboardToDeck(it.cardId);
-        const remaining = cardInSideboard - 1;
-        setFeedback(
-          remaining > 0
-            ? `Moved "${it.name}" to Deck (${remaining} left in sideboard)`
-            : `Moved "${it.name}" to Deck (no copies remain in sideboard)`
-        );
+    const handleClick = (e: React.MouseEvent) => {
+      e.preventDefault();
+      const total = cardInDeck + cardInSideboard;
+      if (total === 1 || cardInDeck === 0 || cardInSideboard === 0) {
+        // Single zone - toggle between deck and sideboard
+        if (cardInDeck > 0) {
+          moveOneToSideboard(it.cardId);
+          const remaining = cardInDeck - 1;
+          const msg =
+            remaining > 0
+              ? `Moved "${it.name}" to Sideboard (${remaining} left in deck)`
+              : `Moved "${it.name}" to Sideboard (no copies remain in deck)`;
+          setFeedback(msg);
+        } else if (cardInSideboard > 0) {
+          moveOneFromSideboardToDeck(it.cardId);
+          const remaining = cardInSideboard - 1;
+          const msg =
+            remaining > 0
+              ? `Moved "${it.name}" to Deck (${remaining} left in sideboard)`
+              : `Moved "${it.name}" to Deck (no copies remain in sideboard)`;
+          setFeedback(msg);
+        }
+      } else {
+        // Multiple cards in both zones - prefer moving from deck to sideboard
+        if (cardInDeck > 0) {
+          moveOneToSideboard(it.cardId);
+          const remaining = cardInDeck - 1;
+          const msg =
+            remaining > 0
+              ? `Moved "${it.name}" to Sideboard (${remaining} left in deck)`
+              : `Moved "${it.name}" to Sideboard (no copies remain in deck)`;
+          setFeedback(msg);
+        }
       }
-    } else {
-      if (cardInDeck > 0) {
-        moveOneToSideboard(it.cardId);
-        const remaining = cardInDeck - 1;
-        setFeedback(
-          remaining > 0
-            ? `Moved "${it.name}" to Sideboard (${remaining} left in deck)`
-            : `Moved "${it.name}" to Sideboard (no copies remain in deck)`
-        );
-      }
-    }
-  };
+    };
 
-  // Compact list view: single-row per card
-  const renderListItem = (it: { cardId: number; count: number; name: string }) => {
-    const { meta, thresholds, pickInfo, slug, isSite, cardInDeck, cardInSideboard, cardInCollection } = getCardData(it);
-
-    return (
-      <div
-        key={it.cardId}
-        className="flex items-center gap-2 px-2 py-1 rounded bg-black/50 ring-1 ring-white/15 text-white text-xs cursor-pointer hover:bg-black/30"
-        onMouseEnter={() => {
-          if (slug) onHoverPreview(slug, it.name, pickInfo?.type || null);
-        }}
-        onMouseLeave={() => onHoverClear()}
-        onClick={(e) => {
-          e.preventDefault();
-          handleCardClick(it, cardInDeck, cardInSideboard);
-        }}
-        onContextMenu={(e) => {
-          e.preventDefault();
-          openContextMenu(it.cardId, it.name, e.clientX, e.clientY);
-        }}
-        title="Left-click to move between Deck/Sideboard. Right-click for more options."
-      >
-        {/* Name */}
-        <span className="flex-1 truncate font-medium min-w-0">{it.name}</span>
-        {/* Count */}
-        <span className="text-white/60 flex-none">x{it.count}</span>
-        {/* Element badges */}
-        <div className="flex items-center gap-0.5 flex-none">
-          {order.map((k) =>
-            thresholds[k] ? (
-              <Image
-                key={k}
-                src={`/api/assets/${k}.png`}
-                alt={k}
-                width={10}
-                height={10}
-                unoptimized
-              />
-            ) : null
-          )}
-        </div>
-        {/* Mana cost */}
-        {meta?.cost != null && !isSite && (
-          <div className="flex-none">
-            {meta.cost >= 0 && meta.cost <= 9 ? (
-              <NumberBadge
-                value={meta.cost as Digit}
-                size={14}
-                strokeWidth={6}
-              />
-            ) : (
-              <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full bg-white text-black text-[9px] font-bold">
-                {meta.cost}
-              </span>
-            )}
-          </div>
-        )}
-        {/* Zone dots */}
-        <div className="flex items-center gap-0.5 flex-none">
-          {cardInDeck > 0 && (
-            <div
-              className="w-2 h-2 rounded-full bg-green-500"
-              title={`Deck: ${cardInDeck}`}
-            />
-          )}
-          {cardInSideboard > 0 && (
-            <div
-              className="w-2 h-2 rounded-full bg-blue-500"
-              title={`Sideboard: ${cardInSideboard}`}
-            />
-          )}
-          {cardInCollection > 0 && (
-            <div
-              className="w-2 h-2 rounded-full bg-purple-500"
-              title={`Collection: ${cardInCollection}`}
-            />
-          )}
-        </div>
-      </div>
-    );
-  };
-
-  // Card grid view (original)
-  const renderItem = (it: { cardId: number; count: number; name: string }) => {
-    const { meta, thresholds, pickInfo, slug, isSite, cardInDeck, cardInSideboard, cardInCollection } = getCardData(it);
+    const handleContextMenu = (e: React.MouseEvent) => {
+      e.preventDefault();
+      openContextMenu(it.cardId, it.name, e.clientX, e.clientY);
+    };
 
     return (
       <div
@@ -342,15 +245,9 @@ export default function YourDeckList(props: YourDeckListProps) {
           if (slug) onHoverPreview(slug, it.name, pickInfo?.type || null);
         }}
         onMouseLeave={() => onHoverClear()}
-        onClick={(e) => {
-          e.preventDefault();
-          handleCardClick(it, cardInDeck, cardInSideboard);
-        }}
-        onContextMenu={(e) => {
-          e.preventDefault();
-          openContextMenu(it.cardId, it.name, e.clientX, e.clientY);
-        }}
-        title="Left-click to move between Deck/Sideboard. Right-click for more options."
+        onClick={handleClick}
+        onContextMenu={handleContextMenu}
+        title={`Left-click to move between Deck/Sideboard. Right-click for more options.`}
       >
         <div className="flex items-start gap-2">
           {slug ? (
@@ -487,59 +384,26 @@ export default function YourDeckList(props: YourDeckListProps) {
     <div className="max-h-[calc(100vh-16rem)] overflow-auto pr-2 text-xs pointer-events-auto space-y-3">
       {/* Controls */}
       <div className="sticky top-0 z-10 bg-black/90 backdrop-blur-sm p-2 rounded space-y-2 border border-white/10">
-        {/* View mode + Column selector */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <span className="text-white/60 text-[10px] uppercase tracking-wide">
-              View:
-            </span>
-            <div className="flex gap-1">
+        {/* Column selector */}
+        <div className="flex items-center gap-2">
+          <span className="text-white/60 text-[10px] uppercase tracking-wide">
+            Columns:
+          </span>
+          <div className="flex gap-1">
+            {([2, 3, 4, 5] as const).map((col) => (
               <button
-                onClick={() => handleViewModeChange("list")}
+                key={col}
+                onClick={() => handleColumnsChange(col)}
                 className={`px-2 py-0.5 rounded text-[10px] ${
-                  viewMode === "list"
+                  columns === col
                     ? "bg-blue-600 text-white"
                     : "bg-white/10 text-white/70 hover:bg-white/20"
                 }`}
               >
-                List
+                {col}
               </button>
-              <button
-                onClick={() => handleViewModeChange("card")}
-                className={`px-2 py-0.5 rounded text-[10px] ${
-                  viewMode === "card"
-                    ? "bg-blue-600 text-white"
-                    : "bg-white/10 text-white/70 hover:bg-white/20"
-                }`}
-              >
-                Card
-              </button>
-            </div>
+            ))}
           </div>
-
-          {/* Column selector — only in card view */}
-          {viewMode === "card" && (
-            <div className="flex items-center gap-2">
-              <span className="text-white/60 text-[10px] uppercase tracking-wide">
-                Columns:
-              </span>
-              <div className="flex gap-1">
-                {([2, 3, 4, 5] as const).map((col) => (
-                  <button
-                    key={col}
-                    onClick={() => handleColumnsChange(col)}
-                    className={`px-2 py-0.5 rounded text-[10px] ${
-                      columns === col
-                        ? "bg-blue-600 text-white"
-                        : "bg-white/10 text-white/70 hover:bg-white/20"
-                    }`}
-                  >
-                    {col}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Sort selector */}
@@ -585,15 +449,9 @@ export default function YourDeckList(props: YourDeckListProps) {
                   : "Atlas"}
               </div>
             )}
-            {viewMode === "card" ? (
-              <div className={`grid ${gridColsClass} gap-2`}>
-                {g.items.map((it) => renderItem(it))}
-              </div>
-            ) : (
-              <div className="flex flex-col gap-1">
-                {g.items.map((it) => renderListItem(it))}
-              </div>
-            )}
+            <div className={`grid ${gridColsClass} gap-2`}>
+              {g.items.map((it) => renderItem(it))}
+            </div>
           </div>
         ) : null
       )}

@@ -10,10 +10,9 @@ import { useMemo, useRef, useState, useCallback, useEffect } from "react";
 import { MOUSE, TOUCH } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import DraggableCard3D from "@/app/decks/editor-3d/DraggableCard3D";
-import { EditorMarqueeActionBar } from "@/app/decks/editor-3d/EditorMarqueeActionBar";
-import { useMarqueeSelection } from "@/app/decks/editor-3d/hooks/useMarqueeSelection";
 import CardPreviewOverlay from "@/components/game/CardPreviewOverlay";
 import { ClientCanvas } from "@/components/game/ClientCanvas";
+import { DynamicBoard as Board } from "@/components/game/dynamic-3d";
 import type { Digit } from "@/components/game/manacost";
 import { NumberBadge } from "@/components/game/manacost";
 import { CustomSelect } from "@/components/ui/CustomSelect";
@@ -26,17 +25,13 @@ import {
   weightForRarity,
   choiceWeighted,
 } from "@/lib/game/cardSorting";
-import { BoardEnvironment } from "@/lib/game/components/BoardEnvironment";
 import DraftPackHand3D from "@/lib/game/components/DraftPackHand3D";
-import {
-  MarqueeOverlayWithRef,
-  useMarqueeOverlayRef,
-} from "@/lib/game/components/MarqueeOverlay";
 import MouseTracker from "@/lib/game/components/MouseTracker";
 import TextureCache from "@/lib/game/components/TextureCache";
-import { BASE_TILE_SIZE, CARD_LONG, MAT_RATIO } from "@/lib/game/constants";
+import { CARD_LONG } from "@/lib/game/constants";
 import { Physics } from "@/lib/game/physics";
 import { createStackHoverState } from "@/lib/game/stackHover";
+import { useGameStore } from "@/lib/game/store";
 import {
   DEFAULT_DRAFTABLE_SETS,
   DEFAULT_SET,
@@ -50,6 +45,17 @@ import { getBoosterAssetName } from "@/lib/utils/booster-assets";
 export default function Draft3DPage() {
   const router = useRouter();
   const { status } = useSession();
+  const resetGameState = useGameStore((s) => s.resetGameState);
+  const clearSnapshotsForNewMatch = useGameStore(
+    (s) => s.clearSnapshotsForNewMatch
+  );
+
+  // Reset game state on mount to clear any previous board state
+  useEffect(() => {
+    resetGameState();
+    clearSnapshotsForNewMatch();
+  }, [resetGameState, clearSnapshotsForNewMatch]);
+
   // --- Draft state (mirrors /draft 2D page) ---
   // Multi-set support: choose a set per pack column
   // Default to Gothic (newest set) for all 3 packs
@@ -148,11 +154,6 @@ export default function Draft3DPage() {
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   // Disable orbit while dragging any draft card
   const [orbitLocked, setOrbitLocked] = useState(false);
-
-  // Marquee selection
-  const marquee = useMarqueeSelection();
-  const { rectRef: marqueeRectRef, updateRect: updateMarqueeRect } =
-    useMarqueeOverlayRef();
   // Render order counter for stacking
   const roCounterRef = useRef(1500);
   const getTopRenderOrder = useCallback(() => {
@@ -164,26 +165,6 @@ export default function Draft3DPage() {
   // Using shared Pick3D type from src/lib/game/cardSorting.ts
   const [pick3D, setPick3D] = useState<Pick3D[]>([]);
   const [nextPickId, setNextPickId] = useState(1);
-  const pick3DRef = useRef<Pick3D[]>([]);
-  pick3DRef.current = pick3D;
-
-  // Update marquee overlay rect
-  useEffect(() => {
-    updateMarqueeRect(marquee.marqueeRect);
-  }, [marquee.marqueeRect, updateMarqueeRect]);
-
-  // Escape clears marquee selection
-  const { selectedIds: mqSelectedIds, clearSelection: mqClearSelection } = marquee;
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      if (mqSelectedIds.size === 0) return;
-      e.preventDefault();
-      mqClearSelection();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [mqSelectedIds.size, mqClearSelection]);
 
   // Hover preview timer to prevent immediate clearing
   const clearHoverTimerRef = useRef<number | null>(null);
@@ -903,51 +884,8 @@ export default function Draft3DPage() {
           />
 
           <Physics gravity={[0, -9.81, 0]}>
-            {/* Table + environment (no game grid) */}
-            <BoardEnvironment
-              matW={(() => {
-                const gw = 5 * BASE_TILE_SIZE;
-                const gh = 4 * BASE_TILE_SIZE;
-                const mh = Math.max(gh, gw / MAT_RATIO);
-                return mh === gh ? gh * MAT_RATIO : gw;
-              })()}
-              matH={Math.max(4 * BASE_TILE_SIZE, 5 * BASE_TILE_SIZE / MAT_RATIO)}
-              showPlaymat={false}
-              showOverlay={false}
-              showTable
-            />
-            {/* Marquee selection plane */}
-            <mesh
-              position={[0, -0.01, 0]}
-              rotation-x={-Math.PI / 2}
-              onPointerDown={(e) => {
-                if (e.nativeEvent.button !== 0) return;
-                marquee.onMarqueePointerDown(
-                  e.nativeEvent.clientX,
-                  e.nativeEvent.clientY,
-                  e.point.x,
-                  e.point.z,
-                );
-              }}
-              onPointerMove={(e) => {
-                marquee.onMarqueePointerMove(
-                  e.nativeEvent.clientX,
-                  e.nativeEvent.clientY,
-                );
-              }}
-              onPointerUp={(e) => {
-                marquee.onMarqueePointerUp(
-                  e.point.x,
-                  e.point.z,
-                  pick3DRef.current,
-                  e.nativeEvent.shiftKey,
-                );
-              }}
-              onPointerCancel={() => marquee.onMarqueeCancel()}
-            >
-              <planeGeometry args={[20, 16]} />
-              <meshBasicMaterial visible={false} />
-            </mesh>
+            {/* Board re-enabled for proper playmat, with raycast disabled for draft mode */}
+            <Board noRaycast={true} />
           </Physics>
 
           <TextureCache />
@@ -1140,8 +1078,6 @@ export default function Draft3DPage() {
                         );
                       }
                     }}
-                    isSelected={marquee.isSelected(p.id)}
-                    onClick={() => marquee.toggleSelect(p.id)}
                     onDragChange={setOrbitLocked}
                     getTopRenderOrder={getTopRenderOrder}
                     lockUpright
@@ -1180,39 +1116,6 @@ export default function Draft3DPage() {
           <KeyboardPanControls enabled={!orbitLocked} />
         </ClientCanvas>
       </div>
-
-      {/* Marquee selection overlay */}
-      <MarqueeOverlayWithRef rectRef={marqueeRectRef} />
-
-      {/* Marquee action bar */}
-      <EditorMarqueeActionBar
-        count={marquee.selectedIds.size}
-        onMoveToDeck={() => {
-          setPick3D((prev) =>
-            prev.map((c) =>
-              marquee.selectedIds.has(c.id) ? { ...c, zone: "Deck" as const } : c,
-            ),
-          );
-          marquee.clearSelection();
-        }}
-        onMoveToSideboard={() => {
-          setPick3D((prev) =>
-            prev.map((c) =>
-              marquee.selectedIds.has(c.id)
-                ? { ...c, zone: "Sideboard" as const }
-                : c,
-            ),
-          );
-          marquee.clearSelection();
-        }}
-        onRemove={() => {
-          setPick3D((prev) =>
-            prev.filter((c) => !marquee.selectedIds.has(c.id)),
-          );
-          marquee.clearSelection();
-        }}
-        onClear={() => marquee.clearSelection()}
-      />
 
       {/* Overlays */}
       <div className="absolute inset-0 z-20 pointer-events-none select-none">
