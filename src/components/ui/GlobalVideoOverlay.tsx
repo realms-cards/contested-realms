@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 /**
  * Global Video Overlay Component
@@ -12,46 +12,51 @@
  * video sections.
  */
 
-import Image from 'next/image';
-import React, { useEffect } from 'react';
-import { OnlineContext } from '@/app/online/online-context';
-import SeatMediaControls, { SeatRtcLike } from '@/components/rtc/SeatMediaControls';
-import { useSound } from '@/lib/contexts/SoundContext';
-import { useVideoOverlay } from '@/lib/contexts/VideoOverlayContext';
-import { FEATURE_AUDIO_ONLY } from '@/lib/flags';
-import { ConnectionStatusIndicator } from './ConnectionStatusIndicator';
-import { VideoStreamOverlay } from './VideoStreamOverlay';
-import type { GlobalVideoOverlayProps } from '@/lib/rtc/types';
+import Image from "next/image";
+import React, { useEffect } from "react";
+import { OnlineContext } from "@/app/online/online-context";
+import SeatMediaControls, {
+  SeatRtcLike,
+} from "@/components/rtc/SeatMediaControls";
+import { useSound } from "@/lib/contexts/SoundContext";
+import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
+import { FEATURE_AUDIO_ONLY } from "@/lib/flags";
+import type { GlobalVideoOverlayProps } from "@/lib/rtc/types";
+import { ConnectionStatusIndicator } from "./ConnectionStatusIndicator";
+import { VideoStreamOverlay } from "./VideoStreamOverlay";
 
 /**
  * Global Video Overlay Component
- * 
+ *
  * @param props - Component configuration
  * @param props.className - Additional CSS classes to apply
  * @param props.position - Where to position the overlay on screen
  * @param props.showUserAvatar - Whether to show the user avatar menu
  * @returns The rendered video overlay component
  */
-export const GlobalVideoOverlay: React.FC<GlobalVideoOverlayProps & {
-  // Optional match-level RTC instance supplied by the page to ensure a single PC
-  rtc?: SeatRtcLike | null;
-  // When expanded, try to auto-connect if RTC is idle (helps with UX and autoplay gating)
-  autoConnectOnExpand?: boolean;
-  // Connection request callback for matches
-  onRequestConnection?: (targetId: string) => void;
-  targetPlayerId?: string | null;
-}> = ({
-  className = '',
-  position = 'top-right',
+export const GlobalVideoOverlay: React.FC<
+  GlobalVideoOverlayProps & {
+    // Optional match-level RTC instance supplied by the page to ensure a single PC
+    rtc?: SeatRtcLike | null;
+    // When expanded, try to auto-connect if RTC is idle (helps with UX and autoplay gating)
+    autoConnectOnExpand?: boolean;
+    // Connection request callback for matches
+    onRequestConnection?: (targetId: string) => void;
+    targetPlayerId?: string | null;
+  }
+> = ({
+  className = "",
+  position = "top-right",
   showUserAvatar = true,
-  userDisplayName = '',
+  userDisplayName = "",
   userAvatarUrl = null,
   rtc: rtcProp = null,
   autoConnectOnExpand = false,
   onRequestConnection,
   targetPlayerId,
 }) => {
-  const { shouldShowVideo: shouldShowVideoFromScreen, shouldShowControls } = useVideoOverlay();
+  const { shouldShowVideo: shouldShowVideoFromScreen, shouldShowControls } =
+    useVideoOverlay();
   const onlineCtx = React.useContext(OnlineContext);
   const [isMinimized, setIsMinimized] = React.useState(true); // Start collapsed by default
   const { volume, setVolume, playCardShuffle } = useSound();
@@ -71,20 +76,24 @@ export const GlobalVideoOverlay: React.FC<GlobalVideoOverlayProps & {
     if (!rtc || !rtc.featureEnabled) return;
     if (isMinimized) return;
     const s = rtc.state;
-    if (s === 'idle' || s === 'failed' || s === 'closed') {
-      try { void rtc.join(); } catch {}
+    if (s === "idle" || s === "failed" || s === "closed") {
+      try {
+        void rtc.join();
+      } catch {}
     }
   }, [autoConnectOnExpand, isMinimized, rtc]);
 
   // Position classes
   const positionClasses = {
-    'top-right': 'top-4 right-4',
-    'bottom-left': 'bottom-4 left-4', 
-    'bottom-right': 'bottom-4 right-4'
+    "top-right": "top-4 right-4",
+    "bottom-left": "bottom-4 left-4",
+    "bottom-right": "bottom-4 right-4",
   };
 
   // Global audio-only flag disables video tiles regardless of screen config
-  const shouldShowVideo = FEATURE_AUDIO_ONLY ? false : shouldShowVideoFromScreen;
+  const shouldShowVideo = FEATURE_AUDIO_ONLY
+    ? false
+    : shouldShowVideoFromScreen;
 
   // No compact status indicator when avatar is hidden; rely on UserBadge presence instead
 
@@ -94,7 +103,7 @@ export const GlobalVideoOverlay: React.FC<GlobalVideoOverlayProps & {
   }
 
   return (
-    <div 
+    <div
       className={`
         fixed z-[65] ${positionClasses[position]} 
         flex flex-col items-end gap-3 pointer-events-none
@@ -116,12 +125,12 @@ export const GlobalVideoOverlay: React.FC<GlobalVideoOverlayProps & {
               shadow-md hover:shadow-lg
               overflow-hidden
             `}
-            title={isMinimized ? 'Show video controls' : 'Hide video controls'}
+            title={isMinimized ? "Show video controls" : "Hide video controls"}
           >
             {userAvatarUrl ? (
               <Image
                 src={userAvatarUrl}
-                alt={userDisplayName || 'User'}
+                alt={userDisplayName || "User"}
                 fill
                 sizes="32px"
                 className="object-cover"
@@ -129,7 +138,9 @@ export const GlobalVideoOverlay: React.FC<GlobalVideoOverlayProps & {
               />
             ) : (
               <span className="text-white text-xs font-semibold">
-                {userDisplayName ? userDisplayName.slice(0, 2).toUpperCase() : 'ME'}
+                {userDisplayName
+                  ? userDisplayName.slice(0, 2).toUpperCase()
+                  : "ME"}
               </span>
             )}
           </button>
@@ -155,7 +166,7 @@ export const GlobalVideoOverlay: React.FC<GlobalVideoOverlayProps & {
           )}
 
           {/* Connection Status Indicator */}
-          {rtc && rtc.state !== 'idle' && (
+          {rtc && rtc.state !== "idle" && (
             <div className="pointer-events-auto">
               <ConnectionStatusIndicator
                 connectionState={rtc.state}
@@ -169,20 +180,27 @@ export const GlobalVideoOverlay: React.FC<GlobalVideoOverlayProps & {
           {/* User Settings Panel - now integrated into the avatar toggle */}
           {showUserAvatar && (
             <div className="pointer-events-auto">
-              <div className="
+              <div
+                className="
                 bg-gray-900/80 backdrop-blur-sm rounded-lg p-3
                 shadow-lg border border-gray-700/50
-              ">
+              "
+              >
                 <div className="flex flex-col gap-3 text-white text-sm">
                   <div className="flex items-center gap-2">
-                    <div className="
+                    <div
+                      className="
                       w-2 h-2 rounded-full bg-green-400
-                    " />
+                    "
+                    />
                     <span>You are online</span>
                   </div>
 
                   <div className="flex flex-col gap-2">
-                    <label className="flex items-center justify-between text-xs uppercase tracking-wide text-white/60" htmlFor={volumeSliderId}>
+                    <label
+                      className="flex items-center justify-between text-xs uppercase tracking-wide text-white/60"
+                      htmlFor={volumeSliderId}
+                    >
                       <span>Sound Volume</span>
                       <span>{sliderValue}%</span>
                     </label>
@@ -196,7 +214,8 @@ export const GlobalVideoOverlay: React.FC<GlobalVideoOverlayProps & {
                         setVolume(event.currentTarget.valueAsNumber / 100);
                       }}
                       onPointerUp={(event) => {
-                        const nextVolume = event.currentTarget.valueAsNumber / 100;
+                        const nextVolume =
+                          event.currentTarget.valueAsNumber / 100;
                         if (nextVolume > 0) {
                           playCardShuffle();
                         }
@@ -214,7 +233,7 @@ export const GlobalVideoOverlay: React.FC<GlobalVideoOverlayProps & {
             <div className="pointer-events-auto">
               <VideoStreamOverlay
                 stream={rtc.remoteStream}
-                playerId={'remote-player'}
+                playerId={"remote-player"}
                 displayName="Remote Player"
                 className="shadow-lg rounded-lg overflow-hidden"
               />
@@ -222,18 +241,20 @@ export const GlobalVideoOverlay: React.FC<GlobalVideoOverlayProps & {
           )}
 
           {/* Local Video Preview (when connected) */}
-          {shouldShowVideo && rtc && rtc.localStream && rtc.state === 'connected' && (
-            <div className="pointer-events-auto">
-              <VideoStreamOverlay
-                stream={rtc.localStream}
-                playerId="local-player"
-                displayName="You"
-                muted={true} // Always mute local stream to prevent echo
-                className="shadow-lg rounded-lg overflow-hidden w-32 h-24"
-              />
-            </div>
-          )}
-
+          {shouldShowVideo &&
+            rtc &&
+            rtc.localStream &&
+            rtc.state === "connected" && (
+              <div className="pointer-events-auto">
+                <VideoStreamOverlay
+                  stream={rtc.localStream}
+                  playerId="local-player"
+                  displayName="You"
+                  muted={true} // Always mute local stream to prevent echo
+                  className="shadow-lg rounded-lg overflow-hidden w-32 h-24"
+                />
+              </div>
+            )}
         </>
       )}
     </div>

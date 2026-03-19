@@ -1,6 +1,7 @@
 "use strict";
 
 import type { Server as SocketIOServer, Socket } from "socket.io";
+import type { RedisStateManager } from "../core/redis-state";
 import type {
   LobbyState,
   PendingVoiceRequest,
@@ -8,15 +9,18 @@ import type {
   ServerMatchState,
   VoiceParticipant,
 } from "../types";
-import type { RedisStateManager } from "../core/redis-state";
 
 interface RtcHandlersDeps {
   io: SocketIOServer;
   socket: Socket;
   isAuthed: () => boolean;
   getPlayerBySocket: (socket: Socket | null | undefined) => PlayerState | null;
-  getPlayerInfo: (playerId: string) => { id: string; displayName: string; seat?: string } | null;
-  getVoiceRoomIdForPlayer: (player: PlayerState | null | undefined) => string | null;
+  getPlayerInfo: (
+    playerId: string,
+  ) => { id: string; displayName: string; seat?: string } | null;
+  getVoiceRoomIdForPlayer: (
+    player: PlayerState | null | undefined,
+  ) => string | null;
   players: Map<string, PlayerState>;
   lobbies: Map<string, LobbyState>;
   matches: Map<string, ServerMatchState>;
@@ -229,46 +233,53 @@ export function registerRtcHandlers(deps: RtcHandlersDeps): RtcHandlers {
     }
   });
 
-  socket.on("rtc:connection-failed", (payload: Record<string, unknown> = {}) => {
-    if (!isAuthed()) return;
-    const player = getPlayerBySocket(socket);
-    if (!player) return;
+  socket.on(
+    "rtc:connection-failed",
+    (payload: Record<string, unknown> = {}) => {
+      if (!isAuthed()) return;
+      const player = getPlayerBySocket(socket);
+      if (!player) return;
 
-    const roomId = getVoiceRoomIdForPlayer(player);
-    if (!roomId) return;
+      const roomId = getVoiceRoomIdForPlayer(player);
+      if (!roomId) return;
 
-    const playerId = player.id;
-    const reason =
-      typeof payload.reason === "string" ? payload.reason : "unknown";
-    const code = typeof payload.code === "string" ? payload.code : "CONNECTION_ERROR";
+      const playerId = player.id;
+      const reason =
+        typeof payload.reason === "string" ? payload.reason : "unknown";
+      const code =
+        typeof payload.code === "string" ? payload.code : "CONNECTION_ERROR";
 
-    console.warn(
-      `WebRTC connection failed for player ${playerId} in ${roomId}: ${reason} (${code})`
-    );
+      console.warn(
+        `WebRTC connection failed for player ${playerId} in ${roomId}: ${reason} (${code})`,
+      );
 
-    const roomParticipants = rtcParticipants.get(roomId);
-    if (roomParticipants && roomParticipants.has(playerId)) {
-      roomParticipants.forEach((pid) => {
-        if (pid === playerId) return;
-        const participantPlayer = players.get(pid);
-        if (participantPlayer?.socketId) {
-          io.to(participantPlayer.socketId).emit("rtc:peer-connection-failed", {
-            from: playerId,
-            reason,
-            code,
-            timestamp: Date.now(),
-          });
-        }
+      const roomParticipants = rtcParticipants.get(roomId);
+      if (roomParticipants && roomParticipants.has(playerId)) {
+        roomParticipants.forEach((pid) => {
+          if (pid === playerId) return;
+          const participantPlayer = players.get(pid);
+          if (participantPlayer?.socketId) {
+            io.to(participantPlayer.socketId).emit(
+              "rtc:peer-connection-failed",
+              {
+                from: playerId,
+                reason,
+                code,
+                timestamp: Date.now(),
+              },
+            );
+          }
+        });
+      }
+
+      socket.emit("rtc:connection-failed-ack", {
+        playerId,
+        matchId: player.matchId || null,
+        roomId,
+        timestamp: Date.now(),
       });
-    }
-
-    socket.emit("rtc:connection-failed-ack", {
-      playerId,
-      matchId: player.matchId || null,
-      roomId,
-      timestamp: Date.now(),
-    });
-  });
+    },
+  );
 
   socket.on("rtc:request", (payload: Record<string, unknown> = {}) => {
     if (!isAuthed()) return;
@@ -387,11 +398,10 @@ export function registerRtcHandlers(deps: RtcHandlersDeps): RtcHandlers {
       matchId,
     });
 
-    const requesterInfo =
-      getPlayerInfo(player.id) ?? {
-        id: player.id,
-        displayName: `Player ${player.id.slice(-4)}`,
-      };
+    const requesterInfo = getPlayerInfo(player.id) ?? {
+      id: player.id,
+      displayName: `Player ${player.id.slice(-4)}`,
+    };
 
     io.to(targetPlayer.socketId).emit("rtc:request", {
       requestId,
@@ -475,11 +485,10 @@ export function registerRtcHandlers(deps: RtcHandlersDeps): RtcHandlers {
 
     const responsePayload = {
       requestId,
-      from:
-        getPlayerInfo(player.id) ?? {
-          id: player.id,
-          displayName: `Player ${player.id.slice(-4)}`,
-        },
+      from: getPlayerInfo(player.id) ?? {
+        id: player.id,
+        displayName: `Player ${player.id.slice(-4)}`,
+      },
       lobbyId: request.lobbyId,
       matchId: request.matchId,
       accepted,
@@ -488,7 +497,7 @@ export function registerRtcHandlers(deps: RtcHandlersDeps): RtcHandlers {
 
     io.to(requesterPlayer.socketId).emit(
       accepted ? "rtc:request:accepted" : "rtc:request:declined",
-      responsePayload
+      responsePayload,
     );
 
     socket.emit("rtc:request:ack", responsePayload);
@@ -526,7 +535,9 @@ export function registerRtcHandlers(deps: RtcHandlersDeps): RtcHandlers {
     if (!player) return;
     const playerId = player.id;
 
-    for (const [requestId, request] of Array.from(pendingVoiceRequests.entries())) {
+    for (const [requestId, request] of Array.from(
+      pendingVoiceRequests.entries(),
+    )) {
       if (request.from === playerId || request.to === playerId) {
         pendingVoiceRequests.delete(requestId);
 

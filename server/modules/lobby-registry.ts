@@ -5,14 +5,12 @@
  * Ensures lobbies are visible and joinable from any server instance.
  */
 
-import type { Redis } from "ioredis";
 import type { Server as SocketServer } from "socket.io";
 import type {
   RedisStateManager,
   RedisFullLobbyState,
   SoatcLeagueMatchInfo,
 } from "../core/redis-state";
-import { LOBBY_STATE_TTL_SEC } from "../core/redis-keys";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -43,7 +41,6 @@ export interface LobbyRecord {
 
 export interface LobbyRegistryConfig {
   io: SocketServer;
-  storeRedis: Redis | null;
   redisState: RedisStateManager;
   instanceId: string;
   lobbies: Map<string, LobbyRecord>;
@@ -55,7 +52,7 @@ export interface LobbyRegistryConfig {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function createLobbyRegistry(config: LobbyRegistryConfig) {
-  const { io, redisState, instanceId, lobbies, lobbyInvites } = config;
+  const { redisState, instanceId, lobbies, lobbyInvites } = config;
 
   // Local cache TTL tracking (30 seconds for lobbies - shorter than players)
   const LOCAL_CACHE_TTL_MS = 30 * 1000;
@@ -141,7 +138,7 @@ export function createLobbyRegistry(config: LobbyRegistryConfig) {
     await redisState.setFullLobbyState(lobby.id, toRedisFormat(lobby));
 
     console.log(
-      `[LobbyRegistry] Created lobby ${lobby.id} on instance ${instanceId}`
+      `[LobbyRegistry] Created lobby ${lobby.id} on instance ${instanceId}`,
     );
   }
 
@@ -203,7 +200,7 @@ export function createLobbyRegistry(config: LobbyRegistryConfig) {
     await redisState.deleteLobbyState(lobbyId);
 
     console.log(
-      `[LobbyRegistry] Deleted lobby ${lobbyId} on instance ${instanceId}`
+      `[LobbyRegistry] Deleted lobby ${lobbyId} on instance ${instanceId}`,
     );
   }
 
@@ -226,7 +223,10 @@ export function createLobbyRegistry(config: LobbyRegistryConfig) {
   /**
    * Remove a player from a lobby
    */
-  async function removePlayer(lobbyId: string, playerId: string): Promise<void> {
+  async function removePlayer(
+    lobbyId: string,
+    playerId: string,
+  ): Promise<void> {
     const lobby = lobbies.get(lobbyId);
     if (!lobby) return;
 
@@ -246,7 +246,7 @@ export function createLobbyRegistry(config: LobbyRegistryConfig) {
   async function setPlayerReady(
     lobbyId: string,
     playerId: string,
-    ready: boolean
+    ready: boolean,
   ): Promise<void> {
     const lobby = lobbies.get(lobbyId);
     if (!lobby) return;
@@ -288,7 +288,9 @@ export function createLobbyRegistry(config: LobbyRegistryConfig) {
     if (!lobbyInvites.has(lobbyId)) {
       lobbyInvites.set(lobbyId, new Set());
     }
-    lobbyInvites.get(lobbyId)!.add(playerId);
+    const invites = lobbyInvites.get(lobbyId);
+    if (!invites) return;
+    invites.add(playerId);
 
     await redisState.addLobbyInvite(lobbyId, playerId);
   }
@@ -296,7 +298,10 @@ export function createLobbyRegistry(config: LobbyRegistryConfig) {
   /**
    * Remove an invite for a player
    */
-  async function removeInvite(lobbyId: string, playerId: string): Promise<void> {
+  async function removeInvite(
+    lobbyId: string,
+    playerId: string,
+  ): Promise<void> {
     const invites = lobbyInvites.get(lobbyId);
     if (invites) {
       invites.delete(playerId);
@@ -308,7 +313,10 @@ export function createLobbyRegistry(config: LobbyRegistryConfig) {
   /**
    * Check if a player is invited to a lobby
    */
-  async function isInvited(lobbyId: string, playerId: string): Promise<boolean> {
+  async function isInvited(
+    lobbyId: string,
+    playerId: string,
+  ): Promise<boolean> {
     // Check local cache first
     const localInvites = lobbyInvites.get(lobbyId);
     if (localInvites?.has(playerId)) {
@@ -330,9 +338,7 @@ export function createLobbyRegistry(config: LobbyRegistryConfig) {
   async function getAllLobbies(): Promise<LobbyRecord[]> {
     if (!redisState.isEnabled()) {
       // Fallback to local-only
-      return Array.from(lobbies.values()).filter(
-        (l) => l.status !== "closed"
-      );
+      return Array.from(lobbies.values()).filter((l) => l.status !== "closed");
     }
 
     // Get from Redis (includes all instances)
@@ -359,7 +365,7 @@ export function createLobbyRegistry(config: LobbyRegistryConfig) {
         (lobby) =>
           lobby.status === "open" &&
           lobby.visibility === "open" &&
-          lobby.playerIds.size < lobby.maxPlayers
+          lobby.playerIds.size < lobby.maxPlayers,
       ) || null
     );
   }

@@ -8,11 +8,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MOUSE, TOUCH } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import DraggableCard3D from "@/app/decks/editor-3d/DraggableCard3D";
+import { EditorMarqueeActionBar } from "@/app/decks/editor-3d/EditorMarqueeActionBar";
+import { useMarqueeSelection } from "@/app/decks/editor-3d/hooks/useMarqueeSelection";
 import { useOnline } from "@/app/online/online-context";
 import UserBadge from "@/components/auth/UserBadge";
 import FloatingChat from "@/components/chat/FloatingChat";
 import CardPreviewOverlay from "@/components/game/CardPreviewOverlay";
-import { DynamicBoard as Board } from "@/components/game/dynamic-3d";
 import { NumberBadge } from "@/components/game/manacost";
 import type { Digit } from "@/components/game/manacost";
 import { GlobalVideoOverlay } from "@/components/ui/GlobalVideoOverlay";
@@ -28,10 +29,14 @@ import {
   type CardMeta,
   type Pick3D,
 } from "@/lib/game/cardSorting";
+import { BoardEnvironment } from "@/lib/game/components/BoardEnvironment";
 import DraftPackHand3D from "@/lib/game/components/DraftPackHand3D";
-import { CARD_LONG } from "@/lib/game/constants";
+import {
+  MarqueeOverlayWithRef,
+  useMarqueeOverlayRef,
+} from "@/lib/game/components/MarqueeOverlay";
+import { BASE_TILE_SIZE, CARD_LONG, MAT_RATIO } from "@/lib/game/constants";
 import { Physics } from "@/lib/game/physics";
-import { useGameStore } from "@/lib/game/store";
 import { useDraft3DTransport } from "@/lib/hooks/useDraft3DTransport";
 import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
 import type { DraftState } from "@/lib/net/transport";
@@ -87,16 +92,16 @@ export default function TournamentDraft3DScreen({
     waitingFor: [],
   });
 
-  useEffect(() => {
-    useGameStore.getState().resetGameState();
-    useGameStore.getState().clearSnapshotsForNewMatch();
-  }, []);
-
   const myPlayerIndex = mySeatNumber - 1; // seatNumber is 1-based, array index is 0-based
   const rtc = voice?.rtc ?? null;
 
   // Enhanced 3D Draft UI state
   const [orbitLocked, setOrbitLocked] = useState(false);
+
+  // Marquee selection
+  const marquee = useMarqueeSelection();
+  const { rectRef: marqueeRectRef, updateRect: updateMarqueeRect } =
+    useMarqueeOverlayRef();
   const [, setError] = useState<string | null>(null);
   const [packChoiceOverlay, setPackChoiceOverlay] = useState(false);
   const [ready, setReady] = useState(false);
@@ -107,6 +112,24 @@ export default function TournamentDraft3DScreen({
   const [packSequence, setPackSequence] = useState<string[]>([]); // tournament-configured sets per round
   const [showDeckConstructionOverlay, setShowDeckConstructionOverlay] =
     useState(false);
+
+  // Update marquee overlay rect
+  useEffect(() => {
+    updateMarqueeRect(marquee.marqueeRect);
+  }, [marquee.marqueeRect, updateMarqueeRect]);
+
+  // Escape clears marquee selection
+  const { selectedIds: mqSelectedIds, clearSelection: mqClearSelection } = marquee;
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (mqSelectedIds.size === 0) return;
+      e.preventDefault();
+      mqClearSelection();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [mqSelectedIds.size, mqClearSelection]);
 
   // Enhanced hand and HUD state
   const [pick3D, setPick3D] = useState<Pick3D[]>([]);
@@ -1727,7 +1750,51 @@ export default function TournamentDraft3DScreen({
           />
 
           <Physics gravity={[0, -9.81, 0]}>
-            <Board noRaycast={true} interactionMode="spectator" />
+            {/* Table + environment (no game grid) */}
+            <BoardEnvironment
+              matW={(() => {
+                const gw = 5 * BASE_TILE_SIZE;
+                const gh = 4 * BASE_TILE_SIZE;
+                const mh = Math.max(gh, gw / MAT_RATIO);
+                return mh === gh ? gh * MAT_RATIO : gw;
+              })()}
+              matH={Math.max(4 * BASE_TILE_SIZE, 5 * BASE_TILE_SIZE / MAT_RATIO)}
+              showPlaymat={false}
+              showOverlay={false}
+              showTable
+            />
+            {/* Marquee selection plane */}
+            <mesh
+              position={[0, -0.01, 0]}
+              rotation-x={-Math.PI / 2}
+              onPointerDown={(e) => {
+                if (e.nativeEvent.button !== 0) return;
+                marquee.onMarqueePointerDown(
+                  e.nativeEvent.clientX,
+                  e.nativeEvent.clientY,
+                  e.point.x,
+                  e.point.z,
+                );
+              }}
+              onPointerMove={(e) => {
+                marquee.onMarqueePointerMove(
+                  e.nativeEvent.clientX,
+                  e.nativeEvent.clientY,
+                );
+              }}
+              onPointerUp={(e) => {
+                marquee.onMarqueePointerUp(
+                  e.point.x,
+                  e.point.z,
+                  pick3DRef.current,
+                  e.nativeEvent.shiftKey,
+                );
+              }}
+              onPointerCancel={() => marquee.onMarqueeCancel()}
+            >
+              <planeGeometry args={[20, 16]} />
+              <meshBasicMaterial visible={false} />
+            </mesh>
           </Physics>
 
           {/* Draft Pack Hand */}
@@ -1898,6 +1965,8 @@ export default function TournamentDraft3DScreen({
                         );
                       }
                     }}
+                    isSelected={marquee.isSelected(p.id)}
+                    onClick={() => marquee.toggleSelect(p.id)}
                     onDragChange={setOrbitLocked}
                     getTopRenderOrder={getTopRenderOrder}
                     lockUpright
@@ -1943,6 +2012,39 @@ export default function TournamentDraft3DScreen({
           <TrackpadOrbitAdapter />
         </Canvas>
       </div>
+
+      {/* Marquee selection overlay */}
+      <MarqueeOverlayWithRef rectRef={marqueeRectRef} />
+
+      {/* Marquee action bar */}
+      <EditorMarqueeActionBar
+        count={marquee.selectedIds.size}
+        onMoveToDeck={() => {
+          setPick3D((prev) =>
+            prev.map((c) =>
+              marquee.selectedIds.has(c.id) ? { ...c, zone: "Deck" as const } : c,
+            ),
+          );
+          marquee.clearSelection();
+        }}
+        onMoveToSideboard={() => {
+          setPick3D((prev) =>
+            prev.map((c) =>
+              marquee.selectedIds.has(c.id)
+                ? { ...c, zone: "Sideboard" as const }
+                : c,
+            ),
+          );
+          marquee.clearSelection();
+        }}
+        onRemove={() => {
+          setPick3D((prev) =>
+            prev.filter((c) => !marquee.selectedIds.has(c.id)),
+          );
+          marquee.clearSelection();
+        }}
+        onClear={() => marquee.clearSelection()}
+      />
 
       {/* Presence overlay - positioned outside pointer-events-none for hover to work */}
       <TournamentPresenceOverlay

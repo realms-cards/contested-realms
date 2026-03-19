@@ -45,7 +45,8 @@ export class VoiceChannelManager {
     // Look for existing category
     const existing = guild.channels.cache.find(
       (ch) =>
-        ch.type === ChannelType.GuildCategory && ch.name === VOICE_CATEGORY_NAME
+        ch.type === ChannelType.GuildCategory &&
+        ch.name === VOICE_CATEGORY_NAME,
     ) as CategoryChannel | undefined;
 
     if (existing) return existing;
@@ -73,7 +74,7 @@ export class VoiceChannelManager {
     player1Name: string,
     player1DiscordId: string,
     player2Name: string,
-    player2DiscordId: string
+    player2DiscordId: string,
   ): Promise<{ channelId: string; inviteUrl: string }> {
     const guild = await this.getGuild();
     const category = await this.getOrCreateCategory(guild);
@@ -148,7 +149,7 @@ export class VoiceChannelManager {
   onVoiceStateUpdate(
     channelId: string,
     isEmpty: boolean,
-    matchId?: string
+    matchId?: string,
   ): void {
     // Find managed channel
     let managed: ManagedChannel | undefined;
@@ -161,15 +162,16 @@ export class VoiceChannelManager {
     }
 
     if (!managed || !matchId) return;
+    const managedMatchId = matchId;
 
     if (isEmpty) {
       // Schedule cleanup
       if (!managed.cleanupTimer) {
         console.log(
-          `[voice] Channel ${channelId} is empty, scheduling cleanup...`
+          `[voice] Channel ${channelId} is empty, scheduling cleanup...`,
         );
         managed.cleanupTimer = setTimeout(() => {
-          this.deleteChannel(matchId!);
+          this.deleteChannel(managedMatchId);
         }, CHANNEL_CLEANUP_DELAY_MS);
       }
     } else {

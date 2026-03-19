@@ -2,12 +2,13 @@
 
 import {
   ArrowLeft,
-  Grid3X3,
   HelpCircle,
+  Layers,
   Pencil,
   Shuffle,
   SlidersHorizontal,
 } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import React, { useMemo, useState } from "react";
 import DeckTopBarActions from "@/app/decks/editor-3d/DeckTopBarActions";
@@ -62,9 +63,12 @@ type DeckPanelsProps = {
   onToggleAutoSave?: (enabled: boolean) => void;
   // Tournament context (for "Back to Tournament" link)
   tournamentId?: string | null;
-  // Playmat/grid toggle
-  showPlaymat?: boolean;
-  onTogglePlaymat?: () => void;
+  // 2D/3D view mode
+  viewMode?: "2d" | "3d";
+  onToggleViewMode?: () => void;
+  // Mana curve & thresholds for inline display
+  manaCurve?: Record<number, number>;
+  thresholdSummary?: { elements: string[]; summary: Record<string, number> };
 };
 
 function DeckTitle({
@@ -117,13 +121,13 @@ function DeckTitle({
               setEditing(false);
             }
           }}
-          className="text-2xl font-fantaisie border-b-2 border-white/40 bg-transparent text-white outline-none max-w-[20ch] px-1"
+          className="text-lg font-fantaisie border-b-2 border-white/40 bg-transparent text-white outline-none max-w-[20ch] px-1"
           placeholder="Deck name"
           autoFocus
         />
       ) : (
         <div
-          className="text-3xl font-fantaisie text-white max-w-[20ch] truncate"
+          className="text-lg font-fantaisie text-white max-w-[20ch] truncate"
           title={displayName}
         >
           {displayName}
@@ -141,7 +145,7 @@ function DeckTitle({
       )}
       {modeLabel && (
         <span
-          className={`text-lg ml-1 ${
+          className={`text-sm ml-1 ${
             isDraftMode
               ? "text-orange-400"
               : isSealed
@@ -161,7 +165,7 @@ export default function DeckPanels(props: DeckPanelsProps) {
   const [controlsOpen, setControlsOpen] = useState(false);
   const iconButtonStyles = useMemo(
     () => ({
-      base: "h-9 w-9 grid place-items-center rounded-full border border-white/15 bg-white/5 text-white/70 transition-colors duration-150 hover:bg-white/15 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40",
+      base: "h-8 w-8 grid place-items-center rounded-full border border-white/15 bg-white/5 text-white/70 transition-colors duration-150 hover:bg-white/15 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40",
       active:
         "bg-emerald-500/80 text-black border-emerald-400 hover:bg-emerald-400 focus-visible:ring-emerald-300",
       toggled: "bg-white/15 text-white border-white/30 hover:bg-white/20",
@@ -209,15 +213,18 @@ export default function DeckPanels(props: DeckPanelsProps) {
     onToggleAutoSave,
     // Tournament context
     tournamentId,
-    // Playmat toggle
-    showPlaymat = true,
-    onTogglePlaymat,
+    // View mode
+    viewMode = "3d",
+    onToggleViewMode,
+    // Mana curve
+    manaCurve = {},
+    thresholdSummary = { elements: [], summary: {} },
   } = props;
 
   return (
     <div className="absolute inset-0 z-20 pointer-events-none select-none">
-      <div className="max-w-7xl mx-auto p-4 lg:pr-[20rem] xl:pr-[24rem] 2xl:pr-[28rem] flex flex-wrap items-end gap-4 pointer-events-auto select-none">
-        <div className="flex items-center gap-3">
+      <div className="max-w-7xl mx-auto px-3 py-2 lg:pr-[20rem] xl:pr-[24rem] 2xl:pr-[28rem] flex flex-wrap items-center gap-3 pointer-events-auto select-none">
+        <div className="flex items-center gap-2">
           {/* Back to Decks link (free mode only) */}
           {isFreeMode && !tournamentId && (
             <Link
@@ -237,21 +244,17 @@ export default function DeckPanels(props: DeckPanelsProps) {
               Back to Tournament
             </Link>
           )}
-          {/* Playmat/Grid toggle */}
-          {onTogglePlaymat && (
+          {/* 2D/3D view toggle */}
+          {onToggleViewMode && (
             <button
-              onClick={onTogglePlaymat}
+              onClick={onToggleViewMode}
               className={`${iconButtonStyles.base} ${
-                !showPlaymat ? "bg-blue-600/80 text-white border-blue-500" : ""
+                viewMode === "2d" ? "bg-blue-600/80 text-white border-blue-500" : ""
               }`}
-              title={
-                showPlaymat
-                  ? "Hide playmat (show grid)"
-                  : "Show playmat (hide grid)"
-              }
-              aria-label={showPlaymat ? "Hide playmat" : "Show playmat"}
+              title={viewMode === "3d" ? "Switch to 2D view" : "Switch to 3D view"}
+              aria-label={viewMode === "3d" ? "Switch to 2D view" : "Switch to 3D view"}
             >
-              <Grid3X3 className="h-5 w-5" strokeWidth={2.5} />
+              <Layers className="h-5 w-5" strokeWidth={2.5} />
             </button>
           )}
           <DeckTitle
@@ -482,13 +485,66 @@ export default function DeckPanels(props: DeckPanelsProps) {
           </div>
         </div>
 
-        {/* Deck selector - hidden in sealed/draft modes */}
-        {/* DeckTopBarActions dropdown is rendered inline under the toggle button above */}
-
-        {/* Sorting controls moved next to the title/help to keep them in the top row */}
-
-        {/* Validation status and submit actions */}
+        {/* Validation, mana curve, thresholds — right side */}
         <div className="ml-auto flex items-center gap-3">
+          {/* Inline mana curve + thresholds */}
+          {pick3DLength > 0 && (
+            <div className="flex items-center gap-2">
+              <div className="flex items-end gap-px h-8 bg-black/30 rounded px-1 py-0.5">
+                {Array.from({ length: 8 }, (_, cost) => {
+                  const count = manaCurve[cost] || 0;
+                  const maxCount = Math.max(...Object.values(manaCurve), 1);
+                  const height = (count / maxCount) * 100;
+                  const label = cost === 7 ? "7+" : String(cost);
+                  return (
+                    <div
+                      key={cost}
+                      className="flex flex-col items-center justify-end gap-0 w-4 h-full"
+                    >
+                      <div
+                        className="bg-blue-400/80 rounded-t min-h-[1px] w-2.5"
+                        style={{
+                          height: `${Math.max(height, count > 0 ? 10 : 0)}%`,
+                        }}
+                        title={`${label} mana: ${count} cards`}
+                      />
+                      <span className="text-[8px] text-white/40 leading-none">
+                        {label}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+              {thresholdSummary.elements.length > 0 && (
+                <div className="flex items-center gap-1.5">
+                  {thresholdSummary.elements.map((element) => {
+                    const count =
+                      thresholdSummary.summary[
+                        element as keyof typeof thresholdSummary.summary
+                      ] || 0;
+                    return (
+                      <div
+                        key={element}
+                        className="flex items-center gap-px bg-black/30 px-1 py-0.5 rounded"
+                        title={`Max ${element} threshold: ${count}`}
+                      >
+                        {Array.from({ length: count }, (_, i) => (
+                          <Image
+                            key={i}
+                            src={`/api/assets/${element}.png`}
+                            alt={element}
+                            width={10}
+                            height={10}
+                            unoptimized
+                          />
+                        ))}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
           <DeckValidation
             avatarCount={avatarCount}
             atlasCount={atlasCount}

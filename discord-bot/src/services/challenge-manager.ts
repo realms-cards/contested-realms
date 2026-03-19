@@ -4,8 +4,6 @@
 
 import type { RealmsApiClient, Challenge } from "./realms-api.js";
 
-const CHALLENGE_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
-
 export class ChallengeManager {
   private api: RealmsApiClient;
   // Local cache of pending challenges for quick lookup
@@ -26,14 +24,14 @@ export class ChallengeManager {
     challengeeDiscordId: string,
     format: string,
     guildId: string,
-    channelId: string
+    channelId: string,
   ): Promise<Challenge> {
     const challenge = await this.api.createChallenge(
       challengerDiscordId,
       challengeeDiscordId,
       format,
       guildId,
-      channelId
+      channelId,
     );
 
     this.pendingChallenges.set(challenge.id, challenge);

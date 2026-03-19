@@ -15,17 +15,18 @@ export const queueCommand = {
     .setName("queue")
     .setDescription("Join the matchmaking queue to find an opponent")
     .addSubcommand((sub) =>
-      sub.setName("join").setDescription("Join the constructed matchmaking queue")
+      sub
+        .setName("join")
+        .setDescription("Join the constructed matchmaking queue"),
     )
     .addSubcommand((sub) =>
-      sub.setName("leave").setDescription("Leave the matchmaking queue")
+      sub.setName("leave").setDescription("Leave the matchmaking queue"),
     )
     .addSubcommand((sub) =>
-      sub.setName("status").setDescription("Check the current queue status")
+      sub.setName("status").setDescription("Check the current queue status"),
     ) as SlashCommandBuilder,
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
-    const { queueManager } = getServices();
     const subcommand = interaction.options.getSubcommand();
 
     // Defer reply immediately (ephemeral for most responses)
@@ -41,13 +42,15 @@ export const queueCommand = {
   },
 };
 
-async function handleJoin(interaction: ChatInputCommandInteraction): Promise<void> {
+async function handleJoin(
+  interaction: ChatInputCommandInteraction,
+): Promise<void> {
   const { queueManager } = getServices();
 
   const result = await queueManager.joinQueue(
     interaction.user.id,
     interaction.guildId || "",
-    interaction.channelId
+    interaction.channelId,
   );
 
   if (result.status === "not_linked") {
@@ -55,7 +58,7 @@ async function handleJoin(interaction: ChatInputCommandInteraction): Promise<voi
       .setColor(0xef4444)
       .setTitle("Account Not Linked")
       .setDescription(
-        "You need to link your Discord account to Realms.cards before joining the queue."
+        "You need to link your Discord account to Realms.cards before joining the queue.",
       )
       .addFields({
         name: "Get Started",
@@ -73,7 +76,7 @@ async function handleJoin(interaction: ChatInputCommandInteraction): Promise<voi
       .setDescription("You're already in the matchmaking queue!")
       .addFields(
         { name: "Position", value: `#${result.position}`, inline: true },
-        { name: "Queue Size", value: `${result.queueSize}`, inline: true }
+        { name: "Queue Size", value: `${result.queueSize}`, inline: true },
       );
 
     await interaction.editReply({ embeds: [embed] });
@@ -82,17 +85,26 @@ async function handleJoin(interaction: ChatInputCommandInteraction): Promise<voi
 
   if (result.status === "matched") {
     // Match was found immediately!
-    const match = result.match!;
+    const match = result.match;
+    if (!match) {
+      throw new Error(
+        "Queue manager returned matched status without match data",
+      );
+    }
 
     const embed = new EmbedBuilder()
       .setColor(0x22c55e)
       .setTitle("Match Found!")
       .setDescription(
-        `You've been matched with **${match.challengee.name || "your opponent"}**!`
+        `You've been matched with **${match.challengee.name || "your opponent"}**!`,
       )
       .addFields(
         { name: "Format", value: "Constructed", inline: true },
-        { name: "Your Link", value: `[Join Match](${match.joinUrlP1})`, inline: true }
+        {
+          name: "Your Link",
+          value: `[Join Match](${match.joinUrlP1})`,
+          inline: true,
+        },
       )
       .setFooter({ text: "Check your DMs for the direct link" });
 
@@ -103,7 +115,7 @@ async function handleJoin(interaction: ChatInputCommandInteraction): Promise<voi
       try {
         const channel = interaction.channel as TextChannel;
         await channel.send(
-          `⚔️ **Match Found!** <@${interaction.user.id}> vs **${match.challengee.name || "opponent"}** - Constructed`
+          `⚔️ **Match Found!** <@${interaction.user.id}> vs **${match.challengee.name || "opponent"}** - Constructed`,
         );
       } catch (err) {
         console.error("[queue] Failed to post match announcement:", err);
@@ -119,7 +131,7 @@ async function handleJoin(interaction: ChatInputCommandInteraction): Promise<voi
     .setDescription("You've joined the constructed matchmaking queue!")
     .addFields(
       { name: "Position", value: `#${result.position}`, inline: true },
-      { name: "Queue Size", value: `${result.queueSize}`, inline: true }
+      { name: "Queue Size", value: `${result.queueSize}`, inline: true },
     )
     .setFooter({ text: "You'll be notified when a match is found" });
 
@@ -130,7 +142,7 @@ async function handleJoin(interaction: ChatInputCommandInteraction): Promise<voi
     try {
       const channel = interaction.channel as TextChannel;
       await channel.send(
-        `🎮 **${interaction.user.displayName}** is looking for a constructed match! Use \`/queue join\` to play them.`
+        `🎮 **${interaction.user.displayName}** is looking for a constructed match! Use \`/queue join\` to play them.`,
       );
     } catch (err) {
       console.error("[queue] Failed to post announcement:", err);
@@ -138,7 +150,9 @@ async function handleJoin(interaction: ChatInputCommandInteraction): Promise<voi
   }
 }
 
-async function handleLeave(interaction: ChatInputCommandInteraction): Promise<void> {
+async function handleLeave(
+  interaction: ChatInputCommandInteraction,
+): Promise<void> {
   const { queueManager } = getServices();
 
   const removed = await queueManager.leaveQueue(interaction.user.id);
@@ -164,7 +178,9 @@ async function handleLeave(interaction: ChatInputCommandInteraction): Promise<vo
   }
 }
 
-async function handleStatus(interaction: ChatInputCommandInteraction): Promise<void> {
+async function handleStatus(
+  interaction: ChatInputCommandInteraction,
+): Promise<void> {
   const { queueManager } = getServices();
 
   const queueSize = await queueManager.getQueueSize();
@@ -181,7 +197,11 @@ async function handleStatus(interaction: ChatInputCommandInteraction): Promise<v
 
   if (position !== null) {
     embed.setDescription("You're currently in the queue!");
-    embed.addFields({ name: "Your Position", value: `#${position}`, inline: true });
+    embed.addFields({
+      name: "Your Position",
+      value: `#${position}`,
+      inline: true,
+    });
   } else {
     embed.setDescription("You're not in the queue.");
     embed.addFields({

@@ -4,10 +4,10 @@ import { AreaSelectionOverlay3D } from "@/lib/game/components/AreaSelectionOverl
 import { AtlanteanFateAreaOverlay } from "@/lib/game/components/AtlanteanFateAreaOverlay";
 import { AuraPreviewOverlay } from "@/lib/game/components/AuraPreviewOverlay";
 import { ChaosTwisterLandingOverlay } from "@/lib/game/components/ChaosTwisterLandingOverlay";
+import { GeomancerTargetOverlay } from "@/lib/game/components/GeomancerTargetOverlay";
 import { InquisitionSummonTargetOverlay } from "@/lib/game/components/InquisitionSummonTargetOverlay";
 import { MagicTargetOverlay } from "@/lib/game/components/MagicTargetOverlay";
 import { MephistophelesSummonTargetOverlay } from "@/lib/game/components/MephistophelesSummonTargetOverlay";
-import { GeomancerTargetOverlay } from "@/lib/game/components/GeomancerTargetOverlay";
 import { PathfinderTargetOverlay } from "@/lib/game/components/PathfinderTargetOverlay";
 import {
   PermanentStack,
@@ -261,7 +261,9 @@ export function BoardTile({
         }
         placeInquisitionSummon={inquisitionSummonContext.placeInquisitionSummon}
         pendingCorpseExplosion={corpseExplosionContext.pendingCorpseExplosion}
-        selectCorpseExplosionArea={corpseExplosionContext.selectCorpseExplosionArea}
+        selectCorpseExplosionArea={
+          corpseExplosionContext.selectCorpseExplosionArea
+        }
         castPlacementMode={castPlacementMode}
       />
 
@@ -314,7 +316,8 @@ export function BoardTile({
         active={
           corpseExplosionContext.pendingCorpseExplosion?.phase ===
             "assigningCorpses" ||
-          corpseExplosionContext.pendingCorpseExplosion?.phase === "resolving" ||
+          corpseExplosionContext.pendingCorpseExplosion?.phase ===
+            "resolving" ||
           corpseExplosionContext.pendingCorpseExplosion?.phase === "resolved"
         }
         labelName={(() => {
@@ -333,9 +336,12 @@ export function BoardTile({
           if (ce.phase === "resolved" && ce.resolvedReport) {
             const entry = ce.resolvedReport.find((r) => r.cellKey === tileKey);
             if (!entry) return undefined;
-            const hits = entry.unitsHit.length > 0
-              ? entry.unitsHit.map((u) => `${u.damageTaken} dmg → ${u.name}`).join("\n")
-              : "No units hit";
+            const hits =
+              entry.unitsHit.length > 0
+                ? entry.unitsHit
+                    .map((u) => `${u.damageTaken} dmg → ${u.name}`)
+                    .join("\n")
+                : "No units hit";
             return `ATK ${entry.power}\n${hits}`;
           }
           const a = ce.assignments.find((assign) => assign.cellKey === tileKey);

@@ -3,10 +3,10 @@
  * Uses Redis for persistent queue state with in-memory fallback.
  */
 
-import { Redis } from "ioredis";
 import type { Client, TextChannel } from "discord.js";
-import type { RealmsApiClient, MatchCreated } from "./realms-api.js";
+import { Redis } from "ioredis";
 import type { ChallengeManager } from "./challenge-manager.js";
+import type { RealmsApiClient, MatchCreated } from "./realms-api.js";
 import type { VoiceCoordinator } from "./voice-coordinator.js";
 
 const QUEUE_KEY = "realms:queue:constructed";
@@ -48,7 +48,7 @@ export class QueueManager {
     client: Client,
     realmsApi: RealmsApiClient,
     challengeManager: ChallengeManager,
-    voiceCoordinator: VoiceCoordinator
+    voiceCoordinator: VoiceCoordinator,
   ) {
     this.client = client;
     this.realmsApi = realmsApi;
@@ -64,7 +64,9 @@ export class QueueManager {
 
     try {
       // Parse Redis URL to extract password if present (same pattern as leader-lock.ts)
-      let redisOptions: { host: string; port: number; password?: string } | undefined;
+      let redisOptions:
+        | { host: string; port: number; password?: string }
+        | undefined;
       try {
         const parsedUrl = new URL(url);
         if (parsedUrl.password) {
@@ -86,7 +88,9 @@ export class QueueManager {
           maxRetriesPerRequest: 3,
           retryStrategy: (times: number) => {
             if (times > 5) {
-              console.error("[queue-manager] Redis connection failed after 5 retries");
+              console.error(
+                "[queue-manager] Redis connection failed after 5 retries",
+              );
               return null;
             }
             return Math.min(times * 200, 3000);
@@ -98,7 +102,9 @@ export class QueueManager {
           maxRetriesPerRequest: 3,
           retryStrategy: (times: number) => {
             if (times > 5) {
-              console.error("[queue-manager] Redis connection failed after 5 retries");
+              console.error(
+                "[queue-manager] Redis connection failed after 5 retries",
+              );
               return null;
             }
             return Math.min(times * 200, 3000);
@@ -134,7 +140,7 @@ export class QueueManager {
   async joinQueue(
     discordId: string,
     guildId: string,
-    channelId: string
+    channelId: string,
   ): Promise<JoinQueueResult> {
     // Check if user has linked account
     const user = await this.realmsApi.getUserByDiscordId(discordId);
@@ -250,8 +256,9 @@ export class QueueManager {
     }
 
     // Fallback to in-memory
-    const entries = Array.from(this.fallbackQueue.entries())
-      .sort((a, b) => a[1].joinedAt - b[1].joinedAt);
+    const entries = Array.from(this.fallbackQueue.entries()).sort(
+      (a, b) => a[1].joinedAt - b[1].joinedAt,
+    );
 
     for (let i = 0; i < entries.length; i++) {
       if (entries[i][0] === discordId) {
@@ -278,7 +285,7 @@ export class QueueManager {
     await this.removeFromQueue(player2);
 
     console.log(
-      `[queue-manager] Matching ${player1.discordId} vs ${player2.discordId}`
+      `[queue-manager] Matching ${player1.discordId} vs ${player2.discordId}`,
     );
 
     try {
@@ -288,7 +295,7 @@ export class QueueManager {
         player2.discordId,
         "constructed",
         player1.guildId,
-        player1.channelId
+        player1.channelId,
       );
 
       // Auto-accept the challenge
@@ -300,7 +307,7 @@ export class QueueManager {
         const voiceInfo = await this.voiceCoordinator.requestVoiceChannel(
           match.matchId,
           match.challenger.id,
-          match.challengee.id
+          match.challengee.id,
         );
         if (voiceInfo) {
           voiceInvite = voiceInfo.inviteUrl;
@@ -334,7 +341,7 @@ export class QueueManager {
     player1: QueueEntry,
     player2: QueueEntry,
     match: MatchCreated,
-    voiceInvite?: string
+    voiceInvite?: string,
   ): Promise<void> {
     try {
       const user1 = await this.client.users.fetch(player1.discordId);
@@ -439,13 +446,15 @@ export class QueueManager {
           const entry = JSON.parse(entryJson) as QueueEntry;
           if (entry.joinedAt < cutoff) {
             await this.redis.zrem(QUEUE_KEY, entryJson);
-            console.log(`[queue-manager] Expired ${entry.discordId} from queue`);
+            console.log(
+              `[queue-manager] Expired ${entry.discordId} from queue`,
+            );
 
             // Notify user via DM
             try {
               const user = await this.client.users.fetch(entry.discordId);
               await user.send(
-                "You've been removed from the queue after 30 minutes. Use `/queue join` to queue again."
+                "You've been removed from the queue after 30 minutes. Use `/queue join` to queue again.",
               );
             } catch {
               // User might have DMs disabled
@@ -467,7 +476,7 @@ export class QueueManager {
         try {
           const user = await this.client.users.fetch(discordId);
           await user.send(
-            "You've been removed from the queue after 30 minutes. Use `/queue join` to queue again."
+            "You've been removed from the queue after 30 minutes. Use `/queue join` to queue again.",
           );
         } catch {
           // User might have DMs disabled

@@ -35,6 +35,8 @@ export type Pick3D = {
   y?: number;
   // Explicit zone tracking - no longer derived from z coordinate
   zone: "Deck" | "Sideboard" | "Collection";
+  // Cards sharing a pileId form a visual pile (manual stacking in unsorted mode)
+  pileId?: string;
 };
 
 export type StackPosition = {

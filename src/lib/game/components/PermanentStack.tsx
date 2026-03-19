@@ -342,6 +342,7 @@ export function PermanentStack({
   isBabelTower = false,
 }: PermanentStackProps) {
   const { gl } = useThree();
+  const marqueeSelection = useGameStore((s) => s.marqueeSelection);
   // Timer for delayed touch drag initiation (prevents tap from entering drag mode)
   const touchDragTimerRef = useRef<number | null>(null);
 
@@ -429,7 +430,6 @@ export function PermanentStack({
   void _baseMarginZ; // Z offset is now computed directly, not from marginZ config
 
   const key = tileKey;
-  const marqueeSelection = useGameStore((s) => s.marqueeSelection);
   const boardHalfW = (boardSize.w * TILE_SIZE) / 2;
   const boardHalfH = (boardSize.h * TILE_SIZE) / 2;
 

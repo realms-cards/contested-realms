@@ -15,12 +15,12 @@
  */
 
 import type { StateCreator } from "zustand";
-import type { CustomMessage } from "@/lib/net/transport";
 import {
   TOKEN_BY_NAME,
   newTokenInstanceId,
   tokenSlug,
 } from "@/lib/game/tokens";
+import type { CustomMessage } from "@/lib/net/transport";
 import type {
   CellKey,
   GameState,

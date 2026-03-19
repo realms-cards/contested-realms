@@ -627,7 +627,6 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     tileKey: string;
     card?: CardRef;
   }> = [];
-  let isCarryableArtifact = false;
   let isMine = false; // Ownership check for attached items operations
 
   if (t.kind === "site") {
@@ -735,8 +734,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         displayText: "Flood",
         isEnabled: true,
         targetPermanentId: "",
-        description:
-          "Add Flooded token (water threshold).",
+        description: "Add Flooded token (water threshold).",
       });
     }
 
@@ -747,8 +745,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         displayText: "Disable",
         isEnabled: true,
         targetPermanentId: "",
-        description:
-          "Add Disabled token (no mana/threshold).",
+        description: "Add Disabled token (no mana/threshold).",
       });
     }
 
@@ -759,8 +756,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         displayText: "Silence",
         isEnabled: true,
         targetPermanentId: "",
-        description:
-          "Add Silenced token (no abilities, keeps mana).",
+        description: "Add Silenced token (no abilities, keeps mana).",
       });
     }
 
@@ -894,7 +890,6 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     const isAutomaton =
       cardSubTypes.includes("automaton") || isAutomatonByName(cardName);
     const isCarryableArtifactType = isArtifact && !isMonument && !isAutomaton;
-    isCarryableArtifact = isCarryableArtifactType && !item?.attachedTo;
 
     // Counter toggle for non-site tokens and regular permanents
     if (item) {
@@ -1183,8 +1178,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
           displayText: "Silence",
           isEnabled: true,
           targetPermanentId: "",
-          description:
-            "Add Silenced token (no abilities).",
+          description: "Add Silenced token (no abilities).",
         });
       }
     }
@@ -1346,8 +1340,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         displayText: `Unmask (was ${maskState?.maskAvatar?.name || "masked"})`,
         isEnabled: true,
         targetPermanentId: "",
-        description:
-          "Reveal original avatar, banish mask.",
+        description: "Reveal original avatar, banish mask.",
       });
     }
 
@@ -1417,8 +1410,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     const mephHasAlreadyUsed = mephistophelesSummonUsed[t.who];
     if (isMine && isMephistopheles(effectiveAvatarName)) {
       const canSummon = isMyTurn && !mephHasAlreadyUsed && hasPosition;
-      let mephDescription =
-        "Summon Evil minion to adjacent site (1/turn).";
+      let mephDescription = "Summon Evil minion to adjacent site (1/turn).";
       if (!isMyTurn) mephDescription = "Can only summon on your turn";
       else if (mephHasAlreadyUsed)
         mephDescription = "Already summoned an Evil minion this turn";
@@ -1483,8 +1475,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         isNotTapped &&
         hasPosition &&
         atlasCount > 0;
-      let geoDescription =
-        "Tap: replace adjacent Rubble with top atlas site.";
+      let geoDescription = "Tap: replace adjacent Rubble with top atlas site.";
       if (!isMyTurn) geoDescription = "Can only use on your turn";
       else if (geomancerHasAlreadyUsed)
         geoDescription = "Already used Geomancer ability this turn";
@@ -1506,8 +1497,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     if (isMine && isDruid(effectiveAvatarName)) {
       const isNotTapped = !a?.tapped;
       const canFlip = !hasAlreadyFlipped && isNotTapped && hasPosition;
-      let flipDescription =
-        "Tap: flip Druid, summon Bruin (permanent).";
+      let flipDescription = "Tap: flip Druid, summon Bruin (permanent).";
       if (hasAlreadyFlipped) flipDescription = "Druid has already been flipped";
       else if (!isNotTapped)
         flipDescription = "Avatar must be untapped to flip";
@@ -1882,10 +1872,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
           onClick={(e) => e.stopPropagation()}
         >
           <div>
-            <div
-              className="text-sm font-semibold mb-2 truncate"
-              title={header}
-            >
+            <div className="text-sm font-semibold mb-2 truncate" title={header}>
               {header}
             </div>
             <div className={iconMode ? "flex flex-wrap gap-1" : "space-y-2"}>
@@ -1899,7 +1886,11 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
 
               {doFlip && (
                 <MenuBtn
-                  icon={isFaceDown ? "game-icons:all-seeing-eye" : "game-icons:semi-closed-eye"}
+                  icon={
+                    isFaceDown
+                      ? "game-icons:all-seeing-eye"
+                      : "game-icons:semi-closed-eye"
+                  }
                   label={isFaceDown ? "Flip face-up" : "Flip face-down"}
                   onClick={doFlip}
                 />
@@ -2932,7 +2923,9 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                 )}
 
               {(doAttachToken || doDetachToken) && (
-                <div className={iconMode ? "flex flex-wrap gap-1" : "space-y-2"}>
+                <div
+                  className={iconMode ? "flex flex-wrap gap-1" : "space-y-2"}
+                >
                   {doAttachToken && (
                     <MenuBtn
                       icon="game-icons:andromeda-chain"
@@ -3277,7 +3270,11 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
               {/* Counter toggle */}
               {doToggleCounter && (
                 <MenuBtn
-                  icon={hasCounter ? "game-icons:heart-minus" : "game-icons:heart-plus"}
+                  icon={
+                    hasCounter
+                      ? "game-icons:heart-minus"
+                      : "game-icons:heart-plus"
+                  }
                   label={hasCounter ? "Remove counter" : "Add counter"}
                   onClick={doToggleCounter}
                 />
@@ -3286,7 +3283,9 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
               {/* Burrow/Submerge Actions */}
               {(positionActions.length > 0 ||
                 (Array.isArray(extraActions) && extraActions.length > 0)) && (
-                <div className={iconMode ? "flex flex-wrap gap-1" : "space-y-2"}>
+                <div
+                  className={iconMode ? "flex flex-wrap gap-1" : "space-y-2"}
+                >
                   {positionActions.concat(extraActions).map((action) => {
                     const isAttackHere = action.actionId === "__attack_here__";
                     const isAttackAdj =
@@ -3920,7 +3919,9 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
               )}
 
               {(doToHand || doToGY || doToSpellbook || doBanish) && (
-                <div className={iconMode ? "flex flex-wrap gap-1" : "space-y-2"}>
+                <div
+                  className={iconMode ? "flex flex-wrap gap-1" : "space-y-2"}
+                >
                   {doToHand && (
                     <MenuBtn
                       icon="game-icons:hand"
@@ -3963,7 +3964,9 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                 doDrawFromPileBottom ||
                 doShufflePile ||
                 doSearchPile) && (
-                <div className={iconMode ? "flex flex-wrap gap-1" : "space-y-2"}>
+                <div
+                  className={iconMode ? "flex flex-wrap gap-1" : "space-y-2"}
+                >
                   {doDrawFromPile && (
                     <MenuBtn
                       icon="game-icons:uprising"

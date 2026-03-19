@@ -11,7 +11,6 @@ import { cardRefToPreview } from "@/lib/game/card-preview.types";
 import type { CardPreviewData } from "@/lib/game/card-preview.types";
 import CardBorder from "@/lib/game/components/CardBorder";
 import CardGlow from "@/lib/game/components/CardGlow";
-import CardOutline from "@/lib/game/components/CardOutline";
 import CardPlane from "@/lib/game/components/CardPlane";
 import MaterialCardBack from "@/lib/game/components/MaterialCardBack";
 import ResolverOutline from "@/lib/game/components/ResolverOutline";

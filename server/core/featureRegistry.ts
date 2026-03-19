@@ -4,21 +4,23 @@ export interface FeatureRegistry<TContext> {
   registerFeature<TFeature, TDeps>(
     name: string,
     factory: (deps: TDeps) => TFeature,
-    deps: TDeps
+    deps: TDeps,
   ): TFeature;
   getFeature<TFeature = unknown>(name: string): TFeature | undefined;
   listFeatures(): string[];
   applyConnectionHandlers(ctx: TContext): void;
 }
 
-export function createFeatureRegistry<TContext extends Record<string, unknown> = Record<string, unknown>>(): FeatureRegistry<TContext> {
+export function createFeatureRegistry<
+  TContext extends Record<string, unknown> = Record<string, unknown>,
+>(): FeatureRegistry<TContext> {
   const features = new Map<string, unknown>();
   const connectionHandlers: Array<ConnectionHandler<TContext>> = [];
 
   function registerFeature<TFeature, TDeps>(
     name: string,
     factory: (deps: TDeps) => TFeature,
-    deps: TDeps
+    deps: TDeps,
   ): TFeature {
     if (!name || typeof name !== "string") {
       throw new Error("Feature name must be a non-empty string");
@@ -32,10 +34,16 @@ export function createFeatureRegistry<TContext extends Record<string, unknown> =
     const feature = factory(deps);
     features.set(name, feature);
 
-    const maybeRegistrable = feature as Partial<{ registerSocketHandlers: (context: TContext) => void }>;
-    if (feature && typeof maybeRegistrable.registerSocketHandlers === "function") {
+    const maybeRegistrable = feature as Partial<{
+      registerSocketHandlers: (context: TContext) => void;
+    }>;
+    if (
+      feature &&
+      typeof maybeRegistrable.registerSocketHandlers === "function"
+    ) {
+      const registerSocketHandlers = maybeRegistrable.registerSocketHandlers;
       connectionHandlers.push((ctx: TContext) => {
-        maybeRegistrable.registerSocketHandlers!(ctx);
+        registerSocketHandlers(ctx);
       });
     }
 
@@ -44,7 +52,7 @@ export function createFeatureRegistry<TContext extends Record<string, unknown> =
 
   function getFeature<TFeature = unknown>(name: string): TFeature | undefined {
     return features.get(name) as TFeature | undefined;
-    }
+  }
 
   function listFeatures(): string[] {
     return Array.from(features.keys());
@@ -56,7 +64,10 @@ export function createFeatureRegistry<TContext extends Record<string, unknown> =
         handler(ctx);
       } catch (err) {
         try {
-          console.warn("[feature-registry] Failed to apply connection handler:", err instanceof Error ? err.message : err);
+          console.warn(
+            "[feature-registry] Failed to apply connection handler:",
+            err instanceof Error ? err.message : err,
+          );
         } catch {
           // noop
         }

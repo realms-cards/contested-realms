@@ -11,11 +11,13 @@ export interface ServerContainer {
   has(name: string): boolean;
   registerFeature<TFeature = unknown>(
     name: string,
-    factory: (container: ServerContainer) => TFeature
+    factory: (container: ServerContainer) => TFeature,
   ): TFeature;
   getFeature<TFeature = unknown>(name: string): TFeature | undefined;
   listFeatures(): string[];
-  applyConnectionHandlers<TContext extends Record<string, unknown>>(context: TContext): void;
+  applyConnectionHandlers<TContext extends Record<string, unknown>>(
+    context: TContext,
+  ): void;
   initialize(): Promise<void>;
   shutdown(): Promise<void>;
 }
@@ -26,11 +28,14 @@ interface FactoryRecord<T = unknown> {
   resolving: boolean;
 }
 
-export function createContainer(initialValues: Record<string, unknown> = {}): ServerContainer {
+export function createContainer(
+  initialValues: Record<string, unknown> = {},
+): ServerContainer {
   const values = new Map<string, unknown>(Object.entries(initialValues));
   const factories = new Map<string, FactoryRecord>();
   const features = new Map<string, unknown>();
-  const connectionHandlers: Array<ConnectionHandler<Record<string, unknown>>> = [];
+  const connectionHandlers: Array<ConnectionHandler<Record<string, unknown>>> =
+    [];
   const initHooks: AsyncHook[] = [];
   const shutdownHooks: AsyncHook[] = [];
   let initialized = false;
@@ -101,7 +106,7 @@ export function createContainer(initialValues: Record<string, unknown> = {}): Se
 
   function registerFeature<TFeature>(
     name: string,
-    factory: (container: ServerContainer) => TFeature
+    factory: (container: ServerContainer) => TFeature,
   ): TFeature {
     if (!name || typeof name !== "string") {
       throw new Error("Feature name must be a non-empty string");
@@ -121,15 +126,19 @@ export function createContainer(initialValues: Record<string, unknown> = {}): Se
       onShutdown: AsyncHook;
     }>;
 
-    if (maybeHandlers && typeof maybeHandlers.registerSocketHandlers === "function") {
+    if (
+      maybeHandlers &&
+      typeof maybeHandlers.registerSocketHandlers === "function"
+    ) {
+      const registerSocketHandlers = maybeHandlers.registerSocketHandlers;
       connectionHandlers.push((ctx) => {
         try {
-          maybeHandlers.registerSocketHandlers!(ctx);
+          registerSocketHandlers(ctx);
         } catch (err) {
           try {
             console.warn(
               `[container] Feature '${name}' connection handler failed:`,
-              err instanceof Error ? err.message : err
+              err instanceof Error ? err.message : err,
             );
           } catch {
             // noop
@@ -139,11 +148,13 @@ export function createContainer(initialValues: Record<string, unknown> = {}): Se
     }
 
     if (maybeHandlers && typeof maybeHandlers.onInit === "function") {
-      initHooks.push(() => maybeHandlers.onInit!());
+      const onInit = maybeHandlers.onInit;
+      initHooks.push(() => onInit());
     }
 
     if (maybeHandlers && typeof maybeHandlers.onShutdown === "function") {
-      shutdownHooks.push(() => maybeHandlers.onShutdown!());
+      const onShutdown = maybeHandlers.onShutdown;
+      shutdownHooks.push(() => onShutdown());
     }
 
     return feature;
@@ -157,13 +168,18 @@ export function createContainer(initialValues: Record<string, unknown> = {}): Se
     return Array.from(features.keys());
   }
 
-  function applyConnectionHandlers<TContext extends Record<string, unknown>>(context: TContext): void {
+  function applyConnectionHandlers<TContext extends Record<string, unknown>>(
+    context: TContext,
+  ): void {
     for (const handler of connectionHandlers) {
       try {
         handler(context);
       } catch (err) {
         try {
-          console.warn("[container] Failed to apply connection handler:", err instanceof Error ? err.message : err);
+          console.warn(
+            "[container] Failed to apply connection handler:",
+            err instanceof Error ? err.message : err,
+          );
         } catch {
           // noop
         }
@@ -187,7 +203,10 @@ export function createContainer(initialValues: Record<string, unknown> = {}): Se
         await hook();
       } catch (err) {
         try {
-          console.warn("[container] Shutdown hook failed:", err instanceof Error ? err.message : err);
+          console.warn(
+            "[container] Shutdown hook failed:",
+            err instanceof Error ? err.message : err,
+          );
         } catch {
           // noop
         }

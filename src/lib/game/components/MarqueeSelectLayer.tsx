@@ -1,9 +1,8 @@
-import { useCallback, useRef } from "react";
 import { useThree } from "@react-three/fiber";
+import { useCallback, useRef } from "react";
 import * as THREE from "three";
-
-import { useGameStore } from "@/lib/game/store";
 import { TILE_SIZE } from "@/lib/game/constants";
+import { useGameStore } from "@/lib/game/store";
 import type { CellKey } from "@/lib/game/store/types";
 
 type MarqueeState = {
@@ -40,20 +39,7 @@ export function MarqueeSelectLayer({
     startWorld: { x: 0, z: 0 },
   });
 
-  const { camera, gl } = useThree();
-
-  const worldToScreen = useCallback(
-    (wx: number, wz: number) => {
-      const v = new THREE.Vector3(wx, 0, wz);
-      v.project(camera);
-      const rect = gl.domElement.getBoundingClientRect();
-      return {
-        x: ((v.x + 1) / 2) * rect.width + rect.left,
-        y: ((-v.y + 1) / 2) * rect.height + rect.top,
-      };
-    },
-    [camera, gl],
-  );
+  useThree();
 
   const handlePointerDown = useCallback(
     (e: THREE.Event & { button?: number; clientX?: number; clientY?: number; point?: THREE.Vector3; nativeEvent?: PointerEvent }) => {
