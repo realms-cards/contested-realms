@@ -8,17 +8,61 @@ import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { useOnline } from "@/app/online/online-context";
 import UserBadge from "@/components/auth/UserBadge";
+import AccusationOverlay from "@/components/game/AccusationOverlay";
+import { AnimistCastChoiceOverlay } from "@/components/game/AnimistCastChoiceOverlay";
+import AnnualFairOverlay from "@/components/game/AnnualFairOverlay";
+import ArtifactCastOverlay from "@/components/game/ArtifactCastOverlay";
+import AssimilatorSnailOverlay from "@/components/game/AssimilatorSnailOverlay";
+import AssortedAnimalsOverlay from "@/components/game/AssortedAnimalsOverlay";
+import AtlanteanFateOverlay from "@/components/game/AtlanteanFateOverlay";
 import AudioControls from "@/components/game/AudioControls";
+import AutoResolveConfirmOverlay from "@/components/game/AutoResolveConfirmOverlay";
+import BabelTowerOverlay from "@/components/game/BabelTowerOverlay";
+import BlackMassOverlay from "@/components/game/BlackMassOverlay";
+import BrowseOverlay from "@/components/game/BrowseOverlay";
+import CallToWarOverlay from "@/components/game/CallToWarOverlay";
 import CardPreview from "@/components/game/CardPreview";
 import CastPlacementBanner from "@/components/game/CastPlacementBanner";
+import ChaosTwisterOverlay from "@/components/game/ChaosTwisterOverlay";
 import { ClientCanvas } from "@/components/game/ClientCanvas";
+import CollectionButton from "@/components/game/CollectionButton";
+import CombatHudOverlay from "@/components/game/CombatHudOverlay";
+import CommonSenseOverlay from "@/components/game/CommonSenseOverlay";
 import ContextMenu from "@/components/game/ContextMenu";
+import CorpseExplosionOverlay from "@/components/game/CorpseExplosionOverlay";
+import CrossroadsOverlay from "@/components/game/CrossroadsOverlay";
+import DemonicContractOverlay from "@/components/game/DemonicContractOverlay";
+import DholChantsOverlay from "@/components/game/DholChantsOverlay";
+import DoomsdayCultOverlay from "@/components/game/DoomsdayCultOverlay";
+import EarthquakeOverlay from "@/components/game/EarthquakeOverlay";
+import FeastForCrowsOverlay from "@/components/game/FeastForCrowsOverlay";
+import { ElementChoiceOverlay } from "@/components/game/ElementChoiceOverlay";
 import { EndTurnConfirmDialog } from "@/components/game/EndTurnConfirmDialog";
 import EnhancedOnlineDraft3DScreen from "@/components/game/EnhancedOnlineDraft3DScreen";
+import FrontierSettlersOverlay from "@/components/game/FrontierSettlersOverlay";
+import GameToolbox from "@/components/game/GameToolbox";
+import GeomancerOverlay from "@/components/game/GeomancerOverlay";
 import HarbingerPortalScreen from "@/components/game/HarbingerPortalScreen";
+import HeadlessHauntOverlay from "@/components/game/HeadlessHauntOverlay";
+import HighlandPrincessOverlay from "@/components/game/HighlandPrincessOverlay";
+import InquisitionOverlay from "@/components/game/InquisitionOverlay";
+import InquisitionSummonOverlay from "@/components/game/InquisitionSummonOverlay";
 import { InteractionConsentDialog } from "@/components/game/InteractionConsentDialog";
+import InterrogatorChoiceOverlay from "@/components/game/InterrogatorChoiceOverlay";
+import KelpCavernOverlay from "@/components/game/KelpCavernOverlay";
+import LegionOfGallOverlay from "@/components/game/LegionOfGallOverlay";
+import LilithOverlay from "@/components/game/LilithOverlay";
+import MagicHudOverlay from "@/components/game/MagicHudOverlay";
+import MatchEndOverlay from "@/components/game/MatchEndOverlay";
+import MatchInfoPopup from "@/components/game/MatchInfoPopup";
+import MephistophelesOverlay from "@/components/game/MephistophelesOverlay";
+import MephistophelesSummonOverlay from "@/components/game/MephistophelesSummonOverlay";
+import MerlinOverlay from "@/components/game/MerlinOverlay";
+import MirrorRealmOverlay from "@/components/game/MirrorRealmOverlay";
 import MobileHandHint from "@/components/game/MobileHandHint";
+import MotherNatureOverlay from "@/components/game/MotherNatureOverlay";
 import MusicGameSync from "@/components/game/MusicGameSync";
+import ObservatoryOverlay from "@/components/game/ObservatoryOverlay";
 import OnlineConsole from "@/components/game/OnlineConsole";
 import OnlineD20Screen from "@/components/game/OnlineD20Screen";
 import OnlineDeckSelector from "@/components/game/OnlineDeckSelector";
@@ -27,10 +71,26 @@ import OnlineLifeCounters from "@/components/game/OnlineLifeCounters";
 import OnlineMulliganScreen from "@/components/game/OnlineMulliganScreen";
 import OnlineSealedDeckLoader from "@/components/game/OnlineSealedDeckLoader";
 import OnlineStatusBar from "@/components/game/OnlineStatusBar";
+import OverlayBackdrop from "@/components/game/OverlayBackdrop";
+import PathfinderPlayOverlay from "@/components/game/PathfinderPlayOverlay";
+import KettletopLeprechaunOverlay from "@/components/game/KettletopLeprechaunOverlay";
+import PigsOfTheSounderOverlay from "@/components/game/PigsOfTheSounderOverlay";
+import PileSearchDialog from "@/components/game/PileSearchDialog";
+import PithImpOverlay from "@/components/game/PithImpOverlay";
+import PlacementDialog from "@/components/game/PlacementDialog";
 import PlayerResourcePanels from "@/components/game/PlayerResourcePanel";
+import PrivateHandTargetingOverlay from "@/components/game/PrivateHandTargetingOverlay";
+import RaiseDeadOverlay from "@/components/game/RaiseDeadOverlay";
 import RestoreUiButton from "@/components/game/RestoreUiButton";
+import RevealOverlay from "@/components/game/RevealOverlay";
+import { RiverGenesisOverlay } from "@/components/game/RiverGenesisOverlay";
+import SearingTruthOverlay from "@/components/game/SearingTruthOverlay";
+import ShapeshiftOverlay from "@/components/game/ShapeshiftOverlay";
 import PlayerStatusEffects from "@/components/game/StatusEffectIcons";
+// SeerScreen is now integrated into OnlineMulliganScreen
+import SwitchSiteHudOverlay from "@/components/game/SwitchSiteHudOverlay";
 import TurnStartOverlay from "@/components/game/TurnStartOverlay";
+import UnitHandsOverlay from "@/components/game/UnitHandsOverlay";
 import {
   DynamicBoard as Board,
   DynamicHand3D as Hand3D,
@@ -44,6 +104,11 @@ import KeyboardShortcutsHelp, {
 } from "@/components/ui/KeyboardShortcutsHelp";
 import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
 import TrackpadOrbitAdapter from "@/lib/controls/TrackpadOrbitAdapter";
+import { MarqueeActionBar } from "@/lib/game/components/MarqueeActionBar";
+import {
+  MarqueeOverlayWithRef,
+  useMarqueeOverlayRef,
+} from "@/lib/game/components/MarqueeOverlay";
 import {
   detectHarbingerSeats,
   hasAnyHarbinger,
@@ -675,7 +740,13 @@ export default function OnlineMatchPage() {
     void (isSpectatorView && transport?.watchMatch
       ? transport.watchMatch(matchId)
       : joinMatchRef.current(matchId));
-  }, [connected, match?.id, matchId, transport, isSpectatorView]);
+  }, [
+    connected,
+    match?.id,
+    matchId,
+    transport,
+    isSpectatorView,
+  ]);
 
   // Track connection edges to reset one-shot guards per reconnect
   useEffect(() => {
@@ -792,6 +863,12 @@ export default function OnlineMatchPage() {
   const storeActorKey = useGameStore((s) => s.actorKey);
   const storeMatchEnded = useGameStore((s) => s.matchEnded);
   const storePermanents = useGameStore((s) => s.permanents);
+  const showToolbox =
+    !isSpectatorView &&
+    match?.status === "in_progress" &&
+    serverPhase !== "Setup" &&
+    !setupOpen &&
+    !storeMatchEnded;
   const [prepared, setPrepared] = useState<boolean>(false);
   const [d20RollingComplete, setD20RollingComplete] = useState<boolean>(false);
   const [portalSetupComplete, setPortalSetupComplete] =
@@ -1035,84 +1112,6 @@ export default function OnlineMatchPage() {
 
   // Prevent showing draft component again once it's completed or if we already submitted a deck
   const shouldShowDraft = isDraftActive && !hasSubmittedDraftDeck;
-
-  // Canonical control for setup overlay (prevents ping-pong updates)
-  useEffect(() => {
-    // Spectators never see the setup overlay
-    if (isSpectatorView) {
-      if (setupOpen) setSetupOpen(false);
-      return;
-    }
-    if (!matchId || match?.id !== matchId) return;
-    if (!match) return;
-
-    let desired = setupOpen;
-    const ended = match.status === "ended" || storeMatchEnded;
-    const gameActuallyStarted =
-      serverPhase === "Main" ||
-      serverTurn > 1 ||
-      (serverPhase === "Start" && serverTurn === 1 && bothPlayersReady);
-    const d20Complete = (() => {
-      const r = storeD20Rolls;
-      const p1 = (r as Record<string, unknown>)?.p1;
-      const p2 = (r as Record<string, unknown>)?.p2;
-      const bothRolled = p1 != null && p2 != null;
-      const notTie = bothRolled && Number(p1) !== Number(p2);
-      return Boolean(storeSetupWinner) || notTie;
-    })();
-
-    if (ended) {
-      desired = false;
-    } else if (resyncing) {
-      desired = true;
-    } else if (shouldShowDraft) {
-      desired = false;
-    } else if (gameActuallyStarted) {
-      desired = false;
-      if (!prepared && deckLoadedForMatchRef.current === matchId) {
-        setPrepared(true);
-      }
-      if (!d20RollingComplete) setD20RollingComplete(true);
-    } else if (
-      match.status === "waiting" ||
-      match.status === "deck_construction"
-    ) {
-      desired = true;
-      if (!gameActuallyStarted && serverPhase !== "Setup" && !d20Complete) {
-        try {
-          useGameStore.getState().setPhase("Setup");
-        } catch {}
-      }
-    } else if (serverPhase === "Setup") {
-      desired = true;
-      if (d20RollingComplete && !prepared) {
-        setD20RollingComplete(false);
-      }
-    } else if (!prepared) {
-      desired = true;
-    }
-
-    if (desired !== setupOpen) setSetupOpen(desired);
-  }, [
-    isSpectatorView,
-    matchId,
-    match,
-    match?.id,
-    match?.status,
-    resyncing,
-    shouldShowDraft,
-    prepared,
-    serverPhase,
-    serverTurn,
-    bothPlayersReady,
-    setupOpen,
-    setPrepared,
-    d20RollingComplete,
-    setD20RollingComplete,
-    storeSetupWinner,
-    storeD20Rolls,
-    storeMatchEnded,
-  ]);
 
   const tournamentId =
     (match as unknown as { tournamentId?: string | null } | undefined)
@@ -2024,11 +2023,171 @@ export default function OnlineMatchPage() {
     } catch {}
   }, [matchId, match?.id, match?.status, match?.matchType, transport]);
 
+  // Canonical control for setup overlay (prevents ping-pong updates)
+  useEffect(() => {
+    // Spectators never see the setup overlay
+    if (isSpectatorView) {
+      if (setupOpen) setSetupOpen(false);
+      return;
+    }
+    if (!matchId || match?.id !== matchId) return;
+    if (!match) return;
+
+    let desired = setupOpen;
+    const ended = match.status === "ended";
+    // Check game phase from game store (which gets updated from resync)
+    // "Main" phase means game started and player has drawn
+    // "Start" phase on turn 1 means mulligan phase, on turn > 1 means waiting for draw
+    // "Setup" phase means D20 rolling OR waiting for players
+    // Game has started if we're in Main phase OR if we're past turn 1
+    const gameActuallyStarted =
+      serverPhase === "Main" ||
+      serverTurn > 1 ||
+      (serverPhase === "Start" && serverTurn === 1 && bothPlayersReady);
+    const d20Complete = (() => {
+      const r = storeD20Rolls;
+      const p1 = r?.p1;
+      const p2 = r?.p2;
+      const bothRolled = p1 != null && p2 != null;
+      const notTie = bothRolled && Number(p1) !== Number(p2);
+      return Boolean(storeSetupWinner) || notTie;
+    })();
+
+    console.log("[setupOpen logic]", {
+      serverPhase,
+      storeSetupWinner,
+      storeD20Rolls,
+      d20Complete,
+      d20RollingComplete,
+      matchStatus: match.status,
+      resyncing,
+    });
+
+    if (ended) {
+      desired = false;
+    } else if (resyncing) {
+      desired = true;
+    } else if (shouldShowDraft) {
+      desired = false;
+    } else if (gameActuallyStarted) {
+      // Portal phase is complete before D20/mulligan, so no portal check needed here
+      desired = false;
+      // Only mark as prepared if we've actually loaded a deck for this match
+      // Otherwise we'll skip the deck loading step on constructed matches
+      if (!prepared && deckLoadedForMatchRef.current === matchId) {
+        setPrepared(true);
+      }
+      // D20 is complete when phase advances past Setup (to Start or Main)
+      // This ensures both players sync when server advances phase
+      if (!d20RollingComplete) setD20RollingComplete(true);
+    } else if (
+      match.status === "waiting" ||
+      match.status === "deck_construction"
+    ) {
+      desired = true;
+      if (!gameActuallyStarted && serverPhase !== "Setup" && !d20Complete) {
+        try {
+          useGameStore.getState().setPhase("Setup");
+        } catch {}
+      }
+    } else if (serverPhase === "Setup") {
+      // Always show setup overlay during Setup phase, regardless of local d20RollingComplete
+      // This ensures both players see D20 screen when in Setup phase
+      desired = true;
+      // Reset d20RollingComplete if we're back in Setup phase (e.g., after reload)
+      if (d20RollingComplete && !prepared) {
+        setD20RollingComplete(false);
+      }
+    } else if (!prepared) {
+      desired = true;
+    }
+
+    if (desired !== setupOpen) setSetupOpen(desired);
+  }, [
+    isSpectatorView,
+    matchId,
+    match,
+    match?.id,
+    match?.status,
+    resyncing,
+    shouldShowDraft,
+    prepared,
+    serverPhase,
+    serverTurn,
+    bothPlayersReady,
+    setupOpen,
+    setPrepared,
+    d20RollingComplete,
+    setD20RollingComplete,
+    storeSetupWinner,
+    storeD20Rolls,
+  ]);
+
+  useEffect(() => {
+    if (isSpectatorView) {
+      setSetupOpen(false);
+    }
+  }, [isSpectatorView]);
+
+  // Reset setup wizard when entering a different match (fresh waiting match)
+  const lastResetMatchRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!matchId) return;
+
+    const serverMatchId = match?.id ?? null;
+    const effectiveMatchId = serverMatchId ?? matchId;
+
+    // Avoid repeated resets for the same match context
+    if (lastResetMatchRef.current === effectiveMatchId) return;
+    lastResetMatchRef.current = effectiveMatchId;
+
+    setPrepared(false);
+    setD20RollingComplete(false);
+    setMulliganReady(false);
+    // seerComplete is derived from synced seerState, no need to reset locally
+    setPortalSetupComplete(false);
+    setPortalPhaseInitialized(false);
+
+    // Clear deck loaded flag when entering a new match
+    deckLoadedForMatchRef.current = null;
+
+    // Clear submission flag when entering a truly different match
+    try {
+      const submittedKey = `sealed_submitted_${matchId}`;
+      if (serverMatchId && serverMatchId !== matchId) {
+        localStorage.removeItem(submittedKey);
+      }
+    } catch {}
+
+    // Also reset local submission flags for safety when navigating to a different match
+    setLocalSealedSubmitted(false);
+    setLocalDraftSubmitted(false);
+  }, [match?.id, matchId]);
+
+  // Clear submission flag when match ends (avoid lingering state for next sessions)
+  useEffect(() => {
+    if (!matchId || !match) return;
+    if (match.status === "ended") {
+      const submittedKey = `sealed_submitted_${matchId}`;
+      localStorage.removeItem(submittedKey);
+    }
+  }, [matchId, match]);
+
+  // NOTE: Game state reset for joining/switching matches is handled by the joinMatch
+  // effect (lines 219-236), which calls resetGameState() once per match before requesting
+  // a resync. The resync handler in OnlineProvider (line 792) also resets before applying
+  // server snapshots to ensure clean state.
+  //
+  // We explicitly DO NOT reset when match status changes (e.g., waiting → in_progress)
+  // because that would wipe active game state (dice rolls, mulligans, etc.) and cause the
+  // D20 screen to reappear mid-game. Status transitions are cosmetic; the server sends
+  // incremental patches via statePatch events to update the actual game state.
+
   // Chat
   const [chatInput, setChatInput] = useState("");
 
   // Match info popup
-  const [_matchInfoOpen, setMatchInfoOpen] = useState<boolean>(false);
+  const [matchInfoOpen, setMatchInfoOpen] = useState<boolean>(false);
 
   // Match end overlay
   const [matchEndOverlayOpen, setMatchEndOverlayOpen] =
@@ -2039,7 +2198,7 @@ export default function OnlineMatchPage() {
   const prevEndedRef = useRef(false);
 
   // Frozen context for the match end overlay so results don't change if roster updates
-  const [_finalEndContext, setFinalEndContext] = useState<{
+  const [finalEndContext, setFinalEndContext] = useState<{
     winner: PlayerKey | null;
     playerNames: { p1: string; p2: string };
     myPlayerKey: PlayerKey | null;
@@ -2107,6 +2266,13 @@ export default function OnlineMatchPage() {
   const pendingMagic = useGameStore((s) => s.pendingMagic);
   const clearSelection = useGameStore((s) => s.clearSelection);
   const selected = useGameStore((s) => s.selectedCard);
+  const placementDialog = useGameStore((s) => s.placementDialog);
+  const closePlacementDialog = useGameStore((s) => s.closePlacementDialog);
+  const searchDialog = useGameStore((s) => s.searchDialog);
+  const closeSearchDialog = useGameStore((s) => s.closeSearchDialog);
+  const removeCardFromSearchDialog = useGameStore(
+    (s) => s.removeCardFromSearchDialog,
+  );
   const selectedPermanent = useGameStore((s) => s.selectedPermanent);
   const selectedAvatar = useGameStore((s) => s.selectedAvatar);
   const boardSize = useGameStore((s) => s.board.size);
@@ -2114,6 +2280,7 @@ export default function OnlineMatchPage() {
   const chaosTwisterPhase = useGameStore(
     (s) => s.pendingChaosTwister?.phase ?? null,
   );
+  const turnOverlayActive = useGameStore((s) => s.turnOverlayActive);
 
   // Space key to toggle hand visibility (skip when Chaos Twister minigame is active)
   useEffect(() => {
@@ -2166,6 +2333,8 @@ export default function OnlineMatchPage() {
   const setCameraMode = useGameStore((s) => s.setCameraMode);
   const controlScheme = useGameStore((s) => s.controlScheme);
   const isTTS = controlScheme === "tts";
+  const { rectRef: marqueeRectRef, updateRect: updateMarqueeRect } =
+    useMarqueeOverlayRef();
 
   // Restore camera mode and playmat settings from API (authenticated users) or localStorage after hydration
   const settingsRestoredRef = useRef(false);
@@ -3172,6 +3341,239 @@ export default function OnlineMatchPage() {
             />
           )}
 
+          {/* TTS mode: marquee selection (disabled for now — triggers on trackpad clicks)
+          {isTTS && (
+            <>
+              <MarqueeOverlayWithRef rectRef={marqueeRectRef} />
+              <MarqueeActionBar />
+            </>
+          )}
+          */}
+
+          {/* Global dialogs */}
+          {placementDialog && (
+            <PlacementDialog
+              cardName={placementDialog.cardName}
+              pileName={placementDialog.pileName}
+              onChoice={(pos) => {
+                placementDialog.onPlace(pos);
+                closePlacementDialog();
+              }}
+              onCancel={() => closePlacementDialog()}
+            />
+          )}
+
+          {searchDialog && (
+            <PileSearchDialog
+              pileName={searchDialog.pileName}
+              cards={searchDialog.cards}
+              onSelectCard={(card) => {
+                searchDialog.onSelectCard(card);
+                removeCardFromSearchDialog(card);
+              }}
+              onClose={() => closeSearchDialog()}
+              onBanishCard={
+                searchDialog.onBanishCard
+                  ? (card) => {
+                      searchDialog.onBanishCard?.(card);
+                      removeCardFromSearchDialog(card);
+                    }
+                  : undefined
+              }
+              banishRequiresConsent={searchDialog.banishRequiresConsent}
+            />
+          )}
+
+          {/* Toolbox and Collection buttons (bottom-right) */}
+          {showToolbox && (
+            <div className="absolute bottom-3 right-3 z-20 flex items-end gap-2">
+              <CollectionButton mySeat={myPlayerKey} />
+              <GameToolbox
+                myPlayerId={myPlayerId || null}
+                mySeat={myPlayerKey}
+                opponentPlayerId={opponentPlayerId}
+                opponentSeat={opponentSeat}
+                matchId={match?.id || null}
+                playerNames={playerNames}
+              />
+            </div>
+          )}
+
+          {/* Match Info Popup */}
+          <MatchInfoPopup
+            isOpen={matchInfoOpen}
+            onClose={() => setMatchInfoOpen(false)}
+            matchId={matchId || ""}
+            playerNames={playerNames}
+            myPlayerNumber={myPlayerNumber}
+            connected={connected}
+            spectatorMode={isSpectatorView}
+          />
+
+          {/* Match End Overlay */}
+          <MatchEndOverlay
+            isVisible={matchEndOverlayOpen}
+            winner={finalEndContext ? finalEndContext.winner : winner}
+            playerNames={
+              finalEndContext ? finalEndContext.playerNames : playerNames
+            }
+            myPlayerKey={
+              finalEndContext ? finalEndContext.myPlayerKey : myPlayerKey
+            }
+            reason={
+              (match as unknown as { endReason?: string | null })?.endReason ||
+              undefined
+            }
+            winnerId={
+              (match as unknown as { winnerId?: string | null })?.winnerId ||
+              undefined
+            }
+            myPlayerId={myPlayerId || undefined}
+            matchId={matchId || undefined}
+            soatcLeagueResult={soatcLeagueResult}
+            viewerSoatcUuid={
+              myPlayerId
+                ? (soatcPlayerInfo[myPlayerId]?.soatcUuid ?? undefined)
+                : undefined
+            }
+            rated={
+              (match as unknown as { rated?: boolean | null })?.rated ??
+              undefined
+            }
+            onClose={() => {
+              setMatchEndOverlayOpen(false);
+            }}
+            onLeave={() => {
+              leaveMatch();
+            }}
+            onLeaveLobby={() => {
+              const isCpuGame = opponentPlayerId?.startsWith("cpu_");
+              if (tournamentId) {
+                router.push(`/tournaments/${tournamentId}`);
+              } else if (isCpuGame) {
+                leaveLobby();
+                router.push("/");
+              } else {
+                leaveLobby();
+                router.push("/online/lobby");
+              }
+            }}
+            leaveLabel={tournamentId ? "Return to Tournament" : undefined}
+            allowContinue={false}
+          />
+
+          {/* All player-interactive overlays hidden for spectators; deferred while Turn overlay is active */}
+          {!isSpectatorView && !turnOverlayActive && (
+            <>
+              {/* Combat HUD Overlay (layout-level, not inside Canvas) */}
+              <CombatHudOverlay />
+              {/* Magic HUD Overlay (layout-level, not inside Canvas) */}
+              <MagicHudOverlay />
+              {/* Chaos Twister Overlay (dexterity minigame) */}
+              <ChaosTwisterOverlay transport={transport} />
+              {/* Corpse Explosion Overlay (corpse assignment to 2x2 area) */}
+              <CorpseExplosionOverlay />
+              {/* Earthquake Overlay (site rearrangement) */}
+              <EarthquakeOverlay transport={transport} />
+              {/* Element Choice Overlay (Valley of Delight, etc.) */}
+              <ElementChoiceOverlay />
+              {/* River Genesis Overlay (Spring/Summer/Autumn/Winter River) */}
+              <RiverGenesisOverlay />
+              {/* Observatory Overlay (reorder top 3 spells) */}
+              <ObservatoryOverlay />
+              {/* Kelp Cavern Overlay (pick one from bottom 3 for top) */}
+              <KelpCavernOverlay />
+              {/* Crossroads Overlay (keep 1 of top 4 atlas sites, rest to bottom) */}
+              <CrossroadsOverlay />
+              {/* Mirror Realm Overlay (copy nearby site) */}
+              <MirrorRealmOverlay />
+              {/* Shapeshift Overlay (transform minion) */}
+              <ShapeshiftOverlay />
+              {/* Animist Cast Choice Overlay (magic or spirit) */}
+              <AnimistCastChoiceOverlay />
+              {/* Browse Overlay (spell selection) */}
+              <BrowseOverlay />
+              {/* Common Sense Overlay (search for Ordinary card) */}
+              <CommonSenseOverlay />
+              {/* Call to War Overlay (search for Exceptional Mortal) */}
+              <CallToWarOverlay />
+              {/* Shared backdrop for tiled overlays */}
+              <OverlayBackdrop />
+              {/* Searing Truth Overlay (reveal and damage) */}
+              <SearingTruthOverlay playerNames={playerNames} />
+              {/* Accusation Overlay (reveal opponent hand, banish) */}
+              <AccusationOverlay />
+              {/* Feast for Crows Overlay (name spell, search opponent, banish) */}
+              <FeastForCrowsOverlay />
+              {/* The Inquisition Overlay (Genesis: reveal opponent hand, may banish) */}
+              <InquisitionOverlay />
+              {/* The Inquisition Passive Summon Overlay (revealed by opponent, may summon) */}
+              <InquisitionSummonOverlay />
+              {/* Lilith Overlay (end of turn reveal) */}
+              <LilithOverlay playerNames={playerNames} />
+              {/* Mother Nature Overlay (start of turn reveal) */}
+              <MotherNatureOverlay />
+              {/* Merlin Overlay (Spellcaster: persistent peek at top spell) */}
+              <MerlinOverlay />
+              {/* Headless Haunt Overlay (start of turn movement - Kythera Mechanism) */}
+              <HeadlessHauntOverlay />
+              {/* Interrogator Choice Overlay (pay life or allow spell draw) */}
+              <InterrogatorChoiceOverlay />
+              {/* Atlantean Fate Overlay (4x4 area selection for flood aura) */}
+              <AtlanteanFateOverlay />
+              {/* Mephistopheles Overlay (avatar replacement confirmation) */}
+              <MephistophelesOverlay />
+              {/* Mephistopheles Summon Overlay (Evil minion summoning) */}
+              <MephistophelesSummonOverlay />
+              {/* Pathfinder Play Overlay (reveal and play site) */}
+              <PathfinderPlayOverlay />
+              {/* Babel Tower Overlay (Apex of Babel placement choice) */}
+              <BabelTowerOverlay />
+              {/* Black Mass Overlay (search for Evil minions) */}
+              <BlackMassOverlay />
+              {/* Highland Princess Overlay (search for artifact) */}
+              <HighlandPrincessOverlay />
+              {/* Assorted Animals Overlay (search for Beasts) */}
+              <AssortedAnimalsOverlay />
+              {/* Frontier Settlers Overlay (tap: place site) */}
+              <FrontierSettlersOverlay />
+              {/* Geomancer Overlay (tap: replace adjacent Rubble) */}
+              <GeomancerOverlay />
+              {/* Pigs of the Sounder Overlay (Deathrite) */}
+              <PigsOfTheSounderOverlay />
+              {/* Kettletop Leprechaun Overlay (Deathrite: draw site) */}
+              <KettletopLeprechaunOverlay />
+              {/* Demonic Contract Overlay */}
+              <DemonicContractOverlay />
+              {/* Raise Dead Overlay (summon random dead minion) */}
+              <RaiseDeadOverlay />
+              {/* Assimilator Snail Overlay (banish dead minion, become copy) */}
+              <AssimilatorSnailOverlay />
+              {/* Legion of Gall Overlay (inspect and banish from opponent collection) */}
+              <LegionOfGallOverlay />
+              {/* Artifact Cast Overlay (Toolbox, Silver Bullet) */}
+              <ArtifactCastOverlay />
+              {/* Auto-Resolve Confirmation Overlay (for silence effects) */}
+              <AutoResolveConfirmOverlay />
+              {/* Dhol Chants Overlay */}
+              <DholChantsOverlay />
+              {/* Reveal Overlay (prominent display for revealed cards) */}
+              <RevealOverlayWrapper />
+              {/* Annual Fair Overlay (activated ability element choice) */}
+              <AnnualFairOverlay />
+              {/* Doomsday Cult Overlay (continuous reveal) */}
+              <DoomsdayCultOverlay />
+              {/* Unit hands overlay (Morgana, Omphalos) */}
+              <UnitHandsOverlay />
+              {/* Pith Imp stolen card notification */}
+              <PithImpOverlay />
+              {/* Private hand targeting overlay (Morgana/Omphalos) */}
+              <PrivateHandTargetingOverlay />
+              {/* Switch Site HUD Overlay (layout-level, not inside Canvas) */}
+              <SwitchSiteHudOverlay />
+            </>
+          )}
+
           {/* 3D Board Canvas - fills entire viewport */}
           {!setupOpen && (
             <div className="absolute inset-0 w-full h-full">
@@ -3224,6 +3626,7 @@ export default function OnlineMatchPage() {
                   <Board
                     interactionMode={boardInteractionMode}
                     enableBoardPings
+                    onMarqueeUpdate={isTTS ? updateMarqueeRect : undefined}
                   />
                 </Physics>
 
@@ -3482,6 +3885,24 @@ export default function OnlineMatchPage() {
         context="game"
       />
     </div>
+  );
+}
+
+// Wrapper component for RevealOverlay that connects to game store
+function RevealOverlayWrapper() {
+  const revealOverlay = useGameStore((s) => s.revealOverlay);
+  const closeRevealOverlay = useGameStore((s) => s.closeRevealOverlay);
+
+  if (!revealOverlay.isOpen) return null;
+
+  return (
+    <RevealOverlay
+      title={revealOverlay.title}
+      cards={revealOverlay.cards}
+      revealedBy={revealOverlay.revealedBy}
+      onClose={closeRevealOverlay}
+      autoCloseDelay={8000} // Auto close after 8 seconds
+    />
   );
 }
 
