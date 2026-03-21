@@ -91,7 +91,7 @@ function DraggableCard3DInner({
   x: number;
   z: number;
   y?: number;
-  onDrop?: (wx: number, wz: number) => void;
+  onDrop?: (wx: number, wz: number, screenX: number, screenY: number) => void;
   disabled?: boolean;
   onDragChange?: (dragging: boolean) => void;
   rotationZ?: number;
@@ -316,8 +316,8 @@ function DraggableCard3DInner({
 
           if (isDoubleClick) {
             onDoubleClick?.();
-          } else if (onDrop && wasDragging) {
-            onDrop(wx, wz);
+          } else if (wasDragging) {
+            onDrop?.(wx, wz, e.clientX, e.clientY);
           }
 
           onRelease?.(wx, wz, wasDragging);

@@ -2,22 +2,29 @@
 
 import { OrbitControls } from "@react-three/drei";
 import { useThree } from "@react-three/fiber";
-import React, { useEffect, useMemo } from "react";
+import React, { useEffect } from "react";
 import { MOUSE, TOUCH } from "three";
 import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { ClientCanvas } from "@/components/game/ClientCanvas";
-import { DynamicBoard as Board } from "@/components/game/dynamic-3d";
 import TrackpadOrbitAdapter from "@/lib/controls/TrackpadOrbitAdapter";
+import { BoardEnvironment } from "@/lib/game/components/BoardEnvironment";
+import { BASE_TILE_SIZE, MAT_RATIO } from "@/lib/game/constants";
 import { Physics } from "@/lib/game/physics";
-import { createGameStore } from "@/lib/game/store";
 import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
 import { useZoomKeyboardShortcuts } from "@/lib/hooks/useZoomKeyboardShortcuts";
+
+// Default board dimensions (5x4 grid)
+const BOARD_W = 5;
+const BOARD_H = 4;
+const baseGridW = BOARD_W * BASE_TILE_SIZE;
+const baseGridH = BOARD_H * BASE_TILE_SIZE;
+const matH = Math.max(baseGridH, baseGridW / MAT_RATIO);
+const matW = matH === baseGridH ? baseGridH * MAT_RATIO : baseGridW;
 
 interface EditorCanvasProps {
   children?: React.ReactNode;
   orbitLocked?: boolean;
-  onStoreReady?: (storeApi: ReturnType<typeof createGameStore>) => void;
 }
 
 interface PanBoundsProps {
@@ -30,23 +37,7 @@ interface PanBoundsProps {
 export default function EditorCanvas({
   children,
   orbitLocked = false,
-  onStoreReady,
 }: EditorCanvasProps) {
-  const storeApi = useMemo<ReturnType<typeof createGameStore>>(
-    () => createGameStore(),
-    []
-  );
-
-  useEffect(() => {
-    storeApi.getState().resetGameState();
-    storeApi.getState().clearSnapshotsForNewMatch();
-  }, [storeApi]);
-
-  // Notify parent of store availability
-  useEffect(() => {
-    onStoreReady?.(storeApi);
-  }, [storeApi, onStoreReady]);
-
   return (
     <div className="absolute inset-0 w-full h-full">
       <ClientCanvas
@@ -83,7 +74,14 @@ export default function EditorCanvas({
           color="#b4c5e4"
         />
         <Physics gravity={[0, -9.81, 0]}>
-          <Board noRaycast interactionMode="spectator" storeApi={storeApi} />
+          {/* Table + environment lighting (no game grid) */}
+          <BoardEnvironment
+            matW={matW}
+            matH={matH}
+            showPlaymat={false}
+            showOverlay={false}
+            showTable
+          />
           {children}
         </Physics>
         <OrbitControls
