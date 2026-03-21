@@ -782,14 +782,18 @@ export default function OnlineMatchPage() {
 
   // Setup state (like offline play)
   // Default CLOSED to avoid flashing overlay on rejoin; we'll open it for new/waiting matches
-  const [setupOpen, _setSetupOpen] = useState<boolean>(false);
+  const [setupOpen, setSetupOpen] = useState<boolean>(false);
 
   // Game store selectors needed for setup
   const serverPhase = useGameStore((s) => s.phase);
+  const serverTurn = useGameStore((s) => s.turn);
+  const storeSetupWinner = useGameStore((s) => s.setupWinner);
+  const storeD20Rolls = useGameStore((s) => s.d20Rolls);
   const storeActorKey = useGameStore((s) => s.actorKey);
+  const storeMatchEnded = useGameStore((s) => s.matchEnded);
   const storePermanents = useGameStore((s) => s.permanents);
   const [prepared, setPrepared] = useState<boolean>(false);
-  const [_d20RollingComplete, setD20RollingComplete] = useState<boolean>(false);
+  const [d20RollingComplete, setD20RollingComplete] = useState<boolean>(false);
   const [portalSetupComplete, setPortalSetupComplete] =
     useState<boolean>(false);
 
@@ -1031,6 +1035,84 @@ export default function OnlineMatchPage() {
 
   // Prevent showing draft component again once it's completed or if we already submitted a deck
   const shouldShowDraft = isDraftActive && !hasSubmittedDraftDeck;
+
+  // Canonical control for setup overlay (prevents ping-pong updates)
+  useEffect(() => {
+    // Spectators never see the setup overlay
+    if (isSpectatorView) {
+      if (setupOpen) setSetupOpen(false);
+      return;
+    }
+    if (!matchId || match?.id !== matchId) return;
+    if (!match) return;
+
+    let desired = setupOpen;
+    const ended = match.status === "ended" || storeMatchEnded;
+    const gameActuallyStarted =
+      serverPhase === "Main" ||
+      serverTurn > 1 ||
+      (serverPhase === "Start" && serverTurn === 1 && bothPlayersReady);
+    const d20Complete = (() => {
+      const r = storeD20Rolls;
+      const p1 = (r as Record<string, unknown>)?.p1;
+      const p2 = (r as Record<string, unknown>)?.p2;
+      const bothRolled = p1 != null && p2 != null;
+      const notTie = bothRolled && Number(p1) !== Number(p2);
+      return Boolean(storeSetupWinner) || notTie;
+    })();
+
+    if (ended) {
+      desired = false;
+    } else if (resyncing) {
+      desired = true;
+    } else if (shouldShowDraft) {
+      desired = false;
+    } else if (gameActuallyStarted) {
+      desired = false;
+      if (!prepared && deckLoadedForMatchRef.current === matchId) {
+        setPrepared(true);
+      }
+      if (!d20RollingComplete) setD20RollingComplete(true);
+    } else if (
+      match.status === "waiting" ||
+      match.status === "deck_construction"
+    ) {
+      desired = true;
+      if (!gameActuallyStarted && serverPhase !== "Setup" && !d20Complete) {
+        try {
+          useGameStore.getState().setPhase("Setup");
+        } catch {}
+      }
+    } else if (serverPhase === "Setup") {
+      desired = true;
+      if (d20RollingComplete && !prepared) {
+        setD20RollingComplete(false);
+      }
+    } else if (!prepared) {
+      desired = true;
+    }
+
+    if (desired !== setupOpen) setSetupOpen(desired);
+  }, [
+    isSpectatorView,
+    matchId,
+    match,
+    match?.id,
+    match?.status,
+    resyncing,
+    shouldShowDraft,
+    prepared,
+    serverPhase,
+    serverTurn,
+    bothPlayersReady,
+    setupOpen,
+    setPrepared,
+    d20RollingComplete,
+    setD20RollingComplete,
+    storeSetupWinner,
+    storeD20Rolls,
+    storeMatchEnded,
+  ]);
 
   const tournamentId =
     (match as unknown as { tournamentId?: string | null } | undefined)
