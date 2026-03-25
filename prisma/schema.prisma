@@ -502,6 +502,7 @@ model HumanCardStats {
   @@unique([cardId, format])
   @@index([cardId])
   @@index([format, plays])
+  @@index([format, cardId])
 }
 
 model OnlineMatchSession {

@@ -382,13 +382,12 @@ async function recalculateTiebreakers(tournamentId: string): Promise<void> {
 
   if (!tournament) return;
 
-  // TODO: Implement proper tiebreaker calculations
-  // For now, just update game win percentage based on match points
-  for (const standing of tournament.standings) {
+  // Batch all tiebreaker updates into a single transaction
+  const updates = tournament.standings.map((standing) => {
     const totalMatches = standing.wins + standing.losses + standing.draws;
     const gameWinPercentage = totalMatches > 0 ? standing.wins / totalMatches : 0;
 
-    await prisma.playerStanding.update({
+    return prisma.playerStanding.update({
       where: {
         tournamentId_playerId: {
           tournamentId,
@@ -401,5 +400,9 @@ async function recalculateTiebreakers(tournamentId: string): Promise<void> {
         opponentMatchWinPercentage: gameWinPercentage * 0.75 // Placeholder
       }
     });
+  });
+
+  if (updates.length > 0) {
+    await prisma.$transaction(updates);
   }
 }

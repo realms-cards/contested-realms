@@ -361,31 +361,31 @@ export function startMaintenanceTimers({
   // Pre-compute meta statistics every 10 minutes
   // Also run on startup after a short delay to populate initial cache
   const META_STATS_INTERVAL = 10 * 60 * 1000; // 10 minutes
-  setTimeout(() => {
-    computeAllMetaStats(prisma).catch((err) => {
+  let metaStatsRunning = false;
+  const runMetaStats = async () => {
+    if (metaStatsRunning) {
+      console.log("[maintenance] Meta stats computation already in progress, skipping");
+      return;
+    }
+    metaStatsRunning = true;
+    try {
+      await computeAllMetaStats(prisma);
+    } catch (err) {
       try {
         console.warn(
-          "[maintenance] Initial meta stats computation failed:",
+          "[maintenance] Meta stats computation failed:",
           safeErrorMessage(err),
         );
       } catch {
         // Ignore logging failures
       }
-    });
-  }, 15_000); // 15s delay for startup
+    } finally {
+      metaStatsRunning = false;
+    }
+  };
+  setTimeout(runMetaStats, 15_000); // 15s delay for startup
   timers.push(
-    setInterval(() => {
-      computeAllMetaStats(prisma).catch((err) => {
-        try {
-          console.warn(
-            "[maintenance] Meta stats computation failed:",
-            safeErrorMessage(err),
-          );
-        } catch {
-          // Ignore logging failures
-        }
-      });
-    }, META_STATS_INTERVAL),
+    setInterval(runMetaStats, META_STATS_INTERVAL),
   );
 
   return timers;
