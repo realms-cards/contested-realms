@@ -282,6 +282,7 @@ const providers = [
     authorization: {
       params: { scope: "identify email guilds" },
     },
+    allowDangerousEmailAccountLinking: true,
   }),
   CredentialsProvider({
     id: "passkey",

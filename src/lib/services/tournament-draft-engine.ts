@@ -352,6 +352,9 @@ export class TournamentDraftEngine {
    * Process a player's pick
    */
   async makePick(playerId: string, cardId: string): Promise<DraftState> {
+    // Pre-compute set sequence outside the transaction to reduce lock duration
+    const precomputedSequence = this.computeSetSequence();
+
     // Process pick atomically to prevent double-picks and premature passing
     const maxAttempts = 5;
     let lastErr: unknown = null;
@@ -489,7 +492,7 @@ export class TournamentDraftEngine {
               : Array.isArray(this.allGeneratedPacks)
                 ? this.allGeneratedPacks
                 : []) as DraftCard[][][];
-            const sequence = TournamentDraftEngine.buildSetSequenceFromConfig(packConfig);
+            const sequence = precomputedSequence.length > 0 ? precomputedSequence : TournamentDraftEngine.buildSetSequenceFromConfig(packConfig);
             const fallbackSet = sequence[nextRoundIndex] || sequence[0] || 'Beta';
             const nextCurrentPacks: DraftCard[][] = participants.map((_, idx) => {
               const source = generated?.[idx]?.[nextRoundIndex] ?? [];
@@ -579,7 +582,7 @@ export class TournamentDraftEngine {
       });
 
           return nextState;
-        }, { isolationLevel: PrismaClientNS.TransactionIsolationLevel.ReadCommitted });
+        }, { isolationLevel: PrismaClientNS.TransactionIsolationLevel.ReadCommitted, maxWait: 5000, timeout: 10000 });
 
         this.draftState = resultState;
         const latestGenerated = (this.draftState as DraftStateExtended).allGeneratedPacks;

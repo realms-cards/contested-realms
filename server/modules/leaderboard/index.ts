@@ -195,14 +195,13 @@ export function createLeaderboardService({
       });
       if (entries.length === 0) continue;
 
-      await Promise.all(
-        entries.map((entry: LeaderboardEntryModel, index: number) =>
-          prisma.leaderboardEntry.update({
-            where: { id: entry.id },
-            data: { rank: index + 1 },
-          })
-        )
+      const rankUpdates = entries.map((entry: LeaderboardEntryModel, index: number) =>
+        prisma.leaderboardEntry.update({
+          where: { id: entry.id },
+          data: { rank: index + 1 },
+        })
       );
+      await prisma.$transaction(rankUpdates);
     }
   }
 
@@ -378,21 +377,20 @@ export function createLeaderboardService({
               getOrCreateEntry(info.id, info.displayName, format, timeFrame)
             )
           );
-          await Promise.all(
-            entries.map((entry: LeaderboardEntryModel) =>
-              prisma.leaderboardEntry.update({
-                where: { id: entry.id },
-                data: {
-                  draws: { increment: 1 },
-                  winRate:
-                    entry.wins / (entry.wins + entry.losses + entry.draws + 1),
-                  lastActive: new Date(),
-                  displayName:
-                    infoById.get(entry.playerId) || entry.displayName,
-                },
-              })
-            )
+          const drawUpdates = entries.map((entry: LeaderboardEntryModel) =>
+            prisma.leaderboardEntry.update({
+              where: { id: entry.id },
+              data: {
+                draws: { increment: 1 },
+                winRate:
+                  entry.wins / (entry.wins + entry.losses + entry.draws + 1),
+                lastActive: new Date(),
+                displayName:
+                  infoById.get(entry.playerId) || entry.displayName,
+              },
+            })
           );
+          await prisma.$transaction(drawUpdates);
         }
         leaderboardUpdated = true;
       } else if (winnerId && loserId) {
@@ -421,7 +419,7 @@ export function createLeaderboardService({
             loserEntry.rating
           );
 
-          await Promise.all([
+          await prisma.$transaction([
             prisma.leaderboardEntry.update({
               where: { id: winnerEntry.id },
               data: {
