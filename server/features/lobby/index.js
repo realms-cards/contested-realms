@@ -1627,7 +1627,7 @@ function createLobbyFeature(deps) {
       const inviter = getPlayerBySocket(socket);
       if (!inviter) return;
 
-      const { targetPlayerId, tournamentId, tournamentName } = payload;
+      const { targetPlayerId, tournamentId, tournamentName, invitationId } = payload;
       if (!targetPlayerId || !tournamentId) return;
 
       const target = players.get(targetPlayerId);
@@ -1638,6 +1638,7 @@ function createLobbyFeature(deps) {
             tournamentId,
             tournamentName: tournamentName || "Tournament",
             from: getPlayerInfo(inviter.id),
+            invitationId: invitationId || null,
           });
           try {
             console.info(

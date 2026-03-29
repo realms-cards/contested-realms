@@ -70,6 +70,7 @@ export default function TournamentDetailsPage() {
   const [toast, setToast] = useState<string | null>(null);
   const [hoveredCard, setHoveredCard] = useState<CardPreviewData | null>(null);
   const [showInviteModal, setShowInviteModal] = useState(false);
+  const [showDraftConfirmModal, setShowDraftConfirmModal] = useState(false);
 
   const [activeTab, setActiveTab] = useState<
     "overview" | "standings" | "rounds"
@@ -411,6 +412,7 @@ export default function TournamentDetailsPage() {
     string[]
   >([]);
   const constructedPanelRef = useRef<HTMLDivElement | null>(null);
+  const [constructedRefreshKey, setConstructedRefreshKey] = useState(0);
   const [constructedModalOpen, setConstructedModalOpen] = useState(false);
   const [includePublicDecks, setIncludePublicDecks] = useState(() => {
     if (typeof window === "undefined") return true;
@@ -823,7 +825,7 @@ export default function TournamentDetailsPage() {
         setConstructedLoading(false);
       }
     })();
-  }, [tId, tStatus, tFormat, isRegistered, includePublicDecks]);
+  }, [tId, tStatus, tFormat, isRegistered, includePublicDecks, constructedRefreshKey]);
 
   const handleSubmitConstructedDeck = async (
     deckId: string,
@@ -1159,8 +1161,21 @@ export default function TournamentDetailsPage() {
   const handleStartTournament = async () => {
     if (!session || !tournament || !isCreator) return;
 
+    // For draft tournaments, show roster confirmation modal first
+    if (tournament.format === "draft") {
+      setShowDraftConfirmModal(true);
+      return;
+    }
+
+    await executeStartTournament();
+  };
+
+  const executeStartTournament = async () => {
+    if (!session || !tournament || !isCreator) return;
+
     setStarting(true);
     setError(null);
+    setShowDraftConfirmModal(false);
     try {
       await rtStartTournament(tournamentId);
       try {
@@ -1406,9 +1421,72 @@ export default function TournamentDetailsPage() {
           document.body,
         )}
 
+      {/* Draft Roster Confirmation Modal */}
+      {showDraftConfirmModal &&
+        tournament &&
+        createPortal(
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+            <div className="bg-slate-800 border border-slate-600 rounded-xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col">
+              <div className="p-5 border-b border-white/10">
+                <h2 className="text-xl font-bold text-white">
+                  Confirm Draft Start
+                </h2>
+                <p className="text-sm text-slate-400 mt-1">
+                  Review the player roster before starting the draft. All
+                  players will be notified.
+                </p>
+              </div>
+              <div className="flex-1 overflow-y-auto p-5">
+                <TournamentRoster tournamentId={tournament.id} />
+              </div>
+              <div className="p-4 border-t border-white/10 flex items-center justify-end gap-3">
+                <button
+                  onClick={() => setShowDraftConfirmModal(false)}
+                  className="px-4 py-2 rounded bg-slate-600 hover:bg-slate-500 text-white font-medium"
+                  disabled={starting}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={executeStartTournament}
+                  disabled={starting}
+                  className="px-6 py-2 rounded bg-blue-600 hover:bg-blue-500 text-white font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {starting ? "Starting Draft..." : "Confirm & Start Draft"}
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
+
       <div className="max-w-5xl mx-auto p-6 space-y-6">
         {/* Instant Join CTA when match is assigned */}
-        {null}
+        {(() => {
+          const matchId = assigned?.matchId || myAssignedMatchId || null;
+          const opponentName = assigned?.opponentName || null;
+          if (!matchId || tournament.status !== "active") return null;
+          return (
+            <div className="mb-4 rounded-lg border-2 border-emerald-500 bg-emerald-900/30 p-4 flex items-center justify-between animate-pulse">
+              <div>
+                <div className="text-lg font-bold text-emerald-300">
+                  Your match is ready!
+                </div>
+                <div className="text-sm text-emerald-200/80">
+                  {opponentName
+                    ? `vs ${opponentName}`
+                    : `Round ${activeRoundNumber ?? ""} — match assigned`}
+                </div>
+              </div>
+              <button
+                onClick={() => startJoinMatch(matchId)}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-3 rounded-lg font-bold text-lg transition-colors"
+              >
+                Join Match
+              </button>
+            </div>
+          );
+        })()}
 
         {isCreator &&
           isOpenSeat &&
@@ -2146,6 +2224,26 @@ export default function TournamentDetailsPage() {
                       )}
                     </div>
                   )}
+                </div>
+                <div className="flex items-center justify-between mb-2">
+                  <Link
+                    href="/decks"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-emerald-300 hover:text-emerald-200 underline"
+                  >
+                    Manage Decks
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setConstructedRefreshKey((k) => k + 1)
+                    }
+                    disabled={constructedLoading}
+                    className="text-xs text-emerald-300 hover:text-emerald-200 underline disabled:opacity-50"
+                  >
+                    {constructedLoading ? "Refreshing…" : "Refresh"}
+                  </button>
                 </div>
                 {constructedLoading ? (
                   <div className="text-emerald-200/80 text-sm">

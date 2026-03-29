@@ -435,6 +435,17 @@ export function RealtimeTournamentProvider({
       // Trust socket data - no HTTP refresh needed
       setLastUpdated(new Date().toISOString());
 
+      // Notify players that the draft is starting
+      try {
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("app:toast", {
+              detail: { message: "Draft is starting! Join now." },
+            }),
+          );
+        }
+      } catch {}
+
       if (!currentUserId) return;
 
       const activeId = activeTournamentId;

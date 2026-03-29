@@ -118,6 +118,7 @@ export default function TournamentInviteModal({
             targetPlayerId: inv.inviteeId,
             tournamentId,
             tournamentName,
+            invitationId: inv.id,
           });
         }
       }
