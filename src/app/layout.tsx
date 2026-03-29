@@ -8,6 +8,8 @@ import GlobalUserBadge from "@/components/auth/GlobalUserBadge";
 import GlobalNetworkLoadingBridge from "@/components/providers/GlobalNetworkLoadingBridge";
 import OnlineProvider from "@/components/providers/OnlineProvider";
 import PreventBrowserZoom from "@/components/providers/PreventBrowserZoom";
+import TournamentInviteListener from "@/components/tournament/TournamentInviteListener";
+import TournamentMatchPrompt from "@/components/tournament/TournamentMatchPrompt";
 import ThemeScope from "@/components/ui/ThemeScope";
 import { CacheProvider } from "@/contexts/CacheContext";
 import { RealtimeTournamentProvider } from "@/contexts/RealtimeTournamentContext";
@@ -138,6 +140,8 @@ export default async function RootLayout({
                         <RealtimeTournamentProvider>
                           <VideoOverlayProvider>
                             {children}
+                            <TournamentInviteListener />
+                            <TournamentMatchPrompt />
                           </VideoOverlayProvider>
                         </RealtimeTournamentProvider>
                       </OnlineProvider>
