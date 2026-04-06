@@ -183,17 +183,28 @@ async function handleStatus(
 ): Promise<void> {
   const { queueManager } = getServices();
 
-  const queueSize = await queueManager.getQueueSize();
-  const position = await queueManager.getPlayerPosition(interaction.user.id);
+  const guildId = interaction.guildId || "";
+  const [queueSize, guildQueueSize, position] = await Promise.all([
+    queueManager.getQueueSize(),
+    guildId ? queueManager.getGuildQueueSize(guildId) : Promise.resolve(0),
+    queueManager.getPlayerPosition(interaction.user.id),
+  ]);
 
   const embed = new EmbedBuilder()
     .setColor(0x7c3aed)
     .setTitle("Queue Status")
-    .addFields({
-      name: "Players in Queue",
-      value: queueSize.toString(),
-      inline: true,
-    });
+    .addFields(
+      {
+        name: "Players in Queue",
+        value: queueSize.toString(),
+        inline: true,
+      },
+      {
+        name: "From This Server",
+        value: guildQueueSize.toString(),
+        inline: true,
+      },
+    );
 
   if (position !== null) {
     embed.setDescription("You're currently in the queue!");

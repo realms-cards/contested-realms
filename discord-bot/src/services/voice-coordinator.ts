@@ -29,7 +29,8 @@ export class VoiceCoordinator {
   async requestVoiceChannel(
     matchId: string,
     player1Id: string,
-    player2Id: string
+    player2Id: string,
+    guildId: string,
   ): Promise<{ channelId: string; inviteUrl: string } | null> {
     try {
       console.log(
@@ -45,6 +46,7 @@ export class VoiceCoordinator {
 
       // Create the voice channel
       const result = await this.voiceManager.createMatchChannel(
+        guildId,
         matchId,
         playerInfo.player1.name,
         playerInfo.player1.discordId,

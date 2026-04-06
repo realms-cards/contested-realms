@@ -26,17 +26,15 @@ interface ManagedChannel {
 export class VoiceChannelManager {
   private client: Client;
   private channels: Map<string, ManagedChannel> = new Map();
-  private guildId: string;
 
   constructor(client: Client) {
     this.client = client;
-    this.guildId = process.env.DISCORD_GUILD_ID || "";
   }
 
-  private async getGuild(): Promise<Guild> {
-    const guild = await this.client.guilds.fetch(this.guildId);
+  private async getGuild(guildId: string): Promise<Guild> {
+    const guild = await this.client.guilds.fetch(guildId);
     if (!guild) {
-      throw new Error(`Guild ${this.guildId} not found`);
+      throw new Error(`Guild ${guildId} not found`);
     }
     return guild;
   }
@@ -70,13 +68,14 @@ export class VoiceChannelManager {
    * Create a private voice channel for a match.
    */
   async createMatchChannel(
+    guildId: string,
     matchId: string,
     player1Name: string,
     player1DiscordId: string,
     player2Name: string,
     player2DiscordId: string,
   ): Promise<{ channelId: string; inviteUrl: string }> {
-    const guild = await this.getGuild();
+    const guild = await this.getGuild(guildId);
     const category = await this.getOrCreateCategory(guild);
 
     const channelName = `${player1Name} vs ${player2Name}`;

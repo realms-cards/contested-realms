@@ -163,6 +163,7 @@ export const challengeCommand = {
                 match.matchId,
                 match.challenger.id,
                 match.challengee.id,
+                interaction.guildId || "",
               );
             } catch (err) {
               console.log("[challenge] Voice channel creation skipped:", err);
