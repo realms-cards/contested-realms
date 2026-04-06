@@ -1,6 +1,11 @@
 /**
  * Manages the matchmaking queue for constructed matches.
  * Uses Redis for persistent queue state with in-memory fallback.
+ *
+ * Matching priority:
+ *  1. Same-guild pair — matched immediately on join
+ *  2. Any same-guild pair in the full queue
+ *  3. Cross-server fallback after CROSS_SERVER_GRACE_MS (2 min)
  */
 
 import type { Client, TextChannel } from "discord.js";
@@ -12,6 +17,8 @@ import type { VoiceCoordinator } from "./voice-coordinator.js";
 const QUEUE_KEY = "realms:queue:constructed";
 const QUEUE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 const CLEANUP_INTERVAL_MS = 60 * 1000; // 60 seconds
+const CROSS_SERVER_GRACE_MS = 2 * 60 * 1000; // 2 minutes
+const PERIODIC_MATCH_CHECK_MS = 10 * 1000; // 10 seconds
 
 export interface QueueEntry {
   discordId: string;
@@ -39,6 +46,7 @@ export class QueueManager {
   private redis: Redis | null = null;
   private fallbackQueue: Map<string, QueueEntry> = new Map();
   private cleanupTimer: NodeJS.Timeout | null = null;
+  private matchCheckTimer: NodeJS.Timeout | null = null;
   private client: Client;
   private realmsApi: RealmsApiClient;
   private challengeManager: ChallengeManager;
@@ -57,6 +65,7 @@ export class QueueManager {
 
     this.initRedis();
     this.startCleanupTask();
+    this.startPeriodicMatchCheck();
   }
 
   private initRedis(): void {
@@ -80,8 +89,6 @@ export class QueueManager {
         console.warn("[queue-manager] Failed to parse REDIS_URL, using as-is");
       }
 
-      // If we have parsed options (password present), use object config
-      // Otherwise use URL string directly
       if (redisOptions) {
         this.redis = new Redis({
           ...redisOptions,
@@ -134,6 +141,24 @@ export class QueueManager {
     }, CLEANUP_INTERVAL_MS);
   }
 
+  private startPeriodicMatchCheck(): void {
+    this.matchCheckTimer = setInterval(() => {
+      this.periodicMatchCheck().catch((err) => {
+        console.error("[queue-manager] Periodic match check failed:", err);
+      });
+    }, PERIODIC_MATCH_CHECK_MS);
+  }
+
+  /**
+   * Periodic check for cross-server matches once grace period expires.
+   */
+  private async periodicMatchCheck(): Promise<void> {
+    const pair = await this.findMatch();
+    if (pair) {
+      await this.executeMatch(pair[0], pair[1]);
+    }
+  }
+
   /**
    * Join the constructed matchmaking queue.
    */
@@ -173,13 +198,16 @@ export class QueueManager {
 
     await this.addToQueue(entry);
 
-    // Check for match
-    const matchResult = await this.checkAndMatch();
-    if (matchResult) {
-      return {
-        status: "matched",
-        match: matchResult.match,
-      };
+    // Check for match (same-guild preference)
+    const pair = await this.findMatch(entry);
+    if (pair) {
+      const matchResult = await this.executeMatch(pair[0], pair[1]);
+      if (matchResult) {
+        return {
+          status: "matched",
+          match: matchResult.match,
+        };
+      }
     }
 
     // Not matched yet - return queue position
@@ -200,7 +228,6 @@ export class QueueManager {
   async leaveQueue(discordId: string): Promise<boolean> {
     if (this.redis) {
       try {
-        // Find and remove the entry with matching discordId
         const entries = await this.redis.zrange(QUEUE_KEY, 0, -1);
         for (const entryJson of entries) {
           const entry = JSON.parse(entryJson) as QueueEntry;
@@ -216,14 +243,13 @@ export class QueueManager {
       }
     }
 
-    // Fallback to in-memory
     const existed = this.fallbackQueue.has(discordId);
     this.fallbackQueue.delete(discordId);
     return existed;
   }
 
   /**
-   * Get current queue size.
+   * Get current queue size (all guilds).
    */
   async getQueueSize(): Promise<number> {
     if (this.redis) {
@@ -237,6 +263,14 @@ export class QueueManager {
   }
 
   /**
+   * Get queue size for a specific guild.
+   */
+  async getGuildQueueSize(guildId: string): Promise<number> {
+    const entries = await this.getAllEntries();
+    return entries.filter((e) => e.guildId === guildId).length;
+  }
+
+  /**
    * Get player's position in queue (1-indexed), or null if not in queue.
    */
   async getPlayerPosition(discordId: string): Promise<number | null> {
@@ -246,7 +280,7 @@ export class QueueManager {
         for (let i = 0; i < entries.length; i++) {
           const entry = JSON.parse(entries[i]) as QueueEntry;
           if (entry.discordId === discordId) {
-            return i + 1; // 1-indexed
+            return i + 1;
           }
         }
         return null;
@@ -255,7 +289,6 @@ export class QueueManager {
       }
     }
 
-    // Fallback to in-memory
     const entries = Array.from(this.fallbackQueue.entries()).sort(
       (a, b) => a[1].joinedAt - b[1].joinedAt,
     );
@@ -269,23 +302,110 @@ export class QueueManager {
   }
 
   /**
-   * Check if there are enough players for a match, and create one if so.
+   * Get all queue entries sorted by joinedAt (oldest first).
    */
-  private async checkAndMatch(): Promise<MatchResult | null> {
-    // Get first 2 entries from queue
-    const entries = await this.getFirstNEntries(2);
-    if (entries.length < 2) {
-      return null;
+  private async getAllEntries(): Promise<QueueEntry[]> {
+    if (this.redis) {
+      try {
+        const entries = await this.redis.zrange(QUEUE_KEY, 0, -1);
+        return entries.map((e) => JSON.parse(e) as QueueEntry);
+      } catch (err) {
+        console.error("[queue-manager] Redis getAllEntries failed:", err);
+      }
+    }
+    return Array.from(this.fallbackQueue.values()).sort(
+      (a, b) => a.joinedAt - b.joinedAt,
+    );
+  }
+
+  /**
+   * Find a pair to match using same-guild preference then cross-server fallback.
+   *
+   * Strategy:
+   *  1. If newEntry provided: find oldest same-guild opponent for this player
+   *  2. Find any same-guild pair in the full queue
+   *  3. Cross-server fallback: if oldest entry waited ≥ CROSS_SERVER_GRACE_MS, match top 2
+   */
+  private async findMatch(
+    newEntry?: QueueEntry,
+  ): Promise<[QueueEntry, QueueEntry] | null> {
+    const entries = await this.getAllEntries();
+    if (entries.length < 2) return null;
+
+    // Strategy 1: same-guild match for the new joiner
+    if (newEntry) {
+      const sameGuildOpponent = entries.find(
+        (e) =>
+          e.guildId === newEntry.guildId &&
+          e.discordId !== newEntry.discordId,
+      );
+      if (sameGuildOpponent) {
+        // Return oldest of the two as player1
+        return sameGuildOpponent.joinedAt < newEntry.joinedAt
+          ? [sameGuildOpponent, newEntry]
+          : [newEntry, sameGuildOpponent];
+      }
     }
 
-    const [player1, player2] = entries;
+    // Strategy 2: any same-guild pair in the full queue
+    const guildBuckets = new Map<string, QueueEntry[]>();
+    for (const entry of entries) {
+      const bucket = guildBuckets.get(entry.guildId) ?? [];
+      bucket.push(entry);
+      guildBuckets.set(entry.guildId, bucket);
+    }
+    for (const bucket of guildBuckets.values()) {
+      if (bucket.length >= 2) {
+        return [bucket[0], bucket[1]];
+      }
+    }
 
+    // Strategy 3: cross-server fallback once oldest player has waited long enough
+    const now = Date.now();
+    if (now - entries[0].joinedAt >= CROSS_SERVER_GRACE_MS) {
+      return [entries[0], entries[1]];
+    }
+
+    return null;
+  }
+
+  /**
+   * Find a common guild where both Discord users are members.
+   * Returns the guild ID or null if none found.
+   */
+  private async findCommonGuild(
+    discordId1: string,
+    discordId2: string,
+  ): Promise<string | null> {
+    for (const guild of this.client.guilds.cache.values()) {
+      try {
+        const [m1, m2] = await Promise.all([
+          guild.members.fetch(discordId1).catch(() => null),
+          guild.members.fetch(discordId2).catch(() => null),
+        ]);
+        if (m1 && m2) return guild.id;
+      } catch {
+        // guild fetch failed, skip
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Execute a match between two queued players.
+   * Removes them from the queue, creates the challenge, voice channel, and sends DMs.
+   */
+  private async executeMatch(
+    player1: QueueEntry,
+    player2: QueueEntry,
+  ): Promise<MatchResult | null> {
     // Remove both from queue
     await this.removeFromQueue(player1);
     await this.removeFromQueue(player2);
 
+    const crossServer = player1.guildId !== player2.guildId;
     console.log(
-      `[queue-manager] Matching ${player1.discordId} vs ${player2.discordId}`,
+      `[queue-manager] Matching ${player1.discordId} vs ${player2.discordId}${crossServer ? " (cross-server)" : ""}`,
     );
 
     try {
@@ -301,30 +421,50 @@ export class QueueManager {
       // Auto-accept the challenge
       const match = await this.challengeManager.acceptChallenge(challenge.id);
 
+      // Determine guild for voice channel
+      let voiceGuildId: string | null = null;
+      if (!crossServer) {
+        voiceGuildId = player1.guildId;
+      } else {
+        voiceGuildId = await this.findCommonGuild(
+          player1.discordId,
+          player2.discordId,
+        );
+      }
+
       // Try to create voice channel (non-blocking)
       let voiceInvite: string | undefined;
-      try {
-        const voiceInfo = await this.voiceCoordinator.requestVoiceChannel(
-          match.matchId,
-          match.challenger.id,
-          match.challengee.id,
-        );
-        if (voiceInfo) {
-          voiceInvite = voiceInfo.inviteUrl;
+      if (voiceGuildId) {
+        try {
+          const voiceInfo = await this.voiceCoordinator.requestVoiceChannel(
+            match.matchId,
+            match.challenger.id,
+            match.challengee.id,
+            voiceGuildId,
+          );
+          if (voiceInfo) {
+            voiceInvite = voiceInfo.inviteUrl;
+          }
+        } catch (err) {
+          console.log("[queue-manager] Voice channel creation skipped:", err);
         }
-      } catch (err) {
-        console.log("[queue-manager] Voice channel creation skipped:", err);
+      } else if (crossServer) {
+        console.log(
+          "[queue-manager] No common guild found for cross-server match, skipping voice",
+        );
       }
 
       // Send DMs to both players
-      await this.sendMatchDMs(player1, player2, match, voiceInvite);
+      await this.sendMatchDMs(player1, player2, match, voiceInvite, crossServer);
 
-      return {
-        match,
-        player1,
-        player2,
-        voiceInvite,
-      };
+      // Post announcements in both players' channels
+      const announcementMsg = `⚔️ **Match Found!** <@${player1.discordId}> vs <@${player2.discordId}> — Constructed`;
+      await this.postAnnouncement(player1.channelId, announcementMsg);
+      if (player2.channelId !== player1.channelId) {
+        await this.postAnnouncement(player2.channelId, announcementMsg);
+      }
+
+      return { match, player1, player2, voiceInvite };
     } catch (err) {
       console.error("[queue-manager] Match creation failed:", err);
       // Return players to queue on failure
@@ -342,6 +482,7 @@ export class QueueManager {
     player2: QueueEntry,
     match: MatchCreated,
     voiceInvite?: string,
+    crossServer = false,
   ): Promise<void> {
     try {
       const user1 = await this.client.users.fetch(player1.discordId);
@@ -353,6 +494,9 @@ export class QueueManager {
       if (voiceInvite) {
         message1 += `\nVoice: ${voiceInvite}`;
         message2 += `\nVoice: ${voiceInvite}`;
+      } else if (crossServer) {
+        message1 += `\n*(Cross-server match — voice chat not available. Use in-game chat.)*`;
+        message2 += `\n*(Cross-server match — voice chat not available. Use in-game chat.)*`;
       }
 
       await Promise.all([
@@ -413,25 +557,6 @@ export class QueueManager {
   }
 
   /**
-   * Get first N entries from queue (sorted by joinedAt).
-   */
-  private async getFirstNEntries(n: number): Promise<QueueEntry[]> {
-    if (this.redis) {
-      try {
-        const entries = await this.redis.zrange(QUEUE_KEY, 0, n - 1);
-        return entries.map((e) => JSON.parse(e) as QueueEntry);
-      } catch (err) {
-        console.error("[queue-manager] Redis getFirstNEntries failed:", err);
-      }
-    }
-
-    // Fallback to in-memory
-    return Array.from(this.fallbackQueue.values())
-      .sort((a, b) => a.joinedAt - b.joinedAt)
-      .slice(0, n);
-  }
-
-  /**
    * Remove expired entries (older than 30 minutes) and notify users.
    */
   private async cleanupExpiredEntries(): Promise<void> {
@@ -440,7 +565,6 @@ export class QueueManager {
 
     if (this.redis) {
       try {
-        // Get all entries
         const entries = await this.redis.zrange(QUEUE_KEY, 0, -1);
         for (const entryJson of entries) {
           const entry = JSON.parse(entryJson) as QueueEntry;
@@ -450,7 +574,6 @@ export class QueueManager {
               `[queue-manager] Expired ${entry.discordId} from queue`,
             );
 
-            // Notify user via DM
             try {
               const user = await this.client.users.fetch(entry.discordId);
               await user.send(
@@ -467,7 +590,6 @@ export class QueueManager {
       }
     }
 
-    // Fallback to in-memory
     for (const [discordId, entry] of this.fallbackQueue) {
       if (entry.joinedAt < cutoff) {
         this.fallbackQueue.delete(discordId);
@@ -492,6 +614,10 @@ export class QueueManager {
     if (this.cleanupTimer) {
       clearInterval(this.cleanupTimer);
       this.cleanupTimer = null;
+    }
+    if (this.matchCheckTimer) {
+      clearInterval(this.matchCheckTimer);
+      this.matchCheckTimer = null;
     }
     if (this.redis) {
       await this.redis.quit();

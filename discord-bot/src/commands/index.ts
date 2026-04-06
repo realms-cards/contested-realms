@@ -48,7 +48,7 @@ export async function registerCommands(): Promise<void> {
   try {
     console.log(`[commands] Registering ${commandsJson.length} commands...`);
 
-    if (guildId) {
+    if (process.env.NODE_ENV === "development" && guildId) {
       // Guild-specific commands (instant update, good for development)
       await rest.put(Routes.applicationGuildCommands(clientId, guildId), {
         body: commandsJson,
