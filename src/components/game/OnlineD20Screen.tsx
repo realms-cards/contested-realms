@@ -24,7 +24,7 @@ function getRetryDelay(attempt: number): number {
   // Exponential backoff: 1.5s, 3s, 6s, 8s (capped)
   const exponentialDelay = Math.min(
     D20_RETRY_BASE_MS * Math.pow(2, attempt),
-    D20_RETRY_MAX_MS
+    D20_RETRY_MAX_MS,
   );
   // Add jitter (±20%) to prevent thundering herd
   const jitter = exponentialDelay * 0.2 * (Math.random() * 2 - 1);
@@ -120,11 +120,11 @@ export default function OnlineD20Screen({
       "SetupWinner:",
       setupWinner,
       "ChoiceMade:",
-      choiceMade
+      choiceMade,
     );
     if (phase === "Start" && setupWinner && !choiceMade) {
       console.log(
-        "CONDITIONS MET! Setting choiceMade=true and starting 2s timeout"
+        "CONDITIONS MET! Setting choiceMade=true and starting 2s timeout",
       );
       setChoiceMade(true);
       // Show choice confirmation for 2 seconds, then advance
@@ -168,7 +168,9 @@ export default function OnlineD20Screen({
       // Increment rollKey on tie reset to force dice animation restart
       if (isTieReset) {
         setRollKey((k) => k + 1);
-        console.log("[OnlineD20Screen] Tie reset detected, incrementing rollKey");
+        console.log(
+          "[OnlineD20Screen] Tie reset detected, incrementing rollKey",
+        );
       }
     }
 
@@ -202,7 +204,7 @@ export default function OnlineD20Screen({
     console.log(
       `[D20] Scheduling retry ${
         retryCount + 1
-      }/${D20_MAX_RETRIES} in ${delay}ms`
+      }/${D20_MAX_RETRIES} in ${delay}ms`,
     );
 
     const retryTimeout = setTimeout(() => {
@@ -210,7 +212,7 @@ export default function OnlineD20Screen({
       if (didRetry) {
         setRetryCount((c) => c + 1);
         console.log(
-          `[D20] Retry attempt ${retryCount + 1}/${D20_MAX_RETRIES} sent`
+          `[D20] Retry attempt ${retryCount + 1}/${D20_MAX_RETRIES} sent`,
         );
       }
     }, delay);
@@ -248,13 +250,15 @@ export default function OnlineD20Screen({
     return () => clearTimeout(resyncTimeout);
   }, [myRoll, opponentRoll, waitingForOpponent, transport]);
 
-  // Clear pending roll when opponent's roll arrives (means server acknowledged ours)
+  // Clear pending roll when the server has fully resolved the D20 outcome.
+  // Seeing the opponent's roll alone is not sufficient, because the deciding
+  // patch could still have been dropped before the server merged both rolls.
   useEffect(() => {
-    if (d20PendingRoll && opponentRoll !== null) {
-      // Both rolls are in, clear pending state
+    if (d20PendingRoll && (setupWinner !== null || isTie)) {
       clearD20Pending();
+      setRetryCount(0);
     }
-  }, [d20PendingRoll, opponentRoll, clearD20Pending]);
+  }, [d20PendingRoll, setupWinner, isTie, clearD20Pending]);
 
   // Listen for D20 acknowledgment from server
   useEffect(() => {
@@ -266,7 +270,7 @@ export default function OnlineD20Screen({
       if (
         d20PendingRoll &&
         payload.seat === myPlayerKey &&
-        payload.roll === d20PendingRoll.roll
+        (payload.roll === d20PendingRoll.roll || payload.roll === null)
       ) {
         console.log("[D20] Clearing pending state after server ack");
         clearD20Pending();
@@ -311,7 +315,9 @@ export default function OnlineD20Screen({
       // If myRoll is null but ref says we initiated, this is likely a tie reset race
       // Reset the ref here as a fallback
       if (hasInitiatedRollRef.current) {
-        console.log("[OnlineD20Screen] Resetting roll guard (tie reset race condition)");
+        console.log(
+          "[OnlineD20Screen] Resetting roll guard (tie reset race condition)",
+        );
       }
       hasInitiatedRollRef.current = true;
       rollD20(myPlayerKey);

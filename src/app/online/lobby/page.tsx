@@ -16,6 +16,7 @@ import ChangelogOverlay from "@/components/ui/ChangelogOverlay";
 import CombinedMarquee from "@/components/ui/CombinedMarquee";
 import { CustomSelect } from "@/components/ui/CustomSelect";
 import ManualOverlay from "@/components/ui/ManualOverlay";
+import Modal from "@/components/ui/Modal";
 import { useRealtimeTournaments } from "@/contexts/RealtimeTournamentContext";
 import { tournamentFeatures } from "@/lib/config/features";
 import {
@@ -239,6 +240,9 @@ function LobbyPageContent({
     dismissInvite,
     addCpuBot,
     removeCpuBot,
+    matchmaking,
+    acceptMatchmaking,
+    declineMatchmaking,
     voice,
     transport,
   } = useOnline();
@@ -248,6 +252,26 @@ function LobbyPageContent({
   const inviteTournamentId = searchParams?.get("tournament") ?? null;
   const [showIneligibleModal, setShowIneligibleModal] = useState(false);
   const [ineligibleReason, setIneligibleReason] = useState<string>("");
+  const [matchmakingNow, setMatchmakingNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (matchmaking.status !== "confirming") return;
+    const id = window.setInterval(() => setMatchmakingNow(Date.now()), 250);
+    return () => window.clearInterval(id);
+  }, [matchmaking.status]);
+
+  const matchmakingConfirmSeconds = useMemo(() => {
+    if (matchmaking.confirmExpiresAt === null) return null;
+    return Math.max(
+      0,
+      Math.ceil((matchmaking.confirmExpiresAt - matchmakingNow) / 1000),
+    );
+  }, [matchmaking.confirmExpiresAt, matchmakingNow]);
+  const matchmakingOpponentName =
+    matchmaking.matchedPlayerName ||
+    (matchmaking.matchedPlayerId
+      ? `Player ${matchmaking.matchedPlayerId.slice(-4)}`
+      : "your opponent");
 
   // Get current user's SOATC status
   const { status: myStatus, loading: myStatusLoading } = useSoatcStatus();
@@ -2587,6 +2611,78 @@ function LobbyPageContent({
             dismissInvite(inv.lobbyId, inv.from.id);
           }}
         />
+      )}
+
+      {matchmaking.status === "confirming" && !lobby && !match && (
+        <Modal
+          onClose={declineMatchmaking}
+          closeOnBackdrop={false}
+          className="w-full max-w-lg"
+        >
+          <div className="rounded-2xl border border-amber-400/30 bg-gradient-to-br from-slate-950 via-slate-900 to-amber-950/60 p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-[11px] uppercase tracking-[0.28em] text-amber-200/80">
+                  Match Found
+                </div>
+                <h3 className="mt-2 text-2xl font-semibold text-white">
+                  {matchmakingOpponentName}
+                </h3>
+                <p className="mt-2 text-sm text-slate-300">
+                  Accept to reserve your place. If either player declines or
+                  runs out of time, the seat is released back into the queue.
+                </p>
+              </div>
+              <div className="rounded-xl border border-amber-300/30 bg-amber-400/10 px-3 py-2 text-right">
+                <div className="text-[10px] uppercase tracking-[0.2em] text-amber-100/70">
+                  Time Left
+                </div>
+                <div className="mt-1 text-2xl font-semibold text-amber-100">
+                  {matchmakingConfirmSeconds ?? "--"}s
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-[10px] uppercase tracking-[0.18em] text-slate-400">
+                  Queue Size
+                </div>
+                <div className="mt-1 text-lg font-semibold text-white">
+                  {matchmaking.queueSize ?? 0}
+                </div>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-[10px] uppercase tracking-[0.18em] text-slate-400">
+                  Your Status
+                </div>
+                <div className="mt-1 text-lg font-semibold text-white">
+                  {matchmaking.youAccepted ? "Accepted" : "Awaiting Response"}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={declineMatchmaking}
+                className="rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-100 transition hover:bg-red-500/20"
+              >
+                Decline Match
+              </button>
+              <button
+                type="button"
+                onClick={acceptMatchmaking}
+                disabled={matchmaking.youAccepted}
+                className="rounded-xl border border-emerald-300/40 bg-emerald-500/20 px-4 py-3 text-sm font-semibold text-emerald-50 transition hover:bg-emerald-500/30 disabled:cursor-default disabled:opacity-60"
+              >
+                {matchmaking.youAccepted
+                  ? "Accepted - Waiting"
+                  : "Accept Match"}
+              </button>
+            </div>
+          </div>
+        </Modal>
       )}
 
       {/* SOATC Tournament Invite Ineligibility Modal */}

@@ -962,6 +962,7 @@ const handleHttpRequest = createRequestHandler({
   metricsInc,
   matchesMap: matches,
   players,
+  matchmaking: matchmakingFeature,
   tournamentBroadcast: {
     emitTournamentUpdate: (
       _io: SocketServer,
@@ -2540,6 +2541,10 @@ io.on("connection", async (socket: SocketClient) => {
         }
       } catch {}
     }
+
+    try {
+      await matchmakingFeature.handlePlayerHello(player.id, socket.id);
+    } catch {}
   });
 
   // --- Update display name (after profile save) ---

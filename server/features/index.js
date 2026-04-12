@@ -1,7 +1,7 @@
 "use strict";
 
 const { createLobbyFeature } = require("./lobby");
-const { createMatchmakingFeature } = require("./matchmaking");
+const { createMatchmakingFeature } = require("./matchmaking/constructed-queue");
 const { createTournamentFeature } = require("./tournament");
 const { createRtcMigrationHelper } = require("../socket/rtc-migration");
 
@@ -51,7 +51,7 @@ function registerFeatures(container, deps) {
       botInternalSecret: deps.botInternalSecret,
       redisState: deps.redisState, // For horizontal scaling - cross-instance lobby visibility
       rtcMigration, // For preserving voice connections from lobby to match
-    })
+    }),
   );
 
   const tournament = container.registerFeature("tournament", () =>
@@ -72,7 +72,7 @@ function registerFeatures(container, deps) {
       startMatchRecording: deps.startMatchRecording,
       getMatchInfo: deps.getMatchInfo,
       tournamentBroadcast: deps.tournamentBroadcast,
-    })
+    }),
   );
 
   const matchmaking = container.registerFeature("matchmaking", () =>
@@ -80,13 +80,17 @@ function registerFeatures(container, deps) {
       io: container.resolve("io"),
       storeRedis: container.resolve("storeRedis"),
       instanceId: container.resolve("instanceId"),
-      rid: deps.rid,
       getOrClaimLobbyLeader: lobby.getOrClaimLobbyLeader,
       handleLobbyControlAsLeader: lobby.handleLobbyControlAsLeader,
       ensurePlayerCached: deps.ensurePlayerCached,
       matchmakingChannel: "matchmaking:control",
       lobbies: lobby.lobbies,
-    })
+      reservePrivateLobby: lobby.reservePrivateLobby,
+      setMatchmakingLobbyConfirmationRequired:
+        lobby.setMatchmakingLobbyConfirmationRequired,
+      cancelReservedLobby: lobby.cancelReservedLobby,
+      addLobbyInvite: lobby.addLobbyInvite,
+    }),
   );
 
   return { lobby, tournament, matchmaking };

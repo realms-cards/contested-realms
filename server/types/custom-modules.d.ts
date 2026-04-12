@@ -10,11 +10,11 @@ declare module "./modules/draft" {
     getDraftConfig(
       prisma: PrismaClient,
       matchId: string,
-      match: AnyRecord
+      match: AnyRecord,
     ): Promise<AnyRecord>;
     loadCubeConfiguration(
       prisma: PrismaClient,
-      cubeId: string
+      cubeId: string,
     ): Promise<AnyRecord>;
     ensureConfigLoaded(
       prisma: PrismaClient,
@@ -22,8 +22,8 @@ declare module "./modules/draft" {
       match: AnyRecord,
       hydrateMatchFromDatabase: (
         matchId: string,
-        match: AnyRecord
-      ) => Promise<void>
+        match: AnyRecord,
+      ) => Promise<void>,
     ): Promise<void>;
   };
   export const createMatchDraftService: typeof CreateMatchDraftService;
@@ -51,7 +51,7 @@ declare module "./modules/draft/match" {
       match: AnyRecord,
       patch: AnyRecord | null,
       playerId: string,
-      timestamp: number
+      timestamp: number,
     ): Promise<void>;
     getOrLoadMatch(matchId: string): Promise<AnyRecord | null>;
     getMatchInfo(match: AnyRecord): AnyRecord;
@@ -68,29 +68,29 @@ declare module "./modules/draft/match" {
       sessionId: string,
       playerId: string,
       playerName: string | null,
-      isConnected: boolean
+      isConnected: boolean,
     ): Promise<DraftPresenceEntry[]>;
     getDraftPresenceList(sessionId: string): DraftPresenceEntry[];
     leaderDraftPlayerReady(
       matchId: string,
       playerId: string,
-      ready: boolean
+      ready: boolean,
     ): Promise<void>;
     leaderStartDraft(
       matchId: string,
       requestingPlayerId?: string | null,
       overrideConfig?: AnyRecord | null,
-      requestingSocketId?: string | null
+      requestingSocketId?: string | null,
     ): Promise<void>;
     leaderMakeDraftPick(
       matchId: string,
       playerId: string,
-      payload: AnyRecord
+      payload: AnyRecord,
     ): Promise<void>;
     leaderChooseDraftPack(
       matchId: string,
       playerId: string,
-      payload: AnyRecord
+      payload: AnyRecord,
     ): Promise<void>;
     clearDraftWatchdog(matchId: string): void;
     repairDraftInvariants(match: AnyRecord): void;
@@ -109,42 +109,42 @@ declare module "./modules/tournament/broadcast" {
     io: Server,
     tournamentId: string,
     newPhase: string,
-    additionalData?: AnyRecord
+    additionalData?: AnyRecord,
   ): void;
   export function emitTournamentUpdate(
     io: Server,
     tournamentId: string,
-    data: AnyRecord
+    data: AnyRecord,
   ): void;
   export function emitRoundStarted(
     io: Server,
     tournamentId: string,
     roundNumber: number,
-    matches: AnyRecord[]
+    matches: AnyRecord[],
   ): void;
   export function emitMatchesReady(
     io: Server,
     tournamentId: string,
-    matches: AnyRecord[]
+    matches: AnyRecord[],
   ): void;
   export function emitDraftReady(
     io: Server,
     tournamentId: string,
-    payload: AnyRecord
+    payload: AnyRecord,
   ): void;
   export function emitPlayerJoined(
     io: Server,
     tournamentId: string,
     playerId: string,
     playerName: string,
-    currentPlayerCount: number
+    currentPlayerCount: number,
   ): void;
   export function emitPlayerLeft(
     io: Server,
     tournamentId: string,
     playerId: string,
     playerName: string,
-    currentPlayerCount: number
+    currentPlayerCount: number,
   ): void;
   export function emitPreparationUpdate(
     io: Server,
@@ -153,12 +153,12 @@ declare module "./modules/tournament/broadcast" {
     preparationStatus: string,
     readyPlayerCount: number,
     totalPlayerCount: number,
-    deckSubmitted?: boolean
+    deckSubmitted?: boolean,
   ): void;
   export function emitStatisticsUpdate(
     io: Server,
     tournamentId: string,
-    statistics: AnyRecord
+    statistics: AnyRecord,
   ): void;
 }
 
@@ -169,7 +169,7 @@ declare module "./modules/replay" {
       limit?: number;
       cursor?: string;
       playerId?: string;
-    }
+    },
   ): Promise<{
     recordings: AnyRecord[];
     hasMore: boolean;
@@ -177,7 +177,7 @@ declare module "./modules/replay" {
   }>;
   export function loadRecording(
     prisma: PrismaClient,
-    matchId: string
+    matchId: string,
   ): Promise<AnyRecord | null>;
 }
 
@@ -185,17 +185,18 @@ declare module "./features" {
   import type { ServerContainer } from "./core/container";
   export function registerFeatures(
     container: ServerContainer,
-    deps: AnyRecord
+    deps: AnyRecord,
   ): {
     lobby: ReturnType<typeof import("./features/lobby").createLobbyFeature>;
     tournament: ReturnType<
       typeof import("./features/tournament").createTournamentFeature
     >;
+    matchmaking: AnyRecord;
   };
 }
 
 declare module "./features/lobby" {
-  export function createLobbyFeature(deps: AnyRecord): {
+  export function createLobbyFeature(deps: AnyRecord): AnyRecord & {
     registerSocketHandlers(context: AnyRecord): void;
     onInit?(): Promise<void> | void;
     onShutdown?(): Promise<void> | void;
@@ -217,12 +218,12 @@ declare module "./booster" {
   export function generateBoosterDeterministic(
     setName: string,
     rng: () => number,
-    replaceAvatars?: boolean
+    replaceAvatars?: boolean,
   ): Promise<AnyRecord>;
   export function generateCubeBoosterDeterministic(
     cubeConfig: AnyRecord,
     rng: () => number,
-    replaceAvatars?: boolean
+    replaceAvatars?: boolean,
   ): Promise<AnyRecord>;
 }
 
@@ -236,7 +237,7 @@ declare module "./botManager" {
       matches: Map<string, AnyRecord>,
       getLobbyInfo: (lobby: AnyRecord) => AnyRecord,
       getMatchInfo: (match: AnyRecord) => AnyRecord,
-      isCpuPlayerId?: (id: string) => boolean
+      isCpuPlayerId?: (id: string) => boolean,
     );
     registerBot(botId: string, botInstance: AnyRecord): void;
     getBot(botId: string): AnyRecord | null;

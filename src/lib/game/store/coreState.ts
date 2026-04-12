@@ -109,31 +109,21 @@ export const createCoreSlice: StateCreator<
     set({ d20PendingRoll: { seat: who, roll, ts: Date.now() } });
 
     if (newRolls.p1 !== null && newRolls.p2 !== null) {
-      let winner: PlayerKey | null = null;
-      if (newRolls.p1 > newRolls.p2) {
-        winner = "p1";
-      } else if (newRolls.p2 > newRolls.p1) {
-        winner = "p2";
-      }
-
       if (newRolls.p1 === newRolls.p2) {
         get().log(`Both players rolled ${newRolls.p1}! Rolling again...`);
         const tiePatch: ServerPatchT = {
           d20Rolls: newRolls,
         };
         get().trySendD20Patch(tiePatch);
-        // IMPORTANT: Clear pending roll on tie to prevent stale retries
-        // The server will reset both rolls to null, so we shouldn't retry the old value
-        set({ d20Rolls: newRolls, setupWinner: null, d20PendingRoll: null });
+        set({ d20Rolls: newRolls, setupWinner: null });
         return;
       }
 
       const patch: ServerPatchT = {
         d20Rolls: newRolls,
-        setupWinner: winner,
       };
       get().trySendD20Patch(patch);
-      set({ d20Rolls: newRolls, setupWinner: winner, d20PendingRoll: null });
+      set({ d20Rolls: newRolls, setupWinner: null });
       get().log(
         `Player ${
           newRolls.p1 > newRolls.p2 ? "1" : "2"

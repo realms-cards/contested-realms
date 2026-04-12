@@ -175,18 +175,11 @@ export const challengeCommand = {
               .setDescription(
                 `The match is ready! Click the links below to join.`,
               )
-              .addFields(
-                {
-                  name: `${interaction.user.displayName}'s Link`,
-                  value: `[Join Match](${match.joinUrlP1})`,
-                  inline: true,
-                },
-                {
-                  name: `${opponent.displayName}'s Link`,
-                  value: `[Join Match](${match.joinUrlP2})`,
-                  inline: true,
-                },
-              );
+              .addFields({
+                name: "Join Match",
+                value: `[Open Lobby](${match.joinUrl})`,
+                inline: false,
+              });
 
             // Add voice channel info if created
             if (voiceInfo) {
@@ -204,8 +197,8 @@ export const challengeCommand = {
 
             // DM both players their personal links
             try {
-              let p1Message = `🎮 Your match against **${opponent.displayName}** is ready!\n${match.joinUrlP1}`;
-              let p2Message = `🎮 Your match against **${interaction.user.displayName}** is ready!\n${match.joinUrlP2}`;
+              let p1Message = `🎮 Your match against **${opponent.displayName}** is ready!\n${match.joinUrl}`;
+              let p2Message = `🎮 Your match against **${interaction.user.displayName}** is ready!\n${match.joinUrl}`;
 
               if (voiceInfo) {
                 p1Message += `\n🎤 Voice: ${voiceInfo.inviteUrl}`;

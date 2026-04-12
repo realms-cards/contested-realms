@@ -419,14 +419,21 @@ export const JoinMatchmakingPayload = z.object({
   preferences: MatchmakingPreferencesSchema,
 });
 export const LeaveMatchmakingPayload = z.object({});
+export const RespondMatchmakingPayload = z.object({
+  decision: z.enum(["accept", "decline"]),
+});
 
 export type JoinMatchmakingPayloadT = z.infer<typeof JoinMatchmakingPayload>;
 export type LeaveMatchmakingPayloadT = z.infer<typeof LeaveMatchmakingPayload>;
+export type RespondMatchmakingPayloadT = z.infer<
+  typeof RespondMatchmakingPayload
+>;
 
 // Matchmaking status for server -> client
 export const MatchmakingStatusSchema = z.enum([
   "idle", // Not in queue
   "searching", // In queue, looking for match
+  "confirming", // Match found, waiting for confirmation
   "found", // Match found, transitioning to lobby
 ]);
 export type MatchmakingStatus = z.infer<typeof MatchmakingStatusSchema>;
@@ -437,10 +444,19 @@ export const MatchmakingUpdatePayload = z.object({
   queuePosition: z.number().int().min(0).optional(),
   estimatedWait: z.number().int().min(0).optional(), // seconds
   matchedPlayerId: z.string().optional(),
+  matchedPlayerName: z.string().optional(),
+  youAccepted: z.boolean().optional(),
   lobbyId: z.string().optional(),
   matchType: z.enum(["constructed", "sealed", "draft", "precon"]).optional(),
   isHost: z.boolean().optional(), // true if this player is the host (for sealed/draft config)
   queueSize: z.number().int().min(0).optional(), // total players in matchmaking queue
+  confirmExpiresAt: z.number().int().min(0).optional(),
+  queueBySource: z
+    .object({
+      web: z.number().int().min(0),
+      discord: z.number().int().min(0),
+    })
+    .optional(),
 });
 export type MatchmakingUpdatePayloadT = z.infer<
   typeof MatchmakingUpdatePayload
@@ -469,6 +485,7 @@ export type ClientEventMap = {
   // Matchmaking
   joinMatchmaking: JoinMatchmakingPayloadT;
   leaveMatchmaking: LeaveMatchmakingPayloadT;
+  respondMatchmaking: RespondMatchmakingPayloadT;
 };
 
 // Server -> Client payloads
@@ -584,6 +601,7 @@ export const Protocol = {
   MulliganDonePayload,
   JoinMatchmakingPayload,
   LeaveMatchmakingPayload,
+  RespondMatchmakingPayload,
   // Server -> Client
   WelcomePayload,
   JoinedLobbyPayload,

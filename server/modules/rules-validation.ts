@@ -342,8 +342,9 @@ export function validateAction(
       context && typeof context === "object"
         ? ((context as AnyRecord).match as AnyRecord | null | undefined)
         : null;
-    const playerIds = Array.isArray(match?.playerIds)
-      ? (match.playerIds as string[])
+    const matchPlayerIds = match?.playerIds;
+    const playerIds = Array.isArray(matchPlayerIds)
+      ? (matchPlayerIds as string[])
       : [];
     const idx = playerIds.indexOf(playerId);
     const meKey: SeatKey | null = idx === 0 ? "p1" : idx === 1 ? "p2" : null;
@@ -357,6 +358,50 @@ export function validateAction(
       typeof (action as AnyRecord).phase === "string"
         ? ((action as AnyRecord).phase as string)
         : ((game.phase as string | undefined) ?? undefined);
+
+    if (
+      (action as AnyRecord).phase === "Start" &&
+      (game.phase as string | undefined) === "Setup"
+    ) {
+      const d20 =
+        game.d20Rolls && typeof game.d20Rolls === "object"
+          ? (game.d20Rolls as AnyRecord)
+          : null;
+      const p1Roll =
+        d20 && typeof d20.p1 === "number" && Number.isFinite(d20.p1)
+          ? Number(d20.p1)
+          : null;
+      const p2Roll =
+        d20 && typeof d20.p2 === "number" && Number.isFinite(d20.p2)
+          ? Number(d20.p2)
+          : null;
+      const setupWinner =
+        game.setupWinner === "p1" || game.setupWinner === "p2"
+          ? (game.setupWinner as SeatKey)
+          : null;
+
+      if (p1Roll === null || p2Roll === null) {
+        return {
+          ok: false,
+          error:
+            "Cannot choose player order before both D20 rolls are confirmed",
+        };
+      }
+
+      if (p1Roll === p2Roll || !setupWinner) {
+        return {
+          ok: false,
+          error: "Cannot choose player order until the D20 winner is confirmed",
+        };
+      }
+
+      if (meKey !== setupWinner) {
+        return {
+          ok: false,
+          error: "Only the D20 winner may choose player order",
+        };
+      }
+    }
 
     if (
       (action as AnyRecord).board &&
