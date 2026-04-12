@@ -1,8 +1,7 @@
 "use client";
 
-import { Loader2, X, Users } from "lucide-react";
+import { Loader2, Users, X } from "lucide-react";
 import Link from "next/link";
-import { useMemo } from "react";
 import { useOnline } from "@/app/online/online-context";
 import { isFeatureEnabled } from "@/lib/config/features";
 
@@ -17,14 +16,15 @@ export default function MatchmakingPanel({
     matchmaking,
     joinMatchmaking,
     leaveMatchmaking,
+    declineMatchmaking,
     leaveLobby,
     lobby,
     match,
     players,
-    lobbies,
   } = useOnline();
 
   const isSearching = matchmaking.status === "searching";
+  const isConfirming = matchmaking.status === "confirming";
   const matchFound = matchmaking.status === "found";
 
   // Disable matchmaking when in a lobby or match
@@ -33,32 +33,29 @@ export default function MatchmakingPanel({
   // Count online players
   const onlineCount = players.length;
   const queueSize = matchmaking.queueSize ?? 0;
-
-  // Count precon matches (lobbies with precon type that are open or started)
-  const preconStats = useMemo(() => {
-    let waiting = 0;
-    let playing = 0;
-    for (const l of lobbies) {
-      // Check if it's a precon/matchmaking lobby (no planned match type or constructed with precon name pattern)
-      const isPrecon =
-        l.isMatchmakingLobby || l.name?.toLowerCase().includes("precon");
-      if (isPrecon) {
-        if (l.status === "open") waiting += l.players.length;
-        else if (l.status === "started") playing += l.players.length;
-      }
-    }
-    return { waiting: waiting + queueSize, playing };
-  }, [lobbies, queueSize]);
+  const queueBySource = matchmaking.queueBySource;
+  const queuePosition = matchmaking.queuePosition;
+  const confirmSeconds =
+    matchmaking.confirmExpiresAt !== null
+      ? Math.max(
+          0,
+          Math.ceil((matchmaking.confirmExpiresAt - Date.now()) / 1000),
+        )
+      : null;
 
   const handleSearchClick = () => {
     if (disabled) return;
+    if (isConfirming) {
+      declineMatchmaking();
+      return;
+    }
     if (isSearching || matchFound) {
       leaveMatchmaking();
       if (lobby) {
         leaveLobby();
       }
     } else {
-      joinMatchmaking(["precon"]);
+      joinMatchmaking(["constructed"]);
     }
   };
 
@@ -79,31 +76,52 @@ export default function MatchmakingPanel({
         </div>
       </div>
 
-      {/* Card 2: Quick Play with Precons */}
+      {/* Card 2: Constructed Queue */}
       <button
         onClick={handleSearchClick}
-        className="flex-1 rounded-xl bg-gradient-to-br from-violet-950/40 to-slate-900/60 ring-1 ring-violet-500/20 flex flex-col items-center justify-center p-3 hover:bg-white/5 transition-colors group"
+        className={`flex-1 rounded-xl ring-1 flex flex-col items-center justify-center p-3 transition-all duration-200 group ${
+          isConfirming
+            ? "bg-gradient-to-br from-amber-600/20 via-rose-950/55 to-slate-950/90 ring-amber-400/50 shadow-[0_0_18px_rgba(251,191,36,0.16)]"
+            : matchFound
+              ? "bg-gradient-to-br from-emerald-700/25 via-emerald-950/55 to-slate-950/90 ring-emerald-400/35 shadow-[0_0_16px_rgba(16,185,129,0.12)]"
+              : isSearching
+                ? "bg-gradient-to-br from-violet-700/20 via-violet-950/55 to-slate-950/90 ring-violet-400/35 shadow-[0_0_16px_rgba(139,92,246,0.14)]"
+                : "bg-gradient-to-br from-violet-950/40 to-slate-900/60 ring-violet-500/20 hover:ring-violet-400/35 hover:bg-white/5"
+        }`}
       >
-        {isSearching || matchFound ? (
+        {isConfirming || matchFound ? (
           <div className="flex items-center gap-2">
             <div className="text-sm font-semibold text-white">
-              {matchFound ? "Match Found!" : "Searching..."}
+              {isConfirming
+                ? `Confirm${confirmSeconds !== null ? ` • ${confirmSeconds}s` : ""}`
+                : "Match Ready"}
             </div>
-            {isSearching && (
-              <Loader2 className="w-4 h-4 text-violet-300 animate-spin" />
-            )}
+            <X className="w-4 h-4 text-red-400 opacity-60 group-hover:opacity-100" />
+          </div>
+        ) : isSearching ? (
+          <div className="flex items-center gap-2">
+            <div className="text-sm font-semibold text-white">Searching...</div>
+            <Loader2 className="w-4 h-4 text-violet-300 animate-spin" />
             <X className="w-4 h-4 text-red-400 opacity-60 group-hover:opacity-100" />
           </div>
         ) : (
           <div>
             <div className="text-sm font-semibold text-white">
-              Quick Play Precons
+              Constructed Queue
             </div>
             <div className="text-[10px] text-violet-300/80">
-              {preconStats.waiting > 0
-                ? `${preconStats.waiting} waiting`
-                : "Click to find match"}
+              {queueSize > 0 ? `${queueSize} waiting` : "Click to find match"}
             </div>
+            {queueBySource ? (
+              <div className="text-[10px] text-violet-200/60 mt-1">
+                {queueBySource.web} web • {queueBySource.discord} discord
+              </div>
+            ) : null}
+            {isSearching && queuePosition !== null ? (
+              <div className="text-[10px] text-violet-200/60 mt-1">
+                You are #{queuePosition + 1}
+              </div>
+            ) : null}
           </div>
         )}
       </button>
@@ -126,7 +144,9 @@ export default function MatchmakingPanel({
           className="rounded-xl bg-gradient-to-br from-amber-950/40 to-slate-900/60 ring-1 ring-amber-500/20 flex flex-col items-center justify-center px-4 py-3 hover:bg-white/5 transition-colors"
         >
           <div className="text-sm font-semibold text-white">Learn to Play</div>
-          <div className="text-[10px] text-amber-300/80">Interactive Tutorial</div>
+          <div className="text-[10px] text-amber-300/80">
+            Interactive Tutorial
+          </div>
         </Link>
       )}
     </div>

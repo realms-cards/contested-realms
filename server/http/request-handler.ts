@@ -75,6 +75,26 @@ export interface RequestHandlerDeps {
   toOptionalNumber: (value: unknown) => number | null;
   matchesMap: Map<string, AnyRecord>;
   safeErrorMessage: (err: unknown) => unknown;
+  matchmaking: {
+    joinExternalQueue: (
+      playerId: string,
+      options?: {
+        discordId?: string | null;
+        guildId?: string | null;
+        channelId?: string | null;
+      },
+    ) => Promise<AnyRecord>;
+    leaveQueue: (playerId: string, reason?: string) => Promise<boolean>;
+    getStatus: (playerId: string, guildId?: string | null) => AnyRecord;
+    respondToMatchmaking: (
+      playerId: string,
+      decision: "accept" | "decline",
+    ) => Promise<AnyRecord>;
+    getPendingMatch: (playerId: string) => AnyRecord | null;
+    getQueueStats: () => {
+      totalInQueue: number;
+    };
+  };
   /** Redis state manager for horizontal scaling (optional) */
   redisState?: RedisStateManager | null;
   /** Instance ID for this server instance */
@@ -103,6 +123,7 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
     matchesMap,
     players,
     safeErrorMessage,
+    matchmaking,
     redisState,
     instanceId,
   } = deps;
@@ -168,6 +189,31 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
       EVENT_ALIAS_MAP[upper];
     if (alias && isTournamentBroadcastEvent(alias)) return alias;
     return null;
+  }
+
+  function getBearerToken(req: IncomingMessage): string | null {
+    const auth = (req && req.headers && req.headers.authorization) || "";
+    const match = auth.match(/^Bearer\s+(.+)$/i);
+    return match ? match[1] : null;
+  }
+
+  function isBotAuthorized(req: IncomingMessage): boolean {
+    const secret = process.env.REALMS_BOT_SECRET;
+    if (!secret) return false;
+    const token = getBearerToken(req);
+    return token === secret;
+  }
+
+  async function readJsonBody(req: IncomingMessage): Promise<AnyRecord> {
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
+    }
+    if (chunks.length === 0) return {};
+    const raw = Buffer.concat(chunks).toString("utf8").trim();
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as unknown;
+    return parsed && typeof parsed === "object" ? (parsed as AnyRecord) : {};
   }
 
   return async function handleRequest(
@@ -303,6 +349,159 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
         allowCorsForOptions(res, reqOrigin);
         res.statusCode = 204;
         res.end();
+        return;
+      }
+
+      if (pathname === "/bot/queue/constructed/status" && method === "GET") {
+        allowCors(res, reqOrigin);
+        if (!isBotAuthorized(req)) {
+          res.statusCode = 401;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ error: "Unauthorized" }));
+          return;
+        }
+
+        const playerId = (u.searchParams.get("playerId") || "").trim();
+        const guildId = (u.searchParams.get("guildId") || "").trim() || null;
+        if (!playerId) {
+          res.statusCode = 400;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ error: "playerId is required" }));
+          return;
+        }
+
+        res.statusCode = 200;
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify(matchmaking.getStatus(playerId, guildId)));
+        return;
+      }
+
+      if (pathname === "/bot/queue/constructed/join" && method === "POST") {
+        allowCors(res, reqOrigin);
+        if (!isBotAuthorized(req)) {
+          res.statusCode = 401;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ error: "Unauthorized" }));
+          return;
+        }
+
+        const body = await readJsonBody(req);
+        const playerId =
+          typeof body.playerId === "string" ? body.playerId.trim() : "";
+        if (!playerId) {
+          res.statusCode = 400;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ error: "playerId is required" }));
+          return;
+        }
+
+        const result = await matchmaking.joinExternalQueue(playerId, {
+          discordId:
+            typeof body.discordId === "string" ? body.discordId.trim() : null,
+          guildId:
+            typeof body.guildId === "string" ? body.guildId.trim() : null,
+          channelId:
+            typeof body.channelId === "string" ? body.channelId.trim() : null,
+        });
+
+        res.statusCode = 200;
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify(result));
+        return;
+      }
+
+      if (pathname === "/bot/queue/constructed/leave" && method === "POST") {
+        allowCors(res, reqOrigin);
+        if (!isBotAuthorized(req)) {
+          res.statusCode = 401;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ error: "Unauthorized" }));
+          return;
+        }
+
+        const body = await readJsonBody(req);
+        const playerId =
+          typeof body.playerId === "string" ? body.playerId.trim() : "";
+        if (!playerId) {
+          res.statusCode = 400;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ error: "playerId is required" }));
+          return;
+        }
+
+        const pendingMatch = matchmaking.getPendingMatch(playerId);
+        const removed =
+          pendingMatch?.status === "confirming"
+            ? !!(await matchmaking.respondToMatchmaking(playerId, "decline"))
+                ?.ok
+            : await matchmaking.leaveQueue(playerId, "bot_cancelled");
+        res.statusCode = 200;
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ removed }));
+        return;
+      }
+
+      if (pathname === "/bot/queue/constructed/accept" && method === "POST") {
+        allowCors(res, reqOrigin);
+        if (!isBotAuthorized(req)) {
+          res.statusCode = 401;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ error: "Unauthorized" }));
+          return;
+        }
+
+        const body = await readJsonBody(req);
+        const playerId =
+          typeof body.playerId === "string" ? body.playerId.trim() : "";
+        if (!playerId) {
+          res.statusCode = 400;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ error: "playerId is required" }));
+          return;
+        }
+
+        const result = await matchmaking.respondToMatchmaking(
+          playerId,
+          "accept",
+        );
+        res.statusCode = result?.ok ? 200 : 409;
+        res.setHeader("Content-Type", "application/json");
+        res.end(
+          JSON.stringify({
+            ...result,
+            pendingMatch: matchmaking.getPendingMatch(playerId),
+            queueSize: matchmaking.getQueueStats().totalInQueue,
+          }),
+        );
+        return;
+      }
+
+      if (pathname === "/bot/queue/constructed/decline" && method === "POST") {
+        allowCors(res, reqOrigin);
+        if (!isBotAuthorized(req)) {
+          res.statusCode = 401;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ error: "Unauthorized" }));
+          return;
+        }
+
+        const body = await readJsonBody(req);
+        const playerId =
+          typeof body.playerId === "string" ? body.playerId.trim() : "";
+        if (!playerId) {
+          res.statusCode = 400;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ error: "playerId is required" }));
+          return;
+        }
+
+        const result = await matchmaking.respondToMatchmaking(
+          playerId,
+          "decline",
+        );
+        res.statusCode = result?.ok ? 200 : 409;
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ ...result, removed: !!result?.ok }));
         return;
       }
 

@@ -6,8 +6,8 @@ import { handleVoiceStateUpdate } from "./events/voiceStateUpdate.js";
 import { ChallengeManager } from "./services/challenge-manager.js";
 import { setContext } from "./services/context.js";
 import { acquireBotLock, releaseBotLock } from "./services/leader-lock.js";
-import { QueueManager } from "./services/queue-manager.js";
 import { RealmsApiClient } from "./services/realms-api.js";
+import { QueueManager } from "./services/shared-queue-manager.js";
 import { VoiceCoordinator } from "./services/voice-coordinator.js";
 import { VoiceChannelManager } from "./services/voice-manager.js";
 

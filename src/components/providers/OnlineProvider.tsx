@@ -36,7 +36,11 @@ import type {
 import { fetchSocketToken } from "@/lib/net/socketTokenCache";
 import { SocketTransport } from "@/lib/net/socketTransport";
 import type { StartMatchConfig } from "@/lib/net/transport";
-import { notifyPlayerJoinedLobby } from "@/lib/notifications/browserNotifications";
+import {
+  notifyMatchFound,
+  notifyPlayerJoinedLobby,
+  requestNotificationPermission,
+} from "@/lib/notifications/browserNotifications";
 import { useMatchWebRTC } from "@/lib/rtc/useMatchWebRTC";
 
 // Helper to parse [p1:Name], [p2:Name], [card:Name], and [p1card:Name]/[p2card:Name] markup into styled spans
@@ -170,12 +174,22 @@ export default function OnlineProvider({
   const [matchmakingMatchedPlayerId, setMatchmakingMatchedPlayerId] = useState<
     string | null
   >(null);
+  const [matchmakingMatchedPlayerName, setMatchmakingMatchedPlayerName] =
+    useState<string | null>(null);
+  const [matchmakingYouAccepted, setMatchmakingYouAccepted] = useState(false);
   const [matchmakingIsHost, setMatchmakingIsHost] = useState<boolean | null>(
     null,
   );
   const [matchmakingQueueSize, setMatchmakingQueueSize] = useState<
     number | null
   >(null);
+  const [matchmakingConfirmExpiresAt, setMatchmakingConfirmExpiresAt] =
+    useState<number | null>(null);
+  const [matchmakingQueueBySource, setMatchmakingQueueBySource] = useState<{
+    web: number;
+    discord: number;
+  } | null>(null);
+  const lastMatchmakingNotificationRef = useRef<string | null>(null);
   const [voicePlaybackEnabled, setVoicePlaybackEnabled] = useState(true);
   const toggleVoicePlayback = useCallback(() => {
     setVoicePlaybackEnabled((prev) => !prev);
@@ -1527,8 +1541,42 @@ export default function OnlineProvider({
       setMatchmakingQueuePosition(data.queuePosition ?? null);
       setMatchmakingEstimatedWait(data.estimatedWait ?? null);
       setMatchmakingMatchedPlayerId(data.matchedPlayerId ?? null);
+      setMatchmakingMatchedPlayerName(data.matchedPlayerName ?? null);
+      setMatchmakingYouAccepted(data.youAccepted === true);
       setMatchmakingIsHost(data.isHost ?? null);
       setMatchmakingQueueSize(data.queueSize ?? null);
+      setMatchmakingConfirmExpiresAt(data.confirmExpiresAt ?? null);
+      setMatchmakingQueueBySource(data.queueBySource ?? null);
+
+      if (data.status === "idle") {
+        setMatchmakingMatchedPlayerName(null);
+        setMatchmakingYouAccepted(false);
+        setMatchmakingConfirmExpiresAt(null);
+      }
+
+      const notificationKey = `${data.status}:${data.lobbyId || "none"}:${data.matchedPlayerId || "none"}`;
+      const opponentName =
+        data.matchedPlayerName ||
+        (data.matchedPlayerId
+          ? `Player ${data.matchedPlayerId.slice(-4)}`
+          : "your opponent");
+      if (
+        (data.status === "confirming" || data.status === "found") &&
+        notificationKey !== lastMatchmakingNotificationRef.current
+      ) {
+        lastMatchmakingNotificationRef.current = notificationKey;
+        notifyMatchFound(opponentName, {
+          lobbyId: data.lobbyId,
+          awaitingConfirmation: data.status === "confirming",
+          onClick: () => {
+            try {
+              window.focus();
+            } catch {}
+          },
+        });
+      } else if (data.status === "searching" || data.status === "idle") {
+        lastMatchmakingNotificationRef.current = null;
+      }
 
       // If match was found, auto-navigate to lobby
       if (data.status === "found" && data.lobbyId) {
@@ -1555,8 +1603,13 @@ export default function OnlineProvider({
       setMatchmakingQueuePosition(null);
       setMatchmakingEstimatedWait(null);
       setMatchmakingMatchedPlayerId(null);
+      setMatchmakingMatchedPlayerName(null);
+      setMatchmakingYouAccepted(false);
       setMatchmakingIsHost(null);
       setMatchmakingQueueSize(null);
+      setMatchmakingConfirmExpiresAt(null);
+      setMatchmakingQueueBySource(null);
+      lastMatchmakingNotificationRef.current = null;
     };
   }, [transport, session, sessionStatus, queueServerPatch]);
 
@@ -1858,15 +1911,26 @@ export default function OnlineProvider({
       queuePosition: matchmakingQueuePosition,
       estimatedWait: matchmakingEstimatedWait,
       matchedPlayerId: matchmakingMatchedPlayerId,
+      matchedPlayerName: matchmakingMatchedPlayerName,
+      youAccepted: matchmakingYouAccepted,
       isHost: matchmakingIsHost,
       queueSize: matchmakingQueueSize,
+      confirmExpiresAt: matchmakingConfirmExpiresAt,
+      queueBySource: matchmakingQueueBySource,
     },
     joinMatchmaking: (
       matchTypes: Array<"constructed" | "sealed" | "draft" | "precon">,
     ) => {
       try {
-        transport.emit("joinMatchmaking", { preferences: { matchTypes } });
+        transport.emit("joinMatchmaking", {
+          preferences: {
+            matchTypes: matchTypes.includes("constructed")
+              ? ["constructed"]
+              : matchTypes,
+          },
+        });
       } catch {}
+      void requestNotificationPermission().catch(() => {});
     },
     leaveMatchmaking: () => {
       try {
@@ -1878,8 +1942,34 @@ export default function OnlineProvider({
       setMatchmakingQueuePosition(null);
       setMatchmakingEstimatedWait(null);
       setMatchmakingMatchedPlayerId(null);
+      setMatchmakingMatchedPlayerName(null);
+      setMatchmakingYouAccepted(false);
       setMatchmakingIsHost(null);
       setMatchmakingQueueSize(null);
+      setMatchmakingConfirmExpiresAt(null);
+      setMatchmakingQueueBySource(null);
+    },
+    acceptMatchmaking: () => {
+      try {
+        transport.emit("respondMatchmaking", { decision: "accept" });
+      } catch {}
+      setMatchmakingYouAccepted(true);
+    },
+    declineMatchmaking: () => {
+      try {
+        transport.emit("respondMatchmaking", { decision: "decline" });
+      } catch {}
+      setMatchmakingStatus("idle");
+      setMatchmakingPreferences(null);
+      setMatchmakingQueuePosition(null);
+      setMatchmakingEstimatedWait(null);
+      setMatchmakingMatchedPlayerId(null);
+      setMatchmakingMatchedPlayerName(null);
+      setMatchmakingYouAccepted(false);
+      setMatchmakingIsHost(null);
+      setMatchmakingQueueSize(null);
+      setMatchmakingConfirmExpiresAt(null);
+      setMatchmakingQueueBySource(null);
     },
   };
 

@@ -72,7 +72,7 @@ export function showNotification(
     requireInteraction?: boolean;
     onClick?: () => void;
     onlyWhenHidden?: boolean;
-  }
+  },
 ): boolean {
   if (!isNotificationSupported()) {
     console.log("[Notification] Not supported in this browser");
@@ -81,7 +81,7 @@ export function showNotification(
   if (Notification.permission !== "granted") {
     console.log(
       "[Notification] Permission not granted:",
-      Notification.permission
+      Notification.permission,
     );
     return false;
   }
@@ -136,7 +136,7 @@ export function notifyLobbyInvite(fromName: string, lobbyId: string): boolean {
  */
 export function notifyPlayerJoinedLobby(
   playerName: string,
-  lobbyName?: string
+  lobbyName?: string,
 ): boolean {
   return showNotification(`${playerName} joined your lobby`, {
     body: lobbyName ? `Lobby: ${lobbyName}` : "A player is ready to play",
@@ -150,11 +150,38 @@ export function notifyPlayerJoinedLobby(
 export function notifyTournamentInvite(
   fromName: string,
   tournamentName: string,
-  tournamentId: string
+  tournamentId: string,
 ): boolean {
   return showNotification(`Tournament Invite from ${fromName}`, {
     body: `You've been invited to join ${tournamentName}`,
     tag: `tournament-invite-${tournamentId}`,
     requireInteraction: true,
+  });
+}
+
+export function notifyMatchFound(
+  opponentName: string,
+  opts?: {
+    lobbyId?: string;
+    awaitingConfirmation?: boolean;
+    onClick?: () => void;
+  },
+): boolean {
+  const title = opts?.awaitingConfirmation
+    ? `Match ready: ${opponentName}`
+    : `Match confirmed: ${opponentName}`;
+  const body = opts?.awaitingConfirmation
+    ? "Confirm soon to keep your seat in the match."
+    : "Your match is ready to join.";
+  const tagPrefix = opts?.awaitingConfirmation
+    ? "matchmaking-confirm"
+    : "matchmaking-ready";
+
+  return showNotification(title, {
+    body,
+    tag: `${tagPrefix}-${opts?.lobbyId || opponentName}`,
+    requireInteraction: opts?.awaitingConfirmation ?? false,
+    onlyWhenHidden: true,
+    onClick: opts?.onClick,
   });
 }

@@ -15,10 +15,7 @@ const UserSchema = z.object({
 const MatchCreatedSchema = z.object({
   matchId: z.string(),
   lobbyId: z.string(),
-  joinTokenP1: z.string(),
-  joinTokenP2: z.string(),
-  joinUrlP1: z.string(),
-  joinUrlP2: z.string(),
+  joinUrl: z.string(),
   format: z.string(),
   challenger: z.object({
     id: z.string(),
@@ -42,9 +39,55 @@ const ChallengeSchema = z.object({
   expiresAt: z.string(),
 });
 
+const PendingQueueMatchSchema = z.object({
+  lobbyId: z.string(),
+  opponentPlayerId: z.string(),
+  opponentPlayerName: z.string().nullable().optional(),
+  matchType: z.literal("constructed"),
+  isHost: z.boolean(),
+  createdAt: z.number(),
+  status: z.enum(["confirming", "ready"]).optional().default("ready"),
+  confirmExpiresAt: z.number().nullable().optional(),
+  youAccepted: z.boolean().optional(),
+});
+
+const QueueJoinResponseSchema = z.object({
+  status: z.enum(["queued", "matched", "already_in_queue"]),
+  position: z.number().int().positive().optional(),
+  queueSize: z.number().int().min(0),
+  wasEmpty: z.boolean().optional(),
+  pendingMatch: PendingQueueMatchSchema.nullable().optional(),
+});
+
+const QueueStatusSchema = z.object({
+  queueSize: z.number().int().min(0),
+  guildQueueSize: z.number().int().min(0),
+  position: z.number().int().positive().nullable(),
+  pendingMatch: PendingQueueMatchSchema.nullable(),
+});
+
+const QueueLeaveResponseSchema = z.object({
+  removed: z.boolean(),
+});
+
+const QueueConfirmationResponseSchema = z.object({
+  ok: z.boolean(),
+  status: z.string().optional(),
+  lobbyId: z.string().optional(),
+  pendingMatch: PendingQueueMatchSchema.nullable().optional(),
+  queueSize: z.number().int().min(0).optional(),
+  removed: z.boolean().optional(),
+});
+
 export type RealmsUser = z.infer<typeof UserSchema>;
 export type MatchCreated = z.infer<typeof MatchCreatedSchema>;
 export type Challenge = z.infer<typeof ChallengeSchema>;
+export type PendingQueueMatch = z.infer<typeof PendingQueueMatchSchema>;
+export type QueueJoinResponse = z.infer<typeof QueueJoinResponseSchema>;
+export type QueueStatus = z.infer<typeof QueueStatusSchema>;
+export type QueueConfirmationResponse = z.infer<
+  typeof QueueConfirmationResponseSchema
+>;
 
 export class RealmsApiClient {
   private baseUrl: string;
@@ -55,10 +98,18 @@ export class RealmsApiClient {
     this.secret = secret;
   }
 
+  buildLobbyUrl(lobbyId: string): string {
+    const url = new URL(
+      `/online/lobby?invite=${encodeURIComponent(lobbyId)}`,
+      this.baseUrl,
+    );
+    return url.toString();
+  }
+
   private async request<T>(
     method: string,
     path: string,
-    body?: unknown
+    body?: unknown,
   ): Promise<T> {
     const url = `${this.baseUrl}${path}`;
     const headers: Record<string, string> = {
@@ -87,7 +138,7 @@ export class RealmsApiClient {
     try {
       const data = await this.request<unknown>(
         "GET",
-        `/api/bot/users/by-discord/${discordId}`
+        `/api/bot/users/by-discord/${discordId}`,
       );
       return UserSchema.parse(data);
     } catch (err) {
@@ -105,7 +156,7 @@ export class RealmsApiClient {
     try {
       const data = await this.request<unknown>(
         "GET",
-        `/api/bot/users/${userId}`
+        `/api/bot/users/${userId}`,
       );
       return UserSchema.parse(data);
     } catch (err) {
@@ -122,7 +173,7 @@ export class RealmsApiClient {
   async createLinkToken(
     discordId: string,
     discordTag: string,
-    guildId: string
+    guildId: string,
   ): Promise<{ token: string; linkUrl: string }> {
     return this.request("POST", "/api/bot/link-token", {
       discordId,
@@ -139,7 +190,7 @@ export class RealmsApiClient {
     challengeeDiscordId: string,
     format: string,
     guildId: string,
-    channelId: string
+    channelId: string,
   ): Promise<Challenge> {
     const data = await this.request<unknown>("POST", "/api/bot/challenges", {
       challengerDiscordId,
@@ -157,7 +208,7 @@ export class RealmsApiClient {
   async acceptChallenge(challengeId: string): Promise<MatchCreated> {
     const data = await this.request<unknown>(
       "POST",
-      `/api/bot/challenges/${challengeId}/accept`
+      `/api/bot/challenges/${challengeId}/accept`,
     );
     return MatchCreatedSchema.parse(data);
   }
@@ -176,7 +227,7 @@ export class RealmsApiClient {
     try {
       const data = await this.request<unknown>(
         "GET",
-        `/api/bot/challenges/pending/${discordId}`
+        `/api/bot/challenges/pending/${discordId}`,
       );
       return ChallengeSchema.parse(data);
     } catch (err) {
@@ -187,13 +238,71 @@ export class RealmsApiClient {
     }
   }
 
+  async joinConstructedQueue(input: {
+    playerId: string;
+    discordId: string;
+    guildId: string;
+    channelId: string;
+  }): Promise<QueueJoinResponse> {
+    const data = await this.request<unknown>(
+      "POST",
+      "/api/bot/queue/constructed/join",
+      input,
+    );
+    return QueueJoinResponseSchema.parse(data);
+  }
+
+  async leaveConstructedQueue(playerId: string): Promise<boolean> {
+    const data = await this.request<unknown>(
+      "POST",
+      "/api/bot/queue/constructed/leave",
+      { playerId },
+    );
+    return QueueLeaveResponseSchema.parse(data).removed;
+  }
+
+  async getConstructedQueueStatus(
+    playerId: string,
+    guildId?: string,
+  ): Promise<QueueStatus> {
+    const params = new URLSearchParams({ playerId });
+    if (guildId) params.set("guildId", guildId);
+    const data = await this.request<unknown>(
+      "GET",
+      `/api/bot/queue/constructed/status?${params.toString()}`,
+    );
+    return QueueStatusSchema.parse(data);
+  }
+
+  async acceptConstructedQueueMatch(
+    playerId: string,
+  ): Promise<QueueConfirmationResponse> {
+    const data = await this.request<unknown>(
+      "POST",
+      "/api/bot/queue/constructed/accept",
+      { playerId },
+    );
+    return QueueConfirmationResponseSchema.parse(data);
+  }
+
+  async declineConstructedQueueMatch(
+    playerId: string,
+  ): Promise<QueueConfirmationResponse> {
+    const data = await this.request<unknown>(
+      "POST",
+      "/api/bot/queue/constructed/decline",
+      { playerId },
+    );
+    return QueueConfirmationResponseSchema.parse(data);
+  }
+
   /**
    * Get player info for voice channel creation.
    */
   async getVoiceChannelPlayers(
     matchId: string,
     player1Id: string,
-    player2Id: string
+    player2Id: string,
   ): Promise<{
     matchId: string;
     player1: { id: string; name: string; discordId: string };

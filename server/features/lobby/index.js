@@ -89,6 +89,8 @@ function createLobbyFeature(deps) {
         visibility: lobby.visibility ?? "open",
         plannedMatchType: lobby.plannedMatchType ?? null,
         isMatchmakingLobby: lobby.isMatchmakingLobby || false,
+        matchmakingRequiresAcceptance:
+          lobby.matchmakingRequiresAcceptance === true,
         soatcLeagueMatch: lobby.soatcLeagueMatch ?? null,
         matchId: lobby.matchId ?? null,
         lastActive: lobby.lastActive || Date.now(),
@@ -153,6 +155,8 @@ function createLobbyFeature(deps) {
       visibility: lobby.visibility,
       plannedMatchType: lobby.plannedMatchType,
       isMatchmakingLobby: lobby.isMatchmakingLobby || false,
+      matchmakingRequiresAcceptance:
+        lobby.matchmakingRequiresAcceptance === true,
       soatcLeagueMatch: lobby.soatcLeagueMatch || null,
       lastActive: lobby.lastActive,
       playerIds: Array.from(lobby.playerIds || []),
@@ -173,6 +177,7 @@ function createLobbyFeature(deps) {
       visibility: "open",
       plannedMatchType: "constructed",
       isMatchmakingLobby: false,
+      matchmakingRequiresAcceptance: false,
       lastActive: Date.now(),
     };
     lb.name = obj.name;
@@ -182,6 +187,8 @@ function createLobbyFeature(deps) {
     lb.visibility = obj.visibility;
     lb.plannedMatchType = obj.plannedMatchType;
     lb.isMatchmakingLobby = obj.isMatchmakingLobby || false;
+    lb.matchmakingRequiresAcceptance =
+      obj.matchmakingRequiresAcceptance === true;
     lb.soatcLeagueMatch = obj.soatcLeagueMatch || null;
     lb.lastActive = obj.lastActive || Date.now();
     lb.playerIds = new Set(Array.isArray(obj.playerIds) ? obj.playerIds : []);
@@ -460,6 +467,128 @@ function createLobbyFeature(deps) {
     return lobby;
   }
 
+  function reservePrivateLobby(hostId, opts = {}) {
+    const name =
+      opts.name && typeof opts.name === "string"
+        ? opts.name.trim().slice(0, 50)
+        : null;
+    const plannedMatchType =
+      opts.plannedMatchType === "sealed" || opts.plannedMatchType === "draft"
+        ? opts.plannedMatchType
+        : "constructed";
+    const now = Date.now();
+    const lobby = {
+      id: rid("lobby"),
+      name,
+      hostId,
+      playerIds: new Set(),
+      status: "open",
+      maxPlayers: 2,
+      ready: new Set(),
+      visibility: "private",
+      plannedMatchType,
+      createdAt: now,
+      lastActive: now,
+      allowSpectators: false,
+      hostReady: true,
+      isMatchmakingLobby: true,
+      matchmakingRequiresAcceptance:
+        opts.matchmakingRequiresAcceptance === true,
+    };
+    lobbies.set(lobby.id, lobby);
+    persistLobbyToRedis(lobby).catch(() => {});
+    return lobby;
+  }
+
+  async function setMatchmakingLobbyConfirmationRequired(
+    lobbyId,
+    required = true,
+  ) {
+    const lobby = lobbies.get(lobbyId);
+    if (!lobby) return false;
+    lobby.matchmakingRequiresAcceptance = required === true;
+    markLobbyActive(lobby);
+    await publishLobbyState(lobby);
+    return true;
+  }
+
+  async function cancelReservedLobby(lobbyId) {
+    const lobby = lobbies.get(lobbyId);
+    if (!lobby) return false;
+
+    const playerIds = Array.from(lobby.playerIds || []);
+    for (const pid of playerIds) {
+      try {
+        const player = await ensurePlayerCached(pid);
+        const socketId = player?.socketId || null;
+        if (socketId) {
+          try {
+            await io.in(socketId).socketsLeave(`lobby:${lobbyId}`);
+          } catch {}
+          try {
+            io.to(socketId).emit("leftLobby", {});
+          } catch {}
+        }
+        if (player && player.lobbyId === lobbyId) {
+          player.lobbyId = null;
+        }
+      } catch {}
+    }
+
+    lobby.status = "closed";
+    if (botManager) {
+      try {
+        botManager.cleanupBotsForLobby(lobbyId);
+      } catch {}
+    }
+    lobbies.delete(lobbyId);
+    await publishLobbyDelete(lobbyId);
+    await (async () => {
+      const leader = await getOrClaimLobbyLeader();
+      if (leader === INSTANCE_ID)
+        io.emit("lobbiesUpdated", { lobbies: lobbiesArray() });
+    })();
+    return true;
+  }
+
+  function addLobbyInvite(lobbyId, playerId) {
+    if (!lobbyId || !playerId) return false;
+    if (!lobbies.has(lobbyId)) return false;
+    if (!lobbyInvites.has(lobbyId)) lobbyInvites.set(lobbyId, new Set());
+    lobbyInvites.get(lobbyId).add(playerId);
+    return true;
+  }
+
+  async function maybeAutoStartConstructedMatchmakingLobby(lobby) {
+    if (!lobby || !lobby.isMatchmakingLobby) return;
+    if (lobby.plannedMatchType !== "constructed") return;
+    if (lobby.visibility !== "private") return;
+    if (lobby.matchmakingRequiresAcceptance === true) return;
+    if (lobby.status !== "open") return;
+    if (lobby.matchId) return;
+    if (lobby.playerIds.size < 2) return;
+    if (!lobby.hostId) return;
+    for (const pid of lobby.playerIds) {
+      if (!lobby.ready.has(pid)) return;
+    }
+
+    const hostPlayer = await ensurePlayerCached(lobby.hostId);
+    if (!hostPlayer || hostPlayer.lobbyId !== lobby.id) return;
+
+    const res = await startMatchFromLobby(
+      hostPlayer,
+      "constructed",
+      null,
+      null,
+      null,
+    );
+    if (!res?.ok) {
+      console.warn(
+        `[lobby] Failed to auto-start constructed matchmaking lobby ${lobby.id}: ${res?.error || "unknown_error"}`,
+      );
+    }
+  }
+
   function markLobbyActive(lobby) {
     lobby.lastActive = Date.now();
     // Update Redis activity timestamp (fire and forget)
@@ -553,6 +682,17 @@ function createLobbyFeature(deps) {
         return;
       }
     }
+    if (
+      lobby.isMatchmakingLobby &&
+      lobby.matchmakingRequiresAcceptance === true
+    ) {
+      socket.emit("error", {
+        message:
+          "This matchmaking match is still waiting for both players to confirm.",
+        code: "matchmaking_confirm_pending",
+      });
+      return;
+    }
 
     lobby.playerIds.add(player.id);
     lobby.ready.add(player.id);
@@ -569,6 +709,9 @@ function createLobbyFeature(deps) {
     broadcastLobbies();
     const inv = lobbyInvites.get(lobby.id);
     if (inv) inv.delete(player.id);
+    maybeAutoStartConstructedMatchmakingLobby(lobby).catch((err) => {
+      console.warn("[lobby] Auto-start after direct join failed:", err);
+    });
   }
 
   function leaveLobby(socket, player) {
@@ -863,6 +1006,8 @@ function createLobbyFeature(deps) {
       visibility: redisLobby.visibility,
       plannedMatchType: redisLobby.plannedMatchType,
       isMatchmakingLobby: redisLobby.isMatchmakingLobby,
+      matchmakingRequiresAcceptance:
+        redisLobby.matchmakingRequiresAcceptance === true,
       soatcLeagueMatch: redisLobby.soatcLeagueMatch,
       matchId: redisLobby.matchId,
       lastActive: redisLobby.lastActive,
@@ -1075,6 +1220,7 @@ function createLobbyFeature(deps) {
         if (leader === INSTANCE_ID)
           io.emit("lobbiesUpdated", { lobbies: lobbiesArray() });
       })();
+      await maybeAutoStartConstructedMatchmakingLobby(lobby);
       return;
     }
     if (msg.type === "join") {
@@ -1126,6 +1272,7 @@ function createLobbyFeature(deps) {
         if (leader === INSTANCE_ID)
           io.emit("lobbiesUpdated", { lobbies: lobbiesArray() });
       })();
+      await maybeAutoStartConstructedMatchmakingLobby(lobby);
       return;
     }
     if (msg.type === "leave") {
@@ -1627,7 +1774,8 @@ function createLobbyFeature(deps) {
       const inviter = getPlayerBySocket(socket);
       if (!inviter) return;
 
-      const { targetPlayerId, tournamentId, tournamentName, invitationId } = payload;
+      const { targetPlayerId, tournamentId, tournamentName, invitationId } =
+        payload;
       if (!targetPlayerId || !tournamentId) return;
 
       const target = players.get(targetPlayerId);
@@ -2201,11 +2349,16 @@ function createLobbyFeature(deps) {
   return {
     lobbies,
     lobbyInvites,
+    reservePrivateLobby,
+    setMatchmakingLobbyConfirmationRequired,
+    cancelReservedLobby,
+    addLobbyInvite,
     getLobbyInfo,
+    broadcastLobbies,
     normalizeSealedConfig,
     normalizeDraftConfig,
-    markLobbyActive,
-    broadcastLobbies,
+    createLobbyWithId,
+    publishLobbyState,
     lobbiesArray,
     lobbiesArrayAsync,
     playersArray,

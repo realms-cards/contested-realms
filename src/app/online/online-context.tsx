@@ -115,7 +115,7 @@ export type OnlineContextValue = {
     respondToRequest: (
       requestId: string,
       requesterId: string,
-      accepted: boolean
+      accepted: boolean,
     ) => void;
     dismissOutgoingRequest: () => void;
     clearIncomingRequest: () => void;
@@ -131,17 +131,23 @@ export type OnlineContextValue = {
     queuePosition: number | null;
     estimatedWait: number | null; // seconds
     matchedPlayerId: string | null;
+    matchedPlayerName: string | null;
+    youAccepted: boolean;
     isHost: boolean | null; // true if this player is host for sealed/draft config
     queueSize: number | null; // total players in matchmaking queue
+    confirmExpiresAt: number | null;
+    queueBySource: { web: number; discord: number } | null;
   };
   joinMatchmaking: (
-    matchTypes: Array<"constructed" | "sealed" | "draft" | "precon">
+    matchTypes: Array<"constructed" | "sealed" | "draft" | "precon">,
   ) => void;
   leaveMatchmaking: () => void;
+  acceptMatchmaking: () => void;
+  declineMatchmaking: () => void;
 };
 
 export const OnlineContext = createContext<OnlineContextValue | undefined>(
-  undefined
+  undefined,
 );
 
 export function useOnline(): OnlineContextValue {
