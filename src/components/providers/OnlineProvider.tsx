@@ -1129,9 +1129,24 @@ export default function OnlineProvider({
         } catch {}
 
         setMatch(p.match);
+
+        setMatchmakingStatus("idle");
+        setMatchmakingPreferences(null);
+        setMatchmakingQueuePosition(null);
+        setMatchmakingEstimatedWait(null);
+        setMatchmakingMatchedPlayerId(null);
+        setMatchmakingMatchedPlayerName(null);
+        setMatchmakingYouAccepted(false);
+        setMatchmakingIsHost(null);
+        setMatchmakingQueueSize(null);
+        setMatchmakingConfirmExpiresAt(null);
+        setMatchmakingQueueBySource(null);
+        lastMatchmakingNotificationRef.current = null;
+
         try {
           useGameStore.getState().setMatchId(p.match?.id ?? null);
         } catch {}
+
         // Log match start
         if (p.match.status === "waiting") {
           try {
