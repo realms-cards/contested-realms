@@ -130,11 +130,24 @@ export function triggerCardResolvers(ctx: ResolverContext): boolean {
       get().beginLegionOfGall({ spell: spellRef, casterSeat: ownerSeat });
       triggered = true;
     } catch {}
+  } else if (cardNameLower === "betrayal") {
+    try {
+      get().beginBetrayal({ spell: spellRef, casterSeat: ownerSeat });
+      triggered = true;
+    } catch {}
+  } else if (cardNameLower === "infiltrate") {
+    try {
+      get().beginInfiltrate({ spell: spellRef, casterSeat: ownerSeat });
+      triggered = true;
+    } catch {}
   }
 
   // ─── MINION GENESIS / ETB RESOLVERS ──────────────────────────────
   // Morgana le Fay genesis (uses else-if chain with spells above)
-  else if (cardNameLower.includes("morgana le fay") && type.includes("minion")) {
+  else if (
+    cardNameLower.includes("morgana le fay") &&
+    type.includes("minion")
+  ) {
     try {
       get().triggerMorganaGenesis({
         minion: { at: key, index: permanentIndex, instanceId, owner, card },

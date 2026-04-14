@@ -227,7 +227,7 @@ const lesson: TutorialLesson = {
       id: "thresh-cast-success",
       type: "narration",
       title: "Spell Cast!",
-      text: "The Cave Trolls have been summoned! You spent all {mana:3} of your mana, leaving {mana:0} remaining. Your {earth} Earth affinity is still 3 as threshold doesn't decrease when you cast spells.\n\nNote: newly summoned units have **Summoning Sickness** and can't attack, nor tap for evetnual tapped abilities this turn, but they CAN defend or intercept on your opponent's turn.",
+      text: "The Cave Trolls have been summoned! You spent all {mana:3} of your mana, leaving {mana:0} remaining. Your {earth} Earth affinity is still 3 as threshold doesn't decrease when you cast spells.\n\nNote: newly summoned units have **Summoning Sickness** and can't attack, nor tap for eventual tapped abilities this turn, but they CAN defend or intercept on your opponent's turn.",
     },
     {
       id: "thresh-complete",

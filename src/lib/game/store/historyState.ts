@@ -47,6 +47,8 @@ const buildSnapshot = (state: GameState): SerializedGame => ({
   events: clone(state.events),
   eventSeq: state.eventSeq,
   portalState: state.portalState ? clone(state.portalState) : null,
+  activeBetrayals: clone(state.activeBetrayals),
+  activeInfiltrations: clone(state.activeInfiltrations),
 });
 
 // Build permanents patch for undo: restores only OWN permanents.
@@ -204,6 +206,10 @@ export const createHistorySlice: StateCreator<
       const hasPendingResolution =
         state.pendingMagic ||
         state.pendingChaosTwister?.phase === "minigame" ||
+        state.pendingBetrayal?.phase === "selectingTarget" ||
+        state.pendingBetrayal?.phase === "resolving" ||
+        state.pendingInfiltrate?.phase === "selectingTarget" ||
+        state.pendingInfiltrate?.phase === "resolving" ||
         state.pendingBrowse?.phase === "viewing" ||
         state.pendingBrowse?.phase === "ordering" ||
         state.pendingSearingTruth?.phase === "revealing" ||
@@ -494,7 +500,11 @@ export const createHistorySlice: StateCreator<
           events: prev.events,
           eventSeq: prev.eventSeq,
           portalState: prev.portalState,
+          activeBetrayals: prev.activeBetrayals,
+          activeInfiltrations: prev.activeInfiltrations,
           // CRITICAL: Clear pending resolver states to prevent card duplication bugs
+          pendingBetrayal: null,
+          pendingInfiltrate: null,
           pendingSearingTruth: null,
           pendingBrowse: null,
           pendingAccusation: null,
@@ -537,7 +547,11 @@ export const createHistorySlice: StateCreator<
         events: prev.events,
         eventSeq: prev.eventSeq,
         portalState: prev.portalState,
+        activeBetrayals: prev.activeBetrayals,
+        activeInfiltrations: prev.activeInfiltrations,
         // CRITICAL: Clear pending resolver states to prevent card duplication bugs
+        pendingBetrayal: null,
+        pendingInfiltrate: null,
         pendingSearingTruth: null,
         pendingBrowse: null,
         pendingAccusation: null,

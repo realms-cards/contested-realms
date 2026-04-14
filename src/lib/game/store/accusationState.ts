@@ -107,7 +107,7 @@ export const createAccusationSlice: StateCreator<
       }
     }
 
-    // Also check for Evil allies on the board
+    // Also check for Evil allies on the board (includes minion tokens like Skeleton)
     const permanents = get().permanents;
     let hasEvilAlly = false;
     for (const cell of Object.values(permanents)) {
@@ -115,7 +115,7 @@ export const createAccusationSlice: StateCreator<
       for (const perm of cell) {
         if (perm.owner !== (victimSeat === "p1" ? 1 : 2)) continue;
         const type = (perm.card?.type || "").toLowerCase();
-        if (!type.includes("minion")) continue;
+        if (!type.includes("minion") && type !== "token") continue;
         const permSubTypes = perm.card?.subTypes || "";
         if (isEvilSubtype(permSubTypes)) {
           hasEvilAlly = true;

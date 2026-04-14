@@ -9,6 +9,7 @@ export type TokenDef = {
   textureRotation?: number;
   isMinion?: boolean; // true for minion tokens that can carry artifacts (Skeleton, Frog, etc.)
   markerOnly?: boolean; // true for tokens that are only used as markers (not shown in token pile)
+  subTypes?: string; // typeline subtypes for game logic (e.g. "Undead", "Beast")
 };
 
 // Registry of known tokens. Extend this list as new tokens are added.
@@ -43,6 +44,7 @@ export const TOKEN_DEFS: TokenDef[] = [
     fileBase: "Skeleton",
     size: "small",
     isMinion: true,
+    subTypes: "Undead",
   },
   { key: "Stealth", name: "Stealth", fileBase: "Stealth", size: "small" },
   {

@@ -100,6 +100,9 @@ export const createNecromancerSlice: StateCreator<
         type: "Token",
         slug: tokenSlug(skeletonDef),
         thresholds: null,
+        ...(skeletonDef.subTypes !== undefined && {
+          subTypes: skeletonDef.subTypes,
+        }),
       },
       who,
     );

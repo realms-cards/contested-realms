@@ -957,6 +957,8 @@ export const createPlayActionsSlice: StateCreator<
       const isMephistopheles = cardNameLower.includes("mephistopheles");
       const isRaiseDead = cardNameLower === "raise dead";
       const isLegionOfGall = cardNameLower === "legion of gall";
+      const isBetrayal = cardNameLower === "betrayal";
+      const isInfiltrate = cardNameLower === "infiltrate";
       const isShapeshift = cardNameLower === "shapeshift";
       const isTorshammarTrinket = cardNameLower === "torshammar trinket";
       const isTheInquisition = cardNameLower === "the inquisition";
@@ -1473,6 +1475,38 @@ export const createPlayActionsSlice: StateCreator<
           console.error("[playActions] Error triggering Legion of Gall:", e);
         }
       }
+      // If this is Infiltrate, begin the enemy-minion control flow
+      else if (isInfiltrate && newest) {
+        try {
+          get().beginInfiltrate({
+            spell: {
+              at: key,
+              index: arr.length - 1,
+              instanceId: newest.instanceId ?? null,
+              owner: newest.owner,
+              card: newest.card as CardRef,
+            },
+            casterSeat: who,
+          });
+        } catch (e) {
+          console.error("[playActions] Error triggering Infiltrate:", e);
+        }
+      } else if (isBetrayal && newest) {
+        try {
+          get().beginBetrayal({
+            spell: {
+              at: key,
+              index: arr.length - 1,
+              instanceId: newest.instanceId ?? null,
+              owner: newest.owner,
+              card: newest.card as CardRef,
+            },
+            casterSeat: who,
+          });
+        } catch (e) {
+          console.error("[playActions] Error triggering Betrayal:", e);
+        }
+      }
       // If this is Mephistopheles (Minion), begin the avatar replacement confirmation
       // Use standalone if (not else if) so it triggers regardless of other card checks
       if (isMephistopheles && newest && type.includes("minion")) {
@@ -1902,9 +1936,34 @@ export const createPlayActionsSlice: StateCreator<
         };
       }
       if (Object.keys(combined).length > 0) get().trySendPatch(combined);
+      const cardNameLower = (card.name || "").toLowerCase();
+      const isBetrayal = cardNameLower === "betrayal";
+      const isInfiltrate = cardNameLower === "infiltrate";
       // If this is a Magic card, begin the magic casting flow after placing it
       try {
-        if (type.includes("magic") && newest) {
+        if (isBetrayal && newest) {
+          get().beginBetrayal({
+            spell: {
+              at: key,
+              index: arr.length - 1,
+              instanceId: newest.instanceId ?? null,
+              owner: newest.owner,
+              card: newest.card as CardRef,
+            },
+            casterSeat: who,
+          });
+        } else if (isInfiltrate && newest) {
+          get().beginInfiltrate({
+            spell: {
+              at: key,
+              index: arr.length - 1,
+              instanceId: newest.instanceId ?? null,
+              owner: newest.owner,
+              card: newest.card as CardRef,
+            },
+            casterSeat: who,
+          });
+        } else if (type.includes("magic") && newest) {
           get().beginMagicCast({
             tile: { x, y },
             spell: {

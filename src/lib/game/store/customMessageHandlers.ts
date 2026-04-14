@@ -338,7 +338,11 @@ export function handleCustomMessage(
     if (typeof oppId === "string" && oppId.startsWith("cpu_")) {
       setTimeout(() => {
         const state = get();
-        if (state.pendingMagic && state.pendingMagic.id === id && state.pendingMagic.status === "confirm") {
+        if (
+          state.pendingMagic &&
+          state.pendingMagic.id === id &&
+          state.pendingMagic.status === "confirm"
+        ) {
           state.resolveMagic();
         }
       }, 800);
@@ -881,7 +885,12 @@ export function handleCustomMessage(
       },
     } as Partial<GameState> as GameState);
     try {
-      const cellNo = getCellNumber(x, y, get().board.size.w, get().board.size.h);
+      const cellNo = getCellNumber(
+        x,
+        y,
+        get().board.size.w,
+        get().board.size.h,
+      );
       get().log(`Attack declared at #${cellNo}`);
     } catch {}
     return;
@@ -2308,10 +2317,12 @@ export function handleCustomMessage(
     const victimSeat = (msg as { victimSeat?: unknown }).victimSeat as
       | PlayerKey
       | undefined;
-    const namedCardName = (msg as { namedCardName?: unknown })
-      .namedCardName as string | undefined;
-    const namedCardSlug = (msg as { namedCardSlug?: unknown })
-      .namedCardSlug as string | undefined;
+    const namedCardName = (msg as { namedCardName?: unknown }).namedCardName as
+      | string
+      | undefined;
+    const namedCardSlug = (msg as { namedCardSlug?: unknown }).namedCardSlug as
+      | string
+      | undefined;
     const matchCount = (msg as { matchCount?: unknown }).matchCount as
       | number
       | undefined;
@@ -2366,13 +2377,15 @@ export function handleCustomMessage(
     const victimSeat = (msg as { victimSeat?: unknown }).victimSeat as
       | PlayerKey
       | undefined;
-    const namedCardName = (msg as { namedCardName?: unknown })
-      .namedCardName as string | undefined;
+    const namedCardName = (msg as { namedCardName?: unknown }).namedCardName as
+      | string
+      | undefined;
     const matchesRaw = (msg as { matches?: unknown }).matches as
       | { zone: string; index: number; card: CardRef }[]
       | undefined;
-    const banishedCount = (msg as { banishedCount?: unknown })
-      .banishedCount as number | undefined;
+    const banishedCount = (msg as { banishedCount?: unknown }).banishedCount as
+      | number
+      | undefined;
 
     if (!id || !casterSeat || !victimSeat) return;
     const actorKey = get().actorKey;
@@ -3723,8 +3736,9 @@ export function handleCustomMessage(
     const casterSeat = (msg as { casterSeat?: unknown }).casterSeat as
       | PlayerKey
       | undefined;
-    const eligibleCount = (msg as { eligibleCount?: unknown })
-      .eligibleCount as number | undefined;
+    const eligibleCount = (msg as { eligibleCount?: unknown }).eligibleCount as
+      | number
+      | undefined;
     if (!id || !spellAny || !casterSeat) return;
     const rec = spellAny as Record<string, unknown>;
     // Opponent sees Corpse Explosion begin
@@ -3761,8 +3775,9 @@ export function handleCustomMessage(
     const corner = (msg as { corner?: unknown }).corner as
       | { x: number; y: number }
       | undefined;
-    const affectedCells = (msg as { affectedCells?: unknown })
-      .affectedCells as CellKey[] | undefined;
+    const affectedCells = (msg as { affectedCells?: unknown }).affectedCells as
+      | CellKey[]
+      | undefined;
     if (!id || !corner) return;
     set((s) => {
       if (!s.pendingCorpseExplosion || s.pendingCorpseExplosion.id !== id)
@@ -3951,7 +3966,9 @@ export function handleCustomMessage(
         (id && s.pendingCorpseExplosion.id !== id)
       )
         return s as GameState;
-      return { pendingCorpseExplosion: null } as Partial<GameState> as GameState;
+      return {
+        pendingCorpseExplosion: null,
+      } as Partial<GameState> as GameState;
     });
     try {
       get().log("Corpse Explosion cancelled");
@@ -4493,10 +4510,9 @@ export function handleCustomMessage(
       // Send only the changed zones (collection, banished)
       try {
         get().trySendPatch({
-          zones: { [targetSeat]: { collection, banished } } as unknown as Record<
-            PlayerKey,
-            Zones
-          >,
+          zones: {
+            [targetSeat]: { collection, banished },
+          } as unknown as Record<PlayerKey, Zones>,
         });
       } catch {}
 
@@ -4762,7 +4778,13 @@ export function handleCustomMessage(
         ...state,
         merlinInstances: [
           ...state.merlinInstances,
-          { id, instanceId, location: location ?? "", ownerSeat, cardName: cardName ?? "Merlin" },
+          {
+            id,
+            instanceId,
+            location: location ?? "",
+            ownerSeat,
+            cardName: cardName ?? "Merlin",
+          },
         ],
       } as GameState;
     });
@@ -6252,9 +6274,7 @@ export function handleCustomMessage(
           ...topSite,
           instanceId:
             topSite.instanceId ||
-            `geomancer_${Date.now()}_${Math.random()
-              .toString(36)
-              .slice(2, 6)}`,
+            `geomancer_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
         },
         tapped: false,
       },
@@ -7529,6 +7549,108 @@ export function handleCustomMessage(
     return;
   }
 
+  // --- Infiltrate message handlers ---
+  if (t === "infiltrateBegin") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const spell = (msg as { spell?: unknown }).spell as
+      | {
+          at: CellKey;
+          index: number;
+          instanceId: string | null;
+          owner: number;
+          card: CardRef;
+        }
+      | undefined;
+    const casterSeat = (msg as { casterSeat?: unknown }).casterSeat as
+      | PlayerKey
+      | undefined;
+    if (!id || !spell || !casterSeat) return;
+
+    const actorKey = get().actorKey;
+    if (actorKey === casterSeat) return;
+
+    set({
+      pendingInfiltrate: {
+        id,
+        spell: {
+          at: spell.at,
+          index: spell.index,
+          instanceId: spell.instanceId,
+          owner: Number(spell.owner) as 1 | 2,
+          card: spell.card,
+        },
+        casterSeat,
+        phase: "selectingTarget",
+        targetMinion: null,
+        createdAt: Date.now(),
+      },
+    } as Partial<GameState> as GameState);
+    return;
+  }
+
+  if (t === "infiltrateSelectTarget") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const target = (msg as { target?: unknown }).target as
+      | {
+          at: CellKey;
+          index: number;
+          instanceId: string | null;
+          owner: 1 | 2;
+          card: CardRef;
+        }
+      | undefined;
+    if (!id || !target) return;
+
+    const pending = get().pendingInfiltrate;
+    if (!pending || pending.id !== id) return;
+
+    const actorKey = get().actorKey;
+    if (actorKey === pending.casterSeat) return;
+
+    set({
+      pendingInfiltrate: {
+        ...pending,
+        targetMinion: target,
+        phase: "resolving",
+      },
+    } as Partial<GameState> as GameState);
+    return;
+  }
+
+  if (t === "infiltrateResolve") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    if (!id) return;
+
+    const pending = get().pendingInfiltrate;
+    if (!pending || pending.id !== id) return;
+
+    const actorKey = get().actorKey;
+    if (actorKey === pending.casterSeat) return;
+
+    set({ pendingInfiltrate: null } as Partial<GameState> as GameState);
+    try {
+      const targetName = pending.targetMinion?.card.name || "enemy minion";
+      get().log(
+        `[${pending.casterSeat.toUpperCase()}] Infiltrate resolves on ${targetName}`,
+      );
+    } catch {}
+    return;
+  }
+
+  if (t === "infiltrateCancel") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    if (!id) return;
+
+    const pending = get().pendingInfiltrate;
+    if (!pending || pending.id !== id) return;
+
+    const actorKey = get().actorKey;
+    if (actorKey === pending.casterSeat) return;
+
+    set({ pendingInfiltrate: null } as Partial<GameState> as GameState);
+    return;
+  }
+
   // --- Mirror Realm handlers ---
   if (t === "mirrorRealmBegin") {
     const payload = msg as {
@@ -7670,7 +7792,13 @@ export function handleCustomMessage(
               owner: Number(snailAny.owner) as 1 | 2,
               card: snailAny.card as CardRef,
             }
-          : { at: "0,0" as CellKey, index: 0, instanceId: null, owner: 1, card: {} as CardRef },
+          : {
+              at: "0,0" as CellKey,
+              index: 0,
+              instanceId: null,
+              owner: 1,
+              card: {} as CardRef,
+            },
         activatorSeat,
         phase: "selectingCorpse" as const,
         eligibleCorpses,

@@ -3154,6 +3154,15 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                             key={token.index}
                             className="w-full text-left rounded bg-red-900/20 hover:bg-red-900/40 px-3 py-1 text-sm"
                             onClick={() => {
+                              if (isStealth && token.card.instanceId) {
+                                useGameStore
+                                  .getState()
+                                  .handleInfiltrateStealthRemoved(
+                                    token.card.instanceId,
+                                  );
+                                onClose();
+                                return;
+                              }
                               // First detach, then immediately banish
                               detachToken(token.tileKey, token.index);
                               // Use setTimeout to ensure detach completes first

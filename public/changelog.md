@@ -1,5 +1,17 @@
 # Changelog
 
+## April 2026
+
+### Bugfix session (go through user filed GitHUB issues)
+
+- **add custom resolvers for Infiltrate and Betrayal**
+- **fix ownership transfer** cards were moving with transfer when they should stay in place
+
+### Better queue handling
+
+- **global shared queue** between all discord servers that use the bot as well as the lobby queue
+- **add functionality to discord bot to import it into YOUR community server so it can join global queue** Invite link: https://discord.com/oauth2/authorize?client_id=1412710227446337567&permissions=275414871104&scope=bot+applications.commands
+
 ## March 2026
 
 ### Mar 16 - Start open source development

@@ -37,30 +37,14 @@ export default function DeckSelector({ onPrepareComplete }: DeckSelectorProps) {
   const [deckErrP2, setDeckErrP2] = useState<string | null>(null);
   const [decksLoaded, setDecksLoaded] = useState<boolean>(false);
 
-  const selectedDeckMetaP1 = useMemo(() => {
-    if (!deckIdP1) return null;
-    return (
-      myDecks.find((d) => d.id === deckIdP1) ||
-      publicDecks.find((d) => d.id === deckIdP1) ||
-      null
-    );
-  }, [deckIdP1, myDecks, publicDecks]);
-  const selectedDeckMetaP2 = useMemo(() => {
-    if (!deckIdP2) return null;
-    return (
-      myDecks.find((d) => d.id === deckIdP2) ||
-      publicDecks.find((d) => d.id === deckIdP2) ||
-      null
-    );
-  }, [deckIdP2, myDecks, publicDecks]);
-  const isPreconP1 = useMemo(() => {
-    const name = (selectedDeckMetaP1?.name || "").toLowerCase();
-    return name.includes("precon");
-  }, [selectedDeckMetaP1]);
-  const isPreconP2 = useMemo(() => {
-    const name = (selectedDeckMetaP2?.name || "").toLowerCase();
-    return name.includes("precon");
-  }, [selectedDeckMetaP2]);
+  const isPreconP1 = useMemo(
+    () => !!deckIdP1 && publicDecks.some((d) => d.id === deckIdP1),
+    [deckIdP1, publicDecks]
+  );
+  const isPreconP2 = useMemo(
+    () => !!deckIdP2 && publicDecks.some((d) => d.id === deckIdP2),
+    [deckIdP2, publicDecks]
+  );
 
   useEffect(() => {
     (async () => {

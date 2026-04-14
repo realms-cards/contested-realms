@@ -129,9 +129,19 @@ type ChaosTwisterContext = {
   metaByCardId: GameState["metaByCardId"];
 };
 
+type BetrayalContext = {
+  pendingBetrayal: GameState["pendingBetrayal"];
+  selectBetrayalTarget: GameState["selectBetrayalTarget"];
+};
+
 type ShapeshiftContext = {
   pendingShapeshift: GameState["pendingShapeshift"];
   selectShapeshiftTarget: GameState["selectShapeshiftTarget"];
+};
+
+type InfiltrateContext = {
+  pendingInfiltrate: GameState["pendingInfiltrate"];
+  selectInfiltrateTarget: GameState["selectInfiltrateTarget"];
 };
 
 type CounterHandlers = {
@@ -184,7 +194,9 @@ export type PermanentStackProps = {
   combatContext: CombatContext;
   magicContext: MagicContext;
   chaosTwisterContext: ChaosTwisterContext;
+  betrayalContext: BetrayalContext;
   shapeshiftContext: ShapeshiftContext;
+  infiltrateContext: InfiltrateContext;
   counterHandlers: CounterHandlers;
   movementHandlers: MovementHandlers;
   emitBoardPing: (pos: { x: number; z: number }) => void;
@@ -325,7 +337,9 @@ export function PermanentStack({
   combatContext,
   magicContext,
   chaosTwisterContext,
+  betrayalContext,
   shapeshiftContext,
+  infiltrateContext,
   counterHandlers,
   movementHandlers,
   emitBoardPing,
@@ -407,7 +421,9 @@ export function PermanentStack({
   void computeProjectileFirstHits;
   const { pendingChaosTwister, selectChaosTwisterMinion, metaByCardId } =
     chaosTwisterContext;
+  const { pendingBetrayal, selectBetrayalTarget } = betrayalContext;
   const { pendingShapeshift, selectShapeshiftTarget } = shapeshiftContext;
+  const { pendingInfiltrate, selectInfiltrateTarget } = infiltrateContext;
   const { increment, decrement } = counterHandlers;
   const { setOffset, moveToWithOffset, moveToZone } = movementHandlers;
 
@@ -817,6 +833,52 @@ export function PermanentStack({
                       cellKey: key as CellKey,
                       index: idx,
                       instanceId: p.card?.instanceId ?? null,
+                      card: p.card as CardRef,
+                    });
+                    return;
+                  }
+                }
+                if (
+                  pendingBetrayal &&
+                  pendingBetrayal.phase === "selectingTarget" &&
+                  pendingBetrayal.casterSeat === actorKey
+                ) {
+                  const type = (p.card?.type || "").toLowerCase();
+                  const isMinion =
+                    type.includes("minion") || type.includes("creature");
+                  const isAttachment = Boolean(p.attachedTo);
+                  const casterOwner =
+                    pendingBetrayal.casterSeat === "p1" ? 1 : 2;
+                  if (isMinion && !isAttachment && owner !== casterOwner) {
+                    e.stopPropagation();
+                    selectBetrayalTarget({
+                      at: key as CellKey,
+                      index: idx,
+                      instanceId: p.card?.instanceId ?? null,
+                      owner: owner as 1 | 2,
+                      card: p.card as CardRef,
+                    });
+                    return;
+                  }
+                }
+                if (
+                  pendingInfiltrate &&
+                  pendingInfiltrate.phase === "selectingTarget" &&
+                  pendingInfiltrate.casterSeat === actorKey
+                ) {
+                  const type = (p.card?.type || "").toLowerCase();
+                  const isMinion =
+                    type.includes("minion") || type.includes("creature");
+                  const isAttachment = Boolean(p.attachedTo);
+                  const casterOwner =
+                    pendingInfiltrate.casterSeat === "p1" ? 1 : 2;
+                  if (isMinion && !isAttachment && owner !== casterOwner) {
+                    e.stopPropagation();
+                    selectInfiltrateTarget({
+                      at: key as CellKey,
+                      index: idx,
+                      instanceId: p.card?.instanceId ?? null,
+                      owner: owner as 1 | 2,
                       card: p.card as CardRef,
                     });
                     return;

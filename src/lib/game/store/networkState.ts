@@ -382,9 +382,12 @@ export const createNetworkSlice: StateCreator<
         // Determine which seat (if any) belongs to the CPU so we can
         // skip the empty-array filter for that seat.
         const oppId = state.opponentPlayerId;
-        const isCpuMatch = typeof oppId === "string" && oppId.startsWith("cpu_");
+        const isCpuMatch =
+          typeof oppId === "string" && oppId.startsWith("cpu_");
         const cpuSeat: PlayerKey | null = isCpuMatch
-          ? (state.actorKey === "p1" ? "p2" : "p1")
+          ? state.actorKey === "p1"
+            ? "p2"
+            : "p1"
           : null;
 
         let zonesCandidate: Partial<
@@ -406,10 +409,14 @@ export const createNetworkSlice: StateCreator<
           ) as Record<PlayerKey, GameState["zones"][PlayerKey]>;
 
           for (const seat of ["p1", "p2"] as PlayerKey[]) {
-            const patchSeat = patchZones[seat] as Record<string, unknown> | undefined;
+            const patchSeat = patchZones[seat] as
+              | Record<string, unknown>
+              | undefined;
             if (!patchSeat || typeof patchSeat !== "object") continue;
 
-            const stateSeat = state.zones[seat] as Record<string, unknown> | undefined;
+            const stateSeat = state.zones[seat] as
+              | Record<string, unknown>
+              | undefined;
             if (!stateSeat) continue; // No local data to protect
 
             const safePatch: Record<string, unknown> = {};
@@ -909,7 +916,11 @@ export const createNetworkSlice: StateCreator<
                   (item as Record<string, unknown>).__remove === true,
               ),
           );
-          if (prevPermCount > 0 && nextPermCount === 0 && !patchHasDeltaRemovals) {
+          if (
+            prevPermCount > 0 &&
+            nextPermCount === 0 &&
+            !patchHasDeltaRemovals
+          ) {
             console.warn(
               `[PERMANENTS_HARDENING] Prevented board wipe: patch would clear all ${prevPermCount} permanents`,
               {
@@ -935,8 +946,12 @@ export const createNetworkSlice: StateCreator<
                 patchCells: Object.keys(p.permanents || {}),
                 lostFromCells: Object.keys(state.permanents || {}).filter(
                   (cell) => {
-                    const prev = (state.permanents as Record<string, unknown[]>)[cell];
-                    const nx = ((next.permanents ?? {}) as Record<string, unknown[]>)[cell];
+                    const prev = (
+                      state.permanents as Record<string, unknown[]>
+                    )[cell];
+                    const nx = (
+                      (next.permanents ?? {}) as Record<string, unknown[]>
+                    )[cell];
                     return (
                       Array.isArray(prev) &&
                       prev.length > 0 &&
@@ -1019,10 +1034,7 @@ export const createNetworkSlice: StateCreator<
                   cardName: perm.card?.name || "Mother Nature",
                 });
               }
-            } else if (
-              cardName === "merlin" &&
-              cardType.includes("minion")
-            ) {
+            } else if (cardName === "merlin" && cardType.includes("minion")) {
               if (!registeredMerlins.has(perm.instanceId)) {
                 newMinionsToRegister.push({
                   type: "merlin",
@@ -1282,6 +1294,26 @@ export const createNetworkSlice: StateCreator<
       if (p.cardsDrawnThisTurn !== undefined) {
         next.cardsDrawnThisTurn = p.cardsDrawnThisTurn;
       }
+      if (p.pendingBetrayal !== undefined) {
+        next.pendingBetrayal = p.pendingBetrayal;
+      } else if (replaceKeys.has("pendingBetrayal")) {
+        next.pendingBetrayal = null;
+      }
+      if (p.activeBetrayals !== undefined) {
+        next.activeBetrayals = p.activeBetrayals;
+      } else if (replaceKeys.has("activeBetrayals")) {
+        next.activeBetrayals = [];
+      }
+      if (p.pendingInfiltrate !== undefined) {
+        next.pendingInfiltrate = p.pendingInfiltrate;
+      } else if (replaceKeys.has("pendingInfiltrate")) {
+        next.pendingInfiltrate = null;
+      }
+      if (p.activeInfiltrations !== undefined) {
+        next.activeInfiltrations = p.activeInfiltrations;
+      } else if (replaceKeys.has("activeInfiltrations")) {
+        next.activeInfiltrations = [];
+      }
       // Pith Imp private hands (stolen cards)
       // CRITICAL: Do NOT clear based on replaceKeys - owner tracks locally, server snapshots would wipe it
       if (p.pithImpHands !== undefined) {
@@ -1381,7 +1413,9 @@ export const createNetworkSlice: StateCreator<
                 (next.zones ?? state.zones)?.p2?.graveyard?.length ?? 0,
             },
           };
-          const mergedBoard = (next.board ?? state.board) as GameState["board"] | undefined;
+          const mergedBoard = (next.board ?? state.board) as
+            | GameState["board"]
+            | undefined;
           const mergedSiteCount = mergedBoard?.sites
             ? Object.keys(mergedBoard.sites).length
             : 0;
@@ -1401,9 +1435,16 @@ export const createNetworkSlice: StateCreator<
             console.warn(
               `[net] SITE_LOSS: sites went from ${prevSiteCount} to ${mergedSiteCount}`,
               {
-                patchBoardKeys: p.board ? Object.keys(p.board as Record<string, unknown>) : [],
+                patchBoardKeys: p.board
+                  ? Object.keys(p.board as Record<string, unknown>)
+                  : [],
                 patchSiteKeys: (p.board as Record<string, unknown>)?.sites
-                  ? Object.keys((p.board as Record<string, unknown>).sites as Record<string, unknown>)
+                  ? Object.keys(
+                      (p.board as Record<string, unknown>).sites as Record<
+                        string,
+                        unknown
+                      >,
+                    )
                   : [],
               },
             );
@@ -1432,10 +1473,25 @@ export const createNetworkSlice: StateCreator<
           (a, v) => a + (Array.isArray(v) ? v.length : 0),
           0,
         );
+        const patchHasDeltaRemovals = Object.values(
+          (p.permanents as Record<string, unknown>) || {},
+        ).some(
+          (arr) =>
+            Array.isArray(arr) &&
+            arr.some(
+              (item) =>
+                item &&
+                typeof item === "object" &&
+                (item as Record<string, unknown>).__remove === true,
+            ),
+        );
         if (
           (prevAvatarP1 && !nextAvatarP1) ||
           (prevAvatarP2 && !nextAvatarP2) ||
-          (prevPermCount > 0 && nextPermCount === 0)
+          (prevPermCount > 0 &&
+            nextPermCount === 0 &&
+            !patchHasDeltaRemovals &&
+            !replaceKeys.has("permanents"))
         ) {
           // Log each field separately to avoid object collapse
           console.error("[net] CRITICAL: State loss detected!");
@@ -1597,7 +1653,11 @@ export const createNetworkSlice: StateCreator<
                   (item as Record<string, unknown>).__remove === true,
               ),
           );
-          if (prevPermCount > 0 && nextPermCount === 0 && !applyPatchHasDeltaRemovals) {
+          if (
+            prevPermCount > 0 &&
+            nextPermCount === 0 &&
+            !applyPatchHasDeltaRemovals
+          ) {
             console.warn(
               `[PERMANENTS_HARDENING] applyPatch: Prevented board wipe: patch would clear all ${prevPermCount} permanents`,
             );
@@ -1747,6 +1807,18 @@ export const createNetworkSlice: StateCreator<
       // Cards drawn this turn - applyPatch version
       if (p.cardsDrawnThisTurn !== undefined) {
         next.cardsDrawnThisTurn = p.cardsDrawnThisTurn;
+      }
+      if (p.pendingBetrayal !== undefined) {
+        next.pendingBetrayal = p.pendingBetrayal;
+      }
+      if (p.activeBetrayals !== undefined) {
+        next.activeBetrayals = p.activeBetrayals;
+      }
+      if (p.pendingInfiltrate !== undefined) {
+        next.pendingInfiltrate = p.pendingInfiltrate;
+      }
+      if (p.activeInfiltrations !== undefined) {
+        next.activeInfiltrations = p.activeInfiltrations;
       }
       // Babel Tower merge tracking - applyPatch version
       if (p.babelTowers !== undefined) {

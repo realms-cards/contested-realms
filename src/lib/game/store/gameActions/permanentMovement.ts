@@ -1,5 +1,10 @@
 import type { StateCreator } from "zustand";
-import { isMonumentByName, isAutomatonByName, isOmphalos } from "../omphalosState";
+import { getPermanentOwnerBaseZ } from "@/lib/game/boardShared";
+import {
+  isMonumentByName,
+  isAutomatonByName,
+  isOmphalos,
+} from "../omphalosState";
 import type {
   CellKey,
   GameState,
@@ -112,7 +117,12 @@ export const createPermanentMovementSlice: StateCreator<
       );
       const { per, movedName, removed, added, updated, newIndex } =
         movePermanentCore(state.permanents, fromKey, sel.index, toKey, null);
-      const cellNo = getCellNumber(x, y, state.board.size.w, state.board.size.h);
+      const cellNo = getCellNumber(
+        x,
+        y,
+        state.board.size.w,
+        state.board.size.h,
+      );
       const ownerKey = seatFromOwner(exists.owner);
       const ownerPlayerNum = ownerKey === "p1" ? "1" : "2";
       let finalPer = per;
@@ -262,7 +272,12 @@ export const createPermanentMovementSlice: StateCreator<
       }
       const { per, movedName, removed, added, updated, newIndex } =
         movePermanentCore(state.permanents, fromKey, sel.index, toKey, offset);
-      const cellNo = getCellNumber(x, y, state.board.size.w, state.board.size.h);
+      const cellNo = getCellNumber(
+        x,
+        y,
+        state.board.size.w,
+        state.board.size.h,
+      );
       const ownerKey = seatFromOwner(exists.owner);
       const ownerPlayerNum = ownerKey === "p1" ? "1" : "2";
       let finalPer = per;
@@ -336,7 +351,9 @@ export const createPermanentMovementSlice: StateCreator<
             return o;
           });
           if (updatedOmph.some((o, i) => o !== s.omphalosHands[i])) {
-            set({ omphalosHands: updatedOmph } as Partial<GameState> as GameState);
+            set({
+              omphalosHands: updatedOmph,
+            } as Partial<GameState> as GameState);
             s.trySendPatch({ omphalosHands: updatedOmph });
           }
         }, 0);
@@ -487,7 +504,7 @@ export const createPermanentMovementSlice: StateCreator<
       });
 
       per[at] = arr;
-      const owner = seatFromOwner(item.owner);
+      const owner = item.originalOwnerSeat ?? seatFromOwner(item.owner);
       const zonesNext = { ...state.zones } as Record<PlayerKey, Zones>;
 
       // Create deep copy of all zone arrays to avoid mutation
@@ -590,7 +607,12 @@ export const createPermanentMovementSlice: StateCreator<
       }
 
       const { x, y } = parseCellKey(at);
-      const cellNo = getCellNumber(x, y, state.board.size.w, state.board.size.h);
+      const cellNo = getCellNumber(
+        x,
+        y,
+        state.board.size.w,
+        state.board.size.h,
+      );
       const playerNum = owner === "p1" ? "1" : "2";
       const zoneLabel =
         finalTarget === "hand"
@@ -763,6 +785,24 @@ export const createPermanentMovementSlice: StateCreator<
         }, 0);
       }
 
+      if (item.instanceId && item.infiltrateId) {
+        const infiltratedInstanceId = item.instanceId;
+        setTimeout(() => {
+          try {
+            get().cleanupInfiltrationForPermanent(infiltratedInstanceId);
+          } catch {}
+        }, 0);
+      }
+
+      if (item.instanceId && item.betrayalId) {
+        const betrayedInstanceId = item.instanceId;
+        setTimeout(() => {
+          try {
+            get().cleanupBetrayalForPermanent(betrayedInstanceId);
+          } catch {}
+        }, 0);
+      }
+
       // Deathrite triggers when going to graveyard:
       // - "Pigs of the Sounder" → summons "Grand Old Boars"
       // - "Squeakers" → summons "Pigs of the Sounder"
@@ -827,21 +867,11 @@ export const createPermanentMovementSlice: StateCreator<
       const fromOwner = item.owner;
       const newOwner: 1 | 2 = to ?? (fromOwner === 1 ? 2 : 1);
       const newOwnerSeat = seatFromOwner(newOwner);
-      // Adjust offset to keep permanent at same absolute position
-      // Rendering uses: worldZ = zBase + offZ
-      // zBase for owner 1: -TILE_SIZE * 0.5 + marginZ (roughly -0.8)
-      // zBase for owner 2: +TILE_SIZE * 0.5 - marginZ (roughly +0.8)
-      // To keep same worldZ: newOffZ = oldZBase + oldOffZ - newZBase
-      const TILE_SIZE = 2.0;
-      const MARGIN_Z = TILE_SIZE * 0.1;
-      const oldZBase =
-        fromOwner === 1
-          ? -TILE_SIZE * 0.5 + MARGIN_Z
-          : TILE_SIZE * 0.5 - MARGIN_Z;
-      const newZBase =
-        newOwner === 1
-          ? -TILE_SIZE * 0.5 + MARGIN_Z
-          : TILE_SIZE * 0.5 - MARGIN_Z;
+      // Preserve exact world position while ownership changes card orientation.
+      // Rendering uses worldZ = tileZ + getPermanentOwnerBaseZ(owner) + offsetZ.
+      // So to keep the card fixed on its tile we must compensate for the owner lane delta.
+      const oldZBase = getPermanentOwnerBaseZ(fromOwner);
+      const newZBase = getPermanentOwnerBaseZ(newOwner);
       const oldOffZ = item.offset?.[1] ?? 0;
       const newOffZ = oldZBase + oldOffZ - newZBase;
       const adjustedOffset: [number, number] = [item.offset?.[0] ?? 0, newOffZ];
@@ -884,7 +914,12 @@ export const createPermanentMovementSlice: StateCreator<
         }
       }
       const { x, y } = parseCellKey(at);
-      const cellNo = getCellNumber(x, y, state.board.size.w, state.board.size.h);
+      const cellNo = getCellNumber(
+        x,
+        y,
+        state.board.size.w,
+        state.board.size.h,
+      );
       const newOwnerNum = newOwner === 1 ? "1" : "2";
       get().log(
         `Control of [p${newOwnerNum}card:${item.card.name}] at #${cellNo} transferred to P${newOwner}`,
@@ -947,11 +982,17 @@ export const createPermanentMovementSlice: StateCreator<
             const updated = hands.map((o) =>
               (itemInstanceId && o.artifact.instanceId === itemInstanceId) ||
               o.artifact.at === at
-                ? { ...o, ownerSeat: newOwnerSeat, artifact: { ...o.artifact, owner: newOwner } }
+                ? {
+                    ...o,
+                    ownerSeat: newOwnerSeat,
+                    artifact: { ...o.artifact, owner: newOwner },
+                  }
                 : o,
             );
             if (updated !== hands) {
-              set({ omphalosHands: updated } as Partial<GameState> as GameState);
+              set({
+                omphalosHands: updated,
+              } as Partial<GameState> as GameState);
               get().trySendPatch({ omphalosHands: updated });
             }
           } catch {}
@@ -969,7 +1010,9 @@ export const createPermanentMovementSlice: StateCreator<
                 : m,
             );
             if (updated !== minions) {
-              set({ lilithMinions: updated } as Partial<GameState> as GameState);
+              set({
+                lilithMinions: updated,
+              } as Partial<GameState> as GameState);
             }
           } catch {}
         }, 0);
@@ -986,7 +1029,9 @@ export const createPermanentMovementSlice: StateCreator<
                 : m,
             );
             if (updated !== minions) {
-              set({ motherNatureMinions: updated } as Partial<GameState> as GameState);
+              set({
+                motherNatureMinions: updated,
+              } as Partial<GameState> as GameState);
             }
           } catch {}
         }, 0);
@@ -1003,7 +1048,9 @@ export const createPermanentMovementSlice: StateCreator<
                 : h,
             );
             if (updated !== haunts) {
-              set({ headlessHaunts: updated } as Partial<GameState> as GameState);
+              set({
+                headlessHaunts: updated,
+              } as Partial<GameState> as GameState);
             }
           } catch {}
         }, 0);
@@ -1059,7 +1106,12 @@ export const createPermanentMovementSlice: StateCreator<
 
       // Log the action
       const { x, y } = parseCellKey(at);
-      const cellNo = getCellNumber(x, y, state.board.size.w, state.board.size.h);
+      const cellNo = getCellNumber(
+        x,
+        y,
+        state.board.size.w,
+        state.board.size.h,
+      );
       const playerNum = ownerKey === "p1" ? "1" : "2";
       get().log(
         `[p${playerNum}:PLAYER] created a token copy of [p${playerNum}card:${item.card.name}] at #${cellNo}`,

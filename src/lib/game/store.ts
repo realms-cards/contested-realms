@@ -15,6 +15,7 @@ import {
   createBabelTowerSlice,
   createInitialBabelTowers,
 } from "./store/babelTowerState";
+import { createBetrayalSlice } from "./store/betrayalState";
 import { createBlackMassSlice } from "./store/blackMassState";
 import { createBoardSlice, createInitialBoard } from "./store/boardState";
 import {
@@ -65,6 +66,7 @@ import {
   createImposterMaskSlice,
   createInitialImposterMasks,
 } from "./store/imposterMaskState";
+import { createInfiltrateSlice } from "./store/infiltrateState";
 import { createInquisitionSlice } from "./store/inquisitionState";
 import { createInquisitionSummonSlice } from "./store/inquisitionSummonState";
 import { createInteractionSlice } from "./store/interactionState";
@@ -201,6 +203,8 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   ...createCallToWarSlice(set, get, storeApi),
   ...createSearingTruthSlice(set, get, storeApi),
   ...createInquisitionSlice(set, get, storeApi),
+  ...createBetrayalSlice(set, get, storeApi),
+  ...createInfiltrateSlice(set, get, storeApi),
   ...createInquisitionSummonSlice(set, get, storeApi),
   ...createAccusationSlice(set, get, storeApi),
   ...createCommonSenseSlice(set, get, storeApi),
@@ -374,6 +378,8 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         pendingCallToWar: null,
         pendingSearingTruth: null,
         pendingInquisition: null,
+        pendingBetrayal: null,
+        pendingInfiltrate: null,
         pendingInquisitionSummon: null,
         pendingAccusation: null,
         pendingCommonSense: null,
@@ -381,6 +387,8 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         pendingEarthquake: null,
         pendingFeastForCrows: null,
         stolenCards: [],
+        activeBetrayals: [],
+        activeInfiltrations: [],
         pithImpHands: [],
         processedPithImpReturns: new Set<string>(),
         morganaHands: [],

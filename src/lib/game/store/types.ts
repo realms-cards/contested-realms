@@ -111,6 +111,7 @@ export type CardRef = {
   thresholds?: Partial<Thresholds> | null; // threshold requirements
   cost?: number | null; // mana cost
   owner?: PlayerKey | null;
+  originalOwnerSeat?: PlayerKey | null;
   instanceId?: string | null;
   // Full metadata for resolvers (populated at deck load time)
   text?: string | null; // full card text
@@ -444,6 +445,10 @@ export type SeerState = {
 
 export type PermanentItem = EntityBase<CardRef> & {
   owner: 1 | 2;
+  originalOwner?: 1 | 2;
+  originalOwnerSeat?: PlayerKey | null;
+  betrayalId?: string | null;
+  infiltrateId?: string | null;
   tilt?: number;
   instanceId?: string | null;
   tapVersion?: number; // Version counter for tap/untap state changes
@@ -458,6 +463,7 @@ export type PermanentItem = EntityBase<CardRef> & {
   isCarried?: boolean; // This unit is being carried by a carry-keyword minion
   enteredOnTurn?: number; // Turn number when this permanent entered the realm (for Savior ward ability)
 };
+
 export type Permanents = Record<CellKey, PermanentItem[]>;
 
 // --- Magic Interaction (casting) -------------------------------------------------
@@ -1591,6 +1597,7 @@ export type GameEvent = {
   turn?: number;
   player?: 1 | 2;
 };
+
 export const MAX_EVENTS = 200;
 export const BOARD_PING_LIFETIME_MS = 2500;
 export const BOARD_PING_MAX_HISTORY = 8;
@@ -1624,6 +1631,8 @@ export type SerializedGame = {
   events: GameEvent[];
   eventSeq: number;
   portalState: PortalState | null;
+  activeBetrayals: BetrayalLink[];
+  activeInfiltrations: InfiltrationLink[];
 };
 
 export type GameState = {
@@ -1743,8 +1752,17 @@ export type GameState = {
   // Tutorial action gate — when active, only matching actions are allowed
   tutorialActionGate: {
     active: boolean;
-    validate: ((actionType: string, x: number, y: number, cardName?: string) => boolean) | null;
-    onReject: ((actionType: string, x: number, y: number, cardName?: string) => void) | null;
+    validate:
+      | ((
+          actionType: string,
+          x: number,
+          y: number,
+          cardName?: string,
+        ) => boolean)
+      | null;
+    onReject:
+      | ((actionType: string, x: number, y: number, cardName?: string) => void)
+      | null;
   };
   setTutorialActionGate: (gate: GameState["tutorialActionGate"]) => void;
   // Card meta cache (subset) used to detect base power and rarity
@@ -1932,6 +1950,79 @@ export type GameState = {
   resolveInterrogatorChoice: (choice: "pay" | "allow") => void;
   // Chaos Twister minigame flow
   pendingChaosTwister: PendingChaosTwister | null;
+  pendingBetrayal: PendingBetrayal | null;
+  activeBetrayals: BetrayalLink[];
+  beginBetrayal: (input: {
+    spell: {
+      at: CellKey;
+      index: number;
+      instanceId?: string | null;
+      owner: 1 | 2;
+      card: CardRef;
+    };
+    casterSeat: PlayerKey;
+  }) => void;
+  selectBetrayalTarget: (target: {
+    at: CellKey;
+    index: number;
+    instanceId: string | null;
+    owner: 1 | 2;
+    card: CardRef;
+  }) => void;
+  resolveBetrayal: () => void;
+  cancelBetrayal: () => void;
+  revertBetrayedPermanent: (
+    targetInstanceId: string,
+    options?: {
+      keepLink?: boolean;
+      skipPatch?: boolean;
+      reason?: string;
+    },
+  ) => void;
+  cleanupBetrayalForPermanent: (
+    targetInstanceId: string,
+    options?: { skipPatch?: boolean },
+  ) => void;
+  triggerBetrayalEndOfTurn: (endingPlayerSeat: PlayerKey) => void;
+  pendingInfiltrate: PendingInfiltrate | null;
+  activeInfiltrations: InfiltrationLink[];
+  beginInfiltrate: (input: {
+    spell: {
+      at: CellKey;
+      index: number;
+      instanceId?: string | null;
+      owner: 1 | 2;
+      card: CardRef;
+    };
+    casterSeat: PlayerKey;
+  }) => void;
+  selectInfiltrateTarget: (target: {
+    at: CellKey;
+    index: number;
+    instanceId: string | null;
+    owner: 1 | 2;
+    card: CardRef;
+  }) => void;
+  resolveInfiltrate: () => void;
+  cancelInfiltrate: () => void;
+  revertInfiltratedPermanent: (
+    targetInstanceId: string,
+    options?: {
+      keepLink?: boolean;
+      removeStealthTokenInstanceId?: string;
+      skipPatch?: boolean;
+      reason?: string;
+    },
+  ) => void;
+  handleInfiltrateStealthRemoved: (
+    stealthTokenInstanceId: string,
+    attachedAt?: CellKey,
+    attachedIndex?: number,
+  ) => void;
+  cleanupInfiltrationForPermanent: (
+    targetInstanceId: string,
+    options?: { skipPatch?: boolean },
+  ) => void;
   beginChaosTwister: (input: {
     spell: {
       at: CellKey;
@@ -3416,8 +3507,100 @@ export type ServerPatchT = Partial<{
   gemTokens: GameState["gemTokens"];
   gardenOfEdenLocations: GameState["gardenOfEdenLocations"];
   cardsDrawnThisTurn: GameState["cardsDrawnThisTurn"];
+  pendingBetrayal: GameState["pendingBetrayal"];
+  activeBetrayals: GameState["activeBetrayals"];
+  pendingInfiltrate: GameState["pendingInfiltrate"];
+  activeInfiltrations: GameState["activeInfiltrations"];
   pendingMirrorRealm: GameState["pendingMirrorRealm"];
   __replaceKeys: string[];
   // Snapshot timestamp for replay truncation on undo
   __snapshotTs: number;
 }>;
+
+export type BetrayalPhase = "selectingTarget" | "resolving";
+
+export type PendingBetrayal = {
+  id: string;
+  spell: {
+    at: CellKey;
+    index: number;
+    instanceId?: string | null;
+    owner: 1 | 2;
+    card: CardRef;
+  };
+  casterSeat: PlayerKey;
+  phase: BetrayalPhase;
+  targetMinion: {
+    at: CellKey;
+    index: number;
+    instanceId: string | null;
+    owner: 1 | 2;
+    card: CardRef;
+  } | null;
+  createdAt: number;
+};
+
+export type BetrayalLink = {
+  id: string;
+  casterSeat: PlayerKey;
+  originalOwner: 1 | 2;
+  originalOwnerSeat: PlayerKey;
+  controllerOwner: 1 | 2;
+  target: {
+    at: CellKey;
+    instanceId: string;
+    cardName: string;
+  };
+  spell: {
+    at: CellKey;
+    instanceId: string | null;
+    cardName: string;
+  };
+  createdAt: number;
+};
+
+export type InfiltratePhase = "selectingTarget" | "resolving";
+
+export type PendingInfiltrate = {
+  id: string;
+  spell: {
+    at: CellKey;
+    index: number;
+    instanceId?: string | null;
+    owner: 1 | 2;
+    card: CardRef;
+  };
+  casterSeat: PlayerKey;
+  phase: InfiltratePhase;
+  targetMinion: {
+    at: CellKey;
+    index: number;
+    instanceId: string | null;
+    owner: 1 | 2;
+    card: CardRef;
+  } | null;
+  createdAt: number;
+};
+
+export type InfiltrationLink = {
+  id: string;
+  casterSeat: PlayerKey;
+  originalOwner: 1 | 2;
+  originalOwnerSeat: PlayerKey;
+  controllerOwner: 1 | 2;
+  target: {
+    at: CellKey;
+    instanceId: string;
+    cardName: string;
+  };
+  stealthToken: {
+    at: CellKey;
+    instanceId: string;
+  } | null;
+  spell: {
+    at: CellKey;
+    instanceId: string | null;
+    cardName: string;
+  };
+  createdAt: number;
+};

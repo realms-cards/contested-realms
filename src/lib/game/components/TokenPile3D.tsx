@@ -230,6 +230,9 @@ export default function TokenPile3D({
                         type: "Token",
                         slug: tokenSlug(def),
                         thresholds: null,
+                        ...(def.subTypes !== undefined && {
+                          subTypes: def.subTypes,
+                        }),
                       };
                       // Clear any selected hand card and preview to prevent accidental plays
                       store.clearSelection?.();
@@ -305,6 +308,9 @@ export default function TokenPile3D({
                         type: "Token",
                         slug: tokenSlug(def),
                         thresholds: null,
+                        ...(def.subTypes !== undefined && {
+                          subTypes: def.subTypes,
+                        }),
                       };
                       // Clear any selected hand card and preview to prevent accidental plays
                       store.clearSelection?.();
