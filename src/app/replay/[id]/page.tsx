@@ -81,7 +81,7 @@ export default function ReplayViewerPage() {
     }
 
     let cancelled = false;
-    let retryTimer: ReturnType<typeof window.setTimeout> | null = null;
+    let retryTimer: number | null = null;
     let retryCount = 0;
 
     const clearRetryTimer = () => {

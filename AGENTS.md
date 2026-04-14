@@ -118,6 +118,8 @@ Schema at `prisma/schema.prisma`. Generate client with `npm run prisma:generate`
 - **Strict mode** — all strict options enabled
 - **No `any` types** — use interfaces, generics, or `unknown` with type guards
 - **No `as any` casts** — find the proper type or use a type guard
+- **Prefer explicit environment-correct types** — when DOM and Node typings differ (for example timers), use the narrower browser/server type instead of relying on utility inference that may resolve to the wrong overload
+- **Typecheck touched code before finishing** — at minimum run a focused typecheck or the repo typecheck when TypeScript files are edited, especially after changing effects, timers, sockets, or async control flow
 - **Import order** — external libs first, then `@/` sorted alphabetically, no blank lines between groups
 - **`prefer-const`** and **`object-shorthand`** enforced by ESLint
 
