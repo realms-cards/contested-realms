@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useRef, useState } from "react";
+import { useEffect, useCallback, useRef } from "react";
 import type { Socket } from "socket.io-client";
 import { useOnline } from "@/app/online/online-context";
 import { TOURNAMENT_SOCKET_EVENTS } from "@/lib/tournament/constants";
@@ -123,7 +123,7 @@ export function useTournamentSocket(
   const socket = transport?.getSocket() ?? null;
 
   const currentTournamentRef = useRef<string | null>(null);
-  const [isConnected, setIsConnected] = useState<boolean>(connected);
+  const wasConnectedRef = useRef<boolean>(connected);
   const eventsRef = useRef(events);
   // T024: Event deduplication - track last 100 event IDs
   const lastEventIds = useRef<Set<string>>(new Set());
@@ -453,38 +453,20 @@ export function useTournamentSocket(
       ),
     ];
 
-    // Connection events
-    socket.on("connect", () => {
-      setIsConnected(true);
-      // Tournament socket uses shared transport - no separate log needed
-      // Rejoin current tournament if we were in one
-      if (currentTournamentRef.current) {
-        socket.emit(TOURNAMENT_SOCKET_EVENTS.JOIN_TOURNAMENT, {
-          tournamentId: currentTournamentRef.current,
-        });
-      }
-    });
-
-    socket.on("disconnect", () => {
-      setIsConnected(false);
-      // Handled by Transport logs
-    });
-
-    socket.on("connect_error", (error) => {
+    const handleConnectError = (error: Error) => {
       console.error("Tournament socket connection error:", error);
       eventsRef.current.onError?.({
         code: "CONNECTION_ERROR",
         message: "Failed to connect to tournament server",
         details: error.message,
       });
-    });
+    };
+    socket.on("connect_error", handleConnectError);
 
     // Cleanup
     return () => {
       cleanups.forEach((cleanup) => cleanup());
-      socket.off("connect");
-      socket.off("disconnect");
-      socket.off("connect_error");
+      socket.off("connect_error", handleConnectError);
     };
     // Note: isDuplicateEvent is intentionally excluded from deps to prevent effect re-runs
     // It only uses lastEventIds.current (ref) which doesn't require re-initialization
@@ -492,12 +474,17 @@ export function useTournamentSocket(
   }, [socket]);
 
   useEffect(() => {
-    if (!socket) {
-      setIsConnected(false);
+    const justConnected = connected && !wasConnectedRef.current;
+    wasConnectedRef.current = connected;
+
+    if (!justConnected || !socket || !currentTournamentRef.current) {
       return;
     }
-    setIsConnected(socket.connected);
-  }, [socket]);
+
+    socket.emit(TOURNAMENT_SOCKET_EVENTS.JOIN_TOURNAMENT, {
+      tournamentId: currentTournamentRef.current,
+    });
+  }, [connected, socket]);
 
   // Tournament actions
   const joinTournament = useCallback(
@@ -555,7 +542,7 @@ export function useTournamentSocket(
 
   return {
     socket,
-    isConnected,
+    isConnected: connected,
     joinTournament,
     leaveTournament,
     updatePreparation,

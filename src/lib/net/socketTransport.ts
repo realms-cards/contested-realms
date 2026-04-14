@@ -475,8 +475,36 @@ export class SocketTransport implements GameTransport {
       !this.socket.connected &&
       !this.isIntentionalDisconnect
     ) {
-      // Reconnecting existing socket
-      this.socket.connect();
+      // Reconnect existing socket and wait for the server welcome handshake
+      this.connectionState = "reconnecting";
+      await new Promise<void>((resolve, reject) => {
+        const socket = this.socket as Socket;
+        let settled = false;
+
+        const cleanup = () => {
+          socket.off("welcome", onWelcome);
+          socket.off("connect_error", onError);
+        };
+
+        const onWelcome = () => {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          this.connectionState = "connected";
+          resolve();
+        };
+
+        const onError = (error: unknown) => {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          reject(error);
+        };
+
+        socket.once("welcome", onWelcome);
+        socket.once("connect_error", onError);
+        socket.connect();
+      });
       return;
     }
 
@@ -570,7 +598,10 @@ export class SocketTransport implements GameTransport {
 
       // Send hello on every connect (initial and reconnects)
       socket.on("connect", () => {
-        this.connectionState = "connected";
+        this.connectionState =
+          this.connectionState === "reconnecting"
+            ? "reconnecting"
+            : "connecting";
         this.reconnectionAttempts = 0;
         this.reconnectionDelay = 1000;
         sendHello();
@@ -581,9 +612,10 @@ export class SocketTransport implements GameTransport {
       socket.once("connect_error", onError);
 
       // Wire server events
-      socket.on("welcome", (payload) =>
-        this.dispatch("welcome", Protocol.WelcomePayload.parse(payload)),
-      );
+      socket.on("welcome", (payload) => {
+        this.connectionState = "connected";
+        this.dispatch("welcome", Protocol.WelcomePayload.parse(payload));
+      });
       socket.on("lobbyUpdated", (payload) =>
         this.dispatch(
           "lobbyUpdated",
@@ -1458,7 +1490,7 @@ export class SocketTransport implements GameTransport {
 
     socket.on("reconnect", (_attemptNumber: number) => {
       // Reconnected successfully
-      this.connectionState = "connected";
+      this.connectionState = "reconnecting";
       this.reconnectionAttempts = 0;
       this.resetAuthFailures(); // Reset auth failure tracking on successful reconnection
     });
