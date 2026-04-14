@@ -2,6 +2,7 @@ import "dotenv/config";
 import { Client, GatewayIntentBits, Events } from "discord.js";
 import { registerCommands } from "./commands/index.js";
 import { handleInteraction } from "./events/interactionCreate.js";
+import { reportGuildJoin, reportGuildLeave, reportGuildSummary } from "./events/guildTracker.js";
 import { handleVoiceStateUpdate } from "./events/voiceStateUpdate.js";
 import { ChallengeManager } from "./services/challenge-manager.js";
 import { setContext } from "./services/context.js";
@@ -72,9 +73,14 @@ client.once(Events.ClientReady, async (readyClient) => {
   await registerCommands();
 
   console.log("[bot] Ready and listening for commands");
+
+  // Report current guild membership to status channel
+  await reportGuildSummary(readyClient);
 });
 
 client.on(Events.InteractionCreate, handleInteraction);
+client.on(Events.GuildCreate, reportGuildJoin);
+client.on(Events.GuildDelete, reportGuildLeave);
 client.on(Events.VoiceStateUpdate, (oldState, newState) => {
   if (voiceManager) {
     handleVoiceStateUpdate(oldState, newState, voiceManager);

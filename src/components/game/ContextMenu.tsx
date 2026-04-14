@@ -94,7 +94,7 @@ function MenuBtn({
           onClick={onClick}
           onMouseEnter={() => {
             const r = btnRef.current?.getBoundingClientRect();
-            if (r) setTipPos({ x: r.left + r.width / 2, y: r.top });
+            if (r) setTipPos({ x: r.left + r.width / 2, y: r.bottom });
           }}
           onMouseLeave={() => setTipPos(null)}
           className={`rounded ${className} p-2 flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed`}
@@ -104,8 +104,8 @@ function MenuBtn({
         {tipPos &&
           createPortal(
             <div
-              className="pointer-events-none fixed z-[9999] px-2 py-0.5 rounded bg-black/90 text-white text-xs whitespace-nowrap -translate-x-1/2 -translate-y-full -mt-1"
-              style={{ left: tipPos.x, top: tipPos.y - 4 }}
+              className="pointer-events-none fixed z-[9999] px-2 py-0.5 rounded bg-black/90 text-white text-xs whitespace-nowrap -translate-x-1/2 mt-1"
+              style={{ left: tipPos.x, top: tipPos.y + 4 }}
             >
               {tooltipText}
             </div>,
@@ -173,6 +173,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   const shuffleSpellbook = useGameStore((s) => s.shuffleSpellbook);
   const shuffleAtlas = useGameStore((s) => s.shuffleAtlas);
   const drawFromBottom = useGameStore((s) => s.drawFromBottom);
+  const millTopCard = useGameStore((s) => s.millTopCard);
   const openSearchDialog = useGameStore((s) => s.openSearchDialog);
   const openPlacementDialog = useGameStore((s) => s.openPlacementDialog);
   const addTokenToHand = useGameStore((s) => s.addTokenToHand);
@@ -612,6 +613,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   let transferTo: 1 | 2 | null = null;
   let doDrawFromPile: (() => void) | null = null;
   let doDrawFromPileBottom: (() => void) | null = null;
+  let doMillTopCard: (() => void) | null = null;
   let doShufflePile: (() => void) | null = null;
   let doAddToAtlas: (() => void) | null = null;
   let doSearchPile: (() => void) | null = null;
@@ -1634,6 +1636,10 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         try {
           playCardSelect();
         } catch {}
+        onClose();
+      };
+      doMillTopCard = () => {
+        millTopCard(t.who, t.from as "spellbook" | "atlas");
         onClose();
       };
     }
@@ -3972,6 +3978,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
 
               {(doDrawFromPile ||
                 doDrawFromPileBottom ||
+                doMillTopCard ||
                 doShufflePile ||
                 doSearchPile) && (
                 <div
@@ -3989,6 +3996,13 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                       icon="game-icons:falling"
                       label="Draw from bottom"
                       onClick={doDrawFromPileBottom}
+                    />
+                  )}
+                  {doMillTopCard && (
+                    <MenuBtn
+                      icon="game-icons:tombstone"
+                      label="Mill top card"
+                      onClick={doMillTopCard}
                     />
                   )}
                   {doSearchPile && (

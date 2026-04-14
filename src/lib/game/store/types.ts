@@ -2875,6 +2875,7 @@ export type GameState = {
   ) => void;
   moveFromGraveyardToBanished: (who: PlayerKey, instanceId: string) => void;
   banishEntireGraveyard: (who: PlayerKey) => void;
+  millTopCard: (who: PlayerKey, from: "spellbook" | "atlas") => void;
   // Handle peeked card action (from peek dialog)
   // instanceId: unique string identifier for the card instance
   handlePeekedCard: (

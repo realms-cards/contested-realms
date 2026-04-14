@@ -41,6 +41,7 @@ type ZoneSlice = Pick<
   | "moveFromBanishedToZone"
   | "moveFromGraveyardToBanished"
   | "banishEntireGraveyard"
+  | "millTopCard"
   | "handlePeekedCard"
 >;
 
@@ -1097,6 +1098,30 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
         (patch as Record<string, unknown>).__allowZoneSeats = [who];
         get().trySendPatch(patch);
       }
+      return {
+        zones: zonesNext as GameState["zones"],
+      } as Partial<GameState> as GameState;
+    }),
+
+  millTopCard: (who: PlayerKey, from: "spellbook" | "atlas") =>
+    set((state) => {
+      const pile = state.zones[who][from];
+      if (!pile || pile.length === 0) return state;
+      get().pushHistory();
+      const zonesNext = { ...state.zones } as Record<PlayerKey, Zones>;
+      const seatZones = { ...zonesNext[who] } as Zones;
+      const pileNext = [...seatZones[from]];
+      const top = pileNext.shift();
+      if (!top) return state;
+      seatZones[from] = pileNext;
+      seatZones.graveyard = [top, ...seatZones.graveyard];
+      zonesNext[who] = seatZones;
+      const playerNum = who === "p1" ? "1" : "2";
+      get().log(
+        `[p${playerNum}:PLAYER] milled [p${playerNum}card:${top.name}] from ${from} to cemetery`,
+      );
+      const patch = createZonesPatchFor(zonesNext as GameState["zones"], who);
+      if (patch) get().trySendPatch(patch);
       return {
         zones: zonesNext as GameState["zones"],
       } as Partial<GameState> as GameState;
