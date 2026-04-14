@@ -31,8 +31,23 @@ export function ClientCanvas({
   }, []);
 
   if (!mounted) {
-    // Return a placeholder with matching dimensions during SSR/hydration
-    return <div style={{ width: "100%", height: "100%" }} />;
+    // Keep a visible scene shell during client hydration to avoid blank flashes.
+    return (
+      <div
+        style={{
+          width: "100%",
+          height: "100%",
+          background: "#0b0b0c",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "#cbd5e1",
+          fontSize: "14px",
+        }}
+      >
+        Loading 3D scene...
+      </div>
+    );
   }
 
   return (

@@ -7,6 +7,20 @@ import { useOnline } from "@/app/online/online-context";
 import OnlinePageShell from "@/components/online/OnlinePageShell";
 
 const LOCAL_REPLAY_STORAGE_KEY = "sorcery:localReplay";
+let replayViewerPreloadPromise: Promise<void> | null = null;
+
+function preloadReplayViewerModules(): Promise<void> {
+  if (!replayViewerPreloadPromise) {
+    replayViewerPreloadPromise = Promise.all([
+      import("@/components/game/ClientCanvas"),
+      import("@/lib/game/Board"),
+      import("@/lib/game/components/Hand3D"),
+      import("@/lib/game/components/Piles3D"),
+    ]).then(() => undefined);
+  }
+
+  return replayViewerPreloadPromise;
+}
 
 interface MatchRecordingSummary {
   matchId: string;
@@ -36,6 +50,10 @@ export default function ReplayListPage() {
   const [showOwnOnly, setShowOwnOnly] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { data: session } = useSession();
+
+  useEffect(() => {
+    void preloadReplayViewerModules();
+  }, []);
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -131,6 +149,22 @@ export default function ReplayListPage() {
     };
   }, [socketReady, transport, showOwnOnly, currentPlayerId]);
 
+  useEffect(() => {
+    if (!recordings.length) return;
+
+    void preloadReplayViewerModules();
+    recordings.slice(0, 8).forEach((recording) => {
+      router.prefetch(`/replay/${recording.matchId}`);
+    });
+  }, [recordings, router]);
+
+  const openReplay = async (replayMatchId: string) => {
+    const href = `/replay/${replayMatchId}`;
+    router.prefetch(href);
+    await preloadReplayViewerModules();
+    router.push(href);
+  };
+
   const loadMore = () => {
     if (!transport || !nextCursor || loadingMore) return;
 
@@ -182,7 +216,17 @@ export default function ReplayListPage() {
     <div
       key={recording.matchId}
       className="bg-slate-900/60 border border-slate-800/70 rounded-xl px-4 py-4 hover:bg-slate-900/80 transition-colors cursor-pointer"
-      onClick={() => router.push(`/replay/${recording.matchId}`)}
+      onMouseEnter={() => {
+        router.prefetch(`/replay/${recording.matchId}`);
+        void preloadReplayViewerModules();
+      }}
+      onFocus={() => {
+        router.prefetch(`/replay/${recording.matchId}`);
+        void preloadReplayViewerModules();
+      }}
+      onClick={() => {
+        void openReplay(recording.matchId);
+      }}
     >
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-2">

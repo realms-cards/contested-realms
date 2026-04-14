@@ -3,7 +3,7 @@
 import { OrbitControls } from "@react-three/drei";
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useOnline } from "@/app/online/online-context";
 import CardPreview from "@/components/game/CardPreview";
 import { ClientCanvas } from "@/components/game/ClientCanvas";
@@ -51,6 +51,8 @@ export default function ReplayViewerPage() {
   const [recording, setRecording] = useState<MatchRecording | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const hasRecordingResponseRef = useRef(false);
+  const loadedMatchIdRef = useRef<string | null>(null);
 
   // Replay controls
   const [isPlaying, setIsPlaying] = useState(false);
@@ -67,11 +69,58 @@ export default function ReplayViewerPage() {
   useEffect(() => {
     if (!connected || !transport || !matchId) return;
 
+    hasRecordingResponseRef.current = false;
+    const isRefreshingLoadedMatch = loadedMatchIdRef.current === matchId;
+
+    if (!isRefreshingLoadedMatch) {
+      setLoading(true);
+      setError(null);
+      setRecording(null);
+      setIsPlaying(false);
+      setCurrentActionIndex(0);
+    }
+
+    let cancelled = false;
+    let retryTimer: ReturnType<typeof window.setTimeout> | null = null;
+    let retryCount = 0;
+
+    const clearRetryTimer = () => {
+      if (retryTimer !== null) {
+        window.clearTimeout(retryTimer);
+        retryTimer = null;
+      }
+    };
+
+    const requestRecording = () => {
+      if (cancelled || hasRecordingResponseRef.current) return;
+
+      try {
+        transport.emit("getMatchRecording", { matchId });
+      } catch (requestError) {
+        console.warn("[replay] Failed to request recording", requestError);
+      }
+
+      if (retryCount >= 2) return;
+
+      retryCount += 1;
+      clearRetryTimer();
+      retryTimer = window.setTimeout(() => {
+        requestRecording();
+      }, 1500);
+    };
+
     const handleRecording = (payload: unknown) => {
+      hasRecordingResponseRef.current = true;
+      clearRetryTimer();
+
       const data = payload as { recording?: MatchRecording; error?: string };
       if (data.error) {
+        if (loadedMatchIdRef.current === matchId) {
+          return;
+        }
         setError(data.error);
       } else if (data.recording) {
+        loadedMatchIdRef.current = data.recording.matchId;
         setRecording(data.recording);
         // Initialize game state and set grid view for replays (no custom playmats)
         const store = useGameStore.getState();
@@ -83,13 +132,20 @@ export default function ReplayViewerPage() {
       setLoading(false);
     };
 
+    const unsubscribeWelcome = transport.on("welcome", () => {
+      // Shared transport reconnects can briefly look connected before replay
+      // requests are accepted again, so retry once welcome lands.
+      requestRecording();
+    });
+
     transport.onGeneric("matchRecordingResponse", handleRecording);
-    transport.emit("getMatchRecording", { matchId });
+    requestRecording();
 
     return () => {
-      if (transport) {
-        transport.offGeneric("matchRecordingResponse", handleRecording);
-      }
+      cancelled = true;
+      clearRetryTimer();
+      unsubscribeWelcome();
+      transport.offGeneric("matchRecordingResponse", handleRecording);
     };
   }, [connected, transport, matchId]);
 
@@ -190,7 +246,7 @@ export default function ReplayViewerPage() {
     return `${minutes}:${seconds.toString().padStart(2, "0")}`;
   };
 
-  if (!connected) {
+  if (!connected && !recording && !error) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
         <div className="text-white">Connecting...</div>
@@ -198,7 +254,7 @@ export default function ReplayViewerPage() {
     );
   }
 
-  if (loading) {
+  if (loading && !recording) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
         <div className="text-white">Loading replay...</div>
