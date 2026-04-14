@@ -76,3 +76,5 @@ DeckMissing.txt
 .claude
 prisma/dev.db
 prisma/*.db-journal
+
+/..bfg-report
