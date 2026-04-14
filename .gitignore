@@ -74,3 +74,5 @@ deck-missing.pdf
 DeckMissing.txt
 
 .claude
+prisma/dev.db
+prisma/*.db-journal
