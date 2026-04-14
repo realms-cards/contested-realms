@@ -18,6 +18,7 @@ import AtlanteanFateOverlay from "@/components/game/AtlanteanFateOverlay";
 import AudioControls from "@/components/game/AudioControls";
 import AutoResolveConfirmOverlay from "@/components/game/AutoResolveConfirmOverlay";
 import BabelTowerOverlay from "@/components/game/BabelTowerOverlay";
+import BetrayalOverlay from "@/components/game/BetrayalOverlay";
 import BlackMassOverlay from "@/components/game/BlackMassOverlay";
 import BrowseOverlay from "@/components/game/BrowseOverlay";
 import CallToWarOverlay from "@/components/game/CallToWarOverlay";
@@ -45,6 +46,7 @@ import GeomancerOverlay from "@/components/game/GeomancerOverlay";
 import HarbingerPortalScreen from "@/components/game/HarbingerPortalScreen";
 import HeadlessHauntOverlay from "@/components/game/HeadlessHauntOverlay";
 import HighlandPrincessOverlay from "@/components/game/HighlandPrincessOverlay";
+import InfiltrateOverlay from "@/components/game/InfiltrateOverlay";
 import InquisitionOverlay from "@/components/game/InquisitionOverlay";
 import InquisitionSummonOverlay from "@/components/game/InquisitionSummonOverlay";
 import { InteractionConsentDialog } from "@/components/game/InteractionConsentDialog";
@@ -740,13 +742,7 @@ export default function OnlineMatchPage() {
     void (isSpectatorView && transport?.watchMatch
       ? transport.watchMatch(matchId)
       : joinMatchRef.current(matchId));
-  }, [
-    connected,
-    match?.id,
-    matchId,
-    transport,
-    isSpectatorView,
-  ]);
+  }, [connected, match?.id, matchId, transport, isSpectatorView]);
 
   // Track connection edges to reset one-shot guards per reconnect
   useEffect(() => {
@@ -3489,6 +3485,9 @@ export default function OnlineMatchPage() {
               <MirrorRealmOverlay />
               {/* Shapeshift Overlay (transform minion) */}
               <ShapeshiftOverlay />
+              <BetrayalOverlay />
+              {/* Infiltrate Overlay (steal enemy minion until Stealth breaks) */}
+              <InfiltrateOverlay />
               {/* Animist Cast Choice Overlay (magic or spirit) */}
               <AnimistCastChoiceOverlay />
               {/* Browse Overlay (spell selection) */}

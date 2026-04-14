@@ -583,6 +583,9 @@ export const createCoreSlice: StateCreator<
 
     // Sync EOT triggers (must modify permanents before the turn transition patch)
     try {
+      get().triggerBetrayalEndOfTurn(endingPlayerSeat);
+    } catch {}
+    try {
       get().triggerTorshammarEndOfTurn(endingPlayerSeat);
     } catch {}
     try {

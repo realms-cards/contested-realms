@@ -790,6 +790,12 @@ export default function Board({
   const selectShapeshiftTarget = useScopedStore(
     (s) => s.selectShapeshiftTarget,
   );
+  const pendingBetrayal = useScopedStore((s) => s.pendingBetrayal);
+  const selectBetrayalTarget = useScopedStore((s) => s.selectBetrayalTarget);
+  const pendingInfiltrate = useScopedStore((s) => s.pendingInfiltrate);
+  const selectInfiltrateTarget = useScopedStore(
+    (s) => s.selectInfiltrateTarget,
+  );
 
   // Earthquake spell flow
   const pendingEarthquake = useScopedStore((s) => s.pendingEarthquake);
@@ -1109,6 +1115,20 @@ export default function Board({
     }),
     [pendingShapeshift, selectShapeshiftTarget],
   );
+  const betrayalContext = useMemo(
+    () => ({
+      pendingBetrayal,
+      selectBetrayalTarget,
+    }),
+    [pendingBetrayal, selectBetrayalTarget],
+  );
+  const infiltrateContext = useMemo(
+    () => ({
+      pendingInfiltrate,
+      selectInfiltrateTarget,
+    }),
+    [pendingInfiltrate, selectInfiltrateTarget],
+  );
   const earthquakeContext = useMemo(
     () => ({
       pendingEarthquake,
@@ -1425,6 +1445,8 @@ export default function Board({
               magicContext={magicContext}
               chaosTwisterContext={chaosTwisterContext}
               shapeshiftContext={shapeshiftContext}
+              betrayalContext={betrayalContext}
+              infiltrateContext={infiltrateContext}
               earthquakeContext={earthquakeContext}
               corpseExplosionContext={corpseExplosionContext}
               atlanteanFateContext={atlanteanFateContext}

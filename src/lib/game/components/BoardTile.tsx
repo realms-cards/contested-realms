@@ -55,6 +55,8 @@ type BoardTileProps = {
   magicContext: PermanentStackProps["magicContext"];
   chaosTwisterContext: PermanentStackProps["chaosTwisterContext"];
   shapeshiftContext: PermanentStackProps["shapeshiftContext"];
+  betrayalContext: PermanentStackProps["betrayalContext"];
+  infiltrateContext: PermanentStackProps["infiltrateContext"];
   earthquakeContext: {
     pendingEarthquake: GameState["pendingEarthquake"];
     selectEarthquakeArea: GameState["selectEarthquakeArea"];
@@ -162,6 +164,8 @@ export function BoardTile({
   magicContext,
   chaosTwisterContext,
   shapeshiftContext,
+  betrayalContext,
+  infiltrateContext,
   earthquakeContext,
   corpseExplosionContext,
   atlanteanFateContext,
@@ -475,6 +479,8 @@ export function BoardTile({
         magicContext={magicContext}
         chaosTwisterContext={chaosTwisterContext}
         shapeshiftContext={shapeshiftContext}
+        betrayalContext={betrayalContext}
+        infiltrateContext={infiltrateContext}
         counterHandlers={counterHandlers}
         movementHandlers={movementHandlers}
         emitBoardPing={emitBoardPing}

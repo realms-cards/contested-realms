@@ -131,6 +131,21 @@ export const RESOLVER_REGISTRY: ResolverEntry[] = [
     description:
       "Name a spell, search opponent's hand/spellbook/cemetery for copies, banish them, shuffle",
   },
+  {
+    id: "betrayal",
+    cardName: "Betrayal",
+    category: "spell",
+    stateFile: "betrayalState.ts",
+    description: "Gain control of target enemy minion this turn and untap it",
+  },
+  {
+    id: "infiltrate",
+    cardName: "Infiltrate",
+    category: "spell",
+    stateFile: "infiltrateState.ts",
+    description:
+      "Target enemy minion gains Stealth and taps. You control it until it no longer has Stealth",
+  },
 
   // ─── MINION RESOLVERS ──────────────────────────────────────────────
   {

@@ -736,6 +736,7 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
         slug: tokenSlug(def),
         thresholds: null,
         instanceId: newZoneCardInstanceId(),
+        ...(def.subTypes !== undefined && { subTypes: def.subTypes }),
       };
       const card = prepareCardForSeat(baseToken, who);
       hand.push(card);
