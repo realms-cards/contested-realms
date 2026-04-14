@@ -337,6 +337,11 @@ export default function PlayPage() {
       setP2Ready(true);
       setMulliganComplete(saved.mulliganComplete);
       setPortalSetupComplete(saved.portalSetupComplete);
+      // Prevent portal init effect from re-running and overwriting restored portalState
+      setPortalPhaseInitialized(true);
+      if (saved.portalSetupComplete && saved.portalState) {
+        setNeedsPortalPhase(true);
+      }
       setRestoredGame(true);
       setShowRestorePrompt(false);
     } else {
@@ -1167,6 +1172,7 @@ export default function PlayPage() {
             opponentPlayerId={null}
             opponentSeat={currentPlayerKey === "p1" ? "p2" : "p1"}
             matchId={null}
+            mulliganComplete={mulliganComplete}
           />
         </div>
       )}

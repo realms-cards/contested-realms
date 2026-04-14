@@ -3391,6 +3391,7 @@ export default function OnlineMatchPage() {
                 opponentSeat={opponentSeat}
                 matchId={match?.id || null}
                 playerNames={playerNames}
+                mulliganComplete={bothPlayersReady}
               />
             </div>
           )}

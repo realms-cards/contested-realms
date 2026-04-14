@@ -6,6 +6,8 @@
 
 - **add custom resolvers for Infiltrate and Betrayal**
 - **fix ownership transfer** cards were moving with transfer when they should stay in place
+- **fix Geomancer replacing rubble at own location**
+- **fix some issues that were only present in hotseat mode**
 
 ### Better queue handling
 

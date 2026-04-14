@@ -34,6 +34,7 @@ export type GameToolboxProps = {
   opponentSeat?: PlayerKey | null;
   matchId?: string | null;
   playerNames?: { p1: string; p2: string };
+  mulliganComplete?: boolean;
 };
 
 export default function GameToolbox({
@@ -43,6 +44,7 @@ export default function GameToolbox({
   opponentSeat = null,
   matchId = null,
   playerNames = { p1: "Player 1", p2: "Player 2" },
+  mulliganComplete = false,
 }: GameToolboxProps) {
   const zones = useGameStore((s) => s.zones);
   const drawFrom = useGameStore((s) => s.drawFrom);
@@ -347,6 +349,9 @@ export default function GameToolbox({
   const lastAutoSnapRef = useRef<string | null>(null);
   useEffect(() => {
     if (phase !== "Start") return;
+    // Do not snapshot before mulligan completes — phase is "Start" immediately after deck
+    // selection (DeckSelector calls setPhase("Start")) but mulligan hasn't happened yet.
+    if (!mulliganComplete) return;
     // Determine if this is the current player's client
     const currentPlayerSeat = currentPlayer === 1 ? "p1" : "p2";
     const isMyTurn = mySeat === currentPlayerSeat;
@@ -367,7 +372,7 @@ export default function GameToolbox({
     try {
       createSnapshot(`Turn ${turn} start (P${currentPlayer})`, "auto");
     } catch {}
-  }, [phase, turn, currentPlayer, snapshots, createSnapshot, mySeat]);
+  }, [phase, turn, currentPlayer, snapshots, createSnapshot, mySeat, mulliganComplete]);
 
   // Derive snapshot lists
   const autoSnapshots = useMemo(

@@ -161,8 +161,9 @@ export const createGeomancerSlice: StateCreator<
     );
 
     // Rubble is stored as permanent tokens
+    // Include the avatar's own cell — Rubble can share the same tile as the avatar
     const validTargets: CellKey[] = [];
-    for (const cellKey of adjacentCells) {
+    for (const cellKey of [avatarCellKey, ...adjacentCells]) {
       const perms = state.permanents[cellKey] || [];
       if (findRubbleIndex(perms) >= 0) {
         validTargets.push(cellKey);
