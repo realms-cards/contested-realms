@@ -30,6 +30,7 @@ import {
   cloneCardForPatch,
   createPermanentDeltaPatch,
   createPermanentsPatch,
+  type PermanentDeltaUpdate,
 } from "./utils/patchHelpers";
 import {
   bumpPermanentVersion,
@@ -528,7 +529,7 @@ export const createInfiltrateSlice: StateCreator<
     } as Partial<GameState> as GameState);
 
     if (!options?.skipPatch) {
-      const deltaUpdates = [
+      const deltaUpdates: PermanentDeltaUpdate[] = [
         {
           at: located.at,
           entry: {

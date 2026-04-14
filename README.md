@@ -4,6 +4,8 @@ A web-based game client for playing [Sorcery: Contested Realm](https://www.sorce
 
 Play now at [realms.cards](https://realms.cards).
 
+[Invite the Discord bot to your community](https://discord.com/oauth2/authorize?client_id=1412710227446337567&permissions=275414871104&scope=bot+applications.commands)
+
 ## Features
 
 - **3D Game Board** - Interactive board rendered with React Three Fiber / Three.js
@@ -94,20 +96,20 @@ npm run dev                # Next.js dev server (connects to stack)
 
 ### Commands
 
-| Command | Description |
-|---------|-------------|
-| `npm run dev` | Start Next.js dev server |
-| `npm run server:dev` | Start Socket.IO server (dev) |
-| `npm run build` | Production build |
-| `npm run test` | Run tests |
-| `npm run test:watch` | Run tests in watch mode |
-| `npm run lint` | Run ESLint |
-| `npm run db:up` / `db:down` | Start/stop local Postgres |
-| `npm run redis:up` / `redis:down` | Start/stop local Redis |
+| Command                           | Description                  |
+| --------------------------------- | ---------------------------- |
+| `npm run dev`                     | Start Next.js dev server     |
+| `npm run server:dev`              | Start Socket.IO server (dev) |
+| `npm run build`                   | Production build             |
+| `npm run test`                    | Run tests                    |
+| `npm run test:watch`              | Run tests in watch mode      |
+| `npm run lint`                    | Run ESLint                   |
+| `npm run db:up` / `db:down`       | Start/stop local Postgres    |
+| `npm run redis:up` / `redis:down` | Start/stop local Redis       |
 | `npm run stack:up` / `stack:down` | Start/stop full Docker stack |
-| `npm run db:seed` | Seed cards and pack configs |
-| `npm run prisma:migrate:dev` | Create/apply DB migrations |
-| `npm run prisma:generate` | Regenerate Prisma client |
+| `npm run db:seed`                 | Seed cards and pack configs  |
+| `npm run prisma:migrate:dev`      | Create/apply DB migrations   |
+| `npm run prisma:generate`         | Regenerate Prisma client     |
 
 ### Project Structure
 
