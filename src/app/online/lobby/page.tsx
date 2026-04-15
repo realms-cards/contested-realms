@@ -37,6 +37,8 @@ import type {
   TournamentInfo as ProtocolTournamentInfo,
   SealedConfig,
   DraftConfig,
+  PlayerStanding,
+  TournamentRound,
 } from "@/lib/net/protocol";
 
 // Map context TournamentInfo to protocol TournamentInfo
@@ -58,6 +60,9 @@ function mapToProtocolTournament(tournament: {
     seatStatus?: string | null;
   }>;
   settings?: Record<string, unknown>;
+  standings?: PlayerStanding[];
+  currentRound?: number;
+  rounds?: TournamentRound[];
   createdAt: string;
   startedAt?: string;
   completedAt?: string;
@@ -119,13 +124,13 @@ function mapToProtocolTournament(tournament: {
     })(),
     maxPlayers: tournament.maxPlayers,
     registeredPlayers,
-    standings: [], // TODO: map when available
-    currentRound: 0, // TODO: map when available
+    standings: tournament.standings ?? [],
+    currentRound: tournament.currentRound ?? 0,
     totalRounds:
       typeof tournament.settings?.totalRounds === "number"
         ? tournament.settings.totalRounds
         : 3,
-    rounds: [], // TODO: map when available
+    rounds: tournament.rounds ?? [],
     // DB 'format' is the actual match type (constructed | sealed | draft)
     matchType: tournament.format as "sealed" | "draft" | "constructed",
     // Pass through configs when present so UI can display/use them if needed
@@ -188,6 +193,9 @@ interface TournamentsAPI {
       seatStatus?: string | null;
     }>;
     settings?: Record<string, unknown>;
+    standings?: PlayerStanding[];
+    currentRound?: number;
+    rounds?: TournamentRound[];
     createdAt: string;
     startedAt?: string;
     completedAt?: string;

@@ -1,9 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-// Note: This module handles dynamic game state and interaction payloads with varying structures.
-// Using 'any' types here is intentional to maintain runtime flexibility while the type system
-// is being gradually improved. Future work should introduce proper discriminated unions and
-// type guards to replace 'any' with 'unknown' + type narrowing.
-
+import type { PrismaClient } from "@prisma/client";
 import {
   getSeatForPlayer as _getSeatForPlayer,
   getPlayerIdForSeat as _getPlayerIdForSeat,
@@ -62,16 +57,22 @@ export const INTERACTION_DECISIONS = new Set([
 interface InteractionModuleDeps {
   io: import("socket.io").Server;
   rid: (prefix: string) => string;
-  enrichPatchWithCosts: (patch: any, prismaClient: any) => Promise<any>;
-  deepMergeReplaceArrays: (base: any, patch: any) => any;
-  finalizeMatch: (match: any, options?: any) => Promise<void> | void;
+  enrichPatchWithCosts: (
+    patch: MatchPatch | null,
+    prismaClient: PrismaClient,
+  ) => Promise<MatchPatch | null>;
+  deepMergeReplaceArrays: (base: JsonRecord, patch: MatchPatch) => JsonRecord;
+  finalizeMatch: (
+    match: MatchState & { status: string; matchType: string },
+    options?: JsonRecord,
+  ) => Promise<void> | void;
   persistMatchUpdate: (
-    match: any,
-    patch: any,
+    match: MatchState,
+    patch: MatchPatch,
     playerId: string,
     ts: number,
   ) => Promise<void>;
-  prisma: any;
+  prisma: PrismaClient;
   // Optional: functions to truncate replay data when snapshot is restored
   truncateRecordingAfter?: (matchId: string, afterTimestamp: number) => number;
   truncateActionsAfter?: (
@@ -82,6 +83,159 @@ interface InteractionModuleDeps {
 
 type JsonRecord = Record<string, unknown>;
 type MatchPatch = Record<string, unknown>;
+type Seat = "p1" | "p2";
+type GrantRequirement = "allowOpponentZoneWrite";
+
+interface PlayerLifeState extends JsonRecord {
+  life?: number;
+  lifeState?: string;
+}
+
+interface CardSnapshot extends JsonRecord {
+  name?: string;
+  type?: string;
+  slug?: string;
+  instanceId?: string;
+  cardId?: number;
+  variantId?: number;
+  owner?: string;
+}
+
+interface ZoneState extends JsonRecord {
+  hand?: CardSnapshot[];
+  spellbook?: CardSnapshot[];
+  atlas?: CardSnapshot[];
+  graveyard?: CardSnapshot[];
+  banished?: CardSnapshot[];
+}
+
+type MatchZones = Partial<Record<Seat, ZoneState>>;
+
+interface MatchGameState extends JsonRecord {
+  zones?: MatchZones;
+  players?: {
+    p1?: PlayerLifeState;
+    p2?: PlayerLifeState;
+  };
+  matchEnded?: boolean;
+}
+
+interface InteractionRequestMessage extends JsonRecord {
+  type: "interaction:request";
+  requestId: string;
+  matchId: string;
+  from: string;
+  to: string;
+  kind?: string;
+  createdAt?: number;
+  expiresAt?: number;
+}
+
+interface InteractionResponseMessage extends JsonRecord {
+  requestId: string;
+  matchId: string;
+  from: string;
+  to: string;
+  kind?: string;
+  decision?: string;
+  createdAt?: number;
+  respondedAt?: number;
+  expiresAt?: number;
+}
+
+interface InteractionGrant extends JsonRecord {
+  __grantId?: string;
+  requestId?: string;
+  kind?: string;
+  grantedBy?: string;
+  grantedTo?: string;
+  targetSeat?: Seat | null;
+  createdAt?: number;
+  expiresAt?: number | null;
+  singleUse?: boolean;
+  allowOpponentZoneWrite?: boolean;
+  allowRevealOpponentHand?: boolean;
+  lastUsed?: number;
+}
+
+interface InteractionEntry extends JsonRecord {
+  request: InteractionRequestMessage | null;
+  response: InteractionResponseMessage | null;
+  status: string;
+  proposedGrant: JsonRecord | null;
+  grant: InteractionGrant | null;
+  pendingAction: JsonRecord | null;
+  result: JsonRecord | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+interface MatchState extends JsonRecord {
+  id: string;
+  playerIds: string[];
+  status: string;
+  matchType: string;
+  game: MatchGameState;
+  lastTs?: number;
+  tournamentId?: string | null;
+  interactionRequests?: Map<string, InteractionEntry>;
+  interactionGrants?: Map<string, InteractionGrant[]>;
+}
+
+function isRecord(value: unknown): value is JsonRecord {
+  return typeof value === "object" && value !== null;
+}
+
+function isSeat(value: unknown): value is Seat {
+  return value === "p1" || value === "p2";
+}
+
+function getZoneState(zones: unknown, seat: Seat): ZoneState | null {
+  if (!isRecord(zones)) return null;
+  const seatZones = zones[seat];
+  return isRecord(seatZones) ? (seatZones as ZoneState) : null;
+}
+
+function toCardSnapshot(card: unknown): CardSnapshot {
+  if (!isRecord(card)) return {};
+  const out: CardSnapshot = {};
+  if (typeof card.name === "string") out.name = card.name;
+  if (typeof card.type === "string") out.type = card.type;
+  if (typeof card.slug === "string") out.slug = card.slug;
+  if (typeof card.instanceId === "string") out.instanceId = card.instanceId;
+  if (Number.isFinite(Number(card.cardId))) out.cardId = Number(card.cardId);
+  if (Number.isFinite(Number(card.variantId))) {
+    out.variantId = Number(card.variantId);
+  }
+  return out;
+}
+
+function getCardName(card: unknown): string {
+  return isRecord(card) && typeof card.name === "string" ? card.name : "Card";
+}
+
+function findCardIndex(cards: unknown[], instanceId: string): number {
+  return cards.findIndex(
+    (card) =>
+      isRecord(card) &&
+      typeof card.instanceId === "string" &&
+      card.instanceId === instanceId,
+  );
+}
+
+function getInteractionRequests(match: MatchState): Map<string, InteractionEntry> {
+  if (!(match.interactionRequests instanceof Map)) {
+    match.interactionRequests = new Map();
+  }
+  return match.interactionRequests;
+}
+
+function getInteractionGrants(match: MatchState): Map<string, InteractionGrant[]> {
+  if (!(match.interactionGrants instanceof Map)) {
+    match.interactionGrants = new Map();
+  }
+  return match.interactionGrants;
+}
 
 export function createInteractionModule({
   io,
@@ -93,8 +247,8 @@ export function createInteractionModule({
   prisma,
   truncateRecordingAfter,
   truncateActionsAfter,
-}: InteractionModuleDeps) {
-  function ensureInteractionState(match: any): void {
+	}: InteractionModuleDeps) {
+  function ensureInteractionState(match: MatchState): void {
     if (!match) return;
     if (!(match.interactionRequests instanceof Map)) {
       match.interactionRequests = new Map();
@@ -104,7 +258,10 @@ export function createInteractionModule({
     }
   }
 
-  function sanitizeGrantOptions(raw: any, fallbackSeat: any): any {
+  function sanitizeGrantOptions(
+    raw: unknown,
+    fallbackSeat: Seat | null,
+  ): JsonRecord | null {
     if (!raw || typeof raw !== "object") {
       if (!fallbackSeat) return null;
       return {
@@ -131,35 +288,32 @@ export function createInteractionModule({
     return result as JsonRecord;
   }
 
-  function purgeExpiredGrants(match: any, now: number) {
-    ensureInteractionState(match);
-    if (!match || !(match.interactionGrants instanceof Map)) return;
-    for (const [playerId, grants] of match.interactionGrants.entries()) {
+  function purgeExpiredGrants(match: MatchState, now: number) {
+    const interactionGrants = getInteractionGrants(match);
+    for (const [playerId, grants] of interactionGrants.entries()) {
       const filtered = Array.isArray(grants)
         ? grants.filter(
             (grant) => !grant || !grant.expiresAt || grant.expiresAt > now,
           )
         : [];
       if (filtered.length > 0) {
-        match.interactionGrants.set(playerId, filtered);
+        interactionGrants.set(playerId, filtered);
       } else {
-        match.interactionGrants.delete(playerId);
+        interactionGrants.delete(playerId);
       }
     }
   }
 
-  function detectOpponentZoneMutation(patch: any, actorSeat: any): boolean {
+  function detectOpponentZoneMutation(
+    patch: MatchPatch,
+    actorSeat: Seat | null,
+  ): boolean {
     if (!patch || typeof patch !== "object") return false;
     const opponentSeat = getOpponentSeat(actorSeat);
     if (!opponentSeat) return false;
     const zones = patch.zones;
-    if (
-      zones &&
-      typeof zones === "object" &&
-      zones[opponentSeat] &&
-      typeof zones[opponentSeat] === "object"
-    ) {
-      const zonePayload = zones[opponentSeat];
+    const zonePayload = getZoneState(zones, opponentSeat);
+    if (zonePayload) {
       for (const key of Object.keys(zonePayload)) {
         if (zonePayload[key] !== undefined) {
           return true;
@@ -167,34 +321,32 @@ export function createInteractionModule({
       }
     }
     const avatars = patch.avatars;
-    if (
-      avatars &&
-      typeof avatars === "object" &&
-      avatars[opponentSeat] &&
-      typeof avatars[opponentSeat] === "object"
-    ) {
-      if (Object.keys(avatars[opponentSeat]).length > 0) {
+    if (isRecord(avatars) && isRecord(avatars[opponentSeat])) {
+      if (Object.keys(avatars[opponentSeat] as JsonRecord).length > 0) {
         return true;
       }
     }
     return false;
   }
 
-  function collectInteractionRequirements(patch: any, actorSeat: any): any {
+  function collectInteractionRequirements(
+    patch: MatchPatch,
+    actorSeat: Seat | null,
+  ): { needsOpponentZoneWrite: boolean } {
     return {
       needsOpponentZoneWrite: detectOpponentZoneMutation(patch, actorSeat),
     };
   }
 
   function usePermitForRequirement(
-    match: any,
+    match: MatchState,
     playerId: string,
-    actorSeat: any,
-    requirement: string,
+    actorSeat: Seat | null,
+    requirement: GrantRequirement,
     now: number,
-  ) {
-    ensureInteractionState(match);
-    const grants = match.interactionGrants.get(playerId);
+  ): InteractionGrant | null {
+    const interactionGrants = getInteractionGrants(match);
+    const grants = interactionGrants.get(playerId);
     if (!Array.isArray(grants) || grants.length === 0) return null;
     const opponentSeat = getOpponentSeat(actorSeat);
     let consumedIndex = -1;
@@ -214,9 +366,9 @@ export function createInteractionModule({
     if (usableGrant.singleUse === true && consumedIndex > -1) {
       grants.splice(consumedIndex, 1);
       if (grants.length > 0) {
-        match.interactionGrants.set(playerId, grants);
+        interactionGrants.set(playerId, grants);
       } else {
-        match.interactionGrants.delete(playerId);
+        interactionGrants.delete(playerId);
       }
     }
     usableGrant.lastUsed = now;
@@ -224,20 +376,26 @@ export function createInteractionModule({
   }
 
   function createGrantRecord(
-    request: any,
-    response: any,
-    grantOpts: any,
+    request: InteractionRequestMessage,
+    response: InteractionResponseMessage,
+    grantOpts: JsonRecord | null,
     now: number,
-  ) {
+  ): InteractionGrant {
+    const targetSeat =
+      grantOpts && isSeat(grantOpts.targetSeat) ? grantOpts.targetSeat : null;
+    const expiresAt =
+      grantOpts && typeof grantOpts.expiresAt === "number"
+        ? grantOpts.expiresAt
+        : null;
     return {
       __grantId: rid("igr"),
       requestId: request.requestId,
       kind: request.kind,
       grantedBy: response.from,
       grantedTo: response.to,
-      targetSeat: grantOpts?.targetSeat ?? null,
+      targetSeat,
       createdAt: now,
-      expiresAt: grantOpts?.expiresAt ?? null,
+      expiresAt,
       singleUse: grantOpts?.singleUse === true,
       allowOpponentZoneWrite: grantOpts?.allowOpponentZoneWrite === true,
       allowRevealOpponentHand: grantOpts?.allowRevealOpponentHand === true,
@@ -245,45 +403,45 @@ export function createInteractionModule({
   }
 
   function recordInteractionRequest(
-    match: any,
-    message: any,
-    proposedGrant: any,
-    pendingAction: any,
-  ) {
-    ensureInteractionState(match);
-    const entry = match.interactionRequests.get(message.requestId) || {};
+    match: MatchState,
+    message: InteractionRequestMessage,
+    proposedGrant: JsonRecord | null,
+    pendingAction: JsonRecord | null,
+  ): void {
+    const interactionRequests = getInteractionRequests(match);
+    const entry = interactionRequests.get(message.requestId);
     const now = message.createdAt || Date.now();
-    match.interactionRequests.set(message.requestId, {
+    interactionRequests.set(message.requestId, {
       request: message,
-      response: entry.response || null,
+      response: entry?.response || null,
       status: "pending",
-      proposedGrant: proposedGrant || entry.proposedGrant || null,
-      grant: entry.grant || null,
-      pendingAction: pendingAction || entry.pendingAction || null,
-      result: entry.result || null,
-      createdAt: entry.createdAt || now,
+      proposedGrant: proposedGrant || entry?.proposedGrant || null,
+      grant: entry?.grant || null,
+      pendingAction: pendingAction || entry?.pendingAction || null,
+      result: entry?.result || null,
+      createdAt: entry?.createdAt || now,
       updatedAt: now,
     });
   }
 
   function recordInteractionResponse(
-    match: any,
-    response: any,
-    grantRecord: any,
-  ) {
-    ensureInteractionState(match);
-    const entry = match.interactionRequests.get(response.requestId) || {};
+    match: MatchState,
+    response: InteractionResponseMessage,
+    grantRecord: InteractionGrant | null,
+  ): void {
+    const interactionRequests = getInteractionRequests(match);
+    const entry = interactionRequests.get(response.requestId);
     const now = response.respondedAt || Date.now();
-    const next = {
-      request: entry.request || null,
+    const next: InteractionEntry = {
+      request: entry?.request || null,
       response,
-      status: response.decision,
-      proposedGrant: entry.proposedGrant || null,
-      grant: grantRecord || entry.grant || null,
-      pendingAction: entry.pendingAction || null,
-      result: entry.result || null,
+      status: response.decision ?? "cancelled",
+      proposedGrant: entry?.proposedGrant || null,
+      grant: grantRecord || entry?.grant || null,
+      pendingAction: entry?.pendingAction || null,
+      result: entry?.result || null,
       createdAt:
-        entry.createdAt || (entry.request && entry.request.createdAt) || now,
+        entry?.createdAt || (entry?.request && entry.request.createdAt) || now,
       updatedAt: now,
     };
     if (!next.request) {
@@ -298,10 +456,10 @@ export function createInteractionModule({
         expiresAt: response.expiresAt,
       };
     }
-    match.interactionRequests.set(response.requestId, next);
+    interactionRequests.set(response.requestId, next);
   }
 
-  function emitInteraction(matchId: string, message: any) {
+  function emitInteraction(matchId: string, message: JsonRecord) {
     const envelope = {
       type: "interaction",
       version: INTERACTION_VERSION,
@@ -313,17 +471,17 @@ export function createInteractionModule({
     io.to(room).emit("interaction", envelope);
   }
 
-  function emitInteractionResult(matchId: string, result: any) {
+  function emitInteractionResult(matchId: string, result: JsonRecord) {
     const room = `match:${matchId}`;
     io.to(room).emit("interaction:result", result);
   }
 
   function sanitizePendingAction(
     kind: string,
-    payload: any,
-    actorSeat: any,
+    payload: unknown,
+    actorSeat: Seat | null,
     requestingPlayerId: string,
-  ) {
+  ): JsonRecord | null {
     if (!payload || typeof payload !== "object") return null;
     const safe: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(payload)) {
@@ -338,42 +496,43 @@ export function createInteractionModule({
   }
 
   function getTopCards(
-    match: any,
-    seat: string,
+    match: MatchState,
+    seat: Seat,
     pile: string,
     count: number,
     from: string,
-  ) {
+  ): CardSnapshot[] {
     if (!match || !match.game || !match.game.zones) return [];
-    const zones = match.game.zones;
-    const seatZones = zones && typeof zones === "object" ? zones[seat] : null;
-    if (!seatZones || typeof seatZones !== "object") return [];
-    const list = Array.isArray(seatZones[pile]) ? [...seatZones[pile]] : [];
+    const seatZones = getZoneState(match.game.zones, seat);
+    if (!seatZones) return [];
+    const zoneCards = seatZones[pile];
+    const list = Array.isArray(zoneCards) ? [...zoneCards] : [];
     if (count <= 0) return [];
     if (from === "bottom") {
-      return list.slice(Math.max(0, list.length - count));
+      return list.slice(Math.max(0, list.length - count)).map(toCardSnapshot);
     }
-    return list.slice(0, count);
+    return list.slice(0, count).map(toCardSnapshot);
   }
 
-  async function applyPendingAction(match: any, entry: any, now: number) {
+  async function applyPendingAction(
+    match: MatchState,
+    entry: InteractionEntry,
+    now: number,
+  ) {
     if (!match || !entry || !entry.pendingAction) return null;
     const { pendingAction, request } = entry;
     if (!pendingAction || typeof pendingAction !== "object") return null;
     const kind = pendingAction.kind;
     const _actorSeat = pendingAction.actorSeat;
     const resultBase = {
-      requestId: request.requestId,
+      requestId: request?.requestId ?? "",
       matchId: match.id,
       kind,
       success: false,
       t: now,
     };
     if (kind === "takeFromPile") {
-      const seat =
-        pendingAction.seat === "p1" || pendingAction.seat === "p2"
-          ? pendingAction.seat
-          : null;
+      const seat = isSeat(pendingAction.seat) ? pendingAction.seat : null;
       const pile = pendingAction.pile === "atlas" ? "atlas" : "spellbook";
       const from = pendingAction.from === "bottom" ? "bottom" : "top";
       const rawCount = Number(pendingAction.count);
@@ -386,18 +545,7 @@ export function createInteractionModule({
           message: "Invalid seat for pile peek",
         };
       }
-      const cards = getTopCards(match, seat, pile, count, from).map((card) => {
-        if (!card || typeof card !== "object") return {};
-        const out: Record<string, unknown> = {};
-        if ((card as any).name) out.name = (card as any).name;
-        if ((card as any).type) out.type = (card as any).type;
-        if ((card as any).slug) out.slug = (card as any).slug;
-        if (Number.isFinite((card as any).cardId))
-          out.cardId = Number((card as any).cardId);
-        if (Number.isFinite((card as any).variantId))
-          out.variantId = Number((card as any).variantId);
-        return out;
-      });
+      const cards = getTopCards(match, seat, pile, count, from);
       return {
         ...resultBase,
         success: true,
@@ -412,10 +560,7 @@ export function createInteractionModule({
       };
     }
     if (kind === "inspectHand") {
-      const seat =
-        pendingAction.seat === "p1" || pendingAction.seat === "p2"
-          ? pendingAction.seat
-          : null;
+      const seat = isSeat(pendingAction.seat) ? pendingAction.seat : null;
       if (!seat) {
         return {
           ...resultBase,
@@ -423,18 +568,7 @@ export function createInteractionModule({
           message: "Invalid seat for hand inspect",
         };
       }
-      const cards = getTopCards(match, seat, "hand", 99, "top").map((card) => {
-        if (!card || typeof card !== "object") return {};
-        const out: Record<string, unknown> = {};
-        if ((card as any).name) out.name = (card as any).name;
-        if ((card as any).type) out.type = (card as any).type;
-        if ((card as any).slug) out.slug = (card as any).slug;
-        if (Number.isFinite((card as any).cardId))
-          out.cardId = Number((card as any).cardId);
-        if (Number.isFinite((card as any).variantId))
-          out.variantId = Number((card as any).variantId);
-        return out;
-      });
+      const cards = getTopCards(match, seat, "hand", 99, "top");
       return {
         ...resultBase,
         success: true,
@@ -449,10 +583,7 @@ export function createInteractionModule({
       };
     }
     if (kind === "inspectBanished") {
-      const seat =
-        pendingAction.seat === "p1" || pendingAction.seat === "p2"
-          ? pendingAction.seat
-          : null;
+      const seat = isSeat(pendingAction.seat) ? pendingAction.seat : null;
       if (!seat) {
         return {
           ...resultBase,
@@ -460,22 +591,7 @@ export function createInteractionModule({
           message: "Invalid seat for banished inspect",
         };
       }
-      const cards = getTopCards(match, seat, "banished", 99, "top").map(
-        (card) => {
-          if (!card || typeof card !== "object") return {};
-          const out: Record<string, unknown> = {};
-          if ((card as any).name) out.name = (card as any).name;
-          if ((card as any).type) out.type = (card as any).type;
-          if ((card as any).slug) out.slug = (card as any).slug;
-          if (typeof (card as any).instanceId === "string")
-            out.instanceId = (card as any).instanceId;
-          if (Number.isFinite((card as any).cardId))
-            out.cardId = Number((card as any).cardId);
-          if (Number.isFinite((card as any).variantId))
-            out.variantId = Number((card as any).variantId);
-          return out;
-        },
-      );
+      const cards = getTopCards(match, seat, "banished", 99, "top");
       return {
         ...resultBase,
         success: true,
@@ -490,10 +606,7 @@ export function createInteractionModule({
       };
     }
     if (kind === "unbanishCard") {
-      const seat =
-        pendingAction.seat === "p1" || pendingAction.seat === "p2"
-          ? pendingAction.seat
-          : null;
+      const seat = isSeat(pendingAction.seat) ? pendingAction.seat : null;
       const target = pendingAction.target === "hand" ? "hand" : "graveyard";
       const instanceId =
         typeof pendingAction.instanceId === "string"
@@ -507,15 +620,12 @@ export function createInteractionModule({
         };
       }
       try {
-        const zones = (match.game && match.game.zones) || {};
-        const seatZonesRaw =
-          zones && typeof zones === "object" ? (zones as any)[seat] : null;
+        const zones = match.game?.zones || {};
+        const seatZonesRaw = getZoneState(zones, seat);
         const banished = Array.isArray(seatZonesRaw?.banished)
           ? [...seatZonesRaw.banished]
           : [];
-        const idx = banished.findIndex(
-          (c: any) => c && typeof c === "object" && c.instanceId === instanceId,
-        );
+        const idx = findCardIndex(banished, instanceId);
         if (idx < 0) {
           return {
             ...resultBase,
@@ -549,8 +659,7 @@ export function createInteractionModule({
         const room = `match:${match.id}`;
         const enrichedPatch = await enrichPatchWithCosts(patch, prisma);
         io.to(room).emit("statePatch", { patch: enrichedPatch, t: now });
-        const name =
-          typeof (card as any)?.name === "string" ? (card as any).name : "Card";
+        const name = getCardName(card);
         return {
           ...resultBase,
           success: true,
@@ -566,10 +675,7 @@ export function createInteractionModule({
       }
     }
     if (kind === "graveyardAction") {
-      const seat =
-        pendingAction.seat === "p1" || pendingAction.seat === "p2"
-          ? pendingAction.seat
-          : null;
+      const seat = isSeat(pendingAction.seat) ? pendingAction.seat : null;
       const action = pendingAction.action;
       const instanceId =
         typeof pendingAction.instanceId === "string"
@@ -583,15 +689,12 @@ export function createInteractionModule({
         };
       }
       try {
-        const zones = (match.game && match.game.zones) || {};
-        const seatZonesRaw =
-          zones && typeof zones === "object" ? (zones as any)[seat] : null;
+        const zones = match.game?.zones || {};
+        const seatZonesRaw = getZoneState(zones, seat);
         const graveyard = Array.isArray(seatZonesRaw?.graveyard)
           ? [...seatZonesRaw.graveyard]
           : [];
-        const idx = graveyard.findIndex(
-          (c: any) => c && typeof c === "object" && c.instanceId === instanceId,
-        );
+        const idx = findCardIndex(graveyard, instanceId);
         if (idx < 0) {
           return {
             ...resultBase,
@@ -603,10 +706,9 @@ export function createInteractionModule({
         const moved = { ...(card || {}) } as Record<string, unknown>;
 
         // Determine target based on action
-        let patch: Record<string, unknown>;
+        let patch: MatchPatch;
         let message: string;
-        const name =
-          typeof (card as any)?.name === "string" ? (card as any).name : "Card";
+        const name = getCardName(card);
 
         if (action === "drawToHand") {
           // Move to requester's hand (the one who requested the action)
@@ -617,24 +719,11 @@ export function createInteractionModule({
           const requesterSeat =
             playerIds[0] === pendingAction.requestedBy ? "p1" : "p2";
           moved.owner = requesterSeat;
-          const requesterZonesRaw =
-            zones && typeof zones === "object"
-              ? (zones as any)[requesterSeat]
-              : null;
+          const requesterZonesRaw = getZoneState(zones, requesterSeat);
           const hand = Array.isArray(requesterZonesRaw?.hand)
             ? [...requesterZonesRaw.hand]
             : [];
           hand.push(moved);
-
-          console.log("[graveyardAction] drawToHand debug:", {
-            requestedBy: pendingAction.requestedBy,
-            playerIds,
-            requesterSeat,
-            opponentSeat: seat,
-            graveyardLengthAfterSplice: graveyard.length,
-            handLengthAfterPush: hand.length,
-            cardName: name,
-          });
 
           patch = {
             zones: {
@@ -742,15 +831,15 @@ export function createInteractionModule({
         "playerPositions",
       ]);
       let rk: string[] = [];
-      if (Array.isArray((src as any).__replaceKeys)) {
-        rk = ((src as any).__replaceKeys as unknown[])
+      if (Array.isArray(src.__replaceKeys)) {
+        rk = (src.__replaceKeys as unknown[])
           .map((k) => (typeof k === "string" ? k : null))
           .filter((k): k is string => !!k && allowedKeys.has(k));
       }
       if (!rk || rk.length === 0) {
         rk = Object.keys(patch).filter((k) => allowedKeys.has(k));
       }
-      (patch as any).__replaceKeys = rk;
+      patch.__replaceKeys = rk;
       try {
         // Truncate replay data BEFORE applying the snapshot
         // This removes all actions that happened after the snapshot point
@@ -781,10 +870,13 @@ export function createInteractionModule({
           for (const [k, v] of Object.entries(patch))
             if (!rk.includes(k)) mergePatch[k] = v;
           const nextGame = deepMergeReplaceArrays(match.game || {}, mergePatch);
-          for (const key of rk) (nextGame as any)[key] = (patch as any)[key];
-          match.game = nextGame;
+          for (const key of rk) nextGame[key] = patch[key];
+          match.game = nextGame as MatchGameState;
         } else {
-          match.game = deepMergeReplaceArrays(match.game || {}, patch);
+          match.game = deepMergeReplaceArrays(
+            match.game || {},
+            patch,
+          ) as MatchGameState;
         }
         match.lastTs = now;
         const room = `match:${match.id}`;
@@ -818,7 +910,7 @@ export function createInteractionModule({
 
         const g = match.game || {};
         const players =
-          g.players && typeof g.players === "object" ? g.players : {};
+          isRecord(g.players) ? g.players : {};
         const p1 = players.p1 || {};
         const p2 = players.p2 || {};
         const p1LS = typeof p1.lifeState === "string" ? p1.lifeState : null;
@@ -846,7 +938,9 @@ export function createInteractionModule({
         const enrichedPatch = await enrichPatchWithCosts(patch, prisma);
         io.to(room).emit("statePatch", { patch: enrichedPatch, t: now });
         try {
-          finalizeMatch(match, { isDraw: true });
+          finalizeMatch(match as MatchState & { status: string; matchType: string }, {
+            isDraw: true,
+          });
         } catch {}
         return {
           ...resultBase,

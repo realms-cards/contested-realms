@@ -140,19 +140,22 @@ export const linkCommand = {
         return;
       }
 
-      // TODO: Implement unlink API call
-      const embed = new EmbedBuilder()
-        .setColor(0xf59e0b)
-        .setTitle("⚠️ Unlink Account")
-        .setDescription(
-          "To unlink your Discord account, please visit your Realms.cards settings page."
-        )
-        .addFields({
-          name: "Settings",
-          value: "[Open Settings](https://realms.cards/settings)",
-        });
+      try {
+        await realmsApi.unlinkUserByDiscordId(interaction.user.id);
+        const embed = new EmbedBuilder()
+          .setColor(0x22c55e)
+          .setTitle("✅ Account Unlinked")
+          .setDescription(
+            "Your Discord account has been unlinked from Realms.cards."
+          );
 
-      await interaction.reply({ embeds: [embed], ephemeral: true });
+        await interaction.editReply({ embeds: [embed] });
+      } catch (err) {
+        console.error("[link] Unlink failed:", err);
+        await interaction.editReply({
+          content: "❌ Failed to unlink your account. Please try again later.",
+        });
+      }
     }
   },
 };

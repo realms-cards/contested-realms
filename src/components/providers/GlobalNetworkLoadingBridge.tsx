@@ -2,6 +2,15 @@
 
 import { useEffect, useRef } from "react";
 import { useLoadingContext } from "@/lib/contexts/LoadingContext";
+
+declare global {
+  interface Window {
+    __globalLoadingBridgePatched?: boolean;
+    __originalFetch?: typeof window.fetch;
+    __OriginalXHR?: typeof XMLHttpRequest;
+  }
+}
+
 export default function GlobalNetworkLoadingBridge() {
   const { startLoading, stopLoading } = useLoadingContext();
   const patchedRef = useRef(false);
@@ -10,9 +19,7 @@ export default function GlobalNetworkLoadingBridge() {
     if (patchedRef.current) return;
     if (typeof window === "undefined") return;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const w = window as any;
-    if (w.__globalLoadingBridgePatched) return;
+    if (window.__globalLoadingBridgePatched) return;
 
     const THRESHOLD_MS = 120;
 
@@ -28,9 +35,7 @@ export default function GlobalNetworkLoadingBridge() {
           if (v && v.toLowerCase() === "true") skipHeader = true;
         } catch {}
         try {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const R: any = Request;
-          if (R && input instanceof R) {
+          if (typeof Request !== "undefined" && input instanceof Request) {
             const h2 = new Headers((input as Request).headers);
             const v2 = h2.get("x-skip-loading-indicator");
             if (v2 && v2.toLowerCase() === "true") skipHeader = true;
@@ -38,7 +43,12 @@ export default function GlobalNetworkLoadingBridge() {
         } catch {}
         if (skipHeader) return false;
         // Normalize URL string
-        const urlStr = typeof input === "string" ? input : input instanceof URL ? input.toString() : String((input as Request).url ?? "");
+        const urlStr =
+          typeof input === "string"
+            ? input
+            : input instanceof URL
+              ? input.toString()
+              : input.url;
         if (!urlStr) return true;
         // Ignore Next.js internal assets and common static assets
         if (nextInternalPattern.test(urlStr)) return false;
@@ -51,8 +61,7 @@ export default function GlobalNetworkLoadingBridge() {
     };
 
     const originalFetch: typeof window.fetch = window.fetch.bind(window);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (window as any).__originalFetch = originalFetch;
+    window.__originalFetch = originalFetch;
     window.fetch = (async (...args: Parameters<typeof originalFetch>) => {
       let started = false;
       let timer: number | null = null;
@@ -123,23 +132,20 @@ export default function GlobalNetworkLoadingBridge() {
       }
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (window as any).__OriginalXHR = OriginalXHR;
+    window.__OriginalXHR = OriginalXHR;
     window.XMLHttpRequest = PatchedXHR as unknown as typeof XMLHttpRequest;
 
-    w.__globalLoadingBridgePatched = true;
+    window.__globalLoadingBridgePatched = true;
     patchedRef.current = true;
 
     return () => {
       try {
         if (typeof window !== "undefined") {
-          if ((window as never as { __originalFetch?: typeof window.fetch }).__originalFetch) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (window as any).fetch = (window as any).__originalFetch;
+          if (window.__originalFetch) {
+            window.fetch = window.__originalFetch;
           }
-          if ((window as never as { __OriginalXHR?: typeof XMLHttpRequest }).__OriginalXHR) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (window as any).XMLHttpRequest = (window as any).__OriginalXHR;
+          if (window.__OriginalXHR) {
+            window.XMLHttpRequest = window.__OriginalXHR;
           }
         }
       } catch {}

@@ -17,6 +17,37 @@ import { useTournamentPreparation } from "@/hooks/useTournamentPreparation";
 import { useTournamentSocket } from "@/hooks/useTournamentSocket";
 import { useTournamentStatistics } from "@/hooks/useTournamentStatistics";
 
+interface RegisteredTournamentPlayer {
+  id: string;
+  displayName: string;
+  ready?: boolean;
+  deckSubmitted?: boolean;
+  avatarUrl?: string | null;
+  avatar?: string | null;
+  image?: string | null;
+  name?: string | null;
+  seatStatus?: string | null;
+}
+
+interface TournamentStanding {
+  playerId: string;
+  displayName: string;
+  wins: number;
+  losses: number;
+  draws: number;
+  matchPoints: number;
+  gameWinPercentage: number;
+  opponentMatchWinPercentage: number;
+  currentMatchId?: string | null;
+  isEliminated: boolean;
+}
+
+interface TournamentRoundSummary {
+  roundNumber: number;
+  matches: string[];
+  status: "pending" | "in_progress" | "completed";
+}
+
 interface TournamentInfo {
   id: string;
   name: string;
@@ -36,7 +67,32 @@ interface TournamentInfo {
   userReady?: boolean;
   canJoin?: boolean;
   canStart?: boolean;
+  registeredPlayers?: RegisteredTournamentPlayer[];
+  standings?: TournamentStanding[];
+  currentRound?: number;
+  totalRounds?: number;
+  rounds?: TournamentRoundSummary[];
   draftSessionId?: string;
+}
+
+const SHOULD_LOG_TOURNAMENT_DEBUG = process.env.NODE_ENV !== "production";
+
+function logTournamentDebug(message: string, payload?: unknown): void {
+  if (!SHOULD_LOG_TOURNAMENT_DEBUG) return;
+  if (payload === undefined) {
+    console.log(message);
+    return;
+  }
+  console.log(message, payload);
+}
+
+function upsertRegisteredPlayer(
+  players: RegisteredTournamentPlayer[] | undefined,
+  player: RegisteredTournamentPlayer,
+): RegisteredTournamentPlayer[] {
+  const existing = players ?? [];
+  const without = existing.filter((entry) => entry.id !== player.id);
+  return [...without, player];
 }
 
 interface RealtimeTournamentContextValue {
@@ -428,9 +484,9 @@ export function RealtimeTournamentProvider({
       setCurrentTournamentState((prev) => {
         if (!prev || prev.id !== data.tournamentId) return prev;
         return {
-          ...(prev as unknown as Record<string, unknown>),
+          ...prev,
           draftSessionId: data.draftSessionId,
-        } as unknown as TournamentInfo;
+        };
       });
       // Trust socket data - no HTTP refresh needed
       setLastUpdated(new Date().toISOString());
@@ -451,11 +507,7 @@ export function RealtimeTournamentProvider({
       const activeId = activeTournamentId;
       if (!activeId || activeId !== data.tournamentId) return;
 
-      const registered = (
-        currentTournament as unknown as {
-          registeredPlayers?: Array<{ id: string }>;
-        }
-      )?.registeredPlayers;
+      const registered = currentTournament?.registeredPlayers;
       if (
         Array.isArray(registered) &&
         !registered.some((p) => p.id === currentUserId)
@@ -618,7 +670,7 @@ export function RealtimeTournamentProvider({
       newStatus: string;
       timestamp: string;
     }) => {
-      console.log("Tournament phase changed:", data);
+      logTournamentDebug("Tournament phase changed:", data);
 
       // Update tournament status
       setTournaments((prev) =>
@@ -697,56 +749,34 @@ export function RealtimeTournamentProvider({
       playerName: string;
       currentPlayerCount: number;
     }) => {
-      console.log("Player joined tournament:", data);
+      logTournamentDebug("Player joined tournament:", data);
       setTournaments((prev) =>
         prev.map((t) => {
           if (t.id !== data.tournamentId) return t;
-          const reg =
-            (
-              t as unknown as {
-                registeredPlayers?: Array<{
-                  id: string;
-                  displayName: string;
-                  ready?: boolean;
-                }>;
-              }
-            ).registeredPlayers || [];
-          const without = reg.filter((p) => p.id !== data.playerId);
-          const updated = [
-            ...without,
-            { id: data.playerId, displayName: data.playerName, ready: false },
-          ];
           return {
-            ...(t as unknown as Record<string, unknown>),
+            ...t,
             currentPlayers: data.currentPlayerCount,
-            registeredPlayers: updated,
-          } as unknown as TournamentInfo;
+            registeredPlayers: upsertRegisteredPlayer(t.registeredPlayers, {
+              id: data.playerId,
+              displayName: data.playerName,
+              ready: false,
+            }),
+          };
         }),
       );
       // Trust socket data - no HTTP refresh needed
       // Update current tournament if it matches
       setCurrentTournamentState((prev) => {
         if (!prev || prev.id !== data.tournamentId) return prev;
-        const reg =
-          (
-            prev as unknown as {
-              registeredPlayers?: Array<{
-                id: string;
-                displayName: string;
-                ready?: boolean;
-              }>;
-            }
-          ).registeredPlayers || [];
-        const without = reg.filter((p) => p.id !== data.playerId);
-        const updated = [
-          ...without,
-          { id: data.playerId, displayName: data.playerName, ready: false },
-        ];
         return {
-          ...(prev as unknown as Record<string, unknown>),
+          ...prev,
           currentPlayers: data.currentPlayerCount,
-          registeredPlayers: updated,
-        } as unknown as TournamentInfo;
+          registeredPlayers: upsertRegisteredPlayer(prev.registeredPlayers, {
+            id: data.playerId,
+            displayName: data.playerName,
+            ready: false,
+          }),
+        };
       });
       setLastUpdated(new Date().toISOString());
       setRealtimeEvents((prev) => ({
@@ -766,47 +796,29 @@ export function RealtimeTournamentProvider({
       playerName: string;
       currentPlayerCount: number;
     }) => {
-      console.log("Player left tournament:", data);
+      logTournamentDebug("Player left tournament:", data);
       setTournaments((prev) =>
         prev.map((t) => {
           if (t.id !== data.tournamentId) return t;
-          const reg =
-            (
-              t as unknown as {
-                registeredPlayers?: Array<{
-                  id: string;
-                  displayName: string;
-                  ready?: boolean;
-                }>;
-              }
-            ).registeredPlayers || [];
-          const updated = reg.filter((p) => p.id !== data.playerId);
           return {
-            ...(t as unknown as Record<string, unknown>),
+            ...t,
             currentPlayers: data.currentPlayerCount,
-            registeredPlayers: updated,
-          } as unknown as TournamentInfo;
+            registeredPlayers: (t.registeredPlayers ?? []).filter(
+              (player) => player.id !== data.playerId,
+            ),
+          };
         }),
       );
       // Trust socket data - no HTTP refresh needed
       setCurrentTournamentState((prev) => {
         if (!prev || prev.id !== data.tournamentId) return prev;
-        const reg =
-          (
-            prev as unknown as {
-              registeredPlayers?: Array<{
-                id: string;
-                displayName: string;
-                ready?: boolean;
-              }>;
-            }
-          ).registeredPlayers || [];
-        const updated = reg.filter((p) => p.id !== data.playerId);
         return {
-          ...(prev as unknown as Record<string, unknown>),
+          ...prev,
           currentPlayers: data.currentPlayerCount,
-          registeredPlayers: updated,
-        } as unknown as TournamentInfo;
+          registeredPlayers: (prev.registeredPlayers ?? []).filter(
+            (player) => player.id !== data.playerId,
+          ),
+        };
       });
       try {
         const hostId = currentTournament?.creatorId || null;
@@ -843,24 +855,14 @@ export function RealtimeTournamentProvider({
       readyPlayerCount: number;
       totalPlayerCount: number;
     }) => {
-      console.log("Preparation update:", data);
+      logTournamentDebug("Preparation update:", data);
       const isReady =
         data.preparationStatus === "ready" || data.deckSubmitted === true;
       setTournaments((prev) =>
         prev.map((t) => {
           if (t.id !== data.tournamentId) return t;
-          const reg = (
-            t as unknown as {
-              registeredPlayers?: Array<{
-                id: string;
-                displayName: string;
-                ready?: boolean;
-                deckSubmitted?: boolean;
-              }>;
-            }
-          ).registeredPlayers;
-          if (!Array.isArray(reg)) return t;
-          const updated = reg.map((p) =>
+          if (!Array.isArray(t.registeredPlayers)) return t;
+          const updated = t.registeredPlayers.map((p) =>
             p.id === data.playerId
               ? {
                   ...p,
@@ -870,24 +872,15 @@ export function RealtimeTournamentProvider({
               : p,
           );
           return {
-            ...(t as unknown as Record<string, unknown>),
+            ...t,
             registeredPlayers: updated,
-          } as unknown as TournamentInfo;
+          };
         }),
       );
       // Trust socket data - no HTTP refresh needed
       // Update current tournament mirror if present
       if (currentTournament?.id === data.tournamentId) {
-        const reg = (
-          currentTournament as unknown as {
-            registeredPlayers?: Array<{
-              id: string;
-              displayName: string;
-              ready?: boolean;
-              deckSubmitted?: boolean;
-            }>;
-          }
-        ).registeredPlayers;
+        const reg = currentTournament.registeredPlayers;
         if (Array.isArray(reg)) {
           const updated = reg.map((p) =>
             p.id === data.playerId
@@ -899,9 +892,9 @@ export function RealtimeTournamentProvider({
               : p,
           );
           setCurrentTournamentState({
-            ...(currentTournament as unknown as Record<string, unknown>),
+            ...currentTournament,
             registeredPlayers: updated,
-          } as unknown as TournamentInfo);
+          });
         }
       }
       // Refresh preparation status only on significant milestones
@@ -930,7 +923,7 @@ export function RealtimeTournamentProvider({
       rounds?: unknown;
       [key: string]: unknown;
     }) => {
-      console.log("Statistics updated:", data);
+      logTournamentDebug("Statistics updated:", data);
       if (currentTournament?.id === data.tournamentId) {
         queueStatisticsRefresh({
           standings: true,
@@ -956,7 +949,7 @@ export function RealtimeTournamentProvider({
         player2Name: string | null;
       }>;
     }) => {
-      console.log("Round started:", data);
+      logTournamentDebug("Round started:", data);
 
       if (currentTournament?.id === data.tournamentId) {
         // Refresh matches/rounds so Join button appears
@@ -992,7 +985,7 @@ export function RealtimeTournamentProvider({
       opponentName: string | null;
       lobbyName: string;
     }) => {
-      console.log("Match assigned:", data);
+      logTournamentDebug("Match assigned:", data);
       if (currentTournament?.id === data.tournamentId) {
         // Refresh matches so Join button appears
         queueStatisticsRefresh({ matches: true });
@@ -1061,7 +1054,10 @@ export function RealtimeTournamentProvider({
       action: string;
       tournamentId?: string;
     }) => {
-      console.log("[RealtimeTournamentContext] Tournament list changed:", data);
+      logTournamentDebug(
+        "[RealtimeTournamentContext] Tournament list changed:",
+        data,
+      );
       // Refresh tournament list when server announces changes
       refreshTournamentsDebounced(500);
     };
@@ -1071,7 +1067,10 @@ export function RealtimeTournamentProvider({
       name: string;
       format: string;
     }) => {
-      console.log("[RealtimeTournamentContext] New tournament created:", data);
+      logTournamentDebug(
+        "[RealtimeTournamentContext] New tournament created:",
+        data,
+      );
       // Immediately refresh to show new tournament
       refreshTournamentsDebounced(200);
     };
@@ -1145,7 +1144,7 @@ export function RealtimeTournamentProvider({
 
     // If we just navigated TO a tournament page, refresh the list
     if (isOnTournamentPage && !wasOnPage) {
-      console.log(
+      logTournamentDebug(
         "[RealtimeTournamentContext] Entered tournament page, refreshing list",
       );
       void refreshTournaments();
@@ -1158,10 +1157,13 @@ export function RealtimeTournamentProvider({
     const id = activeTournamentId;
     if (!id) return;
     if (joinedTournamentIdRef.current === id) {
-      console.log("[RealtimeTournamentContext] Already joined tournament:", id);
+      logTournamentDebug(
+        "[RealtimeTournamentContext] Already joined tournament:",
+        id,
+      );
       return;
     }
-    console.log("[RealtimeTournamentContext] Auto-joining tournament:", id);
+    logTournamentDebug("[RealtimeTournamentContext] Auto-joining tournament:", id);
     joinedTournamentIdRef.current = id;
     socketJoinTournament(id);
   }, [isConnected, activeTournamentId, socketJoinTournament]);
@@ -1188,7 +1190,7 @@ export function RealtimeTournamentProvider({
       setError(null);
 
       try {
-        console.log("Creating tournament:", config);
+        logTournamentDebug("Creating tournament:", config);
 
         const response = await fetch("/api/tournaments", {
           method: "POST",
@@ -1202,7 +1204,7 @@ export function RealtimeTournamentProvider({
         }
 
         const tournament = await response.json();
-        console.log("Tournament created:", tournament);
+        logTournamentDebug("Tournament created:", tournament);
         // Join this tournament room to receive real-time updates immediately
         try {
           socketJoinTournament(tournament.id);
@@ -1245,7 +1247,7 @@ export function RealtimeTournamentProvider({
       setError(null);
 
       try {
-        console.log("Joining tournament:", tournamentId);
+        logTournamentDebug("Joining tournament:", tournamentId);
 
         const response = await fetch(`/api/tournaments/${tournamentId}/join`, {
           method: "POST",
@@ -1257,7 +1259,7 @@ export function RealtimeTournamentProvider({
           throw new Error(error.error || "Failed to join tournament");
         }
 
-        console.log("Joined tournament successfully");
+        logTournamentDebug("Joined tournament successfully");
         // Join the tournament room immediately for real-time updates
         try {
           socketJoinTournament(tournamentId);
@@ -1297,7 +1299,7 @@ export function RealtimeTournamentProvider({
       setError(null);
 
       try {
-        console.log("Leaving tournament:", tournamentId);
+        logTournamentDebug("Leaving tournament:", tournamentId);
 
         const response = await fetch(`/api/tournaments/${tournamentId}/leave`, {
           method: "POST",
@@ -1309,7 +1311,7 @@ export function RealtimeTournamentProvider({
           throw new Error(error.error || "Failed to leave tournament");
         }
 
-        console.log("Left tournament successfully");
+        logTournamentDebug("Left tournament successfully");
 
         // Leave socket room
         socketLeaveTournament(tournamentId);
@@ -1338,7 +1340,7 @@ export function RealtimeTournamentProvider({
       setError(null);
 
       try {
-        console.log("Starting tournament:", tournamentId);
+        logTournamentDebug("Starting tournament:", tournamentId);
 
         const response = await fetch(`/api/tournaments/${tournamentId}/start`, {
           method: "POST",
@@ -1350,7 +1352,7 @@ export function RealtimeTournamentProvider({
           throw new Error(error.error || "Failed to start tournament");
         }
 
-        console.log("Tournament started successfully");
+        logTournamentDebug("Tournament started successfully");
         // Join the room to receive tournament-scoped updates immediately
         try {
           socketJoinTournament(tournamentId);
@@ -1381,7 +1383,7 @@ export function RealtimeTournamentProvider({
       setError(null);
 
       try {
-        console.log("Ending tournament:", tournamentId);
+        logTournamentDebug("Ending tournament:", tournamentId);
 
         const response = await fetch(`/api/tournaments/${tournamentId}/end`, {
           method: "POST",
@@ -1393,7 +1395,7 @@ export function RealtimeTournamentProvider({
           throw new Error(error.error || "Failed to end tournament");
         }
 
-        console.log("Tournament ended successfully");
+        logTournamentDebug("Tournament ended successfully");
         if (!isConnected) {
           refreshTournamentsDebounced();
         }
@@ -1415,7 +1417,7 @@ export function RealtimeTournamentProvider({
       setError(null);
 
       try {
-        console.log("Updating tournament settings:", {
+        logTournamentDebug("Updating tournament settings:", {
           tournamentId,
           settings,
         });
@@ -1436,7 +1438,7 @@ export function RealtimeTournamentProvider({
           );
         }
 
-        console.log("Tournament settings updated successfully");
+        logTournamentDebug("Tournament settings updated successfully");
         if (!isConnected) {
           refreshTournamentsDebounced();
         }
@@ -1497,7 +1499,7 @@ export function RealtimeTournamentProvider({
       setError(null);
 
       try {
-        console.log("Toggling tournament ready status:", {
+        logTournamentDebug("Toggling tournament ready status:", {
           tournamentId,
           ready,
         });

@@ -1,17 +1,22 @@
-import { getServerAuthSession } from '@/lib/auth';
+import { getAdminSession } from '@/lib/admin/auth';
 import { getPerformanceStats, exportPerformanceMetrics } from '@/lib/monitoring/performance';
 
 // GET /api/monitoring/performance
 // Returns performance statistics (admin only)
 export async function GET() {
-  const session = await getServerAuthSession();
+  const { session, isAdmin } = await getAdminSession();
 
-  // Only allow admin users to view performance metrics
-  // TODO: Add proper admin check when role system is implemented
   if (!session?.user) {
     return new Response(
       JSON.stringify({ error: 'Unauthorized' }),
       { status: 401, headers: { 'content-type': 'application/json' } }
+    );
+  }
+
+  if (!isAdmin) {
+    return new Response(
+      JSON.stringify({ error: 'Forbidden' }),
+      { status: 403, headers: { 'content-type': 'application/json' } }
     );
   }
 

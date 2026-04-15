@@ -4,12 +4,9 @@
     header {
         -Server
     }
-    # Temporarily disable load balancing - send all traffic to server1
-    # TODO: Implement proper sticky sessions for Socket.IO
+    # Keep Socket.IO on a single upstream until sticky sessions are configured.
     reverse_proxy {
         to server1:3010
-        to server2:3010
-        lb_policy round_robin
         health_uri /healthz
         transport http {
             read_timeout 3m

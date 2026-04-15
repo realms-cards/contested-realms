@@ -149,6 +149,10 @@ export class RealmsApiClient {
     }
   }
 
+  async unlinkUserByDiscordId(discordId: string): Promise<void> {
+    await this.request("DELETE", `/api/bot/users/by-discord/${discordId}`);
+  }
+
   /**
    * Get user by Realms.cards user ID.
    */

@@ -3,6 +3,7 @@
 import type { PrismaClient } from "@prisma/client";
 import type Redis from "ioredis";
 import type { Server as SocketIOServer } from "socket.io";
+import { debugLog } from "../metrics";
 import type {
   MatchConsoleEvent,
   MatchPermanents,
@@ -583,7 +584,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
     ensureInteractionState,
     purgeExpiredGrants,
     collectInteractionRequirements,
-    usePermitForRequirement,
+    usePermitForRequirement: consumePermitForRequirement,
     sanitizeGrantOptions,
     sanitizePendingAction,
     recordInteractionRequest,
@@ -1326,8 +1327,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
             ? (patchRecord.__allowZoneSeats as string[])
             : [];
 
-          // DEBUG: Log zone update handling
-          console.log("[match-leader] Zone update received:", {
+          debugLog("[match-leader] Zone update received:", {
             matchId,
             actorSeat,
             incomingZoneKeys: Object.keys(incomingZones),
@@ -1400,7 +1400,6 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
           }
         }
 
-        // DEBUG: Log patch before deep merge
         if (patchToApply.zones) {
           type ZoneLike = Record<
             string,
@@ -1415,7 +1414,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
           const patchP2Hand = patchZones?.p2?.hand || [];
           const baseP1Hand = baseZones?.p1?.hand || [];
           const baseP2Hand = baseZones?.p2?.hand || [];
-          console.log("[match-leader] Before deep merge:", {
+          debugLog("[match-leader] Before deep merge:", {
             patchP1HandCount: patchP1Hand.length,
             patchP2HandCount: patchP2Hand.length,
             baseP1HandCount: baseP1Hand.length,
@@ -1436,12 +1435,11 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
         );
         match.game = mergedGame as MatchGameState;
 
-        // DEBUG: Log zones state after merge
         if (patchToApply.zones) {
           type CardLike = { name?: string; cardId?: string };
           const p1Hand = (match.game.zones?.p1?.hand || []) as CardLike[];
           const p2Hand = (match.game.zones?.p2?.hand || []) as CardLike[];
-          console.log("[match-leader] Zones after merge:", {
+          debugLog("[match-leader] Zones after merge:", {
             patchHadZones: !!patchToApply.zones,
             p1HandCount: p1Hand.length,
             p2HandCount: p2Hand.length,
@@ -1537,8 +1535,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
           match.status === "in_progress" &&
           !isSnapshot;
         if (shouldEnforceInteraction && requirements.needsOpponentZoneWrite) {
-          // eslint-disable-next-line react-hooks/rules-of-hooks
-          const grant = usePermitForRequirement(
+          const grant = consumePermitForRequirement(
             match,
             playerId,
             actorSeat,
@@ -1693,7 +1690,6 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
         const sender = players.get(playerId);
         const senderSocketId = sender?.socketId;
 
-        // DEBUG: Log what patch is being broadcast
         if (enrichedPatchToApply.zones) {
           type ZoneLike = Record<
             string,
@@ -1701,7 +1697,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
           >;
           const patchZones = enrichedPatchToApply.zones as ZoneLike;
           const patchRecord = enrichedPatchToApply as Record<string, unknown>;
-          console.log("[match-leader] Broadcasting zones patch:", {
+          debugLog("[match-leader] Broadcasting zones patch:", {
             patchZoneKeys: Object.keys(patchZones || {}),
             hasP1: !!patchZones?.p1,
             hasP2: !!patchZones?.p2,
