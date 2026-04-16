@@ -33,6 +33,7 @@ import {
   useSharedTournament,
   useSoatcStatus,
 } from "@/lib/hooks/useSoatcStatus";
+import { buildLobbyInviteUrl, getLobbyJoinId } from "@/lib/lobby-links";
 import type {
   TournamentInfo as ProtocolTournamentInfo,
   SealedConfig,
@@ -256,7 +257,7 @@ function LobbyPageContent({
   } = useOnline();
 
   // Check for invite link params
-  const inviteLobbyId = searchParams?.get("invite") ?? null;
+  const inviteLobbyId = getLobbyJoinId(searchParams);
   const inviteTournamentId = searchParams?.get("tournament") ?? null;
   const [showIneligibleModal, setShowIneligibleModal] = useState(false);
   const [ineligibleReason, setIneligibleReason] = useState<string>("");
@@ -677,6 +678,7 @@ function LobbyPageContent({
   );
 
   const prevLobbyIdRef = useRef<string | null>(null);
+  const inviteJoinAttemptRef = useRef<string | null>(null);
 
   // Overlay for configuring and confirming match start (host)
   const [configOpen, setConfigOpen] = useState(false);
@@ -893,6 +895,29 @@ function LobbyPageContent({
     sharedTournament?.tournament,
     lobby?.soatcLeagueMatch,
     joinedLobby,
+  ]);
+
+  useEffect(() => {
+    if (!inviteLobbyId || inviteTournamentId || !connected || !me?.id) return;
+    if (lobby?.id === inviteLobbyId) {
+      inviteJoinAttemptRef.current = inviteLobbyId;
+      return;
+    }
+    if (inviteJoinAttemptRef.current === inviteLobbyId) return;
+    inviteJoinAttemptRef.current = inviteLobbyId;
+    joinLobby(inviteLobbyId).catch((error) => {
+      console.error("Failed to join invite lobby:", error);
+      if (inviteJoinAttemptRef.current === inviteLobbyId) {
+        inviteJoinAttemptRef.current = null;
+      }
+    });
+  }, [
+    inviteLobbyId,
+    inviteTournamentId,
+    connected,
+    me?.id,
+    lobby?.id,
+    joinLobby,
   ]);
 
   // Handle invite link with SOATC tournament eligibility check
@@ -1243,13 +1268,13 @@ function LobbyPageContent({
                   className="rounded-lg bg-amber-600/20 hover:bg-amber-600/30 ring-1 ring-amber-500/50 px-3 py-1.5 text-xs font-medium text-amber-200 transition-colors shrink-0"
                   onClick={() => {
                     if (lobby?.soatcLeagueMatch?.tournamentId) {
-                      const inviteUrl = `${
-                        window.location.origin
-                      }/online/lobby?invite=${encodeURIComponent(
+                      const inviteUrl = buildLobbyInviteUrl(
+                        window.location.origin,
                         lobby.id,
-                      )}&tournament=${encodeURIComponent(
-                        lobby.soatcLeagueMatch.tournamentId,
-                      )}`;
+                        {
+                          tournamentId: lobby.soatcLeagueMatch.tournamentId,
+                        },
+                      );
                       navigator.clipboard.writeText(inviteUrl);
                       alert(
                         "Invite link copied! Share with tournament participants.",
@@ -1690,19 +1715,21 @@ function LobbyPageContent({
                             <input
                               type="text"
                               readOnly
-                              value={`${window.location.origin}/online/lobby?invite=${lobby.id}&tournament=${selectedTournament.id}`}
+                              value={buildLobbyInviteUrl(
+                                window.location.origin,
+                                lobby.id,
+                                { tournamentId: selectedTournament.id },
+                              )}
                               className="flex-1 bg-slate-900/60 ring-1 ring-amber-500/30 rounded px-2 py-1.5 text-xs font-mono text-slate-200"
                             />
                             <button
                               className="rounded-lg bg-amber-600/20 hover:bg-amber-600/30 ring-1 ring-amber-500/50 px-3 py-1.5 text-xs font-medium text-amber-200 transition-colors"
                               onClick={() => {
-                                const inviteUrl = `${
-                                  window.location.origin
-                                }/online/lobby?invite=${encodeURIComponent(
+                                const inviteUrl = buildLobbyInviteUrl(
+                                  window.location.origin,
                                   lobby.id,
-                                )}&tournament=${encodeURIComponent(
-                                  selectedTournament.id,
-                                )}`;
+                                  { tournamentId: selectedTournament.id },
+                                );
                                 navigator.clipboard.writeText(inviteUrl);
                                 alert("Invite link copied!");
                               }}

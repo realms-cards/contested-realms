@@ -89,6 +89,11 @@ export type QueueConfirmationResponse = z.infer<
   typeof QueueConfirmationResponseSchema
 >;
 
+type LobbyUrlOptions = {
+  format?: string | null;
+  tournamentId?: string | null;
+};
+
 export class RealmsApiClient {
   private baseUrl: string;
   private secret: string;
@@ -98,11 +103,15 @@ export class RealmsApiClient {
     this.secret = secret;
   }
 
-  buildLobbyUrl(lobbyId: string): string {
-    const url = new URL(
-      `/online/lobby?invite=${encodeURIComponent(lobbyId)}`,
-      this.baseUrl,
-    );
+  buildLobbyUrl(lobbyId: string, options: LobbyUrlOptions = {}): string {
+    const params = new URLSearchParams({ invite: lobbyId });
+    if (options.format) {
+      params.set("format", options.format);
+    }
+    if (options.tournamentId) {
+      params.set("tournament", options.tournamentId);
+    }
+    const url = new URL(`/online/lobby?${params.toString()}`, this.baseUrl);
     return url.toString();
   }
 

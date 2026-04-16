@@ -10,6 +10,7 @@ import {
 } from "react";
 import { useOnline } from "@/app/online/online-context";
 import InviteToast from "@/components/online/InviteToast";
+import { buildLobbyInvitePath } from "@/lib/lobby-links";
 import type { LobbyInvitePayloadT, PlayerLocation } from "@/lib/net/protocol";
 import { notifyLobbyInvite } from "@/lib/notifications/browserNotifications";
 
@@ -87,7 +88,7 @@ export function PresenceProvider({
       setLocalInvites((prev) => {
         const key = `${invite.lobbyId}:${invite.from.id}`;
         const exists = prev.some(
-          (inv) => `${inv.lobbyId}:${inv.from.id}` === key
+          (inv) => `${inv.lobbyId}:${inv.from.id}` === key,
         );
         if (exists) return prev;
         return [...prev, invite];
@@ -107,7 +108,7 @@ export function PresenceProvider({
         transport.setLocation?.(newLocation);
       }
     },
-    [transport, connected]
+    [transport, connected],
   );
 
   const dismissInvite = useCallback((lobbyId: string) => {
@@ -117,9 +118,9 @@ export function PresenceProvider({
   const handleAcceptInvite = useCallback(
     (invite: LobbyInvitePayloadT) => {
       dismissInvite(invite.lobbyId);
-      router.push(`/online/lobby?join=${invite.lobbyId}`);
+      router.push(buildLobbyInvitePath(invite.lobbyId));
     },
-    [dismissInvite, router]
+    [dismissInvite, router],
   );
 
   const handleDeclineInvite = useCallback(
@@ -129,7 +130,7 @@ export function PresenceProvider({
       }
       dismissInvite(invite.lobbyId);
     },
-    [transport, dismissInvite]
+    [transport, dismissInvite],
   );
 
   const handlePostponeInvite = useCallback(
@@ -139,7 +140,7 @@ export function PresenceProvider({
       }
       dismissInvite(invite.lobbyId);
     },
-    [transport, dismissInvite]
+    [transport, dismissInvite],
   );
 
   const value: PresenceContextValue = {

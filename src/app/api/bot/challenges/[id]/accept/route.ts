@@ -6,6 +6,7 @@
 import { randomBytes } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { validateBotAuth, botAuthError } from "@/lib/bot-auth";
+import { buildLobbyInviteUrl } from "@/lib/lobby-links";
 import { prisma } from "@/lib/prisma";
 
 export async function POST(
@@ -82,7 +83,9 @@ export async function POST(
       },
     });
 
-    const joinUrl = `${baseUrl}/online/lobby?invite=${encodeURIComponent(lobbyId)}&format=${encodeURIComponent(challenge.format)}`;
+    const joinUrl = buildLobbyInviteUrl(baseUrl, lobbyId, {
+      format: challenge.format,
+    });
 
     return NextResponse.json({
       matchId: lobbyId,
