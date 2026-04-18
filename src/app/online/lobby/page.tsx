@@ -1931,8 +1931,6 @@ function LobbyPageContent({
                             setDraftConfig((prev) => ({
                               ...prev,
                               packCount: nextCount,
-                              packCounts: label ? { [label]: nextCount } : {},
-                              setMix: label ? [label] : prev.setMix,
                             }));
                           }}
                           className="w-full"
