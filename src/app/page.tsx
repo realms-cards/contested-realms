@@ -8,6 +8,7 @@ import AsciiBottomArt from "@/components/ui/AsciiBottomArt";
 import AsciiLogo from "@/components/ui/AsciiLogo";
 import AsciiMarquee from "@/components/ui/AsciiMarquee";
 import AsciiPanel from "@/components/ui/AsciiPanel";
+import LobbyFooter from "@/components/ui/LobbyFooter";
 import OtherRealms from "@/components/ui/OtherRealms";
 import { FEATURE_CPU_BOTS } from "@/lib/config/features";
 
@@ -17,7 +18,7 @@ export default function Home() {
   // Start with null (hidden) to avoid hydration mismatch, then show after mount if not dismissed
   const [showAlphaBanner, setShowAlphaBanner] = useState<boolean | null>(null);
   const [showCookieNotice, setShowCookieNotice] = useState<boolean | null>(
-    null
+    null,
   );
 
   // Sync with localStorage after mount to avoid hydration mismatch
@@ -25,11 +26,11 @@ export default function Home() {
     document.title = "Realms.cards";
     try {
       const alphaDismissed = window.localStorage.getItem(
-        "sorcery:alphaBannerDismissed"
+        "sorcery:alphaBannerDismissed",
       );
       setShowAlphaBanner(alphaDismissed !== "1");
       const cookieDismissed = window.localStorage.getItem(
-        "sorcery:cookieNoticeDismissed"
+        "sorcery:cookieNoticeDismissed",
       );
       setShowCookieNotice(cookieDismissed !== "1");
     } catch {
@@ -58,7 +59,7 @@ export default function Home() {
                   try {
                     window.localStorage.setItem(
                       "sorcery:alphaBannerDismissed",
-                      "1"
+                      "1",
                     );
                   } catch {}
                   setShowAlphaBanner(false);
@@ -242,46 +243,7 @@ export default function Home() {
           </p>
           <p />
         </div>
-
-        <div className="mx-auto mt-6 text-xs text-orange-200/80 grid grid-cols-5 items-center gap-1">
-          <a
-            href="https://github.com/realms-cards/issues/issues"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline hover:text-orange-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-300/70"
-            aria-label="Report an issue on GitHub"
-          >
-            Report an Issue
-          </a>
-          <a
-            href="https://realms.cards"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline hover:text-orange-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-300/70"
-            aria-label="Realms.cards"
-          >
-            Realms.cards
-          </a>
-          <a
-            href="mailto:kingofthe@realms.cards"
-            className="underline hover:text-orange-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-300/70"
-            aria-label="Email the Realms team"
-          >
-            Email Us
-          </a>
-          <Link
-            href="/terms"
-            className="underline hover:text-orange-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-300/70"
-          >
-            Terms
-          </Link>
-          <Link
-            href="/privacy"
-            className="underline hover:text-orange-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-300/70"
-          >
-            Privacy
-          </Link>
-        </div>
+        <LobbyFooter />
       </div>
 
       {/* Bottom ASCII art background */}
@@ -302,7 +264,7 @@ export default function Home() {
                 try {
                   window.localStorage.setItem(
                     "sorcery:cookieNoticeDismissed",
-                    "1"
+                    "1",
                   );
                 } catch {}
                 setShowCookieNotice(false);
