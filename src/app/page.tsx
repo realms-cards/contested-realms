@@ -42,8 +42,9 @@ export default function Home() {
 
   return (
     <div className="min-h-dvh bg-gradient-to-b from-slate-950 to-slate-900 text-white flex flex-col items-center justify-start px-5 relative overflow-x-hidden overflow-y-auto">
-      {/* 90s-style flying marquee for Gothic announcement */}
+      {/* 90s-style flying marquee for Gothic announcement 
       <AsciiMarquee duration={14} />
+      */}
 
       <div className="relative z-10 max-w-6xl w-full text-center space-y-6 md:space-y-7 pt-8 md:pt-10 pb-10 md:pb-12">
         {showAlphaBanner && (
