@@ -2955,8 +2955,7 @@ export type GameState = {
   // Tracks whether each player has used their once-per-turn portal mana discount
   // When Harbinger casts a minion to a portal tile, mana cost is reduced by 1
   harbingerPortalDiscountUsed: Record<PlayerKey, boolean>;
-  // Assimilator Snail State
-  // Tracks whether each player has used Assimilator Snail ability this turn
+  templarDiscountUsed: Record<PlayerKey, boolean>;
   assimilatorSnailUsed: Record<PlayerKey, boolean>;
   // Active Assimilator Snail transformations (reverted at start of owner's next turn)
   assimilatorSnailTransforms: AssimilatorSnailTransform[];
@@ -3479,6 +3478,7 @@ export type ServerPatchT = Partial<{
   imposterMasks: GameState["imposterMasks"];
   necromancerSkeletonUsed: GameState["necromancerSkeletonUsed"];
   harbingerPortalDiscountUsed: GameState["harbingerPortalDiscountUsed"];
+  templarDiscountUsed: GameState["templarDiscountUsed"];
   assimilatorSnailUsed: GameState["assimilatorSnailUsed"];
   assimilatorSnailTransforms: GameState["assimilatorSnailTransforms"];
   etherCoresInVoidAtTurnStart: GameState["etherCoresInVoidAtTurnStart"];

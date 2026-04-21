@@ -1205,6 +1205,11 @@ export const createNetworkSlice: StateCreator<
       } else if (replaceKeys.has("harbingerPortalDiscountUsed")) {
         next.harbingerPortalDiscountUsed = { p1: false, p2: false };
       }
+      if (p.templarDiscountUsed !== undefined) {
+        next.templarDiscountUsed = p.templarDiscountUsed;
+      } else if (replaceKeys.has("templarDiscountUsed")) {
+        next.templarDiscountUsed = { p1: false, p2: false };
+      }
       // Assimilator Snail used state
       if (p.assimilatorSnailUsed !== undefined) {
         next.assimilatorSnailUsed = p.assimilatorSnailUsed;
@@ -1764,6 +1769,9 @@ export const createNetworkSlice: StateCreator<
       // Harbinger portal discount used state - applyPatch version
       if (p.harbingerPortalDiscountUsed !== undefined) {
         next.harbingerPortalDiscountUsed = p.harbingerPortalDiscountUsed;
+      }
+      if (p.templarDiscountUsed !== undefined) {
+        next.templarDiscountUsed = p.templarDiscountUsed;
       }
       // Ether Core turn-start tracking - applyPatch version
       if (p.etherCoresInVoidAtTurnStart !== undefined) {

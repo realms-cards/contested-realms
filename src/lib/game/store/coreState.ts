@@ -656,12 +656,15 @@ export const createCoreSlice: StateCreator<
       ...state.harbingerPortalDiscountUsed,
       [nextKey]: false,
     };
+    const templarDiscountUsedNext = {
+      ...state.templarDiscountUsed,
+      [nextKey]: false,
+    };
     const assimilatorSnailUsedNext = {
       ...state.assimilatorSnailUsed,
       [nextKey]: false,
     };
 
-    // Revert Assimilator Snail transformations for the player whose turn is starting
     const snailTransformsToRevert = state.assimilatorSnailTransforms.filter(
       (t) => t.ownerSeat === nextKey,
     );
@@ -725,6 +728,7 @@ export const createCoreSlice: StateCreator<
       necromancerSkeletonUsed: necromancerSkeletonUsedNext,
       mephistophelesSummonUsed: mephistophelesSummonUsedNext,
       harbingerPortalDiscountUsed: harbingerPortalDiscountUsedNext,
+      templarDiscountUsed: templarDiscountUsedNext,
       assimilatorSnailUsed: assimilatorSnailUsedNext,
       assimilatorSnailTransforms: assimilatorSnailTransformsNext,
       pathfinderUsed: pathfinderUsedNext,
@@ -748,6 +752,7 @@ export const createCoreSlice: StateCreator<
       necromancerSkeletonUsed: necromancerSkeletonUsedNext,
       mephistophelesSummonUsed: mephistophelesSummonUsedNext,
       harbingerPortalDiscountUsed: harbingerPortalDiscountUsedNext,
+      templarDiscountUsed: templarDiscountUsedNext,
       assimilatorSnailUsed: assimilatorSnailUsedNext,
       assimilatorSnailTransforms: assimilatorSnailTransformsNext,
       pathfinderUsed: pathfinderUsedNext,

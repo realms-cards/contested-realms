@@ -19,6 +19,7 @@ export type AvatarAbility =
   | "imposter"
   | "necromancer"
   | "druid"
+  | "templar"
   | "animist"
   | "interrogator"
   | "mephistopheles"
@@ -105,6 +106,11 @@ export function isNecromancer(avatarName: string | null | undefined): boolean {
 export function isDruid(avatarName: string | null | undefined): boolean {
   if (!avatarName) return false;
   return avatarName.toLowerCase().includes("druid");
+}
+
+export function isTemplar(avatarName: string | null | undefined): boolean {
+  if (!avatarName) return false;
+  return avatarName.toLowerCase().includes("templar");
 }
 
 /**
@@ -207,6 +213,7 @@ export function getAvatarAbility(
   if (name.includes("imposter")) return "imposter";
   if (name.includes("necromancer")) return "necromancer";
   if (name.includes("druid")) return "druid";
+  if (name.includes("templar")) return "templar";
   if (name.includes("animist")) return "animist";
   if (name.includes("interrogator")) return "interrogator";
   if (name.includes("mephistopheles")) return "mephistopheles";

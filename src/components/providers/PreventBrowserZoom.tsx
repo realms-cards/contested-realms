@@ -2,20 +2,8 @@
 
 import { useEffect } from "react";
 
-/**
- * Prevents browser zoom from trackpad pinch gestures and Ctrl+scroll.
- * This is necessary because CSS touch-action doesn't prevent desktop trackpad zoom.
- */
 export default function PreventBrowserZoom() {
   useEffect(() => {
-    const preventZoom = (e: WheelEvent) => {
-      // Trackpad pinch-to-zoom fires as wheel events with ctrlKey
-      if (e.ctrlKey) {
-        e.preventDefault();
-      }
-    };
-
-    // Prevent Ctrl+Plus/Minus keyboard zoom
     const preventKeyboardZoom = (e: KeyboardEvent) => {
       if (
         (e.ctrlKey || e.metaKey) &&
@@ -25,9 +13,31 @@ export default function PreventBrowserZoom() {
       }
     };
 
-    // Must use passive: false to be able to preventDefault on wheel
-    document.addEventListener("wheel", preventZoom, { passive: false });
     document.addEventListener("keydown", preventKeyboardZoom);
+
+    // Safari exposes GestureEvent for trackpad pinch; use it to prevent zoom
+    // without adding a non-passive wheel listener (which blocks Safari scroll).
+    if (
+      typeof (window as Window & { GestureEvent?: unknown }).GestureEvent !==
+      "undefined"
+    ) {
+      const preventGesture = (e: Event) => e.preventDefault();
+      document.addEventListener("gesturestart", preventGesture);
+      document.addEventListener("gesturechange", preventGesture);
+      return () => {
+        document.removeEventListener("keydown", preventKeyboardZoom);
+        document.removeEventListener("gesturestart", preventGesture);
+        document.removeEventListener("gesturechange", preventGesture);
+      };
+    }
+
+    // Chrome/Firefox: trackpad pinch-to-zoom fires as wheel events with ctrlKey
+    const preventZoom = (e: WheelEvent) => {
+      if (e.ctrlKey) {
+        e.preventDefault();
+      }
+    };
+    document.addEventListener("wheel", preventZoom, { passive: false });
 
     return () => {
       document.removeEventListener("wheel", preventZoom);

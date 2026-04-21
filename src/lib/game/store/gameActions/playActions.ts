@@ -3,6 +3,7 @@ import {
   isAnimist,
   isGeomancer,
   isHarbinger,
+  isTemplar,
 } from "@/lib/game/avatarAbilities";
 import {
   BEACON_GENESIS_SITES,
@@ -23,6 +24,7 @@ import type {
   GameState,
   Permanents,
   PermanentItem,
+  PlayerKey,
   ServerPatchT,
   Thresholds,
   Zones,
@@ -249,6 +251,97 @@ const getManaCost = (
   return 0;
 };
 
+const TEMPLAR_NAME_PATTERN = /\b(knight|sir|dame)\b/i;
+
+const getEffectiveAvatarName = (state: GameState, who: PlayerKey) =>
+  state.imposterMasks[who]?.maskAvatar?.name ?? state.avatars[who]?.card?.name;
+
+const isTemplarDiscountCard = (card: CardRef): boolean => {
+  const type = String(card.type || "").toLowerCase();
+  if (!type.includes("minion") || type.includes("token")) return false;
+  return TEMPLAR_NAME_PATTERN.test(String(card.name || ""));
+};
+
+const applyAvatarCostAdjustments = (input: {
+  state: GameState;
+  who: PlayerKey;
+  card: CardRef;
+  type: string;
+  x: number;
+  y: number;
+  manaCost: number;
+  log?: (message: string) => void;
+}): {
+  manaCost: number;
+  harbingerPortalDiscountUsedNext:
+    | GameState["harbingerPortalDiscountUsed"]
+    | null;
+  templarDiscountUsedNext: GameState["templarDiscountUsed"] | null;
+} => {
+  const { state, who, card, type, x, y, manaCost, log } = input;
+  let adjustedManaCost = manaCost;
+  let harbingerPortalDiscountUsedNext:
+    | GameState["harbingerPortalDiscountUsed"]
+    | null = null;
+  let templarDiscountUsedNext: GameState["templarDiscountUsed"] | null = null;
+
+  if (
+    !type.includes("minion") ||
+    type.includes("token") ||
+    adjustedManaCost <= 0
+  ) {
+    return {
+      manaCost: adjustedManaCost,
+      harbingerPortalDiscountUsedNext,
+      templarDiscountUsedNext,
+    };
+  }
+
+  const effectiveAvatarName = getEffectiveAvatarName(state, who);
+
+  if (
+    isHarbinger(effectiveAvatarName) &&
+    !state.harbingerPortalDiscountUsed[who]
+  ) {
+    const { isPortal, owner: portalOwner } = isPortalTile(
+      x,
+      y,
+      state.portalState,
+    );
+    const playerOwner = who === "p1" ? "p1" : "p2";
+    if (isPortal && portalOwner === playerOwner) {
+      adjustedManaCost = Math.max(0, adjustedManaCost - 1);
+      harbingerPortalDiscountUsedNext = {
+        ...state.harbingerPortalDiscountUsed,
+        [who]: true,
+      };
+      log?.(
+        `[Harbinger Portal] ${card.name} cost reduced by 1 (portal discount)`,
+      );
+    }
+  }
+
+  if (
+    adjustedManaCost > 0 &&
+    isTemplar(effectiveAvatarName) &&
+    !state.templarDiscountUsed[who] &&
+    isTemplarDiscountCard(card)
+  ) {
+    adjustedManaCost = Math.max(0, adjustedManaCost - 1);
+    templarDiscountUsedNext = {
+      ...state.templarDiscountUsed,
+      [who]: true,
+    };
+    log?.(`[Templar] ${card.name} cost reduced by 1`);
+  }
+
+  return {
+    manaCost: adjustedManaCost,
+    harbingerPortalDiscountUsedNext,
+    templarDiscountUsedNext,
+  };
+};
+
 export type PlayActionsSlice = Pick<
   GameState,
   | "playSelectedTo"
@@ -338,7 +431,16 @@ export const createPlayActionsSlice: StateCreator<
           state.babelTowers,
           state.coresCarriedAtTurnStart,
         );
-        const manaInsufficient = cardManaCost > currentMana;
+        const { manaCost: adjustedCardManaCost } = applyAvatarCostAdjustments({
+          state,
+          who,
+          card,
+          type,
+          x,
+          y,
+          manaCost: cardManaCost,
+        });
+        const manaInsufficient = adjustedCardManaCost > currentMana;
 
         // Build structured missing thresholds data
         const missingThresholdData: Record<string, number> = {};
@@ -352,7 +454,7 @@ export const createPlayActionsSlice: StateCreator<
 
         if (manaInsufficient || missingThresholds.length) {
           get().log(
-            `[Warning] '${card.name}' ${manaInsufficient ? `costs ${cardManaCost} (you have ${currentMana})` : ""} ${missingThresholds.length ? `missing: ${missingThresholds.join(", ")}` : ""}`,
+            `[Warning] '${card.name}' ${manaInsufficient ? `costs ${adjustedCardManaCost} (you have ${currentMana})` : ""} ${missingThresholds.length ? `missing: ${missingThresholds.join(", ")}` : ""}`,
           );
           try {
             if (typeof window !== "undefined") {
@@ -361,7 +463,7 @@ export const createPlayActionsSlice: StateCreator<
                   detail: {
                     type: "resource-warning",
                     cardName: card.name,
-                    manaCost: manaInsufficient ? cardManaCost : null,
+                    manaCost: manaInsufficient ? adjustedCardManaCost : null,
                     availableMana: manaInsufficient ? currentMana : null,
                     missingThresholds: missingThresholdData,
                   },
@@ -833,51 +935,26 @@ export const createPlayActionsSlice: StateCreator<
           }
         } catch {}
       }
-      // Subtract mana cost from available mana when playing non-site cards from hand
-      let manaCost = getManaCost(card, state.metaByCardId);
-
-      // Harbinger Portal Discount: Once per turn, if Harbinger casts a minion to a portal tile,
-      // reduce the mana cost by 1
-      let harbingerPortalDiscountApplied = false;
-      if (type.includes("minion") && !type.includes("token") && manaCost > 0) {
-        // Check if player is Harbinger (or masked as Harbinger)
-        const avatar = state.avatars[who];
-        const avatarName = avatar?.card?.name;
-        const maskedState = state.imposterMasks[who];
-        const effectiveAvatarName = maskedState?.maskAvatar?.name ?? avatarName;
-
-        if (isHarbinger(effectiveAvatarName)) {
-          // Check if discount not yet used this turn
-          if (!state.harbingerPortalDiscountUsed[who]) {
-            // Check if target cell is a portal tile owned by this Harbinger
-            const { isPortal, owner: portalOwner } = isPortalTile(
-              x,
-              y,
-              state.portalState,
-            );
-            const playerOwner = who === "p1" ? "p1" : "p2";
-            if (isPortal && portalOwner === playerOwner) {
-              // Apply discount
-              manaCost = Math.max(0, manaCost - 1);
-              harbingerPortalDiscountApplied = true;
-              get().log(
-                `[Harbinger Portal] ${card.name} cost reduced by 1 (portal discount)`,
-              );
-            }
-          }
-        }
-      }
+      const {
+        manaCost,
+        harbingerPortalDiscountUsedNext,
+        templarDiscountUsedNext,
+      } = applyAvatarCostAdjustments({
+        state,
+        who,
+        card,
+        type,
+        x,
+        y,
+        manaCost: getManaCost(card, state.metaByCardId),
+        log: (message) => get().log(message),
+      });
 
       const currentMana = Number(state.players[who]?.mana || 0);
       const nextMana =
         manaCost > 0 && !type.includes("token")
           ? currentMana - manaCost
           : currentMana;
-
-      // Update Harbinger portal discount usage if applied
-      const harbingerPortalDiscountUsedNext = harbingerPortalDiscountApplied
-        ? { ...state.harbingerPortalDiscountUsed, [who]: true }
-        : null;
 
       const playersNext =
         nextMana !== currentMana
@@ -921,6 +998,8 @@ export const createPlayActionsSlice: StateCreator<
       // Include Harbinger portal discount usage in patch
       if (harbingerPortalDiscountUsedNext)
         combined.harbingerPortalDiscountUsed = harbingerPortalDiscountUsedNext;
+      if (templarDiscountUsedNext)
+        combined.templarDiscountUsed = templarDiscountUsedNext;
       // Include subsurface position/ability in patch for opponent sync
       if (subsurfacePosition && subsurfaceAbility) {
         combined.permanentPositions = {
@@ -1048,6 +1127,9 @@ export const createPlayActionsSlice: StateCreator<
           ...(playersNext ? { players: playersNext } : {}),
           ...(harbingerPortalDiscountUsedNext
             ? { harbingerPortalDiscountUsed: harbingerPortalDiscountUsedNext }
+            : {}),
+          ...(templarDiscountUsedNext
+            ? { templarDiscountUsed: templarDiscountUsedNext }
             : {}),
           ...(subsurfacePosition
             ? {
@@ -1568,9 +1650,6 @@ export const createPlayActionsSlice: StateCreator<
         selectedPermanent: null,
         castPlacementMode: null,
         ...(playersNext ? { players: playersNext } : {}),
-        ...(harbingerPortalDiscountUsedNext
-          ? { harbingerPortalDiscountUsed: harbingerPortalDiscountUsedNext }
-          : {}),
         ...(nextInteractionLog ? { interactionLog: nextInteractionLog } : {}),
         // Subsurface cast: set position + ability synchronously in state
         ...(subsurfacePosition

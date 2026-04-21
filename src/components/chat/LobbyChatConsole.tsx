@@ -310,11 +310,13 @@ export default function LobbyChatConsole({
             {/* Chat input */}
             <div className="px-3 pb-3 pt-2 border-t border-white/10 flex gap-2 select-none">
               <input
-                className="flex-1 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                className={`flex-1 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-xs${!connected ? " opacity-50 cursor-wait" : ""}`}
                 placeholder={
-                  chatTab === "global"
-                    ? "Type a global message"
-                    : "Type a lobby message"
+                  !connected
+                    ? "Reconnecting…"
+                    : chatTab === "global"
+                      ? "Type a global message"
+                      : "Type a lobby message"
                 }
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
@@ -323,7 +325,6 @@ export default function LobbyChatConsole({
                     handleSend();
                   }
                 }}
-                disabled={!connected}
               />
               <button
                 className="rounded bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed px-3 py-1 text-xs transition-colors"

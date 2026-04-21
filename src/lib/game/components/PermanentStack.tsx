@@ -662,7 +662,7 @@ export function PermanentStack({
 
         // Ownership overlay: show faint glow on cards owned by the local player
         // In online play, use actorKey; in offline play, default to P1
-        const localSeat = actorKey ?? "p1";
+        const localSeat = actorKey ?? (currentPlayer === 1 ? "p1" : "p2");
         const isOwnedByLocalPlayer =
           (localSeat === "p1" && owner === 1) ||
           (localSeat === "p2" && owner === 2);

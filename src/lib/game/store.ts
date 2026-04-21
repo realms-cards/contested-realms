@@ -270,6 +270,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   cardScale: 1,
   // Harbinger portal discount (Gothic expansion) - once per turn mana reduction
   harbingerPortalDiscountUsed: { p1: false, p2: false },
+  templarDiscountUsed: { p1: false, p2: false },
   // Ether Core turn-start tracking (for void mana calculation)
   etherCoresInVoidAtTurnStart: [],
   // Cores carried at turn start (for carried-core mana calculation)
@@ -416,6 +417,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         imposterMasks: createInitialImposterMasks(),
         necromancerSkeletonUsed: createInitialNecromancerSkeletonUsed(),
         harbingerPortalDiscountUsed: { p1: false, p2: false },
+        templarDiscountUsed: { p1: false, p2: false },
         etherCoresInVoidAtTurnStart: [],
         coresCarriedAtTurnStart: [],
         druidFlipped: createInitialDruidFlipped(),

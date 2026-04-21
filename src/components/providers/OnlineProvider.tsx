@@ -1044,6 +1044,7 @@ export default function OnlineProvider({
 
     unsubscribers.push(
       transport.on("welcome", (p) => {
+        setConnected(true);
         setMe(p.you);
         // Note: Removed auto-rejoin logic as it causes loops without persistent player IDs
         // Fetch initial lists
