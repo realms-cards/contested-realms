@@ -5932,6 +5932,73 @@ export function handleCustomMessage(
     return;
   }
 
+  if (t === "realmFloodBegin") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const casterSeat = (msg as { casterSeat?: unknown }).casterSeat as
+      | PlayerKey
+      | undefined;
+    const sourceAny = (msg as { source?: unknown }).source as unknown;
+
+    if (!id || !casterSeat || typeof sourceAny !== "object") return;
+
+    const actorKey = get().actorKey;
+    if (actorKey === casterSeat) return;
+
+    const rec = sourceAny as Record<string, unknown>;
+    set({
+      pendingRealmFlood: {
+        id,
+        source: {
+          at: rec.at as CellKey,
+          index: Number(rec.index),
+          instanceId: (rec.instanceId as string | null) ?? null,
+          owner: Number(rec.owner) as 1 | 2,
+          card: rec.card as CardRef,
+        },
+        casterSeat,
+        phase: "resolving",
+        createdAt: Date.now(),
+      },
+    } as Partial<GameState> as GameState);
+
+    try {
+      const sourceName = String(
+        (rec.card as CardRef | undefined)?.name || "The realm flood",
+      );
+      get().log(
+        `[${casterSeat.toUpperCase()}] ${sourceName} begins flooding the realm`,
+      );
+    } catch {}
+    return;
+  }
+
+  if (t === "realmFloodResolve") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const casterSeat = (msg as { casterSeat?: unknown }).casterSeat as
+      | PlayerKey
+      | undefined;
+    const sourceName = (msg as { sourceName?: unknown }).sourceName as
+      | string
+      | undefined;
+
+    if (!id || !casterSeat) return;
+
+    const pending = get().pendingRealmFlood;
+    if (!pending || pending.id !== id) return;
+
+    const actorKey = get().actorKey;
+    if (actorKey === casterSeat) return;
+
+    set({ pendingRealmFlood: null } as Partial<GameState> as GameState);
+
+    try {
+      get().log(
+        `[${casterSeat.toUpperCase()}] ${sourceName || "The realm flood"} permanently floods the entire realm`,
+      );
+    } catch {}
+    return;
+  }
+
   // --- Mephistopheles handlers ---
   if (t === "mephistophelesBegin") {
     const id = (msg as { id?: unknown }).id as string | undefined;

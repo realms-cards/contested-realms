@@ -1,10 +1,5 @@
 import type { StateCreator } from "zustand";
-import {
-  isAnimist,
-  isGeomancer,
-  isHarbinger,
-  isTemplar,
-} from "@/lib/game/avatarAbilities";
+import { isAnimist, isGeomancer } from "@/lib/game/avatarAbilities";
 import {
   BEACON_GENESIS_SITES,
   ELEMENT_CHOICE_SITES,
@@ -15,7 +10,7 @@ import {
 import { TOKEN_BY_NAME } from "@/lib/game/tokens";
 import { isApexOfBabel, isBaseOfBabel } from "../babelTowerState";
 import { isGardenOfEden } from "../gardenOfEdenState";
-import { isPortalTile } from "../portalState";
+import { ensureFloodedTokenAtSite } from "../realmFloodState";
 import { isRiverGenesisSite } from "../riverGenesisState";
 import { isMismanagedMortuary } from "../specialSiteState";
 import type {
@@ -24,7 +19,6 @@ import type {
   GameState,
   Permanents,
   PermanentItem,
-  PlayerKey,
   ServerPatchT,
   Thresholds,
   Zones,
@@ -47,6 +41,8 @@ import { randomTilt } from "../utils/permanentHelpers";
 import {
   computeAvailableMana,
   computeThresholdTotals,
+  getAvatarAdjustedManaCost,
+  getCardManaCost,
 } from "../utils/resourceHelpers";
 import { createZonesPatchFor } from "../utils/zoneHelpers";
 
@@ -235,36 +231,9 @@ const triggerSiteGenesis = (
   }
 };
 
-/** Get mana cost from card (uses cost field, falls back to metaByCardId cache) */
-const getManaCost = (
-  card: CardRef,
-  metaByCardId: Record<
-    number,
-    { attack: number | null; defence: number | null; cost: number | null }
-  >,
-): number => {
-  // First try the card's cost field
-  if (typeof card.cost === "number") return card.cost;
-  // Fall back to metaByCardId cache
-  const meta = metaByCardId[card.cardId];
-  if (meta && typeof meta.cost === "number") return meta.cost;
-  return 0;
-};
-
-const TEMPLAR_NAME_PATTERN = /\b(knight|sir|dame)\b/i;
-
-const getEffectiveAvatarName = (state: GameState, who: PlayerKey) =>
-  state.imposterMasks[who]?.maskAvatar?.name ?? state.avatars[who]?.card?.name;
-
-const isTemplarDiscountCard = (card: CardRef): boolean => {
-  const type = String(card.type || "").toLowerCase();
-  if (!type.includes("minion") || type.includes("token")) return false;
-  return TEMPLAR_NAME_PATTERN.test(String(card.name || ""));
-};
-
 const applyAvatarCostAdjustments = (input: {
   state: GameState;
-  who: PlayerKey;
+  who: "p1" | "p2";
   card: CardRef;
   type: string;
   x: number;
@@ -279,55 +248,35 @@ const applyAvatarCostAdjustments = (input: {
   templarDiscountUsedNext: GameState["templarDiscountUsed"] | null;
 } => {
   const { state, who, card, type, x, y, manaCost, log } = input;
-  let adjustedManaCost = manaCost;
+  const {
+    manaCost: adjustedManaCost,
+    harbingerPortalDiscountApplied,
+    templarDiscountApplied,
+  } = getAvatarAdjustedManaCost({
+    state,
+    who,
+    card,
+    type,
+    x,
+    y,
+    manaCost,
+  });
   let harbingerPortalDiscountUsedNext:
     | GameState["harbingerPortalDiscountUsed"]
     | null = null;
   let templarDiscountUsedNext: GameState["templarDiscountUsed"] | null = null;
 
-  if (
-    !type.includes("minion") ||
-    type.includes("token") ||
-    adjustedManaCost <= 0
-  ) {
-    return {
-      manaCost: adjustedManaCost,
-      harbingerPortalDiscountUsedNext,
-      templarDiscountUsedNext,
+  if (harbingerPortalDiscountApplied) {
+    harbingerPortalDiscountUsedNext = {
+      ...state.harbingerPortalDiscountUsed,
+      [who]: true,
     };
-  }
-
-  const effectiveAvatarName = getEffectiveAvatarName(state, who);
-
-  if (
-    isHarbinger(effectiveAvatarName) &&
-    !state.harbingerPortalDiscountUsed[who]
-  ) {
-    const { isPortal, owner: portalOwner } = isPortalTile(
-      x,
-      y,
-      state.portalState,
+    log?.(
+      `[Harbinger Portal] ${card.name} cost reduced by 1 (portal discount)`,
     );
-    const playerOwner = who === "p1" ? "p1" : "p2";
-    if (isPortal && portalOwner === playerOwner) {
-      adjustedManaCost = Math.max(0, adjustedManaCost - 1);
-      harbingerPortalDiscountUsedNext = {
-        ...state.harbingerPortalDiscountUsed,
-        [who]: true,
-      };
-      log?.(
-        `[Harbinger Portal] ${card.name} cost reduced by 1 (portal discount)`,
-      );
-    }
   }
 
-  if (
-    adjustedManaCost > 0 &&
-    isTemplar(effectiveAvatarName) &&
-    !state.templarDiscountUsed[who] &&
-    isTemplarDiscountCard(card)
-  ) {
-    adjustedManaCost = Math.max(0, adjustedManaCost - 1);
+  if (templarDiscountApplied) {
     templarDiscountUsedNext = {
       ...state.templarDiscountUsed,
       [who]: true,
@@ -418,8 +367,8 @@ export const createPlayActionsSlice: StateCreator<
         }
 
         // Check mana cost using computeAvailableMana
-        const cardManaCost = getManaCost(card, state.metaByCardId);
-        const currentMana = computeAvailableMana(
+        const cardManaCost = getCardManaCost(card, state.metaByCardId);
+        const currentManaBase = computeAvailableMana(
           state.board,
           state.permanents,
           who,
@@ -430,6 +379,10 @@ export const createPlayActionsSlice: StateCreator<
           state.etherCoresInVoidAtTurnStart,
           state.babelTowers,
           state.coresCarriedAtTurnStart,
+        );
+        const currentMana = Math.max(
+          0,
+          currentManaBase + Number(state.players[who]?.mana || 0),
         );
         const { manaCost: adjustedCardManaCost } = applyAvatarCostAdjustments({
           state,
@@ -525,7 +478,7 @@ export const createPlayActionsSlice: StateCreator<
 
         if (isAnimist(effectiveAvatarName)) {
           // Get mana cost for the card
-          const manaCost = getManaCost(card, state.metaByCardId);
+          const manaCost = getCardManaCost(card, state.metaByCardId);
           const cellKey = toCellKey(x, y);
 
           // Trigger the Animist cast choice instead of proceeding
@@ -672,6 +625,19 @@ export const createPlayActionsSlice: StateCreator<
           ...state.board.sites,
           [key]: { owner: ownerFromSeat(who), tapped: false, card },
         };
+        if (state.specialSiteState.realmFlooded) {
+          const floodedCell = ensureFloodedTokenAtSite(
+            permanentsNext[key],
+            ownerFromSeat(who),
+          );
+          if (floodedCell !== permanentsNext[key]) {
+            permanentsNext =
+              permanentsNext === state.permanents
+                ? { ...state.permanents }
+                : { ...permanentsNext };
+            permanentsNext[key] = floodedCell;
+          }
+        }
         const logPlayerNum = who === "p1" ? "1" : "2";
         get().log(
           `[p${logPlayerNum}:PLAYER] plays site [p${logPlayerNum}card:${card.name}] at #${cellNo}`,
@@ -763,6 +729,14 @@ export const createPlayActionsSlice: StateCreator<
                 [key]: permanentsNext[key] || [],
               } as ServerPatchT["permanents"];
             }
+          }
+          if (
+            !permanentsPatch &&
+            permanentsNext[key] !== state.permanents[key]
+          ) {
+            permanentsPatch = {
+              [key]: permanentsNext[key] || [],
+            } as ServerPatchT["permanents"];
           }
           const sitesPatch: Record<string, unknown> = {
             [key]: sites[key] ?? null,
@@ -946,7 +920,7 @@ export const createPlayActionsSlice: StateCreator<
         type,
         x,
         y,
-        manaCost: getManaCost(card, state.metaByCardId),
+        manaCost: getCardManaCost(card, state.metaByCardId),
         log: (message) => get().log(message),
       });
 
@@ -1038,6 +1012,8 @@ export const createPlayActionsSlice: StateCreator<
       const isLegionOfGall = cardNameLower === "legion of gall";
       const isBetrayal = cardNameLower === "betrayal";
       const isInfiltrate = cardNameLower === "infiltrate";
+      const isTheFlood = cardNameLower === "the flood";
+      const isGreatOldOne = cardNameLower === "great old one";
       const isShapeshift = cardNameLower === "shapeshift";
       const isTorshammarTrinket = cardNameLower === "torshammar trinket";
       const isTheInquisition = cardNameLower === "the inquisition";
@@ -1336,6 +1312,19 @@ export const createPlayActionsSlice: StateCreator<
             xValue,
           });
         } catch {}
+      } else if (isTheFlood && newest) {
+        try {
+          get().beginRealmFlood({
+            source: {
+              at: key,
+              index: arr.length - 1,
+              instanceId: newest.instanceId ?? null,
+              owner: newest.owner,
+              card: newest.card as CardRef,
+            },
+            casterSeat: who,
+          });
+        } catch {}
       }
       // If this is Morgana le Fay (minion with Genesis), trigger her ability
       else if (isMorgana && newest && type.includes("minion")) {
@@ -1444,6 +1433,20 @@ export const createPlayActionsSlice: StateCreator<
         } catch (e) {
           console.error("[playActions] Error registering Mother Nature:", e);
         }
+      }
+      if (isGreatOldOne && newest && type.includes("minion")) {
+        try {
+          get().beginRealmFlood({
+            source: {
+              at: key,
+              index: arr.length - 1,
+              instanceId: newest.instanceId ?? null,
+              owner: newest.owner,
+              card: newest.card as CardRef,
+            },
+            casterSeat: who,
+          });
+        } catch {}
       }
       // If this is The Inquisition minion, trigger Genesis (reveal opponent hand, may banish)
       if (isTheInquisition && newest && type.includes("minion")) {
@@ -1829,6 +1832,16 @@ export const createPlayActionsSlice: StateCreator<
             card: ensuredSiteCard,
           },
         };
+        let pileSitePermanents = state.permanents;
+        if (state.specialSiteState.realmFlooded) {
+          const floodedCell = ensureFloodedTokenAtSite(
+            pileSitePermanents[key],
+            ownerFromSeat(who),
+          );
+          if (floodedCell !== pileSitePermanents[key]) {
+            pileSitePermanents = { ...state.permanents, [key]: floodedCell };
+          }
+        }
 
         const logPlayerNum = who === "p1" ? "1" : "2";
         get().log(
@@ -1881,6 +1894,13 @@ export const createPlayActionsSlice: StateCreator<
               ...state.board,
               sites: sitesPatch as GameState["board"]["sites"],
             } as GameState["board"],
+            ...(pileSitePermanents !== state.permanents
+              ? {
+                  permanents: {
+                    [key]: pileSitePermanents[key] || [],
+                  } as ServerPatchT["permanents"],
+                }
+              : {}),
           };
           get().trySendPatch(patch);
         }
@@ -1893,6 +1913,9 @@ export const createPlayActionsSlice: StateCreator<
         return {
           zones: zonesNext,
           board: { ...state.board, sites },
+          ...(pileSitePermanents !== state.permanents
+            ? { permanents: pileSitePermanents }
+            : {}),
           dragFromPile: null,
           dragFromHand: false,
           ...(nextInteractionLog ? { interactionLog: nextInteractionLog } : {}),
@@ -2018,6 +2041,8 @@ export const createPlayActionsSlice: StateCreator<
       const cardNameLower = (card.name || "").toLowerCase();
       const isBetrayal = cardNameLower === "betrayal";
       const isInfiltrate = cardNameLower === "infiltrate";
+      const isTheFlood = cardNameLower === "the flood";
+      const isGreatOldOne = cardNameLower === "great old one";
       // If this is a Magic card, begin the magic casting flow after placing it
       try {
         if (isBetrayal && newest) {
@@ -2034,6 +2059,28 @@ export const createPlayActionsSlice: StateCreator<
         } else if (isInfiltrate && newest) {
           get().beginInfiltrate({
             spell: {
+              at: key,
+              index: arr.length - 1,
+              instanceId: newest.instanceId ?? null,
+              owner: newest.owner,
+              card: newest.card as CardRef,
+            },
+            casterSeat: who,
+          });
+        } else if (isTheFlood && newest) {
+          get().beginRealmFlood({
+            source: {
+              at: key,
+              index: arr.length - 1,
+              instanceId: newest.instanceId ?? null,
+              owner: newest.owner,
+              card: newest.card as CardRef,
+            },
+            casterSeat: who,
+          });
+        } else if (isGreatOldOne && newest && type.includes("minion")) {
+          get().beginRealmFlood({
+            source: {
               at: key,
               index: arr.length - 1,
               instanceId: newest.instanceId ?? null,

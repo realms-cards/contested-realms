@@ -269,6 +269,8 @@ export type SpecialSiteState = {
   genesisMana: GenesisManaBonus[];
   // Pending element choice (shows overlay)
   pendingElementChoice: PendingElementChoice | null;
+  // Permanent realm-wide flood effect from The Flood / Great Old One
+  realmFlooded: boolean;
   // Atlantean Fate auras (4x4 areas with flood tokens)
   atlanteanFateAuras: AtlanteanFateAura[];
   // Mismanaged Mortuary sites (cemetery swap effect)
@@ -330,6 +332,22 @@ export type PendingAtlanteanFate = {
   previewCorner: CellKey | null;
   // Confirmed corner
   selectedCorner: CellKey | null;
+  createdAt: number;
+};
+
+export type RealmFloodPhase = "resolving" | "complete";
+
+export type PendingRealmFlood = {
+  id: string;
+  source: {
+    at: CellKey;
+    index: number;
+    instanceId: string | null;
+    owner: 1 | 2;
+    card: CardRef;
+  };
+  casterSeat: PlayerKey;
+  phase: RealmFloodPhase;
   createdAt: number;
 };
 
@@ -3017,6 +3035,18 @@ export type GameState = {
   flipDruid: (who: PlayerKey) => boolean;
   // Special Site State (Valley of Delight, Bloom sites, etc.)
   specialSiteState: SpecialSiteState;
+  pendingRealmFlood: PendingRealmFlood | null;
+  beginRealmFlood: (input: {
+    source: {
+      at: CellKey;
+      index: number;
+      instanceId: string | null;
+      owner: 1 | 2;
+      card: CardRef;
+    };
+    casterSeat: PlayerKey;
+  }) => void;
+  resolveRealmFlood: () => void;
   // Atlantean Fate pending state (4x4 area selection)
   pendingAtlanteanFate: PendingAtlanteanFate | null;
   // Begin Atlantean Fate placement
@@ -3494,6 +3524,7 @@ export type ServerPatchT = Partial<{
   pendingCorpseExplosion: GameState["pendingCorpseExplosion"];
   pendingAnimistCast: GameState["pendingAnimistCast"];
   pendingInterrogatorChoice: GameState["pendingInterrogatorChoice"];
+  pendingRealmFlood: GameState["pendingRealmFlood"];
   pendingAtlanteanFate: GameState["pendingAtlanteanFate"];
   pendingMephistopheles: GameState["pendingMephistopheles"];
   mephistophelesSummonUsed: GameState["mephistophelesSummonUsed"];

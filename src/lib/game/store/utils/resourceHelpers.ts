@@ -1,4 +1,8 @@
-import { isElementalist } from "@/lib/game/avatarAbilities";
+import {
+  isElementalist,
+  isHarbinger,
+  isTemplar,
+} from "@/lib/game/avatarAbilities";
 import {
   BACK_ROW_ONLY_SITES,
   CEMETERY_MANA_SITES,
@@ -15,6 +19,7 @@ import {
   VOID_MANA_PROVIDERS,
 } from "@/lib/game/mana-providers";
 import { isBaseOfBabel, isTowerOfBabel } from "../babelTowerState";
+import { isPortalTile } from "../portalState";
 import { getAdjacentCells, parseCellKey } from "./boardHelpers";
 import type {
   AvatarState,
@@ -32,8 +37,122 @@ import type {
 } from "../types";
 
 const THRESHOLD_KEYS: (keyof Thresholds)[] = ["air", "water", "earth", "fire"];
+const TEMPLAR_DISCOUNT_NAME_TOKENS = new Set([
+  "knight",
+  "knights",
+  "sir",
+  "sirs",
+  "dame",
+  "dames",
+]);
 
 export const phases: Phase[] = ["Setup", "Start", "Draw", "Main", "End"];
+
+export const getCardManaCost = (
+  card: CardRef,
+  metaByCardId: Record<
+    number,
+    { attack: number | null; defence: number | null; cost: number | null }
+  >,
+): number => {
+  if (typeof card.cost === "number") return card.cost;
+  const meta = metaByCardId[card.cardId];
+  if (meta && typeof meta.cost === "number") return meta.cost;
+  return 0;
+};
+
+export const getEffectiveAvatarName = (
+  state: Pick<GameState, "avatars" | "imposterMasks">,
+  who: PlayerKey,
+) =>
+  state.imposterMasks[who]?.maskAvatar?.name ?? state.avatars[who]?.card?.name;
+
+const getNormalizedNameTokens = (name: string | null | undefined): string[] =>
+  String(name ?? "")
+    .normalize("NFKD")
+    .toLowerCase()
+    .split(/[^a-z]+/)
+    .filter(Boolean);
+
+export const isTemplarDiscountCard = (card: CardRef): boolean => {
+  const type = String(card.type || "").toLowerCase();
+  if (!type.includes("minion") || type.includes("token")) return false;
+  return getNormalizedNameTokens(card.name).some((token) =>
+    TEMPLAR_DISCOUNT_NAME_TOKENS.has(token),
+  );
+};
+
+export const getAvatarAdjustedManaCost = (input: {
+  state: Pick<
+    GameState,
+    | "avatars"
+    | "imposterMasks"
+    | "harbingerPortalDiscountUsed"
+    | "templarDiscountUsed"
+    | "portalState"
+  >;
+  who: PlayerKey;
+  card: CardRef;
+  type: string;
+  x: number;
+  y: number;
+  manaCost: number;
+}): {
+  manaCost: number;
+  harbingerPortalDiscountApplied: boolean;
+  templarDiscountApplied: boolean;
+} => {
+  const { state, who, card, type, x, y, manaCost } = input;
+  let adjustedManaCost = manaCost;
+  let harbingerPortalDiscountApplied = false;
+  let templarDiscountApplied = false;
+
+  if (
+    !type.includes("minion") ||
+    type.includes("token") ||
+    adjustedManaCost <= 0
+  ) {
+    return {
+      manaCost: adjustedManaCost,
+      harbingerPortalDiscountApplied,
+      templarDiscountApplied,
+    };
+  }
+
+  const effectiveAvatarName = getEffectiveAvatarName(state, who);
+
+  if (
+    isHarbinger(effectiveAvatarName) &&
+    !state.harbingerPortalDiscountUsed[who]
+  ) {
+    const { isPortal, owner: portalOwner } = isPortalTile(
+      x,
+      y,
+      state.portalState,
+    );
+    const playerOwner = who === "p1" ? "p1" : "p2";
+    if (isPortal && portalOwner === playerOwner) {
+      adjustedManaCost = Math.max(0, adjustedManaCost - 1);
+      harbingerPortalDiscountApplied = true;
+    }
+  }
+
+  if (
+    adjustedManaCost > 0 &&
+    isTemplar(effectiveAvatarName) &&
+    !state.templarDiscountUsed[who] &&
+    isTemplarDiscountCard(card)
+  ) {
+    adjustedManaCost = Math.max(0, adjustedManaCost - 1);
+    templarDiscountApplied = true;
+  }
+
+  return {
+    manaCost: adjustedManaCost,
+    harbingerPortalDiscountApplied,
+    templarDiscountApplied,
+  };
+};
 
 export const emptyThresholds = (): Thresholds => ({
   air: 0,
@@ -189,6 +308,17 @@ export const siteHasFloodedToken = (
   return false;
 };
 
+export const siteHasFloodedAbility = (
+  cellKey: string,
+  permanents: Permanents,
+  specialSiteState?: SpecialSiteState | null,
+): boolean => {
+  if (siteHasDisabledToken(cellKey, permanents)) return false;
+  if (siteHasSilencedToken(cellKey, permanents)) return false;
+  if (siteHasFloodedToken(cellKey, permanents)) return true;
+  return !!specialSiteState?.realmFlooded;
+};
+
 // Check if a site has a Silenced token on it
 // NOTE: Silenced sites lose their textbox ability but STILL provide mana and threshold
 export const siteHasSilencedToken = (
@@ -247,6 +377,12 @@ export const computeThresholdTotals = (
     // For non-shared sites, check ownership
     if (!isShared && (!tile || tile.owner !== owner)) continue;
 
+    // Check if site is disabled - disabled sites provide no threshold
+    // (Silenced sites still provide threshold, they only lose textbox abilities)
+    if (siteHasDisabledToken(cellKey, permanents)) {
+      continue; // Skip threshold calculation for disabled sites
+    }
+
     // Check if site is flooded by Atlantean Fate - flooded sites only provide water
     // A silenced Atlantean Fate aura does NOT flood sites
     if (isSiteFloodedByAtlanteanFate(cellKey, specialSiteState, permanents)) {
@@ -254,17 +390,11 @@ export const computeThresholdTotals = (
       continue; // Skip normal threshold calculation for flooded sites
     }
 
-    // Check if site has a Flooded token - adds water threshold
-    if (siteHasFloodedToken(cellKey, permanents)) {
+    // Check if site has the Flooded ability - adds water threshold
+    if (siteHasFloodedAbility(cellKey, permanents, specialSiteState)) {
       totals.water += 1;
       // Flooded sites still provide their normal threshold, plus the water bonus
       // So we don't continue here - let it fall through to normal calculation
-    }
-
-    // Check if site is disabled - disabled sites provide no threshold
-    // (Silenced sites still provide threshold, they only lose textbox abilities)
-    if (siteHasDisabledToken(cellKey, permanents)) {
-      continue; // Skip threshold calculation for disabled sites
     }
 
     // Check back-row-only sites

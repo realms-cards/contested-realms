@@ -56,6 +56,10 @@ export async function loadCameraModeFromApi(): Promise<
  * Defaults to true (previews enabled).
  */
 function loadCardPreviewsEnabled(): boolean {
+  return true;
+}
+
+export function getStoredCardPreviewsEnabled(): boolean {
   if (typeof window === "undefined") return true;
   try {
     const stored = localStorage.getItem(CARD_PREVIEWS_KEY);
@@ -415,9 +419,8 @@ export const createUiSlice: StateCreator<GameState, [], [], UiSlice> = (
       saveControlScheme(newScheme);
       return { controlScheme: newScheme, marqueeSelection: [] };
     }),
-  marqueeSelectPermanents: (
-    entries: Array<{ at: CellKey; index: number }>,
-  ) => set({ marqueeSelection: entries }),
+  marqueeSelectPermanents: (entries: Array<{ at: CellKey; index: number }>) =>
+    set({ marqueeSelection: entries }),
   clearMarqueeSelection: () => set({ marqueeSelection: [] }),
 
   setUiHidden: (hidden: boolean) => {

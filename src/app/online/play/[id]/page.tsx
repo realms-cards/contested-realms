@@ -117,9 +117,10 @@ import {
 } from "@/lib/game/avatarAbilities";
 import type { CardPreviewData } from "@/lib/game/card-preview.types";
 import TextureCache from "@/lib/game/components/TextureCache";
+import { getStoredCardPreviewsEnabled } from "@/lib/game/store/uiState";
 import {
-  MAT_PIXEL_H,
   MAT_PIXEL_W,
+  MAT_PIXEL_H,
   BASE_TILE_SIZE,
   MAT_RATIO,
 } from "@/lib/game/constants";
@@ -2344,6 +2345,15 @@ export default function OnlineMatchPage() {
     // Defer to next tick to ensure hydration is complete
     requestAnimationFrame(() => {
       const loadSettings = async () => {
+        try {
+          const storedCardPreviews = getStoredCardPreviewsEnabled();
+          if (
+            storedCardPreviews !== useGameStore.getState().cardPreviewsEnabled
+          ) {
+            useGameStore.getState().setCardPreviewsEnabled(storedCardPreviews);
+          }
+        } catch {}
+
         try {
           // Try to load from API first (authenticated users)
           const res = await fetch("/api/users/me/playmats/preferences", {

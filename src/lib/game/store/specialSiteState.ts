@@ -29,6 +29,7 @@ const emptySpecialSiteState = (): SpecialSiteState => ({
   bloomBonuses: [],
   genesisMana: [],
   pendingElementChoice: null,
+  realmFlooded: false,
   atlanteanFateAuras: [],
   mismanagedMortuaries: [],
 });
@@ -297,6 +298,7 @@ export const createSpecialSiteSlice: StateCreator<
         bloomBonuses: newBloomBonuses,
         genesisMana: newGenesisMana,
         pendingElementChoice: newPendingChoice,
+        realmFlooded: state.specialSiteState.realmFlooded,
         atlanteanFateAuras: state.specialSiteState.atlanteanFateAuras,
         mismanagedMortuaries: newMortuaries,
       };

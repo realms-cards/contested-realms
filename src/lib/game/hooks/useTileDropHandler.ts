@@ -652,15 +652,36 @@ export function useTileDropHandler({
           });
 
           if (isAura) {
-            // Aura placement - use same flow as regular cards
-            playSelectedTo(tileX, tileY);
+            // 2x2 Auras (e.g. Atlantean Fate) are cast at the intersection of
+            // four squares, NOT atop a single tile. Snap to the nearest valid
+            // intersection so the resolver and overlay agree on the affected
+            // 2x2 area.
+            const halfTile = TILE_SIZE / 2;
+            // Quadrant of the drop within the tile decides which intersection
+            // (offX/offZ are computed relative to tile center above).
+            const rightHalf = offX >= 0;
+            const topHalf = offZ >= 0;
+            // Anchor tile = lower-left tile of the chosen 2x2.
+            let anchorX = rightHalf ? tileX : tileX - 1;
+            let anchorY = topHalf ? tileY : tileY - 1;
+            // Clamp so the full 2x2 fits on the board.
+            anchorX = Math.max(0, Math.min(board.size.w - 2, anchorX));
+            anchorY = Math.max(0, Math.min(board.size.h - 2, anchorY));
+
+            const auraDropKey = `${anchorX},${anchorY}`;
+            const auraNewIndex = (permanents[auraDropKey] || []).length;
+            // Positive offsets place the card toward the anchor tile's
+            // top-right corner = the snapped intersection.
+            const auraOffX = clampOffset(halfTile, TILE_OFFSET_LIMIT_X);
+            const auraOffZ = clampOffset(halfTile, TILE_OFFSET_LIMIT_Z);
+
+            playSelectedTo(anchorX, anchorY);
             try {
               playCardPlay();
             } catch {}
             setDragFromHand(false);
             setGhost(null);
-            // Apply offset same as regular cards
-            setPermanentOffset(dropKey, newIndex, [offX, offZ]);
+            setPermanentOffset(auraDropKey, auraNewIndex, [auraOffX, auraOffZ]);
           } else {
             // Regular non-aura card placement
             playSelectedTo(tileX, tileY);

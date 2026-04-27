@@ -102,6 +102,7 @@ import { createPortalSlice } from "./store/portalState";
 import { createPositionSlice } from "./store/positionState";
 import { createPreferenceSlice } from "./store/preferenceState";
 import { createRaiseDeadSlice } from "./store/raiseDeadState";
+import { createRealmFloodSlice } from "./store/realmFloodState";
 import { createRemoteCursorSlice } from "./store/remoteCursorState";
 import { createResourceSlice } from "./store/resourceState";
 import { createRevealOverlaySlice } from "./store/revealOverlayState";
@@ -226,6 +227,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   ...createKettletopLeprechaunSlice(set, get, storeApi),
   ...createDemonicContractSlice(set, get, storeApi),
   ...createRaiseDeadSlice(set, get, storeApi),
+  ...createRealmFloodSlice(set, get, storeApi),
   ...createLegionOfGallSlice(set, get, storeApi),
   ...createAutoResolveSlice(set, get, storeApi),
   ...createDholChantsSlice(set, get, storeApi),
@@ -397,6 +399,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         pendingPrivateHandCast: null,
         pendingAnimistCast: null,
         pendingInterrogatorChoice: null,
+        pendingRealmFlood: null,
         pendingAtlanteanFate: null,
         pendingMephistopheles: null,
         pendingRaiseDead: null,

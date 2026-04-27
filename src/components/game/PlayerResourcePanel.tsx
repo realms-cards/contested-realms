@@ -7,6 +7,8 @@ import type { PlayerKey } from "@/lib/game/store";
 import {
   computeAvailableMana,
   computeThresholdTotals,
+  getAvatarAdjustedManaCost,
+  getCardManaCost,
   siteProvidesMana,
 } from "@/lib/game/store/utils/resourceHelpers";
 import { useSmallScreen, useTouchDevice } from "@/lib/hooks/useTouchDevice";
@@ -274,6 +276,17 @@ export function PlayerResourceColumn({
   const addMana = useGameStore((s) => s.addMana);
   const actorKey = useGameStore((s) => s.actorKey);
   const manaOffset = useGameStore((s) => s.players[player]?.mana ?? 0);
+  const selectedCard = useGameStore((s) => s.selectedCard);
+  const castPlacementMode = useGameStore((s) => s.castPlacementMode);
+  const hoverCell = useGameStore((s) => s.hoverCell);
+  const metaByCardId = useGameStore((s) => s.metaByCardId);
+  const avatars = useGameStore((s) => s.avatars);
+  const imposterMasks = useGameStore((s) => s.imposterMasks);
+  const harbingerPortalDiscountUsed = useGameStore(
+    (s) => s.harbingerPortalDiscountUsed,
+  );
+  const templarDiscountUsed = useGameStore((s) => s.templarDiscountUsed);
+  const portalState = useGameStore((s) => s.portalState);
 
   // Subscribe to granular state slices for threshold reactivity
   const boardSize = useGameStore((s) => s.board.size);
@@ -346,15 +359,51 @@ export function PlayerResourceColumn({
       undefined,
       babelTowers,
     );
-    return { baseMana: total, mana: Math.max(0, available + manaOffset) };
+    let displayedMana = Math.max(0, available + manaOffset);
+    if (
+      selectedCard?.who === player &&
+      (dragFromHand || Boolean(castPlacementMode))
+    ) {
+      const selectedType = String(selectedCard.card?.type || "").toLowerCase();
+      if (!selectedType.includes("site") && !selectedType.includes("token")) {
+        const baseCost = getCardManaCost(selectedCard.card, metaByCardId);
+        const projectedCost = getAvatarAdjustedManaCost({
+          state: {
+            avatars,
+            imposterMasks,
+            harbingerPortalDiscountUsed,
+            templarDiscountUsed,
+            portalState,
+          },
+          who: player,
+          card: selectedCard.card,
+          type: selectedType,
+          x: hoverCell?.[0] ?? -1,
+          y: hoverCell?.[1] ?? -1,
+          manaCost: baseCost,
+        }).manaCost;
+        displayedMana = Math.max(0, displayedMana - projectedCost);
+      }
+    }
+    return { baseMana: total, mana: displayedMana };
   }, [
+    avatars,
     boardSites,
     boardSize,
+    castPlacementMode,
+    dragFromHand,
+    harbingerPortalDiscountUsed,
+    hoverCell,
+    imposterMasks,
+    metaByCardId,
     permanents,
     owner,
     player,
+    portalState,
+    selectedCard,
     zones,
     specialSiteState,
+    templarDiscountUsed,
     thresholds,
     manaOffset,
     babelTowers,

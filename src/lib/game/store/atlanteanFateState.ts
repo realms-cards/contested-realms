@@ -511,13 +511,28 @@ export const createAtlanteanFateSlice: StateCreator<
     const permanents = get().permanents;
     const { x: cornerX, y: cornerY } = parseCellKey(pending.selectedCorner);
 
-    // Calculate the 2x2 area
-    const coveredCells = calculate2x2Area(
-      cornerX,
-      cornerY,
-      board.size.w,
-      board.size.h,
+    // Calculate the 2x2 area based on the card's placement offset so it matches
+    // the visual overlay (AtlanteanFateAreaOverlay). Fall back to the legacy
+    // anchor-as-lower-left calculation if no offset is available.
+    const auraPermAt = permanents[pending.spell.at] || [];
+    const auraPerm = auraPermAt.find((p) =>
+      String(p.card?.name || "")
+        .toLowerCase()
+        .includes("atlantean fate"),
     );
+    const auraOffset = (auraPerm?.offset || [0, 0]) as [number, number];
+    const [auraOffX, auraOffZ] = auraOffset;
+    const hasOffset = auraOffX !== 0 || auraOffZ !== 0;
+    const coveredCells = hasOffset
+      ? calculate2x2AreaWithOffset(
+          cornerX,
+          cornerY,
+          auraOffX,
+          auraOffZ,
+          board.size.w,
+          board.size.h,
+        )
+      : calculate2x2Area(cornerX, cornerY, board.size.w, board.size.h);
 
     // Find non-ordinary sites to flood
     // Ordinary sites (basic elemental sites with "Ordinary" rarity) are NOT flooded

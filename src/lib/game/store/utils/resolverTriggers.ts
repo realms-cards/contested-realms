@@ -140,6 +140,11 @@ export function triggerCardResolvers(ctx: ResolverContext): boolean {
       get().beginInfiltrate({ spell: spellRef, casterSeat: ownerSeat });
       triggered = true;
     } catch {}
+  } else if (cardNameLower === "the flood") {
+    try {
+      get().beginRealmFlood({ source: spellRef, casterSeat: ownerSeat });
+      triggered = true;
+    } catch {}
   }
 
   // ─── MINION GENESIS / ETB RESOLVERS ──────────────────────────────
@@ -237,6 +242,13 @@ export function triggerCardResolvers(ctx: ResolverContext): boolean {
         minion: { at: key, index: permanentIndex, instanceId, owner, card },
         ownerSeat,
       });
+      triggered = true;
+    } catch {}
+  }
+
+  if (cardNameLower === "great old one" && type.includes("minion")) {
+    try {
+      get().beginRealmFlood({ source: spellRef, casterSeat: ownerSeat });
       triggered = true;
     } catch {}
   }

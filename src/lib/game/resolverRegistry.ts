@@ -146,6 +146,13 @@ export const RESOLVER_REGISTRY: ResolverEntry[] = [
     description:
       "Target enemy minion gains Stealth and taps. You control it until it no longer has Stealth",
   },
+  {
+    id: "theFlood",
+    cardName: "The Flood",
+    category: "spell",
+    stateFile: "realmFloodState.ts",
+    description: "Permanently floods the entire realm, including future sites",
+  },
 
   // ─── MINION RESOLVERS ──────────────────────────────────────────────
   {
@@ -205,6 +212,14 @@ export const RESOLVER_REGISTRY: ResolverEntry[] = [
     category: "minion",
     stateFile: "headlessHauntState.ts",
     description: "Auto-move to random tile at start of turn",
+  },
+  {
+    id: "greatOldOne",
+    cardName: "Great Old One",
+    category: "minion",
+    stateFile: "realmFloodState.ts",
+    description:
+      "Genesis permanently floods the entire realm, including future sites",
   },
   {
     id: "lilith",

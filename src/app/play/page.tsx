@@ -114,6 +114,7 @@ import {
 } from "@/lib/game/hotseatPersistence";
 import { Physics } from "@/lib/game/physics";
 import { useGameStore } from "@/lib/game/store";
+import { getStoredCardPreviewsEnabled } from "@/lib/game/store/uiState";
 import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
 import { useSmallScreen } from "@/lib/hooks/useTouchDevice";
 import { useZoomKeyboardShortcuts } from "@/lib/hooks/useZoomKeyboardShortcuts";
@@ -171,6 +172,15 @@ export default function PlayPage() {
 
     requestAnimationFrame(() => {
       const loadSettings = async () => {
+        try {
+          const storedCardPreviews = getStoredCardPreviewsEnabled();
+          if (
+            storedCardPreviews !== useGameStore.getState().cardPreviewsEnabled
+          ) {
+            useGameStore.getState().setCardPreviewsEnabled(storedCardPreviews);
+          }
+        } catch {}
+
         try {
           // Try to load from API first (authenticated users)
           const res = await fetch("/api/users/me/playmats/preferences", {
