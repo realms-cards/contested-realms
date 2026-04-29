@@ -1018,6 +1018,7 @@ export const createPlayActionsSlice: StateCreator<
       const isTorshammarTrinket = cardNameLower === "torshammar trinket";
       const isTheInquisition = cardNameLower === "the inquisition";
       const isFeastForCrows = cardNameLower === "feast for crows";
+      const isSelfsameSimulacrum = cardNameLower === "selfsame simulacrum";
 
       // If this is Torshammar Trinket, show a toast that it will return to hand automatically
       if (isTorshammarTrinket && newest && type.includes("artifact")) {
@@ -1361,6 +1362,70 @@ export const createPlayActionsSlice: StateCreator<
           });
         } catch (e) {
           console.error("[playActions] Error triggering Pith Imp genesis:", e);
+        }
+      }
+      // If this is Selfsame Simulacrum (minion), offer copy of a nearby minion
+      else if (isSelfsameSimulacrum && newest && type.includes("minion")) {
+        try {
+          const state = get();
+          // "Nearby" includes the Simulacrum's own tile plus the 8 surrounding tiles
+          const adjacentCells = getNearbyCells(
+            key,
+            state.board.size.w,
+            state.board.size.h,
+          );
+          const allCells: CellKey[] = [key, ...adjacentCells];
+          const simInstanceId = newest.instanceId ?? null;
+          const nearbyMinions: Array<{
+            card: CardRef;
+            at: CellKey;
+            index: number;
+            owner: 1 | 2;
+          }> = [];
+          for (const cell of allCells) {
+            const perms = state.permanents[cell] || [];
+            perms.forEach((perm, idx) => {
+              // Exclude the Simulacrum itself
+              if (
+                cell === key &&
+                simInstanceId &&
+                (perm.instanceId === simInstanceId ||
+                  perm.card?.instanceId === simInstanceId)
+              ) {
+                return;
+              }
+              if ((perm.card.type || "").toLowerCase().includes("minion")) {
+                nearbyMinions.push({
+                  card: perm.card as CardRef,
+                  at: cell,
+                  index: idx,
+                  owner: perm.owner,
+                });
+              }
+            });
+          }
+          if (nearbyMinions.length > 0) {
+            get().beginSelfsameSimulacrum({
+              minion: {
+                at: key,
+                index: arr.length - 1,
+                instanceId: newest.instanceId ?? null,
+                owner: newest.owner,
+                card: newest.card as CardRef,
+              },
+              ownerSeat: who,
+              nearbyMinions,
+            });
+          } else {
+            get().log(
+              `[${who.toUpperCase()}] Selfsame Simulacrum: no nearby minions to copy`,
+            );
+          }
+        } catch (e) {
+          console.error(
+            "[playActions] Error triggering Selfsame Simulacrum:",
+            e,
+          );
         }
       }
       // If this is an Omphalos artifact, register it for end-of-turn draws

@@ -13,6 +13,7 @@ import { AnimistCastChoiceOverlay } from "@/components/game/AnimistCastChoiceOve
 import AnnualFairOverlay from "@/components/game/AnnualFairOverlay";
 import ArtifactCastOverlay from "@/components/game/ArtifactCastOverlay";
 import AssimilatorSnailOverlay from "@/components/game/AssimilatorSnailOverlay";
+import SelfsameSimulacrumOverlay from "@/components/game/SelfsameSimulacrumOverlay";
 import AssortedAnimalsOverlay from "@/components/game/AssortedAnimalsOverlay";
 import AtlanteanFateOverlay from "@/components/game/AtlanteanFateOverlay";
 import AudioControls from "@/components/game/AudioControls";
@@ -3559,6 +3560,8 @@ export default function OnlineMatchPage() {
               <RaiseDeadOverlay />
               {/* Assimilator Snail Overlay (banish dead minion, become copy) */}
               <AssimilatorSnailOverlay />
+              {/* Selfsame Simulacrum Overlay (copy a nearby minion on summon) */}
+              <SelfsameSimulacrumOverlay />
               {/* Legion of Gall Overlay (inspect and banish from opponent collection) */}
               <LegionOfGallOverlay />
               {/* Artifact Cast Overlay (Toolbox, Silver Bullet) */}

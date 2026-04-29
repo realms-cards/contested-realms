@@ -1384,6 +1384,31 @@ export type PendingRaiseDead = {
   createdAt: number;
 };
 
+// --- Selfsame Simulacrum State ----------------------------------------
+// "May be summoned as a basic copy of a nearby minion"
+export type SelfsameSimulacrumPhase = "selecting" | "complete";
+
+export type PendingSelfsameSimulacrum = {
+  id: string;
+  minion: {
+    at: CellKey;
+    index: number;
+    instanceId: string | null;
+    owner: 1 | 2;
+    card: CardRef;
+  };
+  ownerSeat: PlayerKey;
+  phase: SelfsameSimulacrumPhase;
+  nearbyMinions: Array<{
+    card: CardRef;
+    at: CellKey;
+    index: number;
+    owner: 1 | 2;
+  }>;
+  selectedIndex: number | null;
+  createdAt: number;
+};
+
 // --- Sea Raider / Captain Baldassare Piracy State --------------------
 // "Discard topmost N spells from defender's spellbook, may cast them this turn"
 export type PiracyPhase = "revealing" | "complete";
@@ -2998,6 +3023,27 @@ export type GameState = {
   cancelAssimilatorSnail: () => void;
   // Revert transformations at start of owner's next turn
   revertAssimilatorSnailTransforms: (who: PlayerKey) => void;
+  // Selfsame Simulacrum: transform into a basic copy of a nearby minion
+  pendingSelfsameSimulacrum: PendingSelfsameSimulacrum | null;
+  beginSelfsameSimulacrum: (input: {
+    minion: {
+      at: CellKey;
+      index: number;
+      instanceId: string | null;
+      owner: 1 | 2;
+      card: CardRef;
+    };
+    ownerSeat: PlayerKey;
+    nearbyMinions: Array<{
+      card: CardRef;
+      at: CellKey;
+      index: number;
+      owner: 1 | 2;
+    }>;
+  }) => void;
+  selectSelfsameSimulacrumTarget: (index: number) => void;
+  resolveSelfsameSimulacrum: () => void;
+  cancelSelfsameSimulacrum: () => void;
   // Hyperparasite: force-drop on silence/destroy/force-move (uses generic carry mechanism)
   forceDropHyperparasiteCarried: (
     instanceId: string,

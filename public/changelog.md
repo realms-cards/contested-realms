@@ -2,6 +2,13 @@
 
 ## April 2026
 
+### Some more custom resolvers
+
+- **add custom resolvers for Templar, Selfsame Simulacrum, Great Old One** and also add support for flooded realm (new played sites will are flooded)
+- **fix Atlantean Fate effect radius** and improve aura placement in general
+- **fix some hotseat inconsistencies**
+- **fix lobby reconnection issues**
+
 ### Bugfix session (go through user filed GitHUB issues)
 
 - **add custom resolvers for Infiltrate and Betrayal**

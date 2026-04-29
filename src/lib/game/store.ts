@@ -109,6 +109,7 @@ import { createRevealOverlaySlice } from "./store/revealOverlayState";
 import { createRiverGenesisSlice } from "./store/riverGenesisState";
 import { createSeaRaiderSlice } from "./store/seaRaiderState";
 import { createSearingTruthSlice } from "./store/searingTruthState";
+import { createSelfsameSimulacrumSlice } from "./store/selfsameSimulacrumState";
 import { createSeerSlice } from "./store/seerState";
 import { createSessionSlice } from "./store/sessionState";
 import { createShapeshiftSlice } from "./store/shapeshiftState";
@@ -266,6 +267,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   ...createTorshammarSlice(set, get, storeApi),
   ...createSeaRaiderSlice(set, get, storeApi),
   ...createShapeshiftSlice(set, get, storeApi),
+  ...createSelfsameSimulacrumSlice(set, get, storeApi),
   ...createAssimilatorSnailSlice(set, get, storeApi),
   ...createHyperparasiteSlice(set, get, storeApi),
   ...createTurnEffectQueueSlice(set, get, storeApi),
@@ -437,6 +439,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         pendingCrossroads: null,
         pendingPiracy: null,
         pendingShapeshift: null,
+        pendingSelfsameSimulacrum: null,
         pendingAssimilatorSnail: null,
         assimilatorSnailUsed: createInitialAssimilatorSnailUsed(),
         assimilatorSnailTransforms: [],

@@ -4405,7 +4405,11 @@ io.on("connection", async (socket: SocketClient) => {
       type === "feastForCrowsCancel" ||
       type === "merlinRegister" ||
       type === "merlinUnregister" ||
-      type === "merlinCast"
+      type === "merlinCast" ||
+      type === "selfsameSimulacrumBegin" ||
+      type === "selfsameSimulacrumSelect" ||
+      type === "selfsameSimulacrumResolve" ||
+      type === "selfsameSimulacrumCancel"
     ) {
       // Resolver messages - broadcast to match room
       try {

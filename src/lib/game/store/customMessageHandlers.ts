@@ -7974,4 +7974,127 @@ export function handleCustomMessage(
 
   // Hyperparasite carry now syncs via permanents patches (generic carry mechanism)
   // No custom message handlers needed
+
+  if (t === "selfsameSimulacrumBegin") {
+    const payload = msg as {
+      id?: string;
+      ownerSeat?: PlayerKey;
+      nearbyCount?: number;
+    };
+    const { id, ownerSeat } = payload;
+    if (!id || !ownerSeat) return;
+
+    // Skip if we're the owner - we already have the state
+    const actorKey = get().actorKey;
+    if (actorKey === ownerSeat) return;
+
+    // Set minimal pending state so opponent sees the waiting indicator
+    set((s) => ({
+      ...s,
+      pendingSelfsameSimulacrum: {
+        id,
+        minion: {
+          at: "0,0" as CellKey,
+          index: 0,
+          instanceId: null,
+          owner: ownerSeat === "p1" ? (1 as const) : (2 as const),
+          card: {
+            cardId: 0,
+            name: "Selfsame Simulacrum",
+            type: "minion",
+          } as CardRef,
+        },
+        ownerSeat,
+        phase: "selecting" as const,
+        nearbyMinions: [],
+        selectedIndex: null,
+        createdAt: Date.now(),
+      },
+    }));
+    return;
+  }
+
+  if (t === "selfsameSimulacrumSelect") {
+    // No-op for opponent - selection is caster-only
+    return;
+  }
+
+  if (t === "selfsameSimulacrumResolve") {
+    const payload = msg as {
+      id?: string;
+      ownerSeat?: PlayerKey;
+      minionAt?: CellKey;
+      minionInstanceId?: string | null;
+      chosenCard?: CardRef;
+    };
+    const { ownerSeat, minionAt, minionInstanceId, chosenCard } = payload;
+    if (!ownerSeat || !minionAt || !chosenCard) return;
+
+    // Skip if we're the owner - we already handled it locally
+    const actorKey = get().actorKey;
+    if (actorKey === ownerSeat) {
+      set({ pendingSelfsameSimulacrum: null } as Partial<GameState> as GameState);
+      return;
+    }
+
+    // Transform the Simulacrum permanent into the basic copy
+    const permanents = { ...get().permanents };
+    const cellPerms = [...(permanents[minionAt] || [])];
+
+    const simIndex = cellPerms.findIndex(
+      (p) =>
+        (minionInstanceId &&
+          ((p.instanceId && p.instanceId === minionInstanceId) ||
+            (p.card?.instanceId && p.card.instanceId === minionInstanceId))) ||
+        (p.card?.name || "").toLowerCase() === "selfsame simulacrum",
+    );
+
+    if (simIndex !== -1) {
+      const simPerm = cellPerms[simIndex];
+      cellPerms[simIndex] = {
+        ...simPerm,
+        card: {
+          ...chosenCard,
+          instanceId: simPerm.card.instanceId,
+          owner: simPerm.card.owner,
+          text: null,
+        },
+      };
+      permanents[minionAt] = cellPerms;
+      set({
+        permanents,
+        pendingSelfsameSimulacrum: null,
+      } as Partial<GameState> as GameState);
+    } else {
+      set({ pendingSelfsameSimulacrum: null } as Partial<GameState> as GameState);
+    }
+
+    try {
+      get().log(
+        `[${ownerSeat.toUpperCase()}] Selfsame Simulacrum becomes a basic copy of ${chosenCard.name}`,
+      );
+    } catch {}
+    return;
+  }
+
+  if (t === "selfsameSimulacrumCancel") {
+    const payload = msg as {
+      id?: string;
+      ownerSeat?: PlayerKey;
+    };
+    const { ownerSeat } = payload;
+    if (!ownerSeat) return;
+
+    const actorKey = get().actorKey;
+    if (actorKey === ownerSeat) return;
+
+    set({ pendingSelfsameSimulacrum: null } as Partial<GameState> as GameState);
+
+    try {
+      get().log(
+        `[${ownerSeat.toUpperCase()}] Selfsame Simulacrum: kept original form`,
+      );
+    } catch {}
+    return;
+  }
 }
