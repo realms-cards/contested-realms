@@ -3162,13 +3162,20 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                             onClick={() => {
                               const tokenInstanceId = token.card?.instanceId;
                               if (isStealth && tokenInstanceId) {
-                                useGameStore
-                                  .getState()
-                                  .handleInfiltrateStealthRemoved(
+                                const state = useGameStore.getState();
+                                const isInfiltrated =
+                                  state.activeInfiltrations.some(
+                                    (entry) =>
+                                      entry.stealthToken?.instanceId ===
+                                      tokenInstanceId,
+                                  );
+                                if (isInfiltrated) {
+                                  state.handleInfiltrateStealthRemoved(
                                     tokenInstanceId,
                                   );
-                                onClose();
-                                return;
+                                  onClose();
+                                  return;
+                                }
                               }
                               // First detach, then immediately banish
                               detachToken(token.tileKey, token.index);
