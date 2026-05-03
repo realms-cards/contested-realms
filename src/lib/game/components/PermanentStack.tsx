@@ -812,7 +812,7 @@ export function PermanentStack({
                 if (
                   pendingShapeshift &&
                   pendingShapeshift.phase === "selectingTarget" &&
-                  pendingShapeshift.casterSeat === actorKey
+                  (actorKey === null || pendingShapeshift.casterSeat === actorKey)
                 ) {
                   const type = (p.card?.type || "").toLowerCase();
                   // Exclude avatars and sites - everything else can be targeted

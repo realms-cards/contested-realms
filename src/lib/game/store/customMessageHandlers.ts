@@ -7433,9 +7433,9 @@ export function handleCustomMessage(
 
     if (!id || !spell || !casterSeat) return;
 
-    // Skip if we're the caster - we already have the state
+    // Skip if we're the caster or in hotseat - direct action calls already manage state
     const actorKey = get().actorKey;
-    if (actorKey === casterSeat) return;
+    if (actorKey === null || actorKey === casterSeat) return;
 
     set({
       pendingShapeshift: {
@@ -7477,9 +7477,9 @@ export function handleCustomMessage(
     const pending = get().pendingShapeshift;
     if (!pending || pending.id !== id) return;
 
-    // Skip if we're the caster - we already have the state
+    // Skip if we're the caster or in hotseat - direct action calls already manage state
     const actorKey = get().actorKey;
-    if (actorKey === pending.casterSeat) return;
+    if (actorKey === null || actorKey === pending.casterSeat) return;
 
     set({
       pendingShapeshift: {
@@ -7510,9 +7510,9 @@ export function handleCustomMessage(
     const pending = get().pendingShapeshift;
     if (!pending || pending.id !== id) return;
 
-    // Skip if we're the caster - we already have the state
+    // Skip if we're the caster or in hotseat - direct action calls already manage state
     const actorKey = get().actorKey;
-    if (actorKey === pending.casterSeat) return;
+    if (actorKey === null || actorKey === pending.casterSeat) return;
 
     set({
       pendingShapeshift: {
@@ -7531,9 +7531,9 @@ export function handleCustomMessage(
     const pending = get().pendingShapeshift;
     if (!pending || pending.id !== id) return;
 
-    // Skip if we're the caster - we already have the state
+    // Skip if we're the caster or in hotseat - direct action calls already manage state
     const actorKey = get().actorKey;
-    if (actorKey === pending.casterSeat) return;
+    if (actorKey === null || actorKey === pending.casterSeat) return;
 
     set({
       pendingShapeshift: {
@@ -7554,9 +7554,9 @@ export function handleCustomMessage(
     const pending = get().pendingShapeshift;
     if (!pending || pending.id !== id) return;
 
-    // Skip if we're the caster - we already have the state
+    // Skip if we're the caster or in hotseat - direct action calls already manage state
     const actorKey = get().actorKey;
-    if (actorKey === pending.casterSeat) return;
+    if (actorKey === null || actorKey === pending.casterSeat) return;
 
     // Clear pending state
     set({ pendingShapeshift: null } as Partial<GameState> as GameState);
@@ -7584,9 +7584,9 @@ export function handleCustomMessage(
     const pending = get().pendingShapeshift;
     if (!pending || pending.id !== id) return;
 
-    // Skip if we're the caster - we already have the state
+    // Skip if we're the caster or in hotseat - direct action calls already manage state
     const actorKey = get().actorKey;
-    if (actorKey === pending.casterSeat) return;
+    if (actorKey === null || actorKey === pending.casterSeat) return;
 
     set({ pendingShapeshift: null } as Partial<GameState> as GameState);
 
@@ -7604,9 +7604,9 @@ export function handleCustomMessage(
     const pending = get().pendingShapeshift;
     if (!pending || pending.id !== id) return;
 
-    // Skip if we're the caster - we already have the state
+    // Skip if we're the caster or in hotseat - direct action calls already manage state
     const actorKey = get().actorKey;
-    if (actorKey === pending.casterSeat) return;
+    if (actorKey === null || actorKey === pending.casterSeat) return;
 
     set({ pendingShapeshift: null } as Partial<GameState> as GameState);
 
