@@ -44,7 +44,7 @@ export default function OnlineMulliganScreen({
   const [selected, setSelected] = useState<number[]>([]);
   const [done, setDone] = useState<boolean>(false);
   const [submitted, setSubmitted] = useState<boolean>(false);
-  const { playCardSelect, playTurnGong } = useSound();
+  const { playCardSelect } = useSound();
 
   // Set screen type for video overlay
   useEffect(() => {
@@ -175,9 +175,6 @@ export default function OnlineMulliganScreen({
     (decision: "top" | "bottom" | "skip") => {
       if (seerCompleted) return;
       completeSeer(decision);
-      try {
-        playTurnGong();
-      } catch {}
       // Auto-start the game after seer is complete
       if (!submitted) {
         setSubmitted(true);
@@ -189,7 +186,6 @@ export default function OnlineMulliganScreen({
     [
       seerCompleted,
       completeSeer,
-      playTurnGong,
       submitted,
       finalizeMulligan,
       onStartGame,

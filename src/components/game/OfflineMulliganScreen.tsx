@@ -30,7 +30,7 @@ export default function OfflineMulliganScreen({
   const [selected, setSelected] = useState<number[]>([]);
   const [done, setDone] = useState<boolean>(false);
   const [submitted, setSubmitted] = useState<boolean>(false);
-  const { playCardSelect, playTurnGong } = useSound();
+  const { playCardSelect } = useSound();
 
   // Set screen type for video overlay (no RTC in offline)
   useEffect(() => {
@@ -74,9 +74,6 @@ export default function OfflineMulliganScreen({
     if (submitted) return;
     setSubmitted(true);
     setDone(true);
-    try {
-      playTurnGong();
-    } catch {}
     onStartGame();
   };
 

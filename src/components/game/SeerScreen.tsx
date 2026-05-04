@@ -33,7 +33,7 @@ export default function SeerScreen({
   const zones = useGameStore((s) => s.zones);
   const setPreviewCard = useGameStore((s) => s.setPreviewCard);
   const currentPlayer = useGameStore((s) => s.currentPlayer);
-  const { playCardSelect, playTurnGong } = useSound();
+  const { playCardSelect } = useSound();
 
   // Synced seer state from store
   const seerState = useGameStore((s) => s.seerState);
@@ -92,12 +92,8 @@ export default function SeerScreen({
       } catch {}
 
       completeSeer(decision);
-
-      try {
-        playTurnGong();
-      } catch {}
     },
-    [isCompleted, playCardSelect, playTurnGong, completeSeer],
+    [isCompleted, playCardSelect, completeSeer],
   );
 
   // If not the second seat, show waiting screen
