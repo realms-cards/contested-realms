@@ -28,8 +28,9 @@ body {
   background: var(--background);
   color: var(--foreground);
   /* Console monospace feel by default; accent font via .font-fantaisie */
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-    "Liberation Mono", "Courier New", monospace;
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
   margin: 0;
   /* Ensure all views can occupy the full available viewport height */
   min-height: 100vh;
@@ -73,15 +74,30 @@ select,
 }
 
 .font-fantaisie {
-  font-family: var(--font-fantaisie), ui-sans-serif, system-ui, -apple-system,
-    "Segoe UI", Roboto, Helvetica, Arial, ui-monospace, SFMono-Regular, Menlo,
-    Monaco, Consolas, "Liberation Mono", "Courier New", sans-serif;
+  font-family:
+    var(--font-fantaisie),
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    Helvetica,
+    Arial,
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Monaco,
+    Consolas,
+    "Liberation Mono",
+    "Courier New",
+    sans-serif;
 }
 
 /* Readable prose font for overlays, modals, and long-form text */
 .prose-font {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
-    Arial, "Noto Sans", sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
+    "Noto Sans", sans-serif;
   letter-spacing: 0.01em;
 }
 
@@ -106,6 +122,10 @@ select,
 /* Utility: apply grayscale to a subtree (used on landing, lobby, overlays) */
 .grayscale-ui {
   filter: grayscale(1) saturate(0.9);
+}
+
+body[data-monochrome-mode="true"] {
+  filter: grayscale(1) saturate(0);
 }
 
 /* In colorful mode, still tone down color intensity a touch for cohesion */
@@ -141,8 +161,9 @@ select,
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-    "Liberation Mono", "Courier New", monospace;
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
   font-size: 1.4rem;
   line-height: 1;
   width: 1.75rem;
@@ -318,12 +339,18 @@ body[data-colorblind="true"] *[class*="ring-rose-"] {
   }
   20% {
     opacity: 1;
-    text-shadow: 0 0 10px #3b82f6, 0 0 18px #3b82f6, 0 0 26px #1d4ed8,
+    text-shadow:
+      0 0 10px #3b82f6,
+      0 0 18px #3b82f6,
+      0 0 26px #1d4ed8,
       0 0 34px #1e3a8a;
   }
   80% {
     opacity: 1;
-    text-shadow: 0 0 6px #3b82f6, 0 0 12px #3b82f6, 0 0 18px #1d4ed8,
+    text-shadow:
+      0 0 6px #3b82f6,
+      0 0 12px #3b82f6,
+      0 0 18px #1d4ed8,
       0 0 24px #1e3a8a;
   }
   100% {

@@ -26,7 +26,7 @@ import {
  */
 function createFabricNormalMap(
   size: number = 256,
-  weaveScale: number = 8
+  weaveScale: number = 8,
 ): DataTexture {
   const data = new Uint8Array(size * size * 4);
 
@@ -111,7 +111,7 @@ type BoardEnvironmentProps = {
 function noopRaycast(
   this: Object3D,
   _raycaster: Raycaster,
-  _intersects: Intersection[]
+  _intersects: Intersection[],
 ): void {
   void _raycaster;
   void _intersects;
@@ -193,7 +193,6 @@ export function BoardEnvironment({
     setPlaymatFailed(true);
   }, []);
 
-  // Always show overlay if playmat failed or if explicitly requested
   const shouldShowOverlay = showOverlay || playmatFailed;
 
   return (
@@ -211,6 +210,7 @@ export function BoardEnvironment({
           <MahoganyTable scale={0.95} />
         </Suspense>
       )}
+      {/* Playmat */}
       {showPlaymat && (
         <Suspense fallback={null}>
           <TextureErrorBoundary
@@ -219,7 +219,7 @@ export function BoardEnvironment({
               if (process.env.NODE_ENV !== "production") {
                 console.warn(
                   "[BoardEnvironment] Playmat texture error:",
-                  err.message
+                  err.message,
                 );
               }
               handlePlaymatError();

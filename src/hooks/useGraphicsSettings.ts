@@ -25,6 +25,7 @@ export interface GraphicsSettings {
   preferRaster: boolean;
   /** Show a subtle purple glow on cards that have a custom resolver (automated behavior) */
   showResolverGlow: boolean;
+  monochromeMode: boolean;
 }
 
 const STORAGE_KEY = "sorcery-graphics-settings";
@@ -40,6 +41,7 @@ const DEFAULT_SETTINGS: GraphicsSettings = {
   gamepadLifeControls: false,
   preferRaster: false,
   showResolverGlow: true,
+  monochromeMode: false,
 };
 
 function loadSettings(): GraphicsSettings {
@@ -180,6 +182,10 @@ export function useGraphicsSettings() {
     setSettings({ showResolverGlow: !settings.showResolverGlow });
   }, [settings.showResolverGlow, setSettings]);
 
+  const toggleMonochromeMode = useCallback(() => {
+    setSettings({ monochromeMode: !settings.monochromeMode });
+  }, [settings.monochromeMode, setSettings]);
+
   return {
     settings,
     isLoaded,
@@ -194,6 +200,7 @@ export function useGraphicsSettings() {
     toggleGamepadLifeControls,
     togglePreferRaster,
     toggleShowResolverGlow,
+    toggleMonochromeMode,
   };
 }
 

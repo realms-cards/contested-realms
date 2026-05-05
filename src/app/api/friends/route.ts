@@ -4,6 +4,33 @@ import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
 
+// GET /api/friends
+// Returns the current user's friend list (users they have added)
+export async function GET() {
+  const session = await getServerAuthSession();
+  if (!session?.user) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'content-type': 'application/json' } });
+  }
+
+  try {
+    const friendships = await prisma.friendship.findMany({
+      where: { ownerUserId: session.user.id },
+      include: {
+        target: {
+          select: { id: true, name: true, image: true },
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const friends = friendships.map((f) => f.target);
+    return new Response(JSON.stringify({ friends }), { status: 200, headers: { 'content-type': 'application/json' } });
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : typeof e === 'string' ? e : 'Unknown error';
+    return new Response(JSON.stringify({ error: message }), { status: 500, headers: { 'content-type': 'application/json' } });
+  }
+}
+
 // POST /api/friends
 // Body: { targetUserId: string }
 

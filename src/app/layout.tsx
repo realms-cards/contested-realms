@@ -6,6 +6,7 @@ import { getServerSession } from "next-auth/next";
 import AuthProvider from "@/components/auth/AuthProvider";
 import GlobalUserBadge from "@/components/auth/GlobalUserBadge";
 import GlobalNetworkLoadingBridge from "@/components/providers/GlobalNetworkLoadingBridge";
+import GraphicsSettingsScope from "@/components/providers/GraphicsSettingsScope";
 import OnlineProvider from "@/components/providers/OnlineProvider";
 import PreventBrowserZoom from "@/components/providers/PreventBrowserZoom";
 import TournamentInviteListener from "@/components/tournament/TournamentInviteListener";
@@ -135,6 +136,7 @@ export default async function RootLayout({
               <SoundProvider>
                 <AuthProvider session={session}>
                   <CacheProvider>
+                    <GraphicsSettingsScope />
                     <ThemeScope>
                       <OnlineProvider>
                         <RealtimeTournamentProvider>

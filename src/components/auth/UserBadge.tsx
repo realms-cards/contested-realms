@@ -88,6 +88,7 @@ export default function UserBadge({
     toggleHandSortOrder,
     toggleGamepadLifeControls,
     togglePreferRaster,
+    toggleMonochromeMode,
   } = useGraphicsSettings();
   const contextMenuIcons = useGameStore((s) => s.contextMenuIcons);
   const toggleContextMenuIcons = useGameStore((s) => s.toggleContextMenuIcons);
@@ -906,6 +907,57 @@ export default function UserBadge({
               </label>
               {/* Settings toggles in a compact grid */}
               <div className="grid grid-cols-2 gap-3">
+                {/* Color blind mode */}
+                <button
+                  type="button"
+                  onClick={() => setColorBlindEnabled(!colorBlindEnabled)}
+                  className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg ring-1 transition-colors text-left ${
+                    colorBlindEnabled
+                      ? "bg-sky-500/20 ring-sky-500/40"
+                      : "bg-slate-800 ring-slate-600"
+                  }`}
+                >
+                  <div className="min-w-0">
+                    <div className="text-xs text-slate-200 font-medium">
+                      Color blind
+                    </div>
+                    <div className="text-[10px] text-slate-400 truncate">
+                      Accessible colors
+                    </div>
+                  </div>
+                  <span
+                    className={`shrink-0 w-2.5 h-2.5 rounded-full ${
+                      colorBlindEnabled ? "bg-sky-300" : "bg-slate-500"
+                    }`}
+                  />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={toggleMonochromeMode}
+                  className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg ring-1 transition-colors text-left ${
+                    graphicsSettings.monochromeMode
+                      ? "bg-white/20 ring-white/40"
+                      : "bg-slate-800 ring-slate-600"
+                  }`}
+                >
+                  <div className="min-w-0">
+                    <div className="text-xs text-slate-200 font-medium">
+                      Monochrome
+                    </div>
+                    <div className="text-[10px] text-slate-400 truncate">
+                      Black and white UI
+                    </div>
+                  </div>
+                  <span
+                    className={`shrink-0 w-2.5 h-2.5 rounded-full ${
+                      graphicsSettings.monochromeMode
+                        ? "bg-white"
+                        : "bg-slate-500"
+                    }`}
+                  />
+                </button>
+
                 {/* Enhanced 3D Cards */}
                 <button
                   type="button"
@@ -929,31 +981,6 @@ export default function UserBadge({
                       graphicsSettings.enhanced3DCards
                         ? "bg-purple-300"
                         : "bg-slate-500"
-                    }`}
-                  />
-                </button>
-
-                {/* Color blind mode */}
-                <button
-                  type="button"
-                  onClick={() => setColorBlindEnabled(!colorBlindEnabled)}
-                  className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg ring-1 transition-colors text-left ${
-                    colorBlindEnabled
-                      ? "bg-sky-500/20 ring-sky-500/40"
-                      : "bg-slate-800 ring-slate-600"
-                  }`}
-                >
-                  <div className="min-w-0">
-                    <div className="text-xs text-slate-200 font-medium">
-                      Color blind
-                    </div>
-                    <div className="text-[10px] text-slate-400 truncate">
-                      Accessible colors
-                    </div>
-                  </div>
-                  <span
-                    className={`shrink-0 w-2.5 h-2.5 rounded-full ${
-                      colorBlindEnabled ? "bg-sky-300" : "bg-slate-500"
                     }`}
                   />
                 </button>
@@ -1141,9 +1168,7 @@ export default function UserBadge({
                   </div>
                   <span
                     className={`shrink-0 w-2.5 h-2.5 rounded-full ${
-                      controlScheme === "tts"
-                        ? "bg-purple-300"
-                        : "bg-slate-500"
+                      controlScheme === "tts" ? "bg-purple-300" : "bg-slate-500"
                     }`}
                   />
                 </button>

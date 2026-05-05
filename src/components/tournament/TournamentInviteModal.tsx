@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useSession } from "next-auth/react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useOnline } from "@/app/online/online-context";
 import { Modal } from "@/components/ui/Modal";
 
@@ -10,7 +10,6 @@ interface Player {
   id: string;
   name: string | null;
   image: string | null;
-  email?: string | null;
 }
 
 interface TournamentInviteModalProps {
@@ -31,41 +30,86 @@ export default function TournamentInviteModal({
   const { data: session } = useSession();
   const { transport } = useOnline();
   const socket = transport?.getSocket() ?? null;
-  const [players, setPlayers] = useState<Player[]>([]);
+  const [friends, setFriends] = useState<Player[]>([]);
+  const [searchResults, setSearchResults] = useState<Player[]>([]);
   const [selectedPlayers, setSelectedPlayers] = useState<Set<string>>(
     new Set()
   );
-  const [loading, setLoading] = useState(false);
+  const [loadingFriends, setLoadingFriends] = useState(false);
+  const [loadingSearch, setLoadingSearch] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Load all players
+  // Load friends when modal opens
   useEffect(() => {
     if (!isOpen || !session?.user) return;
 
-    setLoading(true);
+    setLoadingFriends(true);
     setError(null);
 
-    fetch("/api/users")
+    fetch("/api/friends")
       .then(async (res) => {
-        if (!res.ok) throw new Error("Failed to load players");
+        if (!res.ok) throw new Error("Failed to load friends");
         const data = await res.json();
-        // Filter out current user and extract player list
-        const playersList = (data.users || data || []).filter(
-          (player: Player) => player.id !== session.user?.id
+        const list = (data.friends || []).filter(
+          (p: Player) => p.id !== session.user?.id
         );
-        setPlayers(playersList);
+        setFriends(list);
       })
       .catch((err) => {
-        console.error("Error loading players:", err);
-        setError("Failed to load players list");
+        console.error("Error loading friends:", err);
       })
-      .finally(() => {
-        setLoading(false);
-      });
+      .finally(() => setLoadingFriends(false));
   }, [isOpen, session?.user]);
+
+  // Server-side search when query changes (debounced)
+  useEffect(() => {
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+
+    const q = searchQuery.trim();
+    if (!q) {
+      setSearchResults([]);
+      setLoadingSearch(false);
+      return;
+    }
+
+    setLoadingSearch(true);
+    searchTimer.current = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `/api/users?q=${encodeURIComponent(q)}&limit=30`
+        );
+        if (!res.ok) throw new Error("Failed to search");
+        const data = await res.json();
+        const users = (data.users || []).filter(
+          (p: Player) => p.id !== session?.user?.id
+        );
+        setSearchResults(users);
+      } catch (err) {
+        console.error("Search error:", err);
+        setSearchResults([]);
+      } finally {
+        setLoadingSearch(false);
+      }
+    }, 300);
+
+    return () => {
+      if (searchTimer.current) clearTimeout(searchTimer.current);
+    };
+  }, [searchQuery, session?.user?.id]);
+
+  // Reset on close
+  useEffect(() => {
+    if (!isOpen) {
+      setSearchQuery("");
+      setSearchResults([]);
+      setError(null);
+      setSuccess(null);
+    }
+  }, [isOpen]);
 
   const handleTogglePlayer = (playerId: string) => {
     setSelectedPlayers((prev) => {
@@ -106,9 +150,7 @@ export default function TournamentInviteModal({
 
       const inviteCount = data.invitations?.length || 0;
       setSuccess(
-        `Successfully sent ${inviteCount} invitation${
-          inviteCount !== 1 ? "s" : ""
-        }`
+        `Successfully sent ${inviteCount} invitation${inviteCount !== 1 ? "s" : ""}`
       );
 
       // Notify invited players via socket for real-time toast
@@ -129,7 +171,6 @@ export default function TournamentInviteModal({
         onInvitesSent();
       }
 
-      // Close modal after short delay
       setTimeout(() => {
         onClose();
         setSuccess(null);
@@ -144,10 +185,10 @@ export default function TournamentInviteModal({
     }
   };
 
-  const filteredPlayers = players.filter(
-    (player) =>
-      player.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      player.email?.toLowerCase().includes(searchQuery.toLowerCase())
+  // Search results exclude already-shown friends
+  const friendIds = new Set(friends.map((f) => f.id));
+  const filteredSearchResults = searchResults.filter(
+    (p) => !friendIds.has(p.id)
   );
 
   if (!isOpen) return null;
@@ -170,7 +211,7 @@ export default function TournamentInviteModal({
         </p>
 
         {/* Search */}
-        <div className="mb-4">
+        <div className="mb-4 relative">
           <input
             type="search"
             name="q"
@@ -185,9 +226,14 @@ export default function TournamentInviteModal({
             data-keeper-lock="true"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search players by name or email..."
-            className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="Search all players by name…"
+            className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 pr-8"
           />
+          {loadingSearch && (
+            <span className="absolute right-3 top-2.5 text-slate-400 text-xs">
+              …
+            </span>
+          )}
         </div>
 
         {/* Error/Success Messages */}
@@ -202,54 +248,96 @@ export default function TournamentInviteModal({
           </div>
         )}
 
-        {/* Players List */}
-        <div className="flex-1 overflow-y-auto mb-4 space-y-2">
-          {loading ? (
-            <div className="text-center text-slate-400 py-8">
-              Loading players...
-            </div>
-          ) : filteredPlayers.length === 0 ? (
-            <div className="text-center text-slate-400 py-8">
-              {searchQuery
-                ? "No players found matching your search"
-                : "No players available"}
-            </div>
-          ) : (
-            filteredPlayers.map((player) => (
-              <label
-                key={player.id}
-                className="flex items-center gap-3 p-3 bg-slate-700 rounded hover:bg-slate-650 cursor-pointer transition-colors"
-              >
-                <input
-                  type="checkbox"
-                  checked={selectedPlayers.has(player.id)}
-                  onChange={() => handleTogglePlayer(player.id)}
-                  className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-blue-600 focus:ring-2 focus:ring-blue-500"
-                />
-                <div className="flex items-center gap-2 flex-1">
-                  {player.image && (
-                    <Image
-                      src={player.image}
-                      alt={player.name || "User"}
-                      width={32}
-                      height={32}
-                      className="w-8 h-8 rounded-full"
-                      unoptimized
-                    />
-                  )}
-                  <div className="flex flex-col">
-                    <span className="text-white">
-                      {player.name || "Unknown User"}
-                    </span>
-                    {player.email && (
-                      <span className="text-xs text-slate-400">
-                        {player.email}
-                      </span>
-                    )}
-                  </div>
+        {/* Player List */}
+        <div className="flex-1 overflow-y-auto mb-4 space-y-1">
+          {/* Friends section — always visible */}
+          {!searchQuery && (
+            <>
+              <div className="flex items-center gap-2 mb-1 px-1">
+                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
+                  Friends
+                </span>
+                {selectedPlayers.size > 0 && (
+                  <span className="ml-auto text-xs text-blue-400">
+                    {selectedPlayers.size} selected
+                  </span>
+                )}
+              </div>
+              {loadingFriends ? (
+                <div className="text-center text-slate-400 py-4 text-sm">
+                  Loading friends…
                 </div>
-              </label>
-            ))
+              ) : friends.length === 0 ? (
+                <div className="text-center text-slate-500 py-4 text-sm">
+                  No friends yet — use search to find players
+                </div>
+              ) : (
+                friends.map((player) => (
+                  <PlayerRow
+                    key={player.id}
+                    player={player}
+                    selected={selectedPlayers.has(player.id)}
+                    onToggle={handleTogglePlayer}
+                    badge="friend"
+                  />
+                ))
+              )}
+            </>
+          )}
+
+          {/* Search results */}
+          {searchQuery && (
+            <>
+              <div className="flex items-center gap-2 mb-1 px-1">
+                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
+                  Search results
+                </span>
+                {selectedPlayers.size > 0 && (
+                  <span className="ml-auto text-xs text-blue-400">
+                    {selectedPlayers.size} selected
+                  </span>
+                )}
+              </div>
+
+              {/* Friends matching search first */}
+              {friends
+                .filter(
+                  (f) =>
+                    f.name?.toLowerCase().includes(searchQuery.toLowerCase())
+                )
+                .map((player) => (
+                  <PlayerRow
+                    key={player.id}
+                    player={player}
+                    selected={selectedPlayers.has(player.id)}
+                    onToggle={handleTogglePlayer}
+                    badge="friend"
+                  />
+                ))}
+
+              {loadingSearch ? (
+                <div className="text-center text-slate-400 py-4 text-sm">
+                  Searching…
+                </div>
+              ) : filteredSearchResults.length === 0 &&
+                friends.filter(
+                  (f) =>
+                    f.name?.toLowerCase().includes(searchQuery.toLowerCase())
+                ).length === 0 ? (
+                <div className="text-center text-slate-400 py-4 text-sm">
+                  No players found for &ldquo;{searchQuery}&rdquo;
+                </div>
+              ) : (
+                filteredSearchResults.map((player) => (
+                  <PlayerRow
+                    key={player.id}
+                    player={player}
+                    selected={selectedPlayers.has(player.id)}
+                    onToggle={handleTogglePlayer}
+                  />
+                ))
+              )}
+            </>
           )}
         </div>
 
@@ -268,13 +356,68 @@ export default function TournamentInviteModal({
             disabled={sending || selectedPlayers.size === 0}
           >
             {sending
-              ? "Sending..."
-              : `Invite ${
-                  selectedPlayers.size > 0 ? `(${selectedPlayers.size})` : ""
-                }`}
+              ? "Sending…"
+              : `Invite${selectedPlayers.size > 0 ? ` (${selectedPlayers.size})` : ""}`}
           </button>
         </div>
       </div>
     </Modal>
+  );
+}
+
+function PlayerRow({
+  player,
+  selected,
+  onToggle,
+  badge,
+}: {
+  player: Player;
+  selected: boolean;
+  onToggle: (id: string) => void;
+  badge?: "friend";
+}) {
+  return (
+    <label
+      className={`flex items-center gap-3 p-3 rounded cursor-pointer transition-colors ${
+        selected
+          ? "bg-blue-900/40 border border-blue-600/50"
+          : "bg-slate-700 hover:bg-slate-650 border border-transparent"
+      }`}
+    >
+      <input
+        type="checkbox"
+        checked={selected}
+        onChange={() => onToggle(player.id)}
+        className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-blue-600 focus:ring-2 focus:ring-blue-500"
+      />
+      <div className="flex items-center gap-2 flex-1 min-w-0">
+        {player.image ? (
+          <Image
+            src={player.image}
+            alt={player.name || "User"}
+            width={32}
+            height={32}
+            className="w-8 h-8 rounded-full shrink-0"
+            unoptimized
+          />
+        ) : (
+          <div className="w-8 h-8 rounded-full bg-slate-600 shrink-0 flex items-center justify-center text-slate-300 text-sm font-medium">
+            {player.name?.[0]?.toUpperCase() ?? "?"}
+          </div>
+        )}
+        <div className="flex flex-col min-w-0">
+          <div className="flex items-center gap-1.5">
+            <span className="text-white text-sm truncate">
+              {player.name || "Unknown User"}
+            </span>
+            {badge === "friend" && (
+              <span className="shrink-0 text-xs px-1.5 py-0.5 bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 rounded">
+                friend
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+    </label>
   );
 }
