@@ -65,6 +65,7 @@ function createLobbyFeature(deps) {
   const lobbies = new Map();
   /** @type {Map<string, Set<string>>} lobbyId -> invited playerIds */
   const lobbyInvites = new Map();
+  const playerMatchPreferences = new Map();
 
   /** @type {import('../../botManager').BotManager|null} */
   let botManager = null;
@@ -782,6 +783,7 @@ function createLobbyFeature(deps) {
     sealedConfig = null,
     draftConfig = null,
     soatcLeagueMatch = null,
+    matchOptions = null,
   ) {
     console.log(
       `[Match] Starting match requested by ${requestingPlayer?.displayName}, type: ${matchType}`,
@@ -799,6 +801,22 @@ function createLobbyFeature(deps) {
         return { ok: false, error: "All players must be ready" };
     }
 
+    const startedAt = Date.now();
+    const anyPlayerWantsTimer = Array.from(lobby.playerIds).some((pid) => {
+      const prefs = playerMatchPreferences.get(pid);
+      return prefs && prefs.regularMatchTimer === true;
+    });
+    const matchTimeMinutesRaw =
+      matchOptions && typeof matchOptions.matchTimeMinutes === "number"
+        ? matchOptions.matchTimeMinutes
+        : 45;
+    const matchTimeMinutes = Math.max(
+      1,
+      Math.min(180, Math.floor(matchTimeMinutesRaw) || 45),
+    );
+    const timedMatch =
+      matchOptions?.timedMatch === true || anyPlayerWantsTimer === true;
+
     const match = {
       id: rid("match"),
       lobbyId: lobby.id,
@@ -811,6 +829,9 @@ function createLobbyFeature(deps) {
             ? "waiting"
             : "waiting",
       seed: `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
+      startedAt,
+      timedMatch,
+      matchTimeMinutes,
       turn: Array.from(lobby.playerIds)[0],
       winnerId: null,
       matchType,
@@ -830,6 +851,11 @@ function createLobbyFeature(deps) {
         mulligans: { p1: 1, p2: 1 },
         d20Rolls: { p1: null, p2: null },
         setupWinner: null,
+        matchTimer: {
+          startedAt,
+          timedMatch,
+          matchTimeMinutes,
+        },
       },
       lastTs: 0,
       interactionRequests: new Map(),
@@ -1447,6 +1473,8 @@ function createLobbyFeature(deps) {
         sealedConfig,
         draftConfig,
         soatcLeagueMatch,
+        timedMatch,
+        matchTimeMinutes,
       } = msg;
       const p = await ensurePlayerCached(playerId);
       const lobby = findLobbyForPlayer(playerId, p.lobbyId);
@@ -1460,6 +1488,7 @@ function createLobbyFeature(deps) {
         sealedConfig || null,
         draftConfig || null,
         soatcLeagueMatch || null,
+        { timedMatch: timedMatch === true, matchTimeMinutes },
       );
       if (lobby && lobbies.has(lobby.id)) {
         await publishLobbyState(lobbies.get(lobby.id));
@@ -1468,6 +1497,14 @@ function createLobbyFeature(deps) {
           await publishLobbyDelete(lobby?.id);
         } catch {}
       }
+      return;
+    }
+    if (msg.type === "playerMatchPreferences") {
+      const playerId = typeof msg.playerId === "string" ? msg.playerId : null;
+      if (!playerId) return;
+      playerMatchPreferences.set(playerId, {
+        regularMatchTimer: msg.regularMatchTimer === true,
+      });
       return;
     }
   }
@@ -2273,9 +2310,34 @@ function createLobbyFeature(deps) {
         sealedConfig: payload?.sealedConfig || null,
         draftConfig: payload?.draftConfig || null,
         soatcLeagueMatch: payload?.soatcLeagueMatch || null,
+        timedMatch: payload?.timedMatch === true,
+        matchTimeMinutes: payload?.matchTimeMinutes,
       };
       try {
         const leader = await getOrClaimLobbyLeader();
+        if (leader && leader !== INSTANCE_ID) {
+          if (storeRedis)
+            await storeRedis.publish(
+              LOBBY_CONTROL_CHANNEL,
+              JSON.stringify(msg),
+            );
+          return;
+        }
+        await handleLobbyControlAsLeader(msg);
+      } catch {}
+    });
+
+    socket.on("setPlayerMatchPreferences", async (payload = {}) => {
+      if (!isAuthed()) return;
+      const player = getPlayerBySocket(socket);
+      if (!player) return;
+      try {
+        const leader = await getOrClaimLobbyLeader();
+        const msg = {
+          type: "playerMatchPreferences",
+          playerId: player.id,
+          regularMatchTimer: payload?.regularMatchTimer === true,
+        };
         if (leader && leader !== INSTANCE_ID) {
           if (storeRedis)
             await storeRedis.publish(

@@ -103,7 +103,7 @@ export type TransportEventMap = {
 
 export type TransportEvent = keyof TransportEventMap;
 export type TransportHandler<E extends TransportEvent> = (
-  payload: TransportEventMap[E]
+  payload: TransportEventMap[E],
 ) => void;
 
 // SOATC league match info passed when starting a match
@@ -123,6 +123,8 @@ export type StartMatchConfig = {
   };
   draftConfig?: DraftConfig;
   soatcLeagueMatch?: SoatcLeagueMatchInfo;
+  timedMatch?: boolean;
+  matchTimeMinutes?: number;
 };
 
 export interface GameTransport {
@@ -195,10 +197,10 @@ export interface GameTransport {
   sendMessage?(msg: CustomMessage): Promise<void> | void;
   sendInteractionEnvelope?(envelope: InteractionEnvelope): Promise<void> | void;
   sendInteractionRequest?(
-    message: InteractionRequestMessage
+    message: InteractionRequestMessage,
   ): Promise<void> | void;
   sendInteractionResponse?(
-    message: InteractionResponseMessage
+    message: InteractionResponseMessage,
   ): Promise<void> | void;
 
   // Tournament methods
@@ -217,7 +219,7 @@ export interface GameTransport {
 
   on<E extends TransportEvent>(
     event: E,
-    handler: TransportHandler<E>
+    handler: TransportHandler<E>,
   ): () => void;
   off?<E extends TransportEvent>(event: E, handler: TransportHandler<E>): void;
 }

@@ -35,7 +35,7 @@ interface PersistenceDeps {
   matches: Map<string, Record<string, unknown>>;
   hydrateMatchFromDatabase: (
     matchId: string,
-    match: Record<string, unknown>
+    match: Record<string, unknown>,
   ) => Promise<void>;
   /** Start recording for a recovered match so actions can be tracked */
   startMatchRecording?: (match: Record<string, unknown>) => void;
@@ -90,6 +90,29 @@ const createPersistenceLayerInternal = ({
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function matchToSessionUpsertData(match: Record<string, any>) {
+    const matchTimer =
+      typeof match.startedAt === "number" ||
+      typeof match.timedMatch === "boolean" ||
+      typeof match.matchTimeMinutes === "number"
+        ? {
+            startedAt:
+              typeof match.startedAt === "number" ? match.startedAt : null,
+            timedMatch: match.timedMatch === true,
+            matchTimeMinutes:
+              typeof match.matchTimeMinutes === "number"
+                ? match.matchTimeMinutes
+                : null,
+          }
+        : null;
+    const game =
+      match.game && typeof match.game === "object"
+        ? {
+            ...match.game,
+            ...(matchTimer ? { matchTimer } : {}),
+          }
+        : matchTimer
+          ? { matchTimer }
+          : null;
     return {
       lobbyId: match.lobbyId || null,
       lobbyName: match.lobbyName || null,
@@ -111,13 +134,13 @@ const createPersistenceLayerInternal = ({
         ? toPlainPlayerDecks(match.playerDecks)
         : null,
       sealedPacks: match.sealedPacks || null,
-      game: match.game || null,
+      game,
       lastTs: BigInt(Number(match.lastTs || Date.now())),
     };
   }
 
   async function cacheSessionToRedis(
-    sessionData: Record<string, unknown> & { id: string }
+    sessionData: Record<string, unknown> & { id: string },
   ) {
     try {
       const client = storeRedis || pubClient;
@@ -126,10 +149,10 @@ const createPersistenceLayerInternal = ({
       await client.set(
         key,
         JSON.stringify(sessionData, (_k, v) =>
-          typeof v === "bigint" ? Number(v) : v
+          typeof v === "bigint" ? Number(v) : v,
         ),
         "EX",
-        redisSessionTtlSec
+        redisSessionTtlSec,
       );
       try {
         metricsInc("persist.redis.cache.set", 1);
@@ -140,7 +163,7 @@ const createPersistenceLayerInternal = ({
   function bufferPersistUpdate(
     matchId: string,
     data: Record<string, unknown>,
-    action: PersistedAction | null
+    action: PersistedAction | null,
   ) {
     if (!isWriteBehind) return;
     const buf: PersistBuffer = persistBuffers.get(matchId) ?? {
@@ -156,7 +179,7 @@ const createPersistenceLayerInternal = ({
       // when buffer gets too large. This prevents data loss.
       if (buf.actions.length > actionBatchSize * 2) {
         console.warn(
-          `[persist] action buffer overflow for ${matchId}: ${buf.actions.length} actions, forcing immediate flush`
+          `[persist] action buffer overflow for ${matchId}: ${buf.actions.length} actions, forcing immediate flush`,
         );
         try {
           metricsInc("persist.buffer.overflow", 1);
@@ -185,7 +208,7 @@ const createPersistenceLayerInternal = ({
 
   function schedulePersistFlush(
     matchId: string,
-    dataOverride: Record<string, unknown> | null = null
+    dataOverride: Record<string, unknown> | null = null,
   ) {
     if (!isWriteBehind) return;
     const buf: PersistBuffer = persistBuffers.get(matchId) ?? {
@@ -252,7 +275,7 @@ const createPersistenceLayerInternal = ({
           // createMany failed, try individual inserts
           console.warn(
             `[persist] createMany failed for ${matchId} (${reason}), trying individual inserts:`,
-            safeErrorMessage(batchErr)
+            safeErrorMessage(batchErr),
           );
           let individualSuccessCount = 0;
           for (const r of rows) {
@@ -262,7 +285,7 @@ const createPersistenceLayerInternal = ({
             } catch (individualErr) {
               console.error(
                 `[persist] individual action create failed for ${matchId}:`,
-                safeErrorMessage(individualErr)
+                safeErrorMessage(individualErr),
               );
             }
           }
@@ -271,12 +294,12 @@ const createPersistenceLayerInternal = ({
           try {
             metricsInc(
               "persist.actions.createMany.fallback",
-              individualSuccessCount
+              individualSuccessCount,
             );
             if (individualSuccessCount < rows.length) {
               metricsInc(
                 "persist.actions.lost",
-                rows.length - individualSuccessCount
+                rows.length - individualSuccessCount,
               );
             }
           } catch {}
@@ -292,7 +315,7 @@ const createPersistenceLayerInternal = ({
         // Partial success - only remove the ones that succeeded
         buf.actions.splice(0, persistedActionCount);
         console.warn(
-          `[persist] partial action flush for ${matchId}: ${persistedActionCount}/${actionsToFlush.length} actions persisted`
+          `[persist] partial action flush for ${matchId}: ${persistedActionCount}/${actionsToFlush.length} actions persisted`,
         );
       }
 
@@ -304,7 +327,7 @@ const createPersistenceLayerInternal = ({
       // Session upsert failed - actions stay in buffer for retry
       console.error(
         `[persist] flush failed for ${matchId} (${reason}), ${actionsToFlush.length} actions will retry:`,
-        safeErrorMessage(e)
+        safeErrorMessage(e),
       );
       try {
         metricsInc("persist.flush.failure", 1);
@@ -342,7 +365,7 @@ const createPersistenceLayerInternal = ({
       try {
         console.warn(
           `[persist] create session failed for ${match.id}:`,
-          safeErrorMessage(e)
+          safeErrorMessage(e),
         );
       } catch {}
     }
@@ -353,7 +376,7 @@ const createPersistenceLayerInternal = ({
     match: Record<string, any>,
     patch: Record<string, unknown> | null,
     playerId: string | null,
-    ts: number
+    ts: number,
   ) {
     try {
       const data = matchToSessionUpsertData(match);
@@ -376,7 +399,7 @@ const createPersistenceLayerInternal = ({
                 timestamp: Number(ts || Date.now()),
                 patch,
               }
-            : null
+            : null,
         );
       } else {
         await prisma.$transaction(
@@ -399,14 +422,14 @@ const createPersistenceLayerInternal = ({
                 ]
               : []),
           ],
-          { maxWait: maxWaitMs, timeout: timeoutMs }
+          { maxWait: maxWaitMs, timeout: timeoutMs },
         );
       }
     } catch (e) {
       try {
         console.warn(
           `[persist] update session failed for ${match.id}:`,
-          safeErrorMessage(e)
+          safeErrorMessage(e),
         );
       } catch {}
     }
@@ -419,7 +442,7 @@ const createPersistenceLayerInternal = ({
   async function flushWithRetry(
     matchId: string,
     reason: string,
-    maxRetries = 3
+    maxRetries = 3,
   ): Promise<boolean> {
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
@@ -429,7 +452,7 @@ const createPersistenceLayerInternal = ({
         if (attempt === maxRetries - 1) {
           console.error(
             `[persist] flush failed after ${maxRetries} attempts for ${matchId}:`,
-            safeErrorMessage(err)
+            safeErrorMessage(err),
           );
           return false;
         }
@@ -439,7 +462,7 @@ const createPersistenceLayerInternal = ({
           `[persist] flush attempt ${
             attempt + 1
           } failed for ${matchId}, retrying in ${delayMs}ms:`,
-          safeErrorMessage(err)
+          safeErrorMessage(err),
         );
         await new Promise((r) => setTimeout(r, delayMs));
       }
@@ -482,7 +505,7 @@ const createPersistenceLayerInternal = ({
           const remainingBuf = persistBuffers.get(matchId);
           if (remainingBuf && remainingBuf.actions.length > 0) {
             console.error(
-              `[persist] CRITICAL: ${remainingBuf.actions.length} actions lost for match ${matchId} due to flush failure`
+              `[persist] CRITICAL: ${remainingBuf.actions.length} actions lost for match ${matchId} due to flush failure`,
             );
             try {
               metricsInc("persist.actions.lost", remainingBuf.actions.length);
@@ -528,7 +551,7 @@ const createPersistenceLayerInternal = ({
       try {
         console.warn(
           `[persist] end session failed for ${matchId}:`,
-          safeErrorMessage(e)
+          safeErrorMessage(e),
         );
       } catch {}
     }
@@ -537,6 +560,14 @@ const createPersistenceLayerInternal = ({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function rehydrateMatch(row: Record<string, any>) {
     try {
+      const game =
+        row.game && typeof row.game === "object"
+          ? (row.game as Record<string, unknown>)
+          : {};
+      const timer =
+        game.matchTimer && typeof game.matchTimer === "object"
+          ? (game.matchTimer as Record<string, unknown>)
+          : null;
       const m = {
         id: row.id,
         lobbyId: row.lobbyId || null,
@@ -554,7 +585,14 @@ const createPersistenceLayerInternal = ({
           : null,
         sealedPacks: row.sealedPacks || null,
         draftState: row.draftState || null,
-        game: row.game || {},
+        game,
+        startedAt:
+          typeof timer?.startedAt === "number" ? timer.startedAt : null,
+        timedMatch: timer?.timedMatch === true,
+        matchTimeMinutes:
+          typeof timer?.matchTimeMinutes === "number"
+            ? timer.matchTimeMinutes
+            : null,
         lastTs: Number(row.lastTs || 0) || 0,
       };
       return m;
@@ -564,7 +602,7 @@ const createPersistenceLayerInternal = ({
           `[persist] rehydrate failed for ${
             row && row.id ? row.id : "unknown"
           }:`,
-          safeErrorMessage(e)
+          safeErrorMessage(e),
         );
       } catch {}
       return null;
@@ -603,7 +641,7 @@ const createPersistenceLayerInternal = ({
       try {
         console.warn(
           `[persist] recover active matches failed:`,
-          safeErrorMessage(e)
+          safeErrorMessage(e),
         );
       } catch {}
     }
@@ -666,13 +704,13 @@ const createPersistenceLayerInternal = ({
         totalFailed++;
         console.error(
           `[persist] flushAll failed for ${matchId}:`,
-          safeErrorMessage(err)
+          safeErrorMessage(err),
         );
       }
     }
     if (reason === "shutdown") {
       console.log(
-        `[persist] shutdown flush complete: ${totalFlushed} actions flushed, ${totalFailed} matches failed`
+        `[persist] shutdown flush complete: ${totalFlushed} actions flushed, ${totalFailed} matches failed`,
       );
     }
   }
@@ -690,7 +728,7 @@ const createPersistenceLayerInternal = ({
    */
   async function truncateActionsAfter(
     matchId: string,
-    afterTimestamp: number
+    afterTimestamp: number,
   ): Promise<number> {
     let totalRemoved = 0;
 
@@ -699,14 +737,14 @@ const createPersistenceLayerInternal = ({
     if (buf && Array.isArray(buf.actions)) {
       const originalLength = buf.actions.length;
       buf.actions = buf.actions.filter(
-        (action) => Number(action.timestamp || 0) <= afterTimestamp
+        (action) => Number(action.timestamp || 0) <= afterTimestamp,
       );
       const bufferedRemoved = originalLength - buf.actions.length;
       totalRemoved += bufferedRemoved;
       if (bufferedRemoved > 0) {
         try {
           console.log(
-            `[persist] Truncated ${bufferedRemoved} buffered actions after timestamp ${afterTimestamp} for match ${matchId}`
+            `[persist] Truncated ${bufferedRemoved} buffered actions after timestamp ${afterTimestamp} for match ${matchId}`,
           );
         } catch {}
       }
@@ -725,7 +763,7 @@ const createPersistenceLayerInternal = ({
       if (dbRemoved > 0) {
         try {
           console.log(
-            `[persist] Deleted ${dbRemoved} persisted actions after timestamp ${afterTimestamp} for match ${matchId}`
+            `[persist] Deleted ${dbRemoved} persisted actions after timestamp ${afterTimestamp} for match ${matchId}`,
           );
           metricsInc("persist.actions.truncated", dbRemoved);
         } catch {}
@@ -733,7 +771,7 @@ const createPersistenceLayerInternal = ({
     } catch (err) {
       console.error(
         `[persist] Failed to truncate persisted actions for ${matchId}:`,
-        safeErrorMessage(err)
+        safeErrorMessage(err),
       );
     }
 

@@ -8,8 +8,9 @@ interface TournamentMatchTimerProps {
   matchStartedAt?: number | string | null;
   /** Round time limit in minutes (default 45) */
   roundTimeMinutes?: number;
-  /** Whether this is a tournament match */
+  /** Whether this timer should render */
   isTournamentMatch?: boolean;
+  label?: string;
   /** Current extra turns state */
   extraTurnsMode?: boolean;
   extraTurnsRemaining?: number;
@@ -21,6 +22,7 @@ export function TournamentMatchTimer({
   matchStartedAt,
   roundTimeMinutes = 45,
   isTournamentMatch = false,
+  label,
   extraTurnsMode = false,
   extraTurnsRemaining = 5,
   onTimeExpired,
@@ -110,7 +112,7 @@ export function TournamentMatchTimer({
       ) : (
         <>
           <Clock className="w-4 h-4" />
-          <span>{formattedTime}</span>
+          <span>{label ? `${label} ${formattedTime}` : formattedTime}</span>
           {isExpired && <span className="text-xs ml-1">(Time!)</span>}
         </>
       )}

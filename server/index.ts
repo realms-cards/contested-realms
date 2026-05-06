@@ -1727,6 +1727,9 @@ async function getOrLoadMatch(
         playerIds,
         status,
         seed: `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
+        startedAt: Date.now(),
+        timedMatch: true,
+        matchTimeMinutes: 45,
         turn: playerIds[0] || null,
         winnerId: null,
         matchType,
@@ -1741,7 +1744,13 @@ async function getOrLoadMatch(
             return new Map();
           }
         })(),
-        game: {},
+        game: {
+          matchTimer: {
+            startedAt: Date.now(),
+            timedMatch: true,
+            matchTimeMinutes: 45,
+          },
+        },
         lastTs: 0,
         interactionRequests: new Map(),
         interactionGrants: new Map(),
@@ -1922,6 +1931,29 @@ function getMatchInfo(match: ServerMatchState): AnyRecord {
       return getPlayerInfo(playerId, seat);
     })
     .filter(Boolean);
+  const gameTimer =
+    match.game &&
+    typeof match.game === "object" &&
+    (match.game as AnyRecord).matchTimer &&
+    typeof (match.game as AnyRecord).matchTimer === "object"
+      ? ((match.game as AnyRecord).matchTimer as AnyRecord)
+      : null;
+  const startedAt =
+    typeof (match as AnyRecord).startedAt === "number"
+      ? ((match as AnyRecord).startedAt as number)
+      : typeof gameTimer?.startedAt === "number"
+        ? (gameTimer.startedAt as number)
+        : null;
+  const timedMatch =
+    typeof (match as AnyRecord).timedMatch === "boolean"
+      ? ((match as AnyRecord).timedMatch as boolean)
+      : gameTimer?.timedMatch === true;
+  const matchTimeMinutes =
+    typeof (match as AnyRecord).matchTimeMinutes === "number"
+      ? ((match as AnyRecord).matchTimeMinutes as number)
+      : typeof gameTimer?.matchTimeMinutes === "number"
+        ? (gameTimer.matchTimeMinutes as number)
+        : null;
 
   return {
     id: match.id,
@@ -1956,6 +1988,9 @@ function getMatchInfo(match: ServerMatchState): AnyRecord {
         ? match.draftState
         : undefined,
     soatcLeagueMatch: (match as AnyRecord).soatcLeagueMatch || null,
+    startedAt,
+    timedMatch,
+    matchTimeMinutes,
   };
 }
 

@@ -92,6 +92,7 @@ import ShapeshiftOverlay from "@/components/game/ShapeshiftOverlay";
 import PlayerStatusEffects from "@/components/game/StatusEffectIcons";
 // SeerScreen is now integrated into OnlineMulliganScreen
 import SwitchSiteHudOverlay from "@/components/game/SwitchSiteHudOverlay";
+import TournamentMatchTimer from "@/components/game/TournamentMatchTimer";
 import TurnStartOverlay from "@/components/game/TurnStartOverlay";
 import UnitHandsOverlay from "@/components/game/UnitHandsOverlay";
 import {
@@ -1114,6 +1115,16 @@ export default function OnlineMatchPage() {
   const tournamentId =
     (match as unknown as { tournamentId?: string | null } | undefined)
       ?.tournamentId || null;
+  const timedMatchEnabled =
+    tournamentId !== null ||
+    (match as unknown as { timedMatch?: boolean } | undefined)?.timedMatch ===
+      true;
+  const matchTimerStartedAt =
+    (match as unknown as { startedAt?: number | string | null } | undefined)
+      ?.startedAt ?? null;
+  const matchTimerMinutes =
+    (match as unknown as { matchTimeMinutes?: number | null } | undefined)
+      ?.matchTimeMinutes ?? 45;
 
   // Persist draft configuration so the deck editor can recover cube flags (e.g., includeCubeSideboardInStandard)
   useEffect(() => {
@@ -3230,6 +3241,18 @@ export default function OnlineMatchPage() {
               spectatorCount={spectatorCount}
               myPlayerKey={viewPlayerKey}
             />
+          )}
+          {timedMatchEnabled && matchTimerStartedAt && !uiHidden && (
+            <div
+              className={`absolute ${isMobile ? "top-11 right-1" : "top-14 right-2"} z-30`}
+            >
+              <TournamentMatchTimer
+                matchStartedAt={matchTimerStartedAt}
+                roundTimeMinutes={matchTimerMinutes}
+                isTournamentMatch
+                label={tournamentId ? "Round" : "Match"}
+              />
+            </div>
           )}
           {/* Restore UI button - shown when uiHidden */}
           {uiHidden && (

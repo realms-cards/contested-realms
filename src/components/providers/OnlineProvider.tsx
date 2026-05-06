@@ -17,6 +17,7 @@ import type {
   VoiceOutgoingRequest,
   VoiceRequestPeer,
 } from "@/app/online/online-context";
+import { useGraphicsSettings } from "@/hooks/useGraphicsSettings";
 import { useLoadingContext } from "@/lib/contexts/LoadingContext";
 import { FEATURE_AUDIO_ONLY, FEATURE_SEAT_VIDEO } from "@/lib/flags";
 import { PLAYER_COLORS } from "@/lib/game/constants";
@@ -191,6 +192,7 @@ export default function OnlineProvider({
   } | null>(null);
   const lastMatchmakingNotificationRef = useRef<string | null>(null);
   const [voicePlaybackEnabled, setVoicePlaybackEnabled] = useState(true);
+  const { settings: graphicsSettings } = useGraphicsSettings();
   const toggleVoicePlayback = useCallback(() => {
     setVoicePlaybackEnabled((prev) => !prev);
   }, []);
@@ -1629,6 +1631,15 @@ export default function OnlineProvider({
     };
   }, [transport, session, sessionStatus, queueServerPatch]);
 
+  useEffect(() => {
+    if (!transport || !connected || !me?.id) return;
+    try {
+      transport.emit("setPlayerMatchPreferences", {
+        regularMatchTimer: graphicsSettings.regularMatchTimer === true,
+      });
+    } catch {}
+  }, [transport, connected, me?.id, graphicsSettings.regularMatchTimer]);
+
   // Periodic re-sync of socket-driven player list (fallback in case a broadcast was missed)
   useEffect(() => {
     if (!transport || !connected) return;
@@ -1787,7 +1798,13 @@ export default function OnlineProvider({
     },
     startMatch: (matchConfig?: StartMatchConfig) => {
       try {
-        transport.startMatch(matchConfig);
+        transport.startMatch({
+          ...matchConfig,
+          timedMatch:
+            matchConfig?.timedMatch === true ||
+            graphicsSettings.regularMatchTimer === true,
+          matchTimeMinutes: matchConfig?.matchTimeMinutes ?? 45,
+        });
       } catch {}
     },
     joinMatch: async (id: string) => {
