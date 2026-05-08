@@ -250,8 +250,6 @@ export const MatchInfoSchema = z.object({
     .optional(),
   // Match start timestamp
   startedAt: z.number().nullable().optional(),
-  timedMatch: z.boolean().optional(),
-  matchTimeMinutes: z.number().int().min(1).max(180).nullable().optional(),
 });
 export type MatchInfo = z.infer<typeof MatchInfoSchema>;
 

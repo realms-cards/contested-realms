@@ -26,7 +26,6 @@ export interface GraphicsSettings {
   /** Show a subtle purple glow on cards that have a custom resolver (automated behavior) */
   showResolverGlow: boolean;
   monochromeMode: boolean;
-  regularMatchTimer: boolean;
 }
 
 const STORAGE_KEY = "sorcery-graphics-settings";
@@ -43,7 +42,6 @@ const DEFAULT_SETTINGS: GraphicsSettings = {
   preferRaster: false,
   showResolverGlow: true,
   monochromeMode: false,
-  regularMatchTimer: false,
 };
 
 function loadSettings(): GraphicsSettings {
@@ -188,10 +186,6 @@ export function useGraphicsSettings() {
     setSettings({ monochromeMode: !settings.monochromeMode });
   }, [settings.monochromeMode, setSettings]);
 
-  const toggleRegularMatchTimer = useCallback(() => {
-    setSettings({ regularMatchTimer: !settings.regularMatchTimer });
-  }, [settings.regularMatchTimer, setSettings]);
-
   return {
     settings,
     isLoaded,
@@ -207,7 +201,6 @@ export function useGraphicsSettings() {
     togglePreferRaster,
     toggleShowResolverGlow,
     toggleMonochromeMode,
-    toggleRegularMatchTimer,
   };
 }
 
