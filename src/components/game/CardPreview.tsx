@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   useGraphicsSettings,
   getGraphicsSettings,
@@ -182,6 +183,12 @@ export default function CardPreview({
     };
   }, [isSite]);
 
+  const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
+
+  useEffect(() => {
+    setPortalRoot(document.body);
+  }, []);
+
   const { width: baseWidth, isShort, preferBottom } = layout;
 
   // Apply user's preview scale preference
@@ -245,11 +252,15 @@ export default function CardPreview({
     </div>
   );
 
-  return (
+  const preview = (
     <div
-      className={`${anchorClasses} ${zIndexClass} pointer-events-none ${className}`}
+      className={`card-preview-saturation-portal ${anchorClasses} ${zIndexClass} pointer-events-none ${className}`}
     >
       <div className="relative">{imageEl}</div>
     </div>
   );
+
+  if (!portalRoot) return preview;
+
+  return createPortal(preview, portalRoot);
 }

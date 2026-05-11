@@ -124,8 +124,12 @@ select,
   filter: grayscale(1) saturate(0.9);
 }
 
-body[data-monochrome-mode="true"] {
+body[data-monochrome-mode="true"] > :not(.card-preview-saturation-portal) {
   filter: grayscale(1) saturate(0);
+}
+
+body[data-monochrome-mode="true"] > .card-preview-saturation-portal {
+  filter: saturate(0.5);
 }
 
 /* In colorful mode, still tone down color intensity a touch for cohesion */

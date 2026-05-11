@@ -1661,7 +1661,8 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
         const d20OnlyPatch =
           hasD20RollsPatch &&
           nonMetaKeys.every(
-            (key) => key === "d20Rolls" || key === "setupWinner",
+            (key) =>
+              key === "d20Rolls" || key === "setupWinner" || key === "turn",
           );
 
         // Build an events-only patch for the acting player so they still see
