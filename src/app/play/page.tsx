@@ -24,6 +24,7 @@ import CardPreview from "@/components/game/CardPreview";
 import CastPlacementBanner from "@/components/game/CastPlacementBanner";
 import ChaosTwisterOverlay from "@/components/game/ChaosTwisterOverlay";
 import { ClientCanvas } from "@/components/game/ClientCanvas";
+import BanishedButton from "@/components/game/BanishedButton";
 import CollectionButton from "@/components/game/CollectionButton";
 import CommonSenseOverlay from "@/components/game/CommonSenseOverlay";
 import ContextMenu from "@/components/game/ContextMenu";
@@ -1178,6 +1179,7 @@ export default function PlayPage() {
       {/* Toolbox and Collection buttons (bottom-right) */}
       {showToolbox && (
         <div className="absolute bottom-3 right-3 z-20 flex items-end gap-2">
+          <BanishedButton mySeat={currentPlayerKey} />
           <CollectionButton mySeat={currentPlayerKey} />
           <GameToolbox
             myPlayerId={null}

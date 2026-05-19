@@ -27,6 +27,7 @@ import CardPreview from "@/components/game/CardPreview";
 import CastPlacementBanner from "@/components/game/CastPlacementBanner";
 import ChaosTwisterOverlay from "@/components/game/ChaosTwisterOverlay";
 import { ClientCanvas } from "@/components/game/ClientCanvas";
+import BanishedButton from "@/components/game/BanishedButton";
 import CollectionButton from "@/components/game/CollectionButton";
 import CombatHudOverlay from "@/components/game/CombatHudOverlay";
 import CommonSenseOverlay from "@/components/game/CommonSenseOverlay";
@@ -3394,6 +3395,7 @@ export default function OnlineMatchPage() {
           {/* Toolbox and Collection buttons (bottom-right) */}
           {showToolbox && (
             <div className="absolute bottom-3 right-3 z-20 flex items-end gap-2">
+              <BanishedButton mySeat={myPlayerKey} />
               <CollectionButton mySeat={myPlayerKey} />
               <GameToolbox
                 myPlayerId={myPlayerId || null}
