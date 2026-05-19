@@ -260,6 +260,45 @@ export default function OnlineD20Screen({
     }
   }, [d20PendingRoll, setupWinner, isTie, clearD20Pending]);
 
+  // Watchdog: if both players have rolled but the server's setupWinner
+  // broadcast never arrived (lost packet, brief disconnect, batched-patch
+  // exclusion bug, etc.), trigger a resync so we recover authoritative state
+  // instead of hanging on "Waiting for server to confirm winner…".
+  useEffect(() => {
+    if (!bothRolled || setupWinner !== null || isTie) return;
+    const timeout = setTimeout(() => {
+      console.warn(
+        "[D20] Both rolled but no setupWinner after 5s; requesting resync",
+      );
+      if (
+        transport &&
+        typeof (transport as { resync?: () => void }).resync === "function"
+      ) {
+        (transport as { resync: () => void }).resync();
+      }
+    }, 5000);
+    return () => clearTimeout(timeout);
+  }, [bothRolled, setupWinner, isTie, transport]);
+
+  // Watchdog: if we're the loser and setupWinner is set but phase never
+  // advances to "Start" (winner's choosePlayerOrder echo lost), resync.
+  // We use a longer timeout because the winner is a human picking a seat.
+  useEffect(() => {
+    if (!setupWinner || phase !== "Setup" || canChoose) return;
+    const timeout = setTimeout(() => {
+      console.warn(
+        "[D20] Loser stuck on Setup phase after winner declared; requesting resync",
+      );
+      if (
+        transport &&
+        typeof (transport as { resync?: () => void }).resync === "function"
+      ) {
+        (transport as { resync: () => void }).resync();
+      }
+    }, 60000);
+    return () => clearTimeout(timeout);
+  }, [setupWinner, phase, canChoose, transport]);
+
   // Listen for D20 acknowledgment from server
   useEffect(() => {
     if (!transport) return;
