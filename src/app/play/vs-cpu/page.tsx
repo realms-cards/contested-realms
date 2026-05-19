@@ -1,8 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useOnline } from "@/app/online/online-context";
+import { fetchPatrons, isPatron } from "@/lib/patrons";
 
 type Status =
   | "init"
@@ -26,12 +28,28 @@ function isCpuMatch(
 
 export default function VsCpuPage() {
   const router = useRouter();
+  const { data: session, status: authStatus } = useSession();
   const { connected, startCpuMatch, match, leaveMatch } = useOnline();
   const [status, setStatus] = useState<Status>("init");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const startedRef = useRef(false);
   const matchRef = useRef(match);
   matchRef.current = match;
+
+  // Patron gate — redirect non-patrons back to home
+  useEffect(() => {
+    if (authStatus === "loading") return;
+    const userId = session?.user?.id as string | undefined;
+    if (!userId) {
+      router.replace("/");
+      return;
+    }
+    fetchPatrons().then(() => {
+      if (!isPatron(userId)) {
+        router.replace("/");
+      }
+    });
+  }, [session, authStatus, router]);
 
   // Enable guides by default for vs-cpu
   const enableGuides = useCallback(() => {

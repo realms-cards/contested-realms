@@ -193,7 +193,7 @@ export function BoardEnvironment({
     setPlaymatFailed(true);
   }, []);
 
-  const shouldShowOverlay = showOverlay || playmatFailed;
+  const shouldShowOverlay = (!showPlaymat && showOverlay) || playmatFailed;
 
   return (
     <>

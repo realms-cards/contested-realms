@@ -26,7 +26,6 @@ import {
   generateInteractionRequestId,
   type InteractionRequestKind,
 } from "@/lib/net/interactions";
-import { fetchPatrons, isPatron } from "@/lib/patrons";
 
 export type GameToolboxProps = {
   myPlayerId: string | null;
@@ -177,15 +176,6 @@ export default function GameToolbox({
   const setGoldfishMode = useGameStore((s) => s.setGoldfishMode);
   const goldfishHandSize = useGameStore((s) => s.goldfishHandSize);
   const setGoldfishHandSize = useGameStore((s) => s.setGoldfishHandSize);
-
-  // Patron gate for goldfish mode
-  const [userIsPatron, setUserIsPatron] = useState(false);
-  useEffect(() => {
-    if (!myPlayerId) return;
-    fetchPatrons().then(() => {
-      setUserIsPatron(isPatron(myPlayerId));
-    });
-  }, [myPlayerId]);
 
   // Peek dialog from central store (populated by interaction:result)
   const peekDialog = useGameStore((s) => s.peekDialog);
@@ -1579,8 +1569,8 @@ export default function GameToolbox({
                 />
                 <span className="text-xs">Show purple outline on auto-resolver cards</span>
               </label>
-              {/* Goldfish Mode (hotseat only, patrons only) */}
-              {!isOnline && userIsPatron && (
+              {/* Goldfish Mode (hotseat only) */}
+              {!isOnline && (
                 <div className="border-t border-white/10 pt-2 mt-1">
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input

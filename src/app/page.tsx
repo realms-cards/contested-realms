@@ -11,11 +11,13 @@ import AsciiPanel from "@/components/ui/AsciiPanel";
 import LobbyFooter from "@/components/ui/LobbyFooter";
 import OtherRealms from "@/components/ui/OtherRealms";
 import { FEATURE_CPU_BOTS } from "@/lib/config/features";
+import { fetchPatrons, isPatron } from "@/lib/patrons";
 
 export default function Home() {
   const router = useRouter();
   const { data: session } = useSession();
   // Start with null (hidden) to avoid hydration mismatch, then show after mount if not dismissed
+  const [userIsPatron, setUserIsPatron] = useState(false);
   const [showAlphaBanner, setShowAlphaBanner] = useState<boolean | null>(null);
   const [showCookieNotice, setShowCookieNotice] = useState<boolean | null>(
     null,
@@ -39,6 +41,14 @@ export default function Home() {
       setShowCookieNotice(true);
     }
   }, []);
+
+  useEffect(() => {
+    const userId = session?.user?.id as string | undefined;
+    if (!userId) return;
+    fetchPatrons().then(() => {
+      setUserIsPatron(isPatron(userId));
+    });
+  }, [session]);
 
   return (
     <div className="min-h-dvh bg-gradient-to-b from-slate-950 to-slate-900 text-white flex flex-col items-center justify-start px-5 relative overflow-x-hidden overflow-y-auto">
@@ -157,19 +167,40 @@ export default function Home() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4 max-w-4xl mx-auto">
             {FEATURE_CPU_BOTS && (
               <AsciiPanel className="w-full p-5 md:p-6">
-                <Link
-                  href="/play/vs-cpu"
-                  className="group block hover:scale-[1.02] transition-transform duration-200"
-                >
-                  <div className="flex flex-col items-center justify-center py-3 md:py-4">
-                    <span className="text-xs uppercase tracking-widest text-amber-400/80">
-                      Experimental
-                    </span>
-                    <h4 className="text-lg font-semibold tracking-wide">
-                      Goldfish with CPU
-                    </h4>
-                  </div>
-                </Link>
+                {userIsPatron ? (
+                  <Link
+                    href="/play/vs-cpu"
+                    className="group block hover:scale-[1.02] transition-transform duration-200"
+                  >
+                    <div className="flex flex-col items-center justify-center py-3 md:py-4">
+                      <span className="text-xs uppercase tracking-widest text-amber-400/80">
+                        Experimental
+                      </span>
+                      <h4 className="text-lg font-semibold tracking-wide">
+                        Goldfish with CPU
+                      </h4>
+                    </div>
+                  </Link>
+                ) : (
+                  <a
+                    href="https://www.patreon.com/realmscards"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="group block hover:scale-[1.02] transition-transform duration-200"
+                  >
+                    <div className="flex flex-col items-center justify-center py-3 md:py-4 opacity-60">
+                      <span className="text-xs uppercase tracking-widest text-amber-400/80">
+                        Experimental
+                      </span>
+                      <h4 className="text-lg font-semibold tracking-wide">
+                        Goldfish with CPU
+                      </h4>
+                      <span className="text-xs text-amber-400/70 mt-1">
+                        Patrons only
+                      </span>
+                    </div>
+                  </a>
+                )}
               </AsciiPanel>
             )}
             <AsciiPanel className="w-full p-5 md:p-6">
