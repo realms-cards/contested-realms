@@ -353,7 +353,7 @@ function SpellNameSearch({
         <CardPreview
           card={hoverPreview}
           anchor="top-left"
-          zIndexClass="z-[60]"
+          zIndexClass="z-[10000]"
         />
       )}
     </div>

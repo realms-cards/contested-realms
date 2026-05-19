@@ -1,6 +1,7 @@
 "use client";
 
 import { Trophy, Skull, Users } from "lucide-react";
+import Link from "next/link";
 import { createPortal } from "react-dom";
 import { LeagueReportStatus } from "@/components/game/LeagueReportStatus";
 import { SoatcLeagueResultCard } from "@/components/game/SoatcLeagueResultCard";
@@ -24,6 +25,7 @@ interface MatchEndOverlayProps {
   rated?: boolean;
   soatcLeagueResult?: LeagueMatchResult | null;
   viewerSoatcUuid?: string;
+  isTournament?: boolean;
 }
 
 export default function MatchEndOverlay({
@@ -43,6 +45,7 @@ export default function MatchEndOverlay({
   rated,
   soatcLeagueResult,
   viewerSoatcUuid,
+  isTournament,
 }: MatchEndOverlayProps) {
   if (!isVisible) return null;
 
@@ -321,7 +324,22 @@ export default function MatchEndOverlay({
           )}
         </div>
 
-        <div className="mt-3 sm:mt-4 text-[10px] sm:text-xs opacity-60">
+        {matchId && !isTournament && (
+          <div className="mt-3 sm:mt-4">
+            <Link
+              href={`/replay/${matchId}`}
+              className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 transition-colors"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5">
+                <path d="M8 5v14l11-7-11-7z" />
+              </svg>
+              Watch replay
+            </Link>
+          </div>
+        )}
+
+        <div className="mt-2 sm:mt-3 text-[10px] sm:text-xs opacity-60">
           {canContinue
             ? "The match has ended. Players can still examine the board."
             : "The match has ended. Please return to continue your event."}

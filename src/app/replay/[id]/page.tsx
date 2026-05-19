@@ -1,7 +1,7 @@
 "use client";
 
 import { OrbitControls } from "@react-three/drei";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import CardPreview from "@/components/game/CardPreview";
 import { ClientCanvas } from "@/components/game/ClientCanvas";
@@ -36,40 +36,77 @@ interface MatchRecording {
   }>;
 }
 
-function ShareButton({ matchId }: { matchId: string }) {
+function ShareButton({ matchId, currentActionIndex }: { matchId: string; currentActionIndex: number }) {
+  const [open, setOpen] = useState(false);
+  const [withTimestamp, setWithTimestamp] = useState(true);
   const [copied, setCopied] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
 
-  const handleShare = () => {
-    const url = `${window.location.origin}/replay/${matchId}`;
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const copy = () => {
+    const base = `${window.location.origin}/replay/${matchId}`;
+    const url = withTimestamp ? `${base}?t=${currentActionIndex}` : base;
     void navigator.clipboard.writeText(url).then(() => {
       setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+      setTimeout(() => { setCopied(false); setOpen(false); }, 1200);
     });
   };
 
   return (
-    <button
-      onClick={handleShare}
-      className="h-9 w-9 grid place-items-center bg-slate-700 hover:bg-slate-600 rounded-lg text-white transition-colors"
-      title={copied ? "Copied!" : "Copy share link"}
-    >
-      {copied ? (
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 text-emerald-400">
-          <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
-        </svg>
-      ) : (
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+    <div ref={ref} className="relative flex-shrink-0">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="h-7 w-7 grid place-items-center rounded text-slate-400 hover:text-white transition-colors"
+        title="Share replay"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
           <path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92s2.92-1.31 2.92-2.92-1.31-2.92-2.92-2.92z" />
         </svg>
+      </button>
+
+      {open && (
+        <div className="absolute bottom-full right-0 mb-2 w-52 bg-zinc-900 border border-white/10 rounded-xl shadow-2xl p-3 z-50">
+          <label className="flex items-center gap-2 cursor-pointer mb-3 select-none">
+            <input
+              type="checkbox"
+              checked={withTimestamp}
+              onChange={(e) => setWithTimestamp(e.target.checked)}
+              className="w-3.5 h-3.5 rounded accent-blue-500"
+            />
+            <span className="text-xs text-slate-300">
+              Start at action {currentActionIndex + 1}
+            </span>
+          </label>
+          <button
+            onClick={copy}
+            className={`w-full py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              copied
+                ? "bg-emerald-600 text-white"
+                : "bg-white/10 hover:bg-white/20 text-slate-200"
+            }`}
+          >
+            {copied ? "Copied!" : "Copy link"}
+          </button>
+        </div>
       )}
-    </button>
+    </div>
   );
 }
 
 export default function ReplayViewerPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const matchId = params?.id as string;
+  const initialActionParam = searchParams?.get("t") ?? null;
 
   const [recording, setRecording] = useState<MatchRecording | null>(null);
   const [loading, setLoading] = useState(true);
@@ -112,6 +149,13 @@ export default function ReplayViewerPage() {
           store.resetGameState();
           store.clearSnapshotsForNewMatch();
           useGameStore.setState({ showPlaymat: false, showPlaymatOverlay: true });
+          const tParam = initialActionParam ? parseInt(initialActionParam, 10) : NaN;
+          if (!isNaN(tParam) && tParam > 0 && tParam < data.recording.actions.length) {
+            for (let i = 0; i <= tParam; i++) {
+              useGameStore.getState().applyPatch(data.recording.actions[i].patch);
+            }
+            setCurrentActionIndex(tParam);
+          }
         }
         setLoading(false);
       })
@@ -510,7 +554,7 @@ export default function ReplayViewerPage() {
             />
           </div>
 
-          <ShareButton matchId={recording.matchId} />
+          <ShareButton matchId={recording.matchId} currentActionIndex={currentActionIndex} />
 
           <button
             onClick={() => {

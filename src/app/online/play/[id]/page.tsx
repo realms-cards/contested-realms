@@ -3469,6 +3469,7 @@ export default function OnlineMatchPage() {
               }
             }}
             leaveLabel={tournamentId ? "Return to Tournament" : undefined}
+            isTournament={!!tournamentId}
             allowContinue={false}
           />
 
