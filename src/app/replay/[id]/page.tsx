@@ -2,9 +2,7 @@
 
 import { OrbitControls } from "@react-three/drei";
 import { useParams, useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
-import { useState, useEffect, useCallback, useRef } from "react";
-import { useOnline } from "@/app/online/online-context";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import CardPreview from "@/components/game/CardPreview";
 import { ClientCanvas } from "@/components/game/ClientCanvas";
 import OnlineConsole from "@/components/game/OnlineConsole";
@@ -38,20 +36,44 @@ interface MatchRecording {
   }>;
 }
 
+function ShareButton({ matchId }: { matchId: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleShare = () => {
+    const url = `${window.location.origin}/replay/${matchId}`;
+    void navigator.clipboard.writeText(url).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  };
+
+  return (
+    <button
+      onClick={handleShare}
+      className="h-9 w-9 grid place-items-center bg-slate-700 hover:bg-slate-600 rounded-lg text-white transition-colors"
+      title={copied ? "Copied!" : "Copy share link"}
+    >
+      {copied ? (
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 text-emerald-400">
+          <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
+        </svg>
+      ) : (
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+          <path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92s2.92-1.31 2.92-2.92-1.31-2.92-2.92-2.92z" />
+        </svg>
+      )}
+    </button>
+  );
+}
+
 export default function ReplayViewerPage() {
   const params = useParams();
   const router = useRouter();
   const matchId = params?.id as string;
 
-  // Use shared transport from OnlineProvider instead of creating a new socket
-  const { transport: onlineTransport, connected } = useOnline();
-  const transport = onlineTransport;
-  const { data: _session } = useSession();
-
   const [recording, setRecording] = useState<MatchRecording | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const hasRecordingResponseRef = useRef(false);
   const loadedMatchIdRef = useRef<string | null>(null);
 
   // Replay controls
@@ -59,95 +81,50 @@ export default function ReplayViewerPage() {
   const [currentActionIndex, setCurrentActionIndex] = useState(0);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [chatInput, setChatInput] = useState("");
+  const [controlsVisible, setControlsVisible] = useState(true);
+  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const previewCard = useGameStore((s) => s.previewCard);
   const contextMenu = useGameStore((s) => s.contextMenu);
 
-  // Note: Using shared transport from OnlineProvider instead of creating a new socket.
-  // The OnlineProvider handles connection, auth, and welcome - no setup needed here.
-
-  // Load the recording
+  // Load the recording via public HTTP API
   useEffect(() => {
-    if (!connected || !transport || !matchId) return;
+    if (!matchId) return;
+    if (loadedMatchIdRef.current === matchId) return;
 
-    hasRecordingResponseRef.current = false;
-    const isRefreshingLoadedMatch = loadedMatchIdRef.current === matchId;
-
-    if (!isRefreshingLoadedMatch) {
-      setLoading(true);
-      setError(null);
-      setRecording(null);
-      setIsPlaying(false);
-      setCurrentActionIndex(0);
-    }
+    setLoading(true);
+    setError(null);
+    setRecording(null);
+    setIsPlaying(false);
+    setCurrentActionIndex(0);
 
     let cancelled = false;
-    let retryTimer: number | null = null;
-    let retryCount = 0;
 
-    const clearRetryTimer = () => {
-      if (retryTimer !== null) {
-        window.clearTimeout(retryTimer);
-        retryTimer = null;
-      }
-    };
-
-    const requestRecording = () => {
-      if (cancelled || hasRecordingResponseRef.current) return;
-
-      try {
-        transport.emit("getMatchRecording", { matchId });
-      } catch (requestError) {
-        console.warn("[replay] Failed to request recording", requestError);
-      }
-
-      if (retryCount >= 2) return;
-
-      retryCount += 1;
-      clearRetryTimer();
-      retryTimer = window.setTimeout(() => {
-        requestRecording();
-      }, 1500);
-    };
-
-    const handleRecording = (payload: unknown) => {
-      hasRecordingResponseRef.current = true;
-      clearRetryTimer();
-
-      const data = payload as { recording?: MatchRecording; error?: string };
-      if (data.error) {
-        if (loadedMatchIdRef.current === matchId) {
-          return;
+    void fetch(`/api/replays/${encodeURIComponent(matchId)}`)
+      .then((res) => res.json())
+      .then((data: { recording?: MatchRecording; error?: string }) => {
+        if (cancelled) return;
+        if (data.error || !data.recording) {
+          setError(data.error ?? "Recording not found");
+        } else {
+          loadedMatchIdRef.current = data.recording.matchId;
+          setRecording(data.recording);
+          const store = useGameStore.getState();
+          store.resetGameState();
+          store.clearSnapshotsForNewMatch();
+          useGameStore.setState({ showPlaymat: false, showPlaymatOverlay: true });
         }
-        setError(data.error);
-      } else if (data.recording) {
-        loadedMatchIdRef.current = data.recording.matchId;
-        setRecording(data.recording);
-        // Initialize game state and set grid view for replays (no custom playmats)
-        const store = useGameStore.getState();
-        store.resetGameState();
-        store.clearSnapshotsForNewMatch();
-        // Use grid overlay instead of playmat for spectator/replay view
-        useGameStore.setState({ showPlaymat: false, showPlaymatOverlay: true });
-      }
-      setLoading(false);
-    };
-
-    const unsubscribeWelcome = transport.on("welcome", () => {
-      // Shared transport reconnects can briefly look connected before replay
-      // requests are accepted again, so retry once welcome lands.
-      requestRecording();
-    });
-
-    transport.onGeneric("matchRecordingResponse", handleRecording);
-    requestRecording();
+        setLoading(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setError("Failed to load replay");
+        setLoading(false);
+      });
 
     return () => {
       cancelled = true;
-      clearRetryTimer();
-      unsubscribeWelcome();
-      transport.offGeneric("matchRecordingResponse", handleRecording);
     };
-  }, [connected, transport, matchId]);
+  }, [matchId]);
 
   // Playback engine
   const applyAction = useCallback(
@@ -238,21 +215,39 @@ export default function ReplayViewerPage() {
     return () => clearTimeout(timer);
   }, [isPlaying, recording, currentActionIndex, playbackSpeed, stepForward]);
 
-  const formatTime = (timestamp: number) => {
+  // Auto-hide controls when playing and no mouse activity
+  const showControls = useCallback(() => {
+    setControlsVisible(true);
+    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    hideTimerRef.current = setTimeout(() => {
+      if (isPlaying) setControlsVisible(false);
+    }, 2500);
+  }, [isPlaying]);
+
+  useEffect(() => {
+    if (!isPlaying) {
+      setControlsVisible(true);
+      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    } else {
+      showControls();
+    }
+    return () => {
+      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    };
+  }, [isPlaying, showControls]);
+
+  const formatTime = useCallback((timestamp: number) => {
     if (!recording) return "0:00";
     const elapsed = timestamp - recording.startTime;
     const minutes = Math.floor(elapsed / 60000);
     const seconds = Math.floor((elapsed % 60000) / 1000);
     return `${minutes}:${seconds.toString().padStart(2, "0")}`;
-  };
+  }, [recording]);
 
-  if (!connected && !recording && !error) {
-    return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-        <div className="text-white">Connecting...</div>
-      </div>
-    );
-  }
+  const currentTimeLabel = useMemo(
+    () => (recording?.actions[currentActionIndex] ? formatTime(recording.actions[currentActionIndex].timestamp) : "0:00"),
+    [recording, currentActionIndex, formatTime]
+  );
 
   if (loading && !recording) {
     return (
@@ -281,14 +276,13 @@ export default function ReplayViewerPage() {
     );
   }
 
-  const currentAction = recording.actions[currentActionIndex];
   const progress =
     recording.actions.length > 0
       ? (currentActionIndex / (recording.actions.length - 1)) * 100
       : 0;
 
   return (
-    <div className="fixed inset-0 w-screen h-[100dvh] bg-slate-900">
+    <div className="fixed inset-0 w-screen h-[100dvh] bg-slate-900" onMouseMove={showControls}>
       {/* 3D Game View */}
       <div className="absolute inset-0 w-full h-full">
         <ClientCanvas
@@ -395,196 +389,150 @@ export default function ReplayViewerPage() {
         dragFromHand={false}
       />
 
-      {/* Replay Controls Overlay */}
-      <div className="absolute bottom-0 left-0 right-0 bg-black/80 backdrop-blur-sm p-4">
-        <div className="max-w-6xl mx-auto">
-          {/* Match Info */}
-          <div className="flex items-center justify-between mb-4">
-            <div className="text-white">
-              <div className="font-semibold text-lg">
-                {recording.playerNames.join(" vs ")}
-              </div>
-              <div className="text-sm text-slate-400">
-                {recording.initialState.matchType} • {recording.actions.length}{" "}
-                actions
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => {
-                  const blob = new Blob([JSON.stringify(recording, null, 2)], {
-                    type: "application/json",
-                  });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement("a");
-                  a.href = url;
-                  const safeName = recording.playerNames
-                    .join("_vs_")
-                    .replace(/[^a-zA-Z0-9_-]/g, "");
-                  const date = new Date(recording.startTime)
-                    .toISOString()
-                    .split("T")[0];
-                  a.download = `replay_${safeName}_${date}.json`;
-                  document.body.appendChild(a);
-                  a.click();
-                  document.body.removeChild(a);
-                  URL.revokeObjectURL(url);
-                }}
-                className="h-9 w-9 grid place-items-center bg-emerald-600 hover:bg-emerald-700 rounded-lg text-white transition-colors"
-                title="Download Replay"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                  className="w-5 h-5"
-                >
-                  <path d="M12 16l-6-6h4V4h4v6h4l-6 6zm-8 2h16v2H4v-2z" />
-                </svg>
-              </button>
-              <button
-                onClick={() => router.push("/replay")}
-                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-white transition-colors"
-              >
-                Back to Replays
-              </button>
-            </div>
+      {/* Replay Controls — minimal, auto-hides while playing */}
+      <div
+        className={`absolute bottom-0 left-0 right-0 transition-opacity duration-300 ${
+          controlsVisible ? "opacity-100" : "opacity-0 pointer-events-none"
+        }`}
+      >
+        {/* Scrubber — sits at the very bottom edge */}
+        <div className="group relative h-5 flex items-end px-0 cursor-pointer">
+          <div className="absolute inset-x-0 bottom-0 h-1 group-hover:h-[5px] transition-all duration-150 bg-white/10 rounded-none">
+            <div
+              className="h-full bg-blue-500 rounded-none transition-none"
+              style={{ width: `${progress}%` }}
+            />
           </div>
+          <input
+            type="range"
+            min={0}
+            max={recording.actions.length - 1}
+            value={currentActionIndex}
+            onChange={(e) => {
+              setIsPlaying(false);
+              jumpToAction(parseInt(e.target.value));
+            }}
+            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+          />
+        </div>
 
-          {/* Progress Bar */}
-          <div className="mb-4">
-            <div className="flex items-center justify-between text-sm text-slate-400 mb-2">
-              <span>
-                Action {currentActionIndex + 1} of {recording.actions.length}
-              </span>
-              <span>
-                {currentAction ? formatTime(currentAction.timestamp) : "0:00"}
-              </span>
-            </div>
-            <div className="relative bg-slate-700 h-2 rounded-full">
-              <div
-                className="absolute left-0 top-0 h-full bg-blue-500 rounded-full transition-all"
-                style={{ width: `${progress}%` }}
-              />
-              <input
-                type="range"
-                min={0}
-                max={recording.actions.length - 1}
-                value={currentActionIndex}
-                onChange={(e) => jumpToAction(parseInt(e.target.value))}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-              />
-            </div>
-          </div>
+        {/* Control bar */}
+        <div className="flex items-center gap-1 px-3 py-2 bg-gradient-to-t from-black/70 to-black/0 backdrop-blur-[2px]">
+          {/* Left: back + title */}
+          <button
+            onClick={() => router.push("/replay")}
+            className="h-7 w-7 grid place-items-center rounded text-slate-400 hover:text-white transition-colors flex-shrink-0"
+            title="Back to Replays"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
+              <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" />
+            </svg>
+          </button>
 
-          {/* Control Buttons */}
-          <div className="flex items-center justify-center gap-3">
+          <span className="text-xs text-slate-300 truncate max-w-[180px] flex-shrink-0 mr-1">
+            {recording.playerNames.join(" vs ")}
+          </span>
+
+          <span className="text-[10px] text-slate-500 flex-shrink-0 mr-2">
+            {recording.initialState.matchType}
+          </span>
+
+          {/* Playback controls — centered */}
+          <div className="flex items-center gap-1 flex-1 justify-center">
             <button
-              onClick={() => jumpToAction(0)}
-              className="h-9 w-9 grid place-items-center bg-slate-700 hover:bg-slate-600 rounded text-white transition-colors"
+              onClick={() => { setIsPlaying(false); jumpToAction(0); }}
+              className="h-7 w-7 grid place-items-center rounded text-slate-400 hover:text-white transition-colors"
               title="Jump to Start"
             >
-              {/* Skip back icon */}
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="currentColor"
-                className="w-5 h-5"
-              >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
                 <path d="M6 6h2v12H6V6zm12 6-8 6V6l8 6z" />
               </svg>
             </button>
             <button
               onClick={stepBackward}
-              className="h-9 w-9 grid place-items-center bg-slate-700 hover:bg-slate-600 rounded text-white transition-colors"
+              className="h-7 w-7 grid place-items-center rounded text-slate-400 hover:text-white transition-colors"
               title="Step Backward"
             >
-              {/* Step back icon */}
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="currentColor"
-                className="w-5 h-5"
-              >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
                 <path d="M6 5h2v14H6V5zm12 7-9 6V6l9 6z" />
               </svg>
             </button>
             <button
               onClick={() => setIsPlaying(!isPlaying)}
-              className="h-9 px-4 bg-blue-600 hover:bg-blue-700 rounded text-white transition-colors font-semibold flex items-center gap-2"
+              className="h-8 w-8 grid place-items-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+              title={isPlaying ? "Pause" : "Play"}
             >
               {isPlaying ? (
-                <>
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 24 24"
-                    fill="currentColor"
-                    className="w-5 h-5"
-                  >
-                    <path d="M8 6h3v12H8V6zm5 0h3v12h-3V6z" />
-                  </svg>
-                  Pause
-                </>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
+                  <path d="M8 6h3v12H8V6zm5 0h3v12h-3V6z" />
+                </svg>
               ) : (
-                <>
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 24 24"
-                    fill="currentColor"
-                    className="w-5 h-5"
-                  >
-                    <path d="M8 5v14l11-7-11-7z" />
-                  </svg>
-                  Play
-                </>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
+                  <path d="M8 5v14l11-7-11-7z" />
+                </svg>
               )}
             </button>
             <button
               onClick={stepForward}
-              className="h-9 w-9 grid place-items-center bg-slate-700 hover:bg-slate-600 rounded text-white transition-colors"
+              className="h-7 w-7 grid place-items-center rounded text-slate-400 hover:text-white transition-colors"
               title="Step Forward"
             >
-              {/* Step forward icon */}
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="currentColor"
-                className="w-5 h-5"
-              >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
                 <path d="M7 6h3v12H7V6zm4 6 9 6V6l-9 6z" />
               </svg>
             </button>
             <button
-              onClick={() => jumpToAction(recording.actions.length - 1)}
-              className="h-9 w-9 grid place-items-center bg-slate-700 hover:bg-slate-600 rounded text-white transition-colors"
+              onClick={() => { setIsPlaying(false); jumpToAction(recording.actions.length - 1); }}
+              className="h-7 w-7 grid place-items-center rounded text-slate-400 hover:text-white transition-colors"
               title="Jump to End"
             >
-              {/* Skip forward icon */}
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="currentColor"
-                className="w-5 h-5"
-              >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
                 <path d="M16 6h2v12h-2V6zM6 12l8-6v12l-8-6z" />
               </svg>
             </button>
-
-            {/* Speed Control */}
-            <div className="ml-4 flex items-center gap-2">
-              <span className="text-sm text-slate-400">Speed:</span>
-              <CustomSelect
-                value={String(playbackSpeed)}
-                onChange={(v) => setPlaybackSpeed(parseFloat(v))}
-                options={[
-                  { value: "0.5", label: "0.5x" },
-                  { value: "1", label: "1x" },
-                  { value: "2", label: "2x" },
-                  { value: "4", label: "4x" },
-                ]}
-              />
-            </div>
           </div>
+
+          {/* Right: time + speed + share + download */}
+          <span className="text-[10px] text-slate-400 tabular-nums flex-shrink-0">
+            {currentActionIndex + 1}/{recording.actions.length} · {currentTimeLabel}
+          </span>
+
+          <div className="ml-1 flex-shrink-0">
+            <CustomSelect
+              value={String(playbackSpeed)}
+              onChange={(v) => setPlaybackSpeed(parseFloat(v))}
+              options={[
+                { value: "0.5", label: "0.5×" },
+                { value: "1", label: "1×" },
+                { value: "2", label: "2×" },
+                { value: "4", label: "4×" },
+              ]}
+            />
+          </div>
+
+          <ShareButton matchId={recording.matchId} />
+
+          <button
+            onClick={() => {
+              const blob = new Blob([JSON.stringify(recording, null, 2)], { type: "application/json" });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              const safeName = recording.playerNames.join("_vs_").replace(/[^a-zA-Z0-9_-]/g, "");
+              const date = new Date(recording.startTime).toISOString().split("T")[0];
+              a.download = `replay_${safeName}_${date}.json`;
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              URL.revokeObjectURL(url);
+            }}
+            className="h-7 w-7 grid place-items-center rounded text-slate-400 hover:text-white transition-colors flex-shrink-0"
+            title="Download Replay"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
+              <path d="M12 16l-6-6h4V4h4v6h4l-6 6zm-8 2h16v2H4v-2z" />
+            </svg>
+          </button>
         </div>
       </div>
 

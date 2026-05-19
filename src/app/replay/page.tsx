@@ -2,8 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { useState, useEffect, useRef } from "react";
-import { useOnline } from "@/app/online/online-context";
+import { useState, useEffect, useRef, useCallback } from "react";
 import OnlinePageShell from "@/components/online/OnlinePageShell";
 
 const LOCAL_REPLAY_STORAGE_KEY = "sorcery:localReplay";
@@ -34,6 +33,37 @@ interface MatchRecordingSummary {
   isCpuMatch?: boolean;
 }
 
+function ShareButton({ matchId }: { matchId: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleShare = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const url = `${window.location.origin}/replay/${matchId}`;
+    void navigator.clipboard.writeText(url).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  };
+
+  return (
+    <button
+      onClick={handleShare}
+      className="w-9 grid place-items-center text-slate-500 hover:text-slate-200 hover:bg-slate-700/40 transition-colors"
+      title={copied ? "Copied!" : "Copy share link"}
+    >
+      {copied ? (
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5 text-emerald-400">
+          <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
+        </svg>
+      ) : (
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5">
+          <path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92s2.92-1.31 2.92-2.92-1.31-2.92-2.92-2.92z" />
+        </svg>
+      )}
+    </button>
+  );
+}
+
 export default function ReplayListPage() {
   const router = useRouter();
   const [recordings, setRecordings] = useState<MatchRecordingSummary[]>([]);
@@ -41,10 +71,6 @@ export default function ReplayListPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
-  // Use shared transport from OnlineProvider instead of creating a new socket
-  const { transport: onlineTransport, connected } = useOnline();
-  const transport = onlineTransport;
-  const socketReady = connected; // OnlineProvider handles welcome/auth
   const [currentPlayerId, setCurrentPlayerId] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [showOwnOnly, setShowOwnOnly] = useState(false);
@@ -67,7 +93,6 @@ export default function ReplayListPage() {
         const content = e.target?.result as string;
         const parsed = JSON.parse(content);
 
-        // Validate the replay structure
         if (
           !parsed.matchId ||
           !parsed.playerNames ||
@@ -80,7 +105,6 @@ export default function ReplayListPage() {
           return;
         }
 
-        // Store in sessionStorage and navigate to local viewer
         sessionStorage.setItem(LOCAL_REPLAY_STORAGE_KEY, content);
         router.push("/replay/local");
       } catch {
@@ -94,13 +118,11 @@ export default function ReplayListPage() {
     };
     reader.readAsText(file);
 
-    // Reset the input so the same file can be selected again
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
   };
 
-  // Get current player ID from session or localStorage
   useEffect(() => {
     try {
       const fromSession = (session?.user &&
@@ -108,50 +130,43 @@ export default function ReplayListPage() {
       const storedPlayerId = localStorage.getItem("sorcery:playerId");
       setCurrentPlayerId(fromSession || storedPlayerId);
     } catch {
-      // Ignore localStorage errors
+      // ignore localStorage errors
     }
   }, [session]);
 
-  // Note: socketReady is now derived from OnlineProvider's connected state
-  // No need for separate welcome listener - OnlineProvider handles auth
+  const fetchRecordings = useCallback(
+    async (cursor?: string | null) => {
+      const params = new URLSearchParams({ limit: "50" });
+      if (cursor) params.set("cursor", cursor);
+      if (currentPlayerId) params.set("playerId", currentPlayerId);
+      if (showOwnOnly) params.set("ownOnly", "true");
 
-  useEffect(() => {
-    if (!socketReady || !transport) return;
-
-    const handleRecordings = (payload: unknown) => {
-      const data = payload as {
+      const res = await fetch(`/api/replays?${params.toString()}`);
+      if (!res.ok) throw new Error("Failed to load replays");
+      return res.json() as Promise<{
         recordings: MatchRecordingSummary[];
         hasMore: boolean;
         nextCursor?: string;
-      };
+      }>;
+    },
+    [currentPlayerId, showOwnOnly]
+  );
+
+  useEffect(() => {
+    setLoading(true);
+    setRecordings([]);
+    setHasMore(false);
+    setNextCursor(null);
+    void fetchRecordings().then((data) => {
       setRecordings(data.recordings);
-      setHasMore(data.hasMore || false);
-      setNextCursor(data.nextCursor || null);
+      setHasMore(data.hasMore);
+      setNextCursor(data.nextCursor ?? null);
       setLoading(false);
-    };
-
-    transport.onGeneric("matchRecordingsResponse", handleRecordings);
-
-    // Always send playerId so the server can ensure the player's own matches
-    // are included in results (even when showing global matches).
-    // ownOnly restricts to only the player's matches.
-    const payload: { limit?: number; playerId?: string; ownOnly?: boolean } = { limit: 50 };
-    if (currentPlayerId) {
-      payload.playerId = currentPlayerId;
-    }
-    if (showOwnOnly) {
-      payload.ownOnly = true;
-    }
-    transport.emit("getMatchRecordings", payload);
-
-    return () => {
-      transport.offGeneric("matchRecordingsResponse", handleRecordings);
-    };
-  }, [socketReady, transport, showOwnOnly, currentPlayerId]);
+    }).catch(() => setLoading(false));
+  }, [fetchRecordings]);
 
   useEffect(() => {
     if (!recordings.length) return;
-
     void preloadReplayViewerModules();
     recordings.slice(0, 8).forEach((recording) => {
       router.prefetch(`/replay/${recording.matchId}`);
@@ -166,36 +181,14 @@ export default function ReplayListPage() {
   };
 
   const loadMore = () => {
-    if (!transport || !nextCursor || loadingMore) return;
-
+    if (!nextCursor || loadingMore) return;
     setLoadingMore(true);
-
-    const handleMoreRecordings = (payload: unknown) => {
-      const data = payload as {
-        recordings: MatchRecordingSummary[];
-        hasMore: boolean;
-        nextCursor?: string;
-      };
+    void fetchRecordings(nextCursor).then((data) => {
       setRecordings((prev) => [...prev, ...data.recordings]);
-      setHasMore(data.hasMore || false);
-      setNextCursor(data.nextCursor || null);
+      setHasMore(data.hasMore);
+      setNextCursor(data.nextCursor ?? null);
       setLoadingMore(false);
-      transport.offGeneric("matchRecordingsResponse", handleMoreRecordings);
-    };
-
-    transport.onGeneric("matchRecordingsResponse", handleMoreRecordings);
-
-    const payload: { limit?: number; cursor?: string; playerId?: string; ownOnly?: boolean } = {
-      limit: 50,
-      cursor: nextCursor,
-    };
-    if (currentPlayerId) {
-      payload.playerId = currentPlayerId;
-    }
-    if (showOwnOnly) {
-      payload.ownOnly = true;
-    }
-    transport.emit("getMatchRecordings", payload);
+    }).catch(() => setLoadingMore(false));
   };
 
   const formatDuration = (ms: number) => {
@@ -229,7 +222,7 @@ export default function ReplayListPage() {
       }}
     >
       <div className="flex items-start justify-between gap-4">
-        <div className="space-y-2">
+        <div className="space-y-2 min-w-0">
           <div className="flex flex-wrap items-center gap-3">
             <h3 className="text-sm font-semibold text-slate-100">
               {recording.playerNames.join(" vs ")}
@@ -250,21 +243,24 @@ export default function ReplayListPage() {
             {formatDate(recording.startTime)}
           </div>
         </div>
-        <div className="text-right text-xs text-slate-400 space-y-1">
-          <div>
-            <span className="uppercase tracking-wide text-slate-500">
-              Duration:
-            </span>{" "}
-            {recording.duration
-              ? formatDuration(recording.duration)
-              : "In Progress"}
+        <div
+          className="flex items-stretch flex-shrink-0 rounded-lg overflow-hidden border border-slate-700/50 bg-slate-800/40"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="px-3 py-2 text-right text-xs text-slate-400 space-y-0.5 pointer-events-none select-none">
+            <div>
+              <span className="uppercase tracking-wide text-slate-500 text-[10px]">Duration</span>{" "}
+              {recording.duration
+                ? formatDuration(recording.duration)
+                : "—"}
+            </div>
+            <div>
+              <span className="uppercase tracking-wide text-slate-500 text-[10px]">Actions</span>{" "}
+              {recording.actionCount}
+            </div>
           </div>
-          <div>
-            <span className="uppercase tracking-wide text-slate-500">
-              Actions:
-            </span>{" "}
-            {recording.actionCount}
-          </div>
+          <div className="w-px bg-slate-700/50 self-stretch" />
+          <ShareButton matchId={recording.matchId} />
         </div>
       </div>
     </div>
@@ -281,18 +277,6 @@ export default function ReplayListPage() {
   const otherRecordings = onlineRecordings.filter(
     (recording) => !recording.playerIds?.includes(currentPlayerId || "")
   );
-
-  if (!connected) {
-    return (
-      <OnlinePageShell>
-        <div className="flex items-center justify-center py-32">
-          <div className="text-sm text-slate-300">
-            Connecting to replay service…
-          </div>
-        </div>
-      </OnlinePageShell>
-    );
-  }
 
   return (
     <OnlinePageShell>
@@ -349,10 +333,6 @@ export default function ReplayListPage() {
                 checked={showOwnOnly}
                 onChange={(e) => {
                   setShowOwnOnly(e.target.checked);
-                  setRecordings([]);
-                  setLoading(true);
-                  setHasMore(false);
-                  setNextCursor(null);
                 }}
                 className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-emerald-600 focus:ring-emerald-500 focus:ring-offset-slate-950"
               />
