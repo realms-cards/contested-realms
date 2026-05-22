@@ -3230,6 +3230,27 @@ export default function OnlineMatchPage() {
               readOnly={isSpectatorView}
               spectatorCount={spectatorCount}
               myPlayerKey={viewPlayerKey}
+              matchStartedAt={
+                (
+                  match as unknown as {
+                    startedAt?: number | string | null;
+                  } | null
+                )?.startedAt ?? null
+              }
+              matchTimeMinutes={
+                (
+                  match as unknown as {
+                    matchTimeMinutes?: number | null;
+                  } | null
+                )?.matchTimeMinutes ?? null
+              }
+              isTimedMatch={
+                Boolean(tournamentId) ||
+                Boolean(
+                  (match as unknown as { timedMatch?: boolean } | null)
+                    ?.timedMatch,
+                )
+              }
             />
           )}
           {/* Restore UI button - shown when uiHidden */}

@@ -123,6 +123,8 @@ interface MatchState {
   playerIds: string[];
   playerDecks?: Map<string, unknown> | null;
   tournamentId?: string | null;
+  startedAt?: number;
+  matchTimeMinutes?: number;
   lastTs?: number;
   game?: MatchGameState;
   draftState?: Record<string, unknown>;
@@ -764,6 +766,9 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
         patch.phase === "Main"
       ) {
         match.status = "in_progress";
+        if (typeof match.startedAt !== "number") {
+          match.startedAt = Date.now();
+        }
         io.to(matchRoom).emit("matchStarted", {
           match: { ...match, game: match.game },
         });

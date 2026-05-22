@@ -1929,6 +1929,13 @@ function getMatchInfo(match: ServerMatchState): AnyRecord {
     lobbyName: match.lobbyName || undefined,
     tournamentId: match.tournamentId || undefined,
     draftSessionId: match.draftSessionId || undefined,
+    startedAt:
+      typeof match.startedAt === "number" ? match.startedAt : undefined,
+    matchTimeMinutes:
+      typeof match.matchTimeMinutes === "number"
+        ? match.matchTimeMinutes
+        : undefined,
+    timedMatch: Boolean(match.tournamentId) || Boolean(match.timedMatch),
     players: playersWithSeat,
     playerIds,
     status: match.status,
@@ -1975,6 +1982,7 @@ async function hydrateMatchFromDatabase(
         tournamentId: true,
         roundId: true,
         playerDecks: true,
+        startedAt: true,
       },
     });
     if (dbMatch) {
@@ -1985,6 +1993,31 @@ async function hydrateMatchFromDatabase(
       try {
         if (!match.roundId && dbMatch.roundId) match.roundId = dbMatch.roundId;
       } catch {}
+      try {
+        if (typeof match.startedAt !== "number" && dbMatch.startedAt) {
+          match.startedAt = new Date(dbMatch.startedAt).getTime();
+        }
+      } catch {}
+      // Hydrate tournament round time limit (used by client-side TournamentMatchTimer)
+      if (match.tournamentId && typeof match.matchTimeMinutes !== "number") {
+        try {
+          const tournament = await prisma.tournament.findUnique({
+            where: { id: match.tournamentId },
+            select: { settings: true },
+          });
+          const settings =
+            tournament?.settings && typeof tournament.settings === "object"
+              ? (tournament.settings as Record<string, unknown>)
+              : {};
+          const limit =
+            typeof settings.roundTimeLimit === "number"
+              ? settings.roundTimeLimit
+              : typeof settings.matchTimeLimit === "number"
+                ? settings.matchTimeLimit
+                : 45;
+          match.matchTimeMinutes = limit;
+        } catch {}
+      }
       if (dbMatch.playerDecks && typeof dbMatch.playerDecks === "object") {
         try {
           const hasExisting =

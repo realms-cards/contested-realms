@@ -17,6 +17,7 @@ import {
 import { useRef, useState, useEffect, useCallback } from "react";
 import AudioControls from "@/components/game/AudioControls";
 import { EndTurnConfirmDialog } from "@/components/game/EndTurnConfirmDialog";
+import { TournamentMatchTimer } from "@/components/game/TournamentMatchTimer";
 import { FEATURE_UNDO } from "@/lib/config/features";
 import { useColorBlind } from "@/lib/contexts/ColorBlindContext";
 import { useGameStore } from "@/lib/game/store";
@@ -35,6 +36,12 @@ interface OnlineStatusBarProps {
   spectatorCount?: number | null;
   /** Player key for "Playing as" indicator */
   myPlayerKey?: "p1" | "p2" | null;
+  /** Tournament/timed match start timestamp (ms) */
+  matchStartedAt?: number | string | null;
+  /** Round time limit in minutes */
+  matchTimeMinutes?: number | null;
+  /** Whether this is a timed/tournament match */
+  isTimedMatch?: boolean;
 }
 
 export default function OnlineStatusBar({
@@ -46,6 +53,9 @@ export default function OnlineStatusBar({
   readOnly = false,
   spectatorCount = null,
   myPlayerKey = null,
+  matchStartedAt = null,
+  matchTimeMinutes = null,
+  isTimedMatch = false,
 }: OnlineStatusBarProps) {
   const currentPlayer = useGameStore((s) => s.currentPlayer);
   const requestEndTurn = useGameStore((s) => s.requestEndTurn);
@@ -134,6 +144,17 @@ export default function OnlineStatusBar({
         >
           {currentPlayerName}&apos;s Turn
         </span>
+
+        {/* Tournament/Timed Match Timer */}
+        {isTimedMatch && matchStartedAt && (
+          <TournamentMatchTimer
+            matchStartedAt={matchStartedAt}
+            roundTimeMinutes={
+              typeof matchTimeMinutes === "number" ? matchTimeMinutes : 45
+            }
+            isTournamentMatch={true}
+          />
+        )}
 
         {/* Turn Controls - Only for current player and not read-only */}
         {canControlTurn && (

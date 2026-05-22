@@ -122,9 +122,16 @@ export function enrichCardRef(
     defence: metadata.defence ?? card.defence ?? null,
     rarity: metadata.rarity ?? card.rarity ?? null,
     // Also update other fields if they're missing
-    type: card.type ?? metadata.type ?? null,
-    subTypes: card.subTypes ?? metadata.subTypes ?? null,
-    slug: card.slug ?? metadata.slug ?? null,
+    // For string fields, treat empty strings as missing. Tournament decks
+    // can arrive with `type: ""` when /api/cards/by-id returns null typeText,
+    // and `??` would preserve the empty string, breaking type-gated logic
+    // like artifact attach and Omphalos auto-resolve.
+    type: card.type || metadata.type || null,
+    subTypes:
+      card.subTypes && card.subTypes.length > 0
+        ? card.subTypes
+        : (metadata.subTypes ?? null),
+    slug: card.slug || metadata.slug || null,
     thresholds: card.thresholds ?? metadata.thresholds ?? null,
     cost: card.cost ?? metadata.cost ?? null,
   };
