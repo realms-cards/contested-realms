@@ -37,6 +37,7 @@ import { useBoardHotkeys } from "@/lib/game/hooks/useBoardHotkeys";
 import { useRemoteCursorSystem } from "@/lib/game/hooks/useRemoteCursorSystem";
 import { useTTSHotkeys } from "@/lib/game/hooks/useTTSHotkeys";
 import { useTileDropHandler } from "@/lib/game/hooks/useTileDropHandler";
+import { pendingOrigins } from "@/lib/game/cardAnimOrigins";
 import type { CellKey } from "@/lib/game/store";
 import {
   useGameStore,
@@ -995,6 +996,59 @@ export default function Board({
     }
     return out;
   }, [board.size.w, board.size.h]);
+
+  // Track card origins for entry animations. Subscribe to all state changes and
+  // diff permanents manually (plain subscribe — no selector middleware needed).
+  useEffect(() => {
+    type Perms = ReturnType<typeof useGameStore.getState>["permanents"];
+    type PermItem = Perms[string][number];
+
+    let prevPerms: Perms = useGameStore.getState().permanents;
+
+    const buildPosMap = (perms: Perms) => {
+      const map = new Map<string, { x: number; z: number }>();
+      for (const [cellKey, cellItems] of Object.entries(perms)) {
+        const [cx, cy] = cellKey.split(",").map(Number);
+        const wx = offsetX + cx * TILE_SIZE;
+        const wz = offsetY + cy * TILE_SIZE;
+        for (const item of cellItems as PermItem[]) {
+          if (item.instanceId) map.set(item.instanceId, { x: wx, z: wz });
+        }
+      }
+      return map;
+    };
+
+    const unsub = useGameStore.subscribe((state) => {
+      const newPerms = state.permanents;
+      if (newPerms === prevPerms) return;
+
+      const oldPos = buildPosMap(prevPerms);
+      prevPerms = newPerms;
+
+      for (const [cellKey, cellItems] of Object.entries(newPerms)) {
+        const [cx, cy] = cellKey.split(",").map(Number);
+        const newWx = offsetX + cx * TILE_SIZE;
+        const newWz = offsetY + cy * TILE_SIZE;
+        for (const item of cellItems as PermItem[]) {
+          if (!item.instanceId) continue;
+          const prev = oldPos.get(item.instanceId);
+          if (!prev) {
+            // New to permanents (played from hand/deck)
+            const owner = item.owner as number;
+            const handZ = owner === 1
+              ? offsetY + board.size.h * TILE_SIZE + TILE_SIZE
+              : offsetY - TILE_SIZE;
+            pendingOrigins.set(item.instanceId, { x: newWx, z: handZ });
+          } else if (Math.abs(prev.x - newWx) > 0.05 || Math.abs(prev.z - newWz) > 0.05) {
+            // Moved between tiles
+            pendingOrigins.set(item.instanceId, prev);
+          }
+        }
+      }
+    });
+
+    return unsub;
+  }, [offsetX, offsetY, board.size.h, board.size.w]);
 
   const dragContext = useMemo(
     () => ({

@@ -1,5 +1,5 @@
 import { Text } from "@react-three/drei";
-import { useThree } from "@react-three/fiber";
+import { useFrame, useThree } from "@react-three/fiber";
 import type { ThreeEvent } from "@react-three/fiber";
 import { CuboidCollider, RigidBody } from "@react-three/rapier";
 import {
@@ -10,7 +10,8 @@ import {
   type SetStateAction,
 } from "react";
 import { flushSync } from "react-dom";
-import { Group } from "three";
+import { Group, MathUtils } from "three";
+import { pendingOrigins } from "@/lib/game/cardAnimOrigins";
 import { getGraphicsSettings } from "@/hooks/useGraphicsSettings";
 import { BodyApi, getPermanentOwnerBaseZ } from "@/lib/game/boardShared";
 import { detectSpellcasterSync } from "@/lib/game/cardAbilities";
@@ -360,6 +361,38 @@ export function PermanentStack({
   // Timer for delayed touch drag initiation (prevents tap from entering drag mode)
   const touchDragTimerRef = useRef<number | null>(null);
 
+  // Entry animation — SPECTATOR/REPLAY MODE ONLY.
+  // Each entry is created once per permId (stable refCb avoids React re-firing it on every render).
+  // dx/dy/dz are computed at mount time then applied on the first useFrame tick (after Rapier
+  // has finished its own initialization effects, so it can't clobber the offset).
+  const permanentAnimRef = useRef<Map<string, {
+    group: Group | null;
+    worldX: number;
+    worldZ: number;
+    dx: number; dy: number; dz: number;
+    needsInit: boolean;
+    refCb: (g: Group | null) => void;
+  }>>(new Map());
+
+  useFrame((_, delta) => {
+    if (permanentAnimRef.current.size === 0) return; // no-op in live-game mode
+    const speed = Math.min(1, delta * 6);
+    for (const entry of permanentAnimRef.current.values()) {
+      const g = entry.group;
+      if (!g) continue;
+      if (entry.needsInit) {
+        entry.needsInit = false;
+        g.position.set(entry.dx, entry.dy, entry.dz);
+      }
+      if (Math.abs(g.position.x) > 0.003) g.position.x = MathUtils.lerp(g.position.x, 0, speed);
+      else if (g.position.x !== 0) g.position.x = 0;
+      if (Math.abs(g.position.y) > 0.003) g.position.y = MathUtils.lerp(g.position.y, 0, speed);
+      else if (g.position.y !== 0) g.position.y = 0;
+      if (Math.abs(g.position.z) > 0.003) g.position.z = MathUtils.lerp(g.position.z, 0, speed);
+      else if (g.position.z !== 0) g.position.z = 0;
+    }
+  });
+
   if (items.length === 0) {
     return null;
   }
@@ -681,6 +714,59 @@ export function PermanentStack({
           });
         }
 
+        // Spectator/replay animation — skipped entirely in live-game mode.
+        if (isSpectator && !permanentAnimRef.current.has(permId)) {
+          const entry: {
+            group: Group | null;
+            worldX: number; worldZ: number;
+            dx: number; dy: number; dz: number;
+            needsInit: boolean;
+            refCb: (g: Group | null) => void;
+          } = {
+            group: null,
+            worldX: 0, worldZ: 0,
+            dx: 0, dy: 0, dz: 0,
+            needsInit: false,
+            refCb: null as unknown as (g: Group | null) => void,
+          };
+          entry.refCb = (g: Group | null) => {
+            if (g) {
+              if (entry.group === null) {
+                // Compute offset at mount time; apply it on the next useFrame tick
+                // (after Rapier's own init effects) so Rapier can't clobber it.
+                const origin = pendingOrigins.get(permId);
+                if (origin) {
+                  const dx = origin.x - entry.worldX;
+                  const dz = origin.z - entry.worldZ;
+                  const dist = Math.sqrt(dx * dx + dz * dz);
+                  const maxDist = TILE_SIZE * 4;
+                  const s = dist > maxDist ? maxDist / dist : 1;
+                  entry.dx = dx * s;
+                  entry.dy = 0.25;
+                  entry.dz = dz * s;
+                  pendingOrigins.delete(permId);
+                } else {
+                  entry.dx = 0;
+                  entry.dy = 0.5;
+                  entry.dz = 0;
+                }
+                entry.needsInit = true;
+              }
+              entry.group = g;
+            } else {
+              entry.group = null;
+              entry.needsInit = false;
+            }
+          };
+          permanentAnimRef.current.set(permId, entry);
+        }
+        const animEntry = isSpectator ? permanentAnimRef.current.get(permId) : undefined;
+        if (animEntry) {
+          // Keep world position current so refCb has correct values when it fires
+          animEntry.worldX = boardOffset.x + tileX * TILE_SIZE + offX;
+          animEntry.worldZ = boardOffset.y + tileY * TILE_SIZE + zBase + offZ;
+        }
+
         const bodyType = tokenSiteReplace
           ? "fixed" // Rubble tokens are truly fixed (site replacements)
           : isDraggingPermanent && !useGhostOnlyBoardDrag
@@ -725,6 +811,7 @@ export function PermanentStack({
               restitution={0}
               sensor
             />
+            <group ref={animEntry?.refCb}>
             <group
               visible={!isLocalDragGhost}
               scale={tokenSiteReplace ? [1, 1, 1] : [cardScale, 1, cardScale]}
@@ -1326,10 +1413,12 @@ export function PermanentStack({
                     const newOffset: [number, number] = [offX, offZ];
                     dragTarget.current = null;
                     draggedBody.current = null;
-                    requestAnimationFrame(() => {
+                    if (useGhostOnlyBoardDrag) {
                       setOffset(dropKey, dragging.index, newOffset);
-                    });
-                    if (!useGhostOnlyBoardDrag) {
+                    } else {
+                      requestAnimationFrame(() => {
+                        setOffset(dropKey, dragging.index, newOffset);
+                      });
                       const targetId = (draggedInstId ||
                         `perm:${dropKey}:${dragging.index}`) as string;
                       snapBodyTo(targetId, wx, wz);
@@ -1340,10 +1429,12 @@ export function PermanentStack({
                     const newOffset: [number, number] = [offX, offZ];
                     dragTarget.current = null;
                     draggedBody.current = null;
-                    requestAnimationFrame(() => {
+                    if (useGhostOnlyBoardDrag) {
                       moveToWithOffset(tx, ty, newOffset);
-                    });
-                    if (!useGhostOnlyBoardDrag) {
+                    } else {
+                      requestAnimationFrame(() => {
+                        moveToWithOffset(tx, ty, newOffset);
+                      });
                       const targetId = (draggedInstId ||
                         `perm:${dropKey}:${newIndex}`) as string;
                       snapBodyTo(targetId, wx, wz);
@@ -1748,6 +1839,7 @@ export function PermanentStack({
                 })()}
               </group>
             </group>
+            </group>{/* /entry animation wrapper */}
           </RigidBody>
         );
       })}
