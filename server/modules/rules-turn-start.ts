@@ -32,6 +32,9 @@ interface Permanent {
   owner: 1 | 2;
   tapped?: boolean;
   summonedThisTurn?: boolean;
+  // Waveshaper: when true, this permanent skips this untap. Consumed here so it
+  // untaps normally next time. Authoritative for online play (overrides clients).
+  skipNextUntap?: boolean;
 }
 
 interface Permanents {
@@ -87,6 +90,16 @@ export function applyTurnStart(game: AnyRecord): MatchPatch | null {
       permanents[cellKey] = arr.map((p) => {
         try {
           if (Number((p as Permanent).owner) === cp) {
+            // Waveshaper: a permanent flagged to skip its next untap stays
+            // tapped this turn; consume the flag so it untaps normally next time.
+            if ((p as Permanent).skipNextUntap === true) {
+              const skipped = {
+                ...p,
+                skipNextUntap: false,
+              } as Record<string, unknown>;
+              delete skipped.summonedThisTurn;
+              return skipped;
+            }
             // Untap and clear summoning sickness flag
             const updated = { ...p, tapped: false } as Record<string, unknown>;
             // Remove summonedThisTurn flag (if present)

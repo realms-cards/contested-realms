@@ -492,6 +492,30 @@ export const createCoreSlice: StateCreator<
           if (!cur) continue;
           if (cur.owner !== nextPlayer) continue;
           if (cur.tapped) {
+            if (cur.skipNextUntap) {
+              // Waveshaper: stay tapped through this untap.
+              // Online: leave the flag set — the server's authoritative
+              // applyTurnStart consumes it. Clearing it here first would let the
+              // server see no flag and untap the unit.
+              // Hotseat (no server): consume the flag locally so it untaps next time.
+              if (!state.transport) {
+                const next = bumpPermanentVersion({
+                  ...cur,
+                  skipNextUntap: false,
+                });
+                arr[i] = next;
+                updates.push({
+                  at: cellKey as CellKey,
+                  entry: {
+                    instanceId: next.instanceId ?? undefined,
+                    skipNextUntap: false,
+                    version: next.version,
+                  },
+                });
+                changed = true;
+              }
+              continue;
+            }
             const next = bumpPermanentVersion({ ...cur, tapped: false });
             arr[i] = next;
             updates.push({
@@ -625,8 +649,20 @@ export const createCoreSlice: StateCreator<
         if (!perm) continue;
         if (perm.owner !== nextPlayer) continue;
         if (perm.tapped) {
-          arr[i] = bumpPermanentVersion({ ...perm, tapped: false });
-          changed = true;
+          if (perm.skipNextUntap) {
+            // Waveshaper: stay tapped through this untap.
+            // Online: leave the flag set — the server's authoritative
+            // applyTurnStart consumes it. Clearing it here first would let the
+            // server see no flag and untap the unit.
+            // Hotseat (no server): consume the flag locally so it untaps next time.
+            if (!state.transport) {
+              arr[i] = bumpPermanentVersion({ ...perm, skipNextUntap: false });
+              changed = true;
+            }
+          } else {
+            arr[i] = bumpPermanentVersion({ ...perm, tapped: false });
+            changed = true;
+          }
         }
       }
       if (changed) permanents[cellKey] = arr;

@@ -6479,6 +6479,72 @@ export function handleCustomMessage(
     return;
   }
 
+  // --- Waveshaper flood message handlers ---
+  // State changes (Flooded token, tapped minions w/ skipNextUntap, avatar tap)
+  // arrive via trySendPatch; these handlers only sync the selection UI + log.
+  if (t === "waveshaperBegin") {
+    const pending = (msg as { pending?: unknown }).pending as
+      | {
+          id: string;
+          ownerSeat: PlayerKey;
+          phase: "selectingTarget";
+          validTargets: CellKey[];
+          createdAt: number;
+        }
+      | undefined;
+    if (!pending) return;
+
+    // Skip if we're the owner — we already have the state locally
+    const actorKey = get().actorKey;
+    if (actorKey === pending.ownerSeat) return;
+
+    set({ pendingWaveshaper: pending } as Partial<GameState> as GameState);
+
+    try {
+      get().log(
+        `[${pending.ownerSeat.toUpperCase()}] Waveshaper choosing a site to flood`,
+      );
+    } catch {}
+    return;
+  }
+
+  if (t === "waveshaperResolve") {
+    const ownerSeat = (msg as { ownerSeat?: unknown }).ownerSeat as
+      | PlayerKey
+      | undefined;
+    if (!ownerSeat) return;
+
+    // Skip if we're the owner — we already applied + cleared state locally
+    const actorKey = get().actorKey;
+    if (actorKey === ownerSeat) return;
+
+    // The flood/tap changes were applied via the state patch; just clear the
+    // opponent's selection overlay.
+    set({ pendingWaveshaper: null } as Partial<GameState> as GameState);
+
+    try {
+      get().log(`[${ownerSeat.toUpperCase()}] Waveshaper flooded a site`);
+    } catch {}
+    return;
+  }
+
+  if (t === "waveshaperCancel") {
+    const pending = get().pendingWaveshaper;
+    if (!pending) return;
+
+    const actorKey = get().actorKey;
+    if (actorKey === pending.ownerSeat) return;
+
+    set({ pendingWaveshaper: null } as Partial<GameState> as GameState);
+
+    try {
+      get().log(
+        `[${pending.ownerSeat.toUpperCase()}] Waveshaper flood cancelled`,
+      );
+    } catch {}
+    return;
+  }
+
   // --- Imposter Mask message handlers ---
   if (t === "imposterMask") {
     const who = (msg as { who?: unknown }).who as PlayerKey | undefined;

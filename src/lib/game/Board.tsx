@@ -1246,6 +1246,18 @@ export default function Board({
       selectGeomancerFillTarget,
     ],
   );
+  // Waveshaper flood-site target selection
+  const pendingWaveshaper = useScopedStore((s) => s.pendingWaveshaper);
+  const selectWaveshaperTarget = useScopedStore(
+    (s) => s.selectWaveshaperTarget,
+  );
+  const waveshaperContext = useMemo(
+    () => ({
+      pendingWaveshaper,
+      selectWaveshaperTarget,
+    }),
+    [pendingWaveshaper, selectWaveshaperTarget],
+  );
   // Inquisition summon cell selection
   const pendingInquisitionSummon = useScopedStore(
     (s) => s.pendingInquisitionSummon,
@@ -1507,6 +1519,7 @@ export default function Board({
               mephistophelesSummonContext={mephistophelesSummonContext}
               pathfinderContext={pathfinderContext}
               geomancerContext={geomancerContext}
+              waveshaperContext={waveshaperContext}
               inquisitionSummonContext={inquisitionSummonContext}
               counterHandlers={counterHandlers}
               movementHandlers={movementHandlers}

@@ -19,6 +19,7 @@ import {
   TileInteractionPlane,
   type TileInteractionPlaneProps,
 } from "@/lib/game/components/TileInteractionPlane";
+import { WaveshaperTargetOverlay } from "@/lib/game/components/WaveshaperTargetOverlay";
 import type { BoardDragControls } from "@/lib/game/hooks/useBoardDragControls";
 import type {
   BabelTowerMerge,
@@ -84,6 +85,10 @@ type BoardTileProps = {
     selectGeomancerTarget: GameState["selectGeomancerTarget"];
     pendingGeomancerFill: GameState["pendingGeomancerFill"];
     selectGeomancerFillTarget: GameState["selectGeomancerFillTarget"];
+  };
+  waveshaperContext: {
+    pendingWaveshaper: GameState["pendingWaveshaper"];
+    selectWaveshaperTarget: GameState["selectWaveshaperTarget"];
   };
   inquisitionSummonContext: {
     pendingInquisitionSummon: GameState["pendingInquisitionSummon"];
@@ -172,6 +177,7 @@ export function BoardTile({
   mephistophelesSummonContext,
   pathfinderContext,
   geomancerContext,
+  waveshaperContext,
   inquisitionSummonContext,
   counterHandlers,
   movementHandlers,
@@ -260,6 +266,8 @@ export function BoardTile({
         selectGeomancerTarget={geomancerContext.selectGeomancerTarget}
         pendingGeomancerFill={geomancerContext.pendingGeomancerFill}
         selectGeomancerFillTarget={geomancerContext.selectGeomancerFillTarget}
+        pendingWaveshaper={waveshaperContext.pendingWaveshaper}
+        selectWaveshaperTarget={waveshaperContext.selectWaveshaperTarget}
         pendingInquisitionSummon={
           inquisitionSummonContext.pendingInquisitionSummon
         }
@@ -375,6 +383,13 @@ export function BoardTile({
         tileY={tileY}
         pendingGeomancerPlay={geomancerContext.pendingGeomancerPlay}
         pendingGeomancerFill={geomancerContext.pendingGeomancerFill}
+      />
+
+      {/* Waveshaper flood target overlay - rendered under cards */}
+      <WaveshaperTargetOverlay
+        tileX={tileX}
+        tileY={tileY}
+        pendingWaveshaper={waveshaperContext.pendingWaveshaper}
       />
 
       {/* Inquisition summon target overlay - rendered under cards */}

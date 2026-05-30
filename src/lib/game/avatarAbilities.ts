@@ -26,6 +26,7 @@ export type AvatarAbility =
   | "pathfinder"
   | "savior"
   | "geomancer"
+  | "waveshaper"
   | null;
 
 /**
@@ -178,6 +179,17 @@ export function isSavior(avatarName: string | null | undefined): boolean {
 }
 
 /**
+ * Check if an avatar name indicates Waveshaper (Beta expansion)
+ * Uses case-insensitive matching
+ * Waveshaper: Tap → Flood a site near your body of water until you do so again.
+ * Tap minions without submerge there. They don't untap the next time they would.
+ */
+export function isWaveshaper(avatarName: string | null | undefined): boolean {
+  if (!avatarName) return false;
+  return avatarName.toLowerCase().includes("waveshaper");
+}
+
+/**
  * Check if an avatar has the "Tap → Play or draw a site" ability.
  * Most avatars have this standard ability, but some special avatars do not:
  * - Magician: No atlas (all cards in spellbook, including sites)
@@ -219,6 +231,7 @@ export function getAvatarAbility(
   if (name.includes("mephistopheles")) return "mephistopheles";
   if (name.includes("pathfinder")) return "pathfinder";
   if (name.includes("geomancer")) return "geomancer";
+  if (name.includes("waveshaper")) return "waveshaper";
   if (name.includes("savior")) return "savior";
 
   return null;

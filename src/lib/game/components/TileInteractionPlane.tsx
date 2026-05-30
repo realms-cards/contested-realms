@@ -53,6 +53,9 @@ export type TileInteractionPlaneProps = {
   selectGeomancerTarget?: GameState["selectGeomancerTarget"];
   pendingGeomancerFill?: GameState["pendingGeomancerFill"];
   selectGeomancerFillTarget?: GameState["selectGeomancerFillTarget"];
+  // Waveshaper flood-site target selection support
+  pendingWaveshaper?: GameState["pendingWaveshaper"];
+  selectWaveshaperTarget?: GameState["selectWaveshaperTarget"];
   // Inquisition summon cell selection support
   pendingInquisitionSummon?: GameState["pendingInquisitionSummon"];
   placeInquisitionSummon?: GameState["placeInquisitionSummon"];
@@ -98,6 +101,8 @@ export function TileInteractionPlane({
   selectGeomancerTarget,
   pendingGeomancerFill,
   selectGeomancerFillTarget,
+  pendingWaveshaper,
+  selectWaveshaperTarget,
   pendingInquisitionSummon,
   placeInquisitionSummon,
   pendingCorpseExplosion,
@@ -296,6 +301,20 @@ export function TileInteractionPlane({
           if (pendingGeomancerFill.validTargets.includes(cellKey)) {
             e.stopPropagation();
             selectGeomancerFillTarget(cellKey);
+            return;
+          }
+        }
+        // Waveshaper flood target selection - click on valid site tiles
+        if (
+          pendingWaveshaper &&
+          pendingWaveshaper.phase === "selectingTarget" &&
+          (pendingWaveshaper.ownerSeat === actorKey || !actorKey) &&
+          selectWaveshaperTarget
+        ) {
+          const cellKey = `${tileX},${tileY}`;
+          if (pendingWaveshaper.validTargets.includes(cellKey)) {
+            e.stopPropagation();
+            selectWaveshaperTarget(cellKey);
             return;
           }
         }

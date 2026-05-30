@@ -83,6 +83,7 @@ import PlayerStatusEffects from "@/components/game/StatusEffectIcons";
 import SwitchSiteHudOverlay from "@/components/game/SwitchSiteHudOverlay";
 import TurnStartOverlay from "@/components/game/TurnStartOverlay";
 import UnitHandsOverlay from "@/components/game/UnitHandsOverlay";
+import WaveshaperOverlay from "@/components/game/WaveshaperOverlay";
 import {
   DynamicBoard as Board,
   DynamicHand3D as Hand3D,
@@ -1131,6 +1132,7 @@ export default function PlayPage() {
           <FrontierSettlersOverlay />
           {/* Geomancer Overlay (tap: replace adjacent Rubble) */}
           <GeomancerOverlay />
+          <WaveshaperOverlay />
 
           {/* Pigs of the Sounder Overlay (Deathrite) */}
           <PigsOfTheSounderOverlay />

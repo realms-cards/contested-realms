@@ -4456,7 +4456,10 @@ io.on("connection", async (socket: SocketClient) => {
       type === "selfsameSimulacrumBegin" ||
       type === "selfsameSimulacrumSelect" ||
       type === "selfsameSimulacrumResolve" ||
-      type === "selfsameSimulacrumCancel"
+      type === "selfsameSimulacrumCancel" ||
+      type === "waveshaperBegin" ||
+      type === "waveshaperResolve" ||
+      type === "waveshaperCancel"
     ) {
       // Resolver messages - broadcast to match room
       try {

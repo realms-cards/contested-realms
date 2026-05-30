@@ -480,6 +480,7 @@ export type PermanentItem = EntityBase<CardRef> & {
   isCopy?: boolean; // Token copy - goes to banished instead of graveyard when leaving
   isCarried?: boolean; // This unit is being carried by a carry-keyword minion
   enteredOnTurn?: number; // Turn number when this permanent entered the realm (for Savior ward ability)
+  skipNextUntap?: boolean; // When true, this permanent skips its next untap step (Waveshaper). Cleared on that skipped untap.
 };
 
 export type Permanents = Record<CellKey, PermanentItem[]>;
@@ -1261,6 +1262,19 @@ export type PendingGeomancerPlay = {
 export type PendingGeomancerFill = {
   id: string;
   ownerSeat: PlayerKey;
+  validTargets: CellKey[];
+  createdAt: number;
+};
+
+// --- Waveshaper Avatar State --------------------------------------------------
+// Tap → Flood a site near your body of water until you do so again.
+// Tap minions without submerge there. They don't untap the next time they would.
+export type WaveshaperPhase = "selectingTarget" | "complete";
+
+export type PendingWaveshaper = {
+  id: string;
+  ownerSeat: PlayerKey;
+  phase: WaveshaperPhase;
   validTargets: CellKey[];
   createdAt: number;
 };
@@ -2514,6 +2528,14 @@ export type GameState = {
   beginGeomancerFill: (who: PlayerKey) => void;
   selectGeomancerFillTarget: (targetCell: CellKey) => void;
   cancelGeomancerFill: () => void;
+  // Waveshaper (tap: flood a site near your body of water, tap non-submerge minions there)
+  pendingWaveshaper: PendingWaveshaper | null;
+  // Tracks the single site currently flooded by each player's Waveshaper ability
+  // ("until you do so again" — re-using the ability moves the flood).
+  waveshaperFloodCells: Record<PlayerKey, CellKey | null>;
+  beginWaveshaperFlood: (who: PlayerKey) => void;
+  selectWaveshaperTarget: (targetCell: CellKey) => void;
+  cancelWaveshaperFlood: () => void;
   // Pigs of the Sounder / Squeakers (Deathrite: reveal 5, summon matching cards)
   pendingPigsOfTheSounder: PendingPigsOfTheSounder | null;
   triggerPigsDeathrite: (input: {

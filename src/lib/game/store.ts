@@ -139,6 +139,10 @@ import {
 } from "./store/utils/snapshotHelpers";
 import { createEmptyZonesRecord } from "./store/utils/zoneHelpers";
 import {
+  createWaveshaperSlice,
+  createInitialWaveshaperFloodCells,
+} from "./store/waveshaperState";
+import {
   createZoneSlice,
   createInitialMulligans,
   createInitialMulliganDrawn,
@@ -224,6 +228,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   ...createAssortedAnimalsSlice(set, get, storeApi),
   ...createFrontierSettlersSlice(set, get, storeApi),
   ...createGeomancerSlice(set, get, storeApi),
+  ...createWaveshaperSlice(set, get, storeApi),
   ...createPigsOfTheSounderSlice(set, get, storeApi),
   ...createKettletopLeprechaunSlice(set, get, storeApi),
   ...createDemonicContractSlice(set, get, storeApi),
@@ -415,6 +420,8 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         geomancerRubbleUsed: createInitialGeomancerRubbleUsed(),
         pendingGeomancerPlay: null,
         pendingGeomancerFill: null,
+        pendingWaveshaper: null,
+        waveshaperFloodCells: createInitialWaveshaperFloodCells(),
         babelTowers: createInitialBabelTowers(),
         pendingBabelPlacement: null,
         portalState: null,

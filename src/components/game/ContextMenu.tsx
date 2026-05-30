@@ -10,6 +10,7 @@ import {
   isMephistopheles,
   isPathfinder,
   isGeomancer,
+  isWaveshaper,
   isSavior,
   isImposter,
 } from "@/lib/game/avatarAbilities";
@@ -251,6 +252,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   const beginPathfinderPlay = useGameStore((s) => s.beginPathfinderPlay);
   const geomancerRubbleUsed = useGameStore((s) => s.geomancerRubbleUsed);
   const beginGeomancerRubble = useGameStore((s) => s.beginGeomancerRubble);
+  const beginWaveshaperFlood = useGameStore((s) => s.beginWaveshaperFlood);
   const druidFlipped = useGameStore((s) => s.druidFlipped);
   const flipDruid = useGameStore((s) => s.flipDruid);
   const getAvailableMana = useGameStore((s) => s.getAvailableMana);
@@ -1545,6 +1547,26 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         isEnabled: canReplace,
         targetPermanentId: "",
         description: geoDescription,
+      });
+    }
+
+    // Waveshaper flood action (tap → flood a site near your body of water,
+    // tap non-submerge minions there, they skip their next untap)
+    if (isMine && isWaveshaper(effectiveAvatarName)) {
+      const isNotTapped = !a?.tapped;
+      const canFlood = isMyTurn && isNotTapped && hasPosition;
+      let floodDescription =
+        "Tap: flood a site near your body of water, tapping non-submerge minions there.";
+      if (!isMyTurn) floodDescription = "Can only use on your turn";
+      else if (!isNotTapped) floodDescription = "Waveshaper is already tapped";
+      else if (!hasPosition) floodDescription = "Avatar must be on the board";
+
+      extraActions.push({
+        actionId: "__waveshaper_flood__",
+        displayText: "Flood Site",
+        isEnabled: canFlood,
+        targetPermanentId: "",
+        description: floodDescription,
       });
     }
 
@@ -3855,6 +3877,29 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                           onClick={() => {
                             if (t.kind === "avatar" && action.isEnabled) {
                               beginGeomancerRubble(t.who);
+                            }
+                            onClose();
+                          }}
+                        />
+                      );
+                    }
+                    // Waveshaper flood action
+                    if (action.actionId === "__waveshaper_flood__") {
+                      return (
+                        <MenuBtn
+                          key={action.actionId}
+                          icon="game-icons:big-wave"
+                          label={action.displayText}
+                          title={action.description}
+                          disabled={!action.isEnabled}
+                          className={
+                            action.isEnabled
+                              ? "bg-cyan-600/20 hover:bg-cyan-600/30"
+                              : "bg-gray-600/20"
+                          }
+                          onClick={() => {
+                            if (t.kind === "avatar" && action.isEnabled) {
+                              beginWaveshaperFlood(t.who);
                             }
                             onClose();
                           }}
