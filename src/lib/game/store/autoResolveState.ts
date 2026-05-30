@@ -1,14 +1,23 @@
 import type { StateCreator } from "zustand";
+import {
+  TOKEN_BY_NAME,
+  newTokenInstanceId,
+  tokenSlug,
+} from "@/lib/game/tokens";
 import type { CustomMessage } from "@/lib/net/transport";
 import type {
   CardRef,
   CellKey,
   GameState,
   PendingAutoResolve,
+  PermanentItem,
   PlayerKey,
   ServerPatchT,
   Zones,
 } from "./types";
+import { prepareCardForSeat } from "./utils/cardHelpers";
+import { newPermanentInstanceId } from "./utils/idHelpers";
+import { randomTilt } from "./utils/permanentHelpers";
 
 function newAutoResolveId() {
   return `ar_${Date.now().toString(36)}_${Math.random()
@@ -27,6 +36,7 @@ export type AutoResolveSlice = Pick<
   | "_executeHeadlessHauntMoveEffect"
   | "_executePithImpStealEffect"
   | "_executeLilithRevealEffect"
+  | "_executeTadpolePoolGenesis"
 >;
 
 export const createAutoResolveSlice: StateCreator<
@@ -139,6 +149,12 @@ export const createAutoResolveSlice: StateCreator<
           lilithLocation,
           ownerSeat,
         );
+        break;
+      }
+      case "tadpole_pool_genesis": {
+        // Summon three submerged Frog tokens at the Tadpole Pool's cell
+        const cellKey = callbackData.cellKey as CellKey;
+        get()._executeTadpolePoolGenesis(cellKey, ownerSeat);
         break;
       }
     }
@@ -374,5 +390,99 @@ export const createAutoResolveSlice: StateCreator<
   ) => {
     // Call triggerLilithEndOfTurn with skipConfirmation to proceed with the reveal
     get().triggerLilithEndOfTurn(ownerSeat, true);
+  },
+
+  // Tadpole Pool: "(W)(W)(W) — Genesis → Summon three submerged Frog tokens here."
+  // Summons three Frog minion tokens onto the site's cell and submerges them so
+  // they line up neatly under the site (PermanentStack auto-arranges multiples).
+  _executeTadpolePoolGenesis: (cellKey: CellKey, ownerSeat: PlayerKey) => {
+    const state = get();
+
+    const frogDef = TOKEN_BY_NAME["frog"];
+    if (!frogDef) {
+      get().log("Tadpole Pool Genesis: Frog token definition not found");
+      return;
+    }
+
+    const ownerNum = ownerSeat === "p1" ? 1 : 2;
+    const cellPerms: PermanentItem[] = [...(state.permanents[cellKey] || [])];
+    const permanentPositionsNext = { ...state.permanentPositions };
+    const permanentAbilitiesNext = { ...state.permanentAbilities };
+
+    for (let i = 0; i < 3; i++) {
+      const frogCard = prepareCardForSeat(
+        {
+          cardId: newTokenInstanceId(frogDef),
+          variantId: null,
+          name: frogDef.name,
+          type: "Token",
+          slug: tokenSlug(frogDef),
+          thresholds: null,
+        },
+        ownerSeat,
+      );
+      const instanceId = frogCard.instanceId ?? newPermanentInstanceId();
+
+      cellPerms.push({
+        owner: ownerNum as 1 | 2,
+        card: frogCard,
+        offset: null,
+        tilt: randomTilt(),
+        tapVersion: 0,
+        tapped: false,
+        version: 0,
+        instanceId,
+        enteredOnTurn: state.turn, // Track entry turn (for Savior ward ability)
+      });
+
+      // Frog has Submerge — the tokens enter play submerged.
+      permanentPositionsNext[instanceId] = {
+        permanentId: instanceId,
+        state: "submerged",
+        position: { x: 0, y: -0.25, z: 0 },
+      };
+      permanentAbilitiesNext[instanceId] = {
+        permanentId: instanceId,
+        canBurrow: false,
+        canSubmerge: true,
+        requiresWaterSite: false,
+        abilitySource: "Frog - Submerge (Tadpole Pool)",
+      };
+    }
+
+    const permanentsNext = { ...state.permanents, [cellKey]: cellPerms };
+
+    set({
+      permanents: permanentsNext,
+      permanentPositions: permanentPositionsNext,
+      permanentAbilities: permanentAbilitiesNext,
+    } as Partial<GameState> as GameState);
+
+    get().log(
+      `[${ownerSeat.toUpperCase()}] Tadpole Pool Genesis: summons three submerged Frog tokens`,
+    );
+
+    // Sync to opponent: only the affected cell for permanents (per patch safety
+    // rules), plus the full position/ability maps merged with the new entries.
+    const patch: ServerPatchT = {
+      permanents: { [cellKey]: cellPerms } as GameState["permanents"],
+      permanentPositions: permanentPositionsNext,
+      permanentAbilities: permanentAbilitiesNext,
+    };
+    get().trySendPatch(patch);
+
+    // Toast so the opponent sees the summon
+    const transport = get().transport;
+    if (transport?.sendMessage) {
+      const playerNum = ownerSeat === "p1" ? "1" : "2";
+      try {
+        transport.sendMessage({
+          type: "toast",
+          text: `[p${playerNum}:PLAYER] summons three submerged [p${playerNum}card:Frog] tokens (Tadpole Pool)`,
+          cellKey,
+          seat: ownerSeat,
+        } as unknown as CustomMessage);
+      } catch {}
+    }
   },
 });

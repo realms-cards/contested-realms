@@ -31,6 +31,8 @@ export default function AutoResolveConfirmOverlay() {
         return "red";
       case "lilith_reveal":
         return "pink";
+      case "tadpole_pool_genesis":
+        return "blue";
       default:
         return "yellow";
     }

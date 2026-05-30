@@ -1484,7 +1484,8 @@ export type AutoResolveKind =
   | "morgana_genesis" // Genesis: draw 3 spells to Morgana hand
   | "headless_haunt_move" // Start of turn: random movement
   | "pith_imp_steal" // Genesis: steal random card
-  | "lilith_reveal"; // End of turn: reveal opponent's top spell
+  | "lilith_reveal" // End of turn: reveal opponent's top spell
+  | "tadpole_pool_genesis"; // Genesis: summon three submerged Frog tokens
 
 export type PendingAutoResolve = {
   id: string;
@@ -2674,6 +2675,7 @@ export type GameState = {
     lilithLocation: string,
     ownerSeat: PlayerKey,
   ) => void;
+  _executeTadpolePoolGenesis: (cellKey: CellKey, ownerSeat: PlayerKey) => void;
   // Dhol Chants (tap N allies, reveal N spells, cast one free)
   pendingDholChants: PendingDholChants | null;
   beginDholChants: (input: {

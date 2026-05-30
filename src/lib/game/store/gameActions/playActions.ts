@@ -171,6 +171,23 @@ const triggerSiteGenesis = (
     return;
   }
 
+  // Tadpole Pool - Genesis → Summon three submerged Frog tokens here.
+  // Ask the owner to confirm, then auto-summon via the auto-resolve system.
+  if (lc === "tadpole pool") {
+    const ownerSeat = owner === 1 ? "p1" : "p2";
+    if (!state.resolversDisabled) {
+      state.beginAutoResolve({
+        kind: "tadpole_pool_genesis",
+        ownerSeat,
+        sourceName: siteName,
+        sourceLocation: cellKey,
+        effectDescription: "Summon three submerged Frog tokens here.",
+        callbackData: { cellKey },
+      });
+    }
+    return;
+  }
+
   // Crossroads - Genesis → Look at your next four sites. Put three on the bottom of your atlas.
   if (lc === "crossroads") {
     const ownerSeat = owner === 1 ? "p1" : "p2";
