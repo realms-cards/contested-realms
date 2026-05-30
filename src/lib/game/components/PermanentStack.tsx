@@ -1511,20 +1511,13 @@ export function PermanentStack({
               {/* Purple outline for cards with custom resolvers */}
               {!roleGlow &&
                 !p.isCopy &&
+                !isToken &&
                 !useGameStore.getState().resolversDisabled &&
                 getGraphicsSettings().showResolverGlow &&
                 hasCustomResolver(p.card.name) && (
                   <ResolverOutline
-                    width={
-                      tokenDef && tokenDef.size === "small"
-                        ? CARD_SHORT * 0.5
-                        : CARD_SHORT
-                    }
-                    height={
-                      tokenDef && tokenDef.size === "small"
-                        ? CARD_LONG * 0.5
-                        : CARD_LONG
-                    }
+                    width={CARD_SHORT}
+                    height={CARD_LONG}
                     rotationZ={rotZ}
                     elevation={0.002}
                     renderOrder={1350}

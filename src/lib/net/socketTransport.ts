@@ -28,10 +28,12 @@ import type {
   StackInteractionEvent,
   UIUpdateEvent,
 } from "@/types/draft-3d-events";
+import { getSocketLeader, type SocketLeaderElection } from "./socketLeader";
 import {
   fetchSocketToken,
   clearSocketTokenCache,
   getCachedTokenSync,
+  wasLastFetchUnauthorized,
 } from "./socketTokenCache";
 
 const RECONNECT_ATTEMPTS_ENV = Number(
@@ -304,8 +306,20 @@ export class SocketTransport implements GameTransport {
     | "disconnected"
     | "connecting"
     | "connected"
-    | "reconnecting" = "disconnected";
+    | "reconnecting"
+    | "standby" = "disconnected";
   private isIntentionalDisconnect = false;
+  // Set when the server replaced this connection with a newer one for the same user.
+  // While true we suppress automatic reconnection; the tab reclaims the connection
+  // only on explicit user activity (visibility change / manual connect).
+  private sessionReplaced = false;
+  // Cross-tab leader election. Only the leader tab opens a socket; other tabs stay in
+  // standby (no socket) so they never trigger the server's per-user dedup.
+  private leaderElection: SocketLeaderElection = getSocketLeader();
+  private leaderAware = false;
+  // True after a full teardown (disconnect()); prevents leadership changes from
+  // silently re-opening a socket the app no longer wants.
+  private fullyDisconnected = false;
   private genericHandlers: Map<string, Set<(payload: unknown) => void>> =
     new Map();
   private inflightWatch: Map<string, Promise<void>> = new Map();
@@ -393,7 +407,11 @@ export class SocketTransport implements GameTransport {
         !this.socket.connected &&
         !this.isIntentionalDisconnect
       ) {
-        // Tab visible - reconnecting silently
+        // Tab visible - reconnecting silently. If we were replaced by another tab,
+        // the user focusing this tab means they want it to be the active session,
+        // so we reclaim the connection (which will in turn replace the other tab,
+        // and that tab will pause without fighting back).
+        this.sessionReplaced = false;
 
         // Refresh token before reconnecting (rate-limited)
         try {
@@ -436,12 +454,64 @@ export class SocketTransport implements GameTransport {
     | "disconnected"
     | "connecting"
     | "connected"
-    | "reconnecting" {
+    | "reconnecting"
+    | "standby" {
     return this.connectionState;
   }
 
   isConnected(): boolean {
     return this.connectionState === "connected";
+  }
+
+  /** Whether this tab currently owns the (single) socket connection for the browser. */
+  isLeaderTab(): boolean {
+    return this.leaderElection.isLeader();
+  }
+
+  /**
+   * Ask to become the leader tab (take over the connection from another tab).
+   * Used by the "Play here" affordance shown to standby tabs.
+   */
+  requestLeadership(): void {
+    this.leaderElection.requestLeadership();
+  }
+
+  private ensureLeaderAwareness(): void {
+    if (this.leaderAware) return;
+    this.leaderAware = true;
+    this.leaderElection.start();
+    this.leaderElection.onChange((isLeader) =>
+      this.handleLeadershipChange(isLeader),
+    );
+  }
+
+  private handleLeadershipChange(isLeader: boolean): void {
+    if (this.fullyDisconnected) return;
+    if (isLeader) {
+      // We are now the leader: open (or reclaim) the connection.
+      if (this.connectionOpts && !(this.socket && this.socket.connected)) {
+        void this.connect(this.connectionOpts).catch((e) =>
+          console.warn("[Transport] connect after gaining leadership failed", e),
+        );
+      }
+    } else {
+      // Another tab took over: relinquish our socket so only one connection exists.
+      this.relinquishForStandby();
+    }
+  }
+
+  private relinquishForStandby(): void {
+    this.connectionState = "standby";
+    if (this.socket) {
+      try {
+        type ManagerWithOpts = { reconnection: boolean };
+        (this.socket.io as unknown as ManagerWithOpts).reconnection = false;
+      } catch {}
+      try {
+        // Client-initiated close ("io client disconnect") is not auto-retried.
+        this.socket.disconnect();
+      } catch {}
+    }
   }
 
   /**
@@ -460,8 +530,20 @@ export class SocketTransport implements GameTransport {
     playerId?: string;
     displayName: string;
   }): Promise<void> {
+    // Remember opts so a leadership change can (re)open the connection later.
+    this.connectionOpts = opts;
+    this.fullyDisconnected = false;
+    this.ensureLeaderAwareness();
+
     // Already connected - return immediately
     if (this.socket && this.socket.connected) return;
+
+    // Not the leader tab: stay in standby and let another tab own the socket.
+    // We'll connect automatically if/when we become the leader.
+    if (!this.leaderElection.isLeader()) {
+      this.connectionState = "standby";
+      return;
+    }
 
     // Already connecting - wait for the existing connection attempt
     if (this.connectingPromise) {
@@ -475,7 +557,14 @@ export class SocketTransport implements GameTransport {
       !this.socket.connected &&
       !this.isIntentionalDisconnect
     ) {
-      // Reconnect existing socket and wait for the server welcome handshake
+      // Reconnect existing socket and wait for the server welcome handshake.
+      // Clear the replaced flag and re-enable reconnection: an explicit connect()
+      // means this tab is (re)claiming the active session.
+      this.sessionReplaced = false;
+      try {
+        type ManagerWithOpts = { reconnection: boolean };
+        (this.socket.io as unknown as ManagerWithOpts).reconnection = true;
+      } catch {}
       this.connectionState = "reconnecting";
       await new Promise<void>((resolve, reject) => {
         const socket = this.socket as Socket;
@@ -510,6 +599,7 @@ export class SocketTransport implements GameTransport {
 
     this.connectionState = "connecting";
     this.isIntentionalDisconnect = false;
+    this.sessionReplaced = false;
 
     // Wrap the entire connection in a tracked promise
     this.connectingPromise = this.doConnect(opts);
@@ -940,13 +1030,19 @@ export class SocketTransport implements GameTransport {
   }
 
   disconnect(): void {
-    if (!this.socket) return;
+    // Full teardown: prevent a later leadership change from silently reconnecting.
+    this.fullyDisconnected = true;
     this.isIntentionalDisconnect = true;
     this.connectionState = "disconnected";
     this.cleanupVisibilityHandler();
-    this.socket.disconnect();
-    this.socket = undefined;
+    if (this.socket) {
+      this.socket.disconnect();
+      this.socket = undefined;
+    }
     this.connectionOpts = null;
+    // Note: we deliberately do NOT stop the leader election here. It is a per-tab
+    // singleton that lives for the tab's lifetime and resigns on page unload, so the
+    // tab keeps (or yields) leadership correctly across SPA mount/unmount cycles.
   }
 
   async joinLobby(lobbyId?: string): Promise<{ lobbyId: string }> {
@@ -1362,9 +1458,18 @@ export class SocketTransport implements GameTransport {
       // Disconnect reason logged only for debugging
       this.connectionState = "disconnected";
 
+      // "io server disconnect" means the SERVER deliberately closed us (e.g. another
+      // tab/connection for this user took over, or an admin kick). Auto-reconnecting
+      // here just restarts a reconnection war with the connection that replaced us,
+      // so we must NOT retry automatically. The tab can still reclaim the connection
+      // on user activity (visibility change). Genuine network drops surface as
+      // "transport close" / "transport error" / "ping timeout" and are still retried.
+      if (reason === "io server disconnect" || this.sessionReplaced) {
+        return;
+      }
+
       if (!this.isIntentionalDisconnect) {
         const shouldRetry =
-          reason === "io server disconnect" ||
           reason === "transport close" ||
           reason === "transport error" ||
           reason === "ping timeout";
@@ -1372,6 +1477,25 @@ export class SocketTransport implements GameTransport {
           this.attemptReconnection(opts);
         }
       }
+    });
+
+    // The server tells us when it deliberately replaced this connection with a newer
+    // one for the same user. Stop reconnecting so we don't fight the newer tab.
+    socket.on("session_replaced", (payload: unknown) => {
+      this.sessionReplaced = true;
+      this.connectionState = "disconnected";
+      try {
+        type ManagerWithOpts = { reconnection: boolean };
+        (socket.io as unknown as ManagerWithOpts).reconnection = false;
+      } catch {}
+      console.warn(
+        "[Transport] Connection replaced by another tab/session - pausing reconnection",
+        payload,
+      );
+      this.dispatch("error", {
+        code: "session_replaced",
+        message: "Your session is active in another tab",
+      });
     });
 
     socket.on("connect_error", async (error: Error) => {
@@ -1453,7 +1577,24 @@ export class SocketTransport implements GameTransport {
             socket.connect();
           }
         } else {
-          // Token fetch failed (likely 401) - record failure and back off
+          // No token. If the app reported a 401, the NextAuth session is gone and a
+          // token will never be obtainable here - stop reconnecting entirely instead
+          // of hammering the server with rejected attempts (a major source of the
+          // fleet-wide "jwt expired" / rate-limit storm).
+          if (wasLastFetchUnauthorized()) {
+            console.warn(
+              "[Transport] No auth session (401) - stopping reconnection until re-auth",
+            );
+            this.connectionState = "disconnected";
+            mgr.reconnection = false;
+            this.dispatch("error", {
+              code: "auth_required",
+              message: "Please sign in again to reconnect",
+            });
+            return;
+          }
+
+          // Token fetch failed (likely transient/network) - record failure and back off
           console.warn(
             "[Transport] Token fetch failed - user may not be authenticated",
           );

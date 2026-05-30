@@ -34,6 +34,7 @@ const GAME_SHORTCUTS: ShortcutItem[] = [
   { keys: ["Enter"], description: "End turn" },
   { keys: ["Space"], description: "Toggle hand: hide ↔ show (spread)" },
   { keys: ["G"], description: "Spawn gem token at cursor" },
+  { keys: ["B"], description: "Toggle force burrow on selected permanent" },
   { keys: ["Del", "Backspace"], description: "Banish selected token" },
 ];
 

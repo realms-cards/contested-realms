@@ -2400,7 +2400,21 @@ io.on("connection", async (socket: SocketClient) => {
         console.log(
           `[auth] Disconnecting old socket ${existingSocketId} for ${displayName} (new: ${socket.id})`,
         );
-        existingSocket.disconnect(true);
+        // Tell the old client it was deliberately replaced (another tab/connection
+        // took over) so it does NOT auto-reconnect and start a reconnection war.
+        // We emit first, then close shortly after to let the packet flush.
+        try {
+          existingSocket.emit("session_replaced", {
+            reason: "replaced_by_new_connection",
+            newSocketId: socket.id,
+          });
+        } catch {}
+        const socketToClose = existingSocket;
+        setTimeout(() => {
+          try {
+            socketToClose.disconnect(true);
+          } catch {}
+        }, 150);
       }
       playerIdBySocket.delete(existingSocketId);
     }

@@ -24,6 +24,11 @@ let activeFetchPromise: Promise<string | undefined> | null = null;
 // Track last fetch attempt time (in memory, survives across calls but not page reload)
 let lastFetchAttemptTime = 0;
 
+// Tracks whether the most recent token fetch was rejected with 401 (no valid
+// NextAuth session). Lets callers distinguish "session is gone, stop reconnecting"
+// from a transient/network failure.
+let lastFetchUnauthorized = false;
+
 /**
  * Get cached token from localStorage if still valid
  */
@@ -120,11 +125,13 @@ async function doFetch(): Promise<string | undefined> {
       const j = await res.json();
       const token = j?.token as string;
       if (token) {
+        lastFetchUnauthorized = false;
         setCachedToken(token);
         return token;
       }
     } else if (res.status === 401) {
-      // User not authenticated - clear any stale cache
+      // User not authenticated - clear any stale cache and flag the session as gone
+      lastFetchUnauthorized = true;
       clearSocketTokenCache();
     } else if (process.env.NODE_ENV === "development") {
       console.warn("[SocketTokenCache] Fetch failed:", res.status);
@@ -200,6 +207,15 @@ export async function fetchSocketToken(
  */
 export function hasValidCachedToken(): boolean {
   return getCachedToken() !== null;
+}
+
+/**
+ * Whether the most recent token fetch was rejected with 401 (no NextAuth session).
+ * Callers can use this to stop reconnecting instead of hammering the server with a
+ * token they can never obtain.
+ */
+export function wasLastFetchUnauthorized(): boolean {
+  return lastFetchUnauthorized;
 }
 
 /**

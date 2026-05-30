@@ -160,6 +160,68 @@ export function useBoardHotkeys({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [store, isSpectator, overlayBlocking]);
 
+  // Toggle force burrow on selected permanent (B)
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.repeat) return;
+      if (event.code !== "KeyB") return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (isTextInput(document.activeElement as HTMLElement | null)) {
+        return;
+      }
+      if (isSpectator || overlayBlocking) return;
+
+      const {
+        selectedPermanent,
+        permanents,
+        permanentPositions,
+        permanentAbilities,
+        setPermanentAbility,
+        setPermanentPosition,
+        updatePermanentState,
+      } = store.getState();
+      if (!selectedPermanent) return;
+
+      const { at, index } = selectedPermanent;
+      const item = permanents[at]?.[index];
+      if (!item) return;
+
+      const type = String(item.card?.type ?? "").toLowerCase();
+      if (!type.includes("minion") && !type.includes("artifact")) return;
+
+      const permanentId = item.instanceId ?? `perm:${at}:${index}`;
+
+      event.preventDefault();
+
+      if (!permanentAbilities[permanentId]) {
+        setPermanentAbility(permanentId, {
+          permanentId,
+          canBurrow: true,
+          canSubmerge: true,
+          requiresWaterSite: false,
+          abilitySource: "Hotkey override",
+        });
+      }
+      if (!permanentPositions[permanentId]) {
+        setPermanentPosition(permanentId, {
+          permanentId,
+          state: "surface",
+          position: { x: 0, y: 0, z: 0 },
+        });
+      }
+      const currentState =
+        permanentPositions[permanentId]?.state ?? "surface";
+      const next = currentState === "surface" ? "burrowed" : "surface";
+      try {
+        updatePermanentState(permanentId, next);
+        playCardFlip();
+      } catch {}
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [store, isSpectator, overlayBlocking, playCardFlip]);
+
   // Spawn gem token at cursor shortcut (G)
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {

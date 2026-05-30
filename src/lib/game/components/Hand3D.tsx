@@ -1371,7 +1371,7 @@ export default function Hand3D({
                   elevation={-0.01}
                   renderOrder={renderOrder + 10000 - 6}
                   pulse
-                  flat={false}
+                  flat={flatCards}
                 />
               )}
             {/* Invisible larger interaction box to ensure cards are always clickable */}

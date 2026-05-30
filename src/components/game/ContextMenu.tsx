@@ -126,6 +126,52 @@ function MenuBtn({
   );
 }
 
+function buildForcePositionActions(
+  permanentId: string,
+  cardType: string | undefined | null,
+): ContextMenuAction[] {
+  const type = String(cardType ?? "").toLowerCase();
+  const isForceable = type.includes("minion") || type.includes("artifact");
+  if (!isForceable) return [];
+  const currentPos = useGameStore.getState().permanentPositions[permanentId];
+  const currentState = currentPos?.state ?? "surface";
+  const out: ContextMenuAction[] = [];
+  if (currentState !== "burrowed") {
+    out.push({
+      actionId: "force_burrow",
+      displayText: "Force Burrow",
+      icon: "arrow-down",
+      isEnabled: true,
+      targetPermanentId: permanentId,
+      newPositionState: "burrowed",
+      description: "Force burrow (no Burrowing keyword required)",
+    });
+  }
+  if (currentState !== "submerged") {
+    out.push({
+      actionId: "force_submerge",
+      displayText: "Force Submerge",
+      icon: "waves",
+      isEnabled: true,
+      targetPermanentId: permanentId,
+      newPositionState: "submerged",
+      description: "Force submerge (no Submerge keyword required)",
+    });
+  }
+  if (currentState !== "surface") {
+    out.push({
+      actionId: "force_surface",
+      displayText: "Force Surface",
+      icon: "arrow-up",
+      isEnabled: true,
+      targetPermanentId: permanentId,
+      newPositionState: "surface",
+      description: "Force back to surface",
+    });
+  }
+  return out;
+}
+
 interface ContextMenuProps {
   onClose: () => void;
 }
@@ -435,7 +481,11 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
             }
 
             // Get available position actions after abilities are set
-            const actions = getAvailableActions(permanentId);
+            const nativeActions = getAvailableActions(permanentId);
+            const actions =
+              nativeActions.length > 0
+                ? nativeActions
+                : buildForcePositionActions(permanentId, item.card.type);
             console.log("Debug - Permanent ID:", permanentId);
             console.log("Debug - Available actions:", actions);
             console.log("Debug - Abilities set:", { canBurrow, canSubmerge });
@@ -505,7 +555,11 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
               }
             }
 
-            const actions = getAvailableActions(permanentId);
+            const nativeActions = getAvailableActions(permanentId);
+            const actions =
+              nativeActions.length > 0
+                ? nativeActions
+                : buildForcePositionActions(permanentId, item.card.type);
             console.log("Debug - Fallback - Permanent ID:", permanentId);
             console.log("Debug - Fallback - Available actions:", actions);
             console.log("Debug - Fallback - Abilities set:", {
@@ -3925,6 +3979,41 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                         }
                         onClick={() => {
                           if (action.isEnabled && action.newPositionState) {
+                            const isForce =
+                              action.actionId.startsWith("force_");
+                            if (isForce) {
+                              const state = useGameStore.getState();
+                              if (
+                                !state.permanentAbilities[
+                                  action.targetPermanentId
+                                ]
+                              ) {
+                                state.setPermanentAbility(
+                                  action.targetPermanentId,
+                                  {
+                                    permanentId: action.targetPermanentId,
+                                    canBurrow: true,
+                                    canSubmerge: true,
+                                    requiresWaterSite: false,
+                                    abilitySource: "Context menu override",
+                                  },
+                                );
+                              }
+                              if (
+                                !state.permanentPositions[
+                                  action.targetPermanentId
+                                ]
+                              ) {
+                                state.setPermanentPosition(
+                                  action.targetPermanentId,
+                                  {
+                                    permanentId: action.targetPermanentId,
+                                    state: "surface",
+                                    position: { x: 0, y: 0, z: 0 },
+                                  },
+                                );
+                              }
+                            }
                             updatePermanentState(
                               action.targetPermanentId,
                               action.newPositionState,

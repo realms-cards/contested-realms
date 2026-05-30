@@ -113,6 +113,8 @@ export default function OnlineProvider({
     useLoadingContext();
   const { data: session, status: sessionStatus } = useSession();
   const [connected, setConnected] = useState<boolean>(false);
+  // True when another tab owns the (single) socket connection for this browser.
+  const [standby, setStandby] = useState<boolean>(false);
   const [lobby, setLobby] = useState<LobbyInfo | null>(null);
   const [match, setMatch] = useState<MatchInfo | null>(null);
   const [ready, setReady] = useState<boolean>(false);
@@ -260,10 +262,16 @@ export default function OnlineProvider({
       if (!mounted) return;
       const state = readConnectionState();
       const nowConnected = state === "connected";
+      const nowStandby = state === "standby";
+      setStandby(nowStandby);
       if (nowConnected !== prevConnected) {
         prevConnected = nowConnected;
         setConnected(nowConnected);
-        if (!nowConnected) {
+        if (nowConnected) {
+          clearToastTimers();
+          setConnToast(null);
+        } else if (!nowStandby) {
+          // Genuine disconnect (not the deliberate standby of a non-leader tab).
           clearToastTimers();
           reconnectToastTimer = window.setTimeout(() => {
             if (!mounted || prevConnected) return; // Reconnected in the meantime
@@ -275,10 +283,11 @@ export default function OnlineProvider({
               showConnToast("Disconnected from Server", "error");
             }
           }, 15000);
-        } else {
-          clearToastTimers();
-          setConnToast(null);
         }
+      }
+      // If we slipped into standby while transient toasts were pending, clear them.
+      if (nowStandby) {
+        clearToastTimers();
       }
     };
 
@@ -305,7 +314,7 @@ export default function OnlineProvider({
       }
       return;
     }
-    if (!connected) {
+    if (!connected && !standby) {
       if (connLoadingTimerRef.current) {
         window.clearTimeout(connLoadingTimerRef.current);
       }
@@ -329,7 +338,7 @@ export default function OnlineProvider({
         connLoadingTimerRef.current = null;
       }
     };
-  }, [connected, sessionStatus, startGlobalLoading, stopGlobalLoading]);
+  }, [connected, standby, sessionStatus, startGlobalLoading, stopGlobalLoading]);
 
   // Resolve the HTTP origin for the Socket server (for REST-like endpoints)
   const getSocketHttpOrigin = useCallback((): string => {
@@ -1036,7 +1045,9 @@ export default function OnlineProvider({
           displayName: user.name ?? "Player",
           playerId: user.id ?? undefined,
         });
-        setConnected(true);
+        // Only reflect a real connection. Non-leader tabs resolve in "standby" with
+        // no socket; the poller/welcome handler will update the flag accordingly.
+        setConnected(transport.isConnected());
       } catch (e) {
         console.error("connect failed", e);
       }
@@ -2026,13 +2037,29 @@ export default function OnlineProvider({
       {children}
       {/* Persistent audio element for voice chat - stays mounted regardless of UI state */}
       <audio ref={persistentAudioRef} autoPlay playsInline className="hidden" />
-      {connToast && (
+      {connToast && !standby && (
         <div
           className={`fixed top-3 right-3 z-[3000] text-white text-sm px-3 py-2 rounded shadow ring-1 ring-white/20 ${
             connToast.tone === "error" ? "bg-red-600/90" : "bg-green-600/90"
           }`}
         >
           {connToast.message}
+        </div>
+      )}
+      {standby && (
+        <div className="fixed top-3 right-3 z-[3000] flex items-center gap-3 text-white text-sm px-3 py-2 rounded shadow ring-1 ring-white/20 bg-slate-800/95">
+          <span>This session is active in another tab.</span>
+          <button
+            type="button"
+            onClick={() => {
+              try {
+                transport.requestLeadership();
+              } catch {}
+            }}
+            className="px-2 py-1 rounded bg-amber-500 hover:bg-amber-400 text-black font-medium transition-colors"
+          >
+            Play here
+          </button>
         </div>
       )}
       {appToast && appToast.kind === "text" && (
