@@ -1,6 +1,6 @@
 "use client";
 
-import { useFrame } from "@react-three/fiber";
+import { useFrame, invalidate } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import { TILE_SIZE } from "@/lib/game/constants";
@@ -42,6 +42,8 @@ export function InquisitionSummonTargetOverlay({
     if (fillRef.current) {
       const mat = fillRef.current.material as THREE.MeshBasicMaterial;
       mat.opacity = 0.3 + Math.sin(t * 3.5) * 0.15;
+      // Pulses only on valid-target tiles (mounted per tile; frameloop="demand").
+      invalidate();
     }
   });
 

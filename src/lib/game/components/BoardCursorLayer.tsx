@@ -1,10 +1,11 @@
 "use client";
 
-import { useFrame, useLoader } from "@react-three/fiber";
+import { useFrame, useLoader, invalidate } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import type { Group } from "three";
 import { TextureLoader, SRGBColorSpace, Color } from "three";
 import { PLAYER_COLORS } from "@/lib/game/constants";
+import { requestCosmeticFrame } from "@/lib/game/render/cosmeticFrame";
 import {
   REMOTE_CURSOR_TTL_MS,
   useGameStore,
@@ -46,6 +47,7 @@ function CursorMarker({ entry }: { entry: RemoteCursorState }) {
     pointerRef.current.scale.setScalar(scale);
 
     // Efficient exponential smoothing (lerp) - only runs when cursor exists
+    let moving = false;
     if (!currentPosRef.current) {
       // Initialize on first frame
       currentPosRef.current = { x: entry.position.x, z: entry.position.z };
@@ -54,11 +56,19 @@ function CursorMarker({ entry }: { entry: RemoteCursorState }) {
       // Smooth interpolation using lerp
       const targetX = entry.position.x;
       const targetZ = entry.position.z;
-      currentPosRef.current.x += (targetX - currentPosRef.current.x) * LERP_FACTOR;
-      currentPosRef.current.z += (targetZ - currentPosRef.current.z) * LERP_FACTOR;
+      const dx = targetX - currentPosRef.current.x;
+      const dz = targetZ - currentPosRef.current.z;
+      currentPosRef.current.x += dx * LERP_FACTOR;
+      currentPosRef.current.z += dz * LERP_FACTOR;
 
       pointerRef.current.position.set(currentPosRef.current.x, CURSOR_HEIGHT, currentPosRef.current.z);
+      moving = Math.abs(dx) + Math.abs(dz) > 0.0005;
     }
+    // While the cursor is moving, render at full rate for a smooth follow.
+    // When it's parked, the breathing pulse rides a throttled cosmetic pump so
+    // a persistent remote cursor doesn't peg the scene (frameloop="demand").
+    if (moving) invalidate();
+    else requestCosmeticFrame();
   });
 
   if (!entry.position) return null;

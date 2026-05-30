@@ -1,4 +1,4 @@
-import { useFrame } from "@react-three/fiber";
+import { useFrame, invalidate } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import { TargetBullseye } from "@/lib/game/components/TargetBullseye";
@@ -164,6 +164,8 @@ function ChevronStrip({
         (mesh.material as THREE.MeshBasicMaterial).opacity = opacity;
       }
     });
+    // Connection wave animates continuously while shown (frameloop="demand").
+    invalidate();
   });
 
   return (

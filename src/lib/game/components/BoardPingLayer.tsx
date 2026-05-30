@@ -1,6 +1,6 @@
 "use client";
 
-import { useFrame } from "@react-three/fiber";
+import { useFrame, invalidate } from "@react-three/fiber";
 import { useEffect, useRef } from "react";
 import type { Mesh, MeshBasicMaterial } from "three";
 import { useSound } from "@/lib/contexts/SoundContext";
@@ -68,6 +68,9 @@ function PingMarker({
 
     if (elapsed > BOARD_PING_LIFETIME_MS + FADE_BUFFER_MS) {
       onExpire(ping.id);
+    } else {
+      // Ping rings are still expanding: keep rendering (frameloop="demand").
+      invalidate();
     }
   });
 

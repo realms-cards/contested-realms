@@ -1992,6 +1992,12 @@ export const createPlayActionsSlice: StateCreator<
           state,
           consumeInstantId,
         );
+        // Trigger Genesis effects for special sites (after state update via setTimeout).
+        // Sites played from the atlas/pile flow through this branch, so the
+        // Genesis dispatch must run here too — not only in the click-to-place path.
+        setTimeout(() => {
+          triggerSiteGenesis(card.name, key, ownerFromSeat(who), get);
+        }, 0);
         return {
           zones: zonesNext,
           board: { ...state.board, sites },

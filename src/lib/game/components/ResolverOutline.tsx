@@ -1,6 +1,5 @@
 "use client";
 
-import { useFrame } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import {
   type Object3D,
@@ -88,10 +87,6 @@ export default function ResolverOutline({
   color = "#8b5cf6",
   renderOrder = 10_000,
   opacity = 0.7,
-  pulse = false,
-  pulseSpeed = 0.15,
-  pulseMin = 0.4,
-  pulseMax = 0.8,
   flat = true,
 }: ResolverOutlineProps) {
   const cornerRadius = Math.min(width, height) * 0.06;
@@ -133,13 +128,9 @@ export default function ResolverOutline({
     [color, opacity]
   );
 
-  useFrame((state) => {
-    if (!pulse || !meshRef.current) return;
-    const t = state.clock.getElapsedTime();
-    const phase = (Math.sin(t * Math.PI * 2 * pulseSpeed) + 1) / 2;
-    (meshRef.current.material as MeshBasicMaterial).opacity =
-      pulseMin + (pulseMax - pulseMin) * phase;
-  });
+  // Static outline — no pulse animation. A pulsing outline is shown persistently
+  // on every permanent with a custom resolver; animating it would re-render the
+  // whole scene every frame (frameloop="demand") and peg the GPU all match.
 
   return (
     <mesh

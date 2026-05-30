@@ -1,5 +1,5 @@
 import { Text } from "@react-three/drei";
-import { useFrame, useThree } from "@react-three/fiber";
+import { useFrame, useThree, invalidate } from "@react-three/fiber";
 import type { ThreeEvent } from "@react-three/fiber";
 import { CuboidCollider, RigidBody } from "@react-three/rapier";
 import {
@@ -325,7 +325,6 @@ export function PermanentStack({
   permanents,
   permanentPositions,
   remoteDragLookup,
-  avatars,
   getRemoteHighlightColor,
   isHandVisible,
   isSpectator,
@@ -377,20 +376,24 @@ export function PermanentStack({
   useFrame((_, delta) => {
     if (permanentAnimRef.current.size === 0) return; // no-op in live-game mode
     const speed = Math.min(1, delta * 6);
+    let stillMoving = false;
     for (const entry of permanentAnimRef.current.values()) {
       const g = entry.group;
       if (!g) continue;
       if (entry.needsInit) {
         entry.needsInit = false;
         g.position.set(entry.dx, entry.dy, entry.dz);
+        stillMoving = true;
       }
-      if (Math.abs(g.position.x) > 0.003) g.position.x = MathUtils.lerp(g.position.x, 0, speed);
+      if (Math.abs(g.position.x) > 0.003) { g.position.x = MathUtils.lerp(g.position.x, 0, speed); stillMoving = true; }
       else if (g.position.x !== 0) g.position.x = 0;
-      if (Math.abs(g.position.y) > 0.003) g.position.y = MathUtils.lerp(g.position.y, 0, speed);
+      if (Math.abs(g.position.y) > 0.003) { g.position.y = MathUtils.lerp(g.position.y, 0, speed); stillMoving = true; }
       else if (g.position.y !== 0) g.position.y = 0;
-      if (Math.abs(g.position.z) > 0.003) g.position.z = MathUtils.lerp(g.position.z, 0, speed);
+      if (Math.abs(g.position.z) > 0.003) { g.position.z = MathUtils.lerp(g.position.z, 0, speed); stillMoving = true; }
       else if (g.position.z !== 0) g.position.z = 0;
     }
+    // Keep rendering only while a permanent is still settling (frameloop="demand").
+    if (stillMoving) invalidate();
   });
 
   if (items.length === 0) {
@@ -473,7 +476,6 @@ export function PermanentStack({
     baseElevation,
     burrowedElevation,
     rubbleElevation,
-    avatarAvoidZ,
   } = stackConfig;
   void _spacing; // Spacing is part of the config but not used in this component
   void _baseMarginZ; // Z offset is now computed directly, not from marginZ config
@@ -524,16 +526,6 @@ export function PermanentStack({
 
         const owner = p.owner;
         const ownerSeat = seatFromOwner(owner);
-        // Check if ANY avatar (owner's or opponent's) is on this tile
-        const p1AvatarOnTile =
-          avatars?.p1?.pos &&
-          avatars.p1.pos[0] === tileX &&
-          avatars.p1.pos[1] === tileY;
-        const p2AvatarOnTile =
-          avatars?.p2?.pos &&
-          avatars.p2.pos[0] === tileX &&
-          avatars.p2.pos[1] === tileY;
-        const avatarOnThisTile = p1AvatarOnTile || p2AvatarOnTile;
         const isSel =
           selectedPermanent &&
           selectedPermanent.at === key &&
@@ -552,11 +544,8 @@ export function PermanentStack({
         const isSilencedToken = isToken && tokenName === "silenced";
         // Disabled tokens use the Disabled token texture
         const isDisabledToken = isToken && tokenName === "disabled";
-        const avatarBumpZ = avatarOnThisTile ? avatarAvoidZ : 0;
         // Token site replacements sit at center, regular cards get owner-based z offset
-        const zBase = tokenSiteReplace
-          ? 0
-          : getPermanentOwnerBaseZ(owner, avatarBumpZ > 0);
+        const zBase = tokenSiteReplace ? 0 : getPermanentOwnerBaseZ(owner);
         const rotZ =
           (owner === 1 ? 0 : Math.PI) +
           (tokenSiteReplace || isSiteCard ? -Math.PI / 2 : 0) +
@@ -570,7 +559,7 @@ export function PermanentStack({
           : isDisabledToken
             ? -CARD_SHORT * 0.3
             : 0;
-        const offX = baseOffX + tokenOffsetX;
+        const offXBase = baseOffX + tokenOffsetX;
         const offZ = baseOffZ;
 
         // Use instanceId for stable position state lookup (prevents state leakage on card movement)
@@ -588,18 +577,34 @@ export function PermanentStack({
           return pstate === "burrowed" || pstate === "submerged";
         }).length;
 
-        // Burrowed cards at ground level, non-burrowed cards elevated above them
-        // When avatar is on this tile, lift permanents above the avatar
+        // Submerged/burrowed cards skip the vertical stackLift below, so multiples
+        // on one tile would render on top of each other. Spread them in a centered
+        // horizontal row instead (e.g. Tadpole Pool's three frogs, or Atlantean Fate
+        // submerging a stack). Burrowed/submerged items sort to the front of the
+        // stack, so sortedIdx is the burrowed index. Spacing tightens as the count
+        // grows so a large group still fits beneath the tile's site card.
+        const burrowedSpacing = Math.min(
+          TILE_SIZE * 0.16,
+          (TILE_SIZE * 0.6) / Math.max(1, burrowedCount),
+        );
+        const burrowedSpreadX =
+          isBurrowed && burrowedCount > 1
+            ? (sortedIdx - (burrowedCount - 1) / 2) * burrowedSpacing
+            : 0;
+        const offX = offXBase + burrowedSpreadX;
+
+        // Burrowed cards at ground level, non-burrowed cards elevated above them.
+        // Cards no longer react to an avatar sharing their tile — the avatar tucks
+        // under the stack itself (see AvatarCard), so a card never moves.
         // When site is on this tile, lift permanents above the site (site rendered by SiteCard)
         // Tower of Babel has two stacked cards, so lift an extra layer
-        const avatarLift = avatarOnThisTile ? layerLift : 0;
         const siteLift =
           hasSite && !tokenSiteReplace ? layerLift * (isBabelTower ? 2 : 1) : 0;
         const baseY = isBurrowed
           ? burrowedElevation
           : tokenSiteReplace
             ? rubbleElevation
-            : baseElevation + burrowedCount * layerLift + avatarLift + siteLift;
+            : baseElevation + burrowedCount * layerLift + siteLift;
         // Stack index for non-burrowed cards only (burrowed cards don't stack)
         // Cards maintain stable positions based on sort order
         const nonBurrowedIdx = isBurrowed ? 0 : sortedIdx - burrowedCount;
@@ -1410,7 +1415,12 @@ export function PermanentStack({
                   const offX = wx - tileWorldX;
                   const offZ = wz - tileWorldZ - localZBase;
                   if (dragging.from === dropKey) {
-                    const newOffset: [number, number] = [offX, offZ];
+                    // Subtract the render-time burrowed spread so the stored offset
+                    // round-trips to the same on-screen position (no jump on drop).
+                    const newOffset: [number, number] = [
+                      offX - burrowedSpreadX,
+                      offZ,
+                    ];
                     dragTarget.current = null;
                     draggedBody.current = null;
                     if (useGhostOnlyBoardDrag) {

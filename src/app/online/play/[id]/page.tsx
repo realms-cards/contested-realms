@@ -1,7 +1,7 @@
 "use client";
 
 import { OrbitControls } from "@react-three/drei";
-import { useThree, useFrame } from "@react-three/fiber";
+import { useThree, useFrame, invalidate } from "@react-three/fiber";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
@@ -141,7 +141,6 @@ import { useZoomKeyboardShortcuts } from "@/lib/hooks/useZoomKeyboardShortcuts";
 import { LegacySeatVideo3D } from "@/lib/rtc/SeatVideo3D";
 import { generateClientLeagueMatchResult } from "@/lib/soatc/clientResult";
 import type { LeagueMatchResult } from "@/lib/soatc/types";
-import { VRCameraController, VRStatusBar, VRBoardIntegration } from "@/lib/vr";
 import {
   useBoardPingListener,
   useBotActionToastListener,
@@ -3620,7 +3619,8 @@ export default function OnlineMatchPage() {
                 camera={cameraOptions}
                 shadows
                 gl={glOptions}
-                enableXR={true}
+                dpr={[1, 1.5]}
+                frameloop="demand"
                 onPointerMissed={() => {
                   if (!dragFromHand && !dragFromPile) {
                     clearSelection();
@@ -3637,8 +3637,8 @@ export default function OnlineMatchPage() {
                   position={[5, 12, 5]}
                   intensity={1.4}
                   castShadow
-                  shadow-mapSize-width={2048}
-                  shadow-mapSize-height={2048}
+                  shadow-mapSize-width={1024}
+                  shadow-mapSize-height={1024}
                   shadow-camera-far={50}
                   shadow-camera-left={-15}
                   shadow-camera-right={15}
@@ -3830,27 +3830,6 @@ export default function OnlineMatchPage() {
                   controlScheme={controlScheme}
                 />
                 <TrackpadOrbitAdapter />
-
-                {/* VR Support Components */}
-                <VRCameraController controlsRef={controlsRef} />
-                <VRStatusBar
-                  playerLife={useGameStore.getState().players?.p1?.life ?? 20}
-                  opponentLife={useGameStore.getState().players?.p2?.life ?? 20}
-                  currentTurn={useGameStore.getState().currentPlayer ?? 1}
-                  playerNumber={(viewPlayerNumber ?? 1) as 1 | 2}
-                  phase={useGameStore.getState().phase}
-                />
-                <VRBoardIntegration
-                  viewPlayerKey={viewPlayerKey}
-                  isSpectator={isSpectatorView}
-                  boardWidth={useGameStore.getState().board.size.w}
-                  boardHeight={useGameStore.getState().board.size.h}
-                  onCardAction={(action, cardId) => {
-                    console.log(
-                      `[VR] Card action: ${action} on card ${cardId}`,
-                    );
-                  }}
-                />
               </ClientCanvas>
             </div>
           )}
@@ -3994,6 +3973,8 @@ function SpectatorRotateControls({
     const currentYaw = yawAppliedRef.current;
     const delta = targetYaw - currentYaw;
     if (Math.abs(delta) < 1e-3) return;
+    // Still rotating: request the next frame (frameloop="demand").
+    invalidate();
     // Smooth step toward target yaw
     const step = Math.max(-0.08, Math.min(0.08, delta * 0.15));
     yawAppliedRef.current = currentYaw + step;

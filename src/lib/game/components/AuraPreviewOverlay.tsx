@@ -1,6 +1,6 @@
 "use client";
 
-import { useFrame } from "@react-three/fiber";
+import { useFrame, invalidate } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import { TILE_SIZE } from "@/lib/game/constants";
@@ -108,6 +108,9 @@ export function AuraPreviewOverlay({
       const mat = fillRef.current.material as THREE.MeshBasicMaterial;
       // Pulse between 0.15 and 0.35 opacity
       mat.opacity = 0.25 + Math.sin(t * 3) * 0.1;
+      // Aura preview pulses only while this tile is actually highlighted
+      // (this component is mounted for every tile; frameloop="demand").
+      invalidate();
     }
   });
 

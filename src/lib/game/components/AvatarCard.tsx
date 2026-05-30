@@ -293,8 +293,16 @@ export function AvatarCard({
   const worldX = baseX + offX;
   const worldZ = baseZ + offZ;
   const hideAvatar = dragAvatar === seat && useGhostOnlyBoardDrag;
-  const avatarBodyType = useGhostOnlyBoardDrag ? "fixed" : "dynamic";
-  const avatarGravityScale = useGhostOnlyBoardDrag ? 0 : 1;
+  // Avatars use the same physics as every other permanent: a fixed body with a
+  // sensor collider and no gravity, switching to kinematicPosition only while it
+  // is the body actively being dragged (mirrors PermanentStack's bodyType logic).
+  const isDraggingThisAvatar = dragAvatar === seat;
+  const avatarBodyType =
+    isDraggingThisAvatar && !useGhostOnlyBoardDrag
+      ? "kinematicPosition"
+      : "fixed";
+  const avatarGravityScale =
+    useGhostOnlyBoardDrag || !isDraggingThisAvatar ? 0 : 1;
   const avatarId = `avatar:${seat}`;
   const tileKey = `${ax},${ay}` as CellKey;
   const tileItems = permanents[tileKey] || [];
@@ -306,11 +314,16 @@ export function AvatarCard({
     selectedAvatar === seat || isContextSelected || dragAvatar === seat;
   const isLastTouched = lastTouchedId === avatarId;
   const isTopAvatar = dragAvatar === seat || isSel || isLastTouched;
-  const avatarY =
-    BASE_CARD_ELEVATION +
-    (isTopAvatar
-      ? (tileItems.length + 1) * STACK_LAYER_LIFT + CARD_THICK * 0.01
-      : 0);
+  // Cards never move to avoid the avatar; the avatar yields instead. When it
+  // shares a tile with other permanents and isn't the focused/selected piece, it
+  // tucks just beneath the (surface) stack — above any submerged/burrowed cards —
+  // so it reads as sitting under them without ever nudging a card. When selected
+  // or dragged it lifts above the whole stack for interaction.
+  const avatarY = isTopAvatar
+    ? BASE_CARD_ELEVATION +
+      (tileItems.length + 1) * STACK_LAYER_LIFT +
+      CARD_THICK * 0.01
+    : BASE_CARD_ELEVATION - (tileItems.length > 0 ? CARD_THICK * 0.5 : 0);
 
   const cachedCard = lastAvatarCardsRef.current[seat];
   const activeCard = avatar.card?.slug ? avatar.card : cachedCard;

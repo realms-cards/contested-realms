@@ -1,6 +1,6 @@
 "use client";
 
-import { useFrame, useThree } from "@react-three/fiber";
+import { useFrame, useThree, invalidate } from "@react-three/fiber";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Group, PerspectiveCamera } from "three";
 import { useGraphicsSettings } from "@/hooks/useGraphicsSettings";
@@ -472,10 +472,11 @@ export default function Hand3D({
       : overCardsArea || mouseInZone
         ? 1
         : 0;
-    const handShouldBeSpreadCheck = isEdgePlacementCheck
-      ? true
-      : overCardsArea || mouseInZone;
-    const spreadTargetCheck = handShouldBeSpreadCheck ? 1 : 0;
+    // Hand is always fully spread (handSpreadLerp is pinned to 1 below), so the
+    // spread target is constant. Keeping this in sync prevents spreadDelta from
+    // being a permanent 1, which would mark the hand "never stable" and drive a
+    // full-scene re-render every frame under frameloop="demand".
+    const spreadTargetCheck = 1;
 
     const revealDelta = Math.abs(targetShownCheck - revealLerp.current);
     const spreadDelta = Math.abs(spreadTargetCheck - handSpreadLerp.current);
@@ -498,6 +499,10 @@ export default function Hand3D({
       const now = performance.now();
       if (now - (last.reveal || 0) < 66) return; // ~60ms = 4 frames at 60fps
       lastUpdateRef.current.reveal = now;
+    } else {
+      // Hand is still animating (reveal/spread/focus/hover) or camera moved:
+      // keep requesting frames (frameloop="demand").
+      invalidate();
     }
 
     const dist = HAND_DIST;

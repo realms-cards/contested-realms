@@ -1,6 +1,5 @@
 "use client";
 
-import { useFrame } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import {
   type Object3D,
@@ -93,10 +92,6 @@ export default function CardOutline({
   color = "#93c5fd",
   renderOrder = 10_000,
   opacity = 0.8,
-  pulse = false,
-  pulseSpeed = 1.25,
-  pulseMin = 0.4,
-  pulseMax = 0.9,
   flat = true,
 }: CardOutlineProps) {
   // Card corner radius (proportional to card size)
@@ -201,26 +196,9 @@ export default function CardOutline({
     };
   }, [color, opacity]);
 
-  // Animate pulse
-  useFrame((state) => {
-    if (!pulse) return;
-    const t = state.clock.getElapsedTime();
-    const phase = (Math.sin(t * Math.PI * 2 * pulseSpeed) + 1) / 2; // 0..1
-    const op = pulseMin + (pulseMax - pulseMin) * phase;
-
-    if (outlineMeshRef.current) {
-      (outlineMeshRef.current.material as MeshBasicMaterial).opacity = op;
-    }
-    if (glow1MeshRef.current) {
-      (glow1MeshRef.current.material as MeshBasicMaterial).opacity = op * 0.5;
-    }
-    if (glow2MeshRef.current) {
-      (glow2MeshRef.current.material as MeshBasicMaterial).opacity = op * 0.25;
-    }
-    if (glow3MeshRef.current) {
-      (glow3MeshRef.current.material as MeshBasicMaterial).opacity = op * 0.1;
-    }
-  });
+  // Static glow — no pulse animation. These outlines (token copies, combat
+  // highlights) stay mounted on the board; animating them would re-render the
+  // whole scene every frame (frameloop="demand") and peg the GPU.
 
   return (
     <group

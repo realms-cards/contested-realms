@@ -4,6 +4,7 @@
 
 ### Rework Replays and many other things
 
+- **HUGE performance increase and optimization**
 - **share replays! also nicer replay viewer with slightly better animations**
 - **implement custom resolvers for: Waveshaper, Tadpole Pool**
 - **right-click to force burrow/submerge/surface target card**, hotkey: "B"
@@ -12,6 +13,7 @@
 - **add Monochrome Mode** beause why not
 - **improve socket connection code all over the application**
 - **right-click, break stealth**
+- **removed clunky experimental VR modes**
 
 ## April 2026
 

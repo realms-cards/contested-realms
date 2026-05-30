@@ -36,11 +36,13 @@ export const TILE_OFFSET_LIMIT_Z = TILE_SIZE * 0.65; // Increased to allow reach
 
 export function getPermanentOwnerBaseZ(
   owner: 1 | 2,
-  hasAvatarOnTile = false,
+  _hasAvatarOnTile = false,
 ): number {
   const ownerSign = owner === 1 ? 1 : -1;
-  const avatarBumpZ = hasAvatarOnTile ? AVATAR_AVOID_Z : 0;
-  return ownerSign * (TILE_SIZE * 0.15 + avatarBumpZ);
+  // Avatar-avoidance removed: a permanent's resting Z no longer depends on
+  // whether an avatar shares its tile, so moving an avatar never shifts a card.
+  // (The avatar tucks under the stack itself instead — see AvatarCard.)
+  return ownerSign * (TILE_SIZE * 0.15);
 }
 
 export function clampOffset(value: number, limit: number): number {

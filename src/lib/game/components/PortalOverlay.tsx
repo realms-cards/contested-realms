@@ -5,6 +5,7 @@ import { useFrame, extend } from "@react-three/fiber";
 import { useMemo } from "react";
 import * as THREE from "three";
 import { TILE_SIZE } from "@/lib/game/constants";
+import { requestCosmeticFrame } from "@/lib/game/render/cosmeticFrame";
 import { isPortalTile } from "@/lib/game/store/portalState";
 import type { PortalState } from "@/lib/game/store/types";
 
@@ -126,6 +127,9 @@ export function PortalOverlay({
   useFrame(({ clock }) => {
     if (!material || !isPortal) return;
     material.uniforms.uTime.value = clock.getElapsedTime();
+    // Decorative shimmer — throttled; a portal can sit on the board all match
+    // and shouldn't drive full-scene re-renders every frame (frameloop="demand").
+    requestCosmeticFrame();
   });
 
   if (!isPortal || !owner || !material) {

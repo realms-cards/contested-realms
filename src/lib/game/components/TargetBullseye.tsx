@@ -1,4 +1,4 @@
-import { useFrame } from "@react-three/fiber";
+import { useFrame, invalidate } from "@react-three/fiber";
 import { useRef } from "react";
 import * as THREE from "three";
 
@@ -42,6 +42,8 @@ export function TargetBullseye({
         centerDotRef.current.material.opacity = 0.8 + Math.sin(time * 4) * 0.2;
       }
     }
+    // Bullseye pulses while shown (frameloop="demand").
+    invalidate();
   });
 
   return (

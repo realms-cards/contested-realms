@@ -1,7 +1,7 @@
 "use client";
 
 import { Billboard, Text, useTexture } from "@react-three/drei";
-import { useFrame, useLoader } from "@react-three/fiber";
+import { useFrame, useLoader, invalidate } from "@react-three/fiber";
 import { useRef, useState, useEffect, useMemo } from "react";
 import * as THREE from "three";
 import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
@@ -170,6 +170,9 @@ export default function D20Dice({
 
     // Guard against invalid start time
     if (rollStartTime === 0) return;
+
+    // Dice is rolling: keep requesting frames (frameloop="demand").
+    invalidate();
 
     const elapsed = Date.now() - rollStartTime;
     const rollDuration = 800; // 0.8 seconds of spinning - shorter so winner can be announced

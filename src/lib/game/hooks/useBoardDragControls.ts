@@ -1,4 +1,4 @@
-import { useFrame, useThree } from "@react-three/fiber";
+import { useFrame, useThree, invalidate } from "@react-three/fiber";
 import { useBeforePhysicsStep } from "@react-three/rapier";
 import {
   type Dispatch,
@@ -324,6 +324,10 @@ export function useBoardDragControls({
         }
       } catch {}
     }
+
+    // While a drag is in progress the ghost follows the pointer each frame:
+    // keep requesting frames (frameloop="demand").
+    if (dragFromHand || dragging || dragAvatar) invalidate();
   });
 
   useEffect(() => {

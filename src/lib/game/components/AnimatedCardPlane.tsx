@@ -1,6 +1,6 @@
 "use client";
 
-import { useFrame } from "@react-three/fiber";
+import { useFrame, invalidate } from "@react-three/fiber";
 import { useRef, useEffect } from "react";
 import type { Group } from "three";
 import { MathUtils } from "three";
@@ -97,6 +97,8 @@ export default function AnimatedCardPlane({
       currentPos.current = [nx, ny, nz];
       currentRotZ.current = nr;
       groupRef.current.position.set(nx, ny, nz);
+      // Still animating toward target: request the next frame (frameloop="demand").
+      invalidate();
     }
   });
 

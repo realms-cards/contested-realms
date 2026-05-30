@@ -1,7 +1,7 @@
 "use client";
 
 import { Text } from "@react-three/drei";
-import { useFrame } from "@react-three/fiber";
+import { useFrame, invalidate } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import { TILE_SIZE } from "@/lib/game/constants";
@@ -54,6 +54,8 @@ export function AreaSelectionOverlay3D({
     const t = clock.getElapsedTime();
     const mat = fillRef.current.material as THREE.MeshBasicMaterial;
     mat.opacity = 0.25 + Math.sin(t * 3) * 0.1;
+    // Area highlight pulses while shown (frameloop="demand").
+    invalidate();
   });
 
   if (!isAffected) return null;

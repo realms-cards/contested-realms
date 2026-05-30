@@ -393,8 +393,9 @@ export const createAutoResolveSlice: StateCreator<
   },
 
   // Tadpole Pool: "(W)(W)(W) — Genesis → Summon three submerged Frog tokens here."
-  // Summons three Frog minion tokens onto the site's cell and submerges them so
-  // they line up neatly under the site (PermanentStack auto-arranges multiples).
+  // Summons three Frog minion tokens onto the site's cell and submerges them.
+  // PermanentStack spreads multiple submerged/burrowed cards into a row, so the
+  // frogs line up neatly under the site without needing per-token offsets here.
   _executeTadpolePoolGenesis: (cellKey: CellKey, ownerSeat: PlayerKey) => {
     const state = get();
 
