@@ -1,5 +1,18 @@
 # Changelog
 
+### May 2026
+
+### Rework Replays and many other things
+
+- **share replays! also nicer replay viewer with slightly better animations**
+- **implement custom resolvers for: Waveshaper, Tadpole Pool**
+- **right-click to force burrow/submerge/surface target card**, hotkey: "B"
+- **add visual zone for banished cards** next to the collection, will only show once one of your cards has been banished
+- **fix turn start gong**
+- **add Monochrome Mode** beause why not
+- **improve socket connection code all over the application**
+- **right-click, break stealth**
+
 ## April 2026
 
 ### Some more custom resolvers
