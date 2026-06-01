@@ -8,6 +8,7 @@ import {
   useEffect,
   useState,
   useCallback,
+  useMemo,
   ReactNode,
   useRef,
 } from "react";
@@ -1540,39 +1541,78 @@ export function RealtimeTournamentProvider({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isConnected, isOnTournamentPage]); // Only re-fetch when socket connection status changes or page changes
 
-  const contextValue: RealtimeTournamentContextValue = {
-    tournaments,
-    currentTournament,
-    setCurrentTournament,
-    setCurrentTournamentById,
-    isSocketConnected: isConnected,
-    connectionError,
-    socket,
-    createTournament,
-    joinTournament,
-    leaveTournament,
-    startTournament,
-    endTournament,
-    updateTournamentSettings,
-    toggleTournamentRegistrationLock,
-    toggleTournamentReady,
-    sendTournamentChat,
-    refreshTournaments,
-    preparation: activePreparation,
-    statistics: activeStatistics,
-    phases: activePhases,
-    realtimeEvents,
-    tournamentPresence: activeTournamentId
-      ? presenceByTournament[activeTournamentId] || []
-      : [],
-    getPresenceFor: (tournamentId: string | null) =>
+  const getPresenceFor = useCallback(
+    (tournamentId: string | null) =>
       tournamentId ? presenceByTournament[tournamentId] || [] : [],
-    assignedMatchId: assignedMatch?.matchId ?? null,
-    assignedOpponentName: assignedMatch?.opponentName ?? null,
-    loading,
-    error,
-    lastUpdated,
-  };
+    [presenceByTournament]
+  );
+
+  // Memoize so this root-level provider doesn't re-render every consumer on each
+  // incidental render. All callbacks below are useCallback-stable.
+  const contextValue: RealtimeTournamentContextValue = useMemo(
+    () => ({
+      tournaments,
+      currentTournament,
+      setCurrentTournament,
+      setCurrentTournamentById,
+      isSocketConnected: isConnected,
+      connectionError,
+      socket,
+      createTournament,
+      joinTournament,
+      leaveTournament,
+      startTournament,
+      endTournament,
+      updateTournamentSettings,
+      toggleTournamentRegistrationLock,
+      toggleTournamentReady,
+      sendTournamentChat,
+      refreshTournaments,
+      preparation: activePreparation,
+      statistics: activeStatistics,
+      phases: activePhases,
+      realtimeEvents,
+      tournamentPresence: activeTournamentId
+        ? presenceByTournament[activeTournamentId] || []
+        : [],
+      getPresenceFor,
+      assignedMatchId: assignedMatch?.matchId ?? null,
+      assignedOpponentName: assignedMatch?.opponentName ?? null,
+      loading,
+      error,
+      lastUpdated,
+    }),
+    [
+      tournaments,
+      currentTournament,
+      setCurrentTournament,
+      setCurrentTournamentById,
+      isConnected,
+      connectionError,
+      socket,
+      createTournament,
+      joinTournament,
+      leaveTournament,
+      startTournament,
+      endTournament,
+      updateTournamentSettings,
+      toggleTournamentRegistrationLock,
+      toggleTournamentReady,
+      sendTournamentChat,
+      refreshTournaments,
+      activePreparation,
+      activeStatistics,
+      activePhases,
+      realtimeEvents,
+      activeTournamentId,
+      presenceByTournament,
+      getPresenceFor,
+      assignedMatch,
+      loading,
+      error,
+      lastUpdated,
+    ]
+  );
 
   return (
     <RealtimeTournamentContext.Provider value={contextValue}>

@@ -190,13 +190,35 @@ export default function GameToolbox({
   const phase = useGameStore((s) => s.phase);
   const turn = useGameStore((s) => s.turn);
 
-  // Drive the indicator countdown via a simple interval
+  // The 500ms tick below only exists to live-update the "instant permission"
+  // expiry countdown indicator. Only run it while such a countdown is actually
+  // active for us — otherwise it re-renders the toolbox (and its HUD children)
+  // twice a second for nothing.
+  const hasInstantCountdown = useMemo(() => {
+    for (const entry of Object.values(interactionLog)) {
+      if (!entry || entry.status !== "approved") continue;
+      if (!entry.request || entry.request.kind !== "instantSpell") continue;
+      const g = entry.grant as
+        | { grantedTo?: string; expiresAt?: number }
+        | null
+        | undefined;
+      if (!g || typeof g.expiresAt !== "number") continue;
+      const isMe = localPlayerId
+        ? g.grantedTo === localPlayerId
+        : entry.direction === "outbound";
+      if (isMe) return true;
+    }
+    return false;
+  }, [interactionLog, localPlayerId]);
+
+  // Drive the indicator countdown via a simple interval (only while one is live)
   useEffect(() => {
+    if (!hasInstantCountdown) return undefined;
     const id = setInterval(() => {
       setNowMs(Date.now());
     }, 500);
     return () => clearInterval(id as unknown as number);
-  }, []);
+  }, [hasInstantCountdown]);
 
   // Subscribe to shared d20Roll and d6Roll messages from the server.
   // When received, open the dice overlay locally for both players.
