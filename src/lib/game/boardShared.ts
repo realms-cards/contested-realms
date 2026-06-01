@@ -30,18 +30,14 @@ export const STACK_LAYER_LIFT = CARD_THICK * 1.5;
 export const BURROWED_ELEVATION = CARD_THICK * 0.5; // Card center when lying flat
 export const BASE_CARD_ELEVATION = CARD_THICK * 2; // Sites/normal cards slightly above burrowed
 export const RUBBLE_ELEVATION = CARD_THICK * 2; // Same as BASE_CARD_ELEVATION to sit at site level
-export const AVATAR_AVOID_Z = TILE_SIZE * 0.15;
 export const TILE_OFFSET_LIMIT_X = TILE_SIZE * 0.35;
 export const TILE_OFFSET_LIMIT_Z = TILE_SIZE * 0.65; // Increased to allow reaching tile center and beyond
 
-export function getPermanentOwnerBaseZ(
-  owner: 1 | 2,
-  _hasAvatarOnTile = false,
-): number {
+export function getPermanentOwnerBaseZ(owner: 1 | 2): number {
   const ownerSign = owner === 1 ? 1 : -1;
-  // Avatar-avoidance removed: a permanent's resting Z no longer depends on
-  // whether an avatar shares its tile, so moving an avatar never shifts a card.
-  // (The avatar tucks under the stack itself instead — see AvatarCard.)
+  // A permanent's resting Z depends only on its owner, never on whether an avatar
+  // shares its tile, so moving an avatar never shifts a card. (The avatar tucks
+  // under the stack itself instead — see AvatarCard.)
   return ownerSign * (TILE_SIZE * 0.15);
 }
 

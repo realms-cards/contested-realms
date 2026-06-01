@@ -1,7 +1,7 @@
 "use client";
 
 import { OrbitControls } from "@react-three/drei";
-import { Canvas, useThree } from "@react-three/fiber";
+import { useThree } from "@react-three/fiber";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -12,6 +12,7 @@ import { useOnline } from "@/app/online/online-context";
 import UserBadge from "@/components/auth/UserBadge";
 import FloatingChat from "@/components/chat/FloatingChat";
 import CardPreviewOverlay from "@/components/game/CardPreviewOverlay";
+import { ClientCanvas } from "@/components/game/ClientCanvas";
 import { DynamicBoard as Board } from "@/components/game/dynamic-3d";
 import { NumberBadge } from "@/components/game/manacost";
 import type { Digit } from "@/components/game/manacost";
@@ -1690,7 +1691,7 @@ export default function TournamentDraft3DScreen({
     <div className="fixed inset-0 w-screen h-[100dvh]">
       <FloatingChat tournamentId={tournamentId} mode="bubble" />
       <div className="absolute inset-0 w-full h-full">
-        <Canvas
+        <ClientCanvas
           camera={{ position: [0, 10, 0], fov: 50 }}
           shadows
           gl={{
@@ -1941,7 +1942,7 @@ export default function TournamentDraft3DScreen({
           {/* Disable keyboard pan in draft - arrow keys are used for card cycling */}
           <KeyboardPanControls enabled={false} />
           <TrackpadOrbitAdapter />
-        </Canvas>
+        </ClientCanvas>
       </div>
 
       {/* Presence overlay - positioned outside pointer-events-none for hover to work */}

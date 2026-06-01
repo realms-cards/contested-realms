@@ -312,14 +312,22 @@ export function useTournamentPhases(
     ]
   );
 
-  // Timer for tracking time in phase and countdown
+  // Timer for tracking time in phase and countdown.
+  //
+  // Only run when we're actually tracking a tournament with a timed phase. This
+  // hook feeds the app-root RealtimeTournamentProvider, so an ungated 1s setState
+  // re-renders the entire app every second — including the 3D match board — even
+  // when no tournament is active. Gating on a real tournamentId + a phase that has
+  // a countdown duration keeps idle matches from paying that cost.
+  const phaseDuration = state.currentPhase?.phase?.duration;
   useEffect(() => {
+    if (!tournamentId || !phaseDuration) return undefined;
     const interval = setInterval(() => {
       setState((prev) => {
         const newTimeInPhase = prev.timeInPhase + 1000;
-        const phaseDuration = prev.currentPhase?.phase?.duration;
-        const newTimeRemaining = phaseDuration
-          ? Math.max(0, phaseDuration - newTimeInPhase)
+        const dur = prev.currentPhase?.phase?.duration;
+        const newTimeRemaining = dur
+          ? Math.max(0, dur - newTimeInPhase)
           : undefined;
 
         return {
@@ -331,7 +339,7 @@ export function useTournamentPhases(
     }, 1000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [tournamentId, phaseDuration]);
 
   // Periodic condition checking (backup): avoid polling when socket is connected or tab hidden
   useEffect(() => {

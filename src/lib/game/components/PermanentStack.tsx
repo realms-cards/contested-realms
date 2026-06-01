@@ -163,7 +163,6 @@ type StackConfig = {
   baseElevation: number;
   burrowedElevation: number;
   rubbleElevation: number;
-  avatarAvoidZ: number;
 };
 
 type HighlightColors = {
@@ -182,7 +181,6 @@ export type PermanentStackProps = {
   permanents: Permanents;
   permanentPositions: GameState["permanentPositions"];
   remoteDragLookup: Map<string, Set<number>>;
-  avatars: GameState["avatars"];
   getRemoteHighlightColor: GameState["getRemoteHighlightColor"];
   isHandVisible: boolean;
   isSpectator: boolean;

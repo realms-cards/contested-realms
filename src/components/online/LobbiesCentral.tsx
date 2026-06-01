@@ -907,7 +907,7 @@ export default function LobbiesCentral({
             return (
               <div
                 key={`lobby-${l.id}`}
-                className={`flex items-center gap-2 px-2 py-1.5 bg-black/20 border-l-2 border-blue-500/50 ${
+                className={`flex flex-col gap-2 px-2 py-1.5 bg-black/20 border-l-2 border-blue-500/50 sm:flex-row sm:items-center ${
                   isMine ? "ring-1 ring-emerald-500/40 bg-emerald-500/5" : ""
                 }`}
               >
@@ -931,7 +931,7 @@ export default function LobbiesCentral({
                       </span>
                     )}
                   </div>
-                  <div className="flex items-center gap-1.5 text-xs opacity-70">
+                  <div className="flex flex-wrap items-center gap-1.5 text-xs opacity-70">
                     {l.status !== "open" && (
                       <span
                         className={`text-[9px] uppercase tracking-wide px-1 py-0.5 rounded ${
@@ -971,7 +971,7 @@ export default function LobbiesCentral({
                     </span>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2 shrink-0 sm:justify-end">
                   {isMine ? (
                     <>
                       <div className="flex items-center gap-2">
@@ -1238,7 +1238,7 @@ export default function LobbiesCentral({
             return (
               <div
                 key={`tournament-${tournament.id}`}
-                className={`flex items-center gap-3 px-3 py-2 bg-black/20 border-l-4 border-purple-500/50 ${
+                className={`flex flex-wrap items-center gap-3 px-3 py-2 bg-black/20 border-l-4 border-purple-500/50 ${
                   isRegistered
                     ? "ring-1 ring-purple-500/40 bg-purple-500/5"
                     : ""
@@ -1280,7 +1280,7 @@ export default function LobbiesCentral({
                     )}
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2 shrink-0 ml-auto">
                   {canJoin && onJoinTournament && (
                     <button
                       className={`rounded px-3 py-1 text-xs ${

@@ -1,7 +1,7 @@
 "use client";
 
 import { OrbitControls } from "@react-three/drei";
-import { Canvas, useThree } from "@react-three/fiber";
+import { useThree } from "@react-three/fiber";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -11,6 +11,7 @@ import DraggableCard3D from "@/app/decks/editor-3d/DraggableCard3D";
 import { useOnline } from "@/app/online/online-context";
 import UserBadge from "@/components/auth/UserBadge";
 import CardPreviewOverlay from "@/components/game/CardPreviewOverlay";
+import { ClientCanvas } from "@/components/game/ClientCanvas";
 import { DynamicBoard as Board } from "@/components/game/dynamic-3d";
 import { NumberBadge } from "@/components/game/manacost";
 import type { Digit } from "@/components/game/manacost";
@@ -1719,7 +1720,7 @@ export default function EnhancedOnlineDraft3DScreen({
     <div className="fixed inset-0 w-screen h-[100dvh]">
       {/* Enhanced 3D Stage */}
       <div className="absolute inset-0 w-full h-full">
-        <Canvas
+        <ClientCanvas
           camera={{ position: [0, 10, 0], fov: 50 }}
           shadows
           gl={{ preserveDrawingBuffer: false, antialias: true, alpha: false }}
@@ -1983,7 +1984,7 @@ export default function EnhancedOnlineDraft3DScreen({
           <ClampOrbitTarget bounds={{ minX: -8, maxX: 8, minZ: -6, maxZ: 6 }} />
           <KeyboardPanControls enabled={!orbitLocked} />
           <TrackpadOrbitAdapter />
-        </Canvas>
+        </ClientCanvas>
       </div>
 
       {/* Enhanced Overlays */}

@@ -480,7 +480,6 @@ export function BoardTile({
         permanents={permanents}
         permanentPositions={permanentPositions}
         remoteDragLookup={remotePermanentDragLookup}
-        avatars={avatars}
         getRemoteHighlightColor={getRemoteHighlightColor}
         isHandVisible={isHandVisible}
         isSpectator={isSpectator}

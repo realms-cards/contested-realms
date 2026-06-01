@@ -1,12 +1,12 @@
 "use client";
 
-import { Canvas } from "@react-three/fiber";
 import { Wrench, Eye, Search, AlertTriangle, Circle } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useRef, useState, useMemo } from "react";
 import BugReportModal from "@/components/game/BugReportModal";
 import CardPreview from "@/components/game/CardPreview";
 import CardSearchDialog from "@/components/game/CardSearchDialog";
+import { ClientCanvas } from "@/components/game/ClientCanvas";
 import HandPeekDialog from "@/components/game/HandPeekDialog";
 import { CustomSelect } from "@/components/ui/CustomSelect";
 import { useGraphicsSettings } from "@/hooks/useGraphicsSettings";
@@ -1788,7 +1788,7 @@ export default function GameToolbox({
               </button>
             </div>
             <div className="bg-black/40 rounded-xl ring-1 ring-white/10 h-[42vh] min-h-[240px] sm:h-[260px]">
-              <Canvas camera={{ position: [0, 5, 0], fov: 50, up: [0, 0, -1] }}>
+              <ClientCanvas camera={{ position: [0, 5, 0], fov: 50, up: [0, 0, -1] }}>
                 <ambientLight intensity={0.6} />
                 <directionalLight position={[2, 5, 2]} intensity={0.8} />
                 <D20Dice
@@ -1806,7 +1806,7 @@ export default function GameToolbox({
                     }, 3200);
                   }}
                 />
-              </Canvas>
+              </ClientCanvas>
             </div>
           </div>
         </div>
@@ -1836,7 +1836,7 @@ export default function GameToolbox({
               </button>
             </div>
             <div className="bg-black/40 rounded-xl ring-1 ring-white/10 h-[42vh] min-h-[240px] sm:h-[260px]">
-              <Canvas camera={{ position: [0, 5, 0], fov: 50, up: [0, 0, -1] }}>
+              <ClientCanvas camera={{ position: [0, 5, 0], fov: 50, up: [0, 0, -1] }}>
                 <ambientLight intensity={0.6} />
                 <directionalLight position={[2, 5, 2]} intensity={0.8} />
                 <D6Dice
@@ -1854,7 +1854,7 @@ export default function GameToolbox({
                     }, 3200);
                   }}
                 />
-              </Canvas>
+              </ClientCanvas>
             </div>
           </div>
         </div>

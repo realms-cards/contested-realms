@@ -1,12 +1,12 @@
 "use client";
 
 import { OrbitControls, Text } from "@react-three/drei";
-import { Canvas } from "@react-three/fiber";
 import { RigidBody } from "@react-three/rapier";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useOnline } from "@/app/online/online-context";
+import { ClientCanvas } from "@/components/game/ClientCanvas";
 import { GlobalVideoOverlay } from "@/components/ui/GlobalVideoOverlay";
 import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
 import {
@@ -741,7 +741,7 @@ export default function OnlineDraftScreen({
 
       {/* 3D Canvas */}
       <div className="absolute inset-0 w-full h-full pt-24">
-        <Canvas
+        <ClientCanvas
           camera={{ position: [0, 8, 12], fov: 60 }}
           shadows
           gl={{ preserveDrawingBuffer: true, antialias: true }}
@@ -887,7 +887,7 @@ export default function OnlineDraftScreen({
             maxDistance={25}
             maxPolarAngle={Math.PI / 2.2}
           />
-        </Canvas>
+        </ClientCanvas>
       </div>
 
       {/* Video Overlay */}

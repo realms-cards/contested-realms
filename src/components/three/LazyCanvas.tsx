@@ -31,9 +31,14 @@ import type { ComponentProps } from "react";
  * - Initial bundle reduction: ~600KB (20-30% for most pages)
  */
 
-// Lazy load the Canvas component from @react-three/fiber
-const Canvas = lazy(() =>
-  import("@react-three/fiber").then((mod) => ({ default: mod.Canvas }))
+// Lazy load the WebGL-protected Canvas wrapper. ClientCanvas pulls in
+// @react-three/fiber, so importing it lazily keeps Three.js out of the initial
+// bundle while still giving every lazy 3D surface the WebGL2 capability probe
+// and graceful fallback.
+const ClientCanvas = lazy(() =>
+  import("@/components/game/ClientCanvas").then((mod) => ({
+    default: mod.ClientCanvas,
+  }))
 );
 
 type CanvasProps = ComponentProps<typeof CanvasType>;
@@ -70,7 +75,7 @@ function CanvasLoadingFallback() {
 export function LazyCanvas(props: CanvasProps) {
   return (
     <Suspense fallback={<CanvasLoadingFallback />}>
-      <Canvas {...props} />
+      <ClientCanvas {...props} />
     </Suspense>
   );
 }

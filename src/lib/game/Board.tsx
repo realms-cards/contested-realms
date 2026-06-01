@@ -9,7 +9,6 @@ import { useGraphicsSettings } from "@/hooks/useGraphicsSettings";
 import { cardbackAtlasUrl, cardbackSpellbookUrl } from "@/lib/assets";
 import { useSound } from "@/lib/contexts/SoundContext";
 import {
-  AVATAR_AVOID_Z,
   BASE_CARD_ELEVATION,
   BURROWED_ELEVATION,
   RUBBLE_ELEVATION,
@@ -69,7 +68,6 @@ const STACK_CONFIG = {
   baseElevation: BASE_CARD_ELEVATION,
   burrowedElevation: BURROWED_ELEVATION,
   rubbleElevation: RUBBLE_ELEVATION,
-  avatarAvoidZ: AVATAR_AVOID_Z,
 } as const;
 
 // Component to preload cardback textures inside R3F context

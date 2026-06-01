@@ -64,7 +64,7 @@ export default function MatchmakingPanel({
   }
 
   return (
-    <div className="flex gap-3">
+    <div className="grid grid-cols-2 gap-2 sm:flex sm:gap-3">
       {/* Card 1: Online Count (smaller, non-interactive) */}
       <div className="rounded-lg bg-gradient-to-br from-emerald-950/40 to-slate-900/60 ring-1 ring-emerald-500/20 flex flex-col items-center justify-center px-4 py-2">
         <div className="text-2xl font-bold text-white leading-none">

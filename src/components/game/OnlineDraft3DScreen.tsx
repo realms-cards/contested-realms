@@ -1,7 +1,7 @@
 "use client";
 
 import { OrbitControls } from "@react-three/drei";
-import { Canvas, useThree } from "@react-three/fiber";
+import { useThree } from "@react-three/fiber";
 import type { ThreeEvent } from "@react-three/fiber";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -14,6 +14,7 @@ import {
   WaitingOverlay,
   useWaitingOverlay,
 } from "@/components/draft/WaitingOverlay";
+import { ClientCanvas } from "@/components/game/ClientCanvas";
 import {
   DynamicBoard as Board,
   DynamicPiles3D as Piles3D,
@@ -1202,7 +1203,7 @@ export default function OnlineDraft3DScreen({
     <div className="fixed inset-0 w-screen h-[100dvh]">
       {/* 3D Stage */}
       <div className="absolute inset-0 w-full h-full">
-        <Canvas
+        <ClientCanvas
           camera={{ position: [0, 10, 0], fov: 50 }}
           shadows
           gl={{ preserveDrawingBuffer: true, antialias: true, alpha: false }}
@@ -1385,7 +1386,7 @@ export default function OnlineDraft3DScreen({
           {/* Disable keyboard pan in draft - arrow keys are used for card cycling */}
           <KeyboardPanControls enabled={false} />
           <TrackpadOrbitAdapter />
-        </Canvas>
+        </ClientCanvas>
       </div>
 
       {/* Overlays */}

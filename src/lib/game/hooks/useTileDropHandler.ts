@@ -184,10 +184,6 @@ export function useTileDropHandler({
 
       const dropKey = `${tileX},${tileY}`;
       const pos = tileWorldPosition;
-      const hasAvatarOnDropTile = Object.values(avatars).some((avatar) => {
-        const posArr = avatar.pos;
-        return posArr && posArr[0] === tileX && posArr[1] === tileY;
-      });
 
       if (dragAvatar) {
         const wx = e.point.x;
@@ -309,7 +305,7 @@ export function useTileDropHandler({
         // So to land at world.z, we need: offZ = world.z - pos[2] - zBase
         const draggedItem = permanents[dragging.from]?.[dragging.index];
         const owner = draggedItem?.owner ?? 1;
-        const zBase = getPermanentOwnerBaseZ(owner, hasAvatarOnDropTile);
+        const zBase = getPermanentOwnerBaseZ(owner);
         const offX = clampOffset(world.x - pos[0], TILE_OFFSET_LIMIT_X);
         const offZ = clampOffset(world.z - pos[2] - zBase, TILE_OFFSET_LIMIT_Z);
         const apiAtDrop = draggedBody.current;
@@ -339,7 +335,7 @@ export function useTileDropHandler({
         // So to land at world.z, we need: offZ = world.z - pos[2] - zBase
         const draggedItem = permanents[dragging.from]?.[dragging.index];
         const owner = draggedItem?.owner ?? 1;
-        const zBase = getPermanentOwnerBaseZ(owner, hasAvatarOnDropTile);
+        const zBase = getPermanentOwnerBaseZ(owner);
         const offX = clampOffset(world.x - pos[0], TILE_OFFSET_LIMIT_X);
         const offZ = clampOffset(world.z - pos[2] - zBase, TILE_OFFSET_LIMIT_Z);
         dragTarget.current = null;
@@ -424,10 +420,7 @@ export function useTileDropHandler({
               : selectedCard.who === "p2"
                 ? 2
                 : currentPlayer;
-          const dropZBase = getPermanentOwnerBaseZ(
-            dropOwner,
-            hasAvatarOnDropTile,
-          );
+          const dropZBase = getPermanentOwnerBaseZ(dropOwner);
           const offX = clampOffset(wx - pos[0], TILE_OFFSET_LIMIT_X);
           const offZ = clampOffset(
             wz - pos[2] - dropZBase,
@@ -501,7 +494,7 @@ export function useTileDropHandler({
               }
               const startX = -((Math.max(toItems.length, 1) - 1) * spacing) / 2;
               const owner = perm.owner;
-              const zBase = getPermanentOwnerBaseZ(owner, hasAvatarOnTile);
+              const zBase = getPermanentOwnerBaseZ(owner);
               const xPos = startX + realIdx * spacing;
               const permX = pos[0] + xPos + (perm.offset?.[0] ?? 0);
               const permZ = pos[2] + zBase + (perm.offset?.[1] ?? 0);
@@ -590,10 +583,7 @@ export function useTileDropHandler({
             : actorKey === "p2"
               ? 2
               : currentPlayer;
-        const dropZBase = getPermanentOwnerBaseZ(
-          dropOwner,
-          hasAvatarOnDropTile,
-        );
+        const dropZBase = getPermanentOwnerBaseZ(dropOwner);
         const offX = clampOffset(wx - pos[0], TILE_OFFSET_LIMIT_X);
         const offZ = clampOffset(wz - pos[2] - dropZBase, TILE_OFFSET_LIMIT_Z);
 

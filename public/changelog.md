@@ -2,7 +2,7 @@
 
 ### May 2026
 
-### Rework Replays and many other things
+### PERFORMANCE and replays rework
 
 - **HUGE performance increase and optimization**
 - **share replays! also nicer replay viewer with slightly better animations**

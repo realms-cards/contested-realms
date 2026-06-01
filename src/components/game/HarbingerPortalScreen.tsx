@@ -1,7 +1,7 @@
 "use client";
 
-import { Canvas } from "@react-three/fiber";
 import { useEffect, useState, useCallback, useMemo } from "react";
+import { ClientCanvas } from "@/components/game/ClientCanvas";
 import D20Dice from "@/lib/game/components/D20Dice";
 import { useGameStore } from "@/lib/game/store";
 import type { PlayerKey } from "@/lib/game/store";
@@ -300,7 +300,7 @@ export default function HarbingerPortalScreen({
 
       {/* 3D Canvas for dice rolling */}
       <div className="bg-black/30 rounded-xl ring-1 ring-white/10 mb-6 h-[42vh] min-h-[240px] sm:h-[300px]">
-        <Canvas camera={{ position: [0, 0, 5], fov: 60 }}>
+        <ClientCanvas camera={{ position: [0, 0, 5], fov: 60 }}>
           <ambientLight intensity={0.4} />
           <directionalLight position={[5, 5, 5]} intensity={0.8} />
 
@@ -328,7 +328,7 @@ export default function HarbingerPortalScreen({
               />
             );
           })}
-        </Canvas>
+        </ClientCanvas>
       </div>
 
       {/* Status display */}
