@@ -8,14 +8,14 @@ import ManualOverlay from "@/components/ui/ManualOverlay";
 export default function LobbyFooter() {
   return (
     <>
-      <div className="mt-8 text-center text-xs text-slate-500 space-x-3">
-        <span>Info & Support:</span>
+      <div className="mt-8 flex flex-wrap items-center justify-center gap-x-2.5 gap-y-2 text-center text-xs text-slate-500">
+        <span className="w-full sm:w-auto">Info & Support:</span>
         <a
           href="https://discord.gg/UE2Gfbxjym"
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md 
-              bg-gradient-to-r from-fuchsia-500/20 via-purple-400/30 to-violet-500/20 
+          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md
+              bg-gradient-to-r from-fuchsia-500/20 via-purple-400/30 to-violet-500/20
               border border-purple-400/50 hover:border-purple-300/80
               text-purple-200 hover:text-purple-100 font-medium
               shadow-[0_0_12px_rgba(168,85,247,0.3)] hover:shadow-[0_0_20px_rgba(168,85,247,0.5)]
@@ -23,32 +23,32 @@ export default function LobbyFooter() {
         >
           Official Discord
         </a>
-        <span>·</span>
+        <span className="hidden sm:inline" aria-hidden="true">·</span>
         <a
           href="mailto:kingofthe@realms.cards"
           className="underline hover:text-slate-300"
         >
           Email
         </a>
-        <span>·</span>
+        <span className="hidden sm:inline" aria-hidden="true">·</span>
         <ChangelogOverlay />
-        <span>·</span>
+        <span className="hidden sm:inline" aria-hidden="true">·</span>
         <ManualOverlay />
-        <span>·</span>
+        <span className="hidden sm:inline" aria-hidden="true">·</span>
         <Link href="/terms" className="underline hover:text-slate-300">
           Terms
         </Link>
-        <span>·</span>
+        <span className="hidden sm:inline" aria-hidden="true">·</span>
         <Link href="/privacy" className="underline hover:text-slate-300">
           Privacy
         </Link>
-        <span>·</span>
+        <span className="hidden sm:inline" aria-hidden="true">·</span>
         <a
           href="https://www.patreon.com/realmscards"
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md 
-              bg-gradient-to-r from-blue-500/20 via-sky-400/30 to-blue-500/20 
+          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md
+              bg-gradient-to-r from-blue-500/20 via-sky-400/30 to-blue-500/20
               border border-blue-400/50 hover:border-blue-300/80
               text-blue-200 hover:text-blue-100 font-medium
               shadow-[0_0_12px_rgba(59,130,246,0.3)] hover:shadow-[0_0_20px_rgba(59,130,246,0.5)]
@@ -56,7 +56,7 @@ export default function LobbyFooter() {
         >
           Patreon
         </a>
-        <span>·</span>
+        <span className="hidden sm:inline" aria-hidden="true">·</span>
         <a
           href="https://github.com/realms-cards/contested-realms"
           target="_blank"
