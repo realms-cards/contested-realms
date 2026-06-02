@@ -123,8 +123,17 @@ function computeFloodTargets(state: GameState, who: PlayerKey): CellKey[] {
   return Array.from(candidates).filter((c) => !!board.sites[c]);
 }
 
-/** True if a minion is currently exempt from the tap (has/uses submerge). */
+/**
+ * True if a minion has the Submerge keyword (and is therefore exempt from the
+ * Waveshaper tap, per "Tap minions without submerge there").
+ *
+ * Primary signal is the card's printed rules text, which is the authoritative
+ * source for the keyword; we fall back to the name-based heuristic (which also
+ * consults the ability cache) and the live submerged position state.
+ */
 function minionHasSubmerge(state: GameState, perm: PermanentItem): boolean {
+  const text = (perm.card?.text || "").toLowerCase();
+  if (text.includes("submerge")) return true;
   const name = perm.card?.name || "";
   if (detectBurrowSubmergeAbilitiesSync(name).canSubmerge) return true;
   const id = perm.instanceId || perm.card?.instanceId || "";
