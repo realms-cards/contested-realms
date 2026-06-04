@@ -24,6 +24,7 @@ import type { StateCreator } from "zustand";
 import { detectBurrowSubmergeAbilitiesSync } from "@/lib/game/cardAbilities";
 import {
   TOKEN_BY_NAME,
+  isMinionToken,
   newTokenInstanceId,
   tokenSlug,
 } from "@/lib/game/tokens";
@@ -58,9 +59,13 @@ function isFloodedToken(perm: PermanentItem): boolean {
   return (perm.card?.name || "").toLowerCase() === "flooded";
 }
 
-/** A permanent is a minion if its card type contains "minion". */
+/**
+ * A permanent is a minion if its card type contains "minion", or it is a minion
+ * token (Skeleton, Foot Soldier, Frog, Bruin, Tawny) — those carry type "Token".
+ */
 function isMinionPermanent(perm: PermanentItem): boolean {
-  return (perm.card?.type || "").toLowerCase().includes("minion");
+  if ((perm.card?.type || "").toLowerCase().includes("minion")) return true;
+  return isMinionToken(perm.card?.name);
 }
 
 export function createInitialWaveshaperFloodCells(): Record<
@@ -137,7 +142,13 @@ function minionHasSubmerge(state: GameState, perm: PermanentItem): boolean {
   const name = perm.card?.name || "";
   if (detectBurrowSubmergeAbilitiesSync(name).canSubmerge) return true;
   const id = perm.instanceId || perm.card?.instanceId || "";
-  if (id && state.permanentPositions[id]?.state === "submerged") return true;
+  if (id) {
+    // Registered submerge ability (e.g. Frog tokens from Tadpole Pool,
+    // Atlantean Fate forced-submerge). Tokens carry no rules text, so this is
+    // the authoritative source for them.
+    if (state.permanentAbilities[id]?.canSubmerge) return true;
+    if (state.permanentPositions[id]?.state === "submerged") return true;
+  }
   return false;
 }
 
