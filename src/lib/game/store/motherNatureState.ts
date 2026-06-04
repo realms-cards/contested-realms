@@ -1,6 +1,6 @@
 import type { StateCreator } from "zustand";
 import type { CustomMessage } from "@/lib/net/transport";
-import type { GameState, PlayerKey, ServerPatchT } from "./types";
+import type { CellKey, GameState, PlayerKey, ServerPatchT } from "./types";
 
 function newMotherNatureRevealId() {
   return `mother_nature_${Date.now().toString(36)}_${Math.random()
@@ -77,10 +77,45 @@ export const createMotherNatureSlice: StateCreator<
 
     // Process each Mother Nature one at a time
     // For simplicity, we'll just handle the first one for now
-    const motherNature = motherNatures[0];
+    const registered = motherNatures[0];
     const topCard = spellbook[0];
 
     if (!topCard) return;
+
+    // Resolve Mother Nature's CURRENT cell from `permanents` by instanceId. The
+    // registry's cached `location` can be stale after a move or control transfer
+    // (only `permanents` is synced over the network; the locally-derived
+    // registry is never re-located). The revealed minion is summoned at this
+    // cell, so a stale location would summon it onto the wrong tile.
+    const permanents = get().permanents;
+    let currentLocation: string | null = null;
+    for (const cellKey of Object.keys(permanents)) {
+      if (
+        permanents[cellKey as CellKey]?.some(
+          (p) => p.instanceId === registered.instanceId
+        )
+      ) {
+        currentLocation = cellKey;
+        break;
+      }
+    }
+    if (!currentLocation) {
+      // No longer on the board, unregister and bail
+      get().unregisterMotherNature(registered.instanceId);
+      return;
+    }
+    if (currentLocation !== registered.location) {
+      const freshLocation = currentLocation;
+      set((state) => ({
+        ...state,
+        motherNatureMinions: state.motherNatureMinions.map((m) =>
+          m.instanceId === registered.instanceId
+            ? { ...m, location: freshLocation }
+            : m
+        ),
+      }));
+    }
+    const motherNature = { ...registered, location: currentLocation };
 
     const id = newMotherNatureRevealId();
 

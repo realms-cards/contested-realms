@@ -1,7 +1,7 @@
 import type { StateCreator } from "zustand";
 import type { CustomMessage } from "@/lib/net/transport";
 import { findInquisitionInCards } from "./inquisitionSummonState";
-import type { GameState, PlayerKey } from "./types";
+import type { CellKey, GameState, PlayerKey } from "./types";
 
 function newLilithRevealId() {
   return `lilith_${Date.now().toString(36)}_${Math.random()
@@ -82,17 +82,43 @@ export const createLilithSlice: StateCreator<GameState, [], [], LilithSlice> = (
     if (playerLiliths.length === 0) return;
 
     // Process each Lilith sequentially
-    for (const lilith of playerLiliths) {
-      // Verify Lilith is still on the battlefield
-      const cellPerms = permanents[lilith.location];
-      const lilithPerm = cellPerms?.find(
-        (p) => p.instanceId === lilith.instanceId,
-      );
-      if (!lilithPerm) {
-        // Lilith no longer exists, unregister
-        get().unregisterLilith(lilith.instanceId);
+    for (const registered of playerLiliths) {
+      // Resolve Lilith's CURRENT cell from `permanents` by instanceId. The
+      // registry's cached `location` can be stale: Lilith may have been moved
+      // (by either player — the active player can move opponent permanents) or
+      // changed control, and on networked clients only `permanents` is synced —
+      // the locally-derived registry is never re-located. Trusting the cached
+      // location here is what made the resolver silently skip after a move.
+      let currentLocation: CellKey | null = null;
+      for (const cellKey of Object.keys(permanents)) {
+        if (
+          permanents[cellKey as CellKey]?.some(
+            (p) => p.instanceId === registered.instanceId,
+          )
+        ) {
+          currentLocation = cellKey as CellKey;
+          break;
+        }
+      }
+      if (!currentLocation) {
+        // Lilith no longer exists anywhere on the board, unregister
+        get().unregisterLilith(registered.instanceId);
         continue;
       }
+      // Keep the registry's cached location fresh (silent — registerLilith logs
+      // a re-entry message we don't want to repeat here).
+      if (currentLocation !== registered.location) {
+        const freshLocation = currentLocation;
+        set((state) => ({
+          ...state,
+          lilithMinions: state.lilithMinions.map((l) =>
+            l.instanceId === registered.instanceId
+              ? { ...l, location: freshLocation }
+              : l,
+          ),
+        }));
+      }
+      const lilith = { ...registered, location: currentLocation };
 
       const opponentSeat = endingPlayerSeat === "p1" ? "p2" : "p1";
 
