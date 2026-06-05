@@ -181,7 +181,7 @@ export default function DeckItem({
         </Tag>
       );
     }
-    if (formatLabel) {
+    if (formatLabel && deck.format?.toLowerCase() !== "sandbox") {
       items.push(
         <Tag key="format" tone="default">
           {formatLabel}
