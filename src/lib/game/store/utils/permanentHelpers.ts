@@ -201,6 +201,27 @@ export function ensurePermanentVersion(item: PermanentItem): number {
   return typeof raw === "number" && Number.isFinite(raw) && raw >= 0 ? raw : 0;
 }
 
+/**
+ * Locate a permanent on the board by instanceId, scanning every cell.
+ * Returns its current cell, index, and item — or null if it is not on the
+ * board. Use this instead of trusting a cached location: a permanent can move
+ * or change control, and on networked clients only `permanents` is synced.
+ */
+export function findPermanentByInstanceId(
+  permanents: Permanents,
+  instanceId: string,
+): { at: CellKey; index: number; item: PermanentItem } | null {
+  for (const [cellKey, items] of Object.entries(permanents)) {
+    const index = (items || []).findIndex(
+      (item) => ensurePermanentInstanceId(item) === instanceId,
+    );
+    if (index >= 0) {
+      return { at: cellKey as CellKey, index, item: items[index] };
+    }
+  }
+  return null;
+}
+
 export function normalizePermanentItem(
   item: PermanentItem | null | undefined
 ): PermanentItem | null {

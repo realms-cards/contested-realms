@@ -1,7 +1,9 @@
 import type { StateCreator } from "zustand";
 import type { CustomMessage } from "@/lib/net/transport";
+import { isPermanentSilenced } from "./boudiccaState";
 import { findInquisitionInCards } from "./inquisitionSummonState";
-import type { CellKey, GameState, PlayerKey } from "./types";
+import type { GameState, PlayerKey } from "./types";
+import { findPermanentByInstanceId } from "./utils/permanentHelpers";
 
 function newLilithRevealId() {
   return `lilith_${Date.now().toString(36)}_${Math.random()
@@ -89,31 +91,28 @@ export const createLilithSlice: StateCreator<GameState, [], [], LilithSlice> = (
       // changed control, and on networked clients only `permanents` is synced —
       // the locally-derived registry is never re-located. Trusting the cached
       // location here is what made the resolver silently skip after a move.
-      let currentLocation: CellKey | null = null;
-      for (const cellKey of Object.keys(permanents)) {
-        if (
-          permanents[cellKey as CellKey]?.some(
-            (p) => p.instanceId === registered.instanceId,
-          )
-        ) {
-          currentLocation = cellKey as CellKey;
-          break;
-        }
-      }
-      if (!currentLocation) {
+      const located = findPermanentByInstanceId(
+        permanents,
+        registered.instanceId,
+      );
+      if (!located) {
         // Lilith no longer exists anywhere on the board, unregister
         get().unregisterLilith(registered.instanceId);
         continue;
       }
+      // A Silenced/Disabled token attached to Lilith suppresses her ability.
+      if (isPermanentSilenced(permanents, located.at, located.index)) {
+        continue;
+      }
+      const currentLocation = located.at;
       // Keep the registry's cached location fresh (silent — registerLilith logs
       // a re-entry message we don't want to repeat here).
       if (currentLocation !== registered.location) {
-        const freshLocation = currentLocation;
         set((state) => ({
           ...state,
           lilithMinions: state.lilithMinions.map((l) =>
             l.instanceId === registered.instanceId
-              ? { ...l, location: freshLocation }
+              ? { ...l, location: currentLocation }
               : l,
           ),
         }));
@@ -274,6 +273,15 @@ export const createLilithSlice: StateCreator<GameState, [], [], LilithSlice> = (
       return;
     }
 
+    // Summon the revealed minion at Lilith's CURRENT cell — she may have moved
+    // between the reveal and this resolve. Fall back to the captured location
+    // only if she has left the board.
+    const lilithNow = findPermanentByInstanceId(
+      get().permanents,
+      pending.lilithInstanceId,
+    );
+    const summonLocation = lilithNow?.at ?? lilithLocation;
+
     const actorKey = get().actorKey;
     const isOnline = !!get().transport;
     const opponentSeat = lilithOwner === "p1" ? "p2" : "p1";
@@ -289,7 +297,7 @@ export const createLilithSlice: StateCreator<GameState, [], [], LilithSlice> = (
             type: "lilithRevealResolve",
             id,
             isMinion,
-            lilithLocation,
+            lilithLocation: summonLocation,
             lilithOwner,
             revealedCard,
             revealedCardName: revealedCard.name,
@@ -316,10 +324,10 @@ export const createLilithSlice: StateCreator<GameState, [], [], LilithSlice> = (
           summoningSickness: true,
         };
 
-        const cellPerms = permanents[lilithLocation] || [];
+        const cellPerms = permanents[summonLocation] || [];
         const permanentsNext = {
           ...permanents,
-          [lilithLocation]: [...cellPerms, newPermanent],
+          [summonLocation]: [...cellPerms, newPermanent],
         };
 
         set({
@@ -328,7 +336,7 @@ export const createLilithSlice: StateCreator<GameState, [], [], LilithSlice> = (
         } as Partial<GameState> as GameState);
 
         get().trySendPatch({
-          permanents: { [lilithLocation]: permanentsNext[lilithLocation] },
+          permanents: { [summonLocation]: permanentsNext[summonLocation] },
         });
 
         get().log(
@@ -395,10 +403,10 @@ export const createLilithSlice: StateCreator<GameState, [], [], LilithSlice> = (
         summoningSickness: true,
       };
 
-      const cellPerms = permanentsNext[lilithLocation] || [];
+      const cellPerms = permanentsNext[summonLocation] || [];
       permanentsNext = {
         ...permanentsNext,
-        [lilithLocation]: [...cellPerms, newPermanent],
+        [summonLocation]: [...cellPerms, newPermanent],
       };
 
       get().log(

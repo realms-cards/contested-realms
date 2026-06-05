@@ -1,11 +1,12 @@
 import type { StateCreator } from "zustand";
+import { isPermanentSilenced } from "./boudiccaState";
 import type {
-  CellKey,
   GameState,
   PlayerKey,
   TurnEffectEntry,
   TurnEffectKind,
 } from "./types";
+import { findPermanentByInstanceId } from "./utils/permanentHelpers";
 
 /**
  * Turn Effect Queue — ordered processing of end-of-turn and start-of-turn effects.
@@ -151,12 +152,17 @@ export const createTurnEffectQueueSlice: StateCreator<
       (l) => l.ownerSeat === endingSeat,
     );
     for (const lilith of playerLiliths) {
-      // Verify still on battlefield
-      const cellPerms = state.permanents[lilith.location as CellKey];
-      const lilithPerm = cellPerms?.find(
-        (p) => p.instanceId === lilith.instanceId,
+      // Resolve Lilith's CURRENT cell from permanents (the cached registry
+      // location can be stale after a move or control transfer). Skip if she
+      // has left the board.
+      const located = findPermanentByInstanceId(
+        state.permanents,
+        lilith.instanceId,
       );
-      if (!lilithPerm) continue;
+      if (!located) continue;
+      // A Silenced/Disabled token attached to Lilith suppresses her ability.
+      if (isPermanentSilenced(state.permanents, located.at, located.index))
+        continue;
 
       entries.push({
         id: newQueueEntryId("lilith_reveal", lilith.instanceId),
@@ -167,7 +173,7 @@ export const createTurnEffectQueueSlice: StateCreator<
         sourceName: lilith.cardName,
         data: {
           lilithInstanceId: lilith.instanceId,
-          lilithLocation: lilith.location,
+          lilithLocation: located.at,
         },
       });
     }
@@ -190,6 +196,16 @@ export const createTurnEffectQueueSlice: StateCreator<
       (m) => m.ownerSeat === startingSeat,
     );
     for (const mn of motherNatures) {
+      // Resolve Mother Nature's CURRENT cell (cached location may be stale).
+      const located = findPermanentByInstanceId(
+        state.permanents,
+        mn.instanceId,
+      );
+      if (!located) continue;
+      // A Silenced/Disabled token suppresses her ability.
+      if (isPermanentSilenced(state.permanents, located.at, located.index))
+        continue;
+
       entries.push({
         id: newQueueEntryId("mother_nature_reveal", mn.instanceId),
         kind: "mother_nature_reveal",
@@ -199,7 +215,7 @@ export const createTurnEffectQueueSlice: StateCreator<
         sourceName: mn.cardName,
         data: {
           instanceId: mn.instanceId,
-          location: mn.location,
+          location: located.at,
         },
       });
     }
