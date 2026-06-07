@@ -541,9 +541,10 @@ export const createPermanentMovementSlice: StateCreator<
         if (position === "top") pile.unshift(movedCard);
         else pile.push(movedCard);
         seatZones.atlas = pile;
-      } else {
+      } else if (!isToken && !isCopy) {
         seatZones.banished = [...seatZones.banished, movedCard];
       }
+      // Tokens and copies are truly deleted — not added to any zone
 
       // Store the main item's zones first
       zonesNext[owner] = seatZones;
@@ -578,12 +579,11 @@ export const createPermanentMovementSlice: StateCreator<
           attachZones = { ...zonesNext[attachOwner] };
         }
 
-        if (attachedIsToken) {
-          attachZones.banished = [...attachZones.banished, attachedCard];
-        } else {
+        if (!attachedIsToken) {
           // Non-token, non-carryable-artifact attachments go to owner's graveyard
           attachZones.graveyard = [attachedCard, ...attachZones.graveyard];
         }
+        // Tokens are truly deleted — not added to any zone
         zonesNext[attachOwner] = attachZones;
 
         const attachedId = ensurePermanentInstanceId(attached);
@@ -591,8 +591,8 @@ export const createPermanentMovementSlice: StateCreator<
 
         const attachPlayerNum = attachOwner === "p1" ? "1" : "2";
         get().log(
-          `Attachment [p${attachPlayerNum}card:${attached.card.name}] sent to ${
-            attachedIsToken ? "banished" : "cemetery"
+          `Attachment [p${attachPlayerNum}card:${attached.card.name}] ${
+            attachedIsToken ? "deleted" : "sent to cemetery"
           }`,
         );
       }

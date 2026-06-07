@@ -558,7 +558,7 @@ export function PermanentStack({
             ? -CARD_SHORT * 0.3
             : 0;
         const offXBase = baseOffX + tokenOffsetX;
-        const offZ = baseOffZ;
+        const offZBase = baseOffZ;
 
         // Use instanceId for stable position state lookup (prevents state leakage on card movement)
         const permId = (p.instanceId ?? `perm:${key}:${idx}`) as string;
@@ -590,6 +590,14 @@ export function PermanentStack({
             ? (sortedIdx - (burrowedCount - 1) / 2) * burrowedSpacing
             : 0;
         const offX = offXBase + burrowedSpreadX;
+
+        // Submerged/burrowed cards sit low and would be hidden beneath the tile's
+        // site card. Push them toward the owner's edge so they line up clearly in
+        // front of (below) the site instead of being occluded by it — e.g. Tadpole
+        // Pool's frogs, or Atlantean Fate submerging minions atop a site.
+        const burrowedSiteOffsetZ =
+          isBurrowed && hasSite ? (owner === 1 ? 1 : -1) * TILE_SIZE * 0.4 : 0;
+        const offZ = offZBase + burrowedSiteOffsetZ;
 
         // Burrowed cards at ground level, non-burrowed cards elevated above them.
         // Cards no longer react to an avatar sharing their tile — the avatar tucks
@@ -1413,11 +1421,12 @@ export function PermanentStack({
                   const offX = wx - tileWorldX;
                   const offZ = wz - tileWorldZ - localZBase;
                   if (dragging.from === dropKey) {
-                    // Subtract the render-time burrowed spread so the stored offset
-                    // round-trips to the same on-screen position (no jump on drop).
+                    // Subtract the render-time burrowed spread/site offsets so the
+                    // stored offset round-trips to the same on-screen position
+                    // (no jump on drop).
                     const newOffset: [number, number] = [
                       offX - burrowedSpreadX,
-                      offZ,
+                      offZ - burrowedSiteOffsetZ,
                     ];
                     dragTarget.current = null;
                     draggedBody.current = null;
