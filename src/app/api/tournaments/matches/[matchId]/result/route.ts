@@ -36,6 +36,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ mat
 
     // Resolve player IDs for validation and standings update
     const playerIds = (match.players as Array<{ id: string }>).map(p => p.id);
+
+    // Only match participants or the tournament host may report a result
+    const reporterId = session.user.id;
+    const isHost = match.tournament?.creatorId === reporterId;
+    if (!isHost && !playerIds.includes(reporterId)) {
+      return new Response(
+        JSON.stringify({ error: 'Only match participants or the tournament host can report results' }),
+        { status: 403 }
+      );
+    }
     // For non-draws, ensure provided ids are part of this match
     if (!isDraw) {
       if (!playerIds.includes(winnerId) || !playerIds.includes(loserId)) {
@@ -56,37 +66,44 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ mat
       completedAt: new Date().toISOString()
     };
 
-    // Idempotent completion: only update if not already completed
+    // Idempotent completion: only update if not already completed.
+    // Match completion and standings update are atomic — a crash between the two
+    // can no longer leave a completed match with stale standings.
     const now = new Date();
-    const completeRes = await prisma.match.updateMany({
-      where: { id: matchId, status: { not: 'completed' } },
-      data: {
-        status: 'completed',
-        results: matchResults,
-        completedAt: now,
-      },
+    const completed = await prisma.$transaction(async (tx) => {
+      const completeRes = await tx.match.updateMany({
+        where: { id: matchId, status: { not: 'completed' } },
+        data: {
+          status: 'completed',
+          results: matchResults,
+          completedAt: now,
+        },
+      });
+      if (completeRes.count === 0) return false;
+
+      if (match.tournamentId) {
+        // For draws, pass both player IDs so both receive draw/point
+        const [p1, p2] = playerIds;
+        const wId = isDraw ? p1 : winnerId;
+        const lId = isDraw ? p2 : loserId;
+        await updateStandingsAfterMatch(match.tournamentId, matchId, {
+          winnerId: wId,
+          loserId: lId,
+          isDraw
+        }, tx);
+      }
+      return true;
     });
 
     // If no rows updated, another client already reported the result. Treat as success.
-    if (completeRes.count === 0) {
+    if (!completed) {
       return new Response(JSON.stringify({ success: true, alreadyCompleted: true, matchId }), {
         status: 200,
         headers: { 'content-type': 'application/json' },
       });
     }
 
-    // Update tournament standings
     if (match.tournamentId) {
-      // For draws, pass both player IDs so both receive draw/point
-      const [p1, p2] = playerIds;
-      const wId = isDraw ? p1 : winnerId;
-      const lId = isDraw ? p2 : loserId;
-      await updateStandingsAfterMatch(match.tournamentId, matchId, {
-        winnerId: wId,
-        loserId: lId,
-        isDraw
-      });
-
       // Broadcast statistics update via Socket.io
       try {
         // Get updated statistics for the tournament

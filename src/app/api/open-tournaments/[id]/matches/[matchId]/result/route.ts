@@ -60,17 +60,56 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     );
   }
 
-  const settings = (tournament.settings ?? {}) as unknown as OpenTournamentSettings;
-  const requireApproval =
-    settings.matchResolution?.requireHostApproval &&
-    source !== "realms";
+  const reporterId = session.user.id;
+  const isHost = tournament.creatorId === reporterId;
 
-  const isHost = tournament.creatorId === session.user.id;
+  // Only match participants or the host may report a result
+  if (!isHost && !matchPlayerIds.has(reporterId)) {
+    return Response.json(
+      { error: "Only match participants or the host can report results" },
+      { status: 403 },
+    );
+  }
+
+  const settings = (tournament.settings ?? {}) as unknown as OpenTournamentSettings;
+
+  // Enforce match resolution settings server-side (UI hiding alone is bypassable)
+  const resolution = settings.matchResolution;
+  if (resolution) {
+    if (source === "realms" && !resolution.allowRealms) {
+      return Response.json(
+        { error: "Realms match reporting is disabled for this tournament" },
+        { status: 400 },
+      );
+    }
+    if (source !== "realms" && !resolution.allowManualReport) {
+      return Response.json(
+        { error: "Manual result reporting is disabled for this tournament" },
+        { status: 400 },
+      );
+    }
+  }
+
+  // The reported source is client-supplied and unverifiable, so it must not
+  // bypass host approval: all player-submitted results need approval when enabled
+  const requireApproval = resolution?.requireHostApproval === true;
+
+  // A non-host cannot overwrite another player's pending report
+  const existingResults = match.results as Record<string, unknown> | null;
+  if (
+    !isHost &&
+    existingResults?.approvalStatus === MATCH_APPROVAL_STATUS.PENDING
+  ) {
+    return Response.json(
+      { error: "A result is already awaiting host approval" },
+      { status: 409 },
+    );
+  }
 
   if (requireApproval && !isHost) {
-    // Store as pending approval
-    await prisma.match.update({
-      where: { id: matchId },
+    // Store as pending approval (guarded so a concurrent completion is not overwritten)
+    const pendingRes = await prisma.match.updateMany({
+      where: { id: matchId, status: { not: "completed" } },
       data: {
         status: "active",
         results: {
@@ -78,31 +117,45 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
           loserId,
           isDraw,
           source,
+          reportedBy: reporterId,
           approvalStatus: MATCH_APPROVAL_STATUS.PENDING,
         },
       },
     });
+    if (pendingRes.count === 0) {
+      return Response.json({ error: "Match already completed" }, { status: 400 });
+    }
 
     return Response.json({ status: "pending_approval" });
   }
 
-  // Apply result immediately
-  await prisma.match.update({
-    where: { id: matchId },
-    data: {
-      status: "completed",
-      completedAt: new Date(),
-      results: {
-        winnerId,
-        loserId,
-        isDraw,
-        source,
-        approvalStatus: MATCH_APPROVAL_STATUS.APPROVED,
+  // Apply result immediately; completion and standings update are atomic and
+  // the updateMany guard makes concurrent reports idempotent
+  const completed = await prisma.$transaction(async (tx) => {
+    const completeRes = await tx.match.updateMany({
+      where: { id: matchId, status: { not: "completed" } },
+      data: {
+        status: "completed",
+        completedAt: new Date(),
+        results: {
+          winnerId,
+          loserId,
+          isDraw,
+          source,
+          reportedBy: reporterId,
+          approvalStatus: MATCH_APPROVAL_STATUS.APPROVED,
+        },
       },
-    },
+    });
+    if (completeRes.count === 0) return false;
+
+    await updateStandingsAfterMatch(id, matchId, { winnerId, loserId, isDraw }, tx);
+    return true;
   });
 
-  await updateStandingsAfterMatch(id, matchId, { winnerId, loserId, isDraw });
+  if (!completed) {
+    return Response.json({ error: "Match already completed" }, { status: 400 });
+  }
 
   return Response.json({ status: "completed" });
 }
@@ -150,29 +203,39 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
   }
 
   if (parsed.data.approved) {
-    await prisma.match.update({
-      where: { id: matchId },
-      data: {
-        status: "completed",
-        completedAt: new Date(),
-        results: {
-          ...results,
-          approvalStatus: MATCH_APPROVAL_STATUS.APPROVED,
+    // Atomic approval: guard against a concurrent completion and keep the
+    // standings update in the same transaction as the match completion
+    const approved = await prisma.$transaction(async (tx) => {
+      const completeRes = await tx.match.updateMany({
+        where: { id: matchId, status: { not: "completed" } },
+        data: {
+          status: "completed",
+          completedAt: new Date(),
+          results: {
+            ...results,
+            approvalStatus: MATCH_APPROVAL_STATUS.APPROVED,
+          },
         },
-      },
+      });
+      if (completeRes.count === 0) return false;
+
+      await updateStandingsAfterMatch(id, matchId, {
+        winnerId: results.winnerId as string,
+        loserId: results.loserId as string,
+        isDraw: results.isDraw as boolean,
+      }, tx);
+      return true;
     });
 
-    await updateStandingsAfterMatch(id, matchId, {
-      winnerId: results.winnerId as string,
-      loserId: results.loserId as string,
-      isDraw: results.isDraw as boolean,
-    });
+    if (!approved) {
+      return Response.json({ error: "Match already completed" }, { status: 400 });
+    }
 
     return Response.json({ status: "approved" });
   } else {
     // Rejected — reset match to pending
-    await prisma.match.update({
-      where: { id: matchId },
+    const rejectRes = await prisma.match.updateMany({
+      where: { id: matchId, status: { not: "completed" } },
       data: {
         status: "pending",
         results: {
@@ -181,6 +244,10 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
         },
       },
     });
+
+    if (rejectRes.count === 0) {
+      return Response.json({ error: "Match already completed" }, { status: 400 });
+    }
 
     return Response.json({ status: "rejected" });
   }

@@ -185,6 +185,37 @@ function createTournamentFeature(deps) {
 
   /** @type {Map<string, Map<string, { playerId: string, playerName: string|null, isConnected: boolean, lastActivity: number }>>} */
   const tournamentPresence = new Map();
+
+  // Sockets per player per tournament, so a player with multiple tabs is only
+  // marked offline once their last socket leaves (prevents presence flapping)
+  /** @type {Map<string, Map<string, Set<string>>>} */
+  const tournamentPlayerSockets = new Map();
+
+  function trackPresenceSocket(tournamentId, playerId, socketId) {
+    let byPlayer = tournamentPlayerSockets.get(tournamentId);
+    if (!byPlayer) {
+      byPlayer = new Map();
+      tournamentPlayerSockets.set(tournamentId, byPlayer);
+    }
+    let sockets = byPlayer.get(playerId);
+    if (!sockets) {
+      sockets = new Set();
+      byPlayer.set(playerId, sockets);
+    }
+    sockets.add(socketId);
+  }
+
+  /** @returns {boolean} true when the player has no remaining sockets in this tournament */
+  function untrackPresenceSocket(tournamentId, playerId, socketId) {
+    const byPlayer = tournamentPlayerSockets.get(tournamentId);
+    const sockets = byPlayer?.get(playerId);
+    if (!sockets) return true;
+    sockets.delete(socketId);
+    if (sockets.size > 0) return false;
+    byPlayer.delete(playerId);
+    if (byPlayer.size === 0) tournamentPlayerSockets.delete(tournamentId);
+    return true;
+  }
   function emitTournamentPresence(tournamentId, playersList) {
     const payload = {
       tournamentId,
@@ -418,6 +449,7 @@ function createTournamentFeature(deps) {
         const pid = player?.id || playerIdBySocket.get(socket.id);
         const name = player?.displayName || null;
         if (pid) {
+          trackPresenceSocket(tournamentId, pid, socket.id);
           const list = upsertTournamentPresence(tournamentId, pid, name, true);
           emitTournamentPresence(tournamentId, list);
         }
@@ -446,7 +478,8 @@ function createTournamentFeature(deps) {
 
       try {
         const pid = playerIdBySocket.get(socket.id);
-        if (pid) {
+        // Only mark offline once the player's last socket has left this tournament
+        if (pid && untrackPresenceSocket(tournamentId, pid, socket.id)) {
           const list = upsertTournamentPresence(
             tournamentId,
             pid,
@@ -778,6 +811,8 @@ function createTournamentFeature(deps) {
       try {
         if (currentTournamentIds.size > 0) {
           for (const tid of Array.from(currentTournamentIds)) {
+            // Skip players who are still connected via another tab/socket
+            if (!untrackPresenceSocket(tid, pid, socket.id)) continue;
             const list = upsertTournamentPresence(
               tid,
               pid,

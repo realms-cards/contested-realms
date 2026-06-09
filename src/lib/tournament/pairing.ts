@@ -303,7 +303,8 @@ export async function createRoundMatches(
 export async function updateStandingsAfterMatch(
   tournamentId: string,
   matchId: string,
-  results: { winnerId: string; loserId: string; isDraw?: boolean }
+  results: { winnerId: string; loserId: string; isDraw?: boolean },
+  client: Prisma.TransactionClient = prisma
 ): Promise<void> {
   const { winnerId, loserId, isDraw = false } = results;
 
@@ -317,7 +318,7 @@ export async function updateStandingsAfterMatch(
 
   if (isDraw) {
     // Both players get 1 point for draw
-    const updateResult = await prisma.playerStanding.updateMany({
+    const updateResult = await client.playerStanding.updateMany({
       where: {
         tournamentId,
         playerId: { in: [winnerId, loserId] }
@@ -334,7 +335,7 @@ export async function updateStandingsAfterMatch(
     });
   } else {
     // Winner gets 3 points, loser gets 0
-    await prisma.playerStanding.update({
+    await client.playerStanding.update({
       where: {
         tournamentId_playerId: {
           tournamentId,
@@ -348,7 +349,7 @@ export async function updateStandingsAfterMatch(
       }
     });
 
-    await prisma.playerStanding.update({
+    await client.playerStanding.update({
       where: {
         tournamentId_playerId: {
           tournamentId,
@@ -363,14 +364,17 @@ export async function updateStandingsAfterMatch(
   }
 
   // Recalculate tiebreakers for all players
-  await recalculateTiebreakers(tournamentId);
+  await recalculateTiebreakers(tournamentId, client);
 }
 
 /**
  * Recalculate game win percentage and opponent match win percentage
  */
-async function recalculateTiebreakers(tournamentId: string): Promise<void> {
-  const tournament = await prisma.tournament.findUnique({
+async function recalculateTiebreakers(
+  tournamentId: string,
+  client: Prisma.TransactionClient = prisma
+): Promise<void> {
+  const tournament = await client.tournament.findUnique({
     where: { id: tournamentId },
     include: {
       standings: true,
@@ -382,12 +386,13 @@ async function recalculateTiebreakers(tournamentId: string): Promise<void> {
 
   if (!tournament) return;
 
-  // Batch all tiebreaker updates into a single transaction
-  const updates = tournament.standings.map((standing) => {
+  // Sequential updates on the shared client; callers wrap this in a transaction
+  // when atomicity with the match completion is required
+  for (const standing of tournament.standings) {
     const totalMatches = standing.wins + standing.losses + standing.draws;
     const gameWinPercentage = totalMatches > 0 ? standing.wins / totalMatches : 0;
 
-    return prisma.playerStanding.update({
+    await client.playerStanding.update({
       where: {
         tournamentId_playerId: {
           tournamentId,
@@ -400,9 +405,5 @@ async function recalculateTiebreakers(tournamentId: string): Promise<void> {
         opponentMatchWinPercentage: gameWinPercentage * 0.75 // Placeholder
       }
     });
-  });
-
-  if (updates.length > 0) {
-    await prisma.$transaction(updates);
   }
 }

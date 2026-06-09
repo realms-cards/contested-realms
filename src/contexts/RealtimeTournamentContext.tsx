@@ -1164,10 +1164,20 @@ export function RealtimeTournamentProvider({
       );
       return;
     }
+    // Leave the previous room when switching tournaments so the socket does
+    // not keep receiving events for tournaments we navigated away from
+    const previousId = joinedTournamentIdRef.current;
+    if (previousId) {
+      logTournamentDebug(
+        "[RealtimeTournamentContext] Leaving previous tournament room:",
+        previousId,
+      );
+      socketLeaveTournament(previousId);
+    }
     logTournamentDebug("[RealtimeTournamentContext] Auto-joining tournament:", id);
     joinedTournamentIdRef.current = id;
     socketJoinTournament(id);
-  }, [isConnected, activeTournamentId, socketJoinTournament]);
+  }, [isConnected, activeTournamentId, socketJoinTournament, socketLeaveTournament]);
 
   // Clear connection error when socket connects
   useEffect(() => {
@@ -1314,8 +1324,13 @@ export function RealtimeTournamentProvider({
 
         logTournamentDebug("Left tournament successfully");
 
-        // Leave socket room
+        // Leave socket room and allow a future auto-join to re-enter it;
+        // without this reset, rejoining the same tournament in one session
+        // never re-subscribes to realtime updates
         socketLeaveTournament(tournamentId);
+        if (joinedTournamentIdRef.current === tournamentId) {
+          joinedTournamentIdRef.current = null;
+        }
 
         // Clear current tournament if leaving it
         if (currentTournament?.id === tournamentId) {
