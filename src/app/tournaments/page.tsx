@@ -455,7 +455,8 @@ export default function TournamentsPage() {
               Tournaments
             </h1>
             <p className="text-slate-400">
-              Join or create competitive tournaments
+              Competitive events played on realms.cards — results are recorded
+              automatically
             </p>
           </div>
           <button
@@ -464,6 +465,41 @@ export default function TournamentsPage() {
           >
             Create Tournament
           </button>
+        </div>
+
+        {/* Tournament type chooser */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+          <div className="bg-slate-800 border border-blue-500/40 rounded-lg p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xl">🎮</span>
+              <h2 className="font-semibold text-white">Platform Tournaments</h2>
+              <span className="text-xs px-1.5 py-0.5 bg-blue-600/20 text-blue-300 border border-blue-500/30 rounded">
+                This page
+              </span>
+            </div>
+            <p className="text-sm text-slate-400">
+              Sealed, draft, and constructed events where every match is played
+              here on realms.cards. Pairings, results, and standings are fully
+              automated.
+            </p>
+          </div>
+          <Link
+            href="/open-tournaments"
+            className="group block bg-slate-800 border border-slate-700 hover:border-amber-500/40 rounded-lg p-4 transition-colors"
+          >
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xl">📋</span>
+              <h2 className="font-semibold text-white">Open Events</h2>
+            </div>
+            <p className="text-sm text-slate-400">
+              Play anywhere — on realms.cards, Tabletop Simulator, or in paper.
+              Players report their scores and standings are tracked here, with
+              optional host approval.
+            </p>
+            <span className="text-sm text-amber-400 group-hover:text-amber-300 mt-2 inline-block">
+              Browse Open Events →
+            </span>
+          </Link>
         </div>
 
         {/* View Filter */}
@@ -511,12 +547,6 @@ export default function TournamentsPage() {
           >
             My Tournaments
           </button>
-          <Link
-            href="/open-tournaments"
-            className={`px-3 py-1.5 rounded-md text-sm border bg-slate-800 text-slate-200 border-slate-600 hover:bg-slate-700`}
-          >
-            Open Events
-          </Link>
           {viewFilter !== "active" && (
             <span className="text-xs text-slate-400 ml-2">
               Showing {viewFilter} tournaments
@@ -765,6 +795,18 @@ export default function TournamentsPage() {
                   ×
                 </button>
               </div>
+
+              <p className="text-sm text-slate-400 mb-4">
+                All matches in this tournament are played on realms.cards and
+                results are recorded automatically. Planning to play on
+                Tabletop Simulator or in paper?{" "}
+                <Link
+                  href="/open-tournaments"
+                  className="text-blue-400 hover:text-blue-300"
+                >
+                  Create an Open Event instead →
+                </Link>
+              </p>
 
               <form onSubmit={handleCreateTournament} className="space-y-4">
                 <div>

@@ -100,7 +100,17 @@ export default function OpenTournamentsPage() {
               <h1 className="text-3xl font-fantaisie text-white">Open Events</h1>
             </div>
             <p className="text-slate-400 mt-1">
-              Flexible tournament organizer — play on Realms, TTS, or paper
+              Play anywhere — on realms.cards, Tabletop Simulator, or in paper.
+              Players report scores here, with optional host approval.
+            </p>
+            <p className="text-sm text-slate-500 mt-1">
+              Looking for fully automated events played on realms.cards?{" "}
+              <Link
+                href="/tournaments"
+                className="text-blue-400 hover:text-blue-300"
+              >
+                Platform Tournaments →
+              </Link>
             </p>
           </div>
           <button
@@ -177,7 +187,9 @@ export default function OpenTournamentsPage() {
                           {t.name}
                         </h3>
                       </div>
-                      <p className="text-slate-400 text-sm mt-1">Open Event</p>
+                      <p className="text-slate-400 text-sm mt-1">
+                        Open Event · player-reported scores
+                      </p>
                     </div>
                     <span
                       className={`px-2 py-1 rounded-full text-xs font-medium border capitalize ${
