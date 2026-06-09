@@ -3,29 +3,33 @@
 import { Trophy } from "lucide-react";
 import { useMemo } from "react";
 
-interface Player {
+export interface BracketPlayer {
   id: string;
   name: string;
   seed?: number;
 }
 
-interface Match {
+export interface BracketMatchData {
   id: string;
-  players: Player[];
+  players: BracketPlayer[];
   status: "pending" | "active" | "completed" | "cancelled";
   winnerId?: string | null;
   bye?: boolean;
   invalid?: boolean;
 }
 
-interface Round {
+export interface BracketRound {
   id: string;
   roundNumber: number;
   status: "pending" | "active" | "completed";
-  matches: Match[];
+  matches: BracketMatchData[];
   startedAt?: string | null;
   completedAt?: string | null;
 }
+
+type Player = BracketPlayer;
+type Match = BracketMatchData;
+type Round = BracketRound;
 
 interface TournamentBracketProps {
   rounds: Round[];

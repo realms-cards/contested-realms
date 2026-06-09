@@ -12,6 +12,7 @@ import CardPreview from "@/components/game/CardPreview";
 import type { Digit } from "@/components/game/manacost";
 import { NumberBadge } from "@/components/game/manacost";
 import TournamentBracket from "@/components/tournament/TournamentBracket";
+import TournamentFlowchart from "@/components/tournament/TournamentFlowchart";
 import TournamentRoster from "@/components/tournament/TournamentRoster";
 import { useRealtimeTournaments } from "@/contexts/RealtimeTournamentContext";
 import type { CardPreviewData } from "@/lib/game/card-preview.types";
@@ -72,6 +73,7 @@ export default function TournamentDetailsPage() {
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showDraftConfirmModal, setShowDraftConfirmModal] = useState(false);
 
+  const [roundsView, setRoundsView] = useState<"grid" | "flowchart">("grid");
   const [activeTab, setActiveTab] = useState<
     "overview" | "standings" | "rounds"
   >("overview");
@@ -3066,10 +3068,10 @@ export default function TournamentDetailsPage() {
                 </div>
               )}
 
-            {/* Bracket View */}
+            {/* Bracket / Flowchart View */}
             {statistics && statistics.rounds && statistics.rounds.length > 0 ? (
-              <TournamentBracket
-                rounds={statistics.rounds.map((round) => ({
+              (() => {
+                const bracketRounds = statistics.rounds.map((round) => ({
                   ...round,
                   status: round.status as "pending" | "active" | "completed",
                   matches: (round.matches || []).map((match) => ({
@@ -3081,11 +3083,45 @@ export default function TournamentDetailsPage() {
                       | "cancelled",
                     players: Array.isArray(match.players) ? match.players : [],
                   })),
-                }))}
-                currentUserId={session?.user?.id}
-                isCreator={isCreator ?? false}
-                onInvalidateMatch={handleInvalidateMatch}
-              />
+                }));
+                return (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-end gap-1">
+                      {(
+                        [
+                          ["grid", "Grid"],
+                          ["flowchart", "Flowchart"],
+                        ] as const
+                      ).map(([view, label]) => (
+                        <button
+                          key={view}
+                          onClick={() => setRoundsView(view)}
+                          className={`px-3 py-1 rounded-md text-xs border ${
+                            roundsView === view
+                              ? "bg-blue-600 text-white border-blue-500"
+                              : "bg-slate-800 text-slate-300 border-slate-600 hover:bg-slate-700"
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    {roundsView === "flowchart" ? (
+                      <TournamentFlowchart
+                        rounds={bracketRounds}
+                        currentUserId={session?.user?.id}
+                      />
+                    ) : (
+                      <TournamentBracket
+                        rounds={bracketRounds}
+                        currentUserId={session?.user?.id}
+                        isCreator={isCreator ?? false}
+                        onInvalidateMatch={handleInvalidateMatch}
+                      />
+                    )}
+                  </div>
+                );
+              })()
             ) : (
               <div className="bg-slate-800 border border-slate-700 rounded-lg p-6">
                 <div className="text-center py-8 text-slate-400">
