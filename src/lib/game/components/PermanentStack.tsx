@@ -591,12 +591,16 @@ export function PermanentStack({
             : 0;
         const offX = offXBase + burrowedSpreadX;
 
-        // Submerged/burrowed cards sit low and would be hidden beneath the tile's
-        // site card. Push them toward the owner's edge so they line up clearly in
-        // front of (below) the site instead of being occluded by it — e.g. Tadpole
-        // Pool's frogs, or Atlantean Fate submerging minions atop a site.
+        // Small minion tokens (e.g. Tadpole Pool's frogs) are tiny enough to vanish
+        // completely beneath the tile's landscape site card when submerged. Push
+        // only those toward the owner's edge so they line up clearly in front of
+        // (below) the site. Normal portrait-sized cards already extend past the
+        // site and don't need this, so they're left untouched.
+        const isSmallToken = isToken && tokenDef?.size === "small";
         const burrowedSiteOffsetZ =
-          isBurrowed && hasSite ? (owner === 1 ? 1 : -1) * TILE_SIZE * 0.4 : 0;
+          isBurrowed && hasSite && isSmallToken
+            ? (owner === 1 ? 1 : -1) * TILE_SIZE * 0.4
+            : 0;
         const offZ = offZBase + burrowedSiteOffsetZ;
 
         // Burrowed cards at ground level, non-burrowed cards elevated above them.
