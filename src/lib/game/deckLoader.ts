@@ -156,6 +156,15 @@ export async function loadDeckFor(
         setError(validationResult.error || "Invalid Duplicator deck");
         return false;
       }
+    } else if (magicianDeck) {
+      // Magician: no atlas — sites live in the spellbook, so only the
+      // combined spellbook size is enforced
+      if (spellbook.length + rawAtlas.length < CONSTRUCTED_MIN_SPELLS) {
+        setError(
+          `Magician spellbook needs at least ${CONSTRUCTED_MIN_SPELLS} cards including sites (excluding Avatar)`,
+        );
+        return false;
+      }
     } else {
       // Standard constructed deck validation
       if (rawAtlas.length < CONSTRUCTED_MIN_SITES) {
@@ -583,18 +592,38 @@ export async function loadTournamentConstructedDeck(
     }
 
     const avatar = avatars[0];
+    const magicianDeck = isMagician(avatar.name);
+    const duplicatorDeck = isDuplicator(avatar.name);
     const spellbook = rawSpellbook.filter((c: CardRef) => !isAvatar(c));
 
-    if (rawAtlas.length < CONSTRUCTED_MIN_SITES) {
-      setError(`Atlas needs at least ${CONSTRUCTED_MIN_SITES} sites`);
-      return false;
-    }
+    if (duplicatorDeck) {
+      // Duplicator: spellbook and atlas can only contain matching pairs
+      const validationResult = validateDuplicatorDeck(spellbook, rawAtlas);
+      if (!validationResult.valid) {
+        setError(validationResult.error || "Invalid Duplicator deck");
+        return false;
+      }
+    } else if (magicianDeck) {
+      // Magician: no atlas — sites live in the spellbook, so only the
+      // combined spellbook size is enforced
+      if (spellbook.length + rawAtlas.length < CONSTRUCTED_MIN_SPELLS) {
+        setError(
+          `Magician spellbook needs at least ${CONSTRUCTED_MIN_SPELLS} cards including sites (excluding Avatar)`,
+        );
+        return false;
+      }
+    } else {
+      if (rawAtlas.length < CONSTRUCTED_MIN_SITES) {
+        setError(`Atlas needs at least ${CONSTRUCTED_MIN_SITES} sites`);
+        return false;
+      }
 
-    if (spellbook.length < CONSTRUCTED_MIN_SPELLS) {
-      setError(
-        `Spellbook needs at least ${CONSTRUCTED_MIN_SPELLS} cards (excluding Avatar)`,
-      );
-      return false;
+      if (spellbook.length < CONSTRUCTED_MIN_SPELLS) {
+        setError(
+          `Spellbook needs at least ${CONSTRUCTED_MIN_SPELLS} cards (excluding Avatar)`,
+        );
+        return false;
+      }
     }
 
     const {
@@ -607,9 +636,16 @@ export async function loadTournamentConstructedDeck(
       drawOpening,
     } = useGameStore.getState();
 
-    initLibraries(who, spellbook, rawAtlas);
+    // Magician: merge atlas into spellbook (sites go in spellbook, no atlas)
+    const spellbookToUse = magicianDeck
+      ? [...spellbook, ...rawAtlas]
+      : spellbook;
+    const atlasToUse = magicianDeck ? [] : rawAtlas;
+    initLibraries(who, spellbookToUse, atlasToUse);
     shuffleSpellbook(who);
-    shuffleAtlas(who);
+    if (!magicianDeck) {
+      shuffleAtlas(who);
+    }
 
     // IMPORTANT: Check if player has an active Imposter mask - don't overwrite masked avatar
     const { imposterMasks, avatars: currentAvatars } = useGameStore.getState();

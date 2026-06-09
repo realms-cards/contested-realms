@@ -185,6 +185,7 @@ export async function GET(
         atlas: number;
         collection: number;
         hasDragonlordAvatar: boolean;
+        hasMagicianAvatar: boolean;
         valid: boolean;
       }
     >();
@@ -198,6 +199,7 @@ export async function GET(
           atlas: 0,
           collection: 0,
           hasDragonlordAvatar: false,
+          hasMagicianAvatar: false,
           valid: false,
         };
         constructedValidityByDeck.set(key, agg);
@@ -226,6 +228,9 @@ export async function GET(
         const cardName = dc.card?.name?.toLowerCase() || "";
         if (cardName === "dragonlord") {
           agg.hasDragonlordAvatar = true;
+        }
+        if (cardName.includes("magician")) {
+          agg.hasMagicianAvatar = true;
         }
       }
     }
@@ -266,10 +271,13 @@ export async function GET(
 
     // Finalize validity
     for (const [deckId, agg] of constructedValidityByDeck) {
+      // Magician has no atlas — sites live in the spellbook and count toward it
+      const zoneCountsOk = agg.hasMagicianAvatar
+        ? agg.spellbook + agg.atlas >= minSpellbook
+        : agg.spellbook >= minSpellbook && agg.atlas >= minAtlas;
       const meetsCounts =
         agg.avatarCount === requiredAvatars &&
-        agg.spellbook >= minSpellbook &&
-        agg.atlas >= minAtlas &&
+        zoneCountsOk &&
         (maxCollection == null || agg.collection <= maxCollection);
 
       const championCardId = championByDeckId.get(deckId) ?? null;
@@ -464,6 +472,7 @@ export async function POST(
     let avatarCount = 0;
     let spellbook = 0;
     let atlas = 0;
+    let hasMagicianAvatar = false;
     for (const c of deckFull.cards) {
       const qty = Number(c.count || 0);
       if (c.zone === "Spellbook") spellbook += qty;
@@ -472,10 +481,17 @@ export async function POST(
       const type = (
         c.setId != null ? metaSel.get(`${c.cardId}:${c.setId}`) || "" : ""
       ).toLowerCase();
-      if (type.includes("avatar")) avatarCount += qty;
+      if (type.includes("avatar")) {
+        avatarCount += qty;
+        if ((c.card?.name || "").toLowerCase().includes("magician")) {
+          hasMagicianAvatar = true;
+        }
+      }
     }
-    const isConstructedValid =
-      avatarCount === 1 && spellbook >= 60 && atlas >= 30;
+    // Magician has no atlas — sites live in the spellbook and count toward it
+    const isConstructedValid = hasMagicianAvatar
+      ? avatarCount === 1 && spellbook + atlas >= 60
+      : avatarCount === 1 && spellbook >= 60 && atlas >= 30;
     if (!isConstructedValid) {
       return new Response(
         JSON.stringify({

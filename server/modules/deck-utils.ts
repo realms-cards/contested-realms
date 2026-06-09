@@ -79,6 +79,7 @@ export function validateDeckCards(
   let avatarCount = 0;
   let siteCount = 0;
   let spellCount = 0;
+  let mainAvatarName = "";
   let _collectionAvatarCount = 0; // Tracked for debugging but not validated
 
   for (const card of cards) {
@@ -91,6 +92,7 @@ export function validateDeckCards(
         _collectionAvatarCount++;
       } else {
         avatarCount++;
+        if (typeof card?.name === "string") mainAvatarName = card.name;
       }
     } else if (
       isSiteType(type) ||
@@ -112,12 +114,20 @@ export function validateDeckCards(
     );
   }
   const minimums = DECK_MINIMUMS[format];
-  if (siteCount < minimums.sites)
-    errors.push(`Atlas needs at least ${minimums.sites} sites`);
-  if (spellCount < minimums.spells)
-    errors.push(
-      `Spellbook needs at least ${minimums.spells} cards (excluding Avatar)`
-    );
+  if (mainAvatarName.toLowerCase().includes("magician")) {
+    // Magician: no atlas — sites live in the spellbook and count toward it
+    if (siteCount + spellCount < minimums.spells)
+      errors.push(
+        `Spellbook needs at least ${minimums.spells} cards including sites (excluding Avatar)`
+      );
+  } else {
+    if (siteCount < minimums.sites)
+      errors.push(`Atlas needs at least ${minimums.sites} sites`);
+    if (spellCount < minimums.spells)
+      errors.push(
+        `Spellbook needs at least ${minimums.spells} cards (excluding Avatar)`
+      );
+  }
 
   return {
     isValid: errors.length === 0,
