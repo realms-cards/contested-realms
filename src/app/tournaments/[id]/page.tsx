@@ -16,6 +16,7 @@ import TournamentFlowchart from "@/components/tournament/TournamentFlowchart";
 import TournamentRoster from "@/components/tournament/TournamentRoster";
 import { useRealtimeTournaments } from "@/contexts/RealtimeTournamentContext";
 import type { CardPreviewData } from "@/lib/game/card-preview.types";
+import { prepareTournamentMatchBootstrap } from "@/lib/tournament/matchBootstrap";
 
 const TournamentInviteModal = dynamic(
   () => import("@/components/tournament/TournamentInviteModal"),
@@ -74,6 +75,7 @@ export default function TournamentDetailsPage() {
   const [showDraftConfirmModal, setShowDraftConfirmModal] = useState(false);
 
   const [roundsView, setRoundsView] = useState<"grid" | "flowchart">("grid");
+  const [joiningMatch, setJoiningMatch] = useState(false);
   const [activeTab, setActiveTab] = useState<
     "overview" | "standings" | "rounds"
   >("overview");
@@ -935,71 +937,20 @@ export default function TournamentDetailsPage() {
 
   // Helper: start/join a specific match id (bootstrap online match with tournament context)
   const startJoinMatch = async (matchId: string) => {
-    if (!tournament) return;
-    try {
-      // Load matches to find roster for this match
-      const res = await fetch(
-        `/api/tournaments/${encodeURIComponent(tournament.id)}/matches`,
-      );
-      if (res.ok) {
-        const data = await res.json();
-        const match = Array.isArray(data?.matches)
-          ? data.matches.find((m: { id: string }) => m.id === matchId)
-          : null;
-        if (match && Array.isArray(match.players)) {
-          // Determine match type from tournament settings/format
-          const tSettings =
-            (tournament as unknown as { settings?: Record<string, unknown> })
-              .settings || {};
-          const tournamentFormat =
-            (tournament.format as "constructed" | "sealed" | "draft") ||
-            "constructed";
-          const matchType =
-            tournamentFormat === "sealed" ? "sealed" : "constructed";
-          // Try to include sealed/draft configs
-          let sealedConfig =
-            (tSettings as { sealedConfig?: unknown }).sealedConfig || null;
-          let draftConfig = null;
-          if (!sealedConfig && !draftConfig) {
-            try {
-              const detailRes = await fetch(
-                `/api/tournaments/${encodeURIComponent(tournament.id)}`,
-              );
-              if (detailRes.ok) {
-                const detail = await detailRes.json();
-                sealedConfig = detail?.settings?.sealedConfig || null;
-                draftConfig = detail?.settings?.draftConfig || null;
-              }
-            } catch {}
-          }
-          if (tournamentFormat === "sealed" && !sealedConfig) {
-            sealedConfig = {
-              packCounts: { Beta: 6 },
-              timeLimit: 40,
-              replaceAvatars: false,
-              freeAvatars: false,
-            };
-          }
-          const payload = {
-            players: match.players.map((p: { id: string }) => p.id),
-            matchType,
-            lobbyName: tournament.name,
-            sealedConfig,
-            draftConfig,
-            tournamentId: String(tournament.id),
-          };
-          try {
-            localStorage.setItem(
-              `tournamentMatchBootstrap_${matchId}`,
-              JSON.stringify(payload),
-            );
-          } catch {}
-        }
-      }
-    } catch {}
-    try {
-      window.location.href = `/online/play/${encodeURIComponent(matchId)}`;
-    } catch {}
+    if (!tournament || joiningMatch) return;
+    setJoiningMatch(true);
+    setError(null);
+    const result = await prepareTournamentMatchBootstrap(
+      tournament.id,
+      matchId,
+    );
+    if (!result.ok) {
+      setError(result.reason);
+      setJoiningMatch(false);
+      return;
+    }
+    // Keep the joining state on while navigating so the button stays disabled
+    window.location.href = `/online/play/${encodeURIComponent(matchId)}`;
   };
 
   // Creator-only: start next round and pair players
@@ -1469,7 +1420,7 @@ export default function TournamentDetailsPage() {
           const opponentName = assigned?.opponentName || null;
           if (!matchId || tournament.status !== "active") return null;
           return (
-            <div className="mb-4 rounded-lg border-2 border-emerald-500 bg-emerald-900/30 p-4 flex items-center justify-between animate-pulse">
+            <div className="mb-4 rounded-lg border-2 border-emerald-500 bg-emerald-900/30 p-4 flex items-center justify-between">
               <div>
                 <div className="text-lg font-bold text-emerald-300">
                   Your match is ready!
@@ -1482,9 +1433,10 @@ export default function TournamentDetailsPage() {
               </div>
               <button
                 onClick={() => startJoinMatch(matchId)}
-                className="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-3 rounded-lg font-bold text-lg transition-colors"
+                disabled={joiningMatch}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-3 rounded-lg font-bold text-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                Join Match
+                {joiningMatch ? "Joining…" : "Join Match"}
               </button>
             </div>
           );

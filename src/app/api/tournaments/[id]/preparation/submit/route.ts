@@ -3,8 +3,14 @@ import { z } from "zod";
 import { getServerAuthSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { tournamentSocketService } from "@/lib/services/tournament-broadcast";
+import {
+  buildTournamentDeckList,
+  deckCardSelect,
+  type DeckCardWithRelations,
+} from "@/lib/tournament/deck-utils";
 import { createRoundMatches, generatePairings } from "@/lib/tournament/pairing";
 import { getRegistrationSettings } from "@/lib/tournament/registration";
+import { validateDeckCards } from "../../../../../../../server/modules/deck-utils";
 
 const SubmitPreparationRequestSchema = z.object({
   preparationData: z.object({
@@ -185,7 +191,7 @@ export async function POST(
         }
         break;
 
-      case "constructed":
+      case "constructed": {
         if (!preparationData.constructed) {
           return new Response(
             JSON.stringify({ error: "Constructed preparation data required" }),
@@ -194,12 +200,52 @@ export async function POST(
         }
 
         const constructedData = preparationData.constructed;
-        isComplete =
+        const hasSelection =
           constructedData.deckSelected &&
           constructedData.deckValidated &&
           !!constructedData.deckId;
+
+        // Enforce the same composition rules the match server applies at game
+        // start, so a deck accepted here cannot be rejected when the match begins
+        if (hasSelection) {
+          const deck = await prisma.deck.findFirst({
+            where: { id: constructedData.deckId, userId: session.user.id },
+            select: {
+              name: true,
+              cards: { select: deckCardSelect },
+            },
+          });
+          if (!deck) {
+            return new Response(
+              JSON.stringify({ error: "Selected deck not found" }),
+              { status: 400 },
+            );
+          }
+          const deckList = buildTournamentDeckList(
+            deck.cards as DeckCardWithRelations[],
+          );
+          const validation = validateDeckCards(
+            deckList.map((card) => ({
+              ...card,
+              type: typeof card.type === "string" ? card.type : null,
+              name: typeof card.name === "string" ? card.name : null,
+            })),
+          );
+          if (!validation.isValid) {
+            return new Response(
+              JSON.stringify({
+                error: `Deck "${deck.name}" is not match legal: ${validation.errors.join("; ")}`,
+                details: validation.errors,
+              }),
+              { status: 400 },
+            );
+          }
+        }
+
+        isComplete = hasSelection;
         deckSubmitted = isComplete;
         break;
+      }
     }
 
     // Merge with existing preparation data
