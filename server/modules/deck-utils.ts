@@ -58,8 +58,18 @@ function isAvatarType(type: string | null | undefined): boolean {
   return typeof type === "string" && type.toLowerCase().includes("avatar");
 }
 
+export type DeckRulesFormat = "constructed" | "limited";
+
+// Official constructed rules require 60+ spellbook / 30+ atlas; sealed and
+// draft pools are smaller so limited play only needs 24/12.
+const DECK_MINIMUMS: Record<DeckRulesFormat, { sites: number; spells: number }> = {
+  constructed: { sites: 30, spells: 60 },
+  limited: { sites: 12, spells: 24 },
+};
+
 export function validateDeckCards(
-  cards: NormalizedDeckCard[]
+  cards: NormalizedDeckCard[],
+  format: DeckRulesFormat = "limited"
 ): DeckValidationResult {
   const errors: string[] = [];
   if (!Array.isArray(cards) || cards.length === 0) {
@@ -101,9 +111,13 @@ export function validateDeckCards(
         : "Deck has multiple Avatars in main deck"
     );
   }
-  if (siteCount < 12) errors.push("Atlas needs at least 12 sites");
-  if (spellCount < 24)
-    errors.push("Spellbook needs at least 24 cards (excluding Avatar)");
+  const minimums = DECK_MINIMUMS[format];
+  if (siteCount < minimums.sites)
+    errors.push(`Atlas needs at least ${minimums.sites} sites`);
+  if (spellCount < minimums.spells)
+    errors.push(
+      `Spellbook needs at least ${minimums.spells} cards (excluding Avatar)`
+    );
 
   return {
     isValid: errors.length === 0,

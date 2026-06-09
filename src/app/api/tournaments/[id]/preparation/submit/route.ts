@@ -230,6 +230,7 @@ export async function POST(
               type: typeof card.type === "string" ? card.type : null,
               name: typeof card.name === "string" ? card.name : null,
             })),
+            "constructed",
           );
           if (!validation.isValid) {
             return new Response(

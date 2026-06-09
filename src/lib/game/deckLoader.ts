@@ -8,6 +8,10 @@ import { preCacheDeckFromResponse } from "@/lib/service-worker/registration";
 // Internal helper: extend CardRef with an optional classification zone
 type CardRefWithZone = CardRef & { __zone?: string | null };
 
+// Official constructed minimums; limited (sealed/draft) uses 24/12 instead
+const CONSTRUCTED_MIN_SPELLS = 60;
+const CONSTRUCTED_MIN_SITES = 30;
+
 /**
  * Validate a Duplicator deck: spellbook and atlas can only contain matching pairs of Uniques.
  * Each unique card name must appear exactly twice total (can be split across zones).
@@ -153,14 +157,16 @@ export async function loadDeckFor(
         return false;
       }
     } else {
-      // Standard deck validation
-      if (rawAtlas.length < 12) {
-        setError("Atlas needs at least 12 sites");
+      // Standard constructed deck validation
+      if (rawAtlas.length < CONSTRUCTED_MIN_SITES) {
+        setError(`Atlas needs at least ${CONSTRUCTED_MIN_SITES} sites`);
         return false;
       }
 
-      if (spellbook.length < 24) {
-        setError("Spellbook needs at least 24 cards (excluding Avatar)");
+      if (spellbook.length < CONSTRUCTED_MIN_SPELLS) {
+        setError(
+          `Spellbook needs at least ${CONSTRUCTED_MIN_SPELLS} cards (excluding Avatar)`,
+        );
         return false;
       }
     }
@@ -579,13 +585,15 @@ export async function loadTournamentConstructedDeck(
     const avatar = avatars[0];
     const spellbook = rawSpellbook.filter((c: CardRef) => !isAvatar(c));
 
-    if (rawAtlas.length < 12) {
-      setError("Atlas needs at least 12 sites");
+    if (rawAtlas.length < CONSTRUCTED_MIN_SITES) {
+      setError(`Atlas needs at least ${CONSTRUCTED_MIN_SITES} sites`);
       return false;
     }
 
-    if (spellbook.length < 24) {
-      setError("Spellbook needs at least 24 cards (excluding Avatar)");
+    if (spellbook.length < CONSTRUCTED_MIN_SPELLS) {
+      setError(
+        `Spellbook needs at least ${CONSTRUCTED_MIN_SPELLS} cards (excluding Avatar)`,
+      );
       return false;
     }
 
